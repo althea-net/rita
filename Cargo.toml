@@ -7,3 +7,4 @@ authors = ["Jehan <jehan.tremback@gmail.com>"]
 jsonrpc-core = { git = "https://github.com/paritytech/jsonrpc" }
 jsonrpc-minihttp-server = { git = "https://github.com/paritytech/jsonrpc" }
 rocksdb = "0.6.0"
+num = "*"

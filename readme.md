@@ -10,14 +10,6 @@ This daemon communicates with the outside world with two apis. These APIs are im
 
 This is an API for the application making use of the channel for payments. We include a simple CLI application for manual administration of the light client. This could also be called by, for example, a graphical wallet or an incentivized mesh routing protocol.
 
-#### `view_proposed_channels`
-View all channels proposed by any counterparty.
-
-#### `accept_proposed_channel`
-- **`channelId`**: The id of the channel to be accepted.
-
-Manually accept a proposed channel. This method signs a `newChannel` transaction and sends it back to the counterparty.
-
 #### `propose_channel`
 - **`channelId`**: The id of the proposed channel.
 - **`counterpartyURL`**: How to reach the counterparty to this channel proposal and future updates.
@@ -28,6 +20,14 @@ Manually accept a proposed channel. This method signs a `newChannel` transaction
 - **`settlingPeriod`**: How long funds will be locked in the channel after the channel is ended.
 
 Propose a new channel to the counterparty. This method creates and signs a `newChannel` transaction.
+
+#### `view_proposed_channels`
+View all proposed channels.
+
+#### `accept_proposed_channel`
+- **`channelId`**: The id of the channel to be accepted.
+
+Manually accept a proposed channel. This method signs a `newChannel` transaction and sends it back to the counterparty.
 
 #### `make_payment`
 - **`channelId`**: Id of the channel to update.
