@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use types::{Bytes32, Channel};
 
-struct Storage {
+pub struct Storage {
     channels: HashMap<Bytes32, Channel>,
 }
 

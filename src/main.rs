@@ -4,6 +4,8 @@ extern crate rocksdb;
 
 mod types;
 mod storage;
+mod logic;
+mod crypto;
 
 use jsonrpc_core::*;
 use jsonrpc_minihttp_server::{cors, ServerBuilder, DomainsValidation};

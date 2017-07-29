@@ -8,6 +8,8 @@ pub type Bytes32 = [u8; 32];
 pub type Address = [u8; 20];
 pub type Uint256 = BigUint;
 pub type Int256 = BigInt;
+pub type Signature = [u8; 65];
+pub type PrivateKey = [u8; 64];
 
 pub struct Channel {
   channelId: Bytes32,
