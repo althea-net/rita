@@ -30,6 +30,10 @@ fn main() {
 		futures::finished(Value::String("hello".to_owned()))
 	});
 
+	io.add_async_method("propose_channel", |_params| {
+		futures::finished(Value::String("hello".to_owned()))
+	});
+
 	let server = ServerBuilder::new(io)
 		.cors(DomainsValidation::AllowOnly(vec![cors::AccessControlAllowOrigin::Null]))
 		.start_http(&"127.0.0.1:3030".parse().unwrap())

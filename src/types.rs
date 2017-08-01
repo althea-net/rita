@@ -1,31 +1,9 @@
-// extern crate num_bigint;
-extern crate num;
-
-use self::num::bigint::{BigUint, BigInt};
-use self::num::Bounded;
-
-impl Bounded for Uint256 {
-  fn min_value() -> Self {
-    0
-  };
-  fn max_value() -> Self {
-    2^256
-  };
-}
-
-impl Bounded for Int256 {
-  fn min_value() -> Self {
-    (2^256) * -1
-  };
-  fn max_value() -> Self {
-    2^256
-  };
-}
+extern crate bigint;
 
 pub type Bytes32 = [u8; 32];
 pub type Address = [u8; 20];
-pub type Uint256 = BigUint;
-pub type Int256 = BigInt;
+pub type Uint256 = u64;
+pub type Int256 = i64;
 pub type Signature = [u8; 65];
 pub type PrivateKey = [u8; 64];
 
@@ -35,19 +13,85 @@ pub enum Participant {
   One = 1
 }
 
-pub struct Channel {
-  channelId: Bytes32,
-  addresses: [Address; 2],
-  ended: bool,
-  closed: bool,
-  balances: [Uint256; 2],
-  totalBalance: Uint256,
-  hashlocks: Vec<Hashlock>,
-  sequenceNumber: Uint256,
-  me: Participant
+impl Participant {
+  pub fn get_me(&self) -> usize {
+    match self {
+        Zero => 0,
+        One => 1,
+    }
+  }
+  pub fn get_them(&self) -> usize {
+    match self {
+        One => 0,
+        Zero => 1,
+    }
+  }
 }
 
-struct Hashlock {
-  hash: Bytes32,
-  amount: Int256
+pub struct Channel {
+  pub channel_id: Bytes32,
+  pub addresses: [Address; 2],
+  pub ended: bool,
+  pub closed: bool,
+  pub balances: [Uint256; 2],
+  pub total_balance: Uint256,
+  pub hashlocks: Vec<Hashlock>,
+  pub sequence_number: Uint256,
+  pub participant: Participant
+}
+
+impl Channel {
+  pub fn new (
+    channel_id: Bytes32,
+    addresses: [Address; 2],
+    balances: [Uint256; 2],
+    participant: Participant,
+  ) -> Channel {
+    Channel {
+      channel_id,
+      addresses,
+      balances,
+      participant,
+      total_balance: balances[0] + balances[1],
+
+      sequence_number: 0,
+      closed: false,
+      ended: false,
+      hashlocks: Vec::new(),
+    }
+  }
+
+  pub fn get_my_address (&self) -> Address {
+    self.addresses[self.participant.get_me()]
+  }
+  pub fn get_their_address (&self) -> Address {
+    self.addresses[self.participant.get_them()]
+  }
+  pub fn get_my_balance (&self) -> Uint256 {
+    self.balances[self.participant.get_me()]
+  }
+  pub fn get_their_balance (&self) -> Uint256 {
+    self.balances[self.participant.get_them()]
+  }
+}
+
+pub struct Hashlock {
+  pub hash: Bytes32,
+  pub amount: Int256,
+}
+
+pub struct Account {
+  pub address: Address,
+  pub private_key: PrivateKey,
+  pub balance: Uint256,
+}
+
+pub struct Counterparty {
+  pub address: Address,
+  pub url: String,
+}
+
+pub struct Fullnode {
+  pub address: Address,
+  pub url: String,
 }
