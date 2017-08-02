@@ -1,16 +1,19 @@
 use types::{Bytes32, Address, PrivateKey, Uint256, Signature};
 use std::collections::HashMap;
 
-struct Crypto {
+pub struct Crypto {
     keystore: HashMap<Address, PrivateKey>,
 }
 
 
 impl Crypto {
-    pub fn sign(&self, address: &Address, hash: &Bytes32) -> Option<Bytes32> {
+    pub fn new() -> Crypto {
+        Crypto { keystore: HashMap::new() }
+    }
+    pub fn sign(&self, address: &Address, hash: &Bytes32) -> Result<Signature, String> {
         match self.keystore.get(address) {
-            None => None,
-            Some(pk) => Some([0; 32]),
+            None => Err(String::from("Address not found in keystore.")),
+            Some(pk) => Ok([0; 65]),
         }
     }
     pub fn hash(input: Vec<Bytes32>) -> Bytes32 {

@@ -18,12 +18,9 @@ impl Storage {
         }
     }
 
-    pub fn get_channel(&self, channel_id: &Bytes32) -> Option<&Channel> {
-        self.channels.get(channel_id)
-    }
     pub fn new_channel(&mut self, channel: Channel) -> Result<(), String> {
         if self.channels.contains_key(&channel.channel_id) {
-            Err("foo".to_string())
+            Err(String::from("foo"))
         } else {
             self.set_channel(channel);
             Ok(())
@@ -31,5 +28,26 @@ impl Storage {
     }
     pub fn set_channel(&mut self, channel: Channel) {
         self.channels.insert(channel.channel_id, channel);
+    }
+    pub fn get_channel(&self, channel_id: &Bytes32) -> Option<&Channel> {
+        self.channels.get(channel_id)
+    }
+
+    pub fn new_counterparty(&mut self, counterparty: Counterparty) -> Result<(), String> {
+        if self.counterparties.contains_key(&counterparty.address) {
+            Err(String::from("foo"))
+        } else {
+            self.set_counterparty(counterparty);
+            Ok(())
+        }
+    }
+    pub fn set_counterparty(&mut self, counterparty: Counterparty) {
+        self.counterparties.insert(
+            counterparty.address,
+            counterparty,
+        );
+    }
+    pub fn get_counterparty(&self, address: &Address) -> Option<&Counterparty> {
+        self.counterparties.get(address)
     }
 }

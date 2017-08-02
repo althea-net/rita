@@ -80,6 +80,20 @@ pub struct Hashlock {
   pub amount: Int256,
 }
 
+pub struct NewChannelTx {
+  pub channel_id: Bytes32,
+  pub settling_period: Uint256,
+  pub addresses: [Address; 2],
+  pub balances: [Uint256; 2],
+  pub signatures: [Option<Signature>; 2]
+}
+
+impl NewChannelTx {
+  pub fn get_fingerprint (&self) -> Bytes32 {
+    [0; 32]
+  }
+}
+
 pub struct Account {
   pub address: Address,
   pub private_key: PrivateKey,
@@ -89,6 +103,10 @@ pub struct Account {
 pub struct Counterparty {
   pub address: Address,
   pub url: String,
+}
+
+impl Counterparty {
+  
 }
 
 pub struct Fullnode {
