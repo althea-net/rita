@@ -1,0 +1,8 @@
+[package]
+name = "babel_monitor"
+version = "0.1.0"
+authors = ["jkilpatr <jkilpatr@redhat.com>"]
+
+[dependencies]
+mockstream = { git = "https://github.com/lazy-bitfield/rust-mockstream.git" }
+ascii = "0.8.6"
