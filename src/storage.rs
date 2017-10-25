@@ -1,6 +1,10 @@
 use std::collections::HashMap;
-use types::{Bytes32, Address, Channel, Account, Counterparty, Fullnode};
+use types::{Account, Address, Bytes32, Channel, Counterparty, Fullnode};
 
+#[cfg(test)]
+pub struct Storage {}
+
+#[cfg(not(test))]
 pub struct Storage {
     channels: HashMap<Bytes32, Channel>,
     accounts: HashMap<Address, Account>,
@@ -8,6 +12,7 @@ pub struct Storage {
     fullNodes: Vec<Fullnode>,
 }
 
+#[cfg(not(test))]
 impl Storage {
     pub fn new() -> Storage {
         Storage {
@@ -42,10 +47,8 @@ impl Storage {
         }
     }
     pub fn set_counterparty(&mut self, counterparty: Counterparty) {
-        self.counterparties.insert(
-            counterparty.address,
-            counterparty,
-        );
+        self.counterparties
+            .insert(counterparty.address, counterparty);
     }
     pub fn get_counterparty(&self, address: &Address) -> Option<&Counterparty> {
         self.counterparties.get(address)

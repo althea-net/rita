@@ -1,4 +1,4 @@
-use types::{Bytes32, Address, PrivateKey, Uint256, Signature};
+use types::{Address, Bytes32, PrivateKey, Signature, Uint256};
 use std::collections::HashMap;
 
 pub struct Crypto {
@@ -8,7 +8,9 @@ pub struct Crypto {
 
 impl Crypto {
     pub fn new() -> Crypto {
-        Crypto { keystore: HashMap::new() }
+        Crypto {
+            keystore: HashMap::new(),
+        }
     }
     pub fn sign(&self, address: &Address, hash: &Bytes32) -> Result<Signature, String> {
         match self.keystore.get(address) {

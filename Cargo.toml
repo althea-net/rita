@@ -4,11 +4,10 @@ version = "0.1.0"
 authors = ["Jehan <jehan.tremback@gmail.com>"]
 
 [dependencies]
-jsonrpc-core = { git = "https://github.com/paritytech/jsonrpc" }
-jsonrpc-minihttp-server = { git = "https://github.com/paritytech/jsonrpc" }
-rocksdb = "0.6.0"
 bigint = "*"
 rand = "*"
-
-jsonrpc-client-core = "*"
-jsonrpc-client-http = "*"
+serde = "*"
+serde_json = "*"
+serde_derive = "*"
+serde_bytes = "*"
+base64 = "*"
