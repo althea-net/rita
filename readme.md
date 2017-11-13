@@ -1,0 +1,1 @@
+This crazy crate has custom derive macros to implement Deref, Serialize, and Deserialize to base64 for tuple types containing fixed-length arrays. This is because there is no other way to get fixed size arrays to serialize nicely to base64. Open to suggestions!
