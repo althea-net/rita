@@ -1,0 +1,15 @@
+[package]
+name = "array_serialization_derive"
+version = "0.1.0"
+authors = ["Jehan <jehan.tremback@gmail.com>"]
+
+[dependencies]
+syn = "*"
+quote = "*"
+base64 = "*"
+serde = "*"
+serde_json = "*"
+serde_derive = "*"
+
+[lib]
+proc-macro = true
