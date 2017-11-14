@@ -1,31 +1,20 @@
 extern crate rand;
 
-
 use types::{Address, Bytes32, Channel, NewChannelTx, Participant, Uint256};
 use storage::Storage;
 use crypto::Crypto;
+use network_client::CounterpartyAPI;
 
-pub trait CounterpartyApi {
-  fn add_new_channel(&mut self, NewChannelTx) -> Result<(), String>;
-}
 
-pub struct Logic<T: CounterpartyApi> {
-  pub storage: Storage,
+pub struct Logic<CP: CounterpartyAPI, ST: Storage> {
   pub crypto: Crypto,
-  pub counterparty: T,
+  pub counterpartyAPI: CP,
+  pub storage: ST,
 }
 
-pub struct Network {}
-
-impl CounterpartyApi for Network {
-  fn add_new_channel(&mut self, tx: NewChannelTx) -> Result<(), String> {
-    Ok(())
-  }
-}
-
-impl<T: CounterpartyApi> Logic<T> {
+impl<CP: CounterpartyAPI, ST: Storage> Logic<CP, ST> {
   pub fn propose_channel(
-    &mut self,
+    self,
     channel_id: Bytes32,
     my_address: Address,
     their_address: Address,
@@ -44,18 +33,27 @@ impl<T: CounterpartyApi> Logic<T> {
 
     let mut tx = NewChannelTx {
       channel_id: rand::random::<Bytes32>(),
-      addresses: [my_address, their_address],
-      balances: [my_balance, their_balance],
+      address0: my_address,
+      address1: their_address,
+      balance0: my_balance,
+      balance1: their_balance,
       settling_period,
-      signatures: [None, None],
+      signature0: None,
+      signature1: None,
     };
 
-    tx.signatures[1] = Some(try!(self.crypto.sign(&my_address, &tx.get_fingerprint())));
+    tx.signature0 = Some(try!(self.crypto.sign(&my_address, &tx.get_fingerprint())));
 
-    let counterparty = match self.storage.get_counterparty(&their_address) {
+    let counterparty = match try!(self.storage.get_counterparty(&their_address)) {
       Some(counterparty) => counterparty,
       None => return Err(String::from("Could not find counterparty")),
     };
+
+    try!(
+      self
+        .counterpartyAPI
+        .add_proposed_channel(counterparty.url, tx)
+    );
 
     Ok(())
   }

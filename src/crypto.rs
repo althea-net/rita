@@ -5,7 +5,6 @@ pub struct Crypto {
     keystore: HashMap<Address, PrivateKey>,
 }
 
-
 impl Crypto {
     pub fn new() -> Crypto {
         Crypto {

@@ -1,29 +1,25 @@
-extern crate base64;
-extern crate bigint;
-extern crate serde;
-extern crate serde_bytes;
-extern crate serde_json;
-
-use self::serde::ser::{self, Serialize};
-use self::serde::{Deserialize, Deserializer, Serializer};
+use std::ops::Deref;
+use serde;
+use serde::ser::{Serialize};
+use serde::{Deserialize, Deserializer, Serializer};
+use base64;
 
 // use serde::Serialize;
+#[derive(ArrayTupleDeref, ArrayTupleBase64)]
+pub struct Bytes32([u8; 32]);
 
-pub type Bytes32 = [u8; 32];
-pub type Address = [u8; 20];
+#[derive(ArrayTupleDeref, ArrayTupleBase64)]
+pub struct Address([u8; 20]);
+
 pub type Uint256 = u64;
 pub type Int256 = i64;
-pub type Signature = [u8; 65];
-pub type PrivateKey = [u8; 64];
 
-// impl Serialize for Signature {
-//   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//   where
-//     S: Serializer,
-//   {
-//     serializer.serialize_i32(*self)
-//   }
-// }
+#[derive(ArrayTupleDeref, ArrayTupleBase64)]
+pub struct Signature([u8; 65]);
+
+#[derive(ArrayTupleDeref, ArrayTupleBase64)]
+pub struct PrivateKey([u8; 64]);
+
 
 #[derive(Copy, Clone)]
 pub enum Participant {
@@ -79,18 +75,18 @@ impl Channel {
     }
   }
 
-  pub fn get_my_address(&self) -> Address {
-    self.addresses[self.participant.get_me()]
-  }
-  pub fn get_their_address(&self) -> Address {
-    self.addresses[self.participant.get_them()]
-  }
-  pub fn get_my_balance(&self) -> Uint256 {
-    self.balances[self.participant.get_me()]
-  }
-  pub fn get_their_balance(&self) -> Uint256 {
-    self.balances[self.participant.get_them()]
-  }
+  // pub fn get_my_address(&self) -> Address {
+  //   self.addresses[self.participant.get_me()]
+  // }
+  // pub fn get_their_address(&self) -> Address {
+  //   self.addresses[self.participant.get_them()]
+  // }
+  // pub fn get_my_balance(&self) -> Uint256 {
+  //   self.balances[self.participant.get_me()]
+  // }
+  // pub fn get_their_balance(&self) -> Uint256 {
+  //   self.balances[self.participant.get_them()]
+  // }
 }
 
 pub struct Hashlock {
@@ -100,18 +96,19 @@ pub struct Hashlock {
 
 #[derive(Serialize, Deserialize)]
 pub struct NewChannelTx {
-  #[serde(serialize_with = "as_base64")] pub channel_id: Bytes32,
+  pub channel_id: Bytes32,
   pub settling_period: Uint256,
-  #[serde(serialize_with = "as_base64")] pub address0: Address,
-  #[serde(serialize_with = "as_base64")] pub address1: Address,
+  pub address0: Address,
+  pub address1: Address,
   pub balance0: Uint256,
   pub balance1: Uint256,
-  // pub signatures: [Option<Signature>; 2],
+  pub signature0: Option<Signature>,
+  pub signature1: Option<Signature>,
 }
 
 impl NewChannelTx {
   pub fn get_fingerprint(&self) -> Bytes32 {
-    [0; 32]
+    Bytes32([0; 32])
   }
 }
 
@@ -133,34 +130,28 @@ pub struct Fullnode {
   pub url: String,
 }
 
-fn as_base64<'a, T, S>(key: &T, serializer: S) -> Result<S::Ok, S::Error>
-where
-  T: AsRef<[u8]>,
-  S: Serializer,
-{
-  serializer.serialize_str(&base64::encode(key.as_ref()))
-}
-
-
 #[cfg(test)]
 mod tests {
   use types;
+  use serde_json;
   #[test]
   fn serialize() {
     // Some data structure.
     let new_channel_tx = types::NewChannelTx {
-      address0: [0; 20],
-      address1: [0; 20],
+      address0: types::Address([7; 20]),
+      address1: types::Address([9; 20]),
       balance0: 23,
       balance1: 23,
-      channel_id: [0; 32],
+      channel_id: types::Bytes32([11; 32]),
       settling_period: 45,
+      signature0: None,
+      signature1: None
     };
 
     // Serialize it to a JSON string.
-    let j = types::serde_json::to_string(&new_channel_tx).unwrap();
+    let j = serde_json::to_string(&new_channel_tx).unwrap();
 
     // Print, write to a file, or send to an HTTP server.
-    assert_eq!("{\"channel_id\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\",\"settling_period\":45,\"address0\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAA=\",\"address1\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAA=\",\"balance0\":23,\"balance1\":23}", j);
+    assert_eq!("{\"channel_id\":\"CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws=\",\"settling_period\":45,\"address0\":\"BwcHBwcHBwcHBwcHBwcHBwcHBwc=\",\"address1\":\"CQkJCQkJCQkJCQkJCQkJCQkJCQk=\",\"balance0\":23,\"balance1\":23,\"signature0\":null,\"signature1\":null}", j);
   }
 }

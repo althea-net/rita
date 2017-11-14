@@ -11,3 +11,7 @@ serde_json = "*"
 serde_derive = "*"
 serde_bytes = "*"
 base64 = "*"
+rocksdb = "0.8.1"
+syn = "*"
+quote = "*"
+array_serialization_derive = { path = "../array_serialization_derive" }

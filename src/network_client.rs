@@ -1,10 +1,9 @@
 use std::net::IpAddr;
 use types::NewChannelTx;
 
-
-pub trait NetworkClient {
-  fn send(self, address: IpAddr, payload: &[u8]) -> Result<&[u8], String>;
-  fn add_proposed_channel(self, tx: NewChannelTx) -> Result<(), String>;
+pub trait CounterpartyAPI {
+  fn send(self, url: String, payload: &[u8]) -> Result<Vec<u8>, String>;
+  fn add_proposed_channel(self, url: String, tx: NewChannelTx) -> Result<(), String>;
 }
 
 // Test stub struct implementing fake network client
@@ -17,12 +16,12 @@ impl FakeClient {
   }
 }
 
-impl NetworkClient for FakeClient {
-  fn send(self, address: IpAddr, payload: &[u8]) -> Result<&[u8], String> {
+impl CounterpartyAPI for FakeClient {
+  fn send(self, url: String, payload: &[u8]) -> Result<Vec<u8>, String> {
     let vec = vec![2, 2];
-    Ok(&vec)
+    Ok(vec)
   }
-  fn add_proposed_channel(self, tx: NewChannelTx) -> Result<(), String> {
+  fn add_proposed_channel(self, url: String, tx: NewChannelTx) -> Result<(), String> {
     Ok(())
   }
 }
