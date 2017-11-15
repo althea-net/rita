@@ -12,6 +12,9 @@ extern crate serde_derive;
 #[macro_use]
 extern crate array_serialization_derive;
 
+#[macro_use]
+extern crate derive_error;
+
 extern crate base64;
 extern crate bigint;
 extern crate serde;
@@ -21,7 +24,7 @@ extern crate serde_json;
 fn main() {}
 
 mod types;
-// mod storage;
+mod storage;
 // mod logic;
 // mod crypto;
 // mod network_client;

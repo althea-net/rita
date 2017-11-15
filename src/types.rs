@@ -21,7 +21,7 @@ pub struct Signature([u8; 65]);
 pub struct PrivateKey([u8; 64]);
 
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Serialize, Deserialize)]
 pub enum Participant {
   Zero = 0,
   One = 1,
@@ -42,6 +42,7 @@ impl Participant {
   }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Channel {
   pub channel_id: Bytes32,
   pub addresses: [Address; 2],
@@ -89,6 +90,7 @@ impl Channel {
   // }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Hashlock {
   pub hash: Bytes32,
   pub amount: Int256,
