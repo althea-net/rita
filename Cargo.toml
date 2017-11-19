@@ -16,3 +16,6 @@ syn = "*"
 quote = "*"
 array_serialization_derive = { path = "../array_serialization_derive" }
 derive-error = "*"
+tiny-keccak = "1.3"
+num = "*"
+lazy_static ="*"

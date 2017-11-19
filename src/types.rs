@@ -3,16 +3,49 @@ use serde;
 use serde::ser::{Serialize};
 use serde::{Deserialize, Deserializer, Serializer};
 use base64;
+use storage::Storable;
+use tiny_keccak::Keccak;
+use num::bigint::{BigUint, BigInt};
 
-// use serde::Serialize;
+const biggest_uint256: BigUint = (BigUint::new(vec![2, 0, 0]) ^ BigUint::new(vec![256, 0, 0])) - BigUint::new(vec![1, 0, 0]);
+
+// fn biggest_uint256 () -> BigUint {
+//   (BigUint::new(vec![2, 0, 0]) ^ BigUint::new(vec![256, 0, 0])) - BigUint::new(vec![1, 0, 0])
+// }
+
+#[derive(Copy, Clone, Debug)]
+pub enum Buckets {
+    Channels,
+    Counterparties,
+}
+
 #[derive(ArrayTupleDeref, ArrayTupleBase64)]
 pub struct Bytes32([u8; 32]);
 
-#[derive(ArrayTupleDeref, ArrayTupleBase64)]
+#[derive(ArrayTupleDeref, ArrayTupleBase64, Copy, Clone)]
 pub struct Address([u8; 20]);
 
-pub type Uint256 = u64;
-pub type Int256 = i64;
+pub struct Uint256(BigUint);
+
+impl Deref for Uint256 {
+  type Target = BigUint;
+
+  fn deref(&self) -> &BigUint {
+    &self.0
+  }
+}
+
+impl Uint256 {
+    fn checked_add(&self, v: &Uint256) -> Option<Uint256> {
+        let num = **self + **v;
+        if num > biggest_uint256 {
+          return None;
+        }
+        Some(Uint256(num))
+    }
+}
+
+pub struct Int256(BigInt);
 
 #[derive(ArrayTupleDeref, ArrayTupleBase64)]
 pub struct Signature([u8; 65]);
@@ -27,47 +60,47 @@ pub enum Participant {
   One = 1,
 }
 
-impl Participant {
-  pub fn get_me(&self) -> usize {
-    match self {
-      Zero => 0,
-      One => 1,
-    }
-  }
-  pub fn get_them(&self) -> usize {
-    match self {
-      One => 0,
-      Zero => 1,
-    }
-  }
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct Channel {
   pub channel_id: Bytes32,
-  pub addresses: [Address; 2],
+  pub address0: Address,
+  pub address1: Address,
   pub ended: bool,
   pub closed: bool,
-  pub balances: [Uint256; 2],
+  pub balance0: Uint256,
+  pub balance1: Uint256,
   pub total_balance: Uint256,
   pub hashlocks: Vec<Hashlock>,
   pub sequence_number: Uint256,
   pub participant: Participant,
 }
 
+impl Storable for Channel {
+  fn my_bucket() -> u8 {
+    Buckets::Channels as u8
+  }
+  fn my_id(&self) -> &[u8] {
+    &*self.channel_id
+  }
+}
+
 impl Channel {
   pub fn new(
     channel_id: Bytes32,
-    addresses: [Address; 2],
-    balances: [Uint256; 2],
+    address0: Address,
+    address1: Address,
+    balance0: Uint256,
+    balance1: Uint256,
     participant: Participant,
   ) -> Channel {
     Channel {
       channel_id,
-      addresses,
-      balances,
+      address0,
+      address1,
+      balance0,
+      balance1,
       participant,
-      total_balance: balances[0] + balances[1],
+      total_balance: balance0.checked_add(balance1),
 
       sequence_number: 0,
       closed: false,
@@ -76,18 +109,30 @@ impl Channel {
     }
   }
 
-  // pub fn get_my_address(&self) -> Address {
-  //   self.addresses[self.participant.get_me()]
-  // }
-  // pub fn get_their_address(&self) -> Address {
-  //   self.addresses[self.participant.get_them()]
-  // }
-  // pub fn get_my_balance(&self) -> Uint256 {
-  //   self.balances[self.participant.get_me()]
-  // }
-  // pub fn get_their_balance(&self) -> Uint256 {
-  //   self.balances[self.participant.get_them()]
-  // }
+  pub fn get_my_address(&self) -> Address {
+    match self.participant {
+      Participant::Zero => self.address0,
+      Participant::One => self.address1,
+    }
+  }
+  pub fn get_their_address(&self) -> Address {
+    match self.participant {
+      Participant::Zero => self.address1,
+      Participant::One => self.address0
+    }
+  }
+  pub fn get_my_balance(&self) -> Uint256 {
+    match self.participant {
+      Participant::Zero => self.balance0,
+      Participant::One => self.balance1,
+    }
+  }
+  pub fn get_their_balance(&self) -> Uint256 {
+    match self.participant {
+      Participant::Zero => self.balance1,
+      Participant::One => self.balance0,
+    }
+  }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -110,7 +155,16 @@ pub struct NewChannelTx {
 
 impl NewChannelTx {
   pub fn get_fingerprint(&self) -> Bytes32 {
-    Bytes32([0; 32])
+		let mut keccak = Keccak::new_keccak256();
+		let mut result = [0u8; 32];
+		keccak.update(self.channel_id.as_ref());
+    keccak.update(self.settling_period.to_bytes_le());
+    keccak.update(self.address0.as_ref());
+    keccak.update(self.address1.as_ref());
+    keccak.update(self.balance0);
+    keccak.update(self.balance1);
+		keccak.finalize(&mut result);
+		Bytes32(result)
   }
 }
 

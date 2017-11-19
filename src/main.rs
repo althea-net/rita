@@ -1,6 +1,9 @@
 #![feature(custom_attribute)]
 
 #[macro_use]
+extern crate lazy_static;
+
+#[macro_use]
 extern crate proc_macro;
 
 #[macro_use]
@@ -16,15 +19,17 @@ extern crate array_serialization_derive;
 extern crate derive_error;
 
 extern crate base64;
-extern crate bigint;
+extern crate num;
 extern crate serde;
 extern crate serde_bytes;
 extern crate serde_json;
+extern crate tiny_keccak;
 
 fn main() {}
 
-mod types;
-mod storage;
+// mod types;
+mod num256;
+// mod storage;
 // mod logic;
 // mod crypto;
 // mod network_client;
