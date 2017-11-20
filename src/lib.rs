@@ -21,21 +21,13 @@ pub fn b64(input: TokenStream) -> TokenStream {
 }
 
 fn get_array_length(body: &syn::Body) -> usize {
+    let err_msg = "cannot derive array deref on this type";
     match *body {
-        syn::Body::Struct(ref variant_data) => match *variant_data {
-            syn::VariantData::Tuple(ref fields) => match fields[0].ty {
-                syn::Ty::Array(_, ref const_expr) => match *const_expr {
-                    syn::ConstExpr::Lit(ref lit) => match *lit {
-                        syn::Lit::Int(ref num, _) => *num as usize,
-                        _ => panic!("cannot derive array deref on this type"),
-                    },
-                    _ => panic!("cannot derive array deref on this type"),
-                },
-                _ => panic!("cannot derive array deref on this type"),
-            },
-            _ => panic!("cannot derive array deref on this type"),
+        syn::Body::Struct(syn::VariantData::Tuple(ref v)) => match v[0].ty {
+            syn::Ty::Array(_, syn::ConstExpr::Lit(syn::Lit::Int(ref num, _))) => *num as usize,
+            _ => panic!(err_msg),
         },
-        _ => panic!("cannot derive array deref on this type"),
+        _ => panic!(err_msg),
     }
 }
 
