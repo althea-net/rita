@@ -1,42 +1,8 @@
 use std::io;
-use std::io::{Read,Write};
-use std::net::TcpStream;
 extern crate mockstream;
 use std::str;
 use mockstream::SharedMockStream;
 use std::collections::VecDeque;
-
-// From rust_mockstream MIT
-pub enum NetStream {
-	Mocked(SharedMockStream),
-	Tcp(TcpStream)
-}
-
-impl io::Read for NetStream {
-	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-		match *self {
-			NetStream::Mocked(ref mut s) => s.read(buf),
-			NetStream::Tcp(ref mut s) => s.read(buf),
-		}
-	}
-}
-
-impl io::Write for NetStream {
-	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-		match *self {
-			NetStream::Mocked(ref mut s) => s.write(buf),
-			NetStream::Tcp(ref mut s) => s.write(buf),
-		}
-	}
-
-	fn flush(&mut self) -> io::Result<()> {
-		match *self {
-			NetStream::Mocked(ref mut s) => s.flush(),
-			NetStream::Tcp(ref mut s) => s.flush(),
-		}
-	}
-}
-// end mockstream code
 
 // If a function doesn't modify the state of the Babel object
 // we don't want to place it as a member function.
@@ -49,30 +15,6 @@ fn parse_babel_val(val: &str, line: &str) -> String {
         assert_eq!(entry.is_some(), true);
     }
     place.next().unwrap().to_string()
-}
-
-// Grabs route reference that is valid so long as the routes vector continues to exist.
-// Should be fine for our usage. 
-fn get_route_by_prefix<'a>(prefix: &str, routes: &'a VecDeque<Route>) -> Option<&'a Route> {
-    let mut ret: Option<&Route> = None;
-    for route in routes.iter() {
-        if route.prefix.contains(prefix) {
-            ret = Some(route);
-            break;
-        }
-    }
-    ret
-}
-
-fn get_neigh_by_iface<'a>(iface: &str, neighs: &'a VecDeque<Neighbour>) -> Option<&'a Neighbour> {
-    let mut ret: Option<&Neighbour> = None;
-    for neigh in neighs.iter() {
-        if neigh.iface.contains(iface) {
-            ret = Some(neigh);
-            break;
-        }
-    }
-    ret
 }
 
 #[derive(Debug)]
@@ -101,13 +43,11 @@ pub struct Neighbour {
     cost: u16
 }
 
-pub struct Babel {
-    stream: NetStream,
-    verification_iface: String,
-    verification_endpoint: String
+pub struct Babel<T: io::Read + io::Write> {
+    stream: T
 }
 
-impl Babel {
+impl<T: io::Read + io::Write> Babel<T> {
 
     // Consumes the automated Preamble and validates configuration api version
     pub fn start_connection(&mut self) -> bool {
@@ -328,25 +268,6 @@ impl Babel {
         }
         vector
     }
-
-    pub fn fraud_check(&mut self) -> bool {
-        let neighs = self.parse_neighs();
-        let routes = self.parse_routes();
-
-        let gateway_o = get_neigh_by_iface(&self.verification_iface, &neighs);
-        let route_o = get_route_by_prefix(&self.verification_endpoint, &routes);
-        assert!(gateway_o.is_some());
-        assert!(route_o.is_some());
-
-        let route = route_o.unwrap();
-        let gateway = gateway_o.unwrap();
-
-        //insert realization that modifications to babel are required here
-
-
-        false
-    }
-
 }
 
 
@@ -400,9 +321,7 @@ mod tests {
     #[test]
     fn mock_connect() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel {stream: NetStream::Mocked(s.clone()), 
-                            verification_iface: "wg0".to_string(), 
-                            verification_endpoint: "10.28.7.7".to_string()};
+        let mut b1 = Babel {stream: s.clone()};
         s.push_bytes_to_read(PREAMBLE.as_bytes());
         assert_eq!(b1.start_connection(), true);
         assert_eq!(b1.close_connection(), true);
@@ -411,9 +330,7 @@ mod tests {
     #[test]
     fn mock_dump() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel {stream: NetStream::Mocked(s.clone()), 
-                            verification_iface: "wg0".to_string(), 
-                            verification_endpoint: "10.28.7.7".to_string()};
+        let mut b1 = Babel {stream: s.clone()};
         s.push_bytes_to_read(TABLE.as_bytes());
         assert_eq!(b1.write("dump\n"), true);
     }
@@ -436,9 +353,7 @@ mod tests {
     #[test]
     fn neigh_parse() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel {stream: NetStream::Mocked(s.clone()), 
-                            verification_iface: "wg0".to_string(), 
-                            verification_endpoint: "10.28.7.7".to_string()};
+        let mut b1 = Babel {stream: s.clone()};
         s.push_bytes_to_read(TABLE.as_bytes());
         assert_eq!(b1.write("dump\n"), true);
         let neighs = b1.parse_neighs();
@@ -452,9 +367,7 @@ mod tests {
     #[test]
     fn route_parse() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel {stream: NetStream::Mocked(s.clone()), 
-                            verification_iface: "wg0".to_string(), 
-                            verification_endpoint: "10.28.7.7".to_string()};
+        let mut b1 = Babel {stream: s.clone()};
         s.push_bytes_to_read(TABLE.as_bytes());
         assert_eq!(b1.write("dump\n"), true);
         let routes = b1.parse_routes();
@@ -468,9 +381,7 @@ mod tests {
     #[test]
     fn local_price_parse() { 
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel {stream: NetStream::Mocked(s.clone()), 
-                            verification_iface: "wg0".to_string(), 
-                            verification_endpoint: "10.28.7.7".to_string()};
+        let mut b1 = Babel {stream: s.clone()};
         s.push_bytes_to_read(TABLE.as_bytes());
         assert_eq!(b1.write("dump\n"), true);
         assert_eq!(b1.local_price(), 1024);
