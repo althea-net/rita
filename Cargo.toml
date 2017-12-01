@@ -2,6 +2,8 @@
 name = "althea_kernel_interface"
 version = "0.1.0"
 authors = ["Jehan <jehan.tremback@gmail.com>"]
+description = "Gets information from and changes settings of kernel network stacks"
+license = "Apache-2.0"
 
 [dependencies]
 regex = "0.2"
