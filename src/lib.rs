@@ -17,6 +17,9 @@ use std::os::unix::process::ExitStatusExt;
 pub enum Error {
     Io(std::io::Error),
     UTF8(std::string::FromUtf8Error),
+    ParseInt(std::num::ParseIntError),
+    AddrParse(std::net::AddrParseError),
+    #[error(msg_embedded, no_from, non_std)] RuntimeError(String),
 }
 
 pub struct KernelInterface<'a> {
@@ -47,16 +50,21 @@ impl<'a> KernelInterface<'a> {
         let re = Regex::new(r"(\S*) .* (\S*) (REACHABLE|STALE|DELAY)").unwrap();
         for caps in re.captures_iter(&String::from_utf8(output.stdout)?) {
             vec.push((
-                caps.get(2).unwrap().as_str().parse::<HwAddr>().unwrap(),
-                IpAddr::from_str(&caps[1]).unwrap(),
+                caps.get(2).unwrap().as_str().parse::<HwAddr>()?,
+                IpAddr::from_str(&caps[1])?,
             ));
         }
         Ok(vec)
     }
     
-    #[cfg(target_os = "linux")]
+    /// Returns a vector of neighbors reachable over layer 2, giving the hardware
+    /// and IP address of each. Implemented with `ip neighbor` on Linux.
     pub fn get_neighbors(self) -> Result<Vec<(HwAddr, IpAddr)>, Error> {
-        self.get_neighbors_linux()
+        if cfg!(target_os = "linux") {
+            return self.get_neighbors_linux();
+        }
+
+        Err(Error::RuntimeError(String::from("not implemented for this platform")))
     }
 
     fn get_traffic_linux(self) -> Result<Vec<(HwAddr, IpAddr, u64)>, Error> {
@@ -65,17 +73,23 @@ impl<'a> KernelInterface<'a> {
         let re = Regex::new(r"-s (.*) --ip6-dst (.*)/.* bcnt = (.*)").unwrap();
         for caps in re.captures_iter(&String::from_utf8(output.stdout)?) {
             vec.push((
-                caps[1].parse::<HwAddr>().unwrap(),
-                IpAddr::from_str(&caps[2]).unwrap(),
-                caps[3].parse::<u64>().unwrap(),
+                caps[1].parse::<HwAddr>()?,
+                IpAddr::from_str(&caps[2])?,
+                caps[3].parse::<u64>()?,
             ));
         }
         Ok(vec)
     }
 
-    #[cfg(target_os = "linux")]
+    /// Returns a vector of traffic coming from a specific hardware address and going
+    /// to a specific IP. Note that this will only track flows that have already been
+    /// registered. Implemented with `ebtables` on Linux.
     pub fn get_traffic(self) -> Result<Vec<(HwAddr, IpAddr, u64)>, Error> {
-        self.get_traffic_linux()
+        if cfg!(target_os = "linux") {
+            return self.get_traffic_linux();
+        }
+
+        Err(Error::RuntimeError(String::from("not implemented for this platform")))
     }
 }
 
