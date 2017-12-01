@@ -1,0 +1,9 @@
+[package]
+name = "althea_kernel_interface"
+version = "0.1.0"
+authors = ["Jehan <jehan.tremback@gmail.com>"]
+
+[dependencies]
+regex = "0.2"
+hwaddr = "0.1.2"
+derive-error = "0.0.4"
