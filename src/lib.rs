@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{Read, Write, BufReader};
 extern crate mockstream;
 use std::str;
 use mockstream::SharedMockStream;
@@ -32,6 +32,17 @@ fn find_babel_val(val: &str, line: &str) -> Result<String, Error> {
     return Err(Error::RuntimeError(format!("{} not found in babel output", val)));
 }
 
+
+fn contains_terminator(message: &String) -> bool {
+    message.contains("\nok\n") ||
+    message.contains("\nno\n") ||
+    message.contains("\nbad\n")
+}
+
+fn positive_termination(message: &String) -> bool {
+    message.contains("\nok\n")
+}
+
 #[derive(Debug)]
 pub struct Route {
     id: String,
@@ -57,16 +68,16 @@ pub struct Neighbour {
     cost: u16,
 }
 
-pub struct Babel<T: io::Read + io::Write> {
+pub struct Babel<T: Read + Write> {
     stream: T,
 }
 
-impl<T: io::Read + io::Write> Babel<T> {
+impl<T: Read + Write> Babel<T> {
     // Consumes the automated Preamble and validates configuration api version
     pub fn start_connection(&mut self) -> bool {
         let preamble = self.read();
         // Note you have changed the config interface, bump to 1.1 in babel
-        preamble.contains("BABEL 1.0") && self.positive_termination(&preamble)
+        preamble.contains("BABEL 1.0") && positive_termination(&preamble)
     }
 
     // Safely closes the babel connection and terminates
@@ -75,7 +86,7 @@ impl<T: io::Read + io::Write> Babel<T> {
         true
     }
 
-    //TODO write function to shrink these strings in memory
+    //TODO use BufRead instead of this
     fn read(&mut self) -> String {
         let mut data: [u8; 512] = [0; 512];
         assert!(self.stream.read(&mut data).is_ok());
@@ -86,21 +97,11 @@ impl<T: io::Read + io::Write> Babel<T> {
             assert!(self.stream.read(&mut data).is_ok());
             let message = &str::from_utf8(&data).unwrap().to_string();
             ret = ret + message;
-            if self.contains_terminator(message) {
+            if contains_terminator(message) {
                 break;
             }
         }
         ret
-    }
-
-    fn contains_terminator(&self, message: &String) -> bool {
-        message.contains("\nok\n") ||
-        message.contains("\nno\n") ||
-        message.contains("\nbad\n")
-    }
-
-    fn positive_termination(&self, message: &String) -> bool {
-        message.contains("\nok\n")
     }
 
     fn write(&mut self, command: &'static str) -> bool {
