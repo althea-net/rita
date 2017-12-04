@@ -6,3 +6,4 @@ authors = ["jkilpatr <jkilpatr@redhat.com>"]
 [dependencies]
 mockstream = { git = "https://github.com/lazy-bitfield/rust-mockstream.git" }
 ascii = "0.8.6"
+derive-error = "0.0.4"
