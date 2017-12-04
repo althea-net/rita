@@ -60,24 +60,12 @@ impl KernelInterface {
         Ok(vec)
     }
 
-    /// Returns a vector of neighbors reachable over layer 2, giving the hardware
-    /// and IP address of each. Implemented with `ip neighbor` on Linux.
-    pub fn get_neighbors(&mut self) -> Result<Vec<(HwAddr, IpAddr)>, Error> {
-        if cfg!(target_os = "linux") {
-            return self.get_neighbors_linux();
-        }
-
-        Err(Error::RuntimeError(
-            String::from("not implemented for this platform"),
-        ))
-    }
-
-    fn register_flow_linux(
+    fn start_counter_linux(
         &mut self,
         source_neighbor: HwAddr,
         destination: IpAddr,
     ) -> Result<(), Error> {
-        self.delete_flow_linux(source_neighbor, destination)?;
+        self.delete_counter_linux(source_neighbor, destination)?;
         match (self.run_command)(
             "ebtables",
             &[
@@ -106,24 +94,7 @@ impl KernelInterface {
         }
     }
 
-    /// This starts a counter of the bytes used by a particular "flow", a
-    /// Neighbor/Destination pair. If the flow already exists, it resets the counter.
-    /// Implemented with `ebtables` on linux.
-    pub fn register_flow(
-        &mut self,
-        source_neighbor: HwAddr,
-        destination: IpAddr,
-    ) -> Result<(), Error> {
-        if cfg!(target_os = "linux") {
-            return self.register_flow_linux(source_neighbor, destination);
-        }
-
-        Err(Error::RuntimeError(
-            String::from("not implemented for this platform"),
-        ))
-    }
-
-    fn delete_flow_linux(
+    fn delete_counter_linux(
         &mut self,
         source_neighbor: HwAddr,
         destination: IpAddr,
@@ -152,23 +123,6 @@ impl KernelInterface {
         }
     }
 
-    /// This deletes a counter of the bytes used by a particular "flow", a
-    /// Neighbor/Destination pair.
-    /// Implemented with `ebtables` on linux.
-    pub fn delete_flow(
-        &mut self,
-        source_neighbor: HwAddr,
-        destination: IpAddr,
-    ) -> Result<(), Error> {
-        if cfg!(target_os = "linux") {
-            return self.delete_flow_linux(source_neighbor, destination);
-        }
-
-        Err(Error::RuntimeError(
-            String::from("not implemented for this platform"),
-        ))
-    }
-
     fn get_traffic_linux(&mut self) -> Result<Vec<(HwAddr, IpAddr, u64)>, Error> {
         let output = (self.run_command)("ebtables", &["-L", "INPUT", "--Lc"])?;
         let mut vec = Vec::new();
@@ -182,6 +136,53 @@ impl KernelInterface {
         }
         Ok(vec)
     }
+
+    /// Returns a vector of neighbors reachable over layer 2, giving the hardware
+    /// and IP address of each. Implemented with `ip neighbor` on Linux.
+    pub fn get_neighbors(&mut self) -> Result<Vec<(HwAddr, IpAddr)>, Error> {
+        if cfg!(target_os = "linux") {
+            return self.get_neighbors_linux();
+        }
+
+        Err(Error::RuntimeError(
+            String::from("not implemented for this platform"),
+        ))
+    }
+
+    /// This starts a counter of the bytes used by a particular "flow", a
+    /// Neighbor/Destination pair. If the flow already exists, it resets the counter.
+    /// Implemented with `ebtables` on linux.
+    pub fn start_counter(
+        &mut self,
+        source_neighbor: HwAddr,
+        destination: IpAddr,
+    ) -> Result<(), Error> {
+        if cfg!(target_os = "linux") {
+            return self.start_counter_linux(source_neighbor, destination);
+        }
+
+        Err(Error::RuntimeError(
+            String::from("not implemented for this platform"),
+        ))
+    }
+
+    /// This deletes a counter of the bytes used by a particular "flow", a
+    /// Neighbor/Destination pair.
+    /// Implemented with `ebtables` on linux.
+    pub fn delete_counter(
+        &mut self,
+        source_neighbor: HwAddr,
+        destination: IpAddr,
+    ) -> Result<(), Error> {
+        if cfg!(target_os = "linux") {
+            return self.delete_counter_linux(source_neighbor, destination);
+        }
+
+        Err(Error::RuntimeError(
+            String::from("not implemented for this platform"),
+        ))
+    }
+
 
     /// Returns a vector of traffic coming from a specific hardware address and going
     /// to a specific IP. Note that this will only track flows that have already been
@@ -268,7 +269,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
     }
 
     #[test]
-    fn test_delete_flow_linux() {
+    fn test_delete_counter_linux() {
         let mut counter = 0;
         let delete_rule = &[
             "-D",
@@ -319,14 +320,14 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
 
             }),
         };
-        ki.delete_flow_linux(
+        ki.delete_counter_linux(
             "0:0:0:aa:0:2".parse::<HwAddr>().unwrap(),
             "2001::3".parse::<IpAddr>().unwrap(),
         ).unwrap();
     }
 
     #[test]
-    fn test_register_flow_linux() {
+    fn test_start_counter_linux() {
         let mut counter = 0;
         let delete_rule = &[
             "-D",
@@ -382,7 +383,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
             }),
         };
 
-        ki.register_flow_linux(
+        ki.start_counter_linux(
             "0:0:0:aa:0:2".parse::<HwAddr>().unwrap(),
             "2001::3".parse::<IpAddr>().unwrap(),
         ).unwrap();
