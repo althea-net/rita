@@ -27,8 +27,7 @@ pub struct Route {
     prefix: String,
     metric: u16,
     refmetric: u16,
-    price: u32
-
+    price: u32,
 }
 
 #[derive(Debug)]
@@ -40,23 +39,21 @@ pub struct Neighbour {
     rxcost: u16,
     rtt: f32,
     rttcost: u16,
-    cost: u16
+    cost: u16,
 }
 
 pub struct Babel<T: io::Read + io::Write> {
-    stream: T
+    stream: T,
 }
 
 impl<T: io::Read + io::Write> Babel<T> {
-
     // Consumes the automated Preamble and validates configuration api version
     pub fn start_connection(&mut self) -> bool {
         let preamble = self.read();
         // Note you have changed the config interface, bump to 1.1 in babel
         if preamble.contains("BABEL 1.0") && self.positive_termination(&preamble) {
             true
-        }
-        else {
+        } else {
             false
         }
     }
@@ -69,7 +66,7 @@ impl<T: io::Read + io::Write> Babel<T> {
 
     //TODO write function to shrink these strings in memory
     fn read(&mut self) -> String {
-        let mut data: [u8; 512] = [0;512];
+        let mut data: [u8; 512] = [0; 512];
         assert!(self.stream.read(&mut data).is_ok());
         let mut ret = str::from_utf8(&data).unwrap().to_string();
         // Messages may be long or get interupped, we must consume
@@ -88,14 +85,11 @@ impl<T: io::Read + io::Write> Babel<T> {
     fn contains_terminator(&self, message: &String) -> bool {
         if message.contains("\nok\n") {
             true
-        }
-        else if message.contains("\nno\n") {
+        } else if message.contains("\nno\n") {
             true
-        }
-        else if message.contains("\nbad\n") {
+        } else if message.contains("\nbad\n") {
             true
-        }
-        else {
+        } else {
             false
         }
     }
@@ -103,16 +97,15 @@ impl<T: io::Read + io::Write> Babel<T> {
     fn positive_termination(&self, message: &String) -> bool {
         if message.contains("\nok\n") {
             true
-        }
-        else {
+        } else {
             false
         }
     }
 
     fn write(&mut self, command: &'static str) -> bool {
         let written_bytes = self.stream.write(command.as_bytes());
-        //lets see how common this failure is before writing
-        //a full retry system
+        // lets see how common this failure is before writing
+        // a full retry system
         assert_eq!(written_bytes.unwrap(), command.as_bytes().len());
         true
     }
@@ -148,11 +141,11 @@ impl<T: io::Read + io::Write> Babel<T> {
                 let reach_str = parse_babel_val("reach", entry);
                 let reach_o = u16::from_str_radix(&reach_str, 16);
                 let reach = reach_o.unwrap();
- 
+
                 let txcost_str = parse_babel_val("txcost", entry);
                 let txcost_o = txcost_str.parse::<u16>();
                 let txcost = txcost_o.unwrap();
-                 
+
                 let rxcost_str = parse_babel_val("rxcost", entry);
                 let rxcost_o = rxcost_str.parse::<u16>();
                 let rxcost = rxcost_o.unwrap();
@@ -169,22 +162,24 @@ impl<T: io::Read + io::Write> Babel<T> {
                 let cost_o = cost_str.parse::<u16>();
                 let cost = cost_o.unwrap();
 
-                let n = Neighbour {id,
-                                   iface,
-                                   reach,
-                                   txcost,
-                                   rxcost,
-                                   rtt,
-                                   rttcost,
-                                   cost};
+                let n = Neighbour {
+                    id,
+                    iface,
+                    reach,
+                    txcost,
+                    rxcost,
+                    rtt,
+                    rttcost,
+                    cost,
+                };
                 vector.push_back(n);
 
             }
         }
         vector
     }
-   
-    
+
+
     pub fn parse_routes(&mut self) -> VecDeque<Route> {
         let mut vector: VecDeque<Route> = VecDeque::with_capacity(20);
         assert_eq!(self.write("dump\n"), true);
@@ -202,7 +197,7 @@ impl<T: io::Read + io::Write> Babel<T> {
                 if parse_babel_val("installed", entry).contains("yes") {
                     installed = true;
                 }
-                
+
                 let neigh_ip = parse_babel_val("via", entry);
 
                 let prefix = parse_babel_val("prefix", entry);
@@ -210,28 +205,29 @@ impl<T: io::Read + io::Write> Babel<T> {
                 let metric_str = parse_babel_val("metric", entry);
                 let metric_o = metric_str.parse::<u16>();
                 let metric = metric_o.unwrap();
-                
+
                 let refmetric_str = parse_babel_val("refmetric", entry);
                 let refmetric_o = refmetric_str.parse::<u16>();
                 let refmetric = refmetric_o.unwrap();
-                 
+
                 let price_str = parse_babel_val("price", entry);
                 let price_o = price_str.parse::<u32>();
                 let price = price_o.unwrap();
 
-                let n = Route {id,
-                               iface,
-                               xroute,
-                               installed,
-                               neigh_ip,
-                               prefix,
-                               metric,
-                               refmetric,
-                               price};
+                let n = Route {
+                    id,
+                    iface,
+                    xroute,
+                    installed,
+                    neigh_ip,
+                    prefix,
+                    metric,
+                    refmetric,
+                    price,
+                };
                 vector.push_back(n);
 
-            }
-            else if entry.contains("add xroute") {
+            } else if entry.contains("add xroute") {
 
                 let id = "XROUTE".to_string();
 
@@ -252,16 +248,18 @@ impl<T: io::Read + io::Write> Babel<T> {
                 let refmetric = 0;
 
                 let price = 0;
-                
-                let n = Route {id,
-                               iface,
-                               xroute,
-                               installed,
-                               neigh_ip,
-                               prefix,
-                               metric,
-                               refmetric,
-                               price};
+
+                let n = Route {
+                    id,
+                    iface,
+                    xroute,
+                    installed,
+                    neigh_ip,
+                    prefix,
+                    metric,
+                    refmetric,
+                    price,
+                };
                 vector.push_back(n);
 
             }
@@ -321,7 +319,7 @@ mod tests {
     #[test]
     fn mock_connect() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel {stream: s.clone()};
+        let mut b1 = Babel { stream: s.clone() };
         s.push_bytes_to_read(PREAMBLE.as_bytes());
         assert_eq!(b1.start_connection(), true);
         assert_eq!(b1.close_connection(), true);
@@ -330,7 +328,7 @@ mod tests {
     #[test]
     fn mock_dump() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel {stream: s.clone()};
+        let mut b1 = Babel { stream: s.clone() };
         s.push_bytes_to_read(TABLE.as_bytes());
         assert_eq!(b1.write("dump\n"), true);
     }
@@ -341,7 +339,10 @@ mod tests {
         assert_eq!(parse_babel_val("prefix", XROUTE_LINE), "10.28.119.131/32");
         assert_eq!(parse_babel_val("route", ROUTE_LINE), "14f06d8");
         assert_eq!(parse_babel_val("if", ROUTE_LINE), "wlan0");
-        assert_eq!(parse_babel_val("via", ROUTE_LINE), "fe80::e9d0:498f:6c61:be29");
+        assert_eq!(
+            parse_babel_val("via", ROUTE_LINE),
+            "fe80::e9d0:498f:6c61:be29"
+        );
         assert_eq!(parse_babel_val("reach", NEIGH_LINE), "ffff");
         assert_eq!(parse_babel_val("rxcost", NEIGH_LINE), "256");
         assert_eq!(parse_babel_val("rtt", NEIGH_LINE), "29.264");
@@ -353,7 +354,7 @@ mod tests {
     #[test]
     fn neigh_parse() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel {stream: s.clone()};
+        let mut b1 = Babel { stream: s.clone() };
         s.push_bytes_to_read(TABLE.as_bytes());
         assert_eq!(b1.write("dump\n"), true);
         let neighs = b1.parse_neighs();
@@ -367,7 +368,7 @@ mod tests {
     #[test]
     fn route_parse() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel {stream: s.clone()};
+        let mut b1 = Babel { stream: s.clone() };
         s.push_bytes_to_read(TABLE.as_bytes());
         assert_eq!(b1.write("dump\n"), true);
         let routes = b1.parse_routes();
@@ -379,9 +380,9 @@ mod tests {
     }
 
     #[test]
-    fn local_price_parse() { 
+    fn local_price_parse() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel {stream: s.clone()};
+        let mut b1 = Babel { stream: s.clone() };
         s.push_bytes_to_read(TABLE.as_bytes());
         assert_eq!(b1.write("dump\n"), true);
         assert_eq!(b1.local_price(), 1024);
