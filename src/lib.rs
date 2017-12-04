@@ -51,11 +51,7 @@ impl<T: io::Read + io::Write> Babel<T> {
     pub fn start_connection(&mut self) -> bool {
         let preamble = self.read();
         // Note you have changed the config interface, bump to 1.1 in babel
-        if preamble.contains("BABEL 1.0") && self.positive_termination(&preamble) {
-            true
-        } else {
-            false
-        }
+        preamble.contains("BABEL 1.0") && self.positive_termination(&preamble)
     }
 
     // Safely closes the babel connection and terminates
@@ -83,23 +79,13 @@ impl<T: io::Read + io::Write> Babel<T> {
     }
 
     fn contains_terminator(&self, message: &String) -> bool {
-        if message.contains("\nok\n") {
-            true
-        } else if message.contains("\nno\n") {
-            true
-        } else if message.contains("\nbad\n") {
-            true
-        } else {
-            false
-        }
+        message.contains("\nok\n") ||
+        message.contains("\nno\n") ||
+        message.contains("\nbad\n")
     }
 
     fn positive_termination(&self, message: &String) -> bool {
-        if message.contains("\nok\n") {
-            true
-        } else {
-            false
-        }
+        message.contains("\nok\n")
     }
 
     fn write(&mut self, command: &'static str) -> bool {
@@ -112,68 +98,30 @@ impl<T: io::Read + io::Write> Babel<T> {
 
     pub fn local_price(&mut self) -> u32 {
         assert_eq!(self.write("dump\n"), true);
-        let table = self.read();
-        let table = table.split("\n");
-        let mut price = 0;
-        for entry in table {
+        for entry in self.read().split("\n") {
             if entry.contains("local price") {
-                let price_str = parse_babel_val("price", entry);
-                let price_o = price_str.parse::<u32>();
-                price = price_o.unwrap();
-                break;
+                return parse_babel_val("price", entry).parse::<u32>().unwrap();
             }
         }
-        price
+        0
     }
 
 
     pub fn parse_neighs(&mut self) -> VecDeque<Neighbour> {
         let mut vector: VecDeque<Neighbour> = VecDeque::with_capacity(5);
-        assert_eq!(self.write("dump\n"), true);
-        let table = self.read();
-        let table = table.split("\n");
-        for entry in table {
+        assert!(self.write("dump\n"));
+        for entry in self.read().split("\n") {
             if entry.contains("add neighbour") {
-                let id = parse_babel_val("neighbour", entry);
-
-                let iface = parse_babel_val("if", entry);
-
-                let reach_str = parse_babel_val("reach", entry);
-                let reach_o = u16::from_str_radix(&reach_str, 16);
-                let reach = reach_o.unwrap();
-
-                let txcost_str = parse_babel_val("txcost", entry);
-                let txcost_o = txcost_str.parse::<u16>();
-                let txcost = txcost_o.unwrap();
-
-                let rxcost_str = parse_babel_val("rxcost", entry);
-                let rxcost_o = rxcost_str.parse::<u16>();
-                let rxcost = rxcost_o.unwrap();
-
-                let rtt_str = parse_babel_val("rtt", entry);
-                let rtt_o = rtt_str.parse::<f32>();
-                let rtt = rtt_o.unwrap();
-
-                let rttcost_str = parse_babel_val("rttcost", entry);
-                let rttcost_o = rttcost_str.parse::<u16>();
-                let rttcost = rttcost_o.unwrap();
-
-                let cost_str = parse_babel_val("cost", entry);
-                let cost_o = cost_str.parse::<u16>();
-                let cost = cost_o.unwrap();
-
-                let n = Neighbour {
-                    id,
-                    iface,
-                    reach,
-                    txcost,
-                    rxcost,
-                    rtt,
-                    rttcost,
-                    cost,
-                };
-                vector.push_back(n);
-
+                vector.push_back(Neighbour {
+                    id: parse_babel_val("neighbour", entry),
+                    iface: parse_babel_val("if", entry),
+                    reach: u16::from_str_radix(&parse_babel_val("reach", entry), 16).unwrap(),
+                    txcost: parse_babel_val("txcost", entry).parse::<u16>().unwrap(),
+                    rxcost: parse_babel_val("rxcost", entry).parse::<u16>().unwrap(),
+                    rtt: parse_babel_val("rtt", entry).parse::<f32>().unwrap(),
+                    rttcost: parse_babel_val("rttcost", entry).parse::<u16>().unwrap(),
+                    cost: parse_babel_val("cost", entry).parse::<u16>().unwrap(),
+                });
             }
         }
         vector
@@ -187,81 +135,29 @@ impl<T: io::Read + io::Write> Babel<T> {
         let table = table.split("\n");
         for entry in table {
             if entry.contains("add route") {
-                let id = parse_babel_val("route", entry);
-
-                let iface = parse_babel_val("if", entry);
-
-                let xroute = false;
-
-                let mut installed = false;
-                if parse_babel_val("installed", entry).contains("yes") {
-                    installed = true;
-                }
-
-                let neigh_ip = parse_babel_val("via", entry);
-
-                let prefix = parse_babel_val("prefix", entry);
-
-                let metric_str = parse_babel_val("metric", entry);
-                let metric_o = metric_str.parse::<u16>();
-                let metric = metric_o.unwrap();
-
-                let refmetric_str = parse_babel_val("refmetric", entry);
-                let refmetric_o = refmetric_str.parse::<u16>();
-                let refmetric = refmetric_o.unwrap();
-
-                let price_str = parse_babel_val("price", entry);
-                let price_o = price_str.parse::<u32>();
-                let price = price_o.unwrap();
-
-                let n = Route {
-                    id,
-                    iface,
-                    xroute,
-                    installed,
-                    neigh_ip,
-                    prefix,
-                    metric,
-                    refmetric,
-                    price,
-                };
-                vector.push_back(n);
-
+                vector.push_back(Route {
+                    id: parse_babel_val("route", entry),
+                    iface: parse_babel_val("if", entry),
+                    xroute: false,
+                    installed: parse_babel_val("installed", entry).contains("yes"),
+                    neigh_ip: parse_babel_val("via", entry),
+                    prefix: parse_babel_val("prefix", entry),
+                    metric: parse_babel_val("metric", entry).parse::<u16>().unwrap(),
+                    refmetric: parse_babel_val("refmetric", entry).parse::<u16>().unwrap(),
+                    price: parse_babel_val("price", entry).parse::<u32>().unwrap(),
+                });
             } else if entry.contains("add xroute") {
-
-                let id = "XROUTE".to_string();
-
-                let iface = "XROUTE".to_string();
-
-                let xroute = true;
-
-                let installed = true;
-
-                let neigh_ip = "XROUTE".to_string();
-
-                let prefix = parse_babel_val("prefix", entry);
-
-                let metric_str = parse_babel_val("metric", entry);
-                let metric_o = metric_str.parse::<u16>();
-                let metric = metric_o.unwrap();
-
-                let refmetric = 0;
-
-                let price = 0;
-
-                let n = Route {
-                    id,
-                    iface,
-                    xroute,
-                    installed,
-                    neigh_ip,
-                    prefix,
-                    metric,
-                    refmetric,
-                    price,
-                };
-                vector.push_back(n);
-
+                vector.push_back(Route {
+                    id: "XROUTE".to_string(),
+                    iface: "XROUTE".to_string(),
+                    xroute: true,
+                    installed: true,
+                    neigh_ip: "XROUTE".to_string(),
+                    prefix: parse_babel_val("prefix", entry),
+                    metric: parse_babel_val("metric", entry).parse::<u16>().unwrap(),
+                    refmetric: 0,
+                    price: 0,
+                });
             }
         }
         vector
