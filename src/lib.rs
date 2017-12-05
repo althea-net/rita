@@ -4,7 +4,9 @@ extern crate derive_error;
 use std::str;
 extern crate hwaddr;
 extern crate regex;
+extern crate itertools;
 
+use itertools::join;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use hwaddr::HwAddr;
@@ -99,28 +101,37 @@ impl KernelInterface {
         source_neighbor: HwAddr,
         destination: IpAddr,
     ) -> Result<(), Error> {
-        loop {
-            let res = (self.run_command)(
-                "ebtables",
-                &[
-                    "-D",
-                    "INPUT",
-                    "-s",
-                    &format!("{}", source_neighbor),
-                    "-p",
-                    "IPV6",
-                    "--ip6-dst",
-                    &format!("{}", destination),
-                    "-j",
-                    "ACCEPT",
-                ]
-                    [..],
-            )?;
+        let loop_limit = 100;
+        for _ in 0..loop_limit {
+            let program = "ebtables";
+            let args = &[
+                "-D",
+                "INPUT",
+                "-s",
+                &format!("{}", source_neighbor),
+                "-p",
+                "IPV6",
+                "--ip6-dst",
+                &format!("{}", destination),
+                "-j",
+                "ACCEPT",
+            ];
+            let res = (self.run_command)(program, args)?;
             // keeps looping until it is sure to have deleted the rule
             if res.stdout == b"Sorry, rule does not exist.".to_vec() {
                 return Ok(());
             }
+            if res.stdout == b"".to_vec() {
+                continue;
+            } else {
+                return Err(Error::RuntimeError(
+                    format!("unexpected output from {} {:?}: {:?}", program, join(args, " "), String::from_utf8_lossy(&res.stdout)),
+                ))
+            }
         }
+        Err(Error::RuntimeError(
+            format!("loop limit of {} exceeded", loop_limit)
+        ))
     }
 
     fn get_traffic_linux(&mut self) -> Result<Vec<(HwAddr, IpAddr, u64)>, Error> {
@@ -324,6 +335,44 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
             "0:0:0:aa:0:2".parse::<HwAddr>().unwrap(),
             "2001::3".parse::<IpAddr>().unwrap(),
         ).unwrap();
+
+        let mut ki = KernelInterface {
+            run_command: Box::new(move |_, _| {
+                counter = counter + 1;
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }),
+        };
+
+        match ki.delete_counter_linux(
+            "0:0:0:aa:0:2".parse::<HwAddr>().unwrap(),
+            "2001::3".parse::<IpAddr>().unwrap(),
+        ) {
+            Err(e) => assert_eq!(e.to_string(), "loop limit of 100 exceeded"),
+            _ => panic!("no loop limit error")
+        }
+
+        let mut ki = KernelInterface {
+            run_command: Box::new(move |_, _| {
+                counter = counter + 1;
+                Ok(Output {
+                    stdout: b"shibby".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }),
+        };
+
+        match ki.delete_counter_linux(
+            "0:0:0:aa:0:2".parse::<HwAddr>().unwrap(),
+            "2001::3".parse::<IpAddr>().unwrap(),
+        ) {
+            Err(e) => assert_eq!(e.to_string(), "unexpected output from ebtables \"-D INPUT -s 0:0:0:AA:0:2 -p IPV6 --ip6-dst 2001::3 -j ACCEPT\": \"shibby\""),
+            _ => panic!("no unexpeted input error")
+        }
     }
 
     #[test]
