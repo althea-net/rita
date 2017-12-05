@@ -48,7 +48,7 @@ impl KernelInterface {
         }
     }
 
-    fn get_neighbors_linux(mut self) -> Result<Vec<(HwAddr, IpAddr)>, Error> {
+    fn get_neighbors_linux(&mut self) -> Result<Vec<(HwAddr, IpAddr)>, Error> {
         let output = (self.run_command)("ip", &["neighbor"])?;
         let mut vec = Vec::new();
         let re = Regex::new(r"(\S*) .* (\S*) (REACHABLE|STALE|DELAY)").unwrap();
@@ -62,7 +62,7 @@ impl KernelInterface {
     }
 
     fn start_counter_linux(
-        mut self,
+        &mut self,
         source_neighbor: HwAddr,
         destination: IpAddr,
     ) -> Result<(), Error> {
@@ -133,7 +133,7 @@ impl KernelInterface {
         ))
     }
 
-    fn get_traffic_linux(mut self) -> Result<Vec<(HwAddr, IpAddr, u64)>, Error> {
+    fn get_traffic_linux(&mut self) -> Result<Vec<(HwAddr, IpAddr, u64)>, Error> {
         let output = (self.run_command)("ebtables", &["-L", "INPUT", "--Lc"])?;
         let mut vec = Vec::new();
         let re = Regex::new(r"-s (.*) --ip6-dst (.*)/.* bcnt = (.*)").unwrap();
@@ -149,7 +149,7 @@ impl KernelInterface {
 
     /// Returns a vector of neighbors reachable over layer 2, giving the hardware
     /// and IP address of each. Implemented with `ip neighbor` on Linux.
-    pub fn get_neighbors(self) -> Result<Vec<(HwAddr, IpAddr)>, Error> {
+    pub fn get_neighbors(&mut self) -> Result<Vec<(HwAddr, IpAddr)>, Error> {
         if cfg!(target_os = "linux") {
             return self.get_neighbors_linux();
         }
@@ -163,7 +163,7 @@ impl KernelInterface {
     /// Neighbor/Destination pair. If the flow already exists, it resets the counter.
     /// Implemented with `ebtables` on linux.
     pub fn start_counter(
-        self,
+        &mut self,
         source_neighbor: HwAddr,
         destination: IpAddr,
     ) -> Result<(), Error> {
@@ -180,7 +180,7 @@ impl KernelInterface {
     /// Neighbor/Destination pair.
     /// Implemented with `ebtables` on linux.
     pub fn delete_counter(
-        mut self,
+        &mut self,
         source_neighbor: HwAddr,
         destination: IpAddr,
     ) -> Result<(), Error> {
@@ -197,7 +197,7 @@ impl KernelInterface {
     /// Returns a vector of traffic coming from a specific hardware address and going
     /// to a specific IP. Note that this will only track flows that have already been
     /// registered. Implemented with `ebtables` on Linux.
-    pub fn get_traffic(self) -> Result<Vec<(HwAddr, IpAddr, u64)>, Error> {
+    pub fn get_traffic(&mut self) -> Result<Vec<(HwAddr, IpAddr, u64)>, Error> {
         if cfg!(target_os = "linux") {
             return self.get_traffic_linux();
         }
@@ -213,7 +213,7 @@ mod tests {
     use super::*;
     #[test]
     fn test_get_neighbors_linux() {
-        let ki = KernelInterface {
+        let mut ki = KernelInterface {
             run_command: Box::new(|program, args| {
                 assert_eq!(program, "ip");
                 assert_eq!(args, &["neighbor"]);
@@ -247,7 +247,7 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
 
     #[test]
     fn test_get_traffic_linux() {
-        let ki = KernelInterface {
+        let mut ki = KernelInterface {
             run_command: Box::new(|program, args| {
                 assert_eq!(program, "ebtables");
                 assert_eq!(args, &["-L", "INPUT", "--Lc"]);
@@ -401,7 +401,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
             "-j",
             "ACCEPT",
         ];
-        let ki = KernelInterface {
+        let mut ki = KernelInterface {
             run_command: Box::new(move |program, args| {
                 assert_eq!(program, "ebtables");
 
