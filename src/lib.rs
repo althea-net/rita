@@ -103,14 +103,12 @@ impl<T: Read + Write> Babel<T> {
 
     //TODO use BufRead instead of this
     fn read(&mut self) -> Result<String, Error> {
-        println!("start read");
         let mut data: [u8; 512] = [0; 512];
         self.stream.read(&mut data)?;
         let mut ret = str::from_utf8(&data)?.to_string();
         // Messages may be long or get interupped, we must consume
         // until we hit a terminator
         while !contains_terminator(&ret) {
-            println!("ret {}", ret);
             self.stream.read(&mut data)?;
             ret = ret + &str::from_utf8(&data)?.to_string();
         }
