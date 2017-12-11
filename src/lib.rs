@@ -61,13 +61,13 @@ impl KernelInterface {
         Ok(vec)
     }
 
-    fn start_counter_linux(
+    fn start_flow_counter_linux(
         &mut self,
         source_neighbor: HwAddr,
         destination: IpAddr,
     ) -> Result<(), Error> {
-        self.delete_counter_linux(source_neighbor, destination)?;
-        match (self.run_command)(
+        self.delete_flow_counter_linux(source_neighbor, destination)?;
+        (self.run_command)(
             "ebtables",
             &[
                 "-A",
@@ -79,42 +79,41 @@ impl KernelInterface {
                 "--ip6-dst",
                 &format!("{}", destination),
                 "-j",
-                "ACCEPT",
-            ]
-                [..],
-        ) {
-            Ok(v) => {
-                match v.status.success() {
-                    true => Ok(()),
-                    false => Err(Error::RuntimeError(
-                        String::from(format!("{}", v.status.code().unwrap())),
-                    )),
-                }
-            }
-            Err(e) => Err(e),
-        }
+                "CONTINUE",
+            ],
+        )?;
+        Ok(())
     }
 
-    fn delete_counter_linux(
+    fn start_destination_counter_linux(
         &mut self,
-        source_neighbor: HwAddr,
         destination: IpAddr,
     ) -> Result<(), Error> {
-        let loop_limit = 100;
-        for _ in 0..loop_limit {
-            let program = "ebtables";
-            let args = &[
-                "-D",
+        self.delete_destination_counter_linux(destination)?;
+        (self.run_command)(
+            "ebtables",
+            &[
+                "-A",
                 "INPUT",
-                "-s",
-                &format!("{}", source_neighbor),
                 "-p",
                 "IPV6",
                 "--ip6-dst",
                 &format!("{}", destination),
                 "-j",
-                "ACCEPT",
-            ];
+                "CONTINUE",
+            ],
+        )?;
+        Ok(())
+    }
+
+
+    fn delete_ebtables_rule(
+        &mut self,
+        args: &[&str]
+    ) -> Result<(), Error> {
+        let loop_limit = 100;
+        for _ in 0..loop_limit {
+            let program = "ebtables";
             let res = (self.run_command)(program, args)?;
             // keeps looping until it is sure to have deleted the rule
             if res.stdout == b"Sorry, rule does not exist.".to_vec() {
@@ -133,7 +132,42 @@ impl KernelInterface {
         ))
     }
 
-    fn get_traffic_linux(&mut self) -> Result<Vec<(HwAddr, IpAddr, u64)>, Error> {
+    fn delete_flow_counter_linux(
+        &mut self,
+        source_neighbor: HwAddr,
+        destination: IpAddr,
+    ) -> Result<(), Error> {
+        self.delete_ebtables_rule(&[
+            "-D",
+            "INPUT",
+            "-s",
+            &format!("{}", source_neighbor),
+            "-p",
+            "IPV6",
+            "--ip6-dst",
+            &format!("{}", destination),
+            "-j",
+            "CONTINUE",
+        ])
+    }
+
+    fn delete_destination_counter_linux(
+        &mut self,
+        destination: IpAddr,
+    ) -> Result<(), Error> {
+        self.delete_ebtables_rule(&[
+            "-D",
+            "INPUT",
+            "-p",
+            "IPV6",
+            "--ip6-dst",
+            &format!("{}", destination),
+            "-j",
+            "CONTINUE",
+        ])
+    }
+
+    fn read_flow_counters_linux(&mut self) -> Result<Vec<(HwAddr, IpAddr, u64)>, Error> {
         let output = (self.run_command)("ebtables", &["-L", "INPUT", "--Lc"])?;
         let mut vec = Vec::new();
         let re = Regex::new(r"-s (.*) --ip6-dst (.*)/.* bcnt = (.*)").unwrap();
@@ -159,16 +193,49 @@ impl KernelInterface {
         ))
     }
 
+
+    /// This starts a counter of bytes forwarded to a certain destination.
+    /// If the destination already exists, it resets the counter.
+    /// Implemented with `ebtables` on linux.
+    pub fn start_destination_counter(
+        &mut self,
+        destination: IpAddr,
+    ) -> Result<(), Error> {
+        if cfg!(target_os = "linux") {
+            return self.start_destination_counter_linux(destination);
+        }
+
+        Err(Error::RuntimeError(
+            String::from("not implemented for this platform"),
+        ))
+    }
+
+    /// This deletes a counter of bytes forwarded to a certain destination.
+    /// Implemented with `ebtables` on linux.
+    pub fn delete_destination_counter(
+        &mut self,
+        destination: IpAddr,
+    ) -> Result<(), Error> {
+        if cfg!(target_os = "linux") {
+            return self.delete_destination_counter_linux(destination);
+        }
+
+        Err(Error::RuntimeError(
+            String::from("not implemented for this platform"),
+        ))
+    }
+
+
     /// This starts a counter of the bytes used by a particular "flow", a
     /// Neighbor/Destination pair. If the flow already exists, it resets the counter.
     /// Implemented with `ebtables` on linux.
-    pub fn start_counter(
+    pub fn start_flow_counter(
         &mut self,
         source_neighbor: HwAddr,
         destination: IpAddr,
     ) -> Result<(), Error> {
         if cfg!(target_os = "linux") {
-            return self.start_counter_linux(source_neighbor, destination);
+            return self.start_flow_counter_linux(source_neighbor, destination);
         }
 
         Err(Error::RuntimeError(
@@ -179,13 +246,13 @@ impl KernelInterface {
     /// This deletes a counter of the bytes used by a particular "flow", a
     /// Neighbor/Destination pair.
     /// Implemented with `ebtables` on linux.
-    pub fn delete_counter(
+    pub fn delete_flow_counter(
         &mut self,
         source_neighbor: HwAddr,
         destination: IpAddr,
     ) -> Result<(), Error> {
         if cfg!(target_os = "linux") {
-            return self.delete_counter_linux(source_neighbor, destination);
+            return self.delete_flow_counter_linux(source_neighbor, destination);
         }
 
         Err(Error::RuntimeError(
@@ -193,13 +260,12 @@ impl KernelInterface {
         ))
     }
 
-
     /// Returns a vector of traffic coming from a specific hardware address and going
     /// to a specific IP. Note that this will only track flows that have already been
     /// registered. Implemented with `ebtables` on Linux.
-    pub fn get_traffic(&mut self) -> Result<Vec<(HwAddr, IpAddr, u64)>, Error> {
+    pub fn read_flow_counters(&mut self) -> Result<Vec<(HwAddr, IpAddr, u64)>, Error> {
         if cfg!(target_os = "linux") {
-            return self.get_traffic_linux();
+            return self.read_flow_counters_linux();
         }
 
         Err(Error::RuntimeError(
@@ -246,7 +312,7 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
     }
 
     #[test]
-    fn test_get_traffic_linux() {
+    fn test_read_flow_counter_linuxs() {
         let mut ki = KernelInterface {
             run_command: Box::new(|program, args| {
                 assert_eq!(program, "ebtables");
@@ -267,7 +333,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
             }),
         };
 
-        let traffic = ki.get_traffic_linux().unwrap();
+        let traffic = ki.read_flow_counters_linux().unwrap();
 
         assert_eq!(format!("{}", traffic[0].0), "0:0:0:AA:0:2");
         assert_eq!(format!("{}", traffic[0].1), "2001::1");
@@ -291,7 +357,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
             "--ip6-dst",
             "2001::3",
             "-j",
-            "ACCEPT",
+            "CONTINUE",
         ];
         let mut ki = KernelInterface {
             run_command: Box::new(move |program, args| {
@@ -330,7 +396,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
 
             }),
         };
-        ki.delete_counter_linux(
+        ki.delete_flow_counter_linux(
             "0:0:0:aa:0:2".parse::<HwAddr>().unwrap(),
             "2001::3".parse::<IpAddr>().unwrap(),
         ).unwrap();
@@ -346,7 +412,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
             }),
         };
 
-        match ki.delete_counter_linux(
+        match ki.delete_flow_counter_linux(
             "0:0:0:aa:0:2".parse::<HwAddr>().unwrap(),
             "2001::3".parse::<IpAddr>().unwrap(),
         ) {
@@ -365,11 +431,11 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
             }),
         };
 
-        match ki.delete_counter_linux(
+        match ki.delete_flow_counter_linux(
             "0:0:0:aa:0:2".parse::<HwAddr>().unwrap(),
             "2001::3".parse::<IpAddr>().unwrap(),
         ) {
-            Err(e) => assert_eq!(e.to_string(), "unexpected output from ebtables \"-D INPUT -s 0:0:0:AA:0:2 -p IPV6 --ip6-dst 2001::3 -j ACCEPT\": \"shibby\""),
+            Err(e) => assert_eq!(e.to_string(), "unexpected output from ebtables \"-D INPUT -s 0:0:0:AA:0:2 -p IPV6 --ip6-dst 2001::3 -j CONTINUE\": \"shibby\""),
             _ => panic!("no unexpeted input error")
         }
     }
@@ -387,7 +453,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
             "--ip6-dst",
             "2001::3",
             "-j",
-            "ACCEPT",
+            "CONTINUE",
         ];
         let add_rule = &[
             "-A",
@@ -399,7 +465,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
             "--ip6-dst",
             "2001::3",
             "-j",
-            "ACCEPT",
+            "CONTINUE",
         ];
         let mut ki = KernelInterface {
             run_command: Box::new(move |program, args| {
@@ -431,7 +497,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
             }),
         };
 
-        ki.start_counter_linux(
+        ki.start_flow_counter_linux(
             "0:0:0:aa:0:2".parse::<HwAddr>().unwrap(),
             "2001::3".parse::<IpAddr>().unwrap(),
         ).unwrap();
