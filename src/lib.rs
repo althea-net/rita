@@ -5,12 +5,13 @@ extern crate derive_error;
 extern crate ip_network;
 extern crate mockstream;
 
+use std::{time};
 use std::io::{Read, Write};
 use std::str;
 use mockstream::SharedMockStream;
 use std::collections::VecDeque;
 use std::net::IpAddr;
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::{TcpStream, SocketAddr};
 use ip_network::IpNetwork;
 
 #[derive(Debug, Error)]
@@ -80,12 +81,15 @@ pub struct Babel<T: Read + Write> {
     stream: T,
 }
 
-impl<T: Read + Write> Babel<T> {
-    pub fn new<A: ToSocketAddrs>(addr: A) -> Babel<TcpStream> {
-        let mut babel = Babel { stream: TcpStream::connect(addr).unwrap() };
+impl Babel<TcpStream> {
+    pub fn new(addr: &SocketAddr) -> Babel<TcpStream> {
+        let mut babel = Babel { stream: TcpStream::connect_timeout(addr, time::Duration::from_secs(5)).unwrap() };
         babel.start_connection().unwrap();
         babel
     }
+}
+
+impl<T: Read + Write> Babel<T> {
     // Consumes the automated Preamble and validates configuration api version
     pub fn start_connection(&mut self) -> Result<(), Error> {
         let preamble = self.read()?;
@@ -99,18 +103,16 @@ impl<T: Read + Write> Babel<T> {
 
     //TODO use BufRead instead of this
     fn read(&mut self) -> Result<String, Error> {
+        println!("start read");
         let mut data: [u8; 512] = [0; 512];
         self.stream.read(&mut data)?;
         let mut ret = str::from_utf8(&data)?.to_string();
         // Messages may be long or get interupped, we must consume
         // until we hit a terminator
-        loop {
+        while !contains_terminator(&ret) {
+            println!("ret {}", ret);
             self.stream.read(&mut data)?;
-            let message = &str::from_utf8(&data)?.to_string();
-            ret = ret + message;
-            if contains_terminator(message) {
-                break;
-            }
+            ret = ret + &str::from_utf8(&data)?.to_string();
         }
         Ok(ret)
     }
