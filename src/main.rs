@@ -1,5 +1,9 @@
 extern crate althea_kernel_interface;
 extern crate babel_monitor;
+#[macro_use]
+extern crate log;
+extern crate simple_logger;
+
 extern crate ip_network;
 
 use std::{thread, time};
@@ -8,18 +12,24 @@ use babel_monitor::Babel;
 use althea_kernel_interface::KernelInterface;
 use std::net::IpAddr;
 use ip_network::IpNetwork;
+use std::net::SocketAddr;
 
 fn main() {
-    println!("Hello, world!");
+    simple_logger::init().unwrap();
+    trace!("Starting");
     let mut ki = KernelInterface::new();
 
-    let mut babel = Babel::new("127.0.0.0:8080");
+    let mut babel = Babel::new(&"[::1]:8080".parse::<SocketAddr>().unwrap());
+    trace!("Connected to babel at {}", "[::1]:8080");
 
     let mut neigh_debts = HashMap::new();
 
     loop {
         let neighbors = ki.get_neighbors().unwrap();
+        info!("Got neighbors: {:?}", neighbors);
+
         let destinations = babel.parse_routes().unwrap();
+        info!("Got destinations: {:?}", destinations);
 
         let mut dest_map = HashMap::new();
 
