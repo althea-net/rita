@@ -1,10 +1,15 @@
+#![feature(getpid)]
 extern crate althea_kernel_interface;
 extern crate babel_monitor;
+
+use std::process;
+
+extern crate docopt;
 #[macro_use]
 extern crate log;
-extern crate simple_logger;
 
 extern crate ip_network;
+extern crate simple_logger;
 
 use std::{thread, time};
 use std::collections::HashMap;
@@ -13,12 +18,31 @@ use althea_kernel_interface::KernelInterface;
 use std::net::IpAddr;
 use ip_network::IpNetwork;
 use std::net::SocketAddr;
+use docopt::Docopt;
+
+use std::fs::File;
+use std::io::prelude::*;
+use std::env;
+
+const USAGE: &'static str = "
+Usage: rita [--pid <pid file>]
+
+Options:
+    --pid  Which file to write the PID to. 
+";
 
 fn main() {
     simple_logger::init().unwrap();
+    // let args = Docopt::new(USAGE)
+    //     .and_then(|d| d.parse())
+    //     .unwrap_or_else(|e| e.exit());
+
+    // let mut file = File::create("foo.txt").unwrap();
+    // file.write_all(b"Hello, world!").unwrap();
+
     trace!("Starting");
     let mut ki = KernelInterface::new();
-
+    println!("fo");
     let mut babel = Babel::new(&"[::1]:8080".parse::<SocketAddr>().unwrap());
     trace!("Connected to babel at {}", "[::1]:8080");
 
