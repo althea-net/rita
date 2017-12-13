@@ -39,16 +39,24 @@ pass_string()
  fi
 }
 
-cleanup()
+stop_babel()
 {
- set +eux
-  kill -9 $(cat babeld-n1.pid)
-  kill -9 $(cat babeld-n2.pid)
-  kill -9 $(cat babeld-n3.pid)
-  rm -f babeld-n*
- set -eux
+  set +eux
+    for f in babeld-*.pid
+    do
+      echo "Processing $f file..."
+      # take action on each file. $f store current file name
+      kill -9 "$(cat $f)"
+    done
+  set -eux
 }
 
+cleanup()
+{
+  rm -f babeld-n*
+}
+
+stop_babel
 cleanup
 
 source $network_lab << EOF
@@ -78,21 +86,24 @@ EOF
 
 ip netns exec netlab-1 sysctl -w net.ipv4.ip_forward=1
 ip netns exec netlab-1 sysctl -w net.ipv6.conf.all.forwarding=1
-ip netns exec netlab-2 ip link set up lo
-ip netns exec netlab-1 $babeld -I babeld-n1.pid -d 1 -L babeld-n1.log -P 5 -w veth-1-2 -G 8080&
+ip netns exec netlab-1 ip link set up lo
+ip netns exec netlab-1 $babeld -I babeld-n1.pid -d 1 -L babeld-n1.log -h 1 -P 5 -w veth-1-2 -G 8080 &
 
 ip netns exec netlab-2 sysctl -w net.ipv4.ip_forward=1
 ip netns exec netlab-2 sysctl -w net.ipv6.conf.all.forwarding=1
 ip netns exec netlab-2 ip link set up lo
-ip netns exec netlab-2 $babeld -I babeld-n2.pid -d 1 -L babeld-n2.log -P 10 -w veth-2-1 -w veth-2-3 -G 8080&
-RUST_BACKTRACE=1 ip netns exec netlab-2 $rita > rita-n2.log
+ip netns exec netlab-2 $babeld -I babeld-n2.pid -d 1 -L babeld-n2.log -h 1 -P 10 -w veth-2-1 -w veth-2-3 -G 8080 &
+RUST_BACKTRACE=1 ip netns exec netlab-2 $rita > rita-n2.log &
 
 ip netns exec netlab-3 sysctl -w net.ipv4.ip_forward=1
 ip netns exec netlab-3 sysctl -w net.ipv6.conf.all.forwarding=1
-ip netns exec netlab-2 ip link set up lo
-ip netns exec netlab-3 $babeld -I babeld-n3.pid -d 1 -L babeld-n3.log -P 1 -w veth-3-2 -G 8080&
+ip netns exec netlab-3 ip link set up lo
+ip netns exec netlab-3 $babeld -I babeld-n3.pid -d 1 -L babeld-n3.log -h 1 -P 1 -w veth-3-2 -G 8080 &
 
-sleep 15
+sleep 20
+
+stop_babel
+
 fail_string "malformed" "babeld-n1.log"
 fail_string "malformed" "babeld-n2.log"
 fail_string "malformed" "babeld-n3.log"

@@ -1,4 +1,5 @@
 *.log
+*.pid
 /deps/
 .cache
 .vagrant
