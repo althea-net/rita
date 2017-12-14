@@ -46,10 +46,10 @@ fn find_babel_val(val: &str, line: &str) -> Result<String, Error> {
 }
 
 
-fn contains_terminator(message: &String) -> bool {
-    message.contains("\nok\n") ||
-    message.contains("\nno\n") ||
-    message.contains("\nbad\n")
+fn is_terminator(line: &String) -> bool {
+    line == "ok" ||
+    line == "no" ||
+    line == "bad"
 }
 
 fn positive_termination(message: &String) -> bool {
@@ -105,27 +105,13 @@ impl<T: Read + Write> Babel<T> {
         }
     }
 
-    //TODO use BufRead instead of this
-    // fn read(&mut self) -> Result<String, Error> {
-    //     let mut data: [u8; 512] = [0; 512];
-    //     self.stream.read(&mut data)?;
-    //     let mut ret = str::from_utf8(&data)?.to_string();
-    //     // Messages may be long or get interupped, we must consume
-    //     // until we hit a terminator
-    //     while !contains_terminator(&ret) {
-    //         self.stream.read(&mut data)?;
-    //         ret = ret + &str::from_utf8(&data)?.to_string();
-    //     }
-    //     Ok(ret)
-    // }
-
     fn read(&mut self) -> Result<String, Error> {
         let mut ret = String::new();
         for line in self.stream.by_ref().lines() {
             let line = &line?;
             ret.push_str(line);
-            ret.push_str("\n");
-            if contains_terminator(line) {
+            ret.push_str("\n"); 
+            if is_terminator(line) {
                 break;
             }
         }
