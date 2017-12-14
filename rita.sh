@@ -39,13 +39,11 @@ pass_string()
  fi
 }
 
-stop_babel()
+stop_processes()
 {
   set +eux
-    for f in babeld-*.pid
+    for f in *.pid
     do
-      echo "Processing $f file..."
-      # take action on each file. $f store current file name
       kill -9 "$(cat $f)"
     done
   set -eux
@@ -53,10 +51,11 @@ stop_babel()
 
 cleanup()
 {
-  rm -f babeld-n*
+  rm -f ./*.pid
+  rm -f ./*.log
 }
 
-stop_babel
+stop_processes
 cleanup
 
 source $network_lab << EOF
@@ -93,7 +92,7 @@ ip netns exec netlab-2 sysctl -w net.ipv4.ip_forward=1
 ip netns exec netlab-2 sysctl -w net.ipv6.conf.all.forwarding=1
 ip netns exec netlab-2 ip link set up lo
 ip netns exec netlab-2 $babeld -I babeld-n2.pid -d 1 -L babeld-n2.log -h 1 -P 10 -w veth-2-1 -w veth-2-3 -G 8080 &
-RUST_BACKTRACE=1 ip netns exec netlab-2 $rita > rita-n2.log &
+RUST_BACKTRACE=full ip netns exec netlab-2 $rita --pid rita-n2.pid > rita-n2.log &
 
 ip netns exec netlab-3 sysctl -w net.ipv4.ip_forward=1
 ip netns exec netlab-3 sysctl -w net.ipv6.conf.all.forwarding=1
@@ -102,7 +101,9 @@ ip netns exec netlab-3 $babeld -I babeld-n3.pid -d 1 -L babeld-n3.log -h 1 -P 1 
 
 sleep 20
 
-stop_babel
+stop_processes
+
+sleep 1
 
 fail_string "malformed" "babeld-n1.log"
 fail_string "malformed" "babeld-n2.log"
@@ -119,6 +120,6 @@ pass_string "nexthop 1.0.0.1" "babeld-n2.log"
 pass_string "nexthop 1.0.0.3" "babeld-n2.log"
 pass_string "nexthop 1.0.0.2" "babeld-n3.log"
 
-cleanup
+# cleanup
 
 echo "$0 PASS"
