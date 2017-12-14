@@ -2,8 +2,12 @@
 #[macro_use]
 extern crate derive_error;
 
+#[macro_use]
+extern crate log;
+
 extern crate ip_network;
 extern crate mockstream;
+use std::io::{BufReader, BufRead};
 
 use std::{time};
 use std::io::{Read, Write};
@@ -78,12 +82,12 @@ pub struct Neighbour {
 }
 
 pub struct Babel<T: Read + Write> {
-    stream: T,
+    stream: BufReader<T>,
 }
 
 impl Babel<TcpStream> {
     pub fn new(addr: &SocketAddr) -> Babel<TcpStream> {
-        let mut babel = Babel { stream: TcpStream::connect_timeout(addr, time::Duration::from_secs(5)).unwrap() };
+        let mut babel = Babel { stream: BufReader::new(TcpStream::connect_timeout(addr, time::Duration::from_secs(5)).unwrap()) };
         babel.start_connection().unwrap();
         babel
     }
@@ -94,7 +98,7 @@ impl<T: Read + Write> Babel<T> {
     pub fn start_connection(&mut self) -> Result<(), Error> {
         let preamble = self.read()?;
         // Note you have changed the config interface, bump to 1.1 in babel
-        if preamble.contains("BABEL 1.0") && positive_termination(&preamble) {
+        if preamble.contains("ALTHEA 0.1") && positive_termination(&preamble) {
             return Ok(());
         } else {
             return Err(Error::BabelError(format!("Connection to Babel not started correctly. Invalid preamble: {}", preamble)));
@@ -102,21 +106,34 @@ impl<T: Read + Write> Babel<T> {
     }
 
     //TODO use BufRead instead of this
+    // fn read(&mut self) -> Result<String, Error> {
+    //     let mut data: [u8; 512] = [0; 512];
+    //     self.stream.read(&mut data)?;
+    //     let mut ret = str::from_utf8(&data)?.to_string();
+    //     // Messages may be long or get interupped, we must consume
+    //     // until we hit a terminator
+    //     while !contains_terminator(&ret) {
+    //         self.stream.read(&mut data)?;
+    //         ret = ret + &str::from_utf8(&data)?.to_string();
+    //     }
+    //     Ok(ret)
+    // }
+
     fn read(&mut self) -> Result<String, Error> {
-        let mut data: [u8; 512] = [0; 512];
-        self.stream.read(&mut data)?;
-        let mut ret = str::from_utf8(&data)?.to_string();
-        // Messages may be long or get interupped, we must consume
-        // until we hit a terminator
-        while !contains_terminator(&ret) {
-            self.stream.read(&mut data)?;
-            ret = ret + &str::from_utf8(&data)?.to_string();
+        let mut ret = String::new();
+        for line in self.stream.by_ref().lines() {
+            let line = &line?;
+            ret.push_str(line);
+            ret.push_str("\n");
+            if contains_terminator(line) {
+                break;
+            }
         }
         Ok(ret)
     }
 
     fn write(&mut self, command: &'static str) -> Result<(), Error> {
-        self.stream.write(command.as_bytes())?;
+        self.stream.get_mut().write(command.as_bytes())?;
         Ok(())
     }
 
@@ -155,9 +172,12 @@ impl<T: Read + Write> Babel<T> {
     pub fn parse_routes(&mut self) -> Result<VecDeque<Route>, Error> {
         let mut vector: VecDeque<Route> = VecDeque::with_capacity(20);
         self.write("dump\n")?;
-        for entry in self.read()?.split("\n") {
+        let babel_out = self.read()?;
+        trace!("Got from babel dump: {}", babel_out);
+
+        for entry in babel_out.split("\n") {
             if entry.contains("add route") {
-                println!("{}      {}", find_babel_val("via", entry)?, find_babel_val("prefix", entry)?);
+                trace!("Parsing 'add route' entry: {}", entry);
                 vector.push_back(Route {
                     id: find_babel_val("route", entry)?,
                     iface: find_babel_val("if", entry)?,
@@ -198,7 +218,7 @@ mod tests {
                                   ba:27:eb:ff:fe:d1:3e:ba metric 958 price 2048 refmetric 0 via fe80::e914:2335:a76:bda3 if \
                                   wlan0\nok\n\u{0}\u{0}";
 
-    static PREAMBLE: &'static str = "BABEL 1.0\nversion babeld-1.8.0-24-g6335378\nhost raspberrypi\nmy-id \
+    static PREAMBLE: &'static str = "ALTHEA 0.1\nversion babeld-1.8.0-24-g6335378\nhost raspberrypi\nmy-id \
                                     ba:27:eb:ff:fe:09:06:dd\nok\n\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\
                                     \u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}";
 
@@ -226,7 +246,7 @@ mod tests {
     #[test]
     fn mock_connect() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel { stream: s.clone() };
+        let mut b1 = Babel { stream: BufReader::new(s.clone()) };
         s.push_bytes_to_read(PREAMBLE.as_bytes());
         b1.start_connection().unwrap()
     }
@@ -234,7 +254,7 @@ mod tests {
     #[test]
     fn mock_dump() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel { stream: s.clone() };
+        let mut b1 = Babel { stream: BufReader::new(s.clone()) };
         s.push_bytes_to_read(TABLE.as_bytes());
         b1.write("dump\n").unwrap();
     }
@@ -260,7 +280,7 @@ mod tests {
     #[test]
     fn neigh_parse() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel { stream: s.clone() };
+        let mut b1 = Babel { stream: BufReader::new(s.clone()) };
         s.push_bytes_to_read(TABLE.as_bytes());
         b1.write("dump\n").unwrap();
         let neighs = b1.parse_neighs().unwrap();
@@ -274,7 +294,7 @@ mod tests {
     #[test]
     fn route_parse() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel { stream: s.clone() };
+        let mut b1 = Babel { stream: BufReader::new(s.clone()) };
         s.push_bytes_to_read(TABLE.as_bytes());
         b1.write("dump\n").unwrap();
 
@@ -288,7 +308,7 @@ mod tests {
     #[test]
     fn local_price_parse() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel { stream: s.clone() };
+        let mut b1 = Babel { stream: BufReader::new(s.clone()) };
         s.push_bytes_to_read(TABLE.as_bytes());
         b1.write("dump\n").unwrap();
         assert_eq!(b1.local_price().unwrap(), 1024);
