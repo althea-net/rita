@@ -61,9 +61,9 @@ cleanup
 source $network_lab << EOF
 {
   "nodes": {
-    "1": { "ip": "1.0.0.1" },
-    "2": { "ip": "1.0.0.2" },
-    "3": { "ip": "1.0.0.3" }  
+    "1": { "ip": "2001::1" },
+    "2": { "ip": "2001::2" },
+    "3": { "ip": "2001::3" }  
 
 },
   "edges": [
@@ -87,11 +87,24 @@ ip netns exec netlab-1 sysctl -w net.ipv4.ip_forward=1
 ip netns exec netlab-1 sysctl -w net.ipv6.conf.all.forwarding=1
 ip netns exec netlab-1 ip link set up lo
 ip netns exec netlab-1 $babeld -I babeld-n1.pid -d 1 -L babeld-n1.log -h 1 -P 5 -w veth-1-2 -G 8080 &
+ip netns exec netlab-1 bash -c 'failed=1
+                                while [ $failed -ne 0 ]
+                                do
+                                  ping6 -n 2001::3 > ping.log
+                                  failed=$?
+                                  echo $! > ping.pid
+                                  sleep 1
+                                done' &
+ip netns exec netlab-1 echo $! > ping_retry.pid
 
 ip netns exec netlab-2 sysctl -w net.ipv4.ip_forward=1
 ip netns exec netlab-2 sysctl -w net.ipv6.conf.all.forwarding=1
 ip netns exec netlab-2 ip link set up lo
-ip netns exec netlab-2 $babeld -I babeld-n2.pid -d 1 -L babeld-n2.log -h 1 -P 10 -w veth-2-1 -w veth-2-3 -G 8080 &
+ip netns exec netlab-2 brctl addbr br0
+ip netns exec netlab-2 brctl addif br0 veth-2-1
+ip netns exec netlab-2 brctl addif br0 veth-2-3
+ip netns exec netlab-2 ip link set up br0
+ip netns exec netlab-2 $babeld -I babeld-n2.pid -d 1 -L babeld-n2.log -h 1 -P 10 -w br0 -G 8080 &
 RUST_BACKTRACE=full ip netns exec netlab-2 $rita --pid rita-n2.pid > rita-n2.log &
 
 ip netns exec netlab-3 sysctl -w net.ipv4.ip_forward=1
@@ -100,6 +113,11 @@ ip netns exec netlab-3 ip link set up lo
 ip netns exec netlab-3 $babeld -I babeld-n3.pid -d 1 -L babeld-n3.log -h 1 -P 1 -w veth-3-2 -G 8080 &
 
 sleep 20
+
+ip netns exec netlab-1 ip ad
+ip netns exec netlab-1 ip -6 route show
+
+sleep 10
 
 stop_processes
 
