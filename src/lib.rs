@@ -127,7 +127,7 @@ impl<T: Read + Write> Babel<T> {
         self.write("dump\n")?;
         for entry in self.read()?.split("\n") {
             if entry.contains("local price") {
-                return Ok(find_babel_val("price", entry)?.parse::<u32>()?);
+                return Ok(find_babel_val("price", entry)?.parse()?);
             }
         }
         Ok(0)
@@ -143,11 +143,11 @@ impl<T: Read + Write> Babel<T> {
                     id: find_babel_val("neighbour", entry)?,
                     iface: find_babel_val("if", entry)?,
                     reach: u16::from_str_radix(&find_babel_val("reach", entry)?, 16)?,
-                    txcost: find_babel_val("txcost", entry)?.parse::<u16>()?,
-                    rxcost: find_babel_val("rxcost", entry)?.parse::<u16>()?,
-                    rtt: find_babel_val("rtt", entry)?.parse::<f32>()?,
-                    rttcost: find_babel_val("rttcost", entry)?.parse::<u16>()?,
-                    cost: find_babel_val("cost", entry)?.parse::<u16>()?,
+                    txcost: find_babel_val("txcost", entry)?.parse()?,
+                    rxcost: find_babel_val("rxcost", entry)?.parse()?,
+                    rtt: find_babel_val("rtt", entry)?.parse()?,
+                    rttcost: find_babel_val("rttcost", entry)?.parse()?,
+                    cost: find_babel_val("cost", entry)?.parse()?,
                 });
             }
         }
@@ -169,11 +169,11 @@ impl<T: Read + Write> Babel<T> {
                     iface: find_babel_val("if", entry)?,
                     xroute: false,
                     installed: find_babel_val("installed", entry)?.contains("yes"),
-                    neigh_ip: find_babel_val("via", entry)?.parse::<IpAddr>()?,
-                    prefix: find_babel_val("prefix", entry)?.parse::<IpNetwork>()?,
-                    metric: find_babel_val("metric", entry)?.parse::<u16>()?,
-                    refmetric: find_babel_val("refmetric", entry)?.parse::<u16>()?,
-                    price: find_babel_val("price", entry)?.parse::<u32>()?,
+                    neigh_ip: find_babel_val("via", entry)?.parse()?,
+                    prefix: find_babel_val("prefix", entry)?.parse()?,
+                    metric: find_babel_val("metric", entry)?.parse()?,
+                    refmetric: find_babel_val("refmetric", entry)?.parse()?,
+                    price: find_babel_val("price", entry)?.parse()?,
                 });
             }
         }
