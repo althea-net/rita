@@ -1,23 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-network_lab=./deps/network-lab/network-lab.sh
+cd ../babeld
+make
+make install
 
+cd ../rita
+cargo build
+
+cd ../integration-tests
+
+network_lab=./deps/network-lab/network-lab.sh
 babeld=../babeld/babeld
 rita=../rita/target/debug/rita
 
-# cd ../babeld
-# make
-# make install
-
-# cd ../rita
-# cargo build
-
-# cd ../integration-tests
-
-
-# This is a basic integration test for the Althea fork of Babeld, it focuses on
-# validating that instances actually come up and communicate
 
 if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root :("
@@ -83,8 +79,6 @@ source $network_lab << EOF
 }
 EOF
 
-
-
 ip netns exec netlab-1 sysctl -w net.ipv4.ip_forward=1
 ip netns exec netlab-1 sysctl -w net.ipv6.conf.all.forwarding=1
 ip netns exec netlab-1 ip link set up lo
@@ -93,7 +87,6 @@ ip netns exec netlab-1 bash -c 'failed=1
                                 while [ $failed -ne 0 ]
                                 do
                                   ping6 -n 2001::3 > ping.log
-                                  echo $! > ping.pid
                                   failed=$?
                                   sleep 1
                                 done' &
@@ -108,7 +101,9 @@ ip netns exec netlab-2 brctl addbr br-2-3
 ip netns exec netlab-2 brctl addif br-2-3 veth-2-3
 ip netns exec netlab-2 ip link set up br-2-1
 ip netns exec netlab-2 ip link set up br-2-3
-ip netns exec netlab-2 $babeld -I babeld-n2.pid -d 1 -L babeld-n2.log -h 1 -P 10 -w br-2-1 -w br-2-3 -G 8080 &
+ip netns exec netlab-2 ip addr add 2001::2 dev br-2-1
+ip netns exec netlab-2 ip addr add 2001::2 dev br-2-3
+ip netns exec netlab-2 $babeld -I babeld-n2.pid -d 1 -L babeld-n2.log -h 1 -P 10 -w br-2-1 br-2-3 -G 8080 &
 RUST_BACKTRACE=full ip netns exec netlab-2 $rita --pid rita-n2.pid > rita-n2.log &
 ip netns exec netlab-2 brctl show
 
@@ -118,11 +113,6 @@ ip netns exec netlab-3 ip link set up lo
 ip netns exec netlab-3 $babeld -I babeld-n3.pid -d 1 -L babeld-n3.log -h 1 -P 1 -w veth-3-2 -G 8080 &
 
 sleep 20
-
-ip netns exec netlab-1 ip ad
-ip netns exec netlab-1 ip -6 route show
-
-sleep 10
 
 stop_processes
 
@@ -135,14 +125,17 @@ fail_string "unknown version" "babeld-n1.log"
 fail_string "unknown version" "babeld-n2.log"
 fail_string "unknown version" "babeld-n3.log"
 pass_string "dev veth-1-2 reach" "babeld-n1.log"
-pass_string "dev veth-2-1 reach" "babeld-n2.log"
-pass_string "dev veth-2-3 reach" "babeld-n2.log"
+pass_string "dev br-2-1 reach" "babeld-n2.log"
+pass_string "dev br-2-3 reach" "babeld-n2.log"
 pass_string "dev veth-3-2 reach" "babeld-n3.log"
-pass_string "nexthop 1.0.0.2" "babeld-n1.log"
-pass_string "nexthop 1.0.0.1" "babeld-n2.log"
-pass_string "nexthop 1.0.0.3" "babeld-n2.log"
-pass_string "nexthop 1.0.0.2" "babeld-n3.log"
+pass_string "2001::3\/128.*via veth-1-2" "babeld-n1.log"
+pass_string "2001::1\/128.*via br-2-1" "babeld-n2.log"
+pass_string "2001::3\/128.*via br-2-3" "babeld-n2.log"
+pass_string "2001::2\/128.*via veth-3-2" "babeld-n3.log"
 
-# cleanup
+pass_string "V6(2001::1), 520" "rita-n2.log"
+pass_string "V6(2001::3), 520" "rita-n2.log"
+pass_string "prefix: V6(Ipv6Network { network_address: 2001::1, netmask: 128 })" "rita-n2.log"
+pass_string "prefix: V6(Ipv6Network { network_address: 2001::3, netmask: 128 })" "rita-n2.log"
 
 echo "$0 PASS"
