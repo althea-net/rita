@@ -5,6 +5,7 @@ extern crate babel_monitor;
 use std::process;
 
 extern crate docopt;
+
 #[macro_use]
 extern crate log;
 
@@ -33,48 +34,61 @@ Options:
 
 fn main() {
     simple_logger::init().unwrap();
-    // let args = Docopt::new(USAGE)
-    //     .and_then(|d| d.parse())
-    //     .unwrap_or_else(|e| e.exit());
+    let args = Docopt::new(USAGE)
+        .and_then(|d| d.parse())
+        .unwrap_or_else(|e| e.exit());
 
-    // let mut file = File::create("foo.txt").unwrap();
-    // file.write_all(b"Hello, world!").unwrap();
+    if args.get_bool("--pid") {
+        let mut file = File::create(args.get_str("<pid file>")).unwrap();
+        file.write_all(format!("{}", process::id()).as_bytes()).unwrap();
+    }
 
     trace!("Starting");
     let mut ki = KernelInterface::new();
-    println!("fo");
+
     let mut babel = Babel::new(&"[::1]:8080".parse::<SocketAddr>().unwrap());
     trace!("Connected to babel at {}", "[::1]:8080");
 
     let mut neigh_debts = HashMap::new();
 
     loop {
+        trace!("Getting neighbors");
         let neighbors = ki.get_neighbors().unwrap();
         info!("Got neighbors: {:?}", neighbors);
 
-        let destinations = babel.parse_routes().unwrap();
-        info!("Got destinations: {:?}", destinations);
+        trace!("Getting routes");
+        let routes = babel.parse_routes().unwrap();
+        info!("Got routes: {:?}", routes);
 
-        let mut dest_map = HashMap::new();
+        let mut destinations = HashMap::new();
 
-        for dest in &destinations {
-            dest_map.insert(dest.prefix.to_string(), dest);
-            if let IpNetwork::V6(ref i) = dest.prefix {
-                for &(neigh_mac, _) in &neighbors {
-                    ki.start_flow_counter(neigh_mac, IpAddr::V6(i.get_network_address()))
-                        .unwrap();
+        for route in &routes {
+            // Only ip6
+            if let IpNetwork::V6(ref ip) = route.prefix {
+                // Only host addresses
+                if ip.get_netmask() == 128 {
+                    destinations.insert(ip.get_network_address().to_string(), route.price);
+                    for &(neigh_mac, _) in &neighbors {
+                        ki.start_flow_counter(neigh_mac, IpAddr::V6(ip.get_network_address()))
+                            .unwrap();
+                    }
                 }
             }
         }
 
+        info!("Destinations: {:?}", destinations);
+
+        trace!("Going to sleep");
         thread::sleep(time::Duration::from_secs(5));
 
+        trace!("Getting flow counters");
         let counters = ki.read_flow_counters().unwrap();
+        info!("Got flow counters: {:?}", counters);
 
         for (neigh_mac, dest_ip, bytes) in counters {
             let kb = bytes / 1000;
-            let price = dest_map.get(&dest_ip.to_string()).unwrap().price;
-            let debt = price as u64 * kb;
+            let price = destinations.get(&dest_ip.to_string()).unwrap();
+            let debt = *price as u64 * kb;
 
             *neigh_debts.entry(neigh_mac.to_string()).or_insert(0) += debt;
         }
