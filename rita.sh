@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd ../babeld
-make
-make install
-
-cd ../rita
-cargo build
-
-cd ../integration-tests
-
 network_lab=./deps/network-lab/network-lab.sh
 
 babeld=../babeld/babeld
 rita=../rita/target/debug/rita
+
+# cd ../babeld
+# make
+# make install
+
+# cd ../rita
+# cargo build
+
+# cd ../integration-tests
+
 
 # This is a basic integration test for the Althea fork of Babeld, it focuses on
 # validating that instances actually come up and communicate
@@ -46,6 +47,7 @@ stop_processes()
     do
       kill -9 "$(cat $f)"
     done
+    killall ping6
   set -eux
 }
 
@@ -91,8 +93,8 @@ ip netns exec netlab-1 bash -c 'failed=1
                                 while [ $failed -ne 0 ]
                                 do
                                   ping6 -n 2001::3 > ping.log
-                                  failed=$?
                                   echo $! > ping.pid
+                                  failed=$?
                                   sleep 1
                                 done' &
 ip netns exec netlab-1 echo $! > ping_retry.pid
@@ -100,12 +102,15 @@ ip netns exec netlab-1 echo $! > ping_retry.pid
 ip netns exec netlab-2 sysctl -w net.ipv4.ip_forward=1
 ip netns exec netlab-2 sysctl -w net.ipv6.conf.all.forwarding=1
 ip netns exec netlab-2 ip link set up lo
-ip netns exec netlab-2 brctl addbr br0
-ip netns exec netlab-2 brctl addif br0 veth-2-1
-ip netns exec netlab-2 brctl addif br0 veth-2-3
-ip netns exec netlab-2 ip link set up br0
-ip netns exec netlab-2 $babeld -I babeld-n2.pid -d 1 -L babeld-n2.log -h 1 -P 10 -w br0 -G 8080 &
+ip netns exec netlab-2 brctl addbr br-2-1
+ip netns exec netlab-2 brctl addif br-2-1 veth-2-1
+ip netns exec netlab-2 brctl addbr br-2-3
+ip netns exec netlab-2 brctl addif br-2-3 veth-2-3
+ip netns exec netlab-2 ip link set up br-2-1
+ip netns exec netlab-2 ip link set up br-2-3
+ip netns exec netlab-2 $babeld -I babeld-n2.pid -d 1 -L babeld-n2.log -h 1 -P 10 -w br-2-1 -w br-2-3 -G 8080 &
 RUST_BACKTRACE=full ip netns exec netlab-2 $rita --pid rita-n2.pid > rita-n2.log &
+ip netns exec netlab-2 brctl show
 
 ip netns exec netlab-3 sysctl -w net.ipv4.ip_forward=1
 ip netns exec netlab-3 sysctl -w net.ipv6.conf.all.forwarding=1
