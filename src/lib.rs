@@ -1,6 +1,9 @@
 #[macro_use]
 extern crate derive_error;
 
+#[macro_use]
+extern crate log;
+
 use std::str;
 extern crate hwaddr;
 extern crate regex;
@@ -33,31 +36,27 @@ impl KernelInterface {
         KernelInterface {
             run_command: Box::new(|program, args| {
                 let output = Command::new(program).args(args).output()?;
-                if !output.status.success() {
-                    return Err(Error::RuntimeError(String::from(format!(
-                        "{:?} {:?} exited with error code {}, and message {}",
-                        program,
-                        args,
-                        output.status.code().unwrap(),
-                        String::from_utf8_lossy(&output.stderr)
-                    ))));
-                } else {
-                    return Ok(output);
-                }
+                trace!("Command {} {:?} returned: {:?}", program, args, output);
+                return Ok(output);
             }),
         }
     }
 
     fn get_neighbors_linux(&mut self) -> Result<Vec<(HwAddr, IpAddr)>, Error> {
         let output = (self.run_command)("ip", &["neighbor"])?;
+        trace!("Got {:?} from `ip neighbor`", output);
+
         let mut vec = Vec::new();
-        let re = Regex::new(r"(\S*) .* (\S*) (REACHABLE|STALE|DELAY)").unwrap();
+        let re = Regex::new(r"(\S*).*lladdr (\S*).*(REACHABLE|STALE|DELAY)").unwrap();
         for caps in re.captures_iter(&String::from_utf8(output.stdout)?) {
+            trace!("Regex captured {:?}", caps);
+
             vec.push((
                 caps.get(2).unwrap().as_str().parse::<HwAddr>()?,
                 IpAddr::from_str(&caps[1])?,
             ));
         }
+        trace!("Got neighbors {:?}", vec);
         Ok(vec)
     }
 
@@ -116,7 +115,7 @@ impl KernelInterface {
             let program = "ebtables";
             let res = (self.run_command)(program, args)?;
             // keeps looping until it is sure to have deleted the rule
-            if res.stdout == b"Sorry, rule does not exist.".to_vec() {
+            if res.stderr == b"Sorry, rule does not exist.\n".to_vec() {
                 return Ok(());
             }
             if res.stdout == b"".to_vec() {
