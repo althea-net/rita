@@ -86,11 +86,14 @@ fn main() {
         info!("Got flow counters: {:?}", counters);
 
         for (neigh_mac, dest_ip, bytes) in counters {
-            let kb = bytes / 1000;
+            trace!("Calculating neighbor debt: mac: {:?}, destination: {:?}, bytes: {:?}", neigh_mac, dest_ip, bytes);
             let price = destinations.get(&dest_ip.to_string()).unwrap();
-            let debt = *price as u64 * kb;
+            let debt = *price as u64 * bytes;
+            trace!("Calculated neighbor debt. price: {:?}, debt: {:?}", price, debt);
 
             *neigh_debts.entry(neigh_mac.to_string()).or_insert(0) += debt;
         }
+
+        info!("Current neighbor debts: {:?}", neigh_debts);
     }
 }
