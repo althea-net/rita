@@ -86,7 +86,7 @@ ip netns exec netlab-1 $babeld -I babeld-n1.pid -d 1 -L babeld-n1.log -h 1 -P 5 
 ip netns exec netlab-1 bash -c 'failed=1
                                 while [ $failed -ne 0 ]
                                 do
-                                  ping6 -n 2001::3 > ping.log
+                                  ping6 -n -s 1400 2001::3 &> ping.log
                                   failed=$?
                                   sleep 1
                                 done' &
@@ -104,7 +104,7 @@ ip netns exec netlab-2 ip link set up br-2-3
 ip netns exec netlab-2 ip addr add 2001::2 dev br-2-1
 ip netns exec netlab-2 ip addr add 2001::2 dev br-2-3
 ip netns exec netlab-2 $babeld -I babeld-n2.pid -d 1 -L babeld-n2.log -h 1 -P 10 -w br-2-1 br-2-3 -G 8080 &
-RUST_BACKTRACE=full ip netns exec netlab-2 $rita --pid rita-n2.pid > rita-n2.log &
+RUST_BACKTRACE=full ip netns exec netlab-2 $rita --pid rita-n2.pid &> rita-n2.log &
 ip netns exec netlab-2 brctl show
 
 ip netns exec netlab-3 sysctl -w net.ipv4.ip_forward=1
@@ -133,8 +133,10 @@ pass_string "2001::1\/128.*via br-2-1" "babeld-n2.log"
 pass_string "2001::3\/128.*via br-2-3" "babeld-n2.log"
 pass_string "2001::2\/128.*via veth-3-2" "babeld-n3.log"
 
-pass_string "V6(2001::1), 520" "rita-n2.log"
-pass_string "V6(2001::3), 520" "rita-n2.log"
+pass_string "destination: V6(2001::3), bytes: 7240" "rita-n2.log"
+pass_string "destination: V6(2001::1), bytes: 7240" "rita-n2.log"
+pass_string "Calculated neighbor debt. price: 11, debt: 79640" "rita-n2.log"
+pass_string "Calculated neighbor debt. price: 15, debt: 108600" "rita-n2.log"
 pass_string "prefix: V6(Ipv6Network { network_address: 2001::1, netmask: 128 })" "rita-n2.log"
 pass_string "prefix: V6(Ipv6Network { network_address: 2001::3, netmask: 128 })" "rita-n2.log"
 
