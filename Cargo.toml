@@ -2,6 +2,7 @@
 name = "althea_kv_store"
 version = "0.1.0"
 authors = ["Jehan <jehan.tremback@gmail.com>"]
+license = "Apache 2.0"
 
 [dependencies]
 rocksdb = "0.8.1"
