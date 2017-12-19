@@ -22,6 +22,27 @@ pub enum Error {
     #[error(msg_embedded, no_from, non_std)] Storage(String),
 }
 
+/// Storage is a trait that can be implemented by structs wrapping key value stores.
+///
+/// ```
+/// #[derive(Serialize, Deserialize, Debug, PartialEq)]
+/// struct Dog {
+///     name: String,
+///     color: String,
+///     age: u64,
+/// }
+///
+/// let store = RocksStorage::new(0, ".db");
+/// let dog = Dog {
+///     name: "franklin".to_string(),
+///     color: "brown".to_string(),
+///     age: 3,
+/// };
+///
+/// store.insert(&dog.name, &dog).unwrap();
+/// assert_eq!(dog, store.get(&dog.name).unwrap().unwrap());
+
+/// ```
 pub trait Storage {
     /// Get a value from the current key or None if it does not exist.
     fn get<T: Serialize, U: Serialize + DeserializeOwned>(
@@ -36,14 +57,45 @@ pub trait Storage {
     ) -> Result<(), Error>;
 }
 
-pub struct RocksStorage {
+/// RocksJsonStorage implements the Storage trait, storing data in RocksDB,
+/// serialized as JSON. Multiple instances of RocksJsonStorage can use 1 RocksDB by
+/// initializing with different "bucket" u8's. This is not currently safe to use from
+/// different threads.
+///
+/// ```
+/// enum Breeds {
+///     Shiba = 1,
+///     Rottweiler = 2,
+/// }
+///
+/// #[derive(Serialize, Deserialize, Debug, PartialEq)]
+/// struct Dog {
+///     name: String,
+///     color: String,
+///     age: u64,
+/// }
+///
+/// #[test]
+/// fn it_works() {
+///     let store = RocksJsonStorage::new(Breeds::Shiba as u8, ".db");
+///     let dog = Dog {
+///         name: "franklin".to_string(),
+///         color: "brown".to_string(),
+///         age: 3,
+///     };
+///
+///     store.insert(&dog.name, &dog).unwrap();
+///     assert_eq!(dog, store.get(&dog.name).unwrap().unwrap());
+/// }
+/// ```
+pub struct RocksJsonStorage {
     db: DB,
     bucket: u8,
 }
 
-impl RocksStorage {
-    fn new(bucket: u8, path: &str) -> RocksStorage {
-        RocksStorage {
+impl RocksJsonStorage {
+    fn new(bucket: u8, path: &str) -> RocksJsonStorage {
+        RocksJsonStorage {
             db: DB::open_default(path).unwrap(),
             bucket,
         }
@@ -60,7 +112,7 @@ fn prefix_with_bucket(typ: u8, input: &[u8]) -> Vec<u8> {
     v
 }
 
-impl Storage for RocksStorage {
+impl Storage for RocksJsonStorage {
     fn get<T: Serialize, U: Serialize + DeserializeOwned>(
         &self,
         id: &T,
@@ -89,6 +141,10 @@ impl Storage for RocksStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    enum Breeds {
+        Shiba = 1,
+        Rottweiler = 2,
+    }
 
     #[derive(Serialize, Deserialize, Debug, PartialEq)]
     struct Dog {
@@ -98,7 +154,7 @@ mod tests {
     }
     #[test]
     fn it_works() {
-        let store = RocksStorage::new(0, ".db");
+        let store = RocksJsonStorage::new(Breeds::Shiba as u8, ".db");
         let dog = Dog {
             name: "franklin".to_string(),
             color: "brown".to_string(),
