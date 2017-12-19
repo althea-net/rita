@@ -28,15 +28,12 @@ pub trait Storage {
         &self,
         id: &T,
     ) -> Result<Option<U>, Error>;
-    /// Insert a value under the given key.
+    /// Insert a value under the given key. Will overwrite the existing value.
     fn insert<T: Serialize, U: Serialize + DeserializeOwned>(
         &self,
         id: &T,
         item: &U,
     ) -> Result<(), Error>;
-    /// Return the bucket identifier that the Storage was instantiated with (this is
-    /// to allow multiple processes to use the same underlying store).
-    fn my_bucket(&self) -> u8;
 }
 
 pub struct RocksStorage {
@@ -50,6 +47,9 @@ impl RocksStorage {
             db: DB::open_default(path).unwrap(),
             bucket,
         }
+    }
+    fn my_bucket(&self) -> u8 {
+        self.bucket
     }
 }
 
@@ -82,9 +82,6 @@ impl Storage for RocksStorage {
             &prefix_with_bucket(self.my_bucket(), &serde_json::to_vec(&id)?),
             &serde_json::to_vec(&item)?,
         )?)
-    }
-    fn my_bucket(&self) -> u8 {
-        self.bucket
     }
 }
 
