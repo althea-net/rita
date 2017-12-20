@@ -1,6 +1,6 @@
 #[macro_use]
 extern crate serde_derive;
-
+use rocksdb::DB;
 #[macro_use]
 extern crate derive_error;
 
@@ -13,7 +13,7 @@ use serde::Serialize;
 
 use std::str;
 
-use self::rocksdb::DB;
+// use self::rocksdb::DB;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -94,7 +94,7 @@ pub struct RocksJsonStorage {
 }
 
 impl RocksJsonStorage {
-    fn new(bucket: u8, path: &str) -> RocksJsonStorage {
+    pub fn new(bucket: u8, path: &str) -> RocksJsonStorage {
         RocksJsonStorage {
             db: DB::open_default(path).unwrap(),
             bucket,
