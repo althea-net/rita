@@ -81,19 +81,23 @@ pub struct Neighbour {
     pub cost: u16,
 }
 
-pub struct Babel<T: Read + Write> {
+pub type Babel = InnerBabel<TcpStream>;
+
+#[doc(hidden)] 
+pub struct InnerBabel<T: Read + Write> {
     stream: BufReader<T>,
 }
 
-impl Babel<TcpStream> {
-    pub fn new(addr: &SocketAddr) -> Babel<TcpStream> {
-        let mut babel = Babel { stream: BufReader::new(TcpStream::connect_timeout(addr, time::Duration::from_secs(5)).unwrap()) };
+impl Babel {
+    pub fn new(addr: &SocketAddr) -> Babel {
+        let mut babel = InnerBabel { stream: BufReader::new(TcpStream::connect_timeout(addr, time::Duration::from_secs(5)).unwrap()) };
         babel.start_connection().unwrap();
         babel
     }
 }
 
-impl<T: Read + Write> Babel<T> {
+
+impl<T: Read + Write> InnerBabel<T> {
     // Consumes the automated Preamble and validates configuration api version
     pub fn start_connection(&mut self) -> Result<(), Error> {
         let preamble = self.read()?;
@@ -232,7 +236,7 @@ mod tests {
     #[test]
     fn mock_connect() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel { stream: BufReader::new(s.clone()) };
+        let mut b1 = InnerBabel { stream: BufReader::new(s.clone()) };
         s.push_bytes_to_read(PREAMBLE.as_bytes());
         b1.start_connection().unwrap()
     }
@@ -240,7 +244,7 @@ mod tests {
     #[test]
     fn mock_dump() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel { stream: BufReader::new(s.clone()) };
+        let mut b1 = InnerBabel { stream: BufReader::new(s.clone()) };
         s.push_bytes_to_read(TABLE.as_bytes());
         b1.write("dump\n").unwrap();
     }
@@ -266,7 +270,7 @@ mod tests {
     #[test]
     fn neigh_parse() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel { stream: BufReader::new(s.clone()) };
+        let mut b1 = InnerBabel { stream: BufReader::new(s.clone()) };
         s.push_bytes_to_read(TABLE.as_bytes());
         b1.write("dump\n").unwrap();
         let neighs = b1.parse_neighs().unwrap();
@@ -280,7 +284,7 @@ mod tests {
     #[test]
     fn route_parse() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel { stream: BufReader::new(s.clone()) };
+        let mut b1 = InnerBabel { stream: BufReader::new(s.clone()) };
         s.push_bytes_to_read(TABLE.as_bytes());
         b1.write("dump\n").unwrap();
 
@@ -294,7 +298,7 @@ mod tests {
     #[test]
     fn local_price_parse() {
         let mut s = SharedMockStream::new();
-        let mut b1 = Babel { stream: BufReader::new(s.clone()) };
+        let mut b1 = InnerBabel { stream: BufReader::new(s.clone()) };
         s.push_bytes_to_read(TABLE.as_bytes());
         b1.write("dump\n").unwrap();
         assert_eq!(b1.local_price().unwrap(), 1024);
