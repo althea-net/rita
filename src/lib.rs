@@ -27,23 +27,29 @@ pub enum Error {
     RuntimeError(String),
 }
 
+#[cfg(test)]
 pub struct KernelInterface {
     run_command: Box<FnMut(&str, &[&str]) -> Result<Output, Error>>,
 }
 
+#[cfg(not(test))]
+pub struct KernelInterface {}
+
 impl KernelInterface {
-    pub fn new() -> KernelInterface {
-        KernelInterface {
-            run_command: Box::new(|program, args| {
-                let output = Command::new(program).args(args).output()?;
-                trace!("Command {} {:?} returned: {:?}", program, args, output);
-                return Ok(output);
-            }),
-        }
+    #[cfg(not(test))]
+    fn run_command(&mut self, program: &str, args: &[&str]) -> Result<Output, Error> {
+        let output = Command::new(program).args(args).output()?;
+        trace!("Command {} {:?} returned: {:?}", program, args, output);
+        return Ok(output);
+    }
+
+    #[cfg(test)]
+    fn run_command(&mut self, args: &str, program: &[&str]) -> Result<Output, Error> {
+        (self.run_command)(args, program)
     }
 
     fn get_neighbors_linux(&mut self) -> Result<Vec<(HwAddr, IpAddr)>, Error> {
-        let output = (self.run_command)("ip", &["neighbor"])?;
+        let output = self.run_command("ip", &["neighbor"])?;
         trace!("Got {:?} from `ip neighbor`", output);
 
         let mut vec = Vec::new();
@@ -66,7 +72,7 @@ impl KernelInterface {
         destination: IpAddr,
     ) -> Result<(), Error> {
         self.delete_flow_counter_linux(source_neighbor, destination)?;
-        (self.run_command)(
+        self.run_command(
             "ebtables",
             &[
                 "-A",
@@ -89,7 +95,7 @@ impl KernelInterface {
         destination: IpAddr,
     ) -> Result<(), Error> {
         self.delete_destination_counter_linux(destination)?;
-        (self.run_command)(
+        self.run_command(
             "ebtables",
             &[
                 "-A",
@@ -113,7 +119,7 @@ impl KernelInterface {
         let loop_limit = 100;
         for _ in 0..loop_limit {
             let program = "ebtables";
-            let res = (self.run_command)(program, args)?;
+            let res = self.run_command(program, args)?;
             // keeps looping until it is sure to have deleted the rule
             if res.stderr == b"Sorry, rule does not exist.\n".to_vec() {
                 return Ok(());
@@ -167,7 +173,7 @@ impl KernelInterface {
     }
 
     fn read_flow_counters_linux(&mut self) -> Result<Vec<(HwAddr, IpAddr, u64)>, Error> {
-        let output = (self.run_command)("ebtables", &["-L", "INPUT", "--Lc"])?;
+        let output = self.run_command("ebtables", &["-L", "INPUT", "--Lc"])?;
         let mut vec = Vec::new();
         let re = Regex::new(r"-s (.*) --ip6-dst (.*)/.* bcnt = (.*)").unwrap();
         for caps in re.captures_iter(&String::from_utf8(output.stdout)?) {
