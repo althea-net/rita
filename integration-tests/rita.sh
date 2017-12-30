@@ -1,22 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ ! -d "./babeld" ] ; then
-    git clone -b althea "https://github.com/althea-mesh/babeld" "./babeld"
-fi
 
-cd ./babeld
-make
-make install
+build_babel () {
+  if [ ! -d "./babeld" ] ; then
+      git clone -b althea "https://github.com/althea-mesh/babeld" "./babeld"
+  fi
 
-cd ../../rita
-cargo build
+  cd ./babeld
+  make
+  make install
+  cd ../
+}
 
-cd ../integration-tests
+build_rita () {
+  cd ../rita
+  cargo build
+  cd ../integration-tests
+}
 
 network_lab=./deps/network-lab/network-lab.sh
 babeld=./babeld/babeld
-rita=../../rita/target/debug/rita
+rita=../rita/target/debug/rita
 
 
 if [[ $EUID -ne 0 ]]; then
@@ -56,6 +61,9 @@ cleanup()
   rm -f ./*.pid
   rm -f ./*.log
 }
+
+build_babel
+build_rita
 
 stop_processes
 cleanup
