@@ -38,7 +38,7 @@ Options:
 fn main() {
     simple_logger::init().unwrap();
     trace!("Starting");
-    
+
     let args = Docopt::new(USAGE)
         .and_then(|d| d.parse())
         .unwrap_or_else(|e| e.exit());
@@ -65,14 +65,12 @@ fn main() {
         //     String::from("thread"),
         // ];
 
-        // for val in vals {
-        //     tx1.send(val).unwrap();
-        //     thread::sleep(Duration::from_secs(1));
-        // }
-        // tx1.send(format!(
-        //     "{:?}",
-        //     traffic_watcher::watch(5, &mut ki, &mut babel)
-        // ))
+        for _ in 1..10 {
+            tx1.send(format!(
+                "{:?}",
+                traffic_watcher::watch(5, &mut ki, &mut babel)
+            ));
+        };
     });
 
     thread::spawn(move || {
