@@ -58,14 +58,7 @@ fn main() {
 
     let tx1 = mpsc::Sender::clone(&tx);
     thread::spawn(move || {
-        // let vals = vec![
-        //     String::from("hi"),
-        //     String::from("from"),
-        //     String::from("the"),
-        //     String::from("thread"),
-        // ];
-
-        for _ in 1..10 {
+        while true {
             tx1.send(format!(
                 "{:?}",
                 traffic_watcher::watch(5, &mut ki, &mut babel)
