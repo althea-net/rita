@@ -1,0 +1,12 @@
+[package]
+name = "rita"
+version = "0.1.0"
+authors = ["Jehan <jehan.tremback@gmail.com>"]
+
+[dependencies]
+babel_monitor = { path = "../babel_monitor" }
+althea_kernel_interface = { path = "../kernel_interface" }
+ip_network = "0.1"
+log = "0.3"
+docopt = "0.8.1"
+simple_logger = "0.4.0"
