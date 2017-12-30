@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd ../babeld
+if [ ! -d "./babeld" ] ; then
+    git clone -b althea "https://github.com/althea-mesh/babeld" "./babeld"
+fi
+
+cd ./babeld
 make
 make install
 
-cd ../rita
+cd ../../rita
 cargo build
 
 cd ../integration-tests
 
 network_lab=./deps/network-lab/network-lab.sh
-babeld=../babeld/babeld
-rita=../rita/target/debug/rita
+babeld=./babeld/babeld
+rita=../../rita/target/debug/rita
 
 
 if [[ $EUID -ne 0 ]]; then
