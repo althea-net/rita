@@ -14,7 +14,7 @@ use serde::{Deserialize, Deserializer, Serializer};
 use std::str::FromStr;
 
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Uint256(BigUint);
 
 impl Deref for Uint256 {
@@ -85,7 +85,7 @@ impl CheckedSub for Uint256 {
   }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Int256(BigInt);
 
 impl Deref for Int256 {
