@@ -14,7 +14,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[derive(ArrayTupleDeref, ArrayTupleBase64)]
 pub struct Bytes32([u8; 32]);
 
-#[derive(ArrayTupleDeref, ArrayTupleBase64, Copy, Clone)]
+#[derive(ArrayTupleDeref, ArrayTupleBase64, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct EthAddress([u8; 20]);
 
 #[derive(ArrayTupleDeref, ArrayTupleBase64)]

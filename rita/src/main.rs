@@ -3,6 +3,7 @@ extern crate althea_kernel_interface;
 extern crate babel_monitor;
 
 extern crate traffic_watcher;
+extern crate debt_keeper;
 
 use std::process;
 
