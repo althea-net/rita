@@ -7,6 +7,11 @@ extern crate stash;
 
 mod debts;
 
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error(msg_embedded, no_from, non_std)] DebtKeeperError(String),
+}
+
 use debts::{Debt, Debts, Key};
 use num256::Int256;
 
@@ -15,8 +20,14 @@ pub struct DebtKeeper {
 }
 
 impl DebtKeeper {
-    fn apply_debt(&mut self, key: Key, debt: Int256) {
-        self.debts.get(key);
+    fn apply_debt(&mut self, key: Key, amount: Int256) -> Result<(), Error> {
+        match self.debts.get(&key) {
+            Some(mut debt) => {
+                debt.amount = debt.amount + amount;
+                Ok(self.debts.insert(debt))
+            }
+            None => Err(Error::DebtKeeperError(format!("No entry for {:?}", key))),
+        }
     }
 }
 
