@@ -39,6 +39,7 @@ macro_rules! impl_from_uint {
 impl_from_uint!(u8);
 impl_from_uint!(u16);
 impl_from_uint!(u32);
+impl_from_uint!(u64);
 impl_from_uint!(usize);
 
 impl Serialize for Uint256 {
@@ -127,6 +128,7 @@ macro_rules! impl_from_int {
 impl_from_int!(i8);
 impl_from_int!(i16);
 impl_from_int!(i32);
+impl_from_int!(i64);
 impl_from_int!(isize);
 
 impl Serialize for Int256 {
@@ -231,26 +233,34 @@ mod tests {
 
   #[test]
   fn test_from_uint() {
-    let (a, b, c, d) = (
+    let (a, b, c, d, e) = (
       Uint256::from(8 as u8),
       Uint256::from(8 as u16),
       Uint256::from(8 as u32),
+      Uint256::from(8 as u64),
       Uint256::from(8 as usize),
     );
 
-    assert!((a == b) == (c == d))
+    assert_eq!(a, b);
+    assert_eq!(b, c);
+    assert_eq!(c, d);
+    assert_eq!(d, e);
   }
 
   #[test]
   fn test_from_int() {
-    let (a, b, c, d) = (
+    let (a, b, c, d, e) = (
       Int256::from(-8 as i8),
       Int256::from(-8 as i16),
       Int256::from(-8 as i32),
+      Int256::from(-8 as i64),
       Int256::from(-8 as isize),
     );
 
-    assert!((a == b) == (c == d))
+    assert_eq!(a, b);
+    assert_eq!(b, c);
+    assert_eq!(c, d);
+    assert_eq!(d, e);
   }
 
   #[test]
