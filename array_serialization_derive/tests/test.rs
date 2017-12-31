@@ -5,16 +5,18 @@ extern crate array_serialization_derive;
 
 use std::ops::Deref;
 extern crate base64;
+extern crate hex;
 extern crate serde;
 extern crate serde_json;
 
 use self::serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-#[derive(ArrayTupleDeref, ArrayTupleBase64)]
+#[derive(ArrayTupleDeref, ArrayTupleHex)]
 pub struct Signature([u8; 65]);
 
 #[derive(ArrayTupleDeref, ArrayTupleBase64)]
 pub struct PrivateKey([u8; 64]);
+
 
 #[test]
 fn deref() {
@@ -27,16 +29,18 @@ fn deref() {
   #[derive(Serialize, Deserialize)]
   struct MyStruct {
     sig: Signature,
+    pk: PrivateKey
   }
 
   #[test]
   fn serialize() {
 
     let my_bytes = MyStruct {
-      sig: Signature([7; 65])
+      sig: Signature([7; 65]),
+      pk: PrivateKey([9; 64])
     };
 
-    let expected = "{\"sig\":\"BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=\"}";
+    let expected = "{\"sig\":\"0707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707\",\"pk\":\"CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQ==\"}";
 
     let j = serde_json::to_string(&my_bytes).unwrap();
 
