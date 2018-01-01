@@ -5,6 +5,8 @@ extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 
+#[macro_use]
+extern crate lazy_static;
 
 use num::bigint::{BigInt, BigUint, ToBigInt};
 use std::ops::{Add, Deref, Sub};
@@ -222,6 +224,19 @@ mod tests {
   use num::traits::cast::ToPrimitive;
   use serde_json;
 
+  lazy_static! {
+    static ref BIGGEST_UINT: Uint256 =
+      Uint256(pow(BigUint::from(2 as u32), 256) - BigUint::from(1 as u32));
+
+    static ref BIGGEST_INT: Int256 = Int256(pow(BigInt::from(2), 255) - BigInt::from(1));
+
+    static ref SMALLEST_INT: Int256 = Int256(pow(BigInt::from(-2), 255) + BigInt::from(1));
+
+    static ref BIGGEST_INT_AS_UINT: Uint256 =
+      Uint256(pow(BigUint::from(2 as u32), 255) - BigUint::from(1 as u32));
+  }
+
+
   #[derive(Serialize, Deserialize, Debug)]
   pub struct MyStruct {
     uint: Uint256,
@@ -280,17 +295,40 @@ mod tests {
   }
 
   #[test]
-  fn test_uint256() {
-    let biggest = Uint256(pow(BigUint::from(2 as u32), 256) - BigUint::from(1 as u32));
+  #[should_panic]
+  fn test_uint_add_panic() {
+    BIGGEST_UINT.clone() + Uint256::from(1 as u32);
+  }
 
+  #[test]
+  fn test_uint_add_no_panic() {
+    BIGGEST_UINT.clone() + Uint256::from(0 as u32);
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_uint_sub_panic() {
+    &Uint256::from(1 as u32).sub(Uint256::from(2 as u32));
+  }
+
+  #[test]
+  fn test_uint_sub_no_panic() {
+    assert_eq!(
+      Uint256::from(1 as u32).sub(Uint256::from(1 as u32)),
+      Uint256::from(0 as u32)
+    );
+  }
+
+  #[test]
+  fn test_uint256() {
     assert!(
-      biggest.checked_add(&Uint256::from(1 as u32)).is_none(),
+      BIGGEST_UINT.checked_add(&Uint256::from(1 as u32)).is_none(),
       "should return None adding 1 to biggest"
     );
 
     assert!(
-      biggest.checked_add(&Uint256::from(0 as u32)).is_some(),
-      "should return None adding 0 to biggest"
+      BIGGEST_UINT.checked_add(&Uint256::from(0 as u32)).is_some(),
+      "should return Some adding 0 to biggest"
     );
 
     assert!(
@@ -326,38 +364,55 @@ mod tests {
 
   #[test]
   #[should_panic]
+  fn test_int_add_panic() {
+    BIGGEST_INT.clone() + Int256::from(1);
+  }
+
+  #[test]
+  fn test_int_add_no_panic() {
+    BIGGEST_INT.clone() + Int256::from(0);
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_int_sub_panic() {
+    SMALLEST_INT.clone().sub(Int256::from(1));
+    // SMALLEST_INT.clone().sub(Int256::from(2));
+  }
+
+  #[test]
+  fn test_int_sub_no_panic() {
+    assert_eq!(Int256::from(1).sub(Int256::from(1)), Int256::from(0));
+  }
+
+  #[test]
+  #[should_panic]
   fn test_uint_to_int_panic() {
-    let biggest_int_as_uint = Uint256(pow(BigUint::from(2 as u32), 255) - BigUint::from(1 as u32));
-    Int256::from(biggest_int_as_uint + Uint256::from(1 as u32));
+    Int256::from(BIGGEST_INT_AS_UINT.clone().add(Uint256::from(1 as u32)));
   }
 
   #[test]
   fn test_int256() {
-    let biggest = Int256(pow(BigInt::from(2), 255) - BigInt::from(1));
-    let smallest = Int256(pow(BigInt::from(-2), 255) + BigInt::from(1));
-
-    let biggest_int_as_uint = Uint256(pow(BigUint::from(2 as u32), 255) - BigUint::from(1 as u32));
-
     assert_eq!(
-      Int256::from(biggest_int_as_uint + Uint256::from(0 as u32)),
-      biggest
+      Int256::from(BIGGEST_INT_AS_UINT.clone().add(Uint256::from(0 as u32))),
+      BIGGEST_INT.clone()
     );
 
     assert!(
-      biggest.checked_add(&Int256::from(1)).is_none(),
+      BIGGEST_INT.checked_add(&Int256::from(1)).is_none(),
       "should return None adding 1 to biggest"
     );
     assert!(
-      biggest.checked_add(&Int256::from(0)).is_some(),
+      BIGGEST_INT.checked_add(&Int256::from(0)).is_some(),
       "should return Some adding 0 to biggest"
     );
 
     assert!(
-      smallest.checked_sub(&Int256::from(1)).is_none(),
+      SMALLEST_INT.checked_sub(&Int256::from(1)).is_none(),
       "should return None subtracting 1 from smallest"
     );
     assert!(
-      smallest.checked_sub(&Int256::from(0)).is_some(),
+      SMALLEST_INT.checked_sub(&Int256::from(0)).is_some(),
       "should return Some subtracting 0 from smallest"
     );
 
