@@ -6,9 +6,10 @@ extern crate serde_json;
 extern crate serde_derive;
 
 
-use num::bigint::{BigInt, BigUint};
+use num::bigint::{BigInt, BigUint, ToBigInt};
 use std::ops::{Add, Deref, Sub};
 use num::traits::ops::checked::{CheckedAdd, CheckedSub};
+use num::traits::Signed;
 use serde::ser::Serialize;
 use serde::{Deserialize, Deserializer, Serializer};
 use std::str::FromStr;
@@ -22,6 +23,12 @@ impl Deref for Uint256 {
 
   fn deref(&self) -> &BigUint {
     &self.0
+  }
+}
+
+impl From<Int256> for Uint256 {
+  fn from(n: Int256) -> Self {
+    Uint256(n.abs().to_biguint().unwrap())
   }
 }
 
@@ -113,6 +120,15 @@ impl Deref for Int256 {
   }
 }
 
+impl From<Uint256> for Int256 {
+  fn from(n: Uint256) -> Self {
+    let num = n.to_bigint().unwrap();
+    if num.bits() > 255 {
+      panic!("overflow");
+    }
+    Int256(num)
+  }
+}
 
 macro_rules! impl_from_int {
     ($T:ty) => {
@@ -309,9 +325,23 @@ mod tests {
   }
 
   #[test]
+  #[should_panic]
+  fn test_uint_to_int_panic() {
+    let biggest_int_as_uint = Uint256(pow(BigUint::from(2 as u32), 255) - BigUint::from(1 as u32));
+    Int256::from(biggest_int_as_uint + Uint256::from(1 as u32));
+  }
+
+  #[test]
   fn test_int256() {
     let biggest = Int256(pow(BigInt::from(2), 255) - BigInt::from(1));
     let smallest = Int256(pow(BigInt::from(-2), 255) + BigInt::from(1));
+
+    let biggest_int_as_uint = Uint256(pow(BigUint::from(2 as u32), 255) - BigUint::from(1 as u32));
+
+    assert_eq!(
+      Int256::from(biggest_int_as_uint + Uint256::from(0 as u32)),
+      biggest
+    );
 
     assert!(
       biggest.checked_add(&Int256::from(1)).is_none(),
@@ -319,7 +349,7 @@ mod tests {
     );
     assert!(
       biggest.checked_add(&Int256::from(0)).is_some(),
-      "should return Some adding 1 to biggest"
+      "should return Some adding 0 to biggest"
     );
 
     assert!(
