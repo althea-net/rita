@@ -14,7 +14,7 @@ use serde::{Deserialize, Deserializer, Serializer};
 use std::str::FromStr;
 
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Uint256(BigUint);
 
 impl Deref for Uint256 {
@@ -24,6 +24,23 @@ impl Deref for Uint256 {
     &self.0
   }
 }
+
+macro_rules! impl_from_uint {
+    ($T:ty) => {
+        impl From<$T> for Uint256 {
+            #[inline]
+            fn from(n: $T) -> Self {
+                Uint256(BigUint::from(n))
+            }
+        }
+    }
+}
+
+impl_from_uint!(u8);
+impl_from_uint!(u16);
+impl_from_uint!(u32);
+impl_from_uint!(u64);
+impl_from_uint!(usize);
 
 impl Serialize for Uint256 {
   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -85,7 +102,7 @@ impl CheckedSub for Uint256 {
   }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Int256(BigInt);
 
 impl Deref for Int256 {
@@ -95,6 +112,24 @@ impl Deref for Int256 {
     &self.0
   }
 }
+
+
+macro_rules! impl_from_int {
+    ($T:ty) => {
+        impl From<$T> for Int256 {
+            #[inline]
+            fn from(n: $T) -> Self {
+                Int256(BigInt::from(n))
+            }
+        }
+    }
+}
+
+impl_from_int!(i8);
+impl_from_int!(i16);
+impl_from_int!(i32);
+impl_from_int!(i64);
+impl_from_int!(isize);
 
 impl Serialize for Int256 {
   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -180,8 +215,8 @@ mod tests {
   #[test]
   fn serialize() {
     let struc = MyStruct {
-      uint: Uint256(BigUint::from(234 as u32)),
-      int: Int256(BigInt::from(333)),
+      uint: Uint256::from(234 as u32),
+      int: Int256::from(333),
     };
 
 
@@ -192,8 +227,40 @@ mod tests {
     assert_eq!(expected, j);
     let m: MyStruct = serde_json::from_str(expected).unwrap();
 
-    assert_eq!(Uint256(BigUint::from(234 as u32)), m.uint);
-    assert_eq!(Int256(BigInt::from(333)), m.int);
+    assert_eq!(Uint256::from(234 as u32), m.uint);
+    assert_eq!(Int256::from(333), m.int);
+  }
+
+  #[test]
+  fn test_from_uint() {
+    let (a, b, c, d, e) = (
+      Uint256::from(8 as u8),
+      Uint256::from(8 as u16),
+      Uint256::from(8 as u32),
+      Uint256::from(8 as u64),
+      Uint256::from(8 as usize),
+    );
+
+    assert_eq!(a, b);
+    assert_eq!(b, c);
+    assert_eq!(c, d);
+    assert_eq!(d, e);
+  }
+
+  #[test]
+  fn test_from_int() {
+    let (a, b, c, d, e) = (
+      Int256::from(-8 as i8),
+      Int256::from(-8 as i16),
+      Int256::from(-8 as i32),
+      Int256::from(-8 as i64),
+      Int256::from(-8 as isize),
+    );
+
+    assert_eq!(a, b);
+    assert_eq!(b, c);
+    assert_eq!(c, d);
+    assert_eq!(d, e);
   }
 
   #[test]
@@ -201,43 +268,39 @@ mod tests {
     let biggest = Uint256(pow(BigUint::from(2 as u32), 256) - BigUint::from(1 as u32));
 
     assert!(
-      biggest
-        .checked_add(&Uint256(BigUint::from(1 as u32)))
-        .is_none(),
+      biggest.checked_add(&Uint256::from(1 as u32)).is_none(),
       "should return None adding 1 to biggest"
     );
 
     assert!(
-      biggest
-        .checked_add(&Uint256(BigUint::from(0 as u32)))
-        .is_some(),
+      biggest.checked_add(&Uint256::from(0 as u32)).is_some(),
       "should return None adding 0 to biggest"
     );
 
     assert!(
-      &Uint256(BigUint::from(1 as u32))
-        .checked_sub(&Uint256(BigUint::from(2 as u32)))
+      &Uint256::from(1 as u32)
+        .checked_sub(&Uint256::from(2 as u32))
         .is_none(),
       "should return None if RHS is larger than LHS"
     );
 
     assert!(
-      &Uint256(BigUint::from(1 as u32))
-        .checked_sub(&Uint256(BigUint::from(1 as u32)))
+      &Uint256::from(1 as u32)
+        .checked_sub(&Uint256::from(1 as u32))
         .is_some(),
       "should return Some if RHS is not larger than LHS"
     );
 
-    let num = &Uint256(BigUint::from(1 as u32))
-      .checked_sub(&Uint256(BigUint::from(1 as u32)))
+    let num = &Uint256::from(1 as u32)
+      .checked_sub(&Uint256::from(1 as u32))
       .unwrap()
       .to_u32()
       .unwrap();
 
     assert_eq!(*num, 0, "1 - 1 should = 0");
 
-    let num2 = &Uint256(BigUint::from(346 as u32))
-      .checked_sub(&Uint256(BigUint::from(23 as u32)))
+    let num2 = &Uint256::from(346 as u32)
+      .checked_sub(&Uint256::from(23 as u32))
       .unwrap()
       .to_u32()
       .unwrap();
@@ -251,25 +314,25 @@ mod tests {
     let smallest = Int256(pow(BigInt::from(-2), 255) + BigInt::from(1));
 
     assert!(
-      biggest.checked_add(&Int256(BigInt::from(1))).is_none(),
+      biggest.checked_add(&Int256::from(1)).is_none(),
       "should return None adding 1 to biggest"
     );
     assert!(
-      biggest.checked_add(&Int256(BigInt::from(0))).is_some(),
+      biggest.checked_add(&Int256::from(0)).is_some(),
       "should return Some adding 1 to biggest"
     );
 
     assert!(
-      smallest.checked_sub(&Int256(BigInt::from(1))).is_none(),
+      smallest.checked_sub(&Int256::from(1)).is_none(),
       "should return None subtracting 1 from smallest"
     );
     assert!(
-      smallest.checked_sub(&Int256(BigInt::from(0))).is_some(),
+      smallest.checked_sub(&Int256::from(0)).is_some(),
       "should return Some subtracting 0 from smallest"
     );
 
-    let num = &Int256(BigInt::from(345))
-      .checked_sub(&Int256(BigInt::from(44)))
+    let num = &Int256::from(345)
+      .checked_sub(&Int256::from(44))
       .unwrap()
       .to_u32()
       .unwrap();

@@ -20,6 +20,13 @@ pub fn b64(input: TokenStream) -> TokenStream {
         .unwrap()
 }
 
+#[proc_macro_derive(ArrayTupleHex)]
+pub fn hx(input: TokenStream) -> TokenStream {
+    impl_hex(&syn::parse_derive_input(&input.to_string()).unwrap())
+        .parse()
+        .unwrap()
+}
+
 fn get_array_length(body: &syn::Body) -> usize {
     let err_msg = "cannot derive array deref on this type";
     match *body {
@@ -68,6 +75,38 @@ fn impl_base64(ast: &syn::DeriveInput) -> quote::Tokens {
             let s = <&str>::deserialize(deserializer)?;
 
             base64::decode(s).map(|v| {
+              let mut arr = [0u8; #length];
+              arr.clone_from_slice(&v);
+              #name(arr)
+            })
+            .map_err(serde::de::Error::custom)
+          }
+        }
+    }
+}
+
+fn impl_hex(ast: &syn::DeriveInput) -> quote::Tokens {
+    let length = get_array_length(&ast.body);
+    let name = &ast.ident;
+
+    quote! {
+        impl Serialize for #name {
+          fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+          where
+            S: Serializer,
+          {
+            serializer.serialize_str(&hex::encode(&*self.as_ref()))
+          }
+        }
+
+        impl<'de: 'a, 'a> Deserialize<'de> for #name {
+          fn deserialize<D>(deserializer: D) -> Result<#name, D::Error>
+          where
+            D: Deserializer<'de>,
+          {
+            let s = <&str>::deserialize(deserializer)?;
+
+            hex::decode(s).map(|v| {
               let mut arr = [0u8; #length];
               arr.clone_from_slice(&v);
               #name(arr)
