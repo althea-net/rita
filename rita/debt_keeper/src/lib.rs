@@ -11,9 +11,6 @@ use num256::Uint256;
 
 extern crate stash;
 
-extern crate rita_types;
-use rita_types::DebtAction;
-
 mod debts;
 
 
@@ -31,6 +28,13 @@ pub struct DebtKeeper {
     pay_threshold: Int256,
     close_threshold: Int256,
 }
+
+pub enum DebtAction {
+    CloseTunnel,
+    MakePayment(Uint256),
+}
+
+pub struct DebtAdjustment {}
 
 impl DebtKeeper {
     pub fn new(pay_threshold: Int256, close_threshold: Int256) -> Self {
