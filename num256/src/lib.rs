@@ -246,12 +246,12 @@ mod tests {
   #[test]
   fn serialize() {
     let struc = MyStruct {
-      uint: Uint256::from(234 as u32),
-      int: Int256::from(333),
+      uint: BIGGEST_UINT.clone(),
+      int: SMALLEST_INT.clone(),
     };
 
 
-    let expected = "{\"uint\":\"234\",\"int\":\"333\"}";
+    let expected = "{\"uint\":\"115792089237316195423570985008687907853269984665640564039457584007913129639935\",\"int\":\"-57896044618658097711785492504343953926634992332820282019728792003956564819967\"}";
 
     let j = serde_json::to_string(&struc).unwrap();
 
