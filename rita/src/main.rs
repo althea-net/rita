@@ -1,34 +1,48 @@
 #![feature(getpid)]
+
+#[macro_use] extern crate serde_derive;
+#[macro_use] extern crate log;
+
+use std::net::SocketAddr;
+use std::fs::File;
+use std::io::prelude::*;
+use std::sync::mpsc;
+use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::process;
+use std::thread;
+
 extern crate althea_kernel_interface;
+use althea_kernel_interface::KernelInterface;
+
 extern crate babel_monitor;
+use babel_monitor::Babel;
 
 extern crate traffic_watcher;
-extern crate debt_keeper;
 
-use std::process;
+extern crate debt_keeper;
+use debt_keeper::{Key, DebtKeeper};
+
+extern crate payment_controller;
+use payment_controller::{Payment, PaymentController};
+
+extern crate rita_types;
+use rita_types::DebtAction;
 
 extern crate docopt;
-
-#[macro_use]
-extern crate log;
+use docopt::Docopt;
 
 extern crate ip_network;
 extern crate simple_logger;
 
-use std::thread;
-// use std::collections::HashMap;
-use althea_kernel_interface::KernelInterface;
-use babel_monitor::Babel;
-// use std::net::IpAddr;
-// use ip_network::IpNetwork;
-use std::net::SocketAddr;
-use docopt::Docopt;
+extern crate num256;
+use num256::Int256;
 
-use std::fs::File;
-use std::io::prelude::*;
-// use std::env;
-use std::sync::mpsc;
-use std::time::Duration;
+extern crate rouille;
+use rouille::{Request, Response};
+
+extern crate serde;
+extern crate serde_json;
 
 const USAGE: &'static str = "
 Usage: rita [--pid <pid file>]
