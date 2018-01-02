@@ -22,12 +22,10 @@ extern crate traffic_watcher;
 
 extern crate debt_keeper;
 use debt_keeper::{Key, DebtKeeper};
+use debt_keeper::DebtAction;
 
 extern crate payment_controller;
 use payment_controller::{Payment, PaymentController};
-
-extern crate rita_types;
-use rita_types::DebtAction;
 
 extern crate docopt;
 use docopt::Docopt;
@@ -73,29 +71,64 @@ fn main() {
 
     let tx1 = mpsc::Sender::clone(&tx);
     thread::spawn(move || {
-        while true {
-            tx1.send(format!(
-                "{:?}",
-                traffic_watcher::watch(5, &mut ki, &mut babel)
-            ));
+        loop {
+            let debts = traffic_watcher::watch(5, &mut ki, &mut babel);
+
+            for (ip, debt) in debts {
+                tx1.send((Key::IpAddr(ip), Int256::from(debt as i64)));
+            }
+            // tx1.send(format!(
+            //     "{:?}",
+            //     traffic_watcher::watch(5, &mut ki, &mut babel)
+            // ));
         };
     });
 
-    thread::spawn(move || {
-        let vals = vec![
-            String::from("more"),
-            String::from("messages"),
-            String::from("for"),
-            String::from("you"),
-        ];
 
-        for val in vals {
-            tx.send(val).unwrap();
-            thread::sleep(Duration::from_secs(1));
-        }
+    let m_tx = Arc::new(Mutex::new(tx.clone()));
+
+    thread::spawn(move || {
+        rouille::start_server("localhost:8080", move |request| {
+            let pmt: Payment = serde_json::from_reader(request.data().unwrap()).unwrap();
+            m_tx.lock().unwrap().send(
+                (Key::EthAddress(pmt.from), Int256::from(pmt.amount))
+            ).unwrap();
+
+            Response::text("")
+        });
     });
 
+
+
+    let mut dk = DebtKeeper::new(Int256::from(5), Int256::from(10));
+    let mut pc = PaymentController::new();
+
     for received in rx {
-        println!("Got: {}", received);
+        match dk.apply_debt(received.0, received.1).unwrap() {
+            DebtAction::SuspendTunnel => unimplemented!(), // tunnel manager should suspend forwarding here
+            DebtAction::MakePayment(amt) =>  unimplemented!()
+        };
+
+        // if res.0 {
+        //     // tunnel manager should suspend forwarding here
+        // }
+
+        // if res.1 != Int256::from(0) {
+
+        // }
     }
+    // thread::spawn(move || {
+    //     // let vals = vec![
+    //     //     String::from("more"),
+    //     //     String::from("messages"),
+    //     //     String::from("for"),
+    //     //     String::from("you"),
+    //     // ];
+
+    //     // for val in vals {
+    //     //     tx.send(val).unwrap();
+    //     //     thread::sleep(Duration::from_secs(1));
+    //     // }
+    //     let pmt_ctrl = PaymentController { debt_keeper_input: tx };
+    // });
 }

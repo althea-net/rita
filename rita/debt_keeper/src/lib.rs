@@ -1,7 +1,14 @@
 #[macro_use]
-extern crate derive_error;
-use std::net::IpAddr;
+extern crate serde_derive;
 
+#[macro_use]
+extern crate derive_error;
+
+use std::net::IpAddr;
+use std::collections::HashMap;
+use std::ops::Add;
+
+extern crate serde;
 
 extern crate althea_types;
 use althea_types::EthAddress;
@@ -10,21 +17,24 @@ extern crate num256;
 use num256::Uint256;
 
 extern crate stash;
+use num256::Int256;
 
 mod debts;
-
-
+use debts::{Debts, Neighbor};
+pub use debts::Key;
 #[derive(Debug, Error)]
 pub enum Error {
     #[error(msg_embedded, no_from, non_std)] DebtKeeperError(String),
 }
 
-use debts::{Debts, Neighbor};
-pub use debts::Key;
-use num256::Int256;
+#[derive(Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct Identity {
+    ip_address: IpAddr,
+    eth_address: EthAddress,
+}
 
 pub struct DebtKeeper {
-    debts: Debts,
+    debts: HashMap<Identity, Int256>,
     pay_threshold: Int256,
     close_threshold: Int256,
 }
@@ -39,34 +49,20 @@ pub struct DebtAdjustment {}
 impl DebtKeeper {
     pub fn new(pay_threshold: Int256, close_threshold: Int256) -> Self {
         DebtKeeper {
-            debts: Debts::new(),
+            debts: HashMap::new(),
             pay_threshold,
             close_threshold,
         }
     }
 
-    pub fn add_neighbor(&mut self, ip_addr: IpAddr, eth_addr: EthAddress) {
-        self.debts.insert(Neighbor {
-            ip_addr,
-            eth_addr,
-            debt: Int256::from(0),
-        })
-    }
-
-    pub fn apply_debt(&mut self, key: Key, debt: Int256) -> Result<Option<DebtAction>, Error> {
-        match self.debts.get(&key) {
-            Some(mut neigh) => {
-                neigh.debt = neigh.debt + debt;
-                let new_debt = neigh.debt.clone();
-
-                self.debts.insert(neigh);
-                Ok(self.check_thresholds(new_debt))
-            }
-            None => Err(Error::DebtKeeperError(format!("No entry for {:?}", key))),
-        }
-    }
-
-    pub fn check_thresholds(&self, debt: Int256) -> Option<DebtAction> {
+    pub fn apply_debt(
+        &mut self,
+        ident: Identity,
+        debt: Int256,
+    ) -> Option<DebtAction> {
+        let mut stored_debt = self.debts.entry(ident).or_insert(Int256::from(0));
+        stored_debt = &mut stored_debt.add(debt);
+        
         if debt < self.close_threshold {
             Some(DebtAction::CloseTunnel)
         } else if debt > self.pay_threshold {
@@ -74,6 +70,19 @@ impl DebtKeeper {
         } else {
             None
         }
+
+        // match self.debts.get(&ident) {
+        //     Some(old_debt) => {
+        //         let new_debt = *old_debt + debt;
+
+        //         self.debts.insert(ident, new_debt.clone());
+        //         self.check_thresholds(new_debt)
+        //     },
+        //     None => {
+        //         self.debts.insert(ident, debt.clone());
+        //         self.check_thresholds(debt)
+        //     },
+        // }
     }
 }
 
