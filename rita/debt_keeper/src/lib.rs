@@ -1,21 +1,29 @@
 #[macro_use]
 extern crate derive_error;
+use std::net::IpAddr;
+
 
 extern crate althea_types;
+use althea_types::EthAddress;
+
 extern crate num256;
+use num256::Uint256;
+
 extern crate stash;
+
+extern crate rita_types;
+use rita_types::DebtAction;
 
 mod debts;
 
-use althea_types::EthAddress;
-use std::net::IpAddr;
 
 #[derive(Debug, Error)]
 pub enum Error {
     #[error(msg_embedded, no_from, non_std)] DebtKeeperError(String),
 }
 
-use debts::{Debts, Key, Neighbor};
+use debts::{Debts, Neighbor};
+pub use debts::Key;
 use num256::Int256;
 
 pub struct DebtKeeper {
@@ -25,7 +33,7 @@ pub struct DebtKeeper {
 }
 
 impl DebtKeeper {
-    fn new(pay_threshold: Int256, close_threshold: Int256) -> Self {
+    pub fn new(pay_threshold: Int256, close_threshold: Int256) -> Self {
         DebtKeeper {
             debts: Debts::new(),
             pay_threshold,
@@ -33,7 +41,7 @@ impl DebtKeeper {
         }
     }
 
-    fn add_neighbor(&mut self, ip_addr: IpAddr, eth_addr: EthAddress) {
+    pub fn add_neighbor(&mut self, ip_addr: IpAddr, eth_addr: EthAddress) {
         self.debts.insert(Neighbor {
             ip_addr,
             eth_addr,
@@ -41,7 +49,7 @@ impl DebtKeeper {
         })
     }
 
-    fn apply_debt(&mut self, key: Key, debt: Int256) -> Result<(bool, Int256), Error> {
+    pub fn apply_debt(&mut self, key: Key, debt: Int256) -> Result<Option<DebtAction>, Error> {
         match self.debts.get(&key) {
             Some(mut neigh) => {
                 neigh.debt = neigh.debt + debt;
@@ -54,16 +62,14 @@ impl DebtKeeper {
         }
     }
 
-    fn check_thresholds(&self, debt: Int256) -> (bool, Int256) {
-        let close = debt < self.close_threshold;
-
-        let payment = if debt > self.pay_threshold {
-            debt
+    pub fn check_thresholds(&self, debt: Int256) -> Option<DebtAction> {
+        if debt < self.close_threshold {
+            Some(DebtAction::CloseTunnel)
+        } else if debt > self.pay_threshold {
+            Some(DebtAction::MakePayment(Uint256::from(debt)))
         } else {
-            Int256::from(0)
-        };
-
-        (close, payment)
+            None
+        }
     }
 }
 

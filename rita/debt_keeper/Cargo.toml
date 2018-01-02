@@ -6,6 +6,7 @@ license = "Apache 2.0"
 
 [dependencies]
 althea_types = { path = "../../althea_types" }
+rita_types = { path = "../rita_types" }
 num256 =  { path = "../../num256" }
 stash = "0.1.3"
 derive-error = "0.0.4"
