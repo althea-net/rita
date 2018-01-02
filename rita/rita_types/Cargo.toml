@@ -1,0 +1,7 @@
+[package]
+name = "rita_types"
+version = "0.1.0"
+authors = ["Jehan <jehan.tremback@gmail.com>"]
+
+[dependencies]
+num256 =  { path = "../../num256" }
