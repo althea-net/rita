@@ -1,5 +1,5 @@
 [package]
-name = "guac-rs"
+name = "guac-light-client"
 version = "0.1.0"
 authors = ["Jehan <jehan.tremback@gmail.com>"]
 

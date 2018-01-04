@@ -1,0 +1,10 @@
+[package]
+name = "althea_rs"
+version = "0.1.0"
+authors = ["Stan Drozd <drozdziak1@gmail.com>"]
+
+[dependencies]
+guac-light-client = { path = "./guac-light-client" }
+rita = { path = "./rita" }
+
+[workspace]

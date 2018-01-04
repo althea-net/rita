@@ -2,7 +2,7 @@
 extern crate althea_kernel_interface;
 extern crate babel_monitor;
 
-extern crate traffic_watcher;
+//extern crate traffic_watcher; // PLACEHOLDER, REMOVE/CHANGE UPON MERGE
 extern crate debt_keeper;
 
 use std::process;
@@ -33,7 +33,7 @@ use std::time::Duration;
 const USAGE: &'static str = "
 Usage: rita [--pid <pid file>]
 Options:
-    --pid  Which file to write the PID to. 
+    --pid  Which file to write the PID to.
 ";
 
 fn main() {
@@ -60,10 +60,13 @@ fn main() {
     let tx1 = mpsc::Sender::clone(&tx);
     thread::spawn(move || {
         while true {
-            tx1.send(format!(
-                "{:?}",
-                traffic_watcher::watch(5, &mut ki, &mut babel)
-            ));
+            // PLACEHOLDER, CHANGE/REMOVE UPON MERGE
+            println!(" DUMMY OUTPUT:
+                tx1.send(format!(
+                    \"{:?}\",
+                    traffic_watcher::watch(5, &mut ki, &mut babel)
+                ));
+            ", "{:?}");
         };
     });
 
