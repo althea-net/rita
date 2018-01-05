@@ -9,8 +9,8 @@ extern crate serde_derive;
 extern crate lazy_static;
 
 use num::bigint::{BigInt, BigUint, ToBigInt};
-use std::ops::{Add, Deref, Sub};
-use num::traits::ops::checked::{CheckedAdd, CheckedSub};
+use std::ops::{Add, Deref, Sub, Mul};
+use num::traits::ops::checked::{CheckedAdd, CheckedSub, CheckedMul};
 use num::traits::Signed;
 use serde::ser::Serialize;
 use serde::{Deserialize, Deserializer, Serializer};
@@ -215,6 +215,27 @@ impl CheckedSub for Int256 {
   }
 }
 
+impl Mul for Int256 {
+  type Output = Int256;
+  fn mul(self, v: Int256) -> Int256 {
+    let num = self.0 * v.0;
+    if num.bits() > 255 {
+      panic!("overflow");
+    }
+    Int256(num)
+  }
+}
+
+impl CheckedMul for Int256 {
+  fn checked_mul(&self, v: &Int256) -> Option<Int256> {
+    // drop down to wrapped bigint to stop from panicing in fn above
+    let num = self.0.clone() * v.0.clone();
+    if num.bits() > 255 {
+      return None;
+    }
+    Some(Int256(num))
+  }
+}
 
 #[cfg(test)]
 mod tests {
@@ -258,8 +279,8 @@ mod tests {
     assert_eq!(expected, j);
     let m: MyStruct = serde_json::from_str(expected).unwrap();
 
-    assert_eq!(Uint256::from(234 as u32), m.uint);
-    assert_eq!(Int256::from(333), m.int);
+    assert_eq!(BIGGEST_UINT.clone(), m.uint);
+    assert_eq!(SMALLEST_INT.clone(), m.int);
   }
 
   #[test]
@@ -377,13 +398,24 @@ mod tests {
   #[should_panic]
   fn test_int_sub_panic() {
     SMALLEST_INT.clone().sub(Int256::from(1));
-    // SMALLEST_INT.clone().sub(Int256::from(2));
   }
 
   #[test]
   fn test_int_sub_no_panic() {
     assert_eq!(Int256::from(1).sub(Int256::from(1)), Int256::from(0));
   }
+
+  #[test]
+  #[should_panic]
+  fn test_int_mul_panic() {
+    SMALLEST_INT.clone().mul(Int256::from(2));
+  }
+
+  #[test]
+  fn test_int_mul_no_panic() {
+    assert_eq!(Int256::from(3).mul(Int256::from(2)), Int256::from(6));
+  }
+
 
   #[test]
   #[should_panic]
@@ -414,6 +446,13 @@ mod tests {
     assert!(
       SMALLEST_INT.checked_sub(&Int256::from(0)).is_some(),
       "should return Some subtracting 0 from smallest"
+    );
+
+    assert!(
+      SMALLEST_INT.checked_mul(&Int256::from(2)).is_none()
+    );
+    assert!(
+      SMALLEST_INT.checked_mul(&Int256::from(1)).is_some()
     );
 
     let num = &Int256::from(345)
