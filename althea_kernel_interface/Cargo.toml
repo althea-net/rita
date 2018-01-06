@@ -10,4 +10,4 @@ regex = "0.2"
 derive-error = "0.0.4"
 itertools = "0.7.4"
 log = "0.3"
-hwaddr = { path = "../../rust-hwaddr", features = ["serde"] }
+eui48 = {path = "../../eui48", features = ["serde"]}

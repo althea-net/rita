@@ -10,14 +10,14 @@ use std::ops::Add;
 
 extern crate serde;
 
-extern crate hwaddr;
-use hwaddr::HwAddr;
-
 extern crate althea_types;
 use althea_types::EthAddress;
 
 extern crate num256;
 use num256::Uint256;
+
+extern crate eui48;
+use eui48::MacAddress;
 
 extern crate stash;
 use num256::Int256;
@@ -35,7 +35,7 @@ pub enum Error {
 pub struct Identity {
     pub ip_address: IpAddr,
     pub eth_address: EthAddress,
-    pub mac_address: HwAddr,
+    pub mac_address: MacAddress,
 }
 
 pub struct DebtKeeper {
@@ -63,14 +63,10 @@ impl DebtKeeper {
         }
     }
 
-    pub fn apply_debt(
-        &mut self,
-        ident: Identity,
-        debt: Int256,
-    ) -> Option<DebtAction> {
+    pub fn apply_debt(&mut self, ident: Identity, debt: Int256) -> Option<DebtAction> {
         let stored_debt = self.debts.entry(ident).or_insert(Int256::from(0));
         *stored_debt = stored_debt.clone().add(debt.clone());
-        
+
         if debt < self.close_threshold {
             Some(DebtAction::SuspendTunnel)
         } else if debt > self.pay_threshold {

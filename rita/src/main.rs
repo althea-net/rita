@@ -44,7 +44,7 @@ extern crate serde_json;
 const USAGE: &'static str = "
 Usage: rita [--pid <pid file>]
 Options:
-    --pid  Which file to write the PID to. 
+    --pid  Which file to write the PID to.
 ";
 
 fn main() {
