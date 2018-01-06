@@ -1,2 +1,5 @@
 .DS_Store
 *.bak
+/target/
+**/*.rs.bk
+Cargo.lock

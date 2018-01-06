@@ -4,21 +4,22 @@ extern crate derive_error;
 #[macro_use]
 extern crate log;
 
-use std::str;
-extern crate hwaddr;
+extern crate eui48;
 extern crate regex;
 extern crate itertools;
 
-use itertools::join;
-use std::net::{IpAddr, SocketAddr, SocketAddrV6, Ipv6Addr};
-use hwaddr::HwAddr;
-use std::str::FromStr;
-use regex::Regex;
-use std::process::{Command, Output, ExitStatus, Stdio};
-use std::os::unix::process::ExitStatusExt;
-use std::path::Path;
 use std::fs::{File, remove_file};
 use std::io::Write;
+use std::net::{IpAddr, SocketAddr, SocketAddrV6, Ipv6Addr};
+use std::os::unix::process::ExitStatusExt;
+use std::path::Path;
+use std::process::{Command, Output, ExitStatus, Stdio};
+use std::str::FromStr;
+use std::str;
+
+use eui48::MacAddress;
+use itertools::join;
+use regex::Regex;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -51,7 +52,7 @@ impl KernelInterface {
         (self.run_command)(args, program)
     }
 
-    fn get_neighbors_linux(&mut self) -> Result<Vec<(HwAddr, IpAddr)>, Error> {
+    fn get_neighbors_linux(&mut self) -> Result<Vec<(MacAddress, IpAddr)>, Error> {
         let output = self.run_command("ip", &["neighbor"])?;
         trace!("Got {:?} from `ip neighbor`", output);
 
@@ -61,7 +62,7 @@ impl KernelInterface {
             trace!("Regex captured {:?}", caps);
 
             vec.push((
-                caps.get(2).unwrap().as_str().parse::<HwAddr>()?,
+                MacAddress::parse_str(caps.get(2).unwrap().as_str()).unwrap(), // Ugly and inconsiderate, ditch ASAP
                 IpAddr::from_str(&caps[1])?,
             ));
         }
@@ -71,7 +72,7 @@ impl KernelInterface {
 
     fn start_flow_counter_linux(
         &mut self,
-        source_neighbor: HwAddr,
+        source_neighbor: MacAddress,
         destination: IpAddr,
     ) -> Result<(), Error> {
         self.delete_flow_counter_linux(source_neighbor, destination)?;
@@ -81,7 +82,7 @@ impl KernelInterface {
                 "-A",
                 "INPUT",
                 "-s",
-                &format!("{}", source_neighbor),
+                &format!("{}", source_neighbor.to_hex_string()),
                 "-p",
                 "IPV6",
                 "--ip6-dst",
@@ -142,14 +143,14 @@ impl KernelInterface {
 
     fn delete_flow_counter_linux(
         &mut self,
-        source_neighbor: HwAddr,
+        source_neighbor: MacAddress,
         destination: IpAddr,
     ) -> Result<(), Error> {
         self.delete_ebtables_rule(&[
             "-D",
             "INPUT",
             "-s",
-            &format!("{}", source_neighbor),
+            &format!("{}", source_neighbor.to_hex_string()),
             "-p",
             "IPV6",
             "--ip6-dst",
@@ -175,13 +176,15 @@ impl KernelInterface {
         ])
     }
 
-    fn read_flow_counters_linux(&mut self) -> Result<Vec<(HwAddr, IpAddr, u64)>, Error> {
+    fn read_flow_counters_linux(&mut self) -> Result<Vec<(MacAddress, IpAddr, u64)>, Error> {
         let output = self.run_command("ebtables", &["-L", "INPUT", "--Lc"])?;
         let mut vec = Vec::new();
         let re = Regex::new(r"-s (.*) --ip6-dst (.*)/.* bcnt = (.*)").unwrap();
         for caps in re.captures_iter(&String::from_utf8(output.stdout)?) {
             vec.push((
-                caps[1].parse::<HwAddr>()?,
+                    MacAddress::parse_str(&caps[1]).unwrap_or_else(|e| {
+                        panic!("{:?}", e);
+                    }), // Ugly and inconsiderate, remove ASAP
                 IpAddr::from_str(&caps[2])?,
                 caps[3].parse::<u64>()?,
             ));
@@ -191,7 +194,7 @@ impl KernelInterface {
 
     /// Returns a vector of neighbors reachable over layer 2, giving the hardware
     /// and IP address of each. Implemented with `ip neighbor` on Linux.
-    pub fn get_neighbors(&mut self) -> Result<Vec<(HwAddr, IpAddr)>, Error> {
+    pub fn get_neighbors(&mut self) -> Result<Vec<(MacAddress, IpAddr)>, Error> {
         if cfg!(target_os = "linux") {
             return self.get_neighbors_linux();
         }
@@ -239,7 +242,7 @@ impl KernelInterface {
     /// Implemented with `ebtables` on linux.
     pub fn start_flow_counter(
         &mut self,
-        source_neighbor: HwAddr,
+        source_neighbor: MacAddress,
         destination: IpAddr,
     ) -> Result<(), Error> {
         if cfg!(target_os = "linux") {
@@ -256,7 +259,7 @@ impl KernelInterface {
     /// Implemented with `ebtables` on linux.
     pub fn delete_flow_counter(
         &mut self,
-        source_neighbor: HwAddr,
+        source_neighbor: MacAddress,
         destination: IpAddr,
     ) -> Result<(), Error> {
         if cfg!(target_os = "linux") {
@@ -271,7 +274,7 @@ impl KernelInterface {
     /// Returns a vector of traffic coming from a specific hardware address and going
     /// to a specific IP. Note that this will only track flows that have already been
     /// registered. Implemented with `ebtables` on Linux.
-    pub fn read_flow_counters(&mut self) -> Result<Vec<(HwAddr, IpAddr, u64)>, Error> {
+    pub fn read_flow_counters(&mut self) -> Result<Vec<(MacAddress, IpAddr, u64)>, Error> {
         if cfg!(target_os = "linux") {
             return self.read_flow_counters_linux();
         }
@@ -282,10 +285,10 @@ impl KernelInterface {
     }
 
     pub fn open_tunnel(
-        &mut self, 
+        &mut self,
         interface: &String,
-        endpoint: &SocketAddr, 
-        remote_pub_key: &String, 
+        endpoint: &SocketAddr,
+        remote_pub_key: &String,
         private_key_path: &Path
     ) -> Result<(), Error> {
             if cfg!(target_os = "linux") {
@@ -433,18 +436,18 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
 
         let addresses = ki.get_neighbors_linux().unwrap();
 
-        assert_eq!(format!("{}", addresses[0].0), "0:0:0:AA:0:3");
+        assert_eq!(format!("{}", addresses[0].0), "00-00-00-aa-00-03");
         assert_eq!(format!("{}", addresses[0].1), "10.0.2.2");
 
-        assert_eq!(format!("{}", addresses[1].0), "0:0:0:AA:0:5");
+        assert_eq!(format!("{}", addresses[1].0), "00-00-00-aa-00-05");
         assert_eq!(format!("{}", addresses[1].1), "10.0.1.2");
 
-        assert_eq!(format!("{}", addresses[2].0), "0:0:0:AA:0:56");
+        assert_eq!(format!("{}", addresses[2].0), "00-00-00-aa-00-56");
         assert_eq!(format!("{}", addresses[2].1), "2001::2");
     }
 
     #[test]
-    fn test_read_flow_counter_linuxs() {
+    fn test_read_flow_counters_linux() {
         let mut ki = KernelInterface {
             run_command: Box::new(|program, args| {
                 assert_eq!(program, "ebtables");
@@ -455,9 +458,9 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
 b"Bridge table: filter
 
 Bridge chain: INPUT, entries: 3, policy: ACCEPT
--p IPv6 -s 0:0:0:aa:0:2 --ip6-dst 2001::1/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff -j ACCEPT , pcnt = 1199 -- bcnt = 124696
--p IPv6 -s 0:0:0:aa:0:0 --ip6-dst 2001::3/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff -j ACCEPT , pcnt = 1187 -- bcnt = 123448
--p IPv6 -s 0:0:0:aa:0:0 --ip6-dst 2001::3/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff -j ACCEPT , pcnt = 0 -- bcnt = 0"
+-p IPv6 -s 00:00:00:aa:00:02 --ip6-dst 2001::1/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff -j ACCEPT , pcnt = 1199 -- bcnt = 124696
+-p IPv6 -s 00:00:00:aa:00:00 --ip6-dst 2001::3/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff -j ACCEPT , pcnt = 1187 -- bcnt = 123448
+-p IPv6 -s 00:00:00:aa:00:00 --ip6-dst 2001::3/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff -j ACCEPT , pcnt = 0 -- bcnt = 0"
                         .to_vec(),
                     stderr: b"".to_vec(),
                     status: ExitStatus::from_raw(0),
@@ -467,11 +470,11 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
 
         let traffic = ki.read_flow_counters_linux().unwrap();
 
-        assert_eq!(format!("{}", traffic[0].0), "0:0:0:AA:0:2");
+        assert_eq!(format!("{}", traffic[0].0), "00-00-00-aa-00-02");
         assert_eq!(format!("{}", traffic[0].1), "2001::1");
         assert_eq!(traffic[0].2, 124696);
 
-        assert_eq!(format!("{}", traffic[1].0), "0:0:0:AA:0:0");
+        assert_eq!(format!("{}", traffic[1].0), "00-00-00-aa-00-00");
         assert_eq!(format!("{}", traffic[1].1), "2001::3");
         assert_eq!(traffic[1].2, 123448);
     }
@@ -483,7 +486,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
             "-D",
             "INPUT",
             "-s",
-            "0:0:0:AA:0:2",
+            "00:00:00:aa:00:02",
             "-p",
             "IPV6",
             "--ip6-dst",
@@ -529,7 +532,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
             }),
         };
         ki.delete_flow_counter_linux(
-            "0:0:0:aa:0:2".parse::<HwAddr>().unwrap(),
+            MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
             "2001::3".parse::<IpAddr>().unwrap(),
         ).unwrap();
 
@@ -545,7 +548,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
         };
 
         match ki.delete_flow_counter_linux(
-            "0:0:0:aa:0:2".parse::<HwAddr>().unwrap(),
+            MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
             "2001::3".parse::<IpAddr>().unwrap(),
         ) {
             Err(e) => assert_eq!(e.to_string(), "loop limit of 100 exceeded"),
@@ -564,22 +567,22 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
         };
 
         match ki.delete_flow_counter_linux(
-            "0:0:0:aa:0:2".parse::<HwAddr>().unwrap(),
+            MacAddress::parse_str("0:0:0:aa:0:2").unwrap(),
             "2001::3".parse::<IpAddr>().unwrap(),
         ) {
-            Err(e) => assert_eq!(e.to_string(), "unexpected output from ebtables \"-D INPUT -s 0:0:0:AA:0:2 -p IPV6 --ip6-dst 2001::3 -j CONTINUE\": \"shibby\""),
+            Err(e) => assert_eq!(e.to_string(), "unexpected output from ebtables \"-D INPUT -s 00:00:00:aa:0:2 -p IPV6 --ip6-dst 2001::3 -j CONTINUE\": \"shibby\""),
             _ => panic!("no unexpeted input error")
         }
     }
 
     #[test]
-    fn test_start_counter_linux() {
+    fn test_start_flow_counter_linux() {
         let mut counter = 0;
         let delete_rule = &[
             "-D",
             "INPUT",
             "-s",
-            "0:0:0:AA:0:2",
+            "00:00:00:aa:00:02",
             "-p",
             "IPV6",
             "--ip6-dst",
@@ -591,7 +594,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
             "-A",
             "INPUT",
             "-s",
-            "0:0:0:AA:0:2",
+            "00:00:00:aa:00:02",
             "-p",
             "IPV6",
             "--ip6-dst",
@@ -630,7 +633,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
         };
 
         ki.start_flow_counter_linux(
-            "0:0:0:aa:0:2".parse::<HwAddr>().unwrap(),
+            MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
             "2001::3".parse::<IpAddr>().unwrap(),
         ).unwrap();
     }
@@ -654,8 +657,8 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
             "[2001::1]:8088",
             "allowed-ips",
             "::/0"];
-        
-        let mut ki = KernelInterface { 
+
+        let mut ki = KernelInterface {
             run_command: Box::new(move |program,args| {
                 assert_eq!(program, "wg");
                 assert_eq!(args, wg_args);
@@ -669,7 +672,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
 
         ki.open_tunnel_linux(&interface,&endpoint,&remote_pub_key,&private_key_path).unwrap();
     }
-    
+
     #[test]
     fn test_delete_tunnel_linux() {
         let ip_args = &["link", "del", "wg1"];
@@ -696,18 +699,18 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
 
         let link_args = &["link"];
         let link_add = &[
-            "link", 
-            "add", 
-            "wg1", 
-            "type", 
+            "link",
+            "add",
+            "wg1",
+            "type",
             "wireguard"];
         let addr_add = &[
-            "addr", 
+            "addr",
             "add",
-            "fd01::1", 
-            "dev", 
-            "wg1", 
-            "peer", 
+            "fd01::1",
+            "dev",
+            "wg1",
+            "peer",
             "fd01::2"];
         let link_set = &[
             "link",
@@ -719,7 +722,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
             run_command: Box::new(move |program,args|{
                 assert_eq!(program,"ip");
                 counter += 1;
-                
+
                 match counter {
                     1 => {
                         assert_eq!(args,link_args);
@@ -767,7 +770,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
         let mut ki = KernelInterface {
             run_command: Box::new(move |program, args| {
                 assert_eq!(program, "wg");
-                assert_eq!(args,wg_args); 
+                assert_eq!(args,wg_args);
                 Ok(Output {
                     stdout: b"cD6//mKSM4mhaF4mNY7N93vu5zKad79/MyIRD3L9L0s=".to_vec(),
                     stderr: b"".to_vec(),
@@ -777,6 +780,6 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
         };
         let test_path = Path::new("/tmp/wgtestkey");
         ki.create_wg_key_linux(test_path).unwrap();
-        remove_file(test_path).unwrap();      
+        remove_file(test_path).unwrap();
     }
 }

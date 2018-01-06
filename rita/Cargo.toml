@@ -6,12 +6,11 @@ authors = ["Jehan <jehan.tremback@gmail.com>"]
 [dependencies]
 babel_monitor = { path = "../babel_monitor" }
 althea_kernel_interface = { path = "../althea_kernel_interface" }
-traffic_watcher = { path = "./traffic_watcher"}
+#traffic_watcher = { path = "./traffic_watcher"} # PLACEHOLDER, CHANGE/REMOVIE UPON MERGE
 payment_controller = { path = "./payment_controller" }
 debt_keeper = { path = "./debt_keeper" }
+
 ip_network = "0.1"
 log = "0.3"
 docopt = "0.8.1"
 simple_logger = "0.4.0"
-
-[workspace]
