@@ -9,6 +9,7 @@ althea_kernel_interface = { path = "../althea_kernel_interface" }
 traffic_watcher = { path = "./traffic_watcher"}
 payment_controller = { path = "./payment_controller" }
 debt_keeper = { path = "./debt_keeper" }
+tunnel_manager = { path = "./tunnel_manager" }
 num256 = { path = "../num256" }
 ip_network = "0.1"
 log = "0.3"
@@ -18,5 +19,6 @@ rouille = "1.0.3"
 serde = "1.0.24"
 serde_derive = "1.0.24"
 serde_json = "1.0.8"
+reqwest = "0.8.2"
 
 [workspace]

@@ -10,6 +10,9 @@ use std::ops::Add;
 
 extern crate serde;
 
+extern crate hwaddr;
+use hwaddr::HwAddr;
+
 extern crate althea_types;
 use althea_types::EthAddress;
 
@@ -22,15 +25,17 @@ use num256::Int256;
 mod debts;
 use debts::{Debts, Neighbor};
 pub use debts::Key;
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error(msg_embedded, no_from, non_std)] DebtKeeperError(String),
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct Identity {
-    ip_address: IpAddr,
-    eth_address: EthAddress,
+    pub ip_address: IpAddr,
+    pub eth_address: EthAddress,
+    pub mac_address: HwAddr,
 }
 
 pub struct DebtKeeper {
@@ -40,11 +45,14 @@ pub struct DebtKeeper {
 }
 
 pub enum DebtAction {
-    CloseTunnel,
+    SuspendTunnel,
     MakePayment(Uint256),
 }
 
-pub struct DebtAdjustment {}
+pub struct DebtAdjustment {
+    pub ident: Identity,
+    pub amount: Int256,
+}
 
 impl DebtKeeper {
     pub fn new(pay_threshold: Int256, close_threshold: Int256) -> Self {
@@ -60,29 +68,16 @@ impl DebtKeeper {
         ident: Identity,
         debt: Int256,
     ) -> Option<DebtAction> {
-        let mut stored_debt = self.debts.entry(ident).or_insert(Int256::from(0));
-        stored_debt = &mut stored_debt.add(debt);
+        let stored_debt = self.debts.entry(ident).or_insert(Int256::from(0));
+        *stored_debt = stored_debt.clone().add(debt.clone());
         
         if debt < self.close_threshold {
-            Some(DebtAction::CloseTunnel)
+            Some(DebtAction::SuspendTunnel)
         } else if debt > self.pay_threshold {
             Some(DebtAction::MakePayment(Uint256::from(debt)))
         } else {
             None
         }
-
-        // match self.debts.get(&ident) {
-        //     Some(old_debt) => {
-        //         let new_debt = *old_debt + debt;
-
-        //         self.debts.insert(ident, new_debt.clone());
-        //         self.check_thresholds(new_debt)
-        //     },
-        //     None => {
-        //         self.debts.insert(ident, debt.clone());
-        //         self.check_thresholds(debt)
-        //     },
-        // }
     }
 }
 

@@ -1,24 +1,24 @@
 #[macro_use]
 extern crate serde_derive;
 
-extern crate althea_types;
-extern crate debt_keeper;
-use debt_keeper::Identity;
-
-extern crate num256;
-extern crate reqwest;
+use std::sync::mpsc::{Receiver, Sender};
 
 extern crate serde;
 extern crate serde_json;
 
-use std::sync::mpsc::{Receiver, Sender};
-use num256::{Int256, Uint256};
-use debt_keeper::Key;
+extern crate althea_types;
 use althea_types::EthAddress;
+
+extern crate debt_keeper;
+use debt_keeper::{Identity, Key};
+
+extern crate num256;
+use num256::{Int256, Uint256};
+
+extern crate reqwest;
 use reqwest::Client;
 
 pub struct PaymentController {
-    pub debt_keeper_input: Sender<(Key, Int256)>,
     pub client: Client,
 }
 
@@ -30,15 +30,20 @@ pub struct PaymentTx {
 }
 
 impl PaymentController {
+    pub fn new() -> Self {
+        PaymentController {
+            client: Client::new(),
+        }
+    }
     /// This is exposed to the Guac light client, or whatever else is
     /// being used for payments. It gets called when a payment from a counterparty
     /// has arrived.
-    fn payment_received(&self, pmt: Payment) {}
+    pub fn payment_received(&self, pmt: PaymentTx) {}
 
     /// This is called by the other modules in Rita to make payments.
-    fn make_payment(&self, pmt: PaymentTx) {
+    pub fn make_payment(&self, pmt: PaymentTx) {
         self.client
-            .get(pmt)
+            .get(&format!("http://{}/payments", pmt.to.ip_address))
             .body(serde_json::to_string(&pmt).unwrap())
             .send()
             .unwrap();

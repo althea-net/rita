@@ -11,3 +11,4 @@ stash = "0.1.3"
 derive-error = "0.0.4"
 serde_derive = "1.0.24"
 serde = "1.0.24"
+hwaddr = { path = "../../../rust-hwaddr", features = ["serde"] }

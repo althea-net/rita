@@ -1,13 +1,10 @@
 #![feature(getpid)]
 
-#[macro_use] extern crate serde_derive;
 #[macro_use] extern crate log;
 
-use std::net::SocketAddr;
 use std::fs::File;
 use std::io::prelude::*;
 use std::sync::mpsc;
-use std::time::Duration;
 use std::sync::{Arc, Mutex};
 use std::process;
 use std::thread;
@@ -21,11 +18,10 @@ use babel_monitor::Babel;
 extern crate traffic_watcher;
 
 extern crate debt_keeper;
-use debt_keeper::{Key, DebtKeeper};
-use debt_keeper::DebtAction;
+use debt_keeper::{DebtKeeper, DebtAction, DebtAdjustment, Identity};
 
 extern crate payment_controller;
-use payment_controller::{Payment, PaymentController};
+use payment_controller::{PaymentTx, PaymentController};
 
 extern crate docopt;
 use docopt::Docopt;
@@ -33,11 +29,14 @@ use docopt::Docopt;
 extern crate ip_network;
 extern crate simple_logger;
 
+extern crate tunnel_manager;
+use tunnel_manager::TunnelManager;
+
 extern crate num256;
 use num256::Int256;
 
-extern crate rouille;
-use rouille::{Request, Response};
+#[macro_use] extern crate rouille;
+use rouille::{Response};
 
 extern crate serde;
 extern crate serde_json;
@@ -62,73 +61,68 @@ fn main() {
             .unwrap();
     }
 
+    let my_ident = Identity {
+        mac_address: "0:0:0:aa:0:2".parse().unwrap(),
+        ip_address: "2001::3".parse().unwrap(),
+        eth_address: "0xMyEthAddress".parse().unwrap()
+    };
 
     let (tx, rx) = mpsc::channel();
 
-    let mut ki = KernelInterface {};
-
-    let mut babel = Babel::new(&"[::1]:8080".parse().unwrap());
-
     let tx1 = mpsc::Sender::clone(&tx);
     thread::spawn(move || {
-        loop {
-            let debts = traffic_watcher::watch(5, &mut ki, &mut babel);
+        let mut ki = KernelInterface {};
+        let mut tm = TunnelManager::new();
+        let mut babel = Babel::new(&"[::1]:8080".parse().unwrap());
 
-            for (ip, debt) in debts {
-                tx1.send((Key::IpAddr(ip), Int256::from(debt as i64)));
+        loop {
+            let neighbors = tm.get_neighbors();
+            let debts = traffic_watcher::watch(neighbors, 5, &mut ki, &mut babel);
+
+            for (ident, amount) in debts {
+                tx1.send(DebtAdjustment {
+                    ident,
+                    amount 
+                }).unwrap();
             }
-            // tx1.send(format!(
-            //     "{:?}",
-            //     traffic_watcher::watch(5, &mut ki, &mut babel)
-            // ));
         };
     });
-
 
     let m_tx = Arc::new(Mutex::new(tx.clone()));
 
     thread::spawn(move || {
         rouille::start_server("localhost:8080", move |request| {
-            let pmt: Payment = serde_json::from_reader(request.data().unwrap()).unwrap();
-            m_tx.lock().unwrap().send(
-                (Key::EthAddress(pmt.from), Int256::from(pmt.amount))
-            ).unwrap();
+            router!(request,
+                (POST) (/make_payment) => {
+                    let pmt: PaymentTx = serde_json::from_reader(request.data().unwrap()).unwrap();
+                    m_tx.lock().unwrap().send(
+                        DebtAdjustment {
+                            ident: pmt.from,
+                            amount: Int256::from(pmt.amount)
+                        }
+                    ).unwrap();
 
-            Response::text("")
+                    Response::text("")
+                },
+                (GET) (/hello) => {
+                    Response::text("0xMyEthAddress")
+                },
+                _ => Response::text("404")
+            )
         });
     });
 
-
-
     let mut dk = DebtKeeper::new(Int256::from(5), Int256::from(10));
-    let mut pc = PaymentController::new();
+    let pc = PaymentController::new();
 
-    for received in rx {
-        match dk.apply_debt(received.0, received.1).unwrap() {
+    for debt_adjustment in rx {
+        match dk.apply_debt(debt_adjustment.ident, debt_adjustment.amount).unwrap() {
             DebtAction::SuspendTunnel => unimplemented!(), // tunnel manager should suspend forwarding here
-            DebtAction::MakePayment(amt) =>  unimplemented!()
+            DebtAction::MakePayment(amt) =>  pc.make_payment(PaymentTx {
+                from: my_ident,
+                to: debt_adjustment.ident,
+                amount: amt
+            })
         };
-
-        // if res.0 {
-        //     // tunnel manager should suspend forwarding here
-        // }
-
-        // if res.1 != Int256::from(0) {
-
-        // }
     }
-    // thread::spawn(move || {
-    //     // let vals = vec![
-    //     //     String::from("more"),
-    //     //     String::from("messages"),
-    //     //     String::from("for"),
-    //     //     String::from("you"),
-    //     // ];
-
-    //     // for val in vals {
-    //     //     tx.send(val).unwrap();
-    //     //     thread::sleep(Duration::from_secs(1));
-    //     // }
-    //     let pmt_ctrl = PaymentController { debt_keeper_input: tx };
-    // });
 }
