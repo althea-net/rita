@@ -33,7 +33,7 @@ name = "althea_kernel_interface"
 version = "0.1.0"
 dependencies = [
  "derive-error 0.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "eui48 0.3.0",
+ "eui48 0.3.0 (git+https://github.com/althea-mesh/eui48)",
  "itertools 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -220,7 +220,7 @@ version = "0.1.0"
 dependencies = [
  "althea_types 0.1.0",
  "derive-error 0.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "eui48 0.3.0",
+ "eui48 0.3.0 (git+https://github.com/althea-mesh/eui48)",
  "num256 0.1.0",
  "serde 1.0.27 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.27 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -328,6 +328,7 @@ dependencies = [
 [[package]]
 name = "eui48"
 version = "0.3.0"
+source = "git+https://github.com/althea-mesh/eui48#ba73e983b9803483857767c2ed2218c7e3f5b1d7"
 dependencies = [
  "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.27 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1341,7 +1342,7 @@ dependencies = [
  "babel_monitor 0.1.0",
  "debt_keeper 0.1.0",
  "docopt 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "eui48 0.3.0",
+ "eui48 0.3.0 (git+https://github.com/althea-mesh/eui48)",
  "ip_network 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "num256 0.1.0",
@@ -1547,6 +1548,7 @@ dependencies = [
 "checksum encoding-index-tradchinese 1.20141219.5 (registry+https://github.com/rust-lang/crates.io-index)" = "fd0e20d5688ce3cab59eb3ef3a2083a5c77bf496cb798dc6fcdb75f323890c18"
 "checksum encoding_index_tests 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)" = "a246d82be1c9d791c5dfde9a2bd045fc3cbba3fa2b11ad558f27d01712f00569"
 "checksum env_logger 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)" = "15abd780e45b3ea4f76b4e9a26ff4843258dd8a3eed2775a0e7368c2e7936c2f"
+"checksum eui48 0.3.0 (git+https://github.com/althea-mesh/eui48)" = "<none>"
 "checksum extprim 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "1de79797db68eb235c616cc3ad1a2793fa94a2245594cb6f81d602e62ed951c5"
 "checksum filetime 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)" = "aa75ec8f7927063335a9583e7fa87b0110bb888cf766dc01b54c0ff70d760c8e"
 "checksum flate2 0.2.20 (registry+https://github.com/rust-lang/crates.io-index)" = "e6234dd4468ae5d1e2dbb06fe2b058696fdc50a339c68a393aefbf00bc81e423"

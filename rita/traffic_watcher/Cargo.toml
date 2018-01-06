@@ -13,5 +13,5 @@ ip_network = { version = "0.1", features = ["serde"] }
 log = "0.3"
 docopt = "0.8.1"
 serde_derive = "1.0.24"
-eui48 = { path = "../../../eui48", features = ["serde"] }
+eui48 = { git = "https://github.com/althea-mesh/eui48", features = ["serde"] }
 serde = "1.0.24"
