@@ -7,7 +7,7 @@ extern crate althea_types;
 use althea_types::EthAddress;
 
 extern crate debt_keeper;
-use debt_keeper::{Identity};
+use debt_keeper::Identity;
 
 extern crate althea_kernel_interface;
 use althea_kernel_interface::KernelInterface;
@@ -19,8 +19,7 @@ use reqwest::Client;
 pub enum Error {
     KernelInterfaceError(althea_kernel_interface::Error),
     HttpReqError(reqwest::Error),
-    #[error(msg_embedded, no_from, non_std)]
-    TunnelManagerError(String),
+    #[error(msg_embedded, no_from, non_std)] TunnelManagerError(String),
 }
 
 pub struct TunnelManager {
@@ -36,20 +35,22 @@ impl TunnelManager {
         }
     }
     pub fn get_neighbors(&mut self) -> Result<Vec<Identity>, Error> {
-        Ok(self.ki
-            .get_neighbors()?
-            .iter()
-            .filter_map(|&(mac_address, ip_address)| {
-                match self.neighbor_inquiry(ip_address) {
-                    Ok(eth_address) => Some(Identity {
-                        ip_address,
-                        mac_address,
-                        eth_address,
-                    }),
-                    Err(e) => None
-                }
-            })
-            .collect())
+        Ok(
+            self.ki
+                .get_neighbors()?
+                .iter()
+                .filter_map(|&(mac_address, ip_address)| {
+                    match self.neighbor_inquiry(ip_address) {
+                        Ok(eth_address) => Some(Identity {
+                            ip_address,
+                            mac_address,
+                            eth_address,
+                        }),
+                        Err(_) => None,
+                    }
+                })
+                .collect(),
+        )
     }
 
     fn neighbor_inquiry(&self, ip: IpAddr) -> Result<EthAddress, Error> {
