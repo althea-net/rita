@@ -1,0 +1,17 @@
+[package]
+name = "traffic_watcher"
+version = "0.1.0"
+authors = ["Jehan <jehan.tremback@gmail.com>"]
+license = "Apache 2.0"
+
+[dependencies]
+babel_monitor = { path = "../../babel_monitor" }
+althea_kernel_interface = { path = "../../althea_kernel_interface" }
+debt_keeper = { path = "../debt_keeper" }
+num256 =  { path = "../../num256" }
+ip_network = { version = "0.1", features = ["serde"] }
+log = "0.3"
+docopt = "0.8.1"
+serde_derive = "1.0.24"
+eui48 = { git = "https://github.com/althea-mesh/eui48", features = ["serde"] }
+serde = "1.0.24"

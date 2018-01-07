@@ -5,10 +5,13 @@ extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 
+#[macro_use]
+extern crate lazy_static;
 
-use num::bigint::{BigInt, BigUint};
-use std::ops::{Add, Deref, Sub};
-use num::traits::ops::checked::{CheckedAdd, CheckedSub};
+use num::bigint::{BigInt, BigUint, ToBigInt};
+use std::ops::{Add, Deref, Sub, Mul};
+use num::traits::ops::checked::{CheckedAdd, CheckedSub, CheckedMul};
+use num::traits::Signed;
 use serde::ser::Serialize;
 use serde::{Deserialize, Deserializer, Serializer};
 use std::str::FromStr;
@@ -22,6 +25,12 @@ impl Deref for Uint256 {
 
   fn deref(&self) -> &BigUint {
     &self.0
+  }
+}
+
+impl From<Int256> for Uint256 {
+  fn from(n: Int256) -> Self {
+    Uint256(n.abs().to_biguint().unwrap())
   }
 }
 
@@ -113,6 +122,15 @@ impl Deref for Int256 {
   }
 }
 
+impl From<Uint256> for Int256 {
+  fn from(n: Uint256) -> Self {
+    let num = n.to_bigint().unwrap();
+    if num.bits() > 255 {
+      panic!("overflow");
+    }
+    Int256(num)
+  }
+}
 
 macro_rules! impl_from_int {
     ($T:ty) => {
@@ -197,6 +215,27 @@ impl CheckedSub for Int256 {
   }
 }
 
+impl Mul for Int256 {
+  type Output = Int256;
+  fn mul(self, v: Int256) -> Int256 {
+    let num = self.0 * v.0;
+    if num.bits() > 255 {
+      panic!("overflow");
+    }
+    Int256(num)
+  }
+}
+
+impl CheckedMul for Int256 {
+  fn checked_mul(&self, v: &Int256) -> Option<Int256> {
+    // drop down to wrapped bigint to stop from panicing in fn above
+    let num = self.0.clone() * v.0.clone();
+    if num.bits() > 255 {
+      return None;
+    }
+    Some(Int256(num))
+  }
+}
 
 #[cfg(test)]
 mod tests {
@@ -205,6 +244,19 @@ mod tests {
   use num::traits::ops::checked::{CheckedAdd, CheckedSub};
   use num::traits::cast::ToPrimitive;
   use serde_json;
+
+  lazy_static! {
+    static ref BIGGEST_UINT: Uint256 =
+      Uint256(pow(BigUint::from(2 as u32), 256) - BigUint::from(1 as u32));
+
+    static ref BIGGEST_INT: Int256 = Int256(pow(BigInt::from(2), 255) - BigInt::from(1));
+
+    static ref SMALLEST_INT: Int256 = Int256(pow(BigInt::from(-2), 255) + BigInt::from(1));
+
+    static ref BIGGEST_INT_AS_UINT: Uint256 =
+      Uint256(pow(BigUint::from(2 as u32), 255) - BigUint::from(1 as u32));
+  }
+
 
   #[derive(Serialize, Deserialize, Debug)]
   pub struct MyStruct {
@@ -215,20 +267,20 @@ mod tests {
   #[test]
   fn serialize() {
     let struc = MyStruct {
-      uint: Uint256::from(234 as u32),
-      int: Int256::from(333),
+      uint: BIGGEST_UINT.clone(),
+      int: SMALLEST_INT.clone(),
     };
 
 
-    let expected = "{\"uint\":\"234\",\"int\":\"333\"}";
+    let expected = "{\"uint\":\"115792089237316195423570985008687907853269984665640564039457584007913129639935\",\"int\":\"-57896044618658097711785492504343953926634992332820282019728792003956564819967\"}";
 
     let j = serde_json::to_string(&struc).unwrap();
 
     assert_eq!(expected, j);
     let m: MyStruct = serde_json::from_str(expected).unwrap();
 
-    assert_eq!(Uint256::from(234 as u32), m.uint);
-    assert_eq!(Int256::from(333), m.int);
+    assert_eq!(BIGGEST_UINT.clone(), m.uint);
+    assert_eq!(SMALLEST_INT.clone(), m.int);
   }
 
   #[test]
@@ -264,17 +316,40 @@ mod tests {
   }
 
   #[test]
-  fn test_uint256() {
-    let biggest = Uint256(pow(BigUint::from(2 as u32), 256) - BigUint::from(1 as u32));
+  #[should_panic]
+  fn test_uint_add_panic() {
+    BIGGEST_UINT.clone() + Uint256::from(1 as u32);
+  }
 
+  #[test]
+  fn test_uint_add_no_panic() {
+    BIGGEST_UINT.clone() + Uint256::from(0 as u32);
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_uint_sub_panic() {
+    &Uint256::from(1 as u32).sub(Uint256::from(2 as u32));
+  }
+
+  #[test]
+  fn test_uint_sub_no_panic() {
+    assert_eq!(
+      Uint256::from(1 as u32).sub(Uint256::from(1 as u32)),
+      Uint256::from(0 as u32)
+    );
+  }
+
+  #[test]
+  fn test_uint256() {
     assert!(
-      biggest.checked_add(&Uint256::from(1 as u32)).is_none(),
+      BIGGEST_UINT.checked_add(&Uint256::from(1 as u32)).is_none(),
       "should return None adding 1 to biggest"
     );
 
     assert!(
-      biggest.checked_add(&Uint256::from(0 as u32)).is_some(),
-      "should return None adding 0 to biggest"
+      BIGGEST_UINT.checked_add(&Uint256::from(0 as u32)).is_some(),
+      "should return Some adding 0 to biggest"
     );
 
     assert!(
@@ -309,26 +384,75 @@ mod tests {
   }
 
   #[test]
+  #[should_panic]
+  fn test_int_add_panic() {
+    BIGGEST_INT.clone() + Int256::from(1);
+  }
+
+  #[test]
+  fn test_int_add_no_panic() {
+    BIGGEST_INT.clone() + Int256::from(0);
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_int_sub_panic() {
+    SMALLEST_INT.clone().sub(Int256::from(1));
+  }
+
+  #[test]
+  fn test_int_sub_no_panic() {
+    assert_eq!(Int256::from(1).sub(Int256::from(1)), Int256::from(0));
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_int_mul_panic() {
+    SMALLEST_INT.clone().mul(Int256::from(2));
+  }
+
+  #[test]
+  fn test_int_mul_no_panic() {
+    assert_eq!(Int256::from(3).mul(Int256::from(2)), Int256::from(6));
+  }
+
+
+  #[test]
+  #[should_panic]
+  fn test_uint_to_int_panic() {
+    Int256::from(BIGGEST_INT_AS_UINT.clone().add(Uint256::from(1 as u32)));
+  }
+
+  #[test]
   fn test_int256() {
-    let biggest = Int256(pow(BigInt::from(2), 255) - BigInt::from(1));
-    let smallest = Int256(pow(BigInt::from(-2), 255) + BigInt::from(1));
+    assert_eq!(
+      Int256::from(BIGGEST_INT_AS_UINT.clone().add(Uint256::from(0 as u32))),
+      BIGGEST_INT.clone()
+    );
 
     assert!(
-      biggest.checked_add(&Int256::from(1)).is_none(),
+      BIGGEST_INT.checked_add(&Int256::from(1)).is_none(),
       "should return None adding 1 to biggest"
     );
     assert!(
-      biggest.checked_add(&Int256::from(0)).is_some(),
-      "should return Some adding 1 to biggest"
+      BIGGEST_INT.checked_add(&Int256::from(0)).is_some(),
+      "should return Some adding 0 to biggest"
     );
 
     assert!(
-      smallest.checked_sub(&Int256::from(1)).is_none(),
+      SMALLEST_INT.checked_sub(&Int256::from(1)).is_none(),
       "should return None subtracting 1 from smallest"
     );
     assert!(
-      smallest.checked_sub(&Int256::from(0)).is_some(),
+      SMALLEST_INT.checked_sub(&Int256::from(0)).is_some(),
       "should return Some subtracting 0 from smallest"
+    );
+
+    assert!(
+      SMALLEST_INT.checked_mul(&Int256::from(2)).is_none()
+    );
+    assert!(
+      SMALLEST_INT.checked_mul(&Int256::from(1)).is_some()
     );
 
     let num = &Int256::from(345)

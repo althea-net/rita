@@ -7,3 +7,9 @@ license = "Apache 2.0"
 [dependencies]
 althea_types = { path = "../../althea_types" }
 num256 =  { path = "../../num256" }
+debt_keeper = { path = "../debt_keeper" }
+rouille = "1.0.3"
+reqwest = "0.8.2"
+serde = "1.0.24"
+serde_derive = "1.0.24"
+serde_json = "1.0.8"
