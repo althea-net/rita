@@ -4,19 +4,19 @@ extern crate serde_derive;
 #[macro_use]
 extern crate derive_error;
 
-use std::sync::mpsc::{Receiver, Sender};
+// use std::sync::mpsc::{Receiver, Sender};
 
 extern crate serde;
 extern crate serde_json;
 
-extern crate althea_types;
-use althea_types::EthAddress;
+// extern crate althea_types;
+// use althea_types::EthAddress;
 
 extern crate debt_keeper;
-use debt_keeper::{Identity};
+use debt_keeper::Identity;
 
 extern crate num256;
-use num256::{Int256, Uint256};
+use num256::Uint256;
 
 extern crate reqwest;
 use reqwest::Client;
@@ -25,8 +25,7 @@ use reqwest::Client;
 pub enum Error {
     HttpError(reqwest::Error),
     SerdeError(serde_json::Error),
-    #[error(msg_embedded, no_from, non_std)]
-    PaymentControllerError(String),
+    #[error(msg_embedded, no_from, non_std)] PaymentControllerError(String),
 }
 
 
@@ -50,7 +49,7 @@ impl PaymentController {
     /// This is exposed to the Guac light client, or whatever else is
     /// being used for payments. It gets called when a payment from a counterparty
     /// has arrived.
-    pub fn payment_received(&self, pmt: PaymentTx) {}
+    // pub fn payment_received(&self, pmt: PaymentTx) {}
 
     /// This is called by the other modules in Rita to make payments.
     pub fn make_payment(&self, pmt: PaymentTx) -> Result<(), Error> {
