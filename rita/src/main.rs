@@ -76,8 +76,8 @@ fn main() {
         let mut babel = Babel::new(&"[::1]:8080".parse().unwrap());
 
         loop {
-            let neighbors = tm.get_neighbors();
-            let debts = traffic_watcher::watch(neighbors, 5, &mut ki, &mut babel);
+            let neighbors = tm.get_neighbors().unwrap();
+            let debts = traffic_watcher::watch(neighbors, 5, &mut ki, &mut babel).unwrap();
 
             for (ident, amount) in debts {
                 tx1.send(DebtAdjustment {
@@ -118,11 +118,11 @@ fn main() {
     for debt_adjustment in rx {
         match dk.apply_debt(debt_adjustment.ident, debt_adjustment.amount).unwrap() {
             DebtAction::SuspendTunnel => unimplemented!(), // tunnel manager should suspend forwarding here
-            DebtAction::MakePayment(amt) =>  pc.make_payment(PaymentTx {
+            DebtAction::MakePayment(amt) => pc.make_payment(PaymentTx {
                 from: my_ident,
                 to: debt_adjustment.ident,
                 amount: amt
-            })
+            }).unwrap()
         };
     }
 }
