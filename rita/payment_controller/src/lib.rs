@@ -13,7 +13,7 @@ extern crate althea_types;
 use althea_types::EthAddress;
 
 extern crate debt_keeper;
-use debt_keeper::{Identity, Key};
+use debt_keeper::{Identity};
 
 extern crate num256;
 use num256::{Int256, Uint256};

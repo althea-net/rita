@@ -26,7 +26,7 @@ use ip_network::IpNetwork;
 use std::{thread, time};
 
 extern crate debt_keeper;
-use debt_keeper::{Identity, Key};
+use debt_keeper::{Identity};
 
 extern crate eui48;
 use eui48::MacAddress;
