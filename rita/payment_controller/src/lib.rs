@@ -1,6 +1,9 @@
 #[macro_use]
 extern crate serde_derive;
 
+#[macro_use]
+extern crate derive_error;
+
 use std::sync::mpsc::{Receiver, Sender};
 
 extern crate serde;
@@ -17,6 +20,15 @@ use num256::{Int256, Uint256};
 
 extern crate reqwest;
 use reqwest::Client;
+
+#[derive(Debug, Error)]
+pub enum Error {
+    HttpError(reqwest::Error),
+    SerdeError(serde_json::Error),
+    #[error(msg_embedded, no_from, non_std)]
+    PaymentControllerError(String),
+}
+
 
 pub struct PaymentController {
     pub client: Client,
@@ -41,12 +53,12 @@ impl PaymentController {
     pub fn payment_received(&self, pmt: PaymentTx) {}
 
     /// This is called by the other modules in Rita to make payments.
-    pub fn make_payment(&self, pmt: PaymentTx) {
+    pub fn make_payment(&self, pmt: PaymentTx) -> Result<(), Error> {
         self.client
             .get(&format!("http://{}/payments", pmt.to.ip_address))
-            .body(serde_json::to_string(&pmt).unwrap())
-            .send()
-            .unwrap();
+            .body(serde_json::to_string(&pmt)?)
+            .send()?;
+        Ok(())
     }
 }
 
