@@ -822,6 +822,7 @@ version = "0.1.0"
 dependencies = [
  "althea_types 0.1.0",
  "debt_keeper 0.1.0",
+ "derive-error 0.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "num256 0.1.0",
  "reqwest 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rouille 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1341,6 +1342,7 @@ dependencies = [
  "althea_kernel_interface 0.1.0",
  "babel_monitor 0.1.0",
  "debt_keeper 0.1.0",
+ "derive-error 0.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "docopt 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "eui48 0.3.0 (git+https://github.com/althea-mesh/eui48)",
  "ip_network 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1357,6 +1359,7 @@ dependencies = [
  "althea_kernel_interface 0.1.0",
  "althea_types 0.1.0",
  "debt_keeper 0.1.0",
+ "derive-error 0.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "reqwest 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
