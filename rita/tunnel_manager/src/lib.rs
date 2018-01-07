@@ -7,7 +7,7 @@ extern crate althea_types;
 use althea_types::EthAddress;
 
 extern crate debt_keeper;
-use debt_keeper::{Identity, Key};
+use debt_keeper::{Identity};
 
 extern crate althea_kernel_interface;
 use althea_kernel_interface::KernelInterface;

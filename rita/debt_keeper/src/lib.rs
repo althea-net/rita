@@ -24,14 +24,13 @@ use num256::Int256;
 
 mod debts;
 use debts::{Debts, Neighbor};
-pub use debts::Key;
 
 #[derive(Debug, Error)]
 pub enum Error {
     #[error(msg_embedded, no_from, non_std)] DebtKeeperError(String),
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct Identity {
     pub ip_address: IpAddr,
     pub eth_address: EthAddress,
@@ -44,11 +43,13 @@ pub struct DebtKeeper {
     close_threshold: Int256,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum DebtAction {
     SuspendTunnel,
     MakePayment(Uint256),
 }
 
+#[derive(Debug, PartialEq)]
 pub struct DebtAdjustment {
     pub ident: Identity,
     pub amount: Int256,
@@ -82,18 +83,20 @@ mod tests {
     use super::*;
     #[test]
     fn it_works() {
-        let eth_addr = "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
-            .parse()
-            .unwrap();
-        let ip_addr = "2001::3".parse().unwrap();
         let mut d = DebtKeeper::new(Int256::from(5), Int256::from(10));
 
-        d.add_neighbor(ip_addr, eth_addr);
+        let ident = Identity {
+            eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
+                .parse()
+                .unwrap(),
+            ip_address: "2001::3".parse().unwrap(),
+            mac_address: MacAddress::parse_str("00:00:00:aa:00:02").unwrap()
+        };
 
         assert_eq!(
-            d.apply_debt(Key::EthAddress(eth_addr), Int256::from(7))
+            d.apply_debt(ident, Int256::from(7))
                 .unwrap(),
-            (true, Int256::from(7))
+            DebtAction::SuspendTunnel
         );
     }
 }
