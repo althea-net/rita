@@ -62,9 +62,9 @@ fn main() {
     }
 
     let my_ident = Identity {
-        mac_address: "0:0:0:aa:0:2".parse().unwrap(),
+        mac_address: "00:00:00:aa:00:02".parse().unwrap(),
         ip_address: "2001::3".parse().unwrap(),
-        eth_address: "0xMyEthAddress".parse().unwrap()
+        eth_address: "0xb794f5ea0ba39494ce839613fffba74279579268".parse().unwrap()
     };
 
     let (tx, rx) = mpsc::channel();
@@ -94,18 +94,20 @@ fn main() {
         rouille::start_server("localhost:8080", move |request| {
             router!(request,
                 (POST) (/make_payment) => {
-                    let pmt: PaymentTx = serde_json::from_reader(request.data().unwrap()).unwrap();
-                    m_tx.lock().unwrap().send(
-                        DebtAdjustment {
-                            ident: pmt.from,
-                            amount: Int256::from(pmt.amount)
-                        }
-                    ).unwrap();
+                    if let Some(data) = request.data() {
+                        let pmt: PaymentTx = serde_json::from_reader(data).unwrap();
+                        m_tx.lock().unwrap().send(
+                            DebtAdjustment {
+                                ident: pmt.from,
+                                amount: Int256::from(pmt.amount)
+                            }
+                        ).unwrap();
+                    }
 
                     Response::text("")
                 },
                 (GET) (/hello) => {
-                    Response::text("0xMyEthAddress")
+                    Response::text("0xb794f5ea0ba39494ce839613fffba74279579268")
                 },
                 _ => Response::text("404")
             )
@@ -116,13 +118,14 @@ fn main() {
     let pc = PaymentController::new();
 
     for debt_adjustment in rx {
-        match dk.apply_debt(debt_adjustment.ident, debt_adjustment.amount).unwrap() {
-            DebtAction::SuspendTunnel => unimplemented!(), // tunnel manager should suspend forwarding here
-            DebtAction::MakePayment(amt) => pc.make_payment(PaymentTx {
+        match dk.apply_debt(debt_adjustment.ident, debt_adjustment.amount) {
+            Some(DebtAction::SuspendTunnel) => unimplemented!(), // tunnel manager should suspend forwarding here
+            Some(DebtAction::MakePayment(amt)) => pc.make_payment(PaymentTx {
                 from: my_ident,
                 to: debt_adjustment.ident,
                 amount: amt
-            }).unwrap()
+            }).unwrap(),
+            None => ()
         };
     }
 }
