@@ -77,7 +77,10 @@ fn main() {
 
         loop {
             let neighbors = tm.get_neighbors().unwrap();
+            info!("got neighbors: {:?}", neighbors);
+
             let debts = traffic_watcher::watch(neighbors, 5, &mut ki, &mut babel).unwrap();
+            info!("got debts: {:?}", debts);
 
             for (ident, amount) in debts {
                 tx1.send(DebtAdjustment {
@@ -91,7 +94,7 @@ fn main() {
     let m_tx = Arc::new(Mutex::new(tx.clone()));
 
     thread::spawn(move || {
-        rouille::start_server("localhost:8080", move |request| {
+        rouille::start_server("localhost:4876", move |request| {
             router!(request,
                 (POST) (/make_payment) => {
                     if let Some(data) = request.data() {

@@ -9,3 +9,4 @@ althea_types = { path = "../../althea_types" }
 debt_keeper = { path = "../debt_keeper"}
 reqwest = "0.8.2"
 derive-error = "0.0.4"
+log = "0.3"
