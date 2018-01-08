@@ -1,6 +1,9 @@
 #[macro_use]
 extern crate derive_error;
 
+#[macro_use]
+extern crate log;
+
 use std::net::IpAddr;
 
 extern crate althea_types;
@@ -40,13 +43,15 @@ impl TunnelManager {
                 .get_neighbors()?
                 .iter()
                 .filter_map(|&(mac_address, ip_address)| {
-                    match self.neighbor_inquiry(ip_address) {
+                    let eth_address = self.neighbor_inquiry(ip_address);
+                    trace!("got eth address: {:?}", eth_address);
+                    match eth_address {
                         Ok(eth_address) => Some(Identity {
                             ip_address,
                             mac_address,
                             eth_address,
                         }),
-                        Err(_) => None,
+                        Err(e) => None,
                     }
                 })
                 .collect(),
@@ -54,10 +59,9 @@ impl TunnelManager {
     }
 
     fn neighbor_inquiry(&self, ip: IpAddr) -> Result<EthAddress, Error> {
-        Ok(self.client
-            .get(&format!("http://{}/hello", ip))
-            .send()?
-            .json()?)
+        let url = format!("http://[{}]:4876/hello", ip);
+        trace!("Saying hello to: {:?}", url);
+        Ok(self.client.get(&url).send()?.json()?)
     }
 }
 
