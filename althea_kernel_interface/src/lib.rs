@@ -24,7 +24,8 @@ use regex::Regex;
 #[derive(Debug, Error)]
 pub enum Error {
     Io(std::io::Error),
-    UTF8(std::string::FromUtf8Error),
+    StringUTF8(std::string::FromUtf8Error),
+    StrUTF8(std::str::Utf8Error),
     ParseInt(std::num::ParseIntError),
     AddrParse(std::net::AddrParseError),
     #[error(msg_embedded, no_from, non_std)]
@@ -52,18 +53,19 @@ impl KernelInterface {
         (self.run_command)(args, program)
     }
 
-    fn get_neighbors_linux(&mut self) -> Result<Vec<(MacAddress, IpAddr)>, Error> {
+    fn get_neighbors_linux(&mut self) -> Result<Vec<(MacAddress, IpAddr, String)>, Error> {
         let output = self.run_command("ip", &["neighbor"])?;
         trace!("Got {:?} from `ip neighbor`", output);
 
         let mut vec = Vec::new();
-        let re = Regex::new(r"(\S*).*lladdr (\S*).*(REACHABLE|STALE|DELAY)").unwrap();
+        let re = Regex::new(r"(\S*).*dev (\S*).*lladdr (\S*).*(REACHABLE|STALE|DELAY)").unwrap();
         for caps in re.captures_iter(&String::from_utf8(output.stdout)?) {
             trace!("Regex captured {:?}", caps);
 
             vec.push((
-                MacAddress::parse_str(caps.get(2).unwrap().as_str()).unwrap(), // Ugly and inconsiderate, ditch ASAP
+                MacAddress::parse_str(&caps[3]).unwrap(), // Ugly and inconsiderate, ditch ASAP
                 IpAddr::from_str(&caps[1])?,
+                caps[2].to_string()
             ));
         }
         trace!("Got neighbors {:?}", vec);
@@ -124,8 +126,11 @@ impl KernelInterface {
         for _ in 0..loop_limit {
             let program = "ebtables";
             let res = self.run_command(program, args)?;
+
+            let re = Regex::new(r"rule does not exist").unwrap();
+
             // keeps looping until it is sure to have deleted the rule
-            if res.stderr == b"Sorry, rule does not exist.\n".to_vec() {
+            if re.is_match(str::from_utf8(&res.stderr)?) || re.is_match(str::from_utf8(&res.stdout)?) {
                 return Ok(());
             }
             if res.stdout == b"".to_vec() {
@@ -194,7 +199,7 @@ impl KernelInterface {
 
     /// Returns a vector of neighbors reachable over layer 2, giving the hardware
     /// and IP address of each. Implemented with `ip neighbor` on Linux.
-    pub fn get_neighbors(&mut self) -> Result<Vec<(MacAddress, IpAddr)>, Error> {
+    pub fn get_neighbors(&mut self) -> Result<Vec<(MacAddress, IpAddr, String)>, Error> {
         if cfg!(target_os = "linux") {
             return self.get_neighbors_linux();
         }
@@ -570,7 +575,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
             MacAddress::parse_str("0:0:0:aa:0:2").unwrap(),
             "2001::3".parse::<IpAddr>().unwrap(),
         ) {
-            Err(e) => assert_eq!(e.to_string(), "unexpected output from ebtables \"-D INPUT -s 00:00:00:aa:0:2 -p IPV6 --ip6-dst 2001::3 -j CONTINUE\": \"shibby\""),
+            Err(e) => assert_eq!(e.to_string(), "unexpected output from ebtables \"-D INPUT -s 00:00:00:aa:00:02 -p IPV6 --ip6-dst 2001::3 -j CONTINUE\": \"shibby\""),
             _ => panic!("no unexpeted input error")
         }
     }
