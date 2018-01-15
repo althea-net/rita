@@ -4,8 +4,7 @@ extern crate derive_error;
 #[macro_use]
 extern crate log;
 
-use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6, SocketAddrV4, TcpStream};
-use std::time::Duration;
+use std::net::{IpAddr, SocketAddr, SocketAddrV6, SocketAddrV4, TcpStream};
 
 use std::io::{Read, Write};
 
@@ -32,6 +31,7 @@ pub enum Error {
     HttpReqError(reqwest::Error),
     IOError(std::io::Error),
     DeserializationError(serde_json::Error),
+    HTTPParseError,
     #[error(msg_embedded, no_from, non_std)] TunnelManagerError(String),
 }
 
@@ -80,8 +80,8 @@ impl TunnelManager {
         let mut stream = TcpStream::connect(socket)?;
 
         // Format HTTP request
-        let mut header = format!("GET /hello HTTP/1.0\r\nHost: {}%{}\r\n\r\n", ip, dev);  //TODO: check if this is a proper HTTP request
-        stream.write(header.as_bytes());
+        let header = format!("GET /hello HTTP/1.0\r\nHost: {}%{}\r\n\r\n", ip, dev);  //TODO: check if this is a proper HTTP request
+        stream.write(header.as_bytes())?;
 
         // Make request and return response as string
         let mut resp = String::new();
@@ -89,9 +89,11 @@ impl TunnelManager {
 
         trace!("They replied {}", &resp);
 
-        let response = Response::new(resp.into_bytes()).unwrap();
-
-        Ok(serde_json::from_str(&response.text())?)
+        if let Ok(response) = Response::new(resp.into_bytes()){
+            Ok(serde_json::from_str(&response.text())?)
+        }else{
+            Err(Error::HTTPParseError)
+        }
     }
 }
 
