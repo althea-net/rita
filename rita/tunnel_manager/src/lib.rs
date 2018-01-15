@@ -11,6 +11,9 @@ use std::io::{Read, Write};
 
 extern crate serde_json;
 
+extern crate minihttpse;
+use minihttpse::Response;
+
 extern crate althea_types;
 use althea_types::EthAddress;
 
@@ -77,16 +80,18 @@ impl TunnelManager {
         let mut stream = TcpStream::connect(socket)?;
 
         // Format HTTP request
-        let mut header = format!("GET /hello HTTP/1.0\r\nHost: [{}%25{}]\r\n\r\n", ip, dev);  //TODO: check if this is a proper HTTP request
+        let mut header = format!("GET /hello HTTP/1.0\r\nHost: {}%{}\r\n\r\n", ip, dev);  //TODO: check if this is a proper HTTP request
         stream.write(header.as_bytes());
 
         // Make request and return response as string
         let mut resp = String::new();
         stream.read_to_string(&mut resp)?;
 
-        trace!("They replied {}", resp);
+        trace!("They replied {}", &resp);
 
-        Ok(serde_json::from_str(&resp)?)
+        let response = Response::new(resp.into_bytes()).unwrap();
+
+        Ok(serde_json::from_str(&response.text())?)
     }
 }
 

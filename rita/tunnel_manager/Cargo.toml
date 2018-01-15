@@ -8,6 +8,7 @@ althea_kernel_interface = { path = "../../althea_kernel_interface" }
 althea_types = { path = "../../althea_types" }
 debt_keeper = { path = "../debt_keeper"}
 reqwest = "0.8.2"
+minihttpse = "*"
 derive-error = "0.0.4"
 log = "0.3"
 serde_json = "1.0"
