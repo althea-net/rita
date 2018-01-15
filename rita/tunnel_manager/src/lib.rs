@@ -42,24 +42,20 @@ impl TunnelManager {
             self.ki
                 .get_neighbors()?
                 .iter()
-                .filter_map(|&(mac_address, ip_address)| {
-                    let eth_address = self.neighbor_inquiry(ip_address);
-                    trace!("got eth address: {:?}", eth_address);
-                    match eth_address {
-                        Ok(eth_address) => Some(Identity {
-                            ip_address,
-                            mac_address,
-                            eth_address,
-                        }),
-                        Err(e) => None,
+                .filter_map(|&(mac_address, ip_address, ref dev)| {
+                    let identity = self.neighbor_inquiry(ip_address, &dev);
+                    trace!("got neighbor: {:?}", identity);
+                    match identity {
+                        Ok(identity) => Some(identity),
+                        Err(_) => None,
                     }
                 })
                 .collect(),
         )
     }
 
-    fn neighbor_inquiry(&self, ip: IpAddr) -> Result<EthAddress, Error> {
-        let url = format!("http://[{}]:4876/hello", ip);
+    pub fn neighbor_inquiry(&mut self, ip: IpAddr, dev: &str) -> Result<Identity, Error> {
+        let url = format!("http://[{}%25{}]:4876/hello", ip, dev);
         trace!("Saying hello to: {:?}", url);
         Ok(self.client.get(&url).send()?.json()?)
     }

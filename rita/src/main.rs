@@ -110,7 +110,8 @@ fn main() {
                     Response::text("")
                 },
                 (GET) (/hello) => {
-                    Response::text("0xb794f5ea0ba39494ce839613fffba74279579268")
+                    Response::text(serde_json::to_string(&my_ident).unwrap())
+                    // Response::text("0xb794f5ea0ba39494ce839613fffba74279579268")
                 },
                 _ => Response::text("404")
             )
