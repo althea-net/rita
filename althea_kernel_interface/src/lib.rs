@@ -8,8 +8,9 @@ extern crate eui48;
 extern crate regex;
 extern crate itertools;
 
+use std::fs;
 use std::fs::{File, remove_file};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, SocketAddrV6, Ipv6Addr};
 use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
@@ -287,6 +288,23 @@ impl KernelInterface {
         Err(Error::RuntimeError(
             String::from("not implemented for this platform"),
         ))
+    }
+
+    /// Gets the interface index for a named interface
+    pub fn get_iface_index(&mut self, name: &str) -> Result<u32, Error> {
+
+        let mut f = File::open(format!("/sys/class/net/{}/ifindex", name)).expect("cannot open files");
+
+        let mut contents = String::new();
+        f.read_to_string(&mut contents).expect("cannot read file");
+
+        contents.pop(); //remove trailing newline
+
+        let index = contents.parse::<u32>()?;
+
+        trace!("Got index: {}", index);
+
+        Ok(index)
     }
 
     pub fn open_tunnel(
