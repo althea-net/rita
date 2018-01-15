@@ -72,8 +72,8 @@ impl TunnelManager {
             IpAddr::V6(ip_v6) => {
                 SocketAddr::V6(SocketAddrV6::new(ip_v6, 4876, 0, self.ki.get_iface_index(dev)?))
             }
-            IpAddr::V4(ip_v4) => {
-                SocketAddr::V4(SocketAddrV4::new(ip_v4, 4876)) //TODO: Do we want to allow IPv4?
+            IpAddr::V4(_) => {
+                return Err(Error::TunnelManagerError(String::from("IPv4 neighbours are not supported")))
             }
         };
 

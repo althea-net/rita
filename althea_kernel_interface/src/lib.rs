@@ -292,11 +292,10 @@ impl KernelInterface {
 
     /// Gets the interface index for a named interface
     pub fn get_iface_index(&mut self, name: &str) -> Result<u32, Error> {
-
-        let mut f = File::open(format!("/sys/class/net/{}/ifindex", name)).expect("cannot open files");
+        let mut f = File::open(format!("/sys/class/net/{}/ifindex", name))?;
 
         let mut contents = String::new();
-        f.read_to_string(&mut contents).expect("cannot read file");
+        f.read_to_string(&mut contents)?;
 
         contents.pop(); //remove trailing newline
 
