@@ -127,6 +127,10 @@ ip netns exec netlab-3 $babeld -I babeld-n3.pid -d 1 -L babeld-n3.log -h 1 -P 1 
 
 sleep 20
 
+ip netns exec netlab-2 ip r
+
+sleep 2
+
 stop_processes
 
 sleep 1
