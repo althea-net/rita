@@ -73,7 +73,7 @@ fn main() {
     thread::spawn(move || {
         let mut ki = KernelInterface {};
         let mut tm = TunnelManager::new();
-        let mut babel = Babel::new(&"[::1]:8080".parse().unwrap());
+        let mut babel = Babel::new(&"[::1]:8080".parse().unwrap()); //TODO: Do we really want [::1] and not [::0]?
 
         loop {
             let neighbors = tm.get_neighbors().unwrap();
@@ -94,7 +94,7 @@ fn main() {
     let m_tx = Arc::new(Mutex::new(tx.clone()));
 
     thread::spawn(move || {
-        rouille::start_server("localhost:4876", move |request| {
+        rouille::start_server("[::0]:4876", move |request| {
             router!(request,
                 (POST) (/make_payment) => {
                     if let Some(data) = request.data() {
