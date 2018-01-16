@@ -43,6 +43,9 @@ extern crate serde_json;
 
 extern crate rand;
 
+mod network_endpoints;
+use network_endpoints::make_payments;
+
 const USAGE: &'static str = "
 Usage: rita [--pid <pid file>]
 Options:
@@ -98,20 +101,7 @@ fn main() {
         rouille::start_server("[::0]:4876", move |request| {
             router!(request,
                 (POST) (/make_payment) => {
-                    if let Some(mut data) = request.data() {
-                        let mut pmt_str = String::new();
-                        data.read_to_string(&mut pmt_str);
-                        let pmt: PaymentTx = serde_json::from_str(&pmt_str).unwrap();
-                        m_tx.lock().unwrap().send(
-                            DebtAdjustment {
-                                ident: pmt.from,
-                                amount: Int256::from(pmt.amount)
-                            }
-                        ).unwrap();
-                        Response::text("Payment Recieved")
-                    } else {
-                        Response::text("Payment Error")
-                    }
+                    make_payments(request, m_tx.clone())
                 },
                 (GET) (/hello) => {
                     Response::text(serde_json::to_string(&my_ident).unwrap())
