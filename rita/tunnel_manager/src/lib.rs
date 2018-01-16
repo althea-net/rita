@@ -54,9 +54,11 @@ impl TunnelManager {
                 .iter()
                 .filter_map(|&(mac_address, ip_address, ref dev)| {
                     let identity = self.neighbor_inquiry(ip_address, &dev);
-                    trace!("got neighbor: {:?}", identity);
                     match identity {
-                        Ok(identity) => Some(identity),
+                        Ok(mut identity) => {
+                            identity.mac_address = mac_address.clone(); // TODO: make this not a hack
+                            Some(identity)
+                        },
                         Err(_) => None,
                     }
                 })
@@ -91,9 +93,6 @@ impl TunnelManager {
 
         if let Ok(response) = Response::new(resp.into_bytes()){
             let mut identity: Identity = serde_json::from_str(&response.text())?;
-            // TODO: get rid of this pretty ugly hack
-            identity.mac_address = self.ki.get_interface_mac(&dev)?;
-            trace!("Got identity {:?}", identity);
             Ok(identity)
         }else{
             Err(Error::HTTPParseError)

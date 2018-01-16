@@ -64,7 +64,7 @@ fn main() {
     }
 
     let my_ident = Identity {
-        mac_address: "00:00:00:aa:00:02".parse().unwrap(),
+        mac_address: "12:34:56:78:90:ab".parse().unwrap(), // TODO: make this not a hack
         ip_address: "2001::3".parse().unwrap(),
         eth_address: "0xb794f5ea0ba39494ce839613fffba74279579268".parse().unwrap()
     };
