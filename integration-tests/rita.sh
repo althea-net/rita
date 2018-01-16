@@ -21,7 +21,7 @@ build_rita () {
 
 network_lab=./deps/network-lab/network-lab.sh
 babeld=./babeld/babeld
-rita=../rita/target/debug/rita
+rita=../target/debug/rita
 
 
 if [[ $EUID -ne 0 ]]; then
@@ -133,7 +133,7 @@ ip netns exec netlab-2 ip r
 
 sleep 2
 
-stop_processes
+# stop_processes
 
 sleep 1
 

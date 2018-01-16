@@ -65,10 +65,6 @@ impl DebtKeeper {
         let stored_debt = self.debts.entry(ident).or_insert(Int256::from(0));
         *stored_debt = stored_debt.clone().add(debt.clone());
 
-        return Some(DebtAction::MakePayment(Uint256::from(debt)));
-
-        // TODO: put this back in when done testing
-
         if debt < self.close_threshold {
             Some(DebtAction::SuspendTunnel)
         } else if debt > self.pay_threshold {

@@ -7,3 +7,4 @@ authors = ["Stan Drozd <drozdziak1@gmail.com>"]
 rita = { path = "./rita" }
 
 [workspace]
+members = ["althea_kernel_interface"]
