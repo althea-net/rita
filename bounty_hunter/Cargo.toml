@@ -1,0 +1,8 @@
+[package]
+name = "bounty_hunter"
+version = "0.1.0"
+authors = ["kingoflolz <wangben3@gmail.com>"]
+
+[dependencies]
+rouille = "*"
+log = "0.3"
