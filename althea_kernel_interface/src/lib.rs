@@ -29,6 +29,7 @@ pub enum Error {
     StrUTF8(std::str::Utf8Error),
     ParseInt(std::num::ParseIntError),
     AddrParse(std::net::AddrParseError),
+    MacParse(eui48::ParseError),
     #[error(msg_embedded, no_from, non_std)]
     RuntimeError(String),
 }
@@ -46,6 +47,9 @@ impl KernelInterface {
     fn run_command(&mut self, program: &str, args: &[&str]) -> Result<Output, Error> {
         let output = Command::new(program).args(args).output()?;
         trace!("Command {} {:?} returned: {:?}", program, args, output);
+        if !output.status.success() {
+            trace!("An error was returned");
+        }
         return Ok(output);
     }
 
@@ -305,6 +309,24 @@ impl KernelInterface {
         trace!("Got index: {}", index);
 
         Ok(index)
+    }
+
+    /// Gets the interface mac for a interface name
+    pub fn get_interface_mac(&mut self, name: &str) -> Result<MacAddress, Error> {
+        trace!("Getting mac for interface {}", name);
+
+        let mut f = File::open(format!("/sys/class/net/{}/address", name))?;
+
+        let mut contents = String::new();
+        f.read_to_string(&mut contents)?;
+
+        contents.pop(); //remove trailing newline
+
+        let mac = MacAddress::parse_str(&contents)?;
+
+        trace!("Got mac: {}", mac);
+
+        Ok(mac)
     }
 
     pub fn open_tunnel(
