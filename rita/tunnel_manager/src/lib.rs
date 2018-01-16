@@ -65,7 +65,7 @@ impl TunnelManager {
     }
 
     pub fn neighbor_inquiry(&mut self, ip: IpAddr, dev: &str) -> Result<Identity, Error> {
-        let url = format!("http://[{}%25{}]:4876/hello", ip, dev);
+        let url = format!("http://[{}%{}]:4876/hello", ip, dev);
         trace!("Saying hello to: {:?}", url);
 
         let socket = match ip {

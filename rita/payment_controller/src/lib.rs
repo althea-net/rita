@@ -4,6 +4,8 @@ extern crate serde_derive;
 #[macro_use]
 extern crate derive_error;
 
+#[macro_use] extern crate log;
+
 // use std::sync::mpsc::{Receiver, Sender};
 
 extern crate serde;
@@ -19,13 +21,14 @@ extern crate num256;
 use num256::Uint256;
 
 extern crate reqwest;
-use reqwest::Client;
+use reqwest::{Client, Response, StatusCode};
 
 #[derive(Debug, Error)]
 pub enum Error {
     HttpError(reqwest::Error),
     SerdeError(serde_json::Error),
     #[error(msg_embedded, no_from, non_std)] PaymentControllerError(String),
+    #[error(msg_embedded, no_from, non_std)] PaymentSendingError(String),
 }
 
 
@@ -33,7 +36,7 @@ pub struct PaymentController {
     pub client: Client,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PaymentTx {
     pub to: Identity,
     pub from: Identity,
@@ -53,11 +56,27 @@ impl PaymentController {
 
     /// This is called by the other modules in Rita to make payments.
     pub fn make_payment(&self, pmt: PaymentTx) -> Result<(), Error> {
-        self.client
-            .get(&format!("http://{}/payments", pmt.to.ip_address))
+        trace!("Making payments to {:?}", pmt);
+        trace!("Sending payments to http://[{}]:4876/make_payment", pmt.to.ip_address);
+
+        let mut r = self.client
+            .post(&format!("http://[{}]:4876/make_payment", pmt.to.ip_address))
             .body(serde_json::to_string(&pmt)?)
             .send()?;
-        Ok(())
+
+        if r.status() == StatusCode::Ok {
+            trace!("Successfully paid");
+            trace!("Received success from payee: {:?}", r.text().unwrap_or(String::from("No message received")));
+            Ok(())
+        } else {
+            trace!("Unsuccessfully paid");
+            trace!("Received error from payee: {:?}", r.text().unwrap_or(String::from("No message received")));
+            Err(Error::PaymentSendingError(
+                String::from(format!("Received error from payee: {:?}",
+                                     r.text().unwrap_or(String::from("No message received"))
+                ))
+            ))
+        }
     }
 }
 

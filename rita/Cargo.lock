@@ -828,6 +828,7 @@ dependencies = [
  "althea_types 0.1.0",
  "debt_keeper 0.1.0",
  "derive-error 0.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "num256 0.1.0",
  "reqwest 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rouille 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
