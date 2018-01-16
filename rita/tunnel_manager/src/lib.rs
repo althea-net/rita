@@ -90,7 +90,11 @@ impl TunnelManager {
         trace!("They replied {}", &resp);
 
         if let Ok(response) = Response::new(resp.into_bytes()){
-            Ok(serde_json::from_str(&response.text())?)
+            let mut identity: Identity = serde_json::from_str(&response.text())?;
+            // TODO: get rid of this pretty ugly hack
+            identity.mac_address = self.ki.get_interface_mac(&dev)?;
+            trace!("Got identity {:?}", identity);
+            Ok(identity)
         }else{
             Err(Error::HTTPParseError)
         }

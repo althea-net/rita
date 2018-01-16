@@ -41,6 +41,8 @@ use rouille::{Response};
 extern crate serde;
 extern crate serde_json;
 
+extern crate rand;
+
 const USAGE: &'static str = "
 Usage: rita [--pid <pid file>]
 Options:
@@ -83,10 +85,9 @@ fn main() {
             info!("got debts: {:?}", debts);
 
             for (ident, amount) in debts {
-                tx1.send(DebtAdjustment {
-                    ident,
-                    amount 
-                }).unwrap();
+                let adjustment = DebtAdjustment {ident, amount};
+                trace!("Sent debt adjustment {:?}", &adjustment);
+                tx1.send(adjustment).unwrap();
             }
         };
     });
@@ -121,12 +122,14 @@ fn main() {
         });
     });
 
-    let mut dk = DebtKeeper::new(Int256::from(5), Int256::from(10));
+    let mut dk = DebtKeeper::new(Int256::from(5), Int256::from(-10));
     let pc = PaymentController::new();
 
     for debt_adjustment in rx {
         match dk.apply_debt(debt_adjustment.ident, debt_adjustment.amount) {
-            Some(DebtAction::SuspendTunnel) => {}, // tunnel manager should suspend forwarding here
+            Some(DebtAction::SuspendTunnel) => {
+                trace!("Suspending Tunnel");
+            }, // tunnel manager should suspend forwarding here
             Some(DebtAction::MakePayment(amt)) => {
                 let r = pc.make_payment(PaymentTx {
                     from: my_ident,
