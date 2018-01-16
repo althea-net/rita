@@ -8,8 +8,9 @@ extern crate eui48;
 extern crate regex;
 extern crate itertools;
 
+use std::fs;
 use std::fs::{File, remove_file};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, SocketAddrV6, Ipv6Addr};
 use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
@@ -182,18 +183,19 @@ impl KernelInterface {
     }
 
     fn read_flow_counters_linux(&mut self) -> Result<Vec<(MacAddress, IpAddr, u64)>, Error> {
-        let output = self.run_command("ebtables", &["-L", "INPUT", "--Lc"])?;
+        let output = self.run_command("ebtables", &["-L", "INPUT", "--Lc", "--Lmac2"])?;
         let mut vec = Vec::new();
         let re = Regex::new(r"-s (.*) --ip6-dst (.*)/.* bcnt = (.*)").unwrap();
         for caps in re.captures_iter(&String::from_utf8(output.stdout)?) {
             vec.push((
                     MacAddress::parse_str(&caps[1]).unwrap_or_else(|e| {
-                        panic!("{:?}", e);
+                        panic!("{:?}, original string {:?}", e, caps);
                     }), // Ugly and inconsiderate, remove ASAP
                 IpAddr::from_str(&caps[2])?,
                 caps[3].parse::<u64>()?,
             ));
         }
+        trace!("Read flow couters {:?}", &vec);
         Ok(vec)
     }
 
@@ -287,6 +289,22 @@ impl KernelInterface {
         Err(Error::RuntimeError(
             String::from("not implemented for this platform"),
         ))
+    }
+
+    /// Gets the interface index for a named interface
+    pub fn get_iface_index(&mut self, name: &str) -> Result<u32, Error> {
+        let mut f = File::open(format!("/sys/class/net/{}/ifindex", name))?;
+
+        let mut contents = String::new();
+        f.read_to_string(&mut contents)?;
+
+        contents.pop(); //remove trailing newline
+
+        let index = contents.parse::<u32>()?;
+
+        trace!("Got index: {}", index);
+
+        Ok(index)
     }
 
     pub fn open_tunnel(
@@ -456,7 +474,7 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
         let mut ki = KernelInterface {
             run_command: Box::new(|program, args| {
                 assert_eq!(program, "ebtables");
-                assert_eq!(args, &["-L", "INPUT", "--Lc"]);
+                assert_eq!(args, &["-L", "INPUT", "--Lc", "--Lmac2"]);
 
                 Ok(Output {
                     stdout:
@@ -572,7 +590,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
         };
 
         match ki.delete_flow_counter_linux(
-            MacAddress::parse_str("0:0:0:aa:0:2").unwrap(),
+            MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
             "2001::3".parse::<IpAddr>().unwrap(),
         ) {
             Err(e) => assert_eq!(e.to_string(), "unexpected output from ebtables \"-D INPUT -s 00:00:00:aa:00:02 -p IPV6 --ip6-dst 2001::3 -j CONTINUE\": \"shibby\""),

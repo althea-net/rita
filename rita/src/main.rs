@@ -73,7 +73,7 @@ fn main() {
     thread::spawn(move || {
         let mut ki = KernelInterface {};
         let mut tm = TunnelManager::new();
-        let mut babel = Babel::new(&"[::1]:8080".parse().unwrap());
+        let mut babel = Babel::new(&"[::1]:8080".parse().unwrap()); //TODO: Do we really want [::1] and not [::0]?
 
         loop {
             let neighbors = tm.get_neighbors().unwrap();
@@ -94,20 +94,23 @@ fn main() {
     let m_tx = Arc::new(Mutex::new(tx.clone()));
 
     thread::spawn(move || {
-        rouille::start_server("localhost:4876", move |request| {
+        rouille::start_server("[::0]:4876", move |request| {
             router!(request,
                 (POST) (/make_payment) => {
-                    if let Some(data) = request.data() {
-                        let pmt: PaymentTx = serde_json::from_reader(data).unwrap();
+                    if let Some(mut data) = request.data() {
+                        let mut pmt_str = String::new();
+                        data.read_to_string(&mut pmt_str);
+                        let pmt: PaymentTx = serde_json::from_str(&pmt_str).unwrap();
                         m_tx.lock().unwrap().send(
                             DebtAdjustment {
                                 ident: pmt.from,
                                 amount: Int256::from(pmt.amount)
                             }
                         ).unwrap();
+                        Response::text("Payment Recieved")
+                    } else {
+                        Response::text("Payment Error")
                     }
-
-                    Response::text("")
                 },
                 (GET) (/hello) => {
                     Response::text(serde_json::to_string(&my_ident).unwrap())
@@ -123,12 +126,15 @@ fn main() {
 
     for debt_adjustment in rx {
         match dk.apply_debt(debt_adjustment.ident, debt_adjustment.amount) {
-            Some(DebtAction::SuspendTunnel) => unimplemented!(), // tunnel manager should suspend forwarding here
-            Some(DebtAction::MakePayment(amt)) => pc.make_payment(PaymentTx {
-                from: my_ident,
-                to: debt_adjustment.ident,
-                amount: amt
-            }).unwrap(),
+            Some(DebtAction::SuspendTunnel) => {}, // tunnel manager should suspend forwarding here
+            Some(DebtAction::MakePayment(amt)) => {
+                let r = pc.make_payment(PaymentTx {
+                    from: my_ident,
+                    to: debt_adjustment.ident,
+                    amount: amt
+                });
+                trace!("Got {:?} back from sending payment", r);
+            },
             None => ()
         };
     }
