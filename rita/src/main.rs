@@ -81,6 +81,10 @@ fn main() {
 
     let (tx, rx) = mpsc::channel();
 
+    let node_balance = Arc::new(Mutex::new(Int256::from(100000000000000000000)));
+
+    let n_b = node_balance.clone();
+
     let tx1 = mpsc::Sender::clone(&tx);
     thread::spawn(move || {
         let mut ki = KernelInterface {};
@@ -88,6 +92,7 @@ fn main() {
         let mut babel = Babel::new(&"[::1]:8080".parse().unwrap());
 
         loop {
+            info!("Current Balance: {:?}", (n_b.lock().unwrap()).clone());
             let neighbors = tm.get_neighbors().unwrap();
             info!("got neighbors: {:?}", neighbors);
 
@@ -103,8 +108,6 @@ fn main() {
     });
 
     let m_tx = Arc::new(Mutex::new(tx.clone()));
-
-    let node_balance = Arc::new(Mutex::new(Int256::from(100000000)));
 
     let n_b = node_balance.clone();
 
@@ -142,6 +145,11 @@ fn main() {
                 let balance = (n_b.lock().unwrap()).clone();
                 *(n_b.lock().unwrap()) = balance.clone().add(Int256::from(amt.clone()));
                 trace!("Sent payment, Balance: {:?}", balance);
+                trace!("Sent payment, Payment: {:?}", PaymentTx {
+                    from: my_ident,
+                    to: debt_adjustment.ident,
+                    amount: amt.clone()
+                });
                 trace!("Got {:?} back from sending payment", r);
             },
             None => ()
