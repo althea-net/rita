@@ -81,7 +81,7 @@ fn main() {
 
     let (tx, rx) = mpsc::channel();
 
-    let node_balance = Arc::new(Mutex::new(Int256::from(100000000000000000000)));
+    let node_balance = Arc::new(Mutex::new(Int256::from(10000000000000000i64)));
 
     let n_b = node_balance.clone();
 
@@ -111,11 +111,15 @@ fn main() {
 
     let n_b = node_balance.clone();
 
+    let pc = Arc::new(Mutex::new(PaymentController::new(&my_ident)));
+
+    let pc_c = pc.clone();
+
     thread::spawn(move || {
         rouille::start_server("localhost:4876", move |request| {
             router!(request,
                 (POST) (/make_payment) => {
-                    make_payments(request, m_tx.clone(), n_b.clone())
+                    make_payments(request, m_tx.clone(), n_b.clone(), pc_c.clone())
                 },
                 (GET) (/hello) => {
                     Response::text(serde_json::to_string(&my_ident).unwrap())
@@ -127,7 +131,6 @@ fn main() {
     });
 
     let mut dk = DebtKeeper::new(Int256::from(5), Int256::from(-10));
-    let pc = PaymentController::new();
 
     let n_b = node_balance.clone();
 
@@ -137,7 +140,7 @@ fn main() {
                 trace!("Suspending Tunnel");
             }, // tunnel manager should suspend forwarding here
             Some(DebtAction::MakePayment(amt)) => {
-                let r = pc.make_payment(PaymentTx {
+                let r = pc.lock().unwrap().make_payment(PaymentTx {
                     from: my_ident,
                     to: debt_adjustment.ident,
                     amount: amt.clone()
