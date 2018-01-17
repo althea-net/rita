@@ -54,9 +54,14 @@ pub fn watch(
     let routes = babel.parse_routes()?;
     info!("Got routes: {:?}", routes);
 
-    let mut identities: HashMap<MacAddress, Identity> = HashMap::new();
+    let mut identities_flow: HashMap<MacAddress, Identity> = HashMap::new();
     for ident in &neighbors {
-        identities.insert(ident.mac_address, *ident);
+        identities_flow.insert(ident.mac_address, *ident);
+    }
+
+    let mut identities_des: HashMap<IpAddr, Identity> = HashMap::new();
+    for ident in &neighbors {
+        identities_des.insert(ident.ip_address, *ident);
     }
 
     let mut destinations = HashMap::new();
@@ -71,6 +76,7 @@ pub fn watch(
                 );
                 for ident in &neighbors {
                     ki.start_flow_counter(ident.mac_address, IpAddr::V6(ip.get_network_address()))?;
+                    ki.start_destination_counter(IpAddr::V6(ip.get_network_address()))?;
                 }
             }
         }
@@ -84,6 +90,10 @@ pub fn watch(
     trace!("Getting flow counters");
     let counters = ki.read_flow_counters()?;
     info!("Got flow counters: {:?}", counters);
+
+    trace!("Getting destination counters");
+    let des_counters = ki.read_destination_counters()?;
+    info!("Got flow destination: {:?}", des_counters);
 
     counters
         .iter()
@@ -104,7 +114,7 @@ pub fn watch(
                 debt
             );
 
-            Ok((identities[&neigh_mac].clone(), debt))
+            Ok((identities_flow[&neigh_mac].clone(), debt))
         })
         .collect::<Result<Vec<(Identity, Int256)>, Error>>()
 }

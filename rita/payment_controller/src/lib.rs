@@ -18,10 +18,12 @@ extern crate debt_keeper;
 use debt_keeper::Identity;
 
 extern crate num256;
-use num256::Uint256;
+use num256::{Int256, Uint256};
 
 extern crate reqwest;
 use reqwest::{Client, Response, StatusCode};
+
+use std::net::{Ipv6Addr};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -29,30 +31,67 @@ pub enum Error {
     SerdeError(serde_json::Error),
     #[error(msg_embedded, no_from, non_std)] PaymentControllerError(String),
     #[error(msg_embedded, no_from, non_std)] PaymentSendingError(String),
+    #[error(msg_embedded, no_from, non_std)] BountyError(String),
 }
 
 
 pub struct PaymentController {
     pub client: Client,
+    pub identity: Identity,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PaymentTx {
     pub to: Identity,
     pub from: Identity,
     pub amount: Uint256,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BountyUpdate {
+    pub from: Identity,
+    pub balance: Int256,
+    pub tx: PaymentTx,
+}
+
 impl PaymentController {
-    pub fn new() -> Self {
+    pub fn new(id: &Identity) -> Self {
         PaymentController {
+            identity: id.clone(),
             client: Client::new(),
         }
     }
+
+    fn update_bounty(&self, update: BountyUpdate) -> Result<(), Error> {
+        let mut r = self.client
+            .post(&format!("http://[{}]:8080/update", "2001::4".parse::<Ipv6Addr>().unwrap())) //TODO: what port do we use?, how do we get the IP for the bounty hunter?
+            .body(serde_json::to_string(&update)?)
+            .send()?;
+
+        if r.status() == StatusCode::Ok {
+            trace!("Successfully sent bounty hunter update");
+            Ok(())
+        } else {
+            trace!("Unsuccessfully in sending update to bounty hunter");
+            trace!("Received error from bounty hunter: {:?}", r.text().unwrap_or(String::from("No message received")));
+            Err(Error::BountyError(
+                String::from(format!("Received error from bounty hunter: {:?}",
+                                     r.text().unwrap_or(String::from("No message received"))
+                ))
+            ))
+        }
+    }
+
     /// This is exposed to the Guac light client, or whatever else is
     /// being used for payments. It gets called when a payment from a counterparty
-    /// has arrived.
-    // pub fn payment_received(&self, pmt: PaymentTx) {}
+    /// has arrived, and will return if it is valid.
+    pub fn payment_received(&self, pmt: PaymentTx, balance: Int256) -> Result<(), Error> {
+        trace!("Sending payment to Guac: {:?}", pmt);
+        // TODO: Pass the paymentTx to guac, get a channel summary back, reject if incorrect
+
+        self.update_bounty(BountyUpdate{from: self.identity, tx: pmt, balance})?;
+        Ok(())
+    }
 
     /// This is called by the other modules in Rita to make payments.
     pub fn make_payment(&self, pmt: PaymentTx) -> Result<(), Error> {

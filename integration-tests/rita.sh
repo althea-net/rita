@@ -21,7 +21,7 @@ build_rita () {
 
 network_lab=./deps/network-lab/network-lab.sh
 babeld=./babeld/babeld
-rita=../rita/target/debug/rita
+rita=../target/debug/rita
 
 
 if [[ $EUID -ne 0 ]]; then
@@ -114,24 +114,31 @@ ip netns exec netlab-1 bash -c 'failed=1
                               sleep 1
                             done' &
 ip netns exec netlab-1 echo $! > ping_retry.pid
-RUST_BACKTRACE=full ip netns exec netlab-1 $rita --pid rita-n1.pid &> rita-n1.log &
+RUST_BACKTRACE=full ip netns exec netlab-1 $rita --ip 2001::1 --pid rita-n1.pid | grep -v "<unknown>" &> rita-n1.log &
 
 prep_netns netlab-2
 create_bridge netlab-2 2-1 2001::2
 create_bridge netlab-2 2-3 2001::2
 ip netns exec netlab-2 $babeld -I babeld-n2.pid -d 1 -L babeld-n2.log -h 1 -P 10 -w br-2-1 br-2-3 -G 8080 &
-RUST_BACKTRACE=full ip netns exec netlab-2 $rita --pid rita-n2.pid &> rita-n2.log &
+RUST_BACKTRACE=full ip netns exec netlab-2 $rita --ip 2001::2 --pid rita-n2.pid | grep -v "<unknown>" &> rita-n2.log &
 ip netns exec netlab-2 brctl show
 
 prep_netns netlab-3
 ip netns exec netlab-3 $babeld -I babeld-n3.pid -d 1 -L babeld-n3.log -h 1 -P 1 -w veth-3-2 -G 8080 &
-RUST_BACKTRACE=full ip netns exec netlab-3 $rita --pid rita-n3.pid &> rita-n3.log &
+RUST_BACKTRACE=full ip netns exec netlab-3 $rita --ip 2001::3 --pid rita-n3.pid | grep -v "<unknown>" &> rita-n3.log &
 
 sleep 20
 
-ip netns exec netlab-2 ip r
+# Use some bandwidth from 1 -> 3
 
-sleep 2
+# Start iperf test for 10 seconds @ 1mbps
+ip netns exec netlab-3 iperf3 -s -V &
+
+sleep 1
+
+ip netns exec netlab-1 iperf3 -c 2001::3 -V -b 1000000
+
+killall rita
 
 stop_processes
 

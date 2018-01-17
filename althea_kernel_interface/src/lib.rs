@@ -29,6 +29,7 @@ pub enum Error {
     StrUTF8(std::str::Utf8Error),
     ParseInt(std::num::ParseIntError),
     AddrParse(std::net::AddrParseError),
+    MacParse(eui48::ParseError),
     #[error(msg_embedded, no_from, non_std)]
     RuntimeError(String),
 }
@@ -46,6 +47,9 @@ impl KernelInterface {
     fn run_command(&mut self, program: &str, args: &[&str]) -> Result<Output, Error> {
         let output = Command::new(program).args(args).output()?;
         trace!("Command {} {:?} returned: {:?}", program, args, output);
+        if !output.status.success() {
+            trace!("An error was returned");
+        }
         return Ok(output);
     }
 
@@ -106,7 +110,7 @@ impl KernelInterface {
             "ebtables",
             &[
                 "-A",
-                "INPUT",
+                "OUTPUT",
                 "-p",
                 "IPV6",
                 "--ip6-dst",
@@ -172,7 +176,7 @@ impl KernelInterface {
     ) -> Result<(), Error> {
         self.delete_ebtables_rule(&[
             "-D",
-            "INPUT",
+            "OUTPUT",
             "-p",
             "IPV6",
             "--ip6-dst",
@@ -188,14 +192,28 @@ impl KernelInterface {
         let re = Regex::new(r"-s (.*) --ip6-dst (.*)/.* bcnt = (.*)").unwrap();
         for caps in re.captures_iter(&String::from_utf8(output.stdout)?) {
             vec.push((
-                    MacAddress::parse_str(&caps[1]).unwrap_or_else(|e| {
-                        panic!("{:?}, original string {:?}", e, caps);
-                    }), // Ugly and inconsiderate, remove ASAP
+                MacAddress::parse_str(&caps[1]).unwrap_or_else(|e| {
+                    panic!("{:?}, original string {:?}", e, caps);
+                }), // Ugly and inconsiderate, remove ASAP
                 IpAddr::from_str(&caps[2])?,
                 caps[3].parse::<u64>()?,
             ));
         }
         trace!("Read flow couters {:?}", &vec);
+        Ok(vec)
+    }
+
+    fn read_destination_counters_linux(&mut self) -> Result<Vec<(IpAddr, u64)>, Error> {
+        let output = self.run_command("ebtables", &["-L", "OUTPUT", "--Lc", "--Lmac2"])?;
+        let mut vec = Vec::new();
+        let re = Regex::new(r"-p IPv6 --ip6-dst (.*)/.* bcnt = (.*)").unwrap();
+        for caps in re.captures_iter(&String::from_utf8(output.stdout)?) {
+            vec.push((
+                IpAddr::from_str(&caps[1])?,
+                caps[2].parse::<u64>()?,
+            ));
+        }
+        trace!("Read destination couters {:?}", &vec);
         Ok(vec)
     }
 
@@ -284,6 +302,19 @@ impl KernelInterface {
     pub fn read_flow_counters(&mut self) -> Result<Vec<(MacAddress, IpAddr, u64)>, Error> {
         if cfg!(target_os = "linux") {
             return self.read_flow_counters_linux();
+        }
+
+        Err(Error::RuntimeError(
+            String::from("not implemented for this platform"),
+        ))
+    }
+
+    /// Returns a vector of going to a specific IP address.
+    /// Note that this will only track flows that have already been
+    /// registered. Implemented with `ebtables` on Linux.
+    pub fn read_destination_counters(&mut self) -> Result<Vec<(IpAddr, u64)>, Error> {
+        if cfg!(target_os = "linux") {
+            return self.read_destination_counters_linux();
         }
 
         Err(Error::RuntimeError(

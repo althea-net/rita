@@ -8,6 +8,8 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::process;
 use std::thread;
+use std::ops::Add;
+use std::net::{Ipv6Addr, IpAddr};
 
 extern crate althea_kernel_interface;
 use althea_kernel_interface::KernelInterface;
@@ -41,10 +43,16 @@ use rouille::{Response};
 extern crate serde;
 extern crate serde_json;
 
+extern crate rand;
+
+mod network_endpoints;
+use network_endpoints::make_payments;
+
 const USAGE: &'static str = "
-Usage: rita [--pid <pid file>]
+Usage: rita --ip <ip addr> [--pid <pid file>]
 Options:
     --pid  Which file to write the PID to.
+    --ip   Mesh IP of node
 ";
 
 fn main() {
@@ -61,13 +69,21 @@ fn main() {
             .unwrap();
     }
 
+    let ip: Ipv6Addr = args.get_str("<ip addr>").parse().unwrap();
+
     let my_ident = Identity {
-        mac_address: "00:00:00:aa:00:02".parse().unwrap(),
-        ip_address: "2001::3".parse().unwrap(),
+        mac_address: "12:34:56:78:90:ab".parse().unwrap(), // TODO: make this not a hack
+        ip_address: IpAddr::V6(ip),
         eth_address: "0xb794f5ea0ba39494ce839613fffba74279579268".parse().unwrap()
     };
 
+    trace!("Starting with Identity: {:?}", my_ident);
+
     let (tx, rx) = mpsc::channel();
+
+    let node_balance = Arc::new(Mutex::new(Int256::from(10000000000000000i64)));
+
+    let n_b = node_balance.clone();
 
     let tx1 = mpsc::Sender::clone(&tx);
     thread::spawn(move || {
@@ -76,6 +92,7 @@ fn main() {
         let mut babel = Babel::new(&"[::1]:8080".parse().unwrap()); //TODO: Do we really want [::1] and not [::0]?
 
         loop {
+            info!("Current Balance: {:?}", (n_b.lock().unwrap()).clone());
             let neighbors = tm.get_neighbors().unwrap();
             info!("got neighbors: {:?}", neighbors);
 
@@ -83,34 +100,26 @@ fn main() {
             info!("got debts: {:?}", debts);
 
             for (ident, amount) in debts {
-                tx1.send(DebtAdjustment {
-                    ident,
-                    amount 
-                }).unwrap();
+                let adjustment = DebtAdjustment {ident, amount};
+                trace!("Sent debt adjustment {:?}", &adjustment);
+                tx1.send(adjustment).unwrap();
             }
         };
     });
 
     let m_tx = Arc::new(Mutex::new(tx.clone()));
 
+    let n_b = node_balance.clone();
+
+    let pc = Arc::new(Mutex::new(PaymentController::new(&my_ident)));
+
+    let pc_c = pc.clone();
+
     thread::spawn(move || {
         rouille::start_server("[::0]:4876", move |request| {
             router!(request,
                 (POST) (/make_payment) => {
-                    if let Some(mut data) = request.data() {
-                        let mut pmt_str = String::new();
-                        data.read_to_string(&mut pmt_str);
-                        let pmt: PaymentTx = serde_json::from_str(&pmt_str).unwrap();
-                        m_tx.lock().unwrap().send(
-                            DebtAdjustment {
-                                ident: pmt.from,
-                                amount: Int256::from(pmt.amount)
-                            }
-                        ).unwrap();
-                        Response::text("Payment Recieved")
-                    } else {
-                        Response::text("Payment Error")
-                    }
+                    make_payments(request, m_tx.clone(), n_b.clone(), pc_c.clone())
                 },
                 (GET) (/hello) => {
                     Response::text(serde_json::to_string(&my_ident).unwrap())
@@ -121,17 +130,28 @@ fn main() {
         });
     });
 
-    let mut dk = DebtKeeper::new(Int256::from(5), Int256::from(10));
-    let pc = PaymentController::new();
+    let mut dk = DebtKeeper::new(Int256::from(5), Int256::from(-10));
+
+    let n_b = node_balance.clone();
 
     for debt_adjustment in rx {
         match dk.apply_debt(debt_adjustment.ident, debt_adjustment.amount) {
-            Some(DebtAction::SuspendTunnel) => {}, // tunnel manager should suspend forwarding here
+            Some(DebtAction::SuspendTunnel) => {
+                trace!("Suspending Tunnel");
+            }, // tunnel manager should suspend forwarding here
             Some(DebtAction::MakePayment(amt)) => {
-                let r = pc.make_payment(PaymentTx {
+                let r = pc.lock().unwrap().make_payment(PaymentTx {
                     from: my_ident,
                     to: debt_adjustment.ident,
-                    amount: amt
+                    amount: amt.clone()
+                });
+                let balance = (n_b.lock().unwrap()).clone();
+                *(n_b.lock().unwrap()) = balance.clone().add(Int256::from(amt.clone()));
+                trace!("Sent payment, Balance: {:?}", balance);
+                trace!("Sent payment, Payment: {:?}", PaymentTx {
+                    from: my_ident,
+                    to: debt_adjustment.ident,
+                    amount: amt.clone()
                 });
                 trace!("Got {:?} back from sending payment", r);
             },
