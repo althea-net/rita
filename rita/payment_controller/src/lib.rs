@@ -18,7 +18,7 @@ extern crate debt_keeper;
 use debt_keeper::Identity;
 
 extern crate num256;
-use num256::Uint256;
+use num256::{Int256, Uint256};
 
 extern crate reqwest;
 use reqwest::{Client, Response, StatusCode};
@@ -37,31 +37,35 @@ pub enum Error {
 
 pub struct PaymentController {
     pub client: Client,
+    pub identity: Identity,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PaymentTx {
     pub to: Identity,
     pub from: Identity,
     pub amount: Uint256,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BountyUpdate {
+    pub from: Identity,
+    pub balance: Int256,
+    pub tx: PaymentTx,
+}
+
 impl PaymentController {
-    pub fn new() -> Self {
+    pub fn new(id: &Identity) -> Self {
         PaymentController {
+            identity: id.clone(),
             client: Client::new(),
         }
     }
-    /// This is exposed to the Guac light client, or whatever else is
-    /// being used for payments. It gets called when a payment from a counterparty
-    /// has arrived, and will return if it is valid.
-    pub fn payment_received(&self, pmt: PaymentTx) -> Result<(), Error> {
-        trace!("Sending payment to Guac: {:?}", pmt);
-        // TODO: Pass the paymentTx to guac, get a channel summary back, reject if incorrect
 
+    fn update_bounty(&self, update: BountyUpdate) -> Result<(), Error> {
         let mut r = self.client
-            .post(&format!("http://[{}]:80/update", "2001::4".parse::<Ipv6Addr>().unwrap())) //TODO: what port do we use?, how do we get the IP for the bounty hunter?
-            .body(serde_json::to_string(&pmt)?) //TODO: send the channel summary as well
+            .post(&format!("http://[{}]:8080/update", "2001::4".parse::<Ipv6Addr>().unwrap())) //TODO: what port do we use?, how do we get the IP for the bounty hunter?
+            .body(serde_json::to_string(&update)?)
             .send()?;
 
         if r.status() == StatusCode::Ok {
@@ -76,6 +80,17 @@ impl PaymentController {
                 ))
             ))
         }
+    }
+
+    /// This is exposed to the Guac light client, or whatever else is
+    /// being used for payments. It gets called when a payment from a counterparty
+    /// has arrived, and will return if it is valid.
+    pub fn payment_received(&self, pmt: PaymentTx, balance: Int256) -> Result<(), Error> {
+        trace!("Sending payment to Guac: {:?}", pmt);
+        // TODO: Pass the paymentTx to guac, get a channel summary back, reject if incorrect
+
+        self.update_bounty(BountyUpdate{from: self.identity, tx: pmt, balance})?;
+        Ok(())
     }
 
     /// This is called by the other modules in Rita to make payments.
