@@ -24,6 +24,7 @@ pub fn make_payments(request: &Request,
         let mut pmt_str = String::new();
         data.read_to_string(&mut pmt_str).unwrap();
         let pmt: PaymentTx = serde_json::from_str(&pmt_str).unwrap();
+        trace!("Received payment, Payment: {:?}", pmt);
         m_tx.lock().unwrap().send(
             DebtAdjustment {
                 ident: pmt.from,
