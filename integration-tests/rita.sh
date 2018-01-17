@@ -129,11 +129,18 @@ RUST_BACKTRACE=full ip netns exec netlab-3 $rita --ip 2001::3 --pid rita-n3.pid 
 
 sleep 20
 
-ip netns exec netlab-2 ip r
+# Use some bandwidth from 1 -> 3
 
-sleep 2
+# Start iperf test for 10 seconds @ 1mbps
+ip netns exec netlab-3 iperf3 -s -V &
 
-# stop_processes
+sleep 1
+
+ip netns exec netlab-1 iperf3 -c 2001::3 -V -b 1000000
+
+killall rita
+
+stop_processes
 
 sleep 1
 
