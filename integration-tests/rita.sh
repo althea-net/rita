@@ -114,18 +114,18 @@ ip netns exec netlab-1 bash -c 'failed=1
                               sleep 1
                             done' &
 ip netns exec netlab-1 echo $! > ping_retry.pid
-RUST_BACKTRACE=full ip netns exec netlab-1 $rita --pid rita-n1.pid &> rita-n1.log &
+RUST_BACKTRACE=full ip netns exec netlab-1 $rita --ip 2001::1 --pid rita-n1.pid &> rita-n1.log &
 
 prep_netns netlab-2
 create_bridge netlab-2 2-1 2001::2
 create_bridge netlab-2 2-3 2001::2
 ip netns exec netlab-2 $babeld -I babeld-n2.pid -d 1 -L babeld-n2.log -h 1 -P 10 -w br-2-1 br-2-3 -G 8080 &
-RUST_BACKTRACE=full ip netns exec netlab-2 $rita --pid rita-n2.pid &> rita-n2.log &
+RUST_BACKTRACE=full ip netns exec netlab-2 $rita --ip 2001::2 --pid rita-n2.pid &> rita-n2.log &
 ip netns exec netlab-2 brctl show
 
 prep_netns netlab-3
 ip netns exec netlab-3 $babeld -I babeld-n3.pid -d 1 -L babeld-n3.log -h 1 -P 1 -w veth-3-2 -G 8080 &
-RUST_BACKTRACE=full ip netns exec netlab-3 $rita --pid rita-n3.pid &> rita-n3.log &
+RUST_BACKTRACE=full ip netns exec netlab-3 $rita --ip 2001::3 --pid rita-n3.pid &> rita-n3.log &
 
 sleep 20
 
