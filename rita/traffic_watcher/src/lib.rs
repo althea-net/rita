@@ -109,7 +109,7 @@ pub fn watch(
             let debt = price.clone().mul(Int256::from(bytes as i64));
 
             trace!(
-                "Calculated neighbor debt. price: {:?}, debt: {:?}",
+                "Calculated neighbor debt. price: {}, debt: {}",
                 price,
                 debt
             );
