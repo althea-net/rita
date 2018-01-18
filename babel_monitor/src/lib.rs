@@ -12,7 +12,6 @@ use std::io::{BufReader, BufRead};
 use std::{time};
 use std::io::{Read, Write};
 use std::str;
-use mockstream::SharedMockStream;
 use std::collections::VecDeque;
 use std::net::IpAddr;
 use std::net::{TcpStream, SocketAddr};

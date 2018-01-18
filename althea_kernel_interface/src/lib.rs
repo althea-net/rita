@@ -8,13 +8,11 @@ extern crate eui48;
 extern crate regex;
 extern crate itertools;
 
-use std::fs;
-use std::fs::{File, remove_file};
+use std::fs::File;
 use std::io::{Read, Write};
-use std::net::{IpAddr, SocketAddr, SocketAddrV6, Ipv6Addr};
-use std::os::unix::process::ExitStatusExt;
+use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
-use std::process::{Command, Output, ExitStatus, Stdio};
+use std::process::{Command, Output, Stdio};
 use std::str::FromStr;
 use std::str;
 

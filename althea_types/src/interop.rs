@@ -1,7 +1,7 @@
 use ::eth_address::EthAddress;
 use std::net::{IpAddr};
 use eui48::MacAddress;
-use num256::{Uint256, Int256};
+use num256::Uint256;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct Identity {

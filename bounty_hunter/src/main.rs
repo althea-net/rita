@@ -118,7 +118,7 @@ fn process_updates(request: &Request, conn: &Mutex<SqliteConnection>) -> Respons
     }
 }
 
-fn list_status(request: &Request, conn: &Mutex<SqliteConnection>) -> Response {
+fn list_status(_request: &Request, conn: &Mutex<SqliteConnection>) -> Response {
     let conn = conn.lock().unwrap();
     let results = status
         .load::<Status>(&*conn)

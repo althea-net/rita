@@ -15,10 +15,10 @@ extern crate althea_types;
 use althea_types::{PaymentTx, Identity};
 
 extern crate num256;
-use num256::{Int256, Uint256};
+use num256::Int256;
 
 extern crate reqwest;
-use reqwest::{Client, Response, StatusCode};
+use reqwest::{Client, StatusCode};
 
 use std::net::{Ipv6Addr};
 use std::thread;
@@ -61,8 +61,8 @@ impl PaymentController {
         thread::spawn(move || {
             for msg in rx {
                 match msg {
-                    PaymentControllerMsg::PaymentReceived(pmt) => controller.payment_received(pmt),
-                    PaymentControllerMsg::MakePayment(pmt) => controller.make_payment(pmt)
+                    PaymentControllerMsg::PaymentReceived(pmt) => controller.payment_received(pmt).unwrap(),
+                    PaymentControllerMsg::MakePayment(pmt) => controller.make_payment(pmt).unwrap()
                 };
             }
         });

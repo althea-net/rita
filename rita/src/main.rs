@@ -1,4 +1,6 @@
 #![feature(getpid)]
+#![cfg_attr(feature="clippy", feature(plugin))]
+#![cfg_attr(feature="clippy", plugin(clippy))]
 
 #[macro_use] extern crate log;
 
@@ -8,7 +10,6 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::process;
 use std::thread;
-use std::ops::Add;
 use std::net::{Ipv6Addr, IpAddr};
 
 extern crate althea_kernel_interface;
@@ -136,11 +137,11 @@ fn main() {
                 trace!("Suspending Tunnel");
             }, // tunnel manager should suspend forwarding here
             Some(DebtAction::MakePayment(amt)) => {
-                pc.clone().send(PaymentControllerMsg::MakePayment(PaymentTx {
+                pc.send(PaymentControllerMsg::MakePayment(PaymentTx {
                     from: my_ident,
                     to: debt_adjustment.ident,
                     amount: amt.clone()
-                }));
+                })).unwrap();
                 trace!("Sent payment, Payment: {:?}", PaymentTx {
                     from: my_ident,
                     to: debt_adjustment.ident,

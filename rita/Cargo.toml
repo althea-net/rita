@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Jehan <jehan.tremback@gmail.com>"]
 
 [dependencies]
+clippy = { version = "*", optional = true }
 babel_monitor = { path = "../babel_monitor" }
 althea_types = { path = "../althea_types" }
 althea_kernel_interface = { path = "../althea_kernel_interface" }

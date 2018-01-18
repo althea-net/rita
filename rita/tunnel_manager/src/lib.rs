@@ -4,7 +4,7 @@ extern crate derive_error;
 #[macro_use]
 extern crate log;
 
-use std::net::{IpAddr, SocketAddr, SocketAddrV6, SocketAddrV4, TcpStream};
+use std::net::{IpAddr, SocketAddr, SocketAddrV6, TcpStream};
 
 use std::io::{Read, Write};
 
@@ -14,7 +14,7 @@ extern crate minihttpse;
 use minihttpse::Response;
 
 extern crate althea_types;
-use althea_types::{EthAddress, Identity};
+use althea_types::Identity;
 
 extern crate althea_kernel_interface;
 use althea_kernel_interface::KernelInterface;

@@ -1,5 +1,5 @@
-use althea_types::{Identity, PaymentTx};
-use debt_keeper::{DebtKeeper, DebtAction, DebtAdjustment};
+use althea_types::PaymentTx;
+use debt_keeper::DebtAdjustment;
 
 use payment_controller::{PaymentControllerMsg};
 extern crate num256;
@@ -15,7 +15,6 @@ extern crate rand;
 use std::sync::mpsc::Sender;
 use std::sync::{Mutex, Arc};
 use std::io::Read;
-use std::ops::Sub;
 
 pub fn make_payments(request: &Request,
                      m_tx: Arc<Mutex<Sender<DebtAdjustment>>>,
@@ -32,7 +31,7 @@ pub fn make_payments(request: &Request,
                 amount: Int256::from(pmt.amount.clone())
             }
         ).unwrap();
-        pc.lock().unwrap().send(PaymentControllerMsg::PaymentReceived(pmt.clone()));
+        pc.lock().unwrap().send(PaymentControllerMsg::PaymentReceived(pmt.clone())).unwrap();
         Response::text("Payment Recieved")
     } else {
         Response::text("Payment Error")

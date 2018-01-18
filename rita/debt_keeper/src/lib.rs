@@ -1,23 +1,16 @@
 #[macro_use]
-extern crate serde_derive;
-
-#[macro_use]
 extern crate derive_error;
 
-use std::net::IpAddr;
 use std::collections::HashMap;
 use std::ops::Add;
 
 extern crate serde;
 
 extern crate althea_types;
-use althea_types::{EthAddress, Identity};
+use althea_types::Identity;
 
 extern crate num256;
 use num256::Uint256;
-
-extern crate eui48;
-use eui48::MacAddress;
 
 extern crate stash;
 use num256::Int256;
