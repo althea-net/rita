@@ -15,6 +15,7 @@ use num::traits::Signed;
 use serde::ser::Serialize;
 use serde::{Deserialize, Deserializer, Serializer};
 use std::str::FromStr;
+use std::fmt;
 
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -168,6 +169,12 @@ impl<'de: 'a, 'a> Deserialize<'de> for Int256 {
     BigInt::from_str(s)
       .map(|v| Int256(v))
       .map_err(serde::de::Error::custom)
+  }
+}
+
+impl fmt::Display for Int256 {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "{}", serde_json::to_string(&self).unwrap())
   }
 }
 

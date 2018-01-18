@@ -11,6 +11,12 @@ extern crate serde;
 extern crate serde_json;
 #[macro_use] extern crate serde_derive;
 
+extern crate num256;
+use num256::Int256;
+
+extern crate althea_types;
+use althea_types::{Identity, PaymentTx};
+
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use dotenv::dotenv;
@@ -33,6 +39,12 @@ pub fn establish_connection() -> SqliteConnection {
         .expect(&format!("Error connecting to {}", database_url))
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BountyUpdate {
+    pub from: Identity,
+    pub balance: Int256,
+    pub tx: PaymentTx,
+}
 
 fn main() {
     simple_logger::init().unwrap();
@@ -57,8 +69,16 @@ fn process_updates(request: &Request) -> Response {
 
         let mut status_str = String::new();
         data.read_to_string(&mut status_str).unwrap();
-        let stat: Status = serde_json::from_str(&status_str).unwrap();
-        trace!("Received update, status: {:?}", stat);
+        let update: BountyUpdate = serde_json::from_str(&status_str).unwrap();
+        trace!("Received update, status: {:?}", update);
+        trace!("Received update, balance: {}", update.balance);
+
+        let stat = Status{
+            ip: String::from(format!("{}", update.from.ip_address)),
+            mac: String::from(format!("{}", update.from.mac_address)),
+            balance: String::from(format!("{}", update.balance))
+        };
+
         trace!("Checking if record exists for {}", stat.ip);
 
         let count = status.filter(ip.eq(stat.ip.clone())).count()

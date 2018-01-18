@@ -6,6 +6,7 @@ authors = ["kingoflolz <wangben3@gmail.com>"]
 [dependencies]
 rouille = "*"
 log = "0.3"
+num256 = { path = "../num256" }
 althea_types = { path = "../althea_types" }
 diesel = { version = "1.0.0", features = ["sqlite"] }
 dotenv = "0.9.0"
