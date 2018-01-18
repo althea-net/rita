@@ -23,6 +23,7 @@ use dotenv::dotenv;
 
 use std::env;
 use std::io::Read;
+use std::sync::Mutex;
 
 pub mod schema;
 pub mod models;
@@ -50,23 +51,24 @@ fn main() {
     simple_logger::init().unwrap();
     trace!("Starting");
 
+    let conn = Mutex::new(establish_connection());
+
     rouille::start_server("[::0]:8888", move |request| { // TODO: fix the port
         router!(request,
             (POST) (/update) => {
-                process_updates(request)
+                process_updates(request, &conn)
             },
             (GET) (/list) => {
-                list_status(request)
+                list_status(request, &conn)
             },
             _ => rouille::Response::empty_404()
         )
     });
 }
 
-fn process_updates(request: &Request) -> Response {
+fn process_updates(request: &Request, conn: &Mutex<SqliteConnection>) -> Response {
+    let conn = conn.lock().unwrap();
     if let Some(mut data) = request.data() {
-        let conn = establish_connection(); //TODO: inefficient to create a new db connection every request
-
         let mut status_str = String::new();
         data.read_to_string(&mut status_str).unwrap();
         let update: BountyUpdate = serde_json::from_str(&status_str).unwrap();
@@ -82,7 +84,7 @@ fn process_updates(request: &Request) -> Response {
         trace!("Checking if record exists for {}", stat.ip);
 
         let count = status.filter(ip.eq(stat.ip.clone())).count()
-            .get_result(&conn)
+            .get_result(&*conn)
             .expect("Error loading statuses");
 
         match count {
@@ -91,7 +93,7 @@ fn process_updates(request: &Request) -> Response {
                 // first time seeing
                 diesel::insert_into(status)
                     .values(&stat)
-                    .execute(&conn)
+                    .execute(&*conn)
                     .expect("Error saving");
             }
             1 => {
@@ -99,7 +101,7 @@ fn process_updates(request: &Request) -> Response {
                 // updating
                 diesel::update(status.find(stat.ip))
                     .set(balance.eq(stat.balance))
-                    .execute(&conn)
+                    .execute(&*conn)
                     .expect("Error saving");
             }
             _ => {
@@ -116,9 +118,10 @@ fn process_updates(request: &Request) -> Response {
     }
 }
 
-fn list_status(request: &Request) -> Response {
+fn list_status(request: &Request, conn: &Mutex<SqliteConnection>) -> Response {
+    let conn = conn.lock().unwrap();
     let results = status
-        .load::<Status>(&establish_connection())  //TODO: inefficient to create a new db connection every request
+        .load::<Status>(&*conn)
         .expect("Error loading statuses");
     trace!("Sending response: {:?}", results);
     rouille::Response::text(serde_json::to_string(&results).unwrap())
