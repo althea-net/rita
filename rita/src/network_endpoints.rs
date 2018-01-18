@@ -1,6 +1,7 @@
-use debt_keeper::{DebtKeeper, DebtAction, DebtAdjustment, Identity};
+use althea_types::{Identity, PaymentTx};
+use debt_keeper::{DebtKeeper, DebtAction, DebtAdjustment};
 
-use payment_controller::{PaymentTx, PaymentController};
+use payment_controller::{PaymentController};
 extern crate num256;
 use num256::Int256;
 
