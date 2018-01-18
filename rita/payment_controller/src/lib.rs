@@ -35,6 +35,7 @@ pub enum Error {
 pub struct PaymentController {
     pub client: Client,
     pub identity: Identity,
+    pub balance: Int256,
 }
 
 
@@ -50,12 +51,13 @@ impl PaymentController {
         PaymentController {
             identity: id.clone(),
             client: Client::new(),
+            balance: Int256::from(10000000000000000i64)
         }
     }
 
     fn update_bounty(&self, update: BountyUpdate) -> Result<(), Error> {
         let mut r = self.client
-            .post(&format!("http://[{}]:8080/update", "2001::4".parse::<Ipv6Addr>().unwrap())) //TODO: what port do we use?, how do we get the IP for the bounty hunter?
+            .post(&format!("http://[{}]:8888/update", "2001::3".parse::<Ipv6Addr>().unwrap())) //TODO: what port do we use?, how do we get the IP for the bounty hunter?
             .body(serde_json::to_string(&update)?)
             .send()?;
 
@@ -76,19 +78,23 @@ impl PaymentController {
     /// This is exposed to the Guac light client, or whatever else is
     /// being used for payments. It gets called when a payment from a counterparty
     /// has arrived, and will return if it is valid.
-    pub fn payment_received(&self, pmt: PaymentTx, balance: Int256) -> Result<(), Error> {
+    pub fn payment_received(&mut self, pmt: PaymentTx) -> Result<(), Error> {
         trace!("Sending payment to Guac: {:?}", pmt);
+        trace!("Received payment, Balance: {:?}", self.balance);
         // TODO: Pass the paymentTx to guac, get a channel summary back, reject if incorrect
+        self.balance = self.balance.clone() + Int256::from(pmt.clone().amount);
 
-        self.update_bounty(BountyUpdate{from: self.identity, tx: pmt, balance})?;
+        self.update_bounty(BountyUpdate{from: self.identity, tx: pmt, balance: self.balance.clone()})?;
         Ok(())
     }
 
     /// This is called by the other modules in Rita to make payments.
-    pub fn make_payment(&self, pmt: PaymentTx) -> Result<(), Error> {
+    pub fn make_payment(&mut self, pmt: PaymentTx) -> Result<(), Error> {
         trace!("Making payments to {:?}", pmt);
+        trace!("Sent payment, Balance: {:?}", self.balance);
         trace!("Sending payments to http://[{}]:4876/make_payment", pmt.to.ip_address);
 
+        self.balance = self.balance.clone() - Int256::from(pmt.clone().amount);
         let mut r = self.client
             .post(&format!("http://[{}]:4876/make_payment", pmt.to.ip_address))
             .body(serde_json::to_string(&pmt)?)

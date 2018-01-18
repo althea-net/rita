@@ -19,7 +19,6 @@ use std::ops::Sub;
 
 pub fn make_payments(request: &Request,
                      m_tx: Arc<Mutex<Sender<DebtAdjustment>>>,
-                     node_balance: Arc<Mutex<Int256>>,
                      pc: Arc<Mutex<PaymentController>>)
     -> Response {
     if let Some(mut data) = request.data() {
@@ -33,11 +32,7 @@ pub fn make_payments(request: &Request,
                 amount: Int256::from(pmt.amount.clone())
             }
         ).unwrap();
-        let balance = (node_balance.lock().unwrap()).clone();
-
-        pc.lock().unwrap().payment_received(pmt.clone(), balance.clone());
-        *(node_balance.lock().unwrap()) = balance.clone().sub(Int256::from(pmt.amount));
-        trace!("Received payment, Balance: {:?}", balance);
+        pc.lock().unwrap().payment_received(pmt.clone()).unwrap();
         Response::text("Payment Recieved")
     } else {
         Response::text("Payment Error")
