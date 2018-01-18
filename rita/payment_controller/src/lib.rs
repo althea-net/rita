@@ -21,6 +21,8 @@ extern crate reqwest;
 use reqwest::{Client, Response, StatusCode};
 
 use std::net::{Ipv6Addr};
+use std::thread;
+use std::sync::mpsc::{Sender, channel};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -46,7 +48,27 @@ pub struct BountyUpdate {
     pub tx: PaymentTx,
 }
 
+pub enum PaymentControllerMsg {
+    PaymentReceived(PaymentTx),
+    MakePayment(PaymentTx),
+}
+
 impl PaymentController {
+    pub fn start(id: &Identity) -> Sender<PaymentControllerMsg> {
+        let mut controller = PaymentController::new(id);
+        let (tx, rx) = channel();
+
+        thread::spawn(move || {
+            for msg in rx {
+                match msg {
+                    PaymentControllerMsg::PaymentReceived(pmt) => controller.payment_received(pmt),
+                    PaymentControllerMsg::MakePayment(pmt) => controller.make_payment(pmt)
+                };
+            }
+        });
+        tx
+    }
+
     pub fn new(id: &Identity) -> Self {
         PaymentController {
             identity: id.clone(),

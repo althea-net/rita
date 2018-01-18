@@ -1,7 +1,7 @@
 use althea_types::{Identity, PaymentTx};
 use debt_keeper::{DebtKeeper, DebtAction, DebtAdjustment};
 
-use payment_controller::{PaymentController};
+use payment_controller::{PaymentControllerMsg};
 extern crate num256;
 use num256::Int256;
 
@@ -19,7 +19,7 @@ use std::ops::Sub;
 
 pub fn make_payments(request: &Request,
                      m_tx: Arc<Mutex<Sender<DebtAdjustment>>>,
-                     pc: Arc<Mutex<PaymentController>>)
+                     pc: Arc<Mutex<Sender<PaymentControllerMsg>>>)
     -> Response {
     if let Some(mut data) = request.data() {
         let mut pmt_str = String::new();
@@ -32,7 +32,7 @@ pub fn make_payments(request: &Request,
                 amount: Int256::from(pmt.amount.clone())
             }
         ).unwrap();
-        pc.lock().unwrap().payment_received(pmt.clone()).unwrap();
+        pc.lock().unwrap().send(PaymentControllerMsg::PaymentReceived(pmt.clone()));
         Response::text("Payment Recieved")
     } else {
         Response::text("Payment Error")

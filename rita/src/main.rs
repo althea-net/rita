@@ -23,7 +23,7 @@ extern crate debt_keeper;
 use debt_keeper::{DebtKeeper, DebtAction, DebtAdjustment};
 
 extern crate payment_controller;
-use payment_controller::{PaymentController};
+use payment_controller::{PaymentController, PaymentControllerMsg};
 
 extern crate althea_types;
 use althea_types::{Identity, PaymentTx};
@@ -105,17 +105,19 @@ fn main() {
         };
     });
 
-    let m_tx = Arc::new(Mutex::new(tx.clone()));
+    let m_tx = tx.clone();
 
-    let pc = Arc::new(Mutex::new(PaymentController::new(&my_ident)));
+    let pc = PaymentController::start(&my_ident);
 
-    let pc_c = pc.clone();
+    let pc1 = pc.clone();
 
     thread::spawn(move || {
-        rouille::start_server("localhost:4876", move |request| {
+        let m_tx = Arc::new(Mutex::new(m_tx.clone()));
+        let pc = Arc::new(Mutex::new(pc1));
+        rouille::start_server("[::0]:4876", move |request| {
             router!(request,
                 (POST) (/make_payment) => {
-                    make_payments(request, m_tx.clone(), pc_c.clone())
+                    make_payments(request, m_tx.clone(), pc.clone())
                 },
                 (GET) (/hello) => {
                     Response::text(serde_json::to_string(&my_ident).unwrap())
@@ -134,17 +136,16 @@ fn main() {
                 trace!("Suspending Tunnel");
             }, // tunnel manager should suspend forwarding here
             Some(DebtAction::MakePayment(amt)) => {
-                let r = {pc.lock().unwrap().make_payment(PaymentTx {
+                pc.clone().send(PaymentControllerMsg::MakePayment(PaymentTx {
                     from: my_ident,
                     to: debt_adjustment.ident,
                     amount: amt.clone()
-                })};
+                }));
                 trace!("Sent payment, Payment: {:?}", PaymentTx {
                     from: my_ident,
                     to: debt_adjustment.ident,
                     amount: amt.clone()
                 });
-                trace!("Got {:?} back from sending payment", r);
             },
             None => ()
         };
