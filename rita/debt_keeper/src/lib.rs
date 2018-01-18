@@ -11,7 +11,7 @@ use std::ops::Add;
 extern crate serde;
 
 extern crate althea_types;
-use althea_types::EthAddress;
+use althea_types::{EthAddress, Identity};
 
 extern crate num256;
 use num256::Uint256;
@@ -25,13 +25,6 @@ use num256::Int256;
 #[derive(Debug, Error)]
 pub enum Error {
     #[error(msg_embedded, no_from, non_std)] DebtKeeperError(String),
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct Identity {
-    pub ip_address: IpAddr,
-    pub eth_address: EthAddress,
-    pub mac_address: MacAddress,
 }
 
 pub struct DebtKeeper {

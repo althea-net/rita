@@ -5,6 +5,7 @@ authors = ["Jehan <jehan.tremback@gmail.com>"]
 
 [dependencies]
 babel_monitor = { path = "../babel_monitor" }
+althea_types = { path = "../althea_types" }
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 traffic_watcher = { path = "./traffic_watcher"}
 payment_controller = { path = "./payment_controller" }

@@ -11,6 +11,9 @@ extern crate derive_error;
 extern crate althea_kernel_interface;
 use althea_kernel_interface::KernelInterface;
 
+extern crate althea_types;
+use althea_types::Identity;
+
 extern crate babel_monitor;
 use babel_monitor::Babel;
 
@@ -24,9 +27,6 @@ extern crate ip_network;
 use ip_network::IpNetwork;
 
 use std::{thread, time};
-
-extern crate debt_keeper;
-use debt_keeper::{Identity};
 
 extern crate eui48;
 use eui48::MacAddress;

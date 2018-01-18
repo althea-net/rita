@@ -11,11 +11,8 @@ extern crate derive_error;
 extern crate serde;
 extern crate serde_json;
 
-// extern crate althea_types;
-// use althea_types::EthAddress;
-
-extern crate debt_keeper;
-use debt_keeper::Identity;
+extern crate althea_types;
+use althea_types::{PaymentTx, Identity};
 
 extern crate num256;
 use num256::{Int256, Uint256};
@@ -40,12 +37,6 @@ pub struct PaymentController {
     pub identity: Identity,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct PaymentTx {
-    pub to: Identity,
-    pub from: Identity,
-    pub amount: Uint256,
-}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BountyUpdate {
