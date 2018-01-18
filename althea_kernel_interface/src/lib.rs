@@ -8,19 +8,28 @@ extern crate eui48;
 extern crate regex;
 extern crate itertools;
 
-use std::fs;
-use std::fs::{File, remove_file};
-use std::io::{Read, Write};
-use std::net::{IpAddr, SocketAddr, SocketAddrV6, Ipv6Addr};
-use std::os::unix::process::ExitStatusExt;
+use std::fs::{File};
+use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
-use std::process::{Command, Output, ExitStatus, Stdio};
-use std::str::FromStr;
+use std::process::{Command, Output};
 use std::str;
+use std::io::Read;
 
 use eui48::MacAddress;
-use itertools::join;
-use regex::Regex;
+
+mod create_wg_key_linux;
+mod delete_destination_counter_linux;
+mod delete_ebtables_rule;
+mod delete_flow_counter_linux;
+mod delete_tunnel_linux;
+mod get_neighbors_linux;
+mod get_wg_pubkey_linux;
+mod open_tunnel_linux;
+mod read_destination_counters_linux;
+mod read_flow_counters_linux;
+mod setup_wg_if_linux;
+mod start_destination_counter_linux;
+mod start_flow_counter_linux;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -56,165 +65,6 @@ impl KernelInterface {
     #[cfg(test)]
     fn run_command(&mut self, args: &str, program: &[&str]) -> Result<Output, Error> {
         (self.run_command)(args, program)
-    }
-
-    fn get_neighbors_linux(&mut self) -> Result<Vec<(MacAddress, IpAddr, String)>, Error> {
-        let output = self.run_command("ip", &["neighbor"])?;
-        trace!("Got {:?} from `ip neighbor`", output);
-
-        let mut vec = Vec::new();
-        let re = Regex::new(r"(\S*).*dev (\S*).*lladdr (\S*).*(REACHABLE|STALE|DELAY)").unwrap();
-        for caps in re.captures_iter(&String::from_utf8(output.stdout)?) {
-            trace!("Regex captured {:?}", caps);
-
-            vec.push((
-                MacAddress::parse_str(&caps[3]).unwrap(), // Ugly and inconsiderate, ditch ASAP
-                IpAddr::from_str(&caps[1])?,
-                caps[2].to_string()
-            ));
-        }
-        trace!("Got neighbors {:?}", vec);
-        Ok(vec)
-    }
-
-    fn start_flow_counter_linux(
-        &mut self,
-        source_neighbor: MacAddress,
-        destination: IpAddr,
-    ) -> Result<(), Error> {
-        self.delete_flow_counter_linux(source_neighbor, destination)?;
-        self.run_command(
-            "ebtables",
-            &[
-                "-A",
-                "INPUT",
-                "-s",
-                &format!("{}", source_neighbor.to_hex_string()),
-                "-p",
-                "IPV6",
-                "--ip6-dst",
-                &format!("{}", destination),
-                "-j",
-                "CONTINUE",
-            ],
-        )?;
-        Ok(())
-    }
-
-    fn start_destination_counter_linux(
-        &mut self,
-        destination: IpAddr,
-    ) -> Result<(), Error> {
-        self.delete_destination_counter_linux(destination)?;
-        self.run_command(
-            "ebtables",
-            &[
-                "-A",
-                "OUTPUT",
-                "-p",
-                "IPV6",
-                "--ip6-dst",
-                &format!("{}", destination),
-                "-j",
-                "CONTINUE",
-            ],
-        )?;
-        Ok(())
-    }
-
-
-    fn delete_ebtables_rule(
-        &mut self,
-        args: &[&str]
-    ) -> Result<(), Error> {
-        let loop_limit = 100;
-        for _ in 0..loop_limit {
-            let program = "ebtables";
-            let res = self.run_command(program, args)?;
-
-            let re = Regex::new(r"rule does not exist").unwrap();
-
-            // keeps looping until it is sure to have deleted the rule
-            if re.is_match(str::from_utf8(&res.stderr)?) || re.is_match(str::from_utf8(&res.stdout)?) {
-                return Ok(());
-            }
-            if res.stdout == b"".to_vec() {
-                continue;
-            } else {
-                return Err(Error::RuntimeError(
-                    format!("unexpected output from {} {:?}: {:?}", program, join(args, " "), String::from_utf8_lossy(&res.stdout)),
-                ))
-            }
-        }
-        Err(Error::RuntimeError(
-            format!("loop limit of {} exceeded", loop_limit)
-        ))
-    }
-
-    fn delete_flow_counter_linux(
-        &mut self,
-        source_neighbor: MacAddress,
-        destination: IpAddr,
-    ) -> Result<(), Error> {
-        self.delete_ebtables_rule(&[
-            "-D",
-            "INPUT",
-            "-s",
-            &format!("{}", source_neighbor.to_hex_string()),
-            "-p",
-            "IPV6",
-            "--ip6-dst",
-            &format!("{}", destination),
-            "-j",
-            "CONTINUE",
-        ])
-    }
-
-    fn delete_destination_counter_linux(
-        &mut self,
-        destination: IpAddr,
-    ) -> Result<(), Error> {
-        self.delete_ebtables_rule(&[
-            "-D",
-            "OUTPUT",
-            "-p",
-            "IPV6",
-            "--ip6-dst",
-            &format!("{}", destination),
-            "-j",
-            "CONTINUE",
-        ])
-    }
-
-    fn read_flow_counters_linux(&mut self) -> Result<Vec<(MacAddress, IpAddr, u64)>, Error> {
-        let output = self.run_command("ebtables", &["-L", "INPUT", "--Lc", "--Lmac2"])?;
-        let mut vec = Vec::new();
-        let re = Regex::new(r"-s (.*) --ip6-dst (.*)/.* bcnt = (.*)").unwrap();
-        for caps in re.captures_iter(&String::from_utf8(output.stdout)?) {
-            vec.push((
-                MacAddress::parse_str(&caps[1]).unwrap_or_else(|e| {
-                    panic!("{:?}, original string {:?}", e, caps);
-                }), // Ugly and inconsiderate, remove ASAP
-                IpAddr::from_str(&caps[2])?,
-                caps[3].parse::<u64>()?,
-            ));
-        }
-        trace!("Read flow couters {:?}", &vec);
-        Ok(vec)
-    }
-
-    fn read_destination_counters_linux(&mut self) -> Result<Vec<(IpAddr, u64)>, Error> {
-        let output = self.run_command("ebtables", &["-L", "OUTPUT", "--Lc", "--Lmac2"])?;
-        let mut vec = Vec::new();
-        let re = Regex::new(r"-p IPv6 --ip6-dst (.*)/.* bcnt = (.*)").unwrap();
-        for caps in re.captures_iter(&String::from_utf8(output.stdout)?) {
-            vec.push((
-                IpAddr::from_str(&caps[1])?,
-                caps[2].parse::<u64>()?,
-            ));
-        }
-        trace!("Read destination couters {:?}", &vec);
-        Ok(vec)
     }
 
     /// Returns a vector of neighbors reachable over layer 2, giving the hardware
@@ -352,31 +202,6 @@ impl KernelInterface {
             Err(Error::RuntimeError(String::from("not implemented for this platform")))
     }
 
-    fn open_tunnel_linux(
-        &mut self,
-        interface: &String,
-        endpoint: &SocketAddr,
-        remote_pub_key: &String,
-        private_key_path: &Path
-    ) -> Result<(), Error> {
-        let output = self.run_command("wg", &[
-            "set",
-            &interface,
-            "private-key",
-            &format!("{}", private_key_path.to_str().unwrap()),
-            "peer",
-            &format!("{}", remote_pub_key),
-            "endpoint",
-            &format!("{}", endpoint),
-            "allowed-ips",
-            "::/0"
-        ])?;
-        if !output.stderr.is_empty() {
-            return Err(Error::RuntimeError(format!("recieved error from wg command: {}", String::from_utf8(output.stderr)?)));
-        }
-        Ok(())
-    }
-
     pub fn delete_tunnel(&mut self, interface: &String) -> Result<(),Error> {
             if cfg!(target_os = "linux") {
                 return self.delete_tunnel_linux(interface);
@@ -385,45 +210,12 @@ impl KernelInterface {
             Err(Error::RuntimeError(String::from("not implemented for this platform")))
     }
 
-    fn delete_tunnel_linux(&mut self, interface: &String) -> Result<(),Error> {
-        let output = self.run_command("ip", &["link", "del", &interface])?;
-        if !output.stderr.is_empty() {
-            return Err(Error::RuntimeError(format!("recieved error deleting wireguard interface: {}", String::from_utf8(output.stderr)?)));
-        }
-        Ok(())
-    }
-
     pub fn setup_wg_if(&mut self, addr: &IpAddr, peer: &IpAddr) -> Result<String,Error> {
             if cfg!(target_os = "linux") {
                 return self.setup_wg_if_linux(addr, peer);
             }
 
             Err(Error::RuntimeError(String::from("not implemented for this platform")))
-    }
-    //checks the existing interfaces to find an interface name that isn't in use.
-    //then calls iproute2 to set up a new interface.
-    fn setup_wg_if_linux(&mut self, addr: &IpAddr, peer: &IpAddr) -> Result<String,Error> {
-        //call "ip links" to get a list of currently set up links
-        let links = String::from_utf8(self.run_command("ip", &["link"])?.stdout)?;
-        let mut if_num = 0;
-        //loop through the output of "ip links" until we find a wg suffix that isn't taken (e.g. "wg3")
-        while links.contains(format!("wg{}", if_num).as_str()) {
-            if_num += 1;
-        }
-        let interface = format!("wg{}", if_num);
-        let output = self.run_command("ip", &["link", "add", &interface, "type", "wireguard"])?;
-        if !output.stderr.is_empty() {
-            return Err(Error::RuntimeError(format!("recieved error adding wg link: {}", String::from_utf8(output.stderr)?)))
-        }
-        let output = self.run_command("ip", &["addr", "add", &format!("{}", addr), "dev", &interface, "peer", &format!("{}", peer)])?;
-        if !output.stderr.is_empty() {
-            return Err(Error::RuntimeError(format!("recieved error adding wg address: {}", String::from_utf8(output.stderr)?)))
-        }
-        let output = self.run_command("ip", &["link", "set", &interface, "up"])?;
-        if !output.stderr.is_empty() {
-            return Err(Error::RuntimeError(format!("recieved error setting wg interface up: {}", String::from_utf8(output.stderr)?)))
-        }
-        Ok(interface)
     }
 
     pub fn create_wg_key(&mut self, path: &Path) -> Result<(),Error> {
@@ -434,16 +226,6 @@ impl KernelInterface {
             Err(Error::RuntimeError(String::from("not implemented for this platform")))
 
     }
-    fn create_wg_key_linux(&mut self, path: &Path) -> Result<(),Error> {
-        let mut output = self.run_command("wg", &["genkey"])?;
-        if !output.stderr.is_empty() {
-            return Err(Error::RuntimeError(format!("recieved error in generating wg key: {}", String::from_utf8(output.stderr)?)));
-        }
-        output.stdout.truncate(44); //key should only be 44 bytes
-        let mut priv_key_file = File::create(path)?;
-        write!(priv_key_file, "{}", String::from_utf8(output.stdout)?)?;
-        Ok(())
-    }
 
     pub fn get_wg_pubkey(&mut self, path: &Path) -> Result<String, Error> {
             if cfg!(target_os = "linux") {
@@ -452,20 +234,16 @@ impl KernelInterface {
 
             Err(Error::RuntimeError(String::from("not implemented for this platform")))
     }
-    fn get_wg_pubkey_linux(&mut self, path: &Path) -> Result<String, Error> {
-        let priv_key_file = File::open(path)?;
-        let mut output = Command::new("wg").args(&["pubkey"]).stdin(Stdio::from(priv_key_file)).output()?;
-        if !output.stderr.is_empty() {
-            return Err(Error::RuntimeError(format!("recieved error in getting wg public key: {}", String::from_utf8(output.stderr)?)));
-        }
-        output.stdout.truncate(44); //key should only be 44 bytes
-        Ok(String::from_utf8(output.stdout)?)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::process::ExitStatusExt;
+    use std::fs::remove_file;
+    use std::net::{Ipv6Addr, SocketAddrV6};
+    use std::process::{ExitStatus};
+
     #[test]
     fn test_get_neighbors_linux() {
         let mut ki = KernelInterface {
