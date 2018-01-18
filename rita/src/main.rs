@@ -20,10 +20,13 @@ use babel_monitor::Babel;
 extern crate traffic_watcher;
 
 extern crate debt_keeper;
-use debt_keeper::{DebtKeeper, DebtAction, DebtAdjustment, Identity};
+use debt_keeper::{DebtKeeper, DebtAction, DebtAdjustment};
 
 extern crate payment_controller;
-use payment_controller::{PaymentTx, PaymentController};
+use payment_controller::{PaymentController};
+
+extern crate althea_types;
+use althea_types::{Identity, PaymentTx};
 
 extern crate docopt;
 use docopt::Docopt;

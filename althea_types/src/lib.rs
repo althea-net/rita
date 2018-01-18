@@ -2,6 +2,8 @@ extern crate serde;
 extern crate serde_json;
 extern crate base64;
 extern crate hex;
+extern crate eui48;
+extern crate num256;
 
 #[macro_use]
 extern crate serde_derive;
@@ -10,11 +12,13 @@ pub mod bytes_32;
 pub mod eth_address;
 pub mod eth_private_key;
 pub mod eth_signature;
+pub mod interop;
 
 pub use bytes_32::Bytes32;
 pub use eth_address::EthAddress;
 pub use eth_private_key::EthPrivateKey;
 pub use eth_signature::EthSignature;
+pub use interop::{Identity, PaymentTx};
 
 #[cfg(test)]
 mod tests {

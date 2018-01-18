@@ -14,10 +14,7 @@ extern crate minihttpse;
 use minihttpse::Response;
 
 extern crate althea_types;
-use althea_types::EthAddress;
-
-extern crate debt_keeper;
-use debt_keeper::Identity;
+use althea_types::{EthAddress, Identity};
 
 extern crate althea_kernel_interface;
 use althea_kernel_interface::KernelInterface;
