@@ -8,12 +8,14 @@ extern crate eui48;
 extern crate regex;
 extern crate itertools;
 
-use std::fs::{File};
+use std::fs::File;
+use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
+use std::str::FromStr;
+
 use std::str;
-use std::io::Read;
 
 use eui48::MacAddress;
 

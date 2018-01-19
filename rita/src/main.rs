@@ -1,4 +1,6 @@
 #![feature(getpid)]
+#![cfg_attr(feature="clippy", feature(plugin))]
+#![cfg_attr(feature="clippy", plugin(clippy))]
 
 #[macro_use] extern crate log;
 
@@ -8,7 +10,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::process;
 use std::thread;
-use std::ops::Add;
+
 use std::net::{Ipv6Addr, IpAddr};
 
 extern crate althea_kernel_interface;
@@ -23,7 +25,8 @@ extern crate debt_keeper;
 use debt_keeper::{DebtKeeper, DebtAction, DebtAdjustment};
 
 extern crate payment_controller;
-use payment_controller::{PaymentController};
+
+use payment_controller::{PaymentController, PaymentControllerMsg};
 
 extern crate althea_types;
 use althea_types::{Identity, PaymentTx};
@@ -84,10 +87,6 @@ fn main() {
 
     let (tx, rx) = mpsc::channel();
 
-    let node_balance = Arc::new(Mutex::new(Int256::from(10000000000000000i64)));
-
-    let n_b = node_balance.clone();
-
     let tx1 = mpsc::Sender::clone(&tx);
     thread::spawn(move || {
         let mut ki = KernelInterface {};
@@ -95,7 +94,6 @@ fn main() {
         let mut babel = Babel::new(&"[::1]:8080".parse().unwrap()); //TODO: Do we really want [::1] and not [::0]?
 
         loop {
-            info!("Current Balance: {:?}", (n_b.lock().unwrap()).clone());
             let neighbors = tm.get_neighbors().unwrap();
             info!("got neighbors: {:?}", neighbors);
 
@@ -112,17 +110,16 @@ fn main() {
 
     let m_tx = Arc::new(Mutex::new(tx.clone()));
 
-    let n_b = node_balance.clone();
+    let pc = PaymentController::start(&my_ident, m_tx);
 
-    let pc = Arc::new(Mutex::new(PaymentController::new(&my_ident)));
-
-    let pc_c = pc.clone();
+    let pc1 = pc.clone();
 
     thread::spawn(move || {
+        let pc = Arc::new(Mutex::new(pc1));
         rouille::start_server("[::0]:4876", move |request| {
             router!(request,
                 (POST) (/make_payment) => {
-                    make_payments(request, m_tx.clone(), n_b.clone(), pc_c.clone())
+                    make_payments(request, pc.clone())
                 },
                 (GET) (/hello) => {
                     Response::text(serde_json::to_string(&my_ident).unwrap())
@@ -135,28 +132,23 @@ fn main() {
 
     let mut dk = DebtKeeper::new(Int256::from(5), Int256::from(-10));
 
-    let n_b = node_balance.clone();
-
     for debt_adjustment in rx {
         match dk.apply_debt(debt_adjustment.ident, debt_adjustment.amount) {
             Some(DebtAction::SuspendTunnel) => {
                 trace!("Suspending Tunnel");
             }, // tunnel manager should suspend forwarding here
             Some(DebtAction::MakePayment(amt)) => {
-                let r = pc.lock().unwrap().make_payment(PaymentTx {
+                pc.send(PaymentControllerMsg::MakePayment(PaymentTx {
                     from: my_ident,
                     to: debt_adjustment.ident,
                     amount: amt.clone()
-                });
-                let balance = (n_b.lock().unwrap()).clone();
-                *(n_b.lock().unwrap()) = balance.clone().add(Int256::from(amt.clone()));
-                trace!("Sent payment, Balance: {:?}", balance);
+                })).unwrap();
+
                 trace!("Sent payment, Payment: {:?}", PaymentTx {
                     from: my_ident,
                     to: debt_adjustment.ident,
                     amount: amt.clone()
                 });
-                trace!("Got {:?} back from sending payment", r);
             },
             None => ()
         };

@@ -4,3 +4,4 @@
 **/*.rs.bk
 Cargo.lock
 .idea
+integration_test/test.db
