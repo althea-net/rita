@@ -89,7 +89,7 @@ fn main() {
     thread::spawn(move || {
         let mut ki = KernelInterface {};
         let mut tm = TunnelManager::new();
-        let mut babel = Babel::new(&"[::1]:8080".parse().unwrap());
+        let mut babel = Babel::new(&"[::1]:8080".parse().unwrap()); //TODO: Do we really want [::1] and not [::0]?
 
         loop {
             let neighbors = tm.get_neighbors().unwrap();
@@ -106,19 +106,18 @@ fn main() {
         };
     });
 
-    let m_tx = tx.clone();
+    let m_tx = Arc::new(Mutex::new(tx.clone()));
 
-    let pc = PaymentController::start(&my_ident);
+    let pc = PaymentController::start(&my_ident, m_tx);
 
     let pc1 = pc.clone();
 
     thread::spawn(move || {
-        let m_tx = Arc::new(Mutex::new(m_tx.clone()));
         let pc = Arc::new(Mutex::new(pc1));
         rouille::start_server("[::0]:4876", move |request| {
             router!(request,
                 (POST) (/make_payment) => {
-                    make_payments(request, m_tx.clone(), pc.clone())
+                    make_payments(request, pc.clone())
                 },
                 (GET) (/hello) => {
                     Response::text(serde_json::to_string(&my_ident).unwrap())

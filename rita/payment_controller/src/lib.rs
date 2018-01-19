@@ -14,6 +14,9 @@ extern crate serde_json;
 extern crate althea_types;
 use althea_types::{PaymentTx, Identity};
 
+extern crate debt_keeper;
+use debt_keeper::DebtAdjustment;
+
 extern crate num256;
 use num256::Int256;
 
@@ -23,6 +26,7 @@ use reqwest::{Client, StatusCode};
 use std::net::{Ipv6Addr};
 use std::thread;
 use std::sync::mpsc::{Sender, channel};
+use std::sync::{Mutex, Arc};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -54,14 +58,14 @@ pub enum PaymentControllerMsg {
 }
 
 impl PaymentController {
-    pub fn start(id: &Identity) -> Sender<PaymentControllerMsg> {
+    pub fn start(id: &Identity, m_tx: Arc<Mutex<Sender<DebtAdjustment>>>) -> Sender<PaymentControllerMsg> {
         let mut controller = PaymentController::new(id);
         let (tx, rx) = channel();
 
         thread::spawn(move || {
             for msg in rx {
                 match msg {
-                    PaymentControllerMsg::PaymentReceived(pmt) => controller.payment_received(pmt).unwrap(),
+                    PaymentControllerMsg::PaymentReceived(pmt) => controller.payment_received(pmt, m_tx.clone()).unwrap(),
                     PaymentControllerMsg::MakePayment(pmt) => controller.make_payment(pmt).unwrap()
                 };
             }
@@ -100,11 +104,18 @@ impl PaymentController {
     /// This is exposed to the Guac light client, or whatever else is
     /// being used for payments. It gets called when a payment from a counterparty
     /// has arrived, and will return if it is valid.
-    pub fn payment_received(&mut self, pmt: PaymentTx) -> Result<(), Error> {
+    pub fn payment_received(&mut self, pmt: PaymentTx, m_tx: Arc<Mutex<Sender<DebtAdjustment>>>) -> Result<(), Error> {
         trace!("Sending payment to Guac: {:?}", pmt);
         trace!("Received payment, Balance: {:?}", self.balance);
         // TODO: Pass the paymentTx to guac, get a channel summary back, reject if incorrect
         self.balance = self.balance.clone() + Int256::from(pmt.clone().amount);
+
+        m_tx.lock().unwrap().send(
+            DebtAdjustment {
+                ident: pmt.from,
+                amount: Int256::from(pmt.amount.clone())
+            }
+        ).unwrap();
 
         self.update_bounty(BountyUpdate{from: self.identity, tx: pmt, balance: self.balance.clone()})?;
         Ok(())

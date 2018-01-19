@@ -17,7 +17,6 @@ use std::sync::{Mutex, Arc};
 use std::io::Read;
 
 pub fn make_payments(request: &Request,
-                     m_tx: Arc<Mutex<Sender<DebtAdjustment>>>,
                      pc: Arc<Mutex<Sender<PaymentControllerMsg>>>)
     -> Response {
     if let Some(mut data) = request.data() {
@@ -25,12 +24,12 @@ pub fn make_payments(request: &Request,
         data.read_to_string(&mut pmt_str).unwrap();
         let pmt: PaymentTx = serde_json::from_str(&pmt_str).unwrap();
         trace!("Received payment, Payment: {:?}", pmt);
-        m_tx.lock().unwrap().send(
-            DebtAdjustment {
-                ident: pmt.from,
-                amount: Int256::from(pmt.amount.clone())
-            }
-        ).unwrap();
+        // m_tx.lock().unwrap().send(
+        //     DebtAdjustment {
+        //         ident: pmt.from,
+        //         amount: Int256::from(pmt.amount.clone())
+        //     }
+        // ).unwrap();
         pc.lock().unwrap().send(PaymentControllerMsg::PaymentReceived(pmt.clone())).unwrap();
         Response::text("Payment Recieved")
     } else {
