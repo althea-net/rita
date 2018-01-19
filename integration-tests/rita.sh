@@ -19,10 +19,18 @@ build_rita () {
   cd ../integration-tests
 }
 
+build_bounty () {
+  cd ../bounty_hunter
+  cargo build
+  rm -rf test.db
+  diesel migration run
+  cd ../integration-tests
+}
+
 network_lab=./deps/network-lab/network-lab.sh
 babeld=./babeld/babeld
 rita=../target/debug/rita
-
+bounty=../target/debug/bounty_hunter
 
 if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root :("
@@ -60,10 +68,12 @@ cleanup()
 {
   rm -f ./*.pid
   rm -f ./*.log
+  rm -f ./test.db
 }
 
 build_babel
 build_rita
+build_bounty
 
 stop_processes
 cleanup
@@ -126,6 +136,8 @@ ip netns exec netlab-2 brctl show
 prep_netns netlab-3
 ip netns exec netlab-3 $babeld -I babeld-n3.pid -d 1 -L babeld-n3.log -h 1 -P 1 -w veth-3-2 -G 8080 &
 RUST_BACKTRACE=full ip netns exec netlab-3 $rita --ip 2001::3 --pid rita-n3.pid | grep -v "<unknown>" &> rita-n3.log &
+cp ./../bounty_hunter/test.db ./test.db
+RUST_BACKTRACE=full ip netns exec netlab-3 $bounty &> bounty-n3.log &
 
 sleep 20
 
