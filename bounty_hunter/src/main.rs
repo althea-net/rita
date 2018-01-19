@@ -19,6 +19,8 @@ use althea_types::{Identity, PaymentTx};
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
+use diesel::select;
+use diesel::dsl::exists;
 use dotenv::dotenv;
 
 use std::env;
@@ -75,7 +77,7 @@ fn process_updates(request: &Request, conn: &Mutex<SqliteConnection>) -> Respons
         trace!("Received update, status: {:?}", update);
         trace!("Received update, balance: {}", update.balance);
 
-        let stat = Status{
+        let stat = Status {
             ip: String::from(format!("{}", update.from.ip_address)),
             mac: String::from(format!("{}", update.from.mac_address)),
             balance: String::from(format!("{}", update.balance))
@@ -83,35 +85,25 @@ fn process_updates(request: &Request, conn: &Mutex<SqliteConnection>) -> Respons
 
         trace!("Checking if record exists for {}", stat.ip);
 
-        let count = status.filter(ip.eq(stat.ip.clone())).count()
+        let exists = select(exists(status.filter(ip.eq(stat.ip.clone()))))
             .get_result(&*conn)
             .expect("Error loading statuses");
 
-        match count {
-            0 => {
-                trace!("record does not exist, creating");
-                // first time seeing
-                diesel::insert_into(status)
-                    .values(&stat)
-                    .execute(&*conn)
-                    .expect("Error saving");
-            }
-            1 => {
-                trace!("record exists, updating");
-                // updating
-                diesel::update(status.find(stat.ip))
-                    .set(balance.eq(stat.balance))
-                    .execute(&*conn)
-                    .expect("Error saving");
-            }
-            _ => {
-                error!("record exists twice?!?");
-                // uh oh
-                panic!("This should never happen");
-            }
+        if exists {
+            trace!("record exists, updating");
+            // updating
+            diesel::update(status.find(stat.ip))
+                .set(balance.eq(stat.balance))
+                .execute(&*conn)
+                .expect("Error saving");
+        } else {
+            trace!("record does not exist, creating");
+            // first time seeing
+            diesel::insert_into(status)
+                .values(&stat)
+                .execute(&*conn)
+                .expect("Error saving");
         }
-
-
         Response::text("Received Successfully")
     } else {
         panic!("Empty body")
@@ -119,10 +111,10 @@ fn process_updates(request: &Request, conn: &Mutex<SqliteConnection>) -> Respons
 }
 
 fn list_status(_request: &Request, conn: &Mutex<SqliteConnection>) -> Response {
-    let conn = conn.lock().unwrap();
-    let results = status
-        .load::<Status>(&*conn)
-        .expect("Error loading statuses");
-    trace!("Sending response: {:?}", results);
-    rouille::Response::text(serde_json::to_string(&results).unwrap())
+let conn = conn.lock().unwrap();
+let results = status
+.load::<Status>(&*conn)
+.expect("Error loading statuses");
+trace!("Sending response: {:?}", results);
+rouille::Response::text(serde_json::to_string(&results).unwrap())
 }
