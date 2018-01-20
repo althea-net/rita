@@ -137,6 +137,9 @@ fn main() {
             Some(DebtAction::SuspendTunnel) => {
                 trace!("Suspending Tunnel");
             }, // tunnel manager should suspend forwarding here
+            Some(DebtAction::OpenTunnel) => {
+                trace!("Opening Tunnel");
+            }, // tunnel manager should reopen tunnel here
             Some(DebtAction::MakePayment(amt)) => {
                 pc.send(PaymentControllerMsg::MakePayment(PaymentTx {
                     from: my_ident,
