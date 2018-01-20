@@ -1,3 +1,15 @@
+#![cfg_attr(feature="system_alloc", feature(alloc_system, global_allocator, allocator_api))]
+
+#[cfg(feature = "system_alloc")]
+extern crate alloc_system;
+
+#[cfg(feature = "system_alloc")]
+use alloc_system::System;
+
+#[cfg(feature = "system_alloc")]
+#[global_allocator]
+static A: System = System;
+
 #[macro_use] extern crate log;
 
 #[macro_use] extern crate rouille;
