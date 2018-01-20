@@ -1,0 +1,25 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: fedora
+    steps:
+      - checkout
+      - run:
+          name: Install deps
+          command: dnf install curl openssl-devel sqlite-devel gcc -y
+      - run:
+          name: Install Rust
+          command: curl https://sh.rustup.rs -sSf | sh -s -- -y
+      - run:
+          setup: Setup rust
+          command: $HOME/.cargo/bin/rustup default nightly
+      - run:
+          name: Build all the things
+          command: $HOME/.cargo/bin/cargo build --all
+      - run:
+          name: Test all the things
+          command: $HOME/.cargo/bin/cargo test --all
+      - run:
+          name: Make sure the release profile works
+          command: $HOME/.cargo/bin/cargo build -all --release
