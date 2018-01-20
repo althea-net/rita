@@ -1,5 +1,16 @@
+#![cfg_attr(feature="system_alloc", feature(alloc_system, global_allocator, allocator_api))]
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
+
+#[cfg(feature = "system_alloc")]
+extern crate alloc_system;
+
+#[cfg(feature = "system_alloc")]
+use alloc_system::System;
+
+#[cfg(feature = "system_alloc")]
+#[global_allocator]
+static A: System = System;
 
 #[macro_use] extern crate log;
 #[macro_use] extern crate serde_derive;
@@ -67,5 +78,22 @@ fn main() {
     let rita = rita_loop::RitaLoop{};
     let _: Address<_> = rita.start();
 
-    system.run();
+    for msg in debt_keeper_output {
+        match msg {
+            Some(DebtAction::SuspendTunnel) => {
+                trace!("Suspending Tunnel");
+            }, // tunnel manager should suspend forwarding here
+            Some(DebtAction::OpenTunnel) => {
+                trace!("Opening Tunnel");
+            }, // tunnel manager should reopen tunnel here
+            Some(DebtAction::MakePayment {to, amount}) => {
+                payment_controller_input.send(PaymentControllerMsg::MakePayment(PaymentTx {
+                    from: my_ident,
+                    to: to,
+                    amount
+                })).unwrap();
+            },
+            None => ()
+        };
+    }
 }
