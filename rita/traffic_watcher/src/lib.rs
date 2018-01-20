@@ -5,8 +5,14 @@ use std::ops::Mul;
 #[macro_use]
 extern crate log;
 
+#[macro_use]
+extern crate derive_error;
+
 extern crate althea_kernel_interface;
 use althea_kernel_interface::KernelInterface;
+
+extern crate althea_types;
+use althea_types::Identity;
 
 extern crate babel_monitor;
 use babel_monitor::Babel;
@@ -22,11 +28,16 @@ use ip_network::IpNetwork;
 
 use std::{thread, time};
 
-extern crate debt_keeper;
-use debt_keeper::{Identity, Key};
-
 extern crate eui48;
 use eui48::MacAddress;
+
+#[derive(Debug, Error)]
+pub enum Error {
+    BabelMonitorError(babel_monitor::Error),
+    KernelInterfaceError(althea_kernel_interface::Error),
+    #[error(msg_embedded, no_from, non_std)]
+    TrafficWatcherError(String),
+}
 
 /// This traffic watcher watches how much traffic each neighbor sends to each destination
 /// during the next `duration` seconds (this blocks the thread).
@@ -38,18 +49,19 @@ pub fn watch(
     duration: u64,
     ki: &mut KernelInterface,
     babel: &mut Babel,
-) -> Vec<(Identity, Int256)> {
-    // trace!("Getting neighbors");
-    // let neighbors: HashMap<_, _> = ki.get_neighbors().unwrap().into_iter().collect();
-    // info!("Got neighbors: {:?}", neighbors);
-
+) -> Result<Vec<(Identity, Int256)>, Error> {
     trace!("Getting routes");
-    let routes = babel.parse_routes().unwrap();
+    let routes = babel.parse_routes()?;
     info!("Got routes: {:?}", routes);
 
-    let mut identities: HashMap<MacAddress, Identity> = HashMap::new();
+    let mut identities_flow: HashMap<MacAddress, Identity> = HashMap::new();
     for ident in &neighbors {
-        identities.insert(ident.mac_address, *ident);
+        identities_flow.insert(ident.mac_address, *ident);
+    }
+
+    let mut identities_des: HashMap<IpAddr, Identity> = HashMap::new();
+    for ident in &neighbors {
+        identities_des.insert(ident.ip_address, *ident);
     }
 
     let mut destinations = HashMap::new();
@@ -63,8 +75,8 @@ pub fn watch(
                     Int256::from(route.price as i64),
                 );
                 for ident in &neighbors {
-                    ki.start_flow_counter(ident.mac_address, IpAddr::V6(ip.get_network_address()))
-                        .unwrap();
+                    ki.start_flow_counter(ident.mac_address, IpAddr::V6(ip.get_network_address()))?;
+                    ki.start_destination_counter(IpAddr::V6(ip.get_network_address()))?;
                 }
             }
         }
@@ -76,10 +88,13 @@ pub fn watch(
     thread::sleep(time::Duration::from_secs(duration));
 
     trace!("Getting flow counters");
-    let counters = ki.read_flow_counters().unwrap();
+    let counters = ki.read_flow_counters()?;
     info!("Got flow counters: {:?}", counters);
 
-    // let mut neigh_debts = HashMap::new();
+    trace!("Getting destination counters");
+    let des_counters = ki.read_destination_counters()?;
+    info!("Got flow destination: {:?}", des_counters);
+
     counters
         .iter()
         .map(|&(neigh_mac, dest_ip, bytes)| {
@@ -89,24 +104,19 @@ pub fn watch(
                 dest_ip,
                 bytes
             );
-            let price = destinations.get(&dest_ip.to_string()).unwrap();
+
+            let price = &destinations[&dest_ip.to_string()];
             let debt = price.clone().mul(Int256::from(bytes as i64));
+
             trace!(
-                "Calculated neighbor debt. price: {:?}, debt: {:?}",
+                "Calculated neighbor debt. price: {}, debt: {}",
                 price,
                 debt
             );
 
-
-
-            (identities.get(&neigh_mac).unwrap().clone(), debt)
-            // let neigh_ip = neighbors[&neigh_mac];
-            // *neigh_debts.entry(neigh_ip).or_insert(0) += debt;
+            Ok((identities_flow[&neigh_mac].clone(), debt))
         })
-        .collect::<Vec<(Identity, Int256)>>()
-
-    // info!("Current neighbor debts: {:?}", neigh_debts);
-    // neigh_debts
+        .collect::<Result<Vec<(Identity, Int256)>, Error>>()
 }
 
 
