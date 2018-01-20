@@ -1,6 +1,14 @@
+#![feature(alloc_system, global_allocator, allocator_api)]
 #![feature(getpid)]
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
+
+extern crate alloc_system;
+
+use alloc_system::System;
+
+#[global_allocator]
+static A: System = System;
 
 #[macro_use] extern crate log;
 
