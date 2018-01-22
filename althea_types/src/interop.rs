@@ -10,7 +10,7 @@ pub struct Identity {
     pub mac_address: MacAddress,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
 pub struct PaymentTx {
     pub to: Identity,
     pub from: Identity,
