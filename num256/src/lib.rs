@@ -18,7 +18,7 @@ use serde::{Deserialize, Deserializer, Serializer};
 use std::str::FromStr;
 
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Uint256(BigUint);
 
 impl Deref for Uint256 {
