@@ -80,6 +80,23 @@ mod tests {
         }
     }
 
+    macro_rules! test_eq {
+    ($func_name:ident, $test_name:ident) => (
+        #[test]
+        fn $test_name() {
+            let a = $func_name(1);
+            let b = $func_name(1);
+
+            assert_eq!(a, b);
+
+            let a = $func_name(1);
+            let b = $func_name(2);
+
+            assert_ne!(a, b);
+        }
+    )
+    }
+
     macro_rules! test_hash {
     ($func_name:ident, $test_name:ident) => (
         #[test]
@@ -112,25 +129,23 @@ mod tests {
     )
     }
 
-    test_eq!(new_addr, addr_eq);
-    test_eq!(new_sig, sig_eq);
-    test_eq!(new_key, key_eq);
-    test_eq!(new_payment, payment_eq);
-    test_eq!(new_identity, identity_eq);
-    test_eq!(new_struct, struct_eq);
+    test_eq!(new_addr, check_addr_eq);
+    test_eq!(new_sig, check_sig_eq);
+    test_eq!(new_key, check_key_eq);
+    test_eq!(new_payment, check_payment_eq);
+    test_eq!(new_identity, check_identity_eq);
 
-    test_hash!(new_addr, addr_hash);
-    test_hash!(new_sig, sig_hash);
-    test_hash!(new_key, key_hash);
-    test_hash!(new_payment, payment_hash);
-    test_hash!(new_identity, identity_hash);
-    test_hash!(new_struct, struct_hash);
+    test_hash!(new_addr, check_addr_hash);
+    test_hash!(new_sig, check_sig_hash);
+    test_hash!(new_key, check_key_hash);
+    test_hash!(new_payment, check_payment_hash);
+    test_hash!(new_identity, check_identity_hash);
 
-    test_serde!(new_addr, addr_serde);
-    test_serde!(new_sig, sig_serde);
-    test_serde!(new_key, key_serde);
-    test_serde!(new_payment, payment_serde);
-    test_serde!(new_identity, identity_serde);
+    test_serde!(new_addr, check_addr_serde);
+    test_serde!(new_sig, check_sig_serde);
+    test_serde!(new_key, check_key_serde);
+    test_serde!(new_payment, check_payment_serde);
+    test_serde!(new_identity, check_identity_serde);
 
     #[test]
     fn check_struct_serialize() {
@@ -162,7 +177,6 @@ mod tests {
         let my_struct = new_struct(1);
 
         let my_struct1 = new_struct(2);
-
 
         assert_ne!(my_struct, my_struct1);
     }
