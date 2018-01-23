@@ -57,7 +57,11 @@ pub struct BountyUpdate {
 pub enum PaymentControllerMsg {
     PaymentReceived(PaymentTx),
     MakePayment(PaymentTx),
+    StopThread
 }
+
+#[cfg(test)]
+extern crate mockito;
 
 impl PaymentController {
     pub fn start(id: &Identity, m_tx: Arc<Mutex<Sender<DebtAdjustment>>>) -> Sender<PaymentControllerMsg> {
@@ -68,7 +72,8 @@ impl PaymentController {
             for msg in rx {
                 match msg {
                     PaymentControllerMsg::PaymentReceived(pmt) => controller.payment_received(pmt, m_tx.clone()).unwrap(),
-                    PaymentControllerMsg::MakePayment(pmt) => controller.make_payment(pmt).unwrap()
+                    PaymentControllerMsg::MakePayment(pmt) => controller.make_payment(pmt).unwrap(),
+                    PaymentControllerMsg::StopThread => return
                 };
             }
         });
@@ -84,8 +89,14 @@ impl PaymentController {
     }
 
     fn update_bounty(&self, update: BountyUpdate) -> Result<(), Error> {
+        let bounty_url = if cfg!(not(test)) {
+            format!("http://[{}]:8888/update", "2001::3".parse::<Ipv6Addr>().unwrap())
+        } else {
+            String::from(mockito::SERVER_URL)
+        };
+
         let mut r = self.client
-            .post(&format!("http://[{}]:8888/update", "2001::3".parse::<Ipv6Addr>().unwrap())) //TODO: what port do we use?, how do we get the IP for the bounty hunter?
+            .post(&bounty_url) //TODO: what port do we use?, how do we get the IP for the bounty hunter?
             .body(serde_json::to_string(&update)?)
             .send()?;
 
@@ -129,9 +140,15 @@ impl PaymentController {
         trace!("Sent payment, Balance: {:?}", self.balance);
         trace!("Sending payments to http://[{}]:4876/make_payment", pmt.to.ip_address);
 
+        let neighbour_url = if cfg!(not(test)) {
+            format!("http://[{}]:4876/make_payment", pmt.to.ip_address)
+        } else {
+            String::from(mockito::SERVER_URL)
+        };
+
         self.balance = self.balance.clone() - Int256::from(pmt.clone().amount);
         let mut r = self.client
-            .post(&format!("http://[{}]:4876/make_payment", pmt.to.ip_address))
+            .post(&neighbour_url)
             .body(serde_json::to_string(&pmt)?)
             .send()?;
 
@@ -153,8 +170,107 @@ impl PaymentController {
 
 #[cfg(test)]
 mod tests {
+    extern crate eui48;
+    extern crate mockito;
+
+    use mockito::mock;
+
+    use super::*;
+
+    use std::time;
+
+    use std::collections::hash_map::DefaultHasher;
+    use std::net::IpAddr;
+    use std::net::Ipv6Addr;
+    use std::sync::mpsc;
+    use num256::Uint256;
+
+    use althea_types::{EthAddress, PaymentTx, Identity};
+
+    fn new_addr(x: u8) -> EthAddress {
+        EthAddress([x; 20])
+    }
+
+    fn new_payment(x: u8) -> PaymentTx {
+        PaymentTx{
+            to: new_identity(x),
+            from: new_identity(x),
+            amount: Uint256::from(x)
+        }
+    }
+
+    fn new_identity(x: u8) -> Identity {
+        let y = x as u16;
+        Identity{
+            ip_address: IpAddr::V6(Ipv6Addr::new(y, y, y, y, y, y, y, y)),
+            mac_address: eui48::MacAddress::new([x; 6]),
+            eth_address: new_addr(x)
+        }
+    }
+
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    fn test_thread_stop() {
+        let (rita_rx, rita_tx) = mpsc::channel();
+
+        let id = new_identity(1);
+        let pc_tx = PaymentController::start(&id, Arc::new(Mutex::new(rita_rx)));
+
+        assert!(pc_tx.send(PaymentControllerMsg::StopThread).is_ok());
+
+        thread::sleep(time::Duration::from_millis(100));
+
+        assert!(pc_tx.send(PaymentControllerMsg::StopThread).is_err());
+    }
+
+    #[test]
+    fn test_thread_make_payment() {
+        // mock neighbours
+        let _m = mock("POST", "/")
+            .with_status(200)
+            .with_body("payment OK")
+            .match_body("{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}")
+            .create();
+
+        let (rita_rx, rita_tx) = mpsc::channel();
+
+        let id = new_identity(1);
+        let pc_tx = PaymentController::start(&id, Arc::new(Mutex::new(rita_rx)));
+
+        assert!(pc_tx.send(PaymentControllerMsg::MakePayment(new_payment(1))).is_ok());
+
+        thread::sleep(time::Duration::from_millis(100));
+
+        assert!(pc_tx.send(PaymentControllerMsg::StopThread).is_ok());
+
+        _m.assert();
+    }
+
+    #[test]
+    fn test_thread_payment_received() {
+        // mock bounty hunter
+        let _m = mock("POST", "/")
+            .with_status(200)
+            .with_body("bounty OK")
+            .match_body("{\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"balance\":\"10000000000000001\",\"tx\":{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}}")
+            .create();
+
+        let (rita_tx, rita_rx) = mpsc::channel();
+
+        let id = new_identity(1);
+        let pc_tx = PaymentController::start(&id, Arc::new(Mutex::new(rita_tx)));
+
+        assert!(pc_tx.send(PaymentControllerMsg::PaymentReceived(new_payment(1))).is_ok());
+
+        thread::sleep(time::Duration::from_millis(100));
+
+        let out = rita_rx.try_recv().unwrap();
+
+        assert_eq!(out, DebtAdjustment {
+            ident: new_identity(1),
+            amount: Int256::from(1)
+        });
+
+        assert!(pc_tx.send(PaymentControllerMsg::StopThread).is_ok());
+        _m.assert();
     }
 }
