@@ -251,7 +251,7 @@ mod tests {
         let _m = mock("POST", "/")
             .with_status(200)
             .with_body("bounty OK")
-            .match_body("{\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"balance\":\"10000000000000001\",\"tx\":{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}}")
+            .match_body("{\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"balance\":\"1\",\"tx\":{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}}")
             .create();
 
         let (rita_tx, rita_rx) = mpsc::channel();
@@ -271,6 +271,103 @@ mod tests {
         });
 
         assert!(pc_tx.send(PaymentControllerMsg::StopThread).is_ok());
+        _m.assert();
+    }
+
+    #[test]
+    fn test_single_make_payments() {
+        // mock neighbour
+        let _m = mock("POST", "/")
+            .with_status(200)
+            .with_body("payment OK")
+            .match_body("{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}")
+            .create();
+
+        let mut pc = PaymentController::new(&new_identity(1));
+
+        pc.make_payment(new_payment(1)).unwrap();
+
+        assert_eq!(pc.balance, Int256::from(-1));
+
+        _m.assert();
+    }
+
+    #[test]
+    fn test_multi_make_payments() {
+        // mock neighbour
+        let _m = mock("POST", "/")
+            .with_status(200)
+            .with_body("payment OK")
+            .match_body("{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}")
+            .expect(100)
+            .create();
+
+        let mut pc = PaymentController::new(&new_identity(1));
+
+        for _ in 0..100 {
+            pc.make_payment(new_payment(1)).unwrap();
+        }
+
+        assert_eq!(pc.balance, Int256::from(-100));
+
+        _m.assert();
+    }
+
+    #[test]
+    fn test_single_payment_received() {
+        // mock bounty hunter
+        let _m = mock("POST", "/")
+            .with_status(200)
+            .with_body("bounty OK")
+            .match_body("{\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"balance\":\"1\",\"tx\":{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}}")
+            .create();
+
+        let (rita_tx, rita_rx) = mpsc::channel();
+
+        let mut pc = PaymentController::new(&new_identity(1));
+
+        pc.payment_received(new_payment(1), Arc::new(Mutex::new(rita_tx))).unwrap();
+
+        assert_eq!(pc.balance, Int256::from(1));
+
+        let out = rita_rx.try_recv().unwrap();
+
+        assert_eq!(out, DebtAdjustment {
+            ident: new_identity(1),
+            amount: Int256::from(1)
+        });
+
+        _m.assert();
+    }
+
+    #[test]
+    fn test_multi_payment_received() {
+        // mock bounty hunter
+        let _m = mock("POST", "/")
+            .with_status(200)
+            .with_body("bounty OK")
+            .expect(100)
+            .create();
+
+        let (rita_tx, rita_rx) = mpsc::channel();
+
+        let mut pc = PaymentController::new(&new_identity(1));
+
+        for _ in 0..100 {
+            pc.payment_received(new_payment(1), Arc::new(Mutex::new(rita_tx.clone()))).unwrap();
+        }
+
+        assert_eq!(pc.balance, Int256::from(100));
+
+        for _ in 0..100 {
+            let out = rita_rx.try_recv().unwrap();
+
+            assert_eq!(out, DebtAdjustment {
+                ident: new_identity(1),
+                amount: Int256::from(1)
+            });
+        }
+
         _m.assert();
     }
 }
