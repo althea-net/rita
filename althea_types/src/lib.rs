@@ -134,12 +134,14 @@ mod tests {
     test_eq!(new_key, key_eq);
     test_eq!(new_payment, payment_eq);
     test_eq!(new_identity, identity_eq);
+    test_eq!(new_struct, struct_eq);
 
     test_hash!(new_addr, addr_hash);
     test_hash!(new_sig, sig_hash);
     test_hash!(new_key, key_hash);
     test_hash!(new_payment, payment_hash);
     test_hash!(new_identity, identity_hash);
+    test_hash!(new_struct, struct_hash);
 
     test_serde!(new_addr, addr_serde);
     test_serde!(new_sig, sig_serde);
@@ -163,44 +165,9 @@ mod tests {
         assert_eq!(serde_json::from_str::<MyStruct>(s).unwrap(), my_struct);
     }
 
-    #[test]
-    fn struct_eq() {
-        // Some data structure.
-        let my_struct = new_struct(1);
-
-        assert_eq!(my_struct, my_struct);
-    }
-
-    #[test]
-    fn struct_ne() {
-        // Some data structure.
-        let my_struct = new_struct(1);
-
-        let my_struct1 = new_struct(2);
-
-        assert_ne!(my_struct, my_struct1);
-    }
-
     fn calculate_hash<T: Hash>(t: &T) -> u64 {
         let mut s = DefaultHasher::new();
         t.hash(&mut s);
         s.finish()
-    }
-
-    #[test]
-    fn struct_hash_eq() {
-        // Some data structure.
-        let my_struct = new_struct(1);
-
-        assert_eq!(calculate_hash(&my_struct), calculate_hash(&my_struct));
-    }
-
-    #[test]
-    fn struct_hash_ne() {
-        let my_struct = new_struct(1);
-
-        let my_struct1 = new_struct(2);
-
-        assert_ne!(calculate_hash(&my_struct), calculate_hash(&my_struct1));
     }
 }
