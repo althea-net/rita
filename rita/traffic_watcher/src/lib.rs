@@ -1,5 +1,3 @@
-#![feature(getpid)]
-
 use std::ops::Mul;
 
 #[macro_use]
