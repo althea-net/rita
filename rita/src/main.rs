@@ -1,4 +1,3 @@
-#![feature(getpid)]
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
 
@@ -55,9 +54,8 @@ mod network_endpoints;
 use network_endpoints::make_payments;
 
 const USAGE: &'static str = "
-Usage: rita --ip <ip addr> [--pid <pid file>]
+Usage: rita --ip <ip addr>
 Options:
-    --pid  Which file to write the PID to.
     --ip   Mesh IP of node
 ";
 
@@ -68,12 +66,6 @@ fn main() {
     let args = Docopt::new(USAGE)
         .and_then(|d| d.parse())
         .unwrap_or_else(|e| e.exit());
-
-    if args.get_bool("--pid") {
-        let mut file = File::create(args.get_str("<pid file>")).unwrap();
-        file.write_all(format!("{}", process::id()).as_bytes())
-            .unwrap();
-    }
 
     let ip: Ipv6Addr = args.get_str("<ip addr>").parse().unwrap();
 
