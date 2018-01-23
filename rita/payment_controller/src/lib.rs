@@ -92,7 +92,7 @@ impl PaymentController {
         let bounty_url = if cfg!(not(test)) {
             format!("http://[{}]:8888/update", "2001::3".parse::<Ipv6Addr>().unwrap())
         } else {
-            String::from(mockito::SERVER_URL)
+            String::from("http://127.0.0.1:1234") //TODO: This is mockito::SERVER_URL, but don't want to include the crate in a non-test build just for that string
         };
 
         let mut r = self.client
@@ -143,7 +143,7 @@ impl PaymentController {
         let neighbour_url = if cfg!(not(test)) {
             format!("http://[{}]:4876/make_payment", pmt.to.ip_address)
         } else {
-            String::from(mockito::SERVER_URL)
+            String::from("http://127.0.0.1:1234")
         };
 
         self.balance = self.balance.clone() - Int256::from(pmt.clone().amount);
