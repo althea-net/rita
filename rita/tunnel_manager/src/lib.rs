@@ -44,6 +44,11 @@ impl TunnelManager {
             ki: KernelInterface {},
         }
     }
+
+    /// This gets the list of link-local neighbors, and then contacts them to get their
+    /// Identity using `neighbor_inquiry`. It also puts the MAC address of each neighbor
+    /// into the identity. This is hacky, but the next version of Rita will not use
+    /// a public key instead of a MAC address to identify neighbors, meaning that it is very temporary.
     pub fn get_neighbors(&mut self) -> Result<Vec<Identity>, Error> {
         Ok(
             self.ki
@@ -63,6 +68,7 @@ impl TunnelManager {
         )
     }
 
+    /// Contacts one neighbor to get its Identity.
     pub fn neighbor_inquiry(&mut self, ip: IpAddr, dev: &str) -> Result<Identity, Error> {
         let url = format!("http://[{}%{}]:4876/hello", ip, dev);
         trace!("Saying hello to: {:?}", url);
