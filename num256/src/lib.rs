@@ -8,6 +8,7 @@ extern crate serde_derive;
 #[macro_use]
 extern crate lazy_static;
 
+use std::fmt;
 use num::bigint::{BigInt, BigUint, ToBigInt};
 use std::ops::{Add, Deref, Sub, Mul};
 use num::traits::ops::checked::{CheckedAdd, CheckedSub, CheckedMul};
@@ -17,7 +18,7 @@ use serde::{Deserialize, Deserializer, Serializer};
 use std::str::FromStr;
 
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Uint256(BigUint);
 
 impl Deref for Uint256 {
@@ -50,6 +51,12 @@ impl_from_uint!(u16);
 impl_from_uint!(u32);
 impl_from_uint!(u64);
 impl_from_uint!(usize);
+
+impl fmt::Display for Uint256 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", &self.to_str_radix(10))
+    }
+}
 
 impl Serialize for Uint256 {
   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -148,6 +155,12 @@ impl_from_int!(i16);
 impl_from_int!(i32);
 impl_from_int!(i64);
 impl_from_int!(isize);
+
+impl fmt::Display for Int256 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", &self.to_str_radix(10))
+    }
+}
 
 impl Serialize for Int256 {
   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
