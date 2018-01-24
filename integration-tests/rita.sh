@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
 build_babel () {
   if [ ! -d "./babeld" ] ; then
       git clone -b althea "https://github.com/althea-mesh/babeld" "./babeld"
@@ -19,10 +18,18 @@ build_rita () {
   cd ../integration-tests
 }
 
+build_bounty () {
+  cd ../bounty_hunter
+  cargo build
+  rm -rf test.db
+  diesel migration run
+  cd ../integration-tests
+}
+
 network_lab=./deps/network-lab/network-lab.sh
 babeld=./babeld/babeld
-rita=../rita/target/debug/rita
-
+rita=../target/debug/rita
+bounty=../target/debug/bounty_hunter
 
 if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root :("
@@ -60,10 +67,12 @@ cleanup()
 {
   rm -f ./*.pid
   rm -f ./*.log
+  rm -f ./test.db
 }
 
 build_babel
 build_rita
+build_bounty
 
 stop_processes
 cleanup
@@ -114,18 +123,34 @@ ip netns exec netlab-1 bash -c 'failed=1
                               sleep 1
                             done' &
 ip netns exec netlab-1 echo $! > ping_retry.pid
+(RUST_BACKTRACE=full ip netns exec netlab-1 $rita --ip 2001::1 2>&1 & echo $! > rita-n1.pid) | grep -v "<unknown>" &> rita-n1.log &
+echo $! > rita-n1.pid
 
 prep_netns netlab-2
 create_bridge netlab-2 2-1 2001::2
 create_bridge netlab-2 2-3 2001::2
 ip netns exec netlab-2 $babeld -I babeld-n2.pid -d 1 -L babeld-n2.log -h 1 -P 10 -w br-2-1 br-2-3 -G 8080 &
-RUST_BACKTRACE=full ip netns exec netlab-2 $rita --pid rita-n2.pid &> rita-n2.log &
+(RUST_BACKTRACE=full ip netns exec netlab-2 $rita --ip 2001::2 2>&1 & echo $! > rita-n2.pid) | grep -v "<unknown>" &> rita-n2.log &
+echo $! > rita-n2.pid
 ip netns exec netlab-2 brctl show
 
 prep_netns netlab-3
 ip netns exec netlab-3 $babeld -I babeld-n3.pid -d 1 -L babeld-n3.log -h 1 -P 1 -w veth-3-2 -G 8080 &
+(RUST_BACKTRACE=full ip netns exec netlab-3 $rita --ip 2001::3 2>&1 & echo $! > rita-n3.pid) | grep -v "<unknown>" &> rita-n3.log &
+cp ./../bounty_hunter/test.db ./test.db
+(RUST_BACKTRACE=full ip netns exec netlab-3 $bounty -- 2>&1 & echo $! > bounty-n3.pid) | grep -v "<unknown>" &> bounty-n3.log &
+
 
 sleep 20
+
+# Use some bandwidth from 1 -> 3
+
+# Start iperf test for 10 seconds @ 1mbps
+ip netns exec netlab-3 iperf3 -s -V &
+
+sleep 1
+
+ip netns exec netlab-1 iperf3 -c 2001::3 -V -b 1000000
 
 stop_processes
 

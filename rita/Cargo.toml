@@ -5,6 +5,7 @@ authors = ["Jehan <jehan.tremback@gmail.com>"]
 
 [dependencies]
 babel_monitor = { path = "../babel_monitor" }
+althea_types = { path = "../althea_types" }
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 traffic_watcher = { path = "./traffic_watcher"}
 payment_controller = { path = "./payment_controller" }
@@ -20,3 +21,4 @@ serde = "1.0.24"
 serde_derive = "1.0.24"
 serde_json = "1.0.8"
 reqwest = "0.8.2"
+rand = "*"
