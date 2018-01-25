@@ -123,22 +123,22 @@ ip netns exec netlab-1 bash -c 'failed=1
                               sleep 1
                             done' &
 ip netns exec netlab-1 echo $! > ping_retry.pid
-(RUST_BACKTRACE=full ip netns exec netlab-1 $rita --ip 2001::1 2>&1 & echo $! > rita-n1.pid) | grep -v "<unknown>" &> rita-n1.log &
+(RUST_BACKTRACE=full ip netns exec netlab-1 $rita --ip 2001::1 2>&1 & echo $! > rita-n1.pid) | grep -Ev "<unknown>|mio" &> rita-n1.log &
 echo $! > rita-n1.pid
 
 prep_netns netlab-2
 create_bridge netlab-2 2-1 2001::2
 create_bridge netlab-2 2-3 2001::2
 ip netns exec netlab-2 $babeld -I babeld-n2.pid -d 1 -L babeld-n2.log -h 1 -P 10 -w br-2-1 br-2-3 -G 8080 &
-(RUST_BACKTRACE=full ip netns exec netlab-2 $rita --ip 2001::2 2>&1 & echo $! > rita-n2.pid) | grep -v "<unknown>" &> rita-n2.log &
+(RUST_BACKTRACE=full ip netns exec netlab-2 $rita --ip 2001::2 2>&1 & echo $! > rita-n2.pid) | grep -Ev "<unknown>|mio" &> rita-n2.log &
 echo $! > rita-n2.pid
 ip netns exec netlab-2 brctl show
 
 prep_netns netlab-3
 ip netns exec netlab-3 $babeld -I babeld-n3.pid -d 1 -L babeld-n3.log -h 1 -P 1 -w veth-3-2 -G 8080 &
-(RUST_BACKTRACE=full ip netns exec netlab-3 $rita --ip 2001::3 2>&1 & echo $! > rita-n3.pid) | grep -v "<unknown>" &> rita-n3.log &
+(RUST_BACKTRACE=full ip netns exec netlab-3 $rita --ip 2001::3 2>&1 & echo $! > rita-n3.pid) | grep -Ev "<unknown>|mio" &> rita-n3.log &
 cp ./../bounty_hunter/test.db ./test.db
-(RUST_BACKTRACE=full ip netns exec netlab-3 $bounty -- 2>&1 & echo $! > bounty-n3.pid) | grep -v "<unknown>" &> bounty-n3.log &
+(RUST_BACKTRACE=full ip netns exec netlab-3 $bounty -- 2>&1 & echo $! > bounty-n3.pid) | grep -Ev "<unknown>|mio" &> bounty-n3.log &
 
 
 sleep 20
@@ -177,5 +177,7 @@ pass_string "Calculated neighbor debt. price: 11, debt: 79640" "rita-n2.log"
 pass_string "Calculated neighbor debt. price: 15, debt: 108600" "rita-n2.log"
 pass_string "prefix: V6(Ipv6Network { network_address: 2001::1, netmask: 128 })" "rita-n2.log"
 pass_string "prefix: V6(Ipv6Network { network_address: 2001::3, netmask: 128 })" "rita-n2.log"
+
+pass_string '[rita] got neighbors: [Identity { ip_address: V6(2001::3), eth_address: EthAddress 0xb794f5ea0ba39494ce839613fffba74279579268, mac_address: MacAddress("16:b9:b4:72:71:73") }, Identity { ip_address: V6(2001::1), eth_address: EthAddress 0xb794f5ea0ba39494ce839613fffba74279579268, mac_address: MacAddress("82:33:94:f8:8a:d3") }]' "rita-n2.log"
 
 echo "$0 PASS"

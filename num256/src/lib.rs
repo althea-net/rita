@@ -18,7 +18,7 @@ use serde::{Deserialize, Deserializer, Serializer};
 use std::str::FromStr;
 
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Uint256(BigUint);
 
 impl Deref for Uint256 {
@@ -57,6 +57,13 @@ impl fmt::Display for Uint256 {
         write!(f, "{}", &self.to_str_radix(10))
     }
 }
+
+impl fmt::Debug for Uint256 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Uint256 {}", self.to_string())
+    }
+}
+
 
 impl Serialize for Uint256 {
   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -118,7 +125,7 @@ impl CheckedSub for Uint256 {
   }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Int256(BigInt);
 
 impl Deref for Int256 {
@@ -159,6 +166,12 @@ impl_from_int!(isize);
 impl fmt::Display for Int256 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", &self.to_str_radix(10))
+    }
+}
+
+impl fmt::Debug for Int256 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Int256 {}", self.to_string())
     }
 }
 

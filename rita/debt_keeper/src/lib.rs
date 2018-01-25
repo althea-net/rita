@@ -4,6 +4,9 @@ extern crate serde_derive;
 #[macro_use]
 extern crate derive_error;
 
+#[macro_use] extern crate log;
+
+
 use std::net::IpAddr;
 use std::collections::HashMap;
 use std::ops::{Add, Sub};
@@ -15,6 +18,9 @@ use althea_types::{EthAddress, Identity};
 
 extern crate num256;
 use num256::{Uint256, Int256};
+
+extern crate num_traits;
+use num_traits::sign::Signed;
 
 extern crate eui48;
 use eui48::MacAddress;
@@ -63,13 +69,26 @@ impl DebtKeeper {
         let stored_debt = self.debts.entry(ident).or_insert(Int256::from(0));
         let old_debt = stored_debt.clone();
 
+        trace!("old debt for {:?}: {:?}", ident.ip_address, old_debt);
+
+        if debt.is_positive() {
+            trace!("applying credit from: {:?}, of amount: {:?}", ident.ip_address, debt);
+        } else {
+            trace!("applying debit from: {:?}, of amount: {:?}", ident.ip_address, debt);
+        }
+
         *stored_debt = stored_debt.clone().add(debt.clone());
 
-        if *stored_debt < self.close_threshold {
+        trace!("new debt for {:?}: {:?}", ident.ip_address, *stored_debt);
+
+        return if *stored_debt < self.close_threshold {
+            trace!("debt is below close threshold. suspending forwarding");
             Some(DebtAction::SuspendTunnel)
         } else if (self.close_threshold < *stored_debt) && (old_debt < self.close_threshold) {
+            trace!("debt is above close threshold. resuming forwarding");
             Some(DebtAction::OpenTunnel)
         } else if *stored_debt > self.pay_threshold {
+            trace!("debt is above payment threshold. making payment");
             Some(DebtAction::MakePayment(Uint256::from(stored_debt.clone())))
         } else {
             None
