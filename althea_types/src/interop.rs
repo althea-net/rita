@@ -16,7 +16,7 @@ pub struct Identity {
 
 /// This is a stand-in for channel updates. Completely insecure, but allows us to 
 /// track how much people would be paying each other if channels were implemented.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
 pub struct PaymentTx {
     pub to: Identity,
     pub from: Identity,
