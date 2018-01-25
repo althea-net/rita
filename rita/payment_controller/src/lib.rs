@@ -46,7 +46,10 @@ pub struct PaymentController {
     pub balance: Int256,
 }
 
-
+/// This updates a "bounty hunter" with the current balance and the last PaymentTx. 
+/// Bounty hunters are servers which store and possibly enforce the current state of
+/// a channel. Currently they are actually just showing a completely insecure 
+/// "fake" balance as a stand-in for the real thing.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BountyUpdate {
     pub from: Identity,
@@ -54,6 +57,7 @@ pub struct BountyUpdate {
     pub tx: PaymentTx,
 }
 
+/// The actions that a `PaymentController` can take. 
 pub enum PaymentControllerMsg {
     PaymentReceived(PaymentTx),
     MakePayment(PaymentTx),
@@ -114,9 +118,8 @@ impl PaymentController {
         }
     }
 
-    /// This is exposed to the Guac light client, or whatever else is
-    /// being used for payments. It gets called when a payment from a counterparty
-    /// has arrived, and will return if it is valid.
+    /// This gets called when a payment from a counterparty has arrived, and updates
+    /// the balance in memory and sends an update to the "bounty hunter".
     pub fn payment_received(&mut self, pmt: PaymentTx, m_tx: Arc<Mutex<Sender<DebtAdjustment>>>) -> Result<(), Error> {
         trace!("Sending payment to Guac: {:?}", pmt);
         trace!("Received payment, Balance: {:?}", self.balance);
@@ -134,7 +137,8 @@ impl PaymentController {
         Ok(())
     }
 
-    /// This is called by the other modules in Rita to make payments.
+    /// This is called by the other modules in Rita to make payments. It sends a 
+    /// PaymentTx to the `ip_address` in its `to` field.
     pub fn make_payment(&mut self, pmt: PaymentTx) -> Result<(), Error> {
         trace!("Making payments to {:?}", pmt);
         trace!("Sent payment, Balance: {:?}", self.balance);

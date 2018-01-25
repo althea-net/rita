@@ -32,6 +32,8 @@ pub struct DebtKeeper {
     close_threshold: Int256,
 }
 
+/// Actions to be taken upon a neighbor's debt reaching either a negative or positive
+/// threshold. 
 #[derive(Debug, PartialEq)]
 pub enum DebtAction {
     SuspendTunnel,
@@ -56,6 +58,7 @@ impl DebtKeeper {
         }
     }
 
+    /// This updates a neighbor's debt and outputs a DebtAction if one is necessary.
     pub fn apply_debt(&mut self, ident: Identity, debt: Int256) -> Option<DebtAction> {
         let stored_debt = self.debts.entry(ident).or_insert(Int256::from(0));
         let old_debt = stored_debt.clone();
