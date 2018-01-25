@@ -141,12 +141,6 @@ fn main() {
                     to: debt_adjustment.ident,
                     amount: amt.clone()
                 })).unwrap();
-
-                trace!("Sent payment, Payment: {:?}", PaymentTx {
-                    from: my_ident,
-                    to: debt_adjustment.ident,
-                    amount: amt.clone()
-                });
             },
             None => ()
         };
