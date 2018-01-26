@@ -10,6 +10,8 @@ extern crate derive_error;
 use std::net::IpAddr;
 use std::collections::HashMap;
 use std::ops::{Add, Sub};
+use std::thread;
+use std::sync::mpsc::{Sender, Receiver, channel};
 
 extern crate serde;
 
@@ -33,9 +35,23 @@ pub enum Error {
 }
 
 pub struct DebtKeeper {
+    incoming_payments: HashMap<Identity, Uint256>,
     debts: HashMap<Identity, Int256>,
     pay_threshold: Int256,
     close_threshold: Int256,
+}
+
+// #[derive(Debug, PartialEq)]
+// pub struct DebtAdjustment {
+//     pub ident: Identity,
+//     pub amount: Int256,
+// }
+
+/// The actions that a `DebtKeeper` can take. 
+pub enum DebtKeeperMsg {
+    Payment { from: Identity, amount: Uint256 },
+    Traffic { from: Identity, amount: Int256 },
+    StopThread
 }
 
 /// Actions to be taken upon a neighbor's debt reaching either a negative or positive
@@ -44,52 +60,86 @@ pub struct DebtKeeper {
 pub enum DebtAction {
     SuspendTunnel,
     OpenTunnel,
-    MakePayment(Uint256),
+    MakePayment {to: Identity, amount: Uint256},
 }
 
-#[derive(Debug, PartialEq)]
-pub struct DebtAdjustment {
-    pub ident: Identity,
-    pub amount: Int256,
-}
 
 impl DebtKeeper {
+    pub fn start(pay_threshold: Int256, close_threshold: Int256) ->
+        (Sender<DebtKeeperMsg>, Receiver<Option<DebtAction>>)
+    {
+        let mut keeper = DebtKeeper::new(pay_threshold, close_threshold);
+        let (input_tx, input_rx) = channel();
+        let (output_tx, output_rx) = channel();
+
+        thread::spawn(move || {
+            for msg in input_rx {
+                match msg {
+                    DebtKeeperMsg::Payment { from, amount } => keeper.apply_payment(from, amount),
+                    DebtKeeperMsg::Traffic { from, amount } => output_tx.send(
+                        keeper.apply_traffic(from, amount)
+                    ).unwrap(),
+                    DebtKeeperMsg::StopThread => return
+                };
+            }
+        });
+        (input_tx, output_rx)
+    }
+
     pub fn new(pay_threshold: Int256, close_threshold: Int256) -> Self {
         assert!(pay_threshold > Int256::from(0));
         assert!(close_threshold < Int256::from(0));
         DebtKeeper {
+            incoming_payments: HashMap::new(),
             debts: HashMap::new(),
             pay_threshold,
             close_threshold,
         }
     }
 
+    fn apply_payment(&mut self, ident: Identity, amount: Uint256) {
+        let stored_balance = self.debts.entry(ident).or_insert(Int256::from(0));
+        let old_balance = stored_balance.clone();
+
+        trace!("apply_payment: old balance for {:?}: {:?}", ident.ip_address, old_balance);
+
+        *stored_balance = stored_balance.clone().add(Int256::from(amount.clone()));
+
+        trace!("new balance for {:?}: {:?}", ident.ip_address, *stored_balance);
+    }
+
     /// This updates a neighbor's debt and outputs a DebtAction if one is necessary.
-    pub fn apply_debt(&mut self, ident: Identity, debt: Int256) -> Option<DebtAction> {
-        let stored_debt = self.debts.entry(ident).or_insert(Int256::from(0));
-        let old_debt = stored_debt.clone();
+    fn apply_traffic(&mut self, ident: Identity, traffic: Int256) -> Option<DebtAction> {
+        let debt_ref = self.debts.entry(ident).or_insert(Int256::from(0));
+        let debt = debt_ref.clone();
 
-        trace!("old debt for {:?}: {:?}", ident.ip_address, old_debt);
+        let payment_balance_ref = self.incoming_payments.entry(ident).or_insert(Uint256::from(0 as u32));
+        let payment_balance = payment_balance_ref.clone();
 
-        if debt.is_positive() {
-            trace!("applying credit from: {:?}, of amount: {:?}", ident.ip_address, debt);
-        } else {
-            trace!("applying debit from: {:?}, of amount: {:?}", ident.ip_address, debt);
-        }
+        trace!(
+            "apply_traffic for {:?}: debt: {:?}, traffic: {:?}, payment balance: {:?}",
+            ident.ip_address,
+            debt,
+            traffic,
+            payment_balance
+        );
 
-        *stored_debt = stored_debt.clone().add(debt.clone());
+        *payment_balance_ref = Uint256::from(0 as u32);
+        *debt_ref = debt.clone().add(traffic).add(Int256::from(payment_balance));
 
-        trace!("new debt for {:?}: {:?}", ident.ip_address, *stored_debt);
+        trace!("new debt for {:?}: {:?}", ident.ip_address, *debt_ref);
 
-        return if *stored_debt < self.close_threshold {
+        if *debt_ref < self.close_threshold {
             trace!("debt is below close threshold. suspending forwarding");
             Some(DebtAction::SuspendTunnel)
-        } else if (self.close_threshold < *stored_debt) && (old_debt < self.close_threshold) {
+        } else if (self.close_threshold < *debt_ref) && (debt < self.close_threshold) {
             trace!("debt is above close threshold. resuming forwarding");
             Some(DebtAction::OpenTunnel)
-        } else if *stored_debt > self.pay_threshold {
+        } else if *debt_ref > self.pay_threshold {
             trace!("debt is above payment threshold. making payment");
-            Some(DebtAction::MakePayment(Uint256::from(stored_debt.clone())))
+            let d = debt_ref.clone();
+            *debt_ref = Int256::from(0);
+            Some(DebtAction::MakePayment{to: ident, amount: Uint256::from(d)})
         } else {
             None
         }

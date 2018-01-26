@@ -21,7 +21,7 @@ use babel_monitor::Babel;
 extern crate traffic_watcher;
 
 extern crate debt_keeper;
-use debt_keeper::{DebtKeeper, DebtAction, DebtAdjustment};
+use debt_keeper::{DebtKeeper, DebtAction, DebtKeeperMsg};
 
 extern crate payment_controller;
 
@@ -77,40 +77,38 @@ fn main() {
 
     trace!("Starting with Identity: {:?}", my_ident);
 
-    let (tx, rx) = mpsc::channel();
+    
+    let (debt_keeper_input, debt_keeper_output) = DebtKeeper::start(Int256::from(500000), Int256::from(-1000000));
 
-    let tx1 = mpsc::Sender::clone(&tx);
+    let debt_keeper_input1 = mpsc::Sender::clone(&debt_keeper_input);
     thread::spawn(move || {
         let mut ki = KernelInterface {};
         let mut tm = TunnelManager::new();
         let mut babel = Babel::new(&"[::1]:8080".parse().unwrap());
 
         loop {
-            if let Ok(neighbors) = tm.get_neighbors() {
-                info!("got neighbors: {:?}", neighbors);
+            let neighbors = tm.get_neighbors().unwrap();
+            info!("got neighbors: {:?}", neighbors);
 
-                let debts = traffic_watcher::watch(neighbors, 5, &mut ki, &mut babel).unwrap();
-                info!("got debts: {:?}", debts);
+            let debts = traffic_watcher::watch(neighbors, 5, &mut ki, &mut babel).unwrap();
+            info!("got debts: {:?}", debts);
 
-                for (ident, amount) in debts {
-                    let adjustment = DebtAdjustment { ident, amount };
-                    trace!("Sent debt adjustment {:?}", &adjustment);
-                    tx1.send(adjustment).unwrap();
-                }
-            } else {
-                thread::sleep_ms(100);
+            for (from, amount) in debts {
+                let adjustment = DebtKeeperMsg::Traffic { from, amount };
+                debt_keeper_input1.send(adjustment).unwrap();
             }
         };
     });
 
-    let m_tx = Arc::new(Mutex::new(tx.clone()));
+    let payment_controller_input = PaymentController::start(
+        &my_ident,
+        Arc::new(Mutex::new(debt_keeper_input.clone()))
+    );
 
-    let pc = PaymentController::start(&my_ident, m_tx);
-
-    let pc1 = pc.clone();
+    let payment_controller_input1 = payment_controller_input.clone();
 
     thread::spawn(move || {
-        let pc = Arc::new(Mutex::new(pc1));
+        let pc = Arc::new(Mutex::new(payment_controller_input.clone()));
         rouille::start_server("[::0]:4876", move |request| {
             router!(request,
                 (POST) (/make_payment) => {
@@ -125,21 +123,19 @@ fn main() {
         });
     });
 
-    let mut dk = DebtKeeper::new(Int256::from(5), Int256::from(-10));
-
-    for debt_adjustment in rx {
-        match dk.apply_debt(debt_adjustment.ident, debt_adjustment.amount) {
+    for msg in debt_keeper_output {
+        match msg {
             Some(DebtAction::SuspendTunnel) => {
                 trace!("Suspending Tunnel");
             }, // tunnel manager should suspend forwarding here
             Some(DebtAction::OpenTunnel) => {
                 trace!("Opening Tunnel");
             }, // tunnel manager should reopen tunnel here
-            Some(DebtAction::MakePayment(amt)) => {
-                pc.send(PaymentControllerMsg::MakePayment(PaymentTx {
+            Some(DebtAction::MakePayment {to, amount}) => {
+                payment_controller_input1.send(PaymentControllerMsg::MakePayment(PaymentTx {
                     from: my_ident,
-                    to: debt_adjustment.ident,
-                    amount: amt.clone()
+                    to: to,
+                    amount
                 })).unwrap();
             },
             None => ()
