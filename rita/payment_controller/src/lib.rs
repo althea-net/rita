@@ -15,10 +15,10 @@ extern crate althea_types;
 use althea_types::{PaymentTx, Identity};
 
 extern crate debt_keeper;
-use debt_keeper::DebtAdjustment;
+use debt_keeper::DebtKeeperMsg;
 
 extern crate num256;
-use num256::Int256;
+use num256::{Uint256, Int256};
 
 extern crate reqwest;
 
@@ -68,7 +68,7 @@ pub enum PaymentControllerMsg {
 extern crate mockito;
 
 impl PaymentController {
-    pub fn start(id: &Identity, m_tx: Arc<Mutex<Sender<DebtAdjustment>>>) -> Sender<PaymentControllerMsg> {
+    pub fn start(id: &Identity, m_tx: Arc<Mutex<Sender<DebtKeeperMsg>>>) -> Sender<PaymentControllerMsg> {
         let mut controller = PaymentController::new(id);
         let (tx, rx) = channel();
 
@@ -120,7 +120,7 @@ impl PaymentController {
 
     /// This gets called when a payment from a counterparty has arrived, and updates
     /// the balance in memory and sends an update to the "bounty hunter".
-    pub fn payment_received(&mut self, pmt: PaymentTx, m_tx: Arc<Mutex<Sender<DebtAdjustment>>>) -> Result<(), Error> {
+    pub fn payment_received(&mut self, pmt: PaymentTx, m_tx: Arc<Mutex<Sender<DebtKeeperMsg>>>) -> Result<(), Error> {
         trace!("current balance: {:?}", self.balance);
         trace!("payment of {:?} received from {:?}: {:?}", pmt.amount, pmt.from.ip_address, pmt);
 
@@ -129,9 +129,9 @@ impl PaymentController {
         trace!("current balance: {:?}", self.balance);
 
         m_tx.lock().unwrap().send(
-            DebtAdjustment {
-                ident: pmt.from,
-                amount: Int256::from(pmt.amount.clone())
+            DebtKeeperMsg::Payment {
+                from: pmt.from,
+                amount: Uint256::from(pmt.amount.clone())
             }
         ).unwrap();
 
@@ -272,7 +272,7 @@ mod tests {
 
         let out = rita_rx.try_recv().unwrap();
 
-        assert_eq!(out, DebtAdjustment {
+        assert_eq!(out, DebtKeeperMsg {
             ident: new_identity(1),
             amount: Int256::from(1)
         });
@@ -339,7 +339,7 @@ mod tests {
 
         let out = rita_rx.try_recv().unwrap();
 
-        assert_eq!(out, DebtAdjustment {
+        assert_eq!(out, DebtKeeperMsg {
             ident: new_identity(1),
             amount: Int256::from(1)
         });
@@ -369,7 +369,7 @@ mod tests {
         for _ in 0..100 {
             let out = rita_rx.try_recv().unwrap();
 
-            assert_eq!(out, DebtAdjustment {
+            assert_eq!(out, DebtKeeperMsg {
                 ident: new_identity(1),
                 amount: Int256::from(1)
             });

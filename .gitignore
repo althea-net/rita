@@ -7,3 +7,4 @@ target-mac
 integration-tests/test.db
 bounty_hunter/test.db
 test.db-journal
+*.log
