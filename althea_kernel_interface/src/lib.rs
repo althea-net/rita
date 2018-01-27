@@ -87,10 +87,11 @@ impl KernelInterface {
     /// Implemented with `ebtables` on linux.
     pub fn start_destination_counter(
         &mut self,
+        des_neighbor: MacAddress,
         destination: IpAddr,
     ) -> Result<(), Error> {
         if cfg!(target_os = "linux") {
-            return self.start_destination_counter_linux(destination);
+            return self.start_destination_counter_linux(des_neighbor, destination);
         }
 
         Err(Error::RuntimeError(
@@ -102,10 +103,11 @@ impl KernelInterface {
     /// Implemented with `ebtables` on linux.
     pub fn delete_destination_counter(
         &mut self,
+        des_neighbor: MacAddress,
         destination: IpAddr,
     ) -> Result<(), Error> {
         if cfg!(target_os = "linux") {
-            return self.delete_destination_counter_linux(destination);
+            return self.delete_destination_counter_linux(des_neighbor, destination);
         }
 
         Err(Error::RuntimeError(
@@ -164,7 +166,7 @@ impl KernelInterface {
     /// Returns a vector of going to a specific IP address.
     /// Note that this will only track flows that have already been
     /// registered. Implemented with `ebtables` on Linux.
-    pub fn read_destination_counters(&mut self) -> Result<Vec<(IpAddr, u64)>, Error> {
+    pub fn read_destination_counters(&mut self) -> Result<Vec<(MacAddress, IpAddr, u64)>, Error> {
         if cfg!(target_os = "linux") {
             return self.read_destination_counters_linux();
         }
