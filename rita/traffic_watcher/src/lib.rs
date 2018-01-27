@@ -101,7 +101,7 @@ pub fn watch(
 
     for (mac, ip, bytes) in flow_counters {
         let id = identities[&mac];
-        *debts.get_mut(&id).unwrap() = debts[&id].clone().add(
+        *debts.get_mut(&id).unwrap() = debts[&id].clone().sub(
             // get price
             destinations[
                 // get ip from mac
@@ -114,7 +114,7 @@ pub fn watch(
 
     for (mac, ip, bytes) in des_counters {
         let id = identities[&mac];
-        *debts.get_mut(&id).unwrap() = debts[&id].clone().sub(
+        *debts.get_mut(&id).unwrap() = debts[&id].clone().add(
             // get price
             destinations[
                 // get ip from mac
