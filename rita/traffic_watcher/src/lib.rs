@@ -17,6 +17,7 @@ use babel_monitor::Babel;
 
 extern crate num256;
 use num256::Int256;
+use std::ops::{Add, Sub};
 
 use std::net::IpAddr;
 use std::collections::HashMap;
@@ -69,7 +70,7 @@ pub fn watch(
                 );
                 for ident in &neighbors {
                     ki.start_flow_counter(ident.mac_address, IpAddr::V6(ip.get_network_address()))?;
-                    ki.start_destination_counter(IpAddr::V6(ip.get_network_address()))?;
+                    ki.start_destination_counter(ident.mac_address, IpAddr::V6(ip.get_network_address()))?;
                 }
             }
         }
@@ -81,40 +82,51 @@ pub fn watch(
     thread::sleep(time::Duration::from_secs(duration));
 
     trace!("Getting flow counters");
-    let counters = ki.read_flow_counters()?;
-    info!("Got flow counters: {:?}", counters);
+    let flow_counters = ki.read_flow_counters()?;
+    info!("Got flow counters: {:?}", flow_counters);
 
     trace!("Getting destination counters");
     let des_counters = ki.read_destination_counters()?;
-    info!("Got flow destination: {:?}", des_counters);
+    info!("Got destination counters: {:?}", des_counters);
 
-    // This loop runs for each neighbor-destination pair. It calculates the cost of
-    // that neighbor's forwarding to that destination using the currently advertised
-    // price of that destination.
-    counters
-        .iter()
-        .map(|&(neigh_mac, dest_ip, bytes_they_used)| {
-            let bytes_we_used = 0;
-            trace!(
-                "Calculating neighbor debt: mac: {:?}, destination: {:?}, bytes_they_used: {:?}",
-                neigh_mac,
-                dest_ip,
-                bytes_they_used
-            );
+    // Flow counters should debit your neighbour which you received the packet from
+    // Destination counters should credit your neighbour which you sent the packet to
 
-            let price = &destinations[&dest_ip.to_string()];
-            // turn it negative because it is what they owe us
-            let their_debt = Int256::from(0) - price.clone().mul(Int256::from(bytes_they_used as i64));
+    let mut debts = HashMap::new();
 
-            trace!(
-                "Calculated neighbor debt. price: {}, debt: {}",
-                price,
-                their_debt
-            );
+    // Setup the debts table
+    for (mac, ident) in identities.clone() {
+        debts.insert(ident, Int256::from(0));
+    }
 
-            Ok((identities[&neigh_mac].clone(), their_debt))
-        })
-        .collect::<Result<Vec<(Identity, Int256)>, Error>>()
+    for (mac, ip, bytes) in flow_counters {
+        let id = identities[&mac];
+        *debts.get_mut(&id).unwrap() = debts[&id].clone().add(
+            // get price
+            destinations[
+                // get ip from mac
+                &identities[&mac].ip_address.to_string().clone()]
+                // multiply my bytes used
+                .clone().mul(Int256::from(bytes as i64)));
+    }
+
+    trace!("Collated flow debts: {:?}", debts);
+
+    for (mac, ip, bytes) in des_counters {
+        let id = identities[&mac];
+        *debts.get_mut(&id).unwrap() = debts[&id].clone().sub(
+            // get price
+            destinations[
+                // get ip from mac
+                &identities[&mac].ip_address.to_string().clone()]
+            // multiply my bytes used
+            .clone().mul(Int256::from(bytes as i64)));
+    }
+
+    trace!("Collated total debts: {:?}", debts);
+
+
+    Ok(debts.into_iter().collect())
 }
 
 
