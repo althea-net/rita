@@ -110,11 +110,12 @@ create_bridge () {
   ip netns exec "$1" brctl addbr "br-$2"
   ip netns exec "$1" brctl addif "br-$2" "veth-$2"
   ip netns exec "$1" ip link set up "br-$2"
-  ip netns exec "$1" ip addr add 2001::2 dev "br-$2"
+  ip netns exec "$1" ip addr add $3 dev "br-$2"
 }
 
 prep_netns netlab-1
-ip netns exec netlab-1 $babeld -I babeld-n1.pid -d 1 -L babeld-n1.log -h 1 -P 5 -w veth-1-2 -G 8080 &
+create_bridge netlab-1 1-2 2001::1
+ip netns exec netlab-1 $babeld -I babeld-n1.pid -d 1 -L babeld-n1.log -h 1 -P 5 -w br-1-2 -G 8080 &
 ip netns exec netlab-1 bash -c 'failed=1
                             while [ $failed -ne 0 ]
                             do
@@ -135,7 +136,8 @@ echo $! > rita-n2.pid
 ip netns exec netlab-2 brctl show
 
 prep_netns netlab-3
-ip netns exec netlab-3 $babeld -I babeld-n3.pid -d 1 -L babeld-n3.log -h 1 -P 1 -w veth-3-2 -G 8080 &
+create_bridge netlab-3 3-2 2001::3
+ip netns exec netlab-3 $babeld -I babeld-n3.pid -d 1 -L babeld-n3.log -h 1 -P 1 -w br-3-2 -G 8080 &
 (RUST_BACKTRACE=full ip netns exec netlab-3 $rita --ip 2001::3 2>&1 & echo $! > rita-n3.pid) | grep -Ev "<unknown>|mio" &> rita-n3.log &
 cp ./../bounty_hunter/test.db ./test.db
 (RUST_BACKTRACE=full ip netns exec netlab-3 $bounty -- 2>&1 & echo $! > bounty-n3.pid) | grep -Ev "<unknown>|mio" &> bounty-n3.log &
