@@ -41,12 +41,6 @@ pub struct DebtKeeper {
     close_threshold: Int256,
 }
 
-// #[derive(Debug, PartialEq)]
-// pub struct DebtAdjustment {
-//     pub ident: Identity,
-//     pub amount: Int256,
-// }
-
 /// The actions that a `DebtKeeper` can take. 
 pub enum DebtKeeperMsg {
     Payment { from: Identity, amount: Uint256 },
@@ -98,12 +92,12 @@ impl DebtKeeper {
     }
 
     fn apply_payment(&mut self, ident: Identity, amount: Uint256) {
-        let stored_balance = self.debts.entry(ident).or_insert(Int256::from(0));
+        let stored_balance = self.incoming_payments.entry(ident).or_insert(Uint256::from(0 as u32));
         let old_balance = stored_balance.clone();
 
         trace!("apply_payment: old balance for {:?}: {:?}", ident.ip_address, old_balance);
 
-        *stored_balance = stored_balance.clone().add(Int256::from(amount.clone()));
+        *stored_balance = stored_balance.clone().add(amount.clone());
 
         trace!("new balance for {:?}: {:?}", ident.ip_address, *stored_balance);
     }
