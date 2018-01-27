@@ -52,14 +52,9 @@ pub fn watch(
     let routes = babel.parse_routes()?;
     info!("Got routes: {:?}", routes);
 
-    let mut identities_flow: HashMap<MacAddress, Identity> = HashMap::new();
+    let mut identities: HashMap<MacAddress, Identity> = HashMap::new();
     for ident in &neighbors {
-        identities_flow.insert(ident.mac_address, *ident);
-    }
-
-    let mut identities_des: HashMap<IpAddr, Identity> = HashMap::new();
-    for ident in &neighbors {
-        identities_des.insert(ident.ip_address, *ident);
+        identities.insert(ident.mac_address, *ident);
     }
 
     let mut destinations = HashMap::new();
@@ -93,26 +88,31 @@ pub fn watch(
     let des_counters = ki.read_destination_counters()?;
     info!("Got flow destination: {:?}", des_counters);
 
+    // This loop runs for each neighbor-destination pair. It calculates the cost of
+    // that neighbor's forwarding to that destination using the currently advertised
+    // price of that destination.
     counters
         .iter()
-        .map(|&(neigh_mac, dest_ip, bytes)| {
+        .map(|&(neigh_mac, dest_ip, bytes_they_used)| {
+            let bytes_we_used = 0;
             trace!(
-                "Calculating neighbor debt: mac: {:?}, destination: {:?}, bytes: {:?}",
+                "Calculating neighbor debt: mac: {:?}, destination: {:?}, bytes_they_used: {:?}",
                 neigh_mac,
                 dest_ip,
-                bytes
+                bytes_they_used
             );
 
             let price = &destinations[&dest_ip.to_string()];
-            let debt = price.clone().mul(Int256::from(bytes as i64));
+            // turn it negative because it is what they owe us
+            let their_debt = Int256::from(0) - price.clone().mul(Int256::from(bytes_they_used as i64));
 
             trace!(
                 "Calculated neighbor debt. price: {}, debt: {}",
                 price,
-                debt
+                their_debt
             );
 
-            Ok((identities_flow[&neigh_mac].clone(), debt))
+            Ok((identities[&neigh_mac].clone(), their_debt))
         })
         .collect::<Result<Vec<(Identity, Int256)>, Error>>()
 }

@@ -150,7 +150,7 @@ ip netns exec netlab-3 iperf3 -s -V &
 
 sleep 1
 
-ip netns exec netlab-1 iperf3 -c 2001::3 -V -b 1000000
+ip netns exec netlab-1 iperf3 -c 2001::3 -V -b -u 1000000
 
 stop_processes
 
