@@ -83,19 +83,22 @@ fn main() {
     thread::spawn(move || {
         let mut ki = KernelInterface {};
         let mut tm = TunnelManager::new();
-        let mut babel = Babel::new(&"[::1]:8080".parse().unwrap()); //TODO: Do we really want [::1] and not [::0]?
+        let mut babel = Babel::new(&"[::1]:8080".parse().unwrap());
 
         loop {
-            let neighbors = tm.get_neighbors().unwrap();
-            info!("got neighbors: {:?}", neighbors);
+            if let Ok(neighbors) = tm.get_neighbors() {
+                info!("got neighbors: {:?}", neighbors);
 
-            let debts = traffic_watcher::watch(neighbors, 5, &mut ki, &mut babel).unwrap();
-            info!("got debts: {:?}", debts);
+                let debts = traffic_watcher::watch(neighbors, 5, &mut ki, &mut babel).unwrap();
+                info!("got debts: {:?}", debts);
 
-            for (ident, amount) in debts {
-                let adjustment = DebtAdjustment {ident, amount};
-                trace!("Sent debt adjustment {:?}", &adjustment);
-                tx1.send(adjustment).unwrap();
+                for (ident, amount) in debts {
+                    let adjustment = DebtAdjustment { ident, amount };
+                    trace!("Sent debt adjustment {:?}", &adjustment);
+                    tx1.send(adjustment).unwrap();
+                }
+            } else {
+                thread::sleep_ms(100);
             }
         };
     });
