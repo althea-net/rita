@@ -40,7 +40,8 @@ pub struct DebtKeeper {
     close_threshold: Int256,
 }
 
-/// The actions that a `DebtKeeper` can take. 
+/// The actions that a `DebtKeeper` can take.
+#[derive(Debug, PartialEq)]
 pub enum DebtKeeperMsg {
     Payment { from: Identity, amount: Uint256 },
     Traffic { from: Identity, amount: Int256 },
