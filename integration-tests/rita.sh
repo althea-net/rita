@@ -2,39 +2,39 @@
 set -euo pipefail
 
 build_babel () {
-  if [ ! -d "./babeld" ] ; then
-      git clone -b althea "https://github.com/althea-mesh/babeld" "./babeld"
+  if [ ! -d "deps/babeld" ] ; then
+      git clone -b althea "https://github.com/althea-mesh/babeld" "deps/babeld"
   fi
 
-  cd ./babeld
+  pushd deps/babeld
   make
-  make install
-  cd ../
+  popd
+}
+
+fetch_netlab () {
+  if [ ! -d "deps/network-lab" ] ; then
+    git clone "https://github.com/sudomesh/network-lab" "deps/network-lab"
+  fi
 }
 
 build_rita () {
-  cd ../rita
+  pushd ../rita
   cargo build
-  cd ../integration-tests
+  popd
 }
 
 build_bounty () {
-  cd ../bounty_hunter
+  pushd ../bounty_hunter
   cargo build
   rm -rf test.db
   diesel migration run
-  cd ../integration-tests
+  popd
 }
 
-network_lab=./deps/network-lab/network-lab.sh
-babeld=./babeld/babeld
+network_lab=deps/network-lab/network-lab.sh
+babeld=deps/babeld/babeld
 rita=../target/debug/rita
 bounty=../target/debug/bounty_hunter
-
-if [[ $EUID -ne 0 ]]; then
-   echo "This script must be run as root :("
-   exit 1
-fi
 
 fail_string()
 {
@@ -57,9 +57,9 @@ stop_processes()
   set +eux
     for f in *.pid
     do
-      kill -9 "$(cat $f)"
+      sudo kill -9 "$(cat $f)"
     done
-    killall ping6
+    sudo killall ping6
   set -eux
 }
 
@@ -70,6 +70,7 @@ cleanup()
   rm -f ./test.db
 }
 
+fetch_netlab
 build_babel
 build_rita
 build_bounty
@@ -77,7 +78,7 @@ build_bounty
 stop_processes
 cleanup
 
-source $network_lab << EOF
+sudo bash $network_lab << EOF
 {
   "nodes": {
     "1": { "ip": "2001::1" },
@@ -101,44 +102,46 @@ source $network_lab << EOF
 EOF
 
 prep_netns () {
-  ip netns exec "$1" sysctl -w net.ipv4.ip_forward=1
-  ip netns exec "$1" sysctl -w net.ipv6.conf.all.forwarding=1
-  ip netns exec "$1" ip link set up lo
+  sudo ip netns exec "$1" sysctl -w net.ipv4.ip_forward=1
+  sudo ip netns exec "$1" sysctl -w net.ipv6.conf.all.forwarding=1
+  sudo ip netns exec "$1" ip link set up lo
 }
 
 create_bridge () {
-  ip netns exec "$1" brctl addbr "br-$2"
-  ip netns exec "$1" brctl addif "br-$2" "veth-$2"
-  ip netns exec "$1" ip link set up "br-$2"
-  ip netns exec "$1" ip addr add 2001::2 dev "br-$2"
+  sudo ip netns exec "$1" brctl addbr "br-$2"
+  sudo ip netns exec "$1" brctl addif "br-$2" "veth-$2"
+  sudo ip netns exec "$1" ip link set up "br-$2"
+  sudo ip netns exec "$1" ip addr add $3 dev "br-$2"
 }
 
 prep_netns netlab-1
-ip netns exec netlab-1 $babeld -I babeld-n1.pid -d 1 -L babeld-n1.log -h 1 -P 5 -w veth-1-2 -G 8080 &
-ip netns exec netlab-1 bash -c 'failed=1
+create_bridge netlab-1 1-2 2001::1
+sudo ip netns exec netlab-1 $babeld -I babeld-n1.pid -d 1 -L babeld-n1.log -h 1 -P 5 -w br-1-2 -G 8080 &
+sudo ip netns exec netlab-1 bash -c 'failed=1
                             while [ $failed -ne 0 ]
                             do
                               ping6 -n -s 1400 2001::3 &> ping.log
                               failed=$?
                               sleep 1
                             done' &
-ip netns exec netlab-1 echo $! > ping_retry.pid
-(RUST_BACKTRACE=full ip netns exec netlab-1 $rita --ip 2001::1 2>&1 & echo $! > rita-n1.pid) | grep -v "<unknown>" &> rita-n1.log &
+sudo ip netns exec netlab-1 echo $! > ping_retry.pid
+(RUST_BACKTRACE=full sudo ip netns exec netlab-1 $rita --ip 2001::1 2>&1 & echo $! > rita-n1.pid) | grep -Ev "<unknown>|mio" &> rita-n1.log &
 echo $! > rita-n1.pid
 
 prep_netns netlab-2
 create_bridge netlab-2 2-1 2001::2
 create_bridge netlab-2 2-3 2001::2
-ip netns exec netlab-2 $babeld -I babeld-n2.pid -d 1 -L babeld-n2.log -h 1 -P 10 -w br-2-1 br-2-3 -G 8080 &
-(RUST_BACKTRACE=full ip netns exec netlab-2 $rita --ip 2001::2 2>&1 & echo $! > rita-n2.pid) | grep -v "<unknown>" &> rita-n2.log &
+sudo ip netns exec netlab-2 $babeld -I babeld-n2.pid -d 1 -L babeld-n2.log -h 1 -P 10 -w br-2-1 br-2-3 -G 8080 &
+(RUST_BACKTRACE=full sudo ip netns exec netlab-2 $rita --ip 2001::2 2>&1 & echo $! > rita-n2.pid) | grep -Ev "<unknown>|mio" &> rita-n2.log &
 echo $! > rita-n2.pid
-ip netns exec netlab-2 brctl show
+sudo ip netns exec netlab-2 brctl show
 
 prep_netns netlab-3
-ip netns exec netlab-3 $babeld -I babeld-n3.pid -d 1 -L babeld-n3.log -h 1 -P 1 -w veth-3-2 -G 8080 &
-(RUST_BACKTRACE=full ip netns exec netlab-3 $rita --ip 2001::3 2>&1 & echo $! > rita-n3.pid) | grep -v "<unknown>" &> rita-n3.log &
+create_bridge netlab-3 3-2 2001::3
+sudo ip netns exec netlab-3 $babeld -I babeld-n3.pid -d 1 -L babeld-n3.log -h 1 -P 1 -w br-3-2 -G 8080 &
+(RUST_BACKTRACE=full sudo ip netns exec netlab-3 $rita --ip 2001::3 2>&1 & echo $! > rita-n3.pid) | grep -Ev "<unknown>|mio" &> rita-n3.log &
 cp ./../bounty_hunter/test.db ./test.db
-(RUST_BACKTRACE=full ip netns exec netlab-3 $bounty -- 2>&1 & echo $! > bounty-n3.pid) | grep -v "<unknown>" &> bounty-n3.log &
+(RUST_BACKTRACE=full sudo ip netns exec netlab-3 $bounty -- 2>&1 & echo $! > bounty-n3.pid) | grep -Ev "<unknown>|mio" &> bounty-n3.log &
 
 
 sleep 20
@@ -146,11 +149,11 @@ sleep 20
 # Use some bandwidth from 1 -> 3
 
 # Start iperf test for 10 seconds @ 1mbps
-ip netns exec netlab-3 iperf3 -s -V &
+sudo ip netns exec netlab-3 iperf3 -s -V &
 
 sleep 1
 
-ip netns exec netlab-1 iperf3 -c 2001::3 -V -b 1000000
+sudo ip netns exec netlab-1 iperf3 -c 2001::3 -V -b -u 1000000
 
 stop_processes
 
@@ -177,5 +180,7 @@ pass_string "Calculated neighbor debt. price: 11, debt: 79640" "rita-n2.log"
 pass_string "Calculated neighbor debt. price: 15, debt: 108600" "rita-n2.log"
 pass_string "prefix: V6(Ipv6Network { network_address: 2001::1, netmask: 128 })" "rita-n2.log"
 pass_string "prefix: V6(Ipv6Network { network_address: 2001::3, netmask: 128 })" "rita-n2.log"
+
+pass_string '[rita] got neighbors: [Identity { ip_address: V6(2001::3), eth_address: EthAddress 0xb794f5ea0ba39494ce839613fffba74279579268, mac_address: MacAddress("16:b9:b4:72:71:73") }, Identity { ip_address: V6(2001::1), eth_address: EthAddress 0xb794f5ea0ba39494ce839613fffba74279579268, mac_address: MacAddress("82:33:94:f8:8a:d3") }]' "rita-n2.log"
 
 echo "$0 PASS"

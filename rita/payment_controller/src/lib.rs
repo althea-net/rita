@@ -15,10 +15,10 @@ extern crate althea_types;
 use althea_types::{PaymentTx, Identity};
 
 extern crate debt_keeper;
-use debt_keeper::DebtAdjustment;
+use debt_keeper::DebtKeeperMsg;
 
 extern crate num256;
-use num256::Int256;
+use num256::{Uint256, Int256};
 
 extern crate reqwest;
 
@@ -68,7 +68,7 @@ pub enum PaymentControllerMsg {
 extern crate mockito;
 
 impl PaymentController {
-    pub fn start(id: &Identity, m_tx: Arc<Mutex<Sender<DebtAdjustment>>>) -> Sender<PaymentControllerMsg> {
+    pub fn start(id: &Identity, m_tx: Arc<Mutex<Sender<DebtKeeperMsg>>>) -> Sender<PaymentControllerMsg> {
         let mut controller = PaymentController::new(id);
         let (tx, rx) = channel();
 
@@ -93,6 +93,7 @@ impl PaymentController {
     }
 
     fn update_bounty(&self, update: BountyUpdate) -> Result<(), Error> {
+        trace!("Sending bounty hunter update: {:?}", update);
         let bounty_url = if cfg!(not(test)) {
             format!("http://[{}]:8888/update", "2001::3".parse::<Ipv6Addr>().unwrap())
         } else {
@@ -105,7 +106,6 @@ impl PaymentController {
             .send()?;
 
         if r.status() == StatusCode::Ok {
-            trace!("Successfully sent bounty hunter update");
             Ok(())
         } else {
             trace!("Unsuccessfully in sending update to bounty hunter");
@@ -120,16 +120,18 @@ impl PaymentController {
 
     /// This gets called when a payment from a counterparty has arrived, and updates
     /// the balance in memory and sends an update to the "bounty hunter".
-    pub fn payment_received(&mut self, pmt: PaymentTx, m_tx: Arc<Mutex<Sender<DebtAdjustment>>>) -> Result<(), Error> {
-        trace!("Sending payment to Guac: {:?}", pmt);
-        trace!("Received payment, Balance: {:?}", self.balance);
-        // TODO: Pass the paymentTx to guac, get a channel summary back, reject if incorrect
-        self.balance = self.balance.clone() + Int256::from(pmt.clone().amount);
+    pub fn payment_received(&mut self, pmt: PaymentTx, m_tx: Arc<Mutex<Sender<DebtKeeperMsg>>>) -> Result<(), Error> {
+        trace!("current balance: {:?}", self.balance);
+        trace!("payment of {:?} received from {:?}: {:?}", pmt.amount, pmt.from.ip_address, pmt);
+
+        self.balance = self.balance.clone() + Int256::from(pmt.amount.clone());
+
+        trace!("current balance: {:?}", self.balance);
 
         m_tx.lock().unwrap().send(
-            DebtAdjustment {
-                ident: pmt.from,
-                amount: Int256::from(pmt.amount.clone())
+            DebtKeeperMsg::Payment {
+                from: pmt.from,
+                amount: Uint256::from(pmt.amount.clone())
             }
         ).unwrap();
 
@@ -140,9 +142,9 @@ impl PaymentController {
     /// This is called by the other modules in Rita to make payments. It sends a 
     /// PaymentTx to the `ip_address` in its `to` field.
     pub fn make_payment(&mut self, pmt: PaymentTx) -> Result<(), Error> {
-        trace!("Making payments to {:?}", pmt);
-        trace!("Sent payment, Balance: {:?}", self.balance);
-        trace!("Sending payments to http://[{}]:4876/make_payment", pmt.to.ip_address);
+        trace!("current balance: {:?}", self.balance);
+
+        trace!("sending payment of {:?} to {:?}: {:?}", pmt.amount, pmt.to.ip_address, pmt);
 
         let neighbour_url = if cfg!(not(test)) {
             format!("http://[{}]:4876/make_payment", pmt.to.ip_address)
@@ -150,15 +152,16 @@ impl PaymentController {
             String::from("http://127.0.0.1:1234")
         };
 
-        self.balance = self.balance.clone() - Int256::from(pmt.clone().amount);
+        self.balance = self.balance.clone() - Int256::from(pmt.amount.clone());
+        
+        trace!("current balance: {:?}", self.balance);
+
         let mut r = self.client
             .post(&neighbour_url)
             .body(serde_json::to_string(&pmt)?)
             .send()?;
 
         if r.status() == StatusCode::Ok {
-            trace!("Successfully paid");
-            trace!("Received success from payee: {:?}", r.text().unwrap_or(String::from("No message received")));
             Ok(())
         } else {
             trace!("Unsuccessfully paid");
@@ -269,9 +272,9 @@ mod tests {
 
         let out = rita_rx.try_recv().unwrap();
 
-        assert_eq!(out, DebtAdjustment {
-            ident: new_identity(1),
-            amount: Int256::from(1)
+        assert_eq!(out, DebtKeeperMsg::Payment {
+            from: new_identity(1),
+            amount: Uint256::from(1u32)
         });
 
         assert!(pc_tx.send(PaymentControllerMsg::StopThread).is_ok());
@@ -336,9 +339,9 @@ mod tests {
 
         let out = rita_rx.try_recv().unwrap();
 
-        assert_eq!(out, DebtAdjustment {
-            ident: new_identity(1),
-            amount: Int256::from(1)
+        assert_eq!(out, DebtKeeperMsg::Payment {
+            from: new_identity(1),
+            amount: Uint256::from(1u32)
         });
 
         _m.assert();
@@ -366,9 +369,9 @@ mod tests {
         for _ in 0..100 {
             let out = rita_rx.try_recv().unwrap();
 
-            assert_eq!(out, DebtAdjustment {
-                ident: new_identity(1),
-                amount: Int256::from(1)
+            assert_eq!(out, DebtKeeperMsg::Payment {
+                from: new_identity(1),
+                amount: Uint256::from(1u32)
             });
         }
 
