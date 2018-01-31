@@ -272,9 +272,9 @@ mod tests {
 
         let out = rita_rx.try_recv().unwrap();
 
-        assert_eq!(out, DebtKeeperMsg {
-            ident: new_identity(1),
-            amount: Int256::from(1)
+        assert_eq!(out, DebtKeeperMsg::Payment {
+            from: new_identity(1),
+            amount: Uint256::from(1u32)
         });
 
         assert!(pc_tx.send(PaymentControllerMsg::StopThread).is_ok());
@@ -339,9 +339,9 @@ mod tests {
 
         let out = rita_rx.try_recv().unwrap();
 
-        assert_eq!(out, DebtKeeperMsg {
-            ident: new_identity(1),
-            amount: Int256::from(1)
+        assert_eq!(out, DebtKeeperMsg::Payment {
+            from: new_identity(1),
+            amount: Uint256::from(1u32)
         });
 
         _m.assert();
@@ -369,9 +369,9 @@ mod tests {
         for _ in 0..100 {
             let out = rita_rx.try_recv().unwrap();
 
-            assert_eq!(out, DebtKeeperMsg {
-                ident: new_identity(1),
-                amount: Int256::from(1)
+            assert_eq!(out, DebtKeeperMsg::Payment {
+                from: new_identity(1),
+                amount: Uint256::from(1u32)
             });
         }
 
