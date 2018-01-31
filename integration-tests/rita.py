@@ -2,11 +2,16 @@
 import json
 import os
 import subprocess
+import time
 
 network_lab = os.path.join(os.path.dirname(__file__), "deps/network-lab/network-lab.sh")
-babeld = os.path.join(os.path.dirname(__file__), "babeld/babeld")
+babeld = os.path.join(os.path.dirname(__file__), "deps/babeld/babeld")
 rita = os.path.join(os.path.dirname(__file__), "../target/debug/rita")
 bounty = os.path.join(os.path.dirname(__file__), "../target/debug/bounty_hunter")
+
+def cleanup():
+    os.system("rm -rf *.log *.pid")
+    os.system("killall babeld rita bounty_hunter iperf3")  # TODO: This is very inconsiderate
 
 
 class Node:
@@ -56,11 +61,11 @@ def create_bridge(a, b):
 
 
 def start_bounty(id):
-    os.system("RUST_BACKTRACE=1 ip netns exec netlab-{id} {bounty} > bounty-n{id}.log & echo $! > bounty-n{id}.pid".format(id=id, bounty=bounty))
+    os.system("RUST_BACKTRACE=full ip netns exec netlab-{id} {bounty} > bounty-n{id}.log & echo $! > bounty-n{id}.pid".format(id=id, bounty=bounty))
 
 
 def start_rita(id):
-    os.system("RUST_BACKTRACE=1 ip netns exec netlab-{id} {rita} --ip 2001::{id} > rita-n{id}.log & echo $! > rita-n{id}.pid".format(id=id, rita=rita))
+    os.system("RUST_BACKTRACE=full ip netns exec netlab-{id} {rita} --ip 2001::{id} > rita-n{id}.log & echo $! > rita-n{id}.pid".format(id=id, rita=rita))
 
 
 class World:
@@ -83,6 +88,8 @@ class World:
         self.bounty = bounty_id
 
     def create(self):
+        cleanup()
+
         assert self.bounty
         nodes = {}
         for id in self.nodes:
@@ -136,13 +143,12 @@ class World:
         start_bounty(self.bounty)
         print("bounty hunter started")
 
+        time.sleep(1)
+
         print("starting rita")
         for id in self.nodes:
             start_rita(id)
         print("rita started")
-
-        print("done... exiting")
-
 
 if __name__ == "__main__":
     a = Node(1, 10)  # TODO: Currently unspecified
@@ -172,3 +178,4 @@ if __name__ == "__main__":
     world.set_bounty(3)  # TODO: Who should be the bounty hunter?
 
     world.create()
+    print("done... exiting")
