@@ -4,6 +4,8 @@ import os
 import subprocess
 import time
 import sys
+from termcolor import colored
+import signal
 
 network_lab = os.path.join(os.path.dirname(__file__), "deps/network-lab/network-lab.sh")
 babeld = os.path.join(os.path.dirname(__file__), "deps/babeld/babeld")
@@ -13,9 +15,15 @@ ping6 = os.getenv('PING6', "ping6")
 
 tests_passes = True
 
+
 def cleanup():
     os.system("rm -rf *.log *.pid")
-    os.system("killall babeld rita bounty_hunter iperf3")  # TODO: This is very inconsiderate
+    os.system("killall babeld rita bounty_hunter nc")  # TODO: This is very inconsiderate
+
+
+def teardown():
+    os.system("rm -rf *.pid")
+    os.system("killall babeld rita bounty_hunter nc")  # TODO: This is very inconsiderate
 
 
 class Node:
@@ -74,9 +82,10 @@ def start_rita(id):
 
 def assert_test(x, description):
     if x:
-        print("{} Succeeded".format(description))
+        print(colored(" + ", "green") + "{} Succeeded".format(description))
     else:
-        sys.stderr.write("{} Failed\n".format(description))
+        sys.stderr.write(colored(" + ", "red") + "{} Failed\n".format(description))
+        global tests_passes
         tests_passes = False
 
 class World:
@@ -172,6 +181,24 @@ class World:
             assert_test(self.test_reach(a, b), "Reachability from node {} to {}".format(a, b))
             assert_test(self.test_reach(b, a), "Reachability from node {} to {}".format(a, b))
 
+    def get_balances(self):
+        status = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(self.bounty), "curl", "-s", "[::1]:8888/list"], stdout=subprocess.PIPE)
+        status = json.loads(status.stdout.read().decode("utf-8"))
+        balances = {}
+        for i in status:
+            balances[int(i["ip"].replace("2001::", ""))] = int(i["balance"])
+        return balances
+
+    def gen_traffic(self, from_id, to_id, bytes):
+        status = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(from_id), "nc", "-u", "2001::{}".format(to_id), "1234"], stdout=subprocess.PIPE)
+        while bytes < 1000000:
+            if bytes > 1000000:
+                status.stdin.write("a"*1000000 + "\n")
+            else:
+                status.stdin.write("a"*bytes + "\n")
+            bytes -= 1000000
+        status.send_signal(signal.SIGINT)
+
 
 if __name__ == "__main__":
     a = Node(1, 10)  # TODO: Currently unspecified
@@ -206,8 +233,14 @@ if __name__ == "__main__":
     time.sleep(10)
 
     world.test_reach_all()
+    world.get_balances()
+    world.gen_traffic(1, 3, 10000000)
 
-    cleanup()
+    if len(sys.argv) > 1 and sys.argv[1] == "leave-running":
+        pass
+    else:
+        teardown()
+
     print("done... exiting")
 
     if tests_passes:
