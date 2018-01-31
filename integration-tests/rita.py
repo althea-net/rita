@@ -3,11 +3,15 @@ import json
 import os
 import subprocess
 import time
+import sys
 
 network_lab = os.path.join(os.path.dirname(__file__), "deps/network-lab/network-lab.sh")
 babeld = os.path.join(os.path.dirname(__file__), "deps/babeld/babeld")
 rita = os.path.join(os.path.dirname(__file__), "../target/debug/rita")
 bounty = os.path.join(os.path.dirname(__file__), "../target/debug/bounty_hunter")
+ping6 = os.getenv('PING6', "ping6")
+
+tests_passes = True
 
 def cleanup():
     os.system("rm -rf *.log *.pid")
@@ -67,6 +71,13 @@ def start_bounty(id):
 def start_rita(id):
     os.system("RUST_BACKTRACE=full ip netns exec netlab-{id} {rita} --ip 2001::{id} > rita-n{id}.log & echo $! > rita-n{id}.pid".format(id=id, rita=rita))
 
+
+def assert_test(x, description):
+    if x:
+        print("{} Succeeded".format(description))
+    else:
+        sys.stderr.write("{} Failed\n".format(description))
+        tests_passes = False
 
 class World:
     def __init__(self):
@@ -150,6 +161,18 @@ class World:
             start_rita(id)
         print("rita started")
 
+    @staticmethod
+    def test_reach(id_from, id_to):
+        ping = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(id_from), ping6, "2001::{}".format(id_to), "-c", "1"], stdout=subprocess.PIPE)
+        output = ping.stdout.read().decode("utf-8")
+        return "1 packets transmitted, 1 received, 0% packet loss" in output
+
+    def test_reach_all(self):
+        for a, b in self.connections:
+            assert_test(self.test_reach(a, b), "Reachability from node {} to {}".format(a, b))
+            assert_test(self.test_reach(b, a), "Reachability from node {} to {}".format(a, b))
+
+
 if __name__ == "__main__":
     a = Node(1, 10)  # TODO: Currently unspecified
     b = Node(2, 25)
@@ -178,4 +201,18 @@ if __name__ == "__main__":
     world.set_bounty(3)  # TODO: Who should be the bounty hunter?
 
     world.create()
+
+    print("Waiting for network to stabilize")
+    time.sleep(10)
+
+    world.test_reach_all()
+
+    cleanup()
     print("done... exiting")
+
+    if tests_passes:
+        print("All tests passed!!")
+        exit(0)
+    else:
+        print("Tests have failed :(")
+        exit(1)
