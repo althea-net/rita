@@ -6,7 +6,6 @@ extern crate derive_error;
 
 #[macro_use] extern crate log;
 
-
 use std::net::IpAddr;
 use std::collections::HashMap;
 use std::ops::{Add, Sub};
@@ -157,7 +156,7 @@ mod tests {
         };
 
         assert_eq!(
-            d.apply_debt(ident, Int256::from(-100)).unwrap(),
+            d.apply_traffic(ident, Int256::from(-100)).unwrap(),
             DebtAction::SuspendTunnel
         );
     }
@@ -175,8 +174,8 @@ mod tests {
         };
 
         assert_eq!(
-            d.apply_debt(ident, Int256::from(100)).unwrap(),
-            DebtAction::MakePayment(Uint256::from(100u32))
+            d.apply_traffic(ident, Int256::from(100)).unwrap(),
+            DebtAction::MakePayment{amount: Uint256::from(100u32), to: ident}
         );
     }
 
@@ -193,12 +192,12 @@ mod tests {
         };
 
         assert_eq!(
-            d.apply_debt(ident, Int256::from(-100)).unwrap(),
+            d.apply_traffic(ident, Int256::from(-100)).unwrap(),
             DebtAction::SuspendTunnel
         );
 
         assert_eq!(
-            d.apply_debt(ident, Int256::from(110)).unwrap(),
+            d.apply_traffic(ident, Int256::from(110)).unwrap(),
             DebtAction::OpenTunnel
         );
     }
@@ -217,11 +216,13 @@ mod tests {
 
         // send lots of payments
         for i in 0..100 {
-            assert_eq!(
-                d.apply_debt(ident, Int256::from(100)).unwrap(),
-                DebtAction::MakePayment(Uint256::from(100u32 * (i + 1)))
-            );
+            d.apply_payment(ident, Uint256::from(100u32))
         }
+
+        assert_eq!(
+            d.apply_traffic(ident, Int256::from(0)).unwrap(),
+            DebtAction::MakePayment{amount: Uint256::from(10000u32), to: ident}
+        );
     }
 
     #[test]
@@ -238,23 +239,11 @@ mod tests {
 
         // send lots of payments
         for i in 0..100 {
-            assert_eq!(
-                d.apply_debt(ident, Int256::from(100)).unwrap(),
-                DebtAction::MakePayment(Uint256::from(100u32 * (i + 1)))
-            );
+            d.apply_payment(ident, Uint256::from(100u32))
         }
 
-        // rack up lots of debt
-        for i in 0..99 {
-            assert_eq!(
-                d.apply_debt(ident, Int256::from(-100)).unwrap(),
-                DebtAction::MakePayment(Uint256::from(100u32 * (99 - i)))
-            );
-        }
-
-        // should have +100 credit
         assert_eq!(
-            d.apply_debt(ident, Int256::from(-200)).unwrap(),
+            d.apply_traffic(ident, Int256::from(-10100)).unwrap(),
             DebtAction::SuspendTunnel
         );
     }
@@ -271,32 +260,19 @@ mod tests {
             mac_address: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
         };
 
-        // send lots of payments
         for i in 0..100 {
-            assert_eq!(
-                d.apply_debt(ident, Int256::from(100)).unwrap(),
-                DebtAction::MakePayment(Uint256::from(100u32 * (i + 1)))
-            );
+            d.apply_payment(ident, Uint256::from(100u32))
         }
 
-        // rack up lots of debt
-        for i in 0..99 {
-            assert_eq!(
-                d.apply_debt(ident, Int256::from(-100)).unwrap(),
-                DebtAction::MakePayment(Uint256::from(100u32 * (99 - i)))
-            );
-        }
-
-        // should have +100 credit
         assert_eq!(
-            d.apply_debt(ident, Int256::from(-200)).unwrap(),
+            d.apply_traffic(ident, Int256::from(-10100)).unwrap(),
             DebtAction::SuspendTunnel
         );
 
-        // should have -100 credit
+        d.apply_payment(ident, Uint256::from(200u32));
 
         assert_eq!(
-            d.apply_debt(ident, Int256::from(200)).unwrap(),
+            d.apply_traffic(ident, Int256::from(0)).unwrap(),
             DebtAction::OpenTunnel
         );
     }
