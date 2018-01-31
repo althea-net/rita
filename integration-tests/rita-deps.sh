@@ -13,7 +13,7 @@ build_babel () {
 
 fetch_netlab () {
   if [ ! -d "deps/network-lab" ] ; then
-    git clone "https://github.com/sudomesh/network-lab" "deps/network-lab"
+    git clone "https://github.com/kingoflolz/network-lab" "deps/network-lab" # TODO: Change this back when PR is upstreamed
   fi
 }
 
