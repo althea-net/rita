@@ -78,7 +78,7 @@ fn main() {
     trace!("Starting with Identity: {:?}", my_ident);
 
     
-    let (debt_keeper_input, debt_keeper_output) = DebtKeeper::start(Int256::from(500000), Int256::from(-1000000));
+    let (debt_keeper_input, debt_keeper_output) = DebtKeeper::start(Int256::from(500000), Int256::from(-1000000), Int256::from(100));
 
     let debt_keeper_input1 = mpsc::Sender::clone(&debt_keeper_input);
     thread::spawn(move || {
