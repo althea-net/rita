@@ -66,7 +66,7 @@ pub fn watch(
             if ip.get_netmask() == 128 {
                 destinations.insert(
                     ip.get_network_address().to_string(),
-                    Int256::from(route.price as i64),
+                    Int256::from(route.price as i64 - babel.local_price().unwrap() as i64),
                 );
                 for ident in &neighbors {
                     ki.start_flow_counter(ident.mac_address, IpAddr::V6(ip.get_network_address()))?;
