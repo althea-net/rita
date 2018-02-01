@@ -8,7 +8,7 @@ extern crate derive_error;
 
 use std::net::IpAddr;
 use std::collections::HashMap;
-use std::ops::{Add, Sub};
+use std::ops::{Add, Sub, Div};
 use std::thread;
 use std::sync::mpsc::{Sender, Receiver, channel};
 
@@ -102,20 +102,20 @@ impl DebtKeeper {
         DebtKeeper {
             debt_data: HashMap::new(),
             pay_threshold,
-            close_fraction: close_fraction,
-            close_threshold: close_threshold,
+            close_fraction,
+            close_threshold,
         }
     }
 
     fn apply_payment(&mut self, ident: Identity, amount: Uint256) {
-        let stored_balance = &mut self.debt_data.entry(ident).or_insert(NodeDebtData::new()).incoming_payment;
-        let old_balance = stored_balance.clone();
+        let debt_data = self.debt_data.entry(ident).or_insert(NodeDebtData::new());
+        let old_balance = debt_data.incoming_payment.clone();
 
         trace!("apply_payment: old balance for {:?}: {:?}", ident.ip_address, old_balance);
 
-        *stored_balance = stored_balance.clone().add(amount.clone());
-
-        trace!("new balance for {:?}: {:?}", ident.ip_address, *stored_balance);
+        debt_data.incoming_payment = old_balance.clone().add(amount.clone());
+        debt_data.total_payment = debt_data.total_payment.clone().add(amount.clone());
+        trace!("new balance for {:?}: {:?}", ident.ip_address, debt_data.incoming_payment);
     }
 
     /// This updates a neighbor's debt and outputs a DebtAction if one is necessary.
@@ -138,10 +138,12 @@ impl DebtKeeper {
 
         trace!("new debt for {:?}: {:?}", ident.ip_address, debt_data.debt);
 
+        let close_threshold = self.close_threshold.clone() - Int256::from(debt_data.total_payment.clone()).div(self.close_fraction.clone());
+
         if debt_data.debt < self.close_threshold {
             trace!("debt is below close threshold. suspending forwarding");
             Some(DebtAction::SuspendTunnel)
-        } else if (self.close_threshold < debt_data.debt) && (debt < self.close_threshold) {
+        } else if (close_threshold < debt_data.debt) && (debt < close_threshold) {
             trace!("debt is above close threshold. resuming forwarding");
             Some(DebtAction::OpenTunnel)
         } else if debt_data.debt > self.pay_threshold {
@@ -266,7 +268,7 @@ mod tests {
 
     #[test]
     fn test_multi_reopen() {
-        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100));
+        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(1000000000));
 
         let ident = Identity {
             eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
