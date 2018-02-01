@@ -66,7 +66,7 @@ pub fn watch(
             if ip.get_netmask() == 128 {
                 destinations.insert(
                     ip.get_network_address().to_string(),
-                    Int256::from(route.price as i64 - babel.local_price().unwrap() as i64),
+                    Int256::from(route.price as i64),
                 );
                 for ident in &neighbors {
                     ki.start_flow_counter(ident.mac_address, IpAddr::V6(ip.get_network_address()))?;
@@ -99,6 +99,7 @@ pub fn watch(
         debts.insert(ident, Int256::from(0));
     }
 
+    // Flow counters should charge the "full price"
     for (mac, ip, bytes) in flow_counters {
         let id = identities[&mac];
         *debts.get_mut(&id).unwrap() = debts[&id].clone().sub(
@@ -112,6 +113,7 @@ pub fn watch(
 
     trace!("Collated flow debts: {:?}", debts);
 
+    // Destination counters should not give your cost to your neighbour
     for (mac, ip, bytes) in des_counters {
         let id = identities[&mac];
         *debts.get_mut(&id).unwrap() = debts[&id].clone().add(
@@ -120,7 +122,7 @@ pub fn watch(
                 // get ip from mac
                 &identities[&mac].ip_address.to_string().clone()]
             // multiply my bytes used
-            .clone().mul(Int256::from(bytes as i64)));
+            .clone().mul(Int256::from(bytes as i64 - babel.local_price().unwrap() as i64)));
     }
 
     trace!("Collated total debts: {:?}", debts);
