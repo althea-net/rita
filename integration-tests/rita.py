@@ -189,14 +189,16 @@ class World:
             balances[int(i["ip"].replace("2001::", ""))] = int(i["balance"])
         return balances
 
-    def gen_traffic(self, from_id, to_id, bytes):
-        status = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(from_id), "nc", "-u", "2001::{}".format(to_id), "1234"], stdout=subprocess.PIPE)
+    def gen_traffic(self, from_node, to_node, bytes):
+        status = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(from_node.id), "nc", "-u", "2001::{}".format(to_node.id), "1234"], stdout=subprocess.PIPE)
         while bytes < 1000000:
             if bytes > 1000000:
-                status.stdin.write("a"*1000000 + "\n")
+                status.stdin.write("a"*1000000)
             else:
-                status.stdin.write("a"*bytes + "\n")
+                status.stdin.write("a"*bytes)
             bytes -= 1000000
+        status.stdin.write("\n")
+        time.sleep(1)
         status.send_signal(signal.SIGINT)
 
 
@@ -232,9 +234,14 @@ if __name__ == "__main__":
     print("Waiting for network to stabilize")
     time.sleep(10)
 
+    print("Test reachabibility...")
     world.test_reach_all()
+
+    print("Test traffic...")
     world.get_balances()
-    world.gen_traffic(1, 3, 10000000)
+    world.gen_traffic(d, a, 10000000)
+    world.gen_traffic(a, c, 10000000)
+    world.gen_traffic(c, f, 10000000)
 
     if len(sys.argv) > 1 and sys.argv[1] == "leave-running":
         pass
