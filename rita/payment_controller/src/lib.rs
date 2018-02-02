@@ -129,9 +129,9 @@ impl PaymentController {
         trace!("current balance: {:?}", self.balance);
 
         m_tx.lock().unwrap().send(
-            DebtKeeperMsg::Payment {
+            DebtKeeperMsg::UpdateBalance {
                 from: pmt.from,
-                amount: Uint256::from(pmt.amount.clone())
+                amount: Int256::from(pmt.amount.clone())
             }
         ).unwrap();
 
@@ -272,9 +272,9 @@ mod tests {
 
         let out = rita_rx.try_recv().unwrap();
 
-        assert_eq!(out, DebtKeeperMsg::Payment {
+        assert_eq!(out, DebtKeeperMsg::UpdateBalance {
             from: new_identity(1),
-            amount: Uint256::from(1u32)
+            amount: Int256::from(1)
         });
 
         assert!(pc_tx.send(PaymentControllerMsg::StopThread).is_ok());
@@ -339,9 +339,9 @@ mod tests {
 
         let out = rita_rx.try_recv().unwrap();
 
-        assert_eq!(out, DebtKeeperMsg::Payment {
+        assert_eq!(out, DebtKeeperMsg::UpdateBalance {
             from: new_identity(1),
-            amount: Uint256::from(1u32)
+            amount: Int256::from(1)
         });
 
         _m.assert();
@@ -369,9 +369,9 @@ mod tests {
         for _ in 0..100 {
             let out = rita_rx.try_recv().unwrap();
 
-            assert_eq!(out, DebtKeeperMsg::Payment {
+            assert_eq!(out, DebtKeeperMsg::UpdateBalance {
                 from: new_identity(1),
-                amount: Uint256::from(1u32)
+                amount: Int256::from(1)
             });
         }
 
