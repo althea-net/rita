@@ -17,6 +17,7 @@ use babel_monitor::Babel;
 
 extern crate num256;
 use num256::Int256;
+use std::ops::{Add, Sub};
 
 use std::net::IpAddr;
 use std::collections::HashMap;
@@ -52,14 +53,9 @@ pub fn watch(
     let routes = babel.parse_routes()?;
     info!("Got routes: {:?}", routes);
 
-    let mut identities_flow: HashMap<MacAddress, Identity> = HashMap::new();
+    let mut identities: HashMap<MacAddress, Identity> = HashMap::new();
     for ident in &neighbors {
-        identities_flow.insert(ident.mac_address, *ident);
-    }
-
-    let mut identities_des: HashMap<IpAddr, Identity> = HashMap::new();
-    for ident in &neighbors {
-        identities_des.insert(ident.ip_address, *ident);
+        identities.insert(ident.mac_address, *ident);
     }
 
     let mut destinations = HashMap::new();
@@ -74,7 +70,7 @@ pub fn watch(
                 );
                 for ident in &neighbors {
                     ki.start_flow_counter(ident.mac_address, IpAddr::V6(ip.get_network_address()))?;
-                    ki.start_destination_counter(IpAddr::V6(ip.get_network_address()))?;
+                    ki.start_destination_counter(ident.mac_address, IpAddr::V6(ip.get_network_address()))?;
                 }
             }
         }
@@ -86,35 +82,53 @@ pub fn watch(
     thread::sleep(time::Duration::from_secs(duration));
 
     trace!("Getting flow counters");
-    let counters = ki.read_flow_counters()?;
-    info!("Got flow counters: {:?}", counters);
+    let flow_counters = ki.read_flow_counters()?;
+    info!("Got flow counters: {:?}", flow_counters);
 
     trace!("Getting destination counters");
     let des_counters = ki.read_destination_counters()?;
-    info!("Got flow destination: {:?}", des_counters);
+    info!("Got destination counters: {:?}", des_counters);
 
-    counters
-        .iter()
-        .map(|&(neigh_mac, dest_ip, bytes)| {
-            trace!(
-                "Calculating neighbor debt: mac: {:?}, destination: {:?}, bytes: {:?}",
-                neigh_mac,
-                dest_ip,
-                bytes
-            );
+    // Flow counters should debit your neighbour which you received the packet from
+    // Destination counters should credit your neighbour which you sent the packet to
 
-            let price = &destinations[&dest_ip.to_string()];
-            let debt = price.clone().mul(Int256::from(bytes as i64));
+    let mut debts = HashMap::new();
 
-            trace!(
-                "Calculated neighbor debt. price: {}, debt: {}",
-                price,
-                debt
-            );
+    // Setup the debts table
+    for (mac, ident) in identities.clone() {
+        debts.insert(ident, Int256::from(0));
+    }
 
-            Ok((identities_flow[&neigh_mac].clone(), debt))
-        })
-        .collect::<Result<Vec<(Identity, Int256)>, Error>>()
+    // Flow counters should charge the "full price"
+    for (mac, ip, bytes) in flow_counters {
+        let id = identities[&mac];
+        *debts.get_mut(&id).unwrap() = debts[&id].clone().sub(
+            // get price
+            destinations[
+                // get ip from mac
+                &identities[&mac].ip_address.to_string().clone()]
+                // multiply my bytes used
+                .clone().mul(Int256::from(bytes as i64)));
+    }
+
+    trace!("Collated flow debts: {:?}", debts);
+
+    // Destination counters should not give your cost to your neighbour
+    for (mac, ip, bytes) in des_counters {
+        let id = identities[&mac];
+        *debts.get_mut(&id).unwrap() = debts[&id].clone().add(
+            // get price
+            destinations[
+                // get ip from mac
+                &identities[&mac].ip_address.to_string().clone()]
+            // multiply my bytes used
+            .clone().mul(Int256::from(bytes as i64 - babel.local_price().unwrap() as i64)));
+    }
+
+    trace!("Collated total debts: {:?}", debts);
+
+
+    Ok(debts.into_iter().collect())
 }
 
 

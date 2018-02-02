@@ -10,15 +10,15 @@ extern crate lazy_static;
 
 use std::fmt;
 use num::bigint::{BigInt, BigUint, ToBigInt};
-use std::ops::{Add, Deref, Sub, Mul};
-use num::traits::ops::checked::{CheckedAdd, CheckedSub, CheckedMul};
+use std::ops::{Add, Deref, Sub, Mul, Div};
+use num::traits::ops::checked::{CheckedAdd, CheckedSub, CheckedMul, CheckedDiv};
 use num::traits::Signed;
 use serde::ser::Serialize;
 use serde::{Deserialize, Deserializer, Serializer};
 use std::str::FromStr;
 
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Uint256(BigUint);
 
 impl Deref for Uint256 {
@@ -57,6 +57,13 @@ impl fmt::Display for Uint256 {
         write!(f, "{}", &self.to_str_radix(10))
     }
 }
+
+impl fmt::Debug for Uint256 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Uint256 {}", self.to_string())
+    }
+}
+
 
 impl Serialize for Uint256 {
   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -118,7 +125,7 @@ impl CheckedSub for Uint256 {
   }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Int256(BigInt);
 
 impl Deref for Int256 {
@@ -159,6 +166,12 @@ impl_from_int!(isize);
 impl fmt::Display for Int256 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", &self.to_str_radix(10))
+    }
+}
+
+impl fmt::Debug for Int256 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Int256 {}", self.to_string())
     }
 }
 
@@ -246,6 +259,25 @@ impl CheckedMul for Int256 {
     if num.bits() > 255 {
       return None;
     }
+    Some(Int256(num))
+  }
+}
+
+impl Div for Int256 {
+  type Output = Int256;
+  fn div(self, v: Int256) -> Int256 {
+    let num = self.0 / v.0;
+    Int256(num)
+  }
+}
+
+impl CheckedDiv for Int256 {
+  fn checked_div(&self, v: &Int256) -> Option<Int256> {
+    if *v == Int256::from(0) {
+      return None;
+    }
+    // drop down to wrapped bigint to stop from panicing in fn above
+    let num = self.0.clone() / v.0.clone();
     Some(Int256(num))
   }
 }
