@@ -61,6 +61,7 @@ pub struct BountyUpdate {
 pub enum PaymentControllerMsg {
     PaymentReceived(PaymentTx),
     MakePayment(PaymentTx),
+    Update,
     StopThread
 }
 
@@ -77,6 +78,7 @@ impl PaymentController {
                 match msg {
                     PaymentControllerMsg::PaymentReceived(pmt) => controller.payment_received(pmt, m_tx.clone()).unwrap(),
                     PaymentControllerMsg::MakePayment(pmt) => controller.make_payment(pmt).unwrap(),
+                    PaymentControllerMsg::Update => controller.update(),
                     PaymentControllerMsg::StopThread => return
                 };
             }
@@ -97,7 +99,7 @@ impl PaymentController {
         let bounty_url = if cfg!(not(test)) {
             format!("http://[{}]:8888/update", "2001::3".parse::<Ipv6Addr>().unwrap())
         } else {
-            String::from("http://127.0.0.1:1234") //TODO: This is mockito::SERVER_URL, but don't want to include the crate in a non-test build just for that string
+            String::from("http://127.0.0.1:1234/update") //TODO: This is mockito::SERVER_URL, but don't want to include the crate in a non-test build just for that string
         };
 
         let mut r = self.client
@@ -139,6 +141,20 @@ impl PaymentController {
         Ok(())
     }
 
+    /// This should be called on a regular interval to update the bounty hunter of a node's current
+    /// balance as well as to log the current balance
+    pub fn update(&mut self) {
+        self.update_bounty(BountyUpdate{
+            from: self.identity, tx:
+            PaymentTx{from: self.identity,
+                      to: self.identity,
+                      amount: Uint256::from(0u32)
+            },
+            balance: self.balance.clone()
+        });
+        info!("Balance update: {:?}", self.balance);
+    }
+
     /// This is called by the other modules in Rita to make payments. It sends a 
     /// PaymentTx to the `ip_address` in its `to` field.
     pub fn make_payment(&mut self, pmt: PaymentTx) -> Result<(), Error> {
@@ -149,7 +165,7 @@ impl PaymentController {
         let neighbour_url = if cfg!(not(test)) {
             format!("http://[{}]:4876/make_payment", pmt.to.ip_address)
         } else {
-            String::from("http://127.0.0.1:1234")
+            String::from("http://127.0.0.1:1234/make_payment")
         };
 
         self.balance = self.balance.clone() - Int256::from(pmt.amount.clone());
@@ -162,6 +178,7 @@ impl PaymentController {
             .send()?;
 
         if r.status() == StatusCode::Ok {
+            self.update_bounty(BountyUpdate{from: self.identity, tx: pmt, balance: self.balance.clone()});
             Ok(())
         } else {
             trace!("Unsuccessfully paid");
@@ -232,7 +249,7 @@ mod tests {
     #[test]
     fn test_thread_make_payment() {
         // mock neighbours
-        let _m = mock("POST", "/")
+        let _m = mock("POST", "/make_payment")
             .with_status(200)
             .with_body("payment OK")
             .match_body("{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}")
@@ -255,7 +272,7 @@ mod tests {
     #[test]
     fn test_thread_payment_received() {
         // mock bounty hunter
-        let _m = mock("POST", "/")
+        let _m = mock("POST", "/update")
             .with_status(200)
             .with_body("bounty OK")
             .match_body("{\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"balance\":\"1\",\"tx\":{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}}")
@@ -284,7 +301,7 @@ mod tests {
     #[test]
     fn test_single_make_payments() {
         // mock neighbour
-        let _m = mock("POST", "/")
+        let _m = mock("POST", "/make_payment")
             .with_status(200)
             .with_body("payment OK")
             .match_body("{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}")
@@ -302,7 +319,7 @@ mod tests {
     #[test]
     fn test_multi_make_payments() {
         // mock neighbour
-        let _m = mock("POST", "/")
+        let _m = mock("POST", "/make_payment")
             .with_status(200)
             .with_body("payment OK")
             .match_body("{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}")
@@ -323,7 +340,7 @@ mod tests {
     #[test]
     fn test_single_payment_received() {
         // mock bounty hunter
-        let _m = mock("POST", "/")
+        let _m = mock("POST", "/update")
             .with_status(200)
             .with_body("bounty OK")
             .match_body("{\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"balance\":\"1\",\"tx\":{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}}")
@@ -350,7 +367,7 @@ mod tests {
     #[test]
     fn test_multi_payment_received() {
         // mock bounty hunter
-        let _m = mock("POST", "/")
+        let _m = mock("POST", "/update")
             .with_status(200)
             .with_body("bounty OK")
             .expect(100)

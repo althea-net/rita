@@ -77,9 +77,15 @@ fn main() {
 
     trace!("Starting with Identity: {:?}", my_ident);
 
-    
-    let (debt_keeper_input, debt_keeper_output) = DebtKeeper::start(Int256::from(500000), Int256::from(-1000000), Int256::from(100));
 
+    let (debt_keeper_input, debt_keeper_output) = DebtKeeper::start(Int256::from(1), Int256::from(-1000000), Int256::from(100));
+
+    let payment_controller_input = PaymentController::start(
+        &my_ident,
+        Arc::new(Mutex::new(debt_keeper_input.clone()))
+    );
+
+    let payment_controller_input1 = payment_controller_input.clone();
     let debt_keeper_input1 = mpsc::Sender::clone(&debt_keeper_input);
     thread::spawn(move || {
         let mut ki = KernelInterface {};
@@ -99,15 +105,11 @@ fn main() {
                 debt_keeper_input1.send(update).unwrap();
                 debt_keeper_input1.send(adjustment).unwrap();
             }
+            payment_controller_input1 .send(PaymentControllerMsg::Update);
         };
     });
 
-    let payment_controller_input = PaymentController::start(
-        &my_ident,
-        Arc::new(Mutex::new(debt_keeper_input.clone()))
-    );
-
-    let payment_controller_input1 = payment_controller_input.clone();
+    let payment_controller_input2 = payment_controller_input.clone();
 
     thread::spawn(move || {
         let pc = Arc::new(Mutex::new(payment_controller_input.clone()));
@@ -134,7 +136,7 @@ fn main() {
                 trace!("Opening Tunnel");
             }, // tunnel manager should reopen tunnel here
             Some(DebtAction::MakePayment {to, amount}) => {
-                payment_controller_input1.send(PaymentControllerMsg::MakePayment(PaymentTx {
+                payment_controller_input2.send(PaymentControllerMsg::MakePayment(PaymentTx {
                     from: my_ident,
                     to: to,
                     amount
