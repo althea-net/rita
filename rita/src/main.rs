@@ -40,7 +40,7 @@ extern crate tunnel_manager;
 use tunnel_manager::TunnelManager;
 
 extern crate num256;
-use num256::Int256;
+use num256::{Int256, Uint256};
 
 #[macro_use] extern crate rouille;
 use rouille::{Response};
@@ -94,7 +94,9 @@ fn main() {
             info!("got debts: {:?}", debts);
 
             for (from, amount) in debts {
-                let adjustment = DebtKeeperMsg::Traffic { from, amount };
+                let update = DebtKeeperMsg::UpdateBalance { from, amount };
+                let adjustment = DebtKeeperMsg::SendUpdate { from };
+                debt_keeper_input1.send(update).unwrap();
                 debt_keeper_input1.send(adjustment).unwrap();
             }
         };

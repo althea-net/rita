@@ -34,7 +34,7 @@ pub enum Error {
 }
 
 struct NodeDebtData {
-    incoming_payment: Uint256,
+    temp_balance: Int256,
     total_payment: Uint256,
     debt: Int256,
 }
@@ -42,7 +42,7 @@ struct NodeDebtData {
 impl NodeDebtData {
     fn new() -> NodeDebtData {
         NodeDebtData{
-            incoming_payment: Uint256::from(0u32),
+            temp_balance: Int256::from(0),
             total_payment: Uint256::from(0u32),
             debt: Int256::from(0),
         }
@@ -59,8 +59,8 @@ pub struct DebtKeeper {
 /// The actions that a `DebtKeeper` can take.
 #[derive(Debug, PartialEq)]
 pub enum DebtKeeperMsg {
-    Payment { from: Identity, amount: Uint256 },
-    Traffic { from: Identity, amount: Int256 },
+    UpdateBalance { from: Identity, amount: Int256 },
+    SendUpdate { from: Identity},
     StopThread
 }
 
@@ -85,9 +85,9 @@ impl DebtKeeper {
         thread::spawn(move || {
             for msg in input_rx {
                 match msg {
-                    DebtKeeperMsg::Payment { from, amount } => keeper.apply_payment(from, amount),
-                    DebtKeeperMsg::Traffic { from, amount } => output_tx.send(
-                        keeper.apply_traffic(from, amount)
+                    DebtKeeperMsg::UpdateBalance { from, amount } => keeper.update_balance(from, amount),
+                    DebtKeeperMsg::SendUpdate { from } => output_tx.send(
+                        keeper.send_update(from)
                     ).unwrap(),
                     DebtKeeperMsg::StopThread => return
                 };
@@ -107,40 +107,37 @@ impl DebtKeeper {
         }
     }
 
-    fn apply_payment(&mut self, ident: Identity, amount: Uint256) {
+    fn update_balance(&mut self, ident: Identity, amount: Int256) {
         let debt_data = self.debt_data.entry(ident).or_insert(NodeDebtData::new());
-        let old_balance = debt_data.incoming_payment.clone();
+        let old_balance = debt_data.temp_balance.clone();
 
         trace!("apply_payment: old balance for {:?}: {:?}", ident.ip_address, old_balance);
 
-        debt_data.incoming_payment = old_balance.clone().add(amount.clone());
-        debt_data.total_payment = debt_data.total_payment.clone().add(amount.clone());
-        trace!("new balance for {:?}: {:?}", ident.ip_address, debt_data.incoming_payment);
+        debt_data.temp_balance = old_balance.clone().add(amount.clone());
+        debt_data.total_payment = debt_data.total_payment.clone().add(Uint256::from(amount.clone()));
+        trace!("new balance for {:?}: {:?}", ident.ip_address, debt_data.temp_balance);
     }
 
     /// This updates a neighbor's debt and outputs a DebtAction if one is necessary.
-    fn apply_traffic(&mut self, ident: Identity, traffic: Int256) -> Option<DebtAction> {
+    fn send_update(&mut self, ident: Identity) -> Option<DebtAction> {
         let debt_data = self.debt_data.entry(ident).or_insert(NodeDebtData::new());
         let debt = debt_data.debt.clone();
 
-        let payment_balance = debt_data.incoming_payment.clone();
+        let payment_balance = debt_data.temp_balance.clone();
 
         trace!(
-            "apply_traffic for {:?}: debt: {:?}, traffic: {:?}, payment balance: {:?}",
+            "apply_traffic for {:?}: debt: {:?}, payment balance: {:?}",
             ident.ip_address,
             debt,
-            traffic,
             payment_balance
         );
 
-        debt_data.incoming_payment = Uint256::from(0 as u32);
-        debt_data.debt = debt.clone().add(traffic).add(Int256::from(payment_balance));
-
-        trace!("new debt for {:?}: {:?}", ident.ip_address, debt_data.debt);
+        debt_data.temp_balance = Int256::from(0);
+        debt_data.debt = debt.clone().add(Int256::from(payment_balance));
 
         let close_threshold = self.close_threshold.clone() - Int256::from(debt_data.total_payment.clone()).div(self.close_fraction.clone());
 
-        if debt_data.debt < self.close_threshold {
+        if debt_data.debt < close_threshold {
             trace!("debt is below close threshold. suspending forwarding");
             Some(DebtAction::SuspendTunnel)
         } else if (close_threshold < debt_data.debt) && (debt < close_threshold) {
@@ -173,8 +170,10 @@ mod tests {
             mac_address: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
         };
 
+        d.update_balance(ident, Int256::from(-100));
+
         assert_eq!(
-            d.apply_traffic(ident, Int256::from(-100)).unwrap(),
+            d.send_update(ident).unwrap(),
             DebtAction::SuspendTunnel
         );
     }
@@ -191,9 +190,32 @@ mod tests {
             mac_address: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
         };
 
+        d.update_balance(ident, Int256::from(100));
+
         assert_eq!(
-            d.apply_traffic(ident, Int256::from(100)).unwrap(),
+            d.send_update(ident).unwrap(),
             DebtAction::MakePayment{amount: Uint256::from(100u32), to: ident}
+        );
+    }
+
+    #[test]
+    fn test_fudge() {
+        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-1), Int256::from(100));
+
+        let ident = Identity {
+            eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
+                .parse()
+                .unwrap(),
+            ip_address: "2001::3".parse().unwrap(),
+            mac_address: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+        };
+
+        d.update_balance(ident, Int256::from(100000));
+        d.update_balance(ident, Int256::from(-100100));
+
+        assert_eq!(
+            d.send_update(ident),
+            None
         );
     }
 
@@ -209,13 +231,17 @@ mod tests {
             mac_address: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
         };
 
+        d.update_balance(ident, Int256::from(-100));
+
         assert_eq!(
-            d.apply_traffic(ident, Int256::from(-100)).unwrap(),
+            d.send_update(ident).unwrap(),
             DebtAction::SuspendTunnel
         );
 
+        d.update_balance(ident, Int256::from(110));
+
         assert_eq!(
-            d.apply_traffic(ident, Int256::from(110)).unwrap(),
+            d.send_update(ident).unwrap(),
             DebtAction::OpenTunnel
         );
     }
@@ -234,18 +260,18 @@ mod tests {
 
         // send lots of payments
         for i in 0..100 {
-            d.apply_payment(ident, Uint256::from(100u32))
+            d.update_balance(ident, Int256::from(100))
         }
 
         assert_eq!(
-            d.apply_traffic(ident, Int256::from(0)).unwrap(),
+            d.send_update(ident).unwrap(),
             DebtAction::MakePayment{amount: Uint256::from(10000u32), to: ident}
         );
     }
 
     #[test]
     fn test_multi_fail() {
-        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100));
+        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100000));
 
         let ident = Identity {
             eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
@@ -257,11 +283,13 @@ mod tests {
 
         // send lots of payments
         for i in 0..100 {
-            d.apply_payment(ident, Uint256::from(100u32))
+            d.update_balance(ident, Int256::from(100))
         }
 
+        d.update_balance(ident, Int256::from(-10100));
+
         assert_eq!(
-            d.apply_traffic(ident, Int256::from(-10100)).unwrap(),
+            d.send_update(ident).unwrap(),
             DebtAction::SuspendTunnel
         );
     }
@@ -279,18 +307,20 @@ mod tests {
         };
 
         for i in 0..100 {
-            d.apply_payment(ident, Uint256::from(100u32))
+            d.update_balance(ident, Int256::from(100))
         }
 
+        d.update_balance(ident, Int256::from(-10100));
+
         assert_eq!(
-            d.apply_traffic(ident, Int256::from(-10100)).unwrap(),
+            d.send_update(ident).unwrap(),
             DebtAction::SuspendTunnel
         );
 
-        d.apply_payment(ident, Uint256::from(200u32));
+        d.update_balance(ident, Int256::from(200));
 
         assert_eq!(
-            d.apply_traffic(ident, Int256::from(0)).unwrap(),
+            d.send_update(ident).unwrap(),
             DebtAction::OpenTunnel
         );
     }
