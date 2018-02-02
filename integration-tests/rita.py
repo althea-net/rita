@@ -185,21 +185,22 @@ class World:
         status = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(self.bounty), "curl", "-s", "[::1]:8888/list"], stdout=subprocess.PIPE)
         status = json.loads(status.stdout.read().decode("utf-8"))
         balances = {}
+        s = 0
+        m = 0
         for i in status:
             balances[int(i["ip"].replace("2001::", ""))] = int(i["balance"])
+            s += int(i["balance"])
+            m += abs(int(i["balance"]))
+        print("sum = {}, magnitude = {}, error = {}".format(s, m, abs(s)/m))
         return balances
 
     def gen_traffic(self, from_node, to_node, bytes):
-        status = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(from_node.id), "nc", "-u", "2001::{}".format(to_node.id), "1234"], stdout=subprocess.PIPE)
-        while bytes < 1000000:
-            if bytes > 1000000:
-                status.stdin.write("a"*1000000)
-            else:
-                status.stdin.write("a"*bytes)
-            bytes -= 1000000
-        status.stdin.write("\n")
-        time.sleep(1)
-        status.send_signal(signal.SIGINT)
+        server = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(to_node.id), "iperf3", "-s", "-V"])
+        time.sleep(0.1)
+        client = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(from_node.id), "iperf3", "-c", "2001::{}".format(to_node.id), "-V", "-n", str(bytes), "-Z"])
+        client.wait()
+        server.send_signal(signal.SIGINT)
+        server.wait()
 
 
 if __name__ == "__main__":
@@ -232,16 +233,17 @@ if __name__ == "__main__":
     world.create()
 
     print("Waiting for network to stabilize")
-    time.sleep(10)
+    time.sleep(22)
 
     print("Test reachabibility...")
     world.test_reach_all()
 
     print("Test traffic...")
-    world.get_balances()
     world.gen_traffic(d, a, 10000000)
     world.gen_traffic(a, c, 10000000)
     world.gen_traffic(c, f, 10000000)
+    time.sleep(5)
+    print(world.get_balances())
 
     if len(sys.argv) > 1 and sys.argv[1] == "leave-running":
         pass
