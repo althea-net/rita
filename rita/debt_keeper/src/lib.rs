@@ -97,7 +97,7 @@ impl DebtKeeper {
     }
 
     pub fn new(pay_threshold: Int256, close_threshold: Int256, close_fraction: Int256) -> Self {
-        assert!(pay_threshold > Int256::from(0));
+        assert!(pay_threshold >= Int256::from(0));
         assert!(close_fraction > Int256::from(0));
         DebtKeeper {
             debt_data: HashMap::new(),
