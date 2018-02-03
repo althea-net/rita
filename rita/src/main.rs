@@ -78,7 +78,7 @@ fn main() {
     trace!("Starting with Identity: {:?}", my_ident);
 
 
-    let (debt_keeper_input, debt_keeper_output) = DebtKeeper::start(Int256::from(1), Int256::from(-1000000), Int256::from(100));
+    let (debt_keeper_input, debt_keeper_output) = DebtKeeper::start(Int256::from(1), Int256::from(-100000000000000i64), Int256::from(100));
 
     let payment_controller_input = PaymentController::start(
         &my_ident,
@@ -96,7 +96,7 @@ fn main() {
             let neighbors = tm.get_neighbors().unwrap();
             info!("got neighbors: {:?}", neighbors);
 
-            let debts = traffic_watcher::watch(neighbors, 5, &mut ki, &mut babel).unwrap();
+            let debts = traffic_watcher::watch(neighbors, 5, &mut ki, &mut babel, ip.clone()).unwrap();
             info!("got debts: {:?}", debts);
 
             for (from, amount) in debts {

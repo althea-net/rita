@@ -1,5 +1,3 @@
-use std::ops::Mul;
-
 #[macro_use]
 extern crate log;
 
@@ -17,9 +15,9 @@ use babel_monitor::Babel;
 
 extern crate num256;
 use num256::Int256;
-use std::ops::{Add, Sub};
+use std::ops::{Add, Sub, Mul};
 
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv6Addr};
 use std::collections::HashMap;
 
 extern crate ip_network;
@@ -48,6 +46,7 @@ pub fn watch(
     duration: u64,
     ki: &mut KernelInterface,
     babel: &mut Babel,
+    own_addr: Ipv6Addr,
 ) -> Result<Vec<(Identity, Int256)>, Error> {
     trace!("Getting routes");
     let routes = babel.parse_routes()?;
@@ -62,10 +61,10 @@ pub fn watch(
     for route in &routes {
         // Only ip6
         if let IpNetwork::V6(ref ip) = route.prefix {
-            // Only host addresses
-            if ip.get_netmask() == 128 {
+            // Only host addresses and installed routes
+            if ip.get_netmask() == 128 && route.installed {
                 destinations.insert(
-                    ip.get_network_address().to_string(),
+                    IpAddr::V6(ip.get_network_address()),
                     Int256::from(route.price as i64),
                 );
                 for ident in &neighbors {
@@ -76,6 +75,10 @@ pub fn watch(
         }
     }
 
+    for ident in &neighbors {
+        ki.start_flow_counter(ident.mac_address, IpAddr::V6(own_addr))?;
+    }
+
     info!("Destinations: {:?}", destinations);
 
     trace!("Going to sleep");
@@ -83,11 +86,11 @@ pub fn watch(
 
     trace!("Getting flow counters");
     let flow_counters = ki.read_flow_counters()?;
-    info!("Got flow counters: {:?}", flow_counters);
+    info!("Got flow counters: {:#?}", flow_counters);
 
     trace!("Getting destination counters");
     let des_counters = ki.read_destination_counters()?;
-    info!("Got destination counters: {:?}", des_counters);
+    info!("Got destination counters: {:#?}", des_counters);
 
     // Flow counters should debit your neighbour which you received the packet from
     // Destination counters should credit your neighbour which you sent the packet to
@@ -101,28 +104,28 @@ pub fn watch(
 
     // Flow counters should charge the "full price"
     for (mac, ip, bytes) in flow_counters {
-        let id = identities[&mac];
-        *debts.get_mut(&id).unwrap() = debts[&id].clone().sub(
-            // get price
-            destinations[
-                // get ip from mac
-                &identities[&mac].ip_address.to_string().clone()]
-                // multiply my bytes used
-                .clone().mul(Int256::from(bytes as i64)));
+        if destinations.contains_key(&ip) {
+            let id = identities[&mac];
+            *debts.get_mut(&id).unwrap() = debts[&id].clone().sub(
+                // get price
+                destinations[&ip]
+                    // multiply my bytes used
+                    .clone().mul(Int256::from(bytes as i64)));
+        }
     }
 
     trace!("Collated flow debts: {:?}", debts);
 
     // Destination counters should not give your cost to your neighbour
     for (mac, ip, bytes) in des_counters {
-        let id = identities[&mac];
-        *debts.get_mut(&id).unwrap() = debts[&id].clone().add(
-            // get price
-            destinations[
-                // get ip from mac
-                &identities[&mac].ip_address.to_string().clone()]
-            // multiply my bytes used
-            .clone().mul(Int256::from(bytes as i64 - babel.local_price().unwrap() as i64)));
+        if destinations.contains_key(&ip) {
+            let id = identities[&mac];
+            *debts.get_mut(&id).unwrap() = debts[&id].clone().add(
+                // get price
+                (destinations[&ip]
+                    // multiply my bytes used
+                    .clone() - Int256::from(babel.local_price().unwrap() as i64)).mul(Int256::from(bytes as i64)));
+        }
     }
 
     trace!("Collated total debts: {:?}", debts);

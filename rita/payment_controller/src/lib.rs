@@ -25,6 +25,7 @@ extern crate reqwest;
 use reqwest::{Client, StatusCode};
 
 use std::thread;
+use std::time::Duration;
 use std::sync::{Mutex, Arc};
 use std::sync::mpsc::{Sender, channel};
 
@@ -89,7 +90,9 @@ impl PaymentController {
     pub fn new(id: &Identity) -> Self {
         PaymentController {
             identity: id.clone(),
-            client: Client::new(),
+            client: reqwest::Client::builder()
+                .timeout(Duration::from_secs(5))
+                .build().unwrap(),
             balance: Int256::from(0i64)
         }
     }

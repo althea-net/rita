@@ -55,13 +55,18 @@ impl TunnelManager {
                 .get_neighbors()?
                 .iter()
                 .filter_map(|&(mac_address, ip_address, ref dev)| {
-                    let identity = self.neighbor_inquiry(ip_address, &dev);
-                    match identity {
-                        Ok(mut identity) => {
-                            identity.mac_address = mac_address.clone(); // TODO: make this not a hack
-                            Some(identity)
-                        },
-                        Err(_) => None,
+                    trace!("neighbour at interface {}, ip {}, mac {}", dev, ip_address, mac_address);
+                    if &dev[..2] == "br" {
+                        let identity = self.neighbor_inquiry(ip_address, &dev);
+                        match identity {
+                            Ok(mut identity) => {
+                                identity.mac_address = mac_address.clone(); // TODO: make this not a hack
+                                Some(identity)
+                            },
+                            Err(_) => None,
+                        }
+                    } else {
+                        None
                     }
                 })
                 .collect(),
