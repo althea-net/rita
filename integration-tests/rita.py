@@ -61,9 +61,8 @@ def prep_netns(id):
 
 
 def start_babel(node):
-    os.system("ip netns exec netlab-{id} {0} -I babeld-n{id}.pid -d 1 -L babeld-n{id}.log -h 1 -P 5 -w {1} -G 8080 &".
-              format(babeld, node.get_interfaces(), id=node.id))
-
+    os.system("ip netns exec netlab-{id} {0} -I babeld-n{id}.pid -d 1 -L babeld-n{id}.log -h 1 -P {price} -w {1} -G 8080 &".
+              format(babeld, node.get_interfaces(), id=node.id, price=node.fwd_price))
 
 def create_bridge(a, b):
     os.system('ip netns exec netlab-{} brctl addbr "br-{}-{}"'.format(a, a, b))
@@ -73,11 +72,11 @@ def create_bridge(a, b):
 
 
 def start_bounty(id):
-    os.system("RUST_BACKTRACE=full ip netns exec netlab-{id} {bounty} > bounty-n{id}.log & echo $! > bounty-n{id}.pid".format(id=id, bounty=bounty))
+    os.system('(RUST_BACKTRACE=full ip netns exec netlab-{id} {bounty} & echo $! > bounty-n{id}.pid) | grep -Ev "<unknown>|mio" > bounty-n{id}.log &'.format(id=id, bounty=bounty))
 
 
 def start_rita(id):
-    os.system("RUST_BACKTRACE=full ip netns exec netlab-{id} {rita} --ip 2001::{id} > rita-n{id}.log & echo $! > rita-n{id}.pid".format(id=id, rita=rita))
+    os.system('(RUST_BACKTRACE=full ip netns exec netlab-{id} {rita} --ip 2001::{id} & echo $! > rita-n{id}.pid) | grep -Ev "<unknown>|mio" > rita-n{id}.log &'.format(id=id, rita=rita))
 
 
 def assert_test(x, description):
@@ -192,6 +191,7 @@ class World:
             s += int(i["balance"])
             m += abs(int(i["balance"]))
         print("sum = {}, magnitude = {}, error = {}".format(s, m, abs(s)/m))
+        assert_test(s == 0, "Conservation of balance")
         return balances
 
     def gen_traffic(self, from_node, to_node, bytes):
@@ -201,6 +201,14 @@ class World:
         client.wait()
         server.send_signal(signal.SIGINT)
         server.wait()
+
+
+def traffic_diff(a, b):
+    assert set(a.keys()) == set(b.keys())
+    return {key: b[key] - a.get(key, 0) for key in b.keys()}
+
+def fuzzy_traffic(a, b):
+    return b - 5e9 < a < b + 5e9
 
 
 if __name__ == "__main__":
@@ -233,17 +241,65 @@ if __name__ == "__main__":
     world.create()
 
     print("Waiting for network to stabilize")
-    time.sleep(22)
+    time.sleep(12)
 
     print("Test reachabibility...")
     world.test_reach_all()
+    time.sleep(10)
 
     print("Test traffic...")
-    world.gen_traffic(d, a, 10000000)
-    world.gen_traffic(a, c, 10000000)
-    world.gen_traffic(c, f, 10000000)
-    time.sleep(5)
-    print(world.get_balances())
+    t1 = world.get_balances()
+    time.sleep(10)
+    world.gen_traffic(d, a, 1000000000)
+    time.sleep(10)
+
+    t2 = world.get_balances()
+    print("balance change from d->a:")
+    diff = traffic_diff(t1, t2)
+    print(diff)
+
+    assert_test(fuzzy_traffic(diff[1], 10e9), "Balance of A")
+    assert_test(fuzzy_traffic(diff[2], 25e9), "Balance of B")
+    assert_test(fuzzy_traffic(diff[3], 0), "Balance of C")
+    assert_test(fuzzy_traffic(diff[4], -85e9), "Balance of D")
+    assert_test(fuzzy_traffic(diff[6], 50e9), "Balance of F")
+    assert_test(fuzzy_traffic(diff[7], 0), "Balance of G")
+
+    t2 = world.get_balances()
+
+    time.sleep(11)
+    world.gen_traffic(a, c, 1000000000)
+    time.sleep(10)
+
+    t3 = world.get_balances()
+    print("balance change from a->c:")
+    diff = traffic_diff(t2, t3)
+    print(diff)
+
+    assert_test(fuzzy_traffic(diff[1], -120e9), "Balance of A")
+    assert_test(fuzzy_traffic(diff[2], 0), "Balance of B")
+    assert_test(fuzzy_traffic(diff[3], 60e9), "Balance of C")
+    assert_test(fuzzy_traffic(diff[4], 0), "Balance of D")
+    assert_test(fuzzy_traffic(diff[6], 50e9), "Balance of F")
+    assert_test(fuzzy_traffic(diff[7], 10e9), "Balance of G")
+
+    t3 = world.get_balances()
+
+    time.sleep(10)
+    world.gen_traffic(c, f, 1000000000)
+    time.sleep(10)
+
+    t4 = world.get_balances()
+    print("balance change from c->f:")
+    diff = traffic_diff(t3, t4)
+    print(diff)
+
+    assert_test(fuzzy_traffic(diff[1], 0), "Balance of A")
+    assert_test(fuzzy_traffic(diff[2], 0), "Balance of B")
+    assert_test(fuzzy_traffic(diff[3], -60e9), "Balance of C")
+    assert_test(fuzzy_traffic(diff[4], 0), "Balance of D")
+    assert_test(fuzzy_traffic(diff[6], 50e9), "Balance of F")
+    assert_test(fuzzy_traffic(diff[7], 10e9), "Balance of G")
 
     if len(sys.argv) > 1 and sys.argv[1] == "leave-running":
         pass
