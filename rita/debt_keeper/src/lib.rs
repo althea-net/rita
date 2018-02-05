@@ -33,6 +33,7 @@ pub enum Error {
     #[error(msg_embedded, no_from, non_std)] DebtKeeperError(String),
 }
 
+#[derive(Clone, Debug)]
 struct NodeDebtData {
     temp_balance: Int256,
     total_payment: Uint256,
@@ -50,7 +51,7 @@ impl NodeDebtData {
 }
 
 pub struct DebtKeeper {
-    debt_data: HashMap<Identity, NodeDebtData>,
+    debt_data: HashMap<IpAddr, NodeDebtData>,
     pay_threshold: Int256,
     close_fraction: Int256,
     close_threshold: Int256, // Connection is closed when debt < close_fraction * total_payment + close_threshold
@@ -108,25 +109,37 @@ impl DebtKeeper {
     }
 
     fn update_balance(&mut self, ident: Identity, amount: Int256) {
-        let debt_data = self.debt_data.entry(ident).or_insert(NodeDebtData::new());
-        let old_balance = debt_data.temp_balance.clone();
+        trace!("debt data: {:#?}", self.debt_data);
+        {
+            let debt_data = self.debt_data.entry(ident.ip_address).or_insert(NodeDebtData::new());
+            let old_balance = debt_data.temp_balance.clone();
 
-        trace!("apply_payment: old balance for {:?}: {:?}", ident.ip_address, old_balance);
+            trace!("update_balance: old balance for {:?}: {:?}", ident.ip_address, old_balance);
 
-        debt_data.temp_balance = old_balance.clone().add(amount.clone());
-        debt_data.total_payment = debt_data.total_payment.clone().add(Uint256::from(amount.clone()));
-        trace!("new balance for {:?}: {:?}", ident.ip_address, debt_data.temp_balance);
+            debt_data.temp_balance = old_balance.clone().add(amount.clone());
+            if amount > Int256::from(0){
+                debt_data.total_payment = debt_data.total_payment.clone().add(Uint256::from(amount.clone()));
+            }
+            trace!("new balance for {:?}: {:?}", ident.ip_address, debt_data.temp_balance);
+        } // borrowck
+
+        let mut imbalance = Uint256::from(0u32);
+        for (k, v) in self.debt_data.clone() {
+            imbalance = imbalance.clone().add(Uint256::from(v.debt.abs()));
+        }
+        trace!("total debt imbalance: {}", imbalance);
     }
 
     /// This updates a neighbor's debt and outputs a DebtAction if one is necessary.
     fn send_update(&mut self, ident: Identity) -> Option<DebtAction> {
-        let debt_data = self.debt_data.entry(ident).or_insert(NodeDebtData::new());
+        trace!("debt data: {:#?}", self.debt_data);
+        let debt_data = self.debt_data.entry(ident.ip_address).or_insert(NodeDebtData::new());
         let debt = debt_data.debt.clone();
 
         let payment_balance = debt_data.temp_balance.clone();
 
         trace!(
-            "apply_traffic for {:?}: debt: {:?}, payment balance: {:?}",
+            "send_update for {:?}: debt: {:?}, payment balance: {:?}",
             ident.ip_address,
             debt,
             payment_balance
