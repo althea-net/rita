@@ -58,6 +58,8 @@ pub fn watch(
     }
 
     let mut destinations = HashMap::new();
+    destinations.insert(IpAddr::V6(own_addr), Int256::from(babel.local_price().unwrap() as i64));
+
     for route in &routes {
         // Only ip6
         if let IpNetwork::V6(ref ip) = route.prefix {
@@ -85,11 +87,11 @@ pub fn watch(
     thread::sleep(time::Duration::from_secs(duration));
 
     trace!("Getting flow counters");
-    let flow_counters = ki.read_flow_counters()?;
+    let flow_counters = ki.read_flow_counters(true)?;
     info!("Got flow counters: {:#?}", flow_counters);
 
     trace!("Getting destination counters");
-    let des_counters = ki.read_destination_counters()?;
+    let des_counters = ki.read_destination_counters(true)?;
     info!("Got destination counters: {:#?}", des_counters);
 
     // Flow counters should debit your neighbour which you received the packet from
@@ -111,6 +113,8 @@ pub fn watch(
                 destinations[&ip]
                     // multiply my bytes used
                     .clone().mul(Int256::from(bytes as i64)));
+        } else {
+            warn!("flow destination not found {}, {}", ip, bytes);
         }
     }
 
@@ -125,6 +129,8 @@ pub fn watch(
                 (destinations[&ip]
                     // multiply my bytes used
                     .clone() - Int256::from(babel.local_price().unwrap() as i64)).mul(Int256::from(bytes as i64)));
+        } else {
+            warn!("destination not found {}, {}", ip, bytes);
         }
     }
 
