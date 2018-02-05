@@ -245,13 +245,13 @@ if __name__ == "__main__":
 
     print("Test reachabibility...")
     world.test_reach_all()
-    time.sleep(10)
+    time.sleep(12)
 
     print("Test traffic...")
     t1 = world.get_balances()
-    time.sleep(10)
+    time.sleep(20)
     world.gen_traffic(d, a, 1000000000)
-    time.sleep(10)
+    time.sleep(20)
 
     t2 = world.get_balances()
     print("balance change from d->a:")
@@ -267,9 +267,9 @@ if __name__ == "__main__":
 
     t2 = world.get_balances()
 
-    time.sleep(11)
+    time.sleep(22)
     world.gen_traffic(a, c, 1000000000)
-    time.sleep(10)
+    time.sleep(20)
 
     t3 = world.get_balances()
     print("balance change from a->c:")
@@ -285,9 +285,9 @@ if __name__ == "__main__":
 
     t3 = world.get_balances()
 
-    time.sleep(10)
+    time.sleep(20)
     world.gen_traffic(c, f, 1000000000)
-    time.sleep(10)
+    time.sleep(20)
 
     t4 = world.get_balances()
     print("balance change from c->f:")
