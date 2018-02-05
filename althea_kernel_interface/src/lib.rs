@@ -115,7 +115,6 @@ impl KernelInterface {
         ))
     }
 
-
     /// This starts a counter of the bytes used by a particular "flow", a
     /// Neighbor/Destination pair. If the flow already exists, it resets the counter.
     /// Implemented with `ebtables` on linux.
@@ -153,9 +152,9 @@ impl KernelInterface {
     /// Returns a vector of traffic coming from a specific hardware address and going
     /// to a specific IP. Note that this will only track flows that have already been
     /// registered. Implemented with `ebtables` on Linux.
-    pub fn read_flow_counters(&mut self) -> Result<Vec<(MacAddress, IpAddr, u64)>, Error> {
+    pub fn read_flow_counters(&mut self, zero: bool) -> Result<Vec<(MacAddress, IpAddr, u64)>, Error> {
         if cfg!(target_os = "linux") {
-            return self.read_flow_counters_linux();
+            return self.read_flow_counters_linux(zero);
         }
 
         Err(Error::RuntimeError(
@@ -166,9 +165,9 @@ impl KernelInterface {
     /// Returns a vector of going to a specific IP address.
     /// Note that this will only track flows that have already been
     /// registered. Implemented with `ebtables` on Linux.
-    pub fn read_destination_counters(&mut self) -> Result<Vec<(MacAddress, IpAddr, u64)>, Error> {
+    pub fn read_destination_counters(&mut self, zero: bool) -> Result<Vec<(MacAddress, IpAddr, u64)>, Error> {
         if cfg!(target_os = "linux") {
-            return self.read_destination_counters_linux();
+            return self.read_destination_counters_linux(zero);
         }
 
         Err(Error::RuntimeError(
@@ -304,7 +303,7 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
             }),
         };
 
-        let traffic = ki.read_flow_counters_linux().unwrap();
+        let traffic = ki.read_flow_counters_linux(false).unwrap();
 
         assert_eq!(format!("{}", traffic[0].0), "00-00-00-aa-00-02");
         assert_eq!(format!("{}", traffic[0].1), "2001::1");
@@ -414,18 +413,6 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
     #[test]
     fn test_start_flow_counter_linux() {
         let mut counter = 0;
-        let delete_rule = &[
-            "-D",
-            "INPUT",
-            "-s",
-            "00:00:00:aa:00:02",
-            "-p",
-            "IPV6",
-            "--ip6-dst",
-            "2001::3",
-            "-j",
-            "CONTINUE",
-        ];
         let add_rule = &[
             "-A",
             "INPUT",
@@ -445,14 +432,15 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
                 counter = counter + 1;
                 println!("COUNTER {}", counter);
                 match counter {
-                    1 => {
-                        assert_eq!(args, delete_rule);
-                        Ok(Output {
-                            stdout: b"Sorry, rule does not exist.".to_vec(),
+                    1 => { Ok(Output {
+                            stdout:
+                            b"Bridge table: filter
+
+Bridge chain: INPUT, entries: 3, policy: ACCEPT
+"
+                                .to_vec(),
                             stderr: b"".to_vec(),
-                            status: ExitStatus::from_raw(0),
-                        })
-                    }
+                            status: ExitStatus::from_raw(0)})}
                     2 => {
                         assert_eq!(args, add_rule);
                         Ok(Output {
