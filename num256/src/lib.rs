@@ -35,6 +35,15 @@ impl From<Int256> for Uint256 {
   }
 }
 
+impl From<BigInt> for Int256 {
+  fn from(n: BigInt) -> Self {
+    if n.bits() > 255 {
+      panic!("Overflow")
+    }
+    Int256(n)
+  }
+}
+
 macro_rules! impl_from_uint {
     ($T:ty) => {
         impl From<$T> for Uint256 {
@@ -143,6 +152,24 @@ impl From<Uint256> for Int256 {
       panic!("overflow");
     }
     Int256(num)
+  }
+}
+
+impl From<BigUint> for Uint256 {
+  fn from(n: BigUint) -> Self {
+    if n.bits() > 256 {
+      panic!("Overflow")
+    }
+    Uint256(n)
+  }
+}
+
+impl From<BigInt> for Uint256 {
+  fn from(n: BigInt) -> Self {
+    if n.bits() > 256 {
+      panic!("Overflow")
+    }
+    Uint256::from(Int256(n.abs()))
   }
 }
 
