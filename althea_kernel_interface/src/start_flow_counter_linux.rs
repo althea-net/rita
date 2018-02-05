@@ -9,22 +9,31 @@ impl KernelInterface {
         source_neighbor: MacAddress,
         destination: IpAddr,
     ) -> Result<(), Error> {
-        self.delete_flow_counter_linux(source_neighbor, destination)?;
-        self.run_command(
-            "ebtables",
-            &[
-                "-A",
-                "INPUT",
-                "-s",
-                &format!("{}", source_neighbor.to_hex_string()),
-                "-p",
-                "IPV6",
-                "--ip6-dst",
-                &format!("{}", destination),
-                "-j",
-                "CONTINUE",
-            ],
-        )?;
+        let ctr = self.read_flow_counters(false)?;
+        let mut exists = false;
+        for (mac, ip, _) in ctr {
+            if (mac == source_neighbor) && (ip == destination) {
+                exists = true;
+            }
+        }
+        trace!("rule exists: {:?}", exists);
+        if !exists {
+            self.run_command(
+                "ebtables",
+                &[
+                    "-A",
+                    "INPUT",
+                    "-s",
+                    &format!("{}", source_neighbor.to_hex_string()),
+                    "-p",
+                    "IPV6",
+                    "--ip6-dst",
+                    &format!("{}", destination),
+                    "-j",
+                    "CONTINUE",
+                ],
+            )?;
+        }
         Ok(())
     }
 }

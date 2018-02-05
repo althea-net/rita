@@ -10,22 +10,31 @@ impl KernelInterface {
         des_neighbor: MacAddress,
         destination: IpAddr,
     ) -> Result<(), Error> {
-        self.delete_destination_counter_linux(des_neighbor, destination)?;
-        self.run_command(
-            "ebtables",
-            &[
-                "-A",
-                "OUTPUT",
-                "-d",
-                &format!("{}", des_neighbor.to_hex_string()),
-                "-p",
-                "IPV6",
-                "--ip6-dst",
-                &format!("{}", destination),
-                "-j",
-                "ACCEPT",
-            ],
-        )?;
+        let ctr = self.read_destination_counters(false)?;
+        let mut exists = false;
+        for (mac, ip, _) in ctr {
+            if (mac == des_neighbor) && (ip == destination) {
+                exists = true;
+            }
+        }
+        trace!("rule exists: {:?}", exists);
+        if !exists {
+            self.run_command(
+                "ebtables",
+                &[
+                    "-A",
+                    "OUTPUT",
+                    "-d",
+                    &format!("{}", des_neighbor.to_hex_string()),
+                    "-p",
+                    "IPV6",
+                    "--ip6-dst",
+                    &format!("{}", destination),
+                    "-j",
+                    "ACCEPT",
+                ],
+            )?;
+        }
         Ok(())
     }
 }
