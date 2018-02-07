@@ -181,19 +181,28 @@ class World:
             assert_test(self.test_reach(b, a), "Reachability from node {} to {}".format(a, b))
 
     def get_balances(self):
-        status = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(self.bounty), "curl", "-s", "-g", "-6", "[::1]:8888/list"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        status.wait()
-        output = status.stdout.read().decode("utf-8")
-        status = json.loads(output)
-        balances = {}
-        s = 0
+        s = 1
+        n = 0
         m = 0
-        for i in status:
-            balances[int(i["ip"].replace("2001::", ""))] = int(i["balance"])
-            s += int(i["balance"])
-            m += abs(int(i["balance"]))
+        balances = {}
+
+        while s != 0 and n < 5:
+            status = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(self.bounty), "curl", "-s", "-g", "-6", "[::1]:8888/list"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            status.wait()
+            output = status.stdout.read().decode("utf-8")
+            status = json.loads(output)
+            balances = {}
+            s = 0
+            m = 0
+            for i in status:
+                balances[int(i["ip"].replace("2001::", ""))] = int(i["balance"])
+                s += int(i["balance"])
+                m += abs(int(i["balance"]))
+            n += 1
+
+        print("tried {} times".format(n))
         print("sum = {}, magnitude = {}, error = {}".format(s, m, abs(s)/m))
-        assert_test(s == 0, "Conservation of balance")
+        assert_test(s == 0 and m != 0, "Conservation of balance")
         return balances
 
     def gen_traffic(self, from_node, to_node, bytes):
@@ -201,6 +210,7 @@ class World:
         time.sleep(0.1)
         client = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(from_node.id), "iperf3", "-c", "2001::{}".format(to_node.id), "-V", "-n", str(bytes), "-Z"])
         client.wait()
+        time.sleep(0.1)
         server.send_signal(signal.SIGINT)
         server.wait()
 
