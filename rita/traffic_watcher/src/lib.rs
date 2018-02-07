@@ -94,8 +94,8 @@ pub fn watch(
     let des_counters = ki.read_destination_counters(true)?;
     info!("Got destination counters: {:#?}", des_counters);
 
-    // Flow counters should debit your neighbour which you received the packet from
-    // Destination counters should credit your neighbour which you sent the packet to
+    // Flow counters should debit your neighbor which you received the packet from
+    // Destination counters should credit your neighbor which you sent the packet to
 
     let mut debts = HashMap::new();
 
@@ -120,7 +120,7 @@ pub fn watch(
 
     trace!("Collated flow debts: {:?}", debts);
 
-    // Destination counters should not give your cost to your neighbour
+    // Destination counters should not give your cost to your neighbor
     for (mac, ip, bytes) in des_counters {
         if destinations.contains_key(&ip) {
             let id = identities[&mac];

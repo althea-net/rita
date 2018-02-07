@@ -165,7 +165,7 @@ impl PaymentController {
 
         trace!("sending payment of {:?} to {:?}: {:?}", pmt.amount, pmt.to.ip_address, pmt);
 
-        let neighbour_url = if cfg!(not(test)) {
+        let neighbor_url = if cfg!(not(test)) {
             format!("http://[{}]:4876/make_payment", pmt.to.ip_address)
         } else {
             String::from("http://127.0.0.1:1234/make_payment")
@@ -176,7 +176,7 @@ impl PaymentController {
         trace!("current balance: {:?}", self.balance);
 
         let mut r = self.client
-            .post(&neighbour_url)
+            .post(&neighbor_url)
             .body(serde_json::to_string(&pmt)?)
             .send()?;
 
@@ -303,7 +303,7 @@ mod tests {
 
     #[test]
     fn test_make_payments() {
-        // mock neighbour
+        // mock neighbor
         let _m = mock("POST", "/make_payment")
             .with_status(200)
             .with_body("payment OK")
@@ -321,7 +321,7 @@ mod tests {
 
     #[test]
     fn test_multi_make_payments() {
-        // mock neighbour
+        // mock neighbor
         let _m = mock("POST", "/make_payment")
             .with_status(200)
             .with_body("payment OK")

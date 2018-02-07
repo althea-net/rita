@@ -69,7 +69,7 @@ impl fmt::Display for Uint256 {
 
 impl fmt::Debug for Uint256 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Uint256 {}", self.to_string())
+        write!(f, "Uint256({})", self.to_string())
     }
 }
 
@@ -198,7 +198,7 @@ impl fmt::Display for Int256 {
 
 impl fmt::Debug for Int256 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Int256 {}", self.to_string())
+        write!(f, "Int256({})", self.to_string())
     }
 }
 
@@ -293,6 +293,9 @@ impl CheckedMul for Int256 {
 impl Div for Int256 {
   type Output = Int256;
   fn div(self, v: Int256) -> Int256 {
+    if v == Int256::from(0) {
+      panic!("div by zero")
+    }
     let num = self.0 / v.0;
     Int256(num)
   }

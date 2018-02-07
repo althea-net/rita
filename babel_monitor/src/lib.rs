@@ -70,7 +70,7 @@ pub struct Route {
 }
 
 #[derive(Debug)]
-pub struct Neighbour {
+pub struct Neighbor {
     pub id: String,
     pub iface: String,
     pub reach: u16,
@@ -138,12 +138,12 @@ impl<T: Read + Write> InnerBabel<T> {
     }
 
 
-    pub fn parse_neighs(&mut self) -> Result<VecDeque<Neighbour>, Error> {
-        let mut vector: VecDeque<Neighbour> = VecDeque::with_capacity(5);
+    pub fn parse_neighs(&mut self) -> Result<VecDeque<Neighbor>, Error> {
+        let mut vector: VecDeque<Neighbor> = VecDeque::with_capacity(5);
         self.write("dump\n")?;
         for entry in self.read()?.split("\n") {
             if entry.contains("add neighbour") {
-                vector.push_back(Neighbour {
+                vector.push_back(Neighbor {
                     id: find_babel_val("neighbour", entry)?,
                     iface: find_babel_val("if", entry)?,
                     reach: u16::from_str_radix(&find_babel_val("reach", entry)?, 16)?,
