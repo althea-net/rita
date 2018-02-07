@@ -15,6 +15,8 @@ fetch_netlab () {
   if [ ! -d "deps/network-lab" ] ; then
     git clone "https://github.com/kingoflolz/network-lab" "deps/network-lab" # TODO: Change this back when PR is upstreamed
   fi
+
+  chmod 777 deps/network-lab deps/network-lab/network-lab.sh
 }
 
 build_rita () {
@@ -28,6 +30,8 @@ build_bounty () {
   cargo build
   rm -rf test.db
   diesel migration run
+  rm -rf ../integration-tests/test.db
+  cp test.db ../integration-tests/test.db
   popd
 }
 

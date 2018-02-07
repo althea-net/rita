@@ -181,8 +181,10 @@ class World:
             assert_test(self.test_reach(b, a), "Reachability from node {} to {}".format(a, b))
 
     def get_balances(self):
-        status = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(self.bounty), "curl", "-s", "[::1]:8888/list"], stdout=subprocess.PIPE)
-        status = json.loads(status.stdout.read().decode("utf-8"))
+        status = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(self.bounty), "curl", "-s", "-g", "-6", "[::1]:8888/list"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        status.wait()
+        output = status.stdout.read().decode("utf-8")
+        status = json.loads(output)
         balances = {}
         s = 0
         m = 0
