@@ -241,7 +241,7 @@ if __name__ == "__main__":
     world.create()
 
     print("Waiting for network to stabilize")
-    time.sleep(12)
+    time.sleep(20)
 
     print("Test reachabibility...")
     world.test_reach_all()
