@@ -78,15 +78,19 @@ fn main() {
     trace!("Starting with Identity: {:?}", my_ident);
 
 
-    let (debt_keeper_input, debt_keeper_output) = DebtKeeper::start(Int256::from(1), Int256::from(-100000000000000i64), Int256::from(100), 2u32);
+    let (debt_keeper_input_master, debt_keeper_output) = DebtKeeper::start(
+        Int256::from(1),
+        Int256::from(-1_000_000_000i64), // -1 billion
+        Int256::from(100),
+        3u32);
 
-    let payment_controller_input = PaymentController::start(
+    let payment_controller_input_master = PaymentController::start(
         &my_ident,
-        Arc::new(Mutex::new(debt_keeper_input.clone()))
+        Arc::new(Mutex::new(debt_keeper_input_master.clone()))
     );
 
-    let payment_controller_input1 = payment_controller_input.clone();
-    let debt_keeper_input1 = mpsc::Sender::clone(&debt_keeper_input);
+    let payment_controller_input = payment_controller_input_master.clone();
+    let debt_keeper_input = mpsc::Sender::clone(&debt_keeper_input_master);
     thread::spawn(move || {
         let mut ki = KernelInterface {};
         let mut tm = TunnelManager::new();
@@ -102,17 +106,17 @@ fn main() {
             for (from, amount) in debts {
                 let update = DebtKeeperMsg::TrafficUpdate { from, amount };
                 let adjustment = DebtKeeperMsg::SendUpdate { from };
-                debt_keeper_input1.send(update).unwrap();
-                debt_keeper_input1.send(adjustment).unwrap();
+                debt_keeper_input.send(update).unwrap();
+                debt_keeper_input.send(adjustment).unwrap();
             }
-            payment_controller_input1 .send(PaymentControllerMsg::Update);
+            payment_controller_input.send(PaymentControllerMsg::Update);
         };
     });
 
-    let payment_controller_input2 = payment_controller_input.clone();
+    let payment_controller_input = payment_controller_input_master.clone();
 
     thread::spawn(move || {
-        let pc = Arc::new(Mutex::new(payment_controller_input.clone()));
+        let pc = Arc::new(Mutex::new(payment_controller_input_master.clone()));
         rouille::start_server("[::0]:4876", move |request| {
             router!(request,
                 (POST) (/make_payment) => {
@@ -136,7 +140,7 @@ fn main() {
                 trace!("Opening Tunnel");
             }, // tunnel manager should reopen tunnel here
             Some(DebtAction::MakePayment {to, amount}) => {
-                payment_controller_input2.send(PaymentControllerMsg::MakePayment(PaymentTx {
+                payment_controller_input.send(PaymentControllerMsg::MakePayment(PaymentTx {
                     from: my_ident,
                     to: to,
                     amount

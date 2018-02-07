@@ -30,15 +30,15 @@ class Node:
     def __init__(self, id, fwd_price):
         self.id = id
         self.fwd_price = fwd_price
-        self.neighbours = []
+        self.neighbors = []
 
-    def add_neighbour(self, id):
-        if id not in self.neighbours:
-            self.neighbours.append(id)
+    def add_neighbor(self, id):
+        if id not in self.neighbors:
+            self.neighbors.append(id)
 
     def get_interfaces(self):
         interfaces = ""
-        for i in self.neighbours:
+        for i in self.neighbors:
             interfaces += "br-{}-{} ".format(self.id, i)
         return interfaces
 
@@ -100,8 +100,8 @@ class World:
     def add_connection(self, connection):
         connection.canonicalize()
         self.connections[(connection.a.id, connection.b.id)] = connection
-        connection.a.add_neighbour(connection.b.id)
-        connection.b.add_neighbour(connection.a.id)
+        connection.a.add_neighbor(connection.b.id)
+        connection.b.add_neighbor(connection.a.id)
 
     def set_bounty(self, bounty_id):
         self.bounty = bounty_id
