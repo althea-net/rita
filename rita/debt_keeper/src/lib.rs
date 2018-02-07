@@ -229,11 +229,173 @@ mod tests {
             mac_address: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
         };
 
-        d.payment_recieved(ident, Int256::from(-100));
+        d.traffic_update(ident, Int256::from(-100));
 
         assert_eq!(
             d.send_update(ident).unwrap(),
             DebtAction::SuspendTunnel
+        );
+    }
+
+    #[test]
+    fn test_single_overpay() {
+        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100), 1u32);
+
+        let ident = Identity {
+            eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
+                .parse()
+                .unwrap(),
+            ip_address: "2001::3".parse().unwrap(),
+            mac_address: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+        };
+
+        d.traffic_update(ident, Int256::from(-100));
+        d.payment_recieved(ident, Int256::from(1000));
+
+        assert_eq!(
+            d.send_update(ident),
+            None
+        );
+    }
+
+    #[test]
+    fn test_buffer_suspend() {
+        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100), 2u32);
+
+        let ident = Identity {
+            eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
+                .parse()
+                .unwrap(),
+            ip_address: "2001::3".parse().unwrap(),
+            mac_address: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+        };
+
+        d.traffic_update(ident, Int256::from(-100));
+
+        assert_eq!(
+            d.send_update(ident),
+            None
+        );
+
+        assert_eq!(
+            d.send_update(ident).unwrap(),
+            DebtAction::SuspendTunnel
+        );
+    }
+
+    #[test]
+    fn test_buffer_average() {
+        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100), 2u32);
+
+        let ident = Identity {
+            eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
+                .parse()
+                .unwrap(),
+            ip_address: "2001::3".parse().unwrap(),
+            mac_address: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+        };
+
+        d.traffic_update(ident, Int256::from(-100));
+
+        assert_eq!(
+            d.send_update(ident),
+            None
+        );
+
+        d.traffic_update(ident, Int256::from(100));
+
+        assert_eq!(
+            d.send_update(ident),
+            None
+        );
+    }
+
+    #[test]
+    fn test_buffer_repay() {
+        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100), 2u32);
+
+        let ident = Identity {
+            eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
+                .parse()
+                .unwrap(),
+            ip_address: "2001::3".parse().unwrap(),
+            mac_address: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+        };
+
+        d.traffic_update(ident, Int256::from(-100));
+
+        assert_eq!(
+            d.send_update(ident),
+            None
+        );
+
+        d.payment_recieved(ident, Int256::from(100));
+
+        assert_eq!(
+            d.send_update(ident),
+            None
+        );
+    }
+
+    #[test]
+    fn test_buffer_overpay() {
+        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100), 2u32);
+
+        let ident = Identity {
+            eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
+                .parse()
+                .unwrap(),
+            ip_address: "2001::3".parse().unwrap(),
+            mac_address: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+        };
+
+        d.traffic_update(ident, Int256::from(-100));
+
+        assert_eq!(
+            d.send_update(ident),
+            None
+        );
+
+        d.traffic_update(ident, Int256::from(-100));
+        d.payment_recieved(ident, Int256::from(1000));
+
+        assert_eq!(
+            d.send_update(ident),
+            None
+        );
+    }
+
+    #[test]
+    fn test_buffer_debt() {
+        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-100), Int256::from(100), 2u32);
+
+        let ident = Identity {
+            eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
+                .parse()
+                .unwrap(),
+            ip_address: "2001::3".parse().unwrap(),
+            mac_address: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+        };
+
+        d.traffic_update(ident, Int256::from(-50));
+
+        assert_eq!(
+            d.send_update(ident),
+            None
+        );
+
+        assert_eq!(
+            d.send_update(ident),
+            None
+        );
+
+        // our debt should be -50
+
+        d.traffic_update(ident, Int256::from(100));
+
+        assert_eq!(
+            d.send_update(ident).unwrap(),
+            DebtAction::MakePayment{amount: Uint256::from(50u32), to: ident}
         );
     }
 
@@ -270,7 +432,7 @@ mod tests {
         };
 
         d.payment_recieved(ident, Int256::from(100000));
-        d.payment_recieved(ident, Int256::from(-100100));
+        d.traffic_update(ident, Int256::from(-100100));
 
         assert_eq!(
             d.send_update(ident),
