@@ -1,3 +1,12 @@
+#![feature(alloc_system, global_allocator, allocator_api)]
+
+extern crate alloc_system;
+
+use alloc_system::System;
+
+#[global_allocator]
+static A: System = System;
+
 #[macro_use] extern crate log;
 
 #[macro_use] extern crate rouille;
