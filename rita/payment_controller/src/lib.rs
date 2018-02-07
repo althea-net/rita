@@ -134,7 +134,7 @@ impl PaymentController {
         trace!("current balance: {:?}", self.balance);
 
         m_tx.lock().unwrap().send(
-            DebtKeeperMsg::UpdateBalance {
+            DebtKeeperMsg::PaymentReceived {
                 from: pmt.from,
                 amount: Int256::from(pmt.amount.clone())
             }
@@ -292,7 +292,7 @@ mod tests {
 
         let out = rita_rx.try_recv().unwrap();
 
-        assert_eq!(out, DebtKeeperMsg::UpdateBalance {
+        assert_eq!(out, DebtKeeperMsg::PaymentReceived {
             from: new_identity(1),
             amount: Int256::from(1)
         });
@@ -302,7 +302,7 @@ mod tests {
     }
 
     #[test]
-    fn test_single_make_payments() {
+    fn test_make_payments() {
         // mock neighbour
         let _m = mock("POST", "/make_payment")
             .with_status(200)
@@ -359,7 +359,7 @@ mod tests {
 
         let out = rita_rx.try_recv().unwrap();
 
-        assert_eq!(out, DebtKeeperMsg::UpdateBalance {
+        assert_eq!(out, DebtKeeperMsg::PaymentReceived {
             from: new_identity(1),
             amount: Int256::from(1)
         });
@@ -389,7 +389,7 @@ mod tests {
         for _ in 0..100 {
             let out = rita_rx.try_recv().unwrap();
 
-            assert_eq!(out, DebtKeeperMsg::UpdateBalance {
+            assert_eq!(out, DebtKeeperMsg::PaymentReceived {
                 from: new_identity(1),
                 amount: Int256::from(1)
             });

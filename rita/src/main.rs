@@ -78,7 +78,7 @@ fn main() {
     trace!("Starting with Identity: {:?}", my_ident);
 
 
-    let (debt_keeper_input, debt_keeper_output) = DebtKeeper::start(Int256::from(1), Int256::from(-100000000000000i64), Int256::from(100));
+    let (debt_keeper_input, debt_keeper_output) = DebtKeeper::start(Int256::from(1), Int256::from(-100000000000000i64), Int256::from(100), 2u32);
 
     let payment_controller_input = PaymentController::start(
         &my_ident,
@@ -100,7 +100,7 @@ fn main() {
             info!("got debts: {:?}", debts);
 
             for (from, amount) in debts {
-                let update = DebtKeeperMsg::UpdateBalance { from, amount };
+                let update = DebtKeeperMsg::TrafficUpdate { from, amount };
                 let adjustment = DebtKeeperMsg::SendUpdate { from };
                 debt_keeper_input1.send(update).unwrap();
                 debt_keeper_input1.send(adjustment).unwrap();
