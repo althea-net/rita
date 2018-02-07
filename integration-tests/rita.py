@@ -211,6 +211,13 @@ def fuzzy_traffic(a, b):
     return b - 5e9 < a < b + 5e9
 
 
+def check_log_contains(f, x):
+    if x in open(f).read():
+        return True
+    else:
+        return False
+
+
 if __name__ == "__main__":
     a = Node(1, 10)  # TODO: Currently unspecified
     b = Node(2, 25)
@@ -300,6 +307,15 @@ if __name__ == "__main__":
     assert_test(fuzzy_traffic(diff[4], 0), "Balance of D")
     assert_test(fuzzy_traffic(diff[6], 50e9), "Balance of F")
     assert_test(fuzzy_traffic(diff[7], 10e9), "Balance of G")
+
+    print("Check that tunnels have not been suspended")
+
+    assert_test(not check_log_contains("rita-n1.log", "Suspending Tunnel"), "Suspension of A")
+    assert_test(not check_log_contains("rita-n2.log", "Suspending Tunnel"), "Suspension of B")
+    assert_test(not check_log_contains("rita-n3.log", "Suspending Tunnel"), "Suspension of C")
+    assert_test(not check_log_contains("rita-n4.log", "Suspending Tunnel"), "Suspension of D")
+    assert_test(not check_log_contains("rita-n6.log", "Suspending Tunnel"), "Suspension of F")
+    assert_test(not check_log_contains("rita-n7.log", "Suspending Tunnel"), "Suspension of G")
 
     if len(sys.argv) > 1 and sys.argv[1] == "leave-running":
         pass
