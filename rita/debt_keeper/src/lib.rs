@@ -8,7 +8,6 @@ extern crate derive_error;
 
 use std::net::IpAddr;
 use std::collections::{HashMap, VecDeque};
-use std::ops::{Add, Sub, Div, Mul};
 use std::thread;
 use std::sync::mpsc::{Sender, Receiver, channel};
 
@@ -72,7 +71,7 @@ pub struct DebtKeeper {
 /// The actions that a `DebtKeeper` can take.
 #[derive(Debug, PartialEq)]
 pub enum DebtKeeperMsg {
-    PaymentReceived { from: Identity, amount: Int256 },
+    PaymentReceived { from: Identity, amount: Uint256 },
     TrafficUpdate { from: Identity, amount: Int256 },
     SendUpdate { from: Identity},
     StopThread
@@ -123,14 +122,14 @@ impl DebtKeeper {
         }
     }
 
-    fn payment_recieved(&mut self, ident: Identity, amount: Int256) {
+    fn payment_recieved(&mut self, ident: Identity, amount: Uint256) {
         trace!("debt data: {:#?}", self.debt_data);
         let debt_data = self.debt_data.entry(ident.ip_address).or_insert(NodeDebtData::new(self.buffer_period));
 
         let old_balance = debt_data.incoming_payments.clone();
         trace!("payment_recieved: old balance for {:?}: {:?}", ident.ip_address, old_balance);
-        debt_data.incoming_payments = old_balance.clone().add(amount.clone());
-        debt_data.total_payment = debt_data.total_payment.clone().add(Uint256::from(amount.clone()));
+        debt_data.incoming_payments += amount.clone();
+        debt_data.total_payment += amount.clone();
 
         trace!("new balance for {:?}: {:?}", ident.ip_address, debt_data.incoming_payments);
     }
@@ -141,16 +140,16 @@ impl DebtKeeper {
 
             if amount < Int256::from(0) {
                 // Buffer debt in the back of the debt buffer
-                debt_data.debt_buffer[(self.buffer_period - 1) as usize] = amount.add(debt_data.debt_buffer[(self.buffer_period - 1) as usize].clone());
+                debt_data.debt_buffer[(self.buffer_period - 1) as usize] += amount;
             } else {
                 // Immediately apply credit
-                debt_data.debt = amount.add(debt_data.debt.clone());
+                debt_data.debt += amount;
             }
         } // borrowck
 
         let mut imbalance = Uint256::from(0u32);
         for (k, v) in self.debt_data.clone() {
-            imbalance = imbalance.clone().add(Uint256::from(v.debt.abs()));
+            imbalance = imbalance.clone() + v.debt.abs();
         }
         trace!("total debt imbalance: {}", imbalance);
     }
@@ -172,29 +171,29 @@ impl DebtKeeper {
             traffic
         );
 
-        if debt_data.incoming_payments > traffic.clone().mul(Int256::from(-1)) {
+        if debt_data.incoming_payments > -traffic.clone() {
             // we have enough to pay off the traffic from just the payment balance
-            debt_data.incoming_payments = debt_data.incoming_payments.clone().add(traffic.clone());
+            debt_data.incoming_payments += traffic.clone();
 
             // pay off some debt if we have extra
             if debt_data.debt > Int256::from(0) {
                 // no need to pay off
-            } else if debt_data.debt < debt_data.incoming_payments.clone().mul(Int256::from(-1)) {
+            } else if debt_data.debt < -debt_data.incoming_payments.clone() {
                 // not enough to pay off fully
-                debt_data.debt = debt_data.debt.clone().add(debt_data.incoming_payments.clone());
+                debt_data.debt += debt_data.incoming_payments.clone();
                 debt_data.incoming_payments = Int256::from(0);
             } else {
                 // pay off debt fully
-                debt_data.incoming_payments = debt_data.incoming_payments.clone().add(debt_data.debt.clone());
+                debt_data.incoming_payments += debt_data.debt.clone();
                 debt_data.debt = Int256::from(0);
             }
         } else {
             // rack up debt
-            debt_data.debt = debt_data.debt.clone().add(debt_data.incoming_payments.clone().add(traffic));
+            debt_data.debt += debt_data.incoming_payments.clone() + traffic;
             debt_data.incoming_payments = Int256::from(0);
         }
 
-        let close_threshold = self.close_threshold.clone() - Int256::from(debt_data.total_payment.clone()).div(self.close_fraction.clone());
+        let close_threshold = self.close_threshold.clone() - debt_data.total_payment.clone()/self.close_fraction.clone();
 
         if debt_data.debt < close_threshold {
             trace!("debt is below close threshold. suspending forwarding");
@@ -250,7 +249,7 @@ mod tests {
         };
 
         d.traffic_update(ident, Int256::from(-100));
-        d.payment_recieved(ident, Int256::from(1000));
+        d.payment_recieved(ident, Uint256::from(1000));
 
         assert_eq!(
             d.send_update(ident),
@@ -329,7 +328,7 @@ mod tests {
             None
         );
 
-        d.payment_recieved(ident, Int256::from(100));
+        d.payment_recieved(ident, Uint256::from(100));
 
         assert_eq!(
             d.send_update(ident),
@@ -357,7 +356,7 @@ mod tests {
         );
 
         d.traffic_update(ident, Int256::from(-100));
-        d.payment_recieved(ident, Int256::from(1000));
+        d.payment_recieved(ident, Uint256::from(1000));
 
         assert_eq!(
             d.send_update(ident),
@@ -431,7 +430,7 @@ mod tests {
             mac_address: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
         };
 
-        d.payment_recieved(ident, Int256::from(100000));
+        d.payment_recieved(ident, Uint256::from(100000));
         d.traffic_update(ident, Int256::from(-100100));
 
         assert_eq!(
@@ -452,14 +451,14 @@ mod tests {
             mac_address: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
         };
 
-        d.payment_recieved(ident, Int256::from(-100));
+        d.traffic_update(ident, Int256::from(-100));
 
         assert_eq!(
             d.send_update(ident).unwrap(),
             DebtAction::SuspendTunnel
         );
 
-        d.payment_recieved(ident, Int256::from(110));
+        d.payment_recieved(ident, Uint256::from(110));
 
         assert_eq!(
             d.send_update(ident).unwrap(),
@@ -492,7 +491,7 @@ mod tests {
 
     #[test]
     fn test_multi_fail() {
-        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100000), 1u32);
+        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100000), 1);
 
         let ident = Identity {
             eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
@@ -504,14 +503,14 @@ mod tests {
 
         // send lots of payments
         for i in 0..100 {
-            d.payment_recieved(ident, Int256::from(100))
+            d.payment_recieved(ident, Uint256::from(100))
         }
 
-        d.payment_recieved(ident, Int256::from(-10100));
+        d.traffic_update(ident, Int256::from(-10100));
 
         assert_eq!(
-            d.send_update(ident).unwrap(),
-            DebtAction::SuspendTunnel
+            d.send_update(ident),
+            Some(DebtAction::SuspendTunnel)
         );
     }
 
@@ -528,17 +527,17 @@ mod tests {
         };
 
         for i in 0..100 {
-            d.payment_recieved(ident, Int256::from(100))
+            d.payment_recieved(ident, Uint256::from(100))
         }
 
-        d.payment_recieved(ident, Int256::from(-10100));
+        d.traffic_update(ident, Int256::from(-10100));
 
         assert_eq!(
             d.send_update(ident).unwrap(),
             DebtAction::SuspendTunnel
         );
 
-        d.payment_recieved(ident, Int256::from(200));
+        d.payment_recieved(ident, Uint256::from(200));
 
         assert_eq!(
             d.send_update(ident).unwrap(),

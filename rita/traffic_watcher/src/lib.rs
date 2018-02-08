@@ -15,7 +15,6 @@ use babel_monitor::Babel;
 
 extern crate num256;
 use num256::Int256;
-use std::ops::{Add, Sub, Mul};
 
 use std::net::{IpAddr, Ipv6Addr};
 use std::collections::HashMap;
@@ -67,7 +66,7 @@ pub fn watch(
             if ip.get_netmask() == 128 && route.installed {
                 destinations.insert(
                     IpAddr::V6(ip.get_network_address()),
-                    Int256::from(route.price as i64),
+                    Int256::from(route.price),
                 );
                 for ident in &neighbors {
                     ki.start_flow_counter(ident.mac_address, IpAddr::V6(ip.get_network_address()))?;
@@ -108,11 +107,7 @@ pub fn watch(
     for (mac, ip, bytes) in flow_counters {
         if destinations.contains_key(&ip) {
             let id = identities[&mac];
-            *debts.get_mut(&id).unwrap() = debts[&id].clone().sub(
-                // get price
-                destinations[&ip]
-                    // multiply my bytes used
-                    .clone().mul(Int256::from(bytes as i64)));
+            *debts.get_mut(&id).unwrap() -= destinations[&ip].clone() * bytes;
         } else {
             warn!("flow destination not found {}, {}", ip, bytes);
         }
@@ -124,11 +119,7 @@ pub fn watch(
     for (mac, ip, bytes) in des_counters {
         if destinations.contains_key(&ip) {
             let id = identities[&mac];
-            *debts.get_mut(&id).unwrap() = debts[&id].clone().add(
-                // get price
-                (destinations[&ip]
-                    // multiply my bytes used
-                    .clone() - Int256::from(babel.local_price().unwrap() as i64)).mul(Int256::from(bytes as i64)));
+            *debts.get_mut(&id).unwrap() += (destinations[&ip].clone() - babel.local_price().unwrap()) * bytes;
         } else {
             warn!("destination not found {}, {}", ip, bytes);
         }
