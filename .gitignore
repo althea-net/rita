@@ -1,6 +1,10 @@
 .DS_Store
 *.bak
 /target/
+target-mac
 **/*.rs.bk
 .idea
-integration_test/test.db
+integration-tests/test.db
+bounty_hunter/test.db
+test.db-journal
+*.log

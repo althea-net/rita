@@ -55,13 +55,18 @@ impl TunnelManager {
                 .get_neighbors()?
                 .iter()
                 .filter_map(|&(mac_address, ip_address, ref dev)| {
-                    let identity = self.neighbor_inquiry(ip_address, &dev);
-                    match identity {
-                        Ok(mut identity) => {
-                            identity.mac_address = mac_address.clone(); // TODO: make this not a hack
-                            Some(identity)
-                        },
-                        Err(_) => None,
+                    trace!("neighbor at interface {}, ip {}, mac {}", dev, ip_address, mac_address);
+                    if &dev[..2] == "br" {
+                        let identity = self.neighbor_inquiry(ip_address, &dev);
+                        match identity {
+                            Ok(mut identity) => {
+                                identity.mac_address = mac_address.clone(); // TODO: make this not a hack
+                                Some(identity)
+                            },
+                            Err(_) => None,
+                        }
+                    } else {
+                        None
                     }
                 })
                 .collect(),
@@ -78,7 +83,7 @@ impl TunnelManager {
                 SocketAddr::V6(SocketAddrV6::new(ip_v6, 4876, 0, self.ki.get_iface_index(dev)?))
             }
             IpAddr::V4(_) => {
-                return Err(Error::TunnelManagerError(String::from("IPv4 neighbours are not supported")))
+                return Err(Error::TunnelManagerError(String::from("IPv4 neighbors are not supported")))
             }
         };
 

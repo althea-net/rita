@@ -1,5 +1,4 @@
 use althea_types::PaymentTx;
-use debt_keeper::DebtAdjustment;
 
 use payment_controller::{PaymentControllerMsg};
 
@@ -25,12 +24,7 @@ pub fn make_payments(request: &Request,
         data.read_to_string(&mut pmt_str).unwrap();
         let pmt: PaymentTx = serde_json::from_str(&pmt_str).unwrap();
         trace!("Received payment, Payment: {:?}", pmt);
-        // m_tx.lock().unwrap().send(
-        //     DebtAdjustment {
-        //         ident: pmt.from,
-        //         amount: Int256::from(pmt.amount.clone())
-        //     }
-        // ).unwrap();
+
         pc.lock().unwrap().send(PaymentControllerMsg::PaymentReceived(pmt.clone())).unwrap();
         Response::text("Payment Recieved")
     } else {

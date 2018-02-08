@@ -15,16 +15,17 @@ extern crate althea_types;
 use althea_types::{PaymentTx, Identity};
 
 extern crate debt_keeper;
-use debt_keeper::DebtAdjustment;
+use debt_keeper::DebtKeeperMsg;
 
 extern crate num256;
-use num256::Int256;
+use num256::{Uint256, Int256};
 
 extern crate reqwest;
 
 use reqwest::{Client, StatusCode};
 
 use std::thread;
+use std::time::Duration;
 use std::sync::{Mutex, Arc};
 use std::sync::mpsc::{Sender, channel};
 
@@ -61,6 +62,7 @@ pub struct BountyUpdate {
 pub enum PaymentControllerMsg {
     PaymentReceived(PaymentTx),
     MakePayment(PaymentTx),
+    Update,
     StopThread
 }
 
@@ -68,7 +70,7 @@ pub enum PaymentControllerMsg {
 extern crate mockito;
 
 impl PaymentController {
-    pub fn start(id: &Identity, m_tx: Arc<Mutex<Sender<DebtAdjustment>>>) -> Sender<PaymentControllerMsg> {
+    pub fn start(id: &Identity, m_tx: Arc<Mutex<Sender<DebtKeeperMsg>>>) -> Sender<PaymentControllerMsg> {
         let mut controller = PaymentController::new(id);
         let (tx, rx) = channel();
 
@@ -77,6 +79,7 @@ impl PaymentController {
                 match msg {
                     PaymentControllerMsg::PaymentReceived(pmt) => controller.payment_received(pmt, m_tx.clone()).unwrap(),
                     PaymentControllerMsg::MakePayment(pmt) => controller.make_payment(pmt).unwrap(),
+                    PaymentControllerMsg::Update => controller.update(),
                     PaymentControllerMsg::StopThread => return
                 };
             }
@@ -87,16 +90,19 @@ impl PaymentController {
     pub fn new(id: &Identity) -> Self {
         PaymentController {
             identity: id.clone(),
-            client: Client::new(),
+            client: reqwest::Client::builder()
+                .timeout(Duration::from_secs(5))
+                .build().unwrap(),
             balance: Int256::from(0i64)
         }
     }
 
     fn update_bounty(&self, update: BountyUpdate) -> Result<(), Error> {
+        trace!("Sending bounty hunter update: {:?}", update);
         let bounty_url = if cfg!(not(test)) {
             format!("http://[{}]:8888/update", "2001::3".parse::<Ipv6Addr>().unwrap())
         } else {
-            String::from("http://127.0.0.1:1234") //TODO: This is mockito::SERVER_URL, but don't want to include the crate in a non-test build just for that string
+            String::from("http://127.0.0.1:1234/update") //TODO: This is mockito::SERVER_URL, but don't want to include the crate in a non-test build just for that string
         };
 
         let mut r = self.client
@@ -105,7 +111,6 @@ impl PaymentController {
             .send()?;
 
         if r.status() == StatusCode::Ok {
-            trace!("Successfully sent bounty hunter update");
             Ok(())
         } else {
             trace!("Unsuccessfully in sending update to bounty hunter");
@@ -120,15 +125,17 @@ impl PaymentController {
 
     /// This gets called when a payment from a counterparty has arrived, and updates
     /// the balance in memory and sends an update to the "bounty hunter".
-    pub fn payment_received(&mut self, pmt: PaymentTx, m_tx: Arc<Mutex<Sender<DebtAdjustment>>>) -> Result<(), Error> {
-        trace!("Sending payment to Guac: {:?}", pmt);
-        trace!("Received payment, Balance: {:?}", self.balance);
-        // TODO: Pass the paymentTx to guac, get a channel summary back, reject if incorrect
-        self.balance = self.balance.clone() + Int256::from(pmt.clone().amount);
+    pub fn payment_received(&mut self, pmt: PaymentTx, m_tx: Arc<Mutex<Sender<DebtKeeperMsg>>>) -> Result<(), Error> {
+        trace!("current balance: {:?}", self.balance);
+        trace!("payment of {:?} received from {:?}: {:?}", pmt.amount, pmt.from.ip_address, pmt);
+
+        self.balance = self.balance.clone() + Int256::from(pmt.amount.clone());
+
+        trace!("current balance: {:?}", self.balance);
 
         m_tx.lock().unwrap().send(
-            DebtAdjustment {
-                ident: pmt.from,
+            DebtKeeperMsg::PaymentReceived {
+                from: pmt.from,
                 amount: Int256::from(pmt.amount.clone())
             }
         ).unwrap();
@@ -137,28 +144,44 @@ impl PaymentController {
         Ok(())
     }
 
+    /// This should be called on a regular interval to update the bounty hunter of a node's current
+    /// balance as well as to log the current balance
+    pub fn update(&mut self) {
+        self.update_bounty(BountyUpdate{
+            from: self.identity, tx:
+            PaymentTx{from: self.identity,
+                      to: self.identity,
+                      amount: Uint256::from(0u32)
+            },
+            balance: self.balance.clone()
+        });
+        info!("Balance update: {:?}", self.balance);
+    }
+
     /// This is called by the other modules in Rita to make payments. It sends a 
     /// PaymentTx to the `ip_address` in its `to` field.
     pub fn make_payment(&mut self, pmt: PaymentTx) -> Result<(), Error> {
-        trace!("Making payments to {:?}", pmt);
-        trace!("Sent payment, Balance: {:?}", self.balance);
-        trace!("Sending payments to http://[{}]:4876/make_payment", pmt.to.ip_address);
+        trace!("current balance: {:?}", self.balance);
 
-        let neighbour_url = if cfg!(not(test)) {
+        trace!("sending payment of {:?} to {:?}: {:?}", pmt.amount, pmt.to.ip_address, pmt);
+
+        let neighbor_url = if cfg!(not(test)) {
             format!("http://[{}]:4876/make_payment", pmt.to.ip_address)
         } else {
-            String::from("http://127.0.0.1:1234")
+            String::from("http://127.0.0.1:1234/make_payment")
         };
 
-        self.balance = self.balance.clone() - Int256::from(pmt.clone().amount);
+        self.balance = self.balance.clone() - Int256::from(pmt.amount.clone());
+        
+        trace!("current balance: {:?}", self.balance);
+
         let mut r = self.client
-            .post(&neighbour_url)
+            .post(&neighbor_url)
             .body(serde_json::to_string(&pmt)?)
             .send()?;
 
         if r.status() == StatusCode::Ok {
-            trace!("Successfully paid");
-            trace!("Received success from payee: {:?}", r.text().unwrap_or(String::from("No message received")));
+            self.update_bounty(BountyUpdate{from: self.identity, tx: pmt, balance: self.balance.clone()});
             Ok(())
         } else {
             trace!("Unsuccessfully paid");
@@ -229,7 +252,7 @@ mod tests {
     #[test]
     fn test_thread_make_payment() {
         // mock neighbours
-        let _m = mock("POST", "/")
+        let _m = mock("POST", "/make_payment")
             .with_status(200)
             .with_body("payment OK")
             .match_body("{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}")
@@ -252,7 +275,7 @@ mod tests {
     #[test]
     fn test_thread_payment_received() {
         // mock bounty hunter
-        let _m = mock("POST", "/")
+        let _m = mock("POST", "/update")
             .with_status(200)
             .with_body("bounty OK")
             .match_body("{\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"balance\":\"1\",\"tx\":{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}}")
@@ -269,8 +292,8 @@ mod tests {
 
         let out = rita_rx.try_recv().unwrap();
 
-        assert_eq!(out, DebtAdjustment {
-            ident: new_identity(1),
+        assert_eq!(out, DebtKeeperMsg::PaymentReceived {
+            from: new_identity(1),
             amount: Int256::from(1)
         });
 
@@ -279,9 +302,9 @@ mod tests {
     }
 
     #[test]
-    fn test_single_make_payments() {
-        // mock neighbour
-        let _m = mock("POST", "/")
+    fn test_make_payments() {
+        // mock neighbor
+        let _m = mock("POST", "/make_payment")
             .with_status(200)
             .with_body("payment OK")
             .match_body("{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}")
@@ -298,8 +321,8 @@ mod tests {
 
     #[test]
     fn test_multi_make_payments() {
-        // mock neighbour
-        let _m = mock("POST", "/")
+        // mock neighbor
+        let _m = mock("POST", "/make_payment")
             .with_status(200)
             .with_body("payment OK")
             .match_body("{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}")
@@ -320,7 +343,7 @@ mod tests {
     #[test]
     fn test_single_payment_received() {
         // mock bounty hunter
-        let _m = mock("POST", "/")
+        let _m = mock("POST", "/update")
             .with_status(200)
             .with_body("bounty OK")
             .match_body("{\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"balance\":\"1\",\"tx\":{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}}")
@@ -336,8 +359,8 @@ mod tests {
 
         let out = rita_rx.try_recv().unwrap();
 
-        assert_eq!(out, DebtAdjustment {
-            ident: new_identity(1),
+        assert_eq!(out, DebtKeeperMsg::PaymentReceived {
+            from: new_identity(1),
             amount: Int256::from(1)
         });
 
@@ -347,7 +370,7 @@ mod tests {
     #[test]
     fn test_multi_payment_received() {
         // mock bounty hunter
-        let _m = mock("POST", "/")
+        let _m = mock("POST", "/update")
             .with_status(200)
             .with_body("bounty OK")
             .expect(100)
@@ -366,8 +389,8 @@ mod tests {
         for _ in 0..100 {
             let out = rita_rx.try_recv().unwrap();
 
-            assert_eq!(out, DebtAdjustment {
-                ident: new_identity(1),
+            assert_eq!(out, DebtKeeperMsg::PaymentReceived {
+                from: new_identity(1),
                 amount: Int256::from(1)
             });
         }
