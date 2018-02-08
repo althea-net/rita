@@ -136,7 +136,7 @@ impl PaymentController {
         m_tx.lock().unwrap().send(
             DebtKeeperMsg::PaymentReceived {
                 from: pmt.from,
-                amount: Int256::from(pmt.amount.clone())
+                amount: pmt.amount.clone()
             }
         ).unwrap();
 
@@ -294,7 +294,7 @@ mod tests {
 
         assert_eq!(out, DebtKeeperMsg::PaymentReceived {
             from: new_identity(1),
-            amount: Int256::from(1)
+            amount: Uint256::from(1)
         });
 
         assert!(pc_tx.send(PaymentControllerMsg::StopThread).is_ok());
@@ -361,7 +361,7 @@ mod tests {
 
         assert_eq!(out, DebtKeeperMsg::PaymentReceived {
             from: new_identity(1),
-            amount: Int256::from(1)
+            amount: Uint256::from(1)
         });
 
         _m.assert();
@@ -391,7 +391,7 @@ mod tests {
 
             assert_eq!(out, DebtKeeperMsg::PaymentReceived {
                 from: new_identity(1),
-                amount: Int256::from(1)
+                amount: Uint256::from(1)
             });
         }
 
