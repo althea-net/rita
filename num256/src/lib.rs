@@ -10,7 +10,7 @@ extern crate lazy_static;
 
 use std::fmt;
 use num::bigint::{BigInt, BigUint, ToBigInt};
-use std::ops::{Add, Deref, Sub, Mul, Div};
+use std::ops::{Add, Deref, Sub, Mul, Div, AddAssign, SubAssign, MulAssign, DivAssign, Neg};
 use num::traits::ops::checked::{CheckedAdd, CheckedSub, CheckedMul, CheckedDiv};
 use num::traits::Signed;
 use serde::ser::Serialize;
@@ -28,38 +28,6 @@ impl Deref for Uint256 {
     &self.0
   }
 }
-
-impl From<Int256> for Uint256 {
-  fn from(n: Int256) -> Self {
-    Uint256(n.abs().to_biguint().unwrap())
-  }
-}
-
-impl From<BigInt> for Int256 {
-  fn from(n: BigInt) -> Self {
-    if n.bits() > 255 {
-      panic!("Overflow")
-    }
-    Int256(n)
-  }
-}
-
-macro_rules! impl_from_uint {
-    ($T:ty) => {
-        impl From<$T> for Uint256 {
-            #[inline]
-            fn from(n: $T) -> Self {
-                Uint256(BigUint::from(n))
-            }
-        }
-    }
-}
-
-impl_from_uint!(u8);
-impl_from_uint!(u16);
-impl_from_uint!(u32);
-impl_from_uint!(u64);
-impl_from_uint!(usize);
 
 impl fmt::Display for Uint256 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -96,14 +64,31 @@ impl<'de: 'a, 'a> Deserialize<'de> for Uint256 {
   }
 }
 
-impl Add for Uint256 {
+impl Neg for Uint256 where {
+  type Output = Int256;
+  fn neg(self) -> Self::Output {
+    let out = self.clone();
+    Int256(out.0.to_bigint().unwrap() * -1)
+  }
+}
+
+impl<T> Add<T> for Uint256 where T: Into<Int256> {
   type Output = Uint256;
-  fn add(self, v: Uint256) -> Uint256 {
-    let num = self.0 + v.0;
+  fn add(self, v: T) -> Uint256 {
+    let num = (self.0.to_bigint().unwrap() + v.into().0).to_biguint().unwrap();
     if num.bits() > 256 {
       panic!("overflow");
     }
     Uint256(num)
+  }
+}
+
+impl<T> AddAssign<T> for Uint256 where T: Into<Int256> {
+  fn add_assign(&mut self, v: T) {
+    self.0 = (self.0.clone().to_bigint().unwrap() + v.into().0).to_biguint().unwrap();
+    if self.0.bits() > 256 {
+      panic!("overflow");
+    }
   }
 }
 
@@ -117,10 +102,20 @@ impl CheckedAdd for Uint256 {
   }
 }
 
-impl Sub for Uint256 {
+impl<T> Sub<T> for Uint256 where T: Into<Int256> {
   type Output = Uint256;
-  fn sub(self, v: Uint256) -> Uint256 {
-    Uint256(self.0 - v.0)
+  fn sub(self, v: T) -> Uint256 {
+    let num = (self.0.to_bigint().unwrap() - v.into().0).to_biguint().unwrap();
+    Uint256(num)
+  }
+}
+
+impl<T> SubAssign<T> for Uint256 where T: Into<Int256> {
+  fn sub_assign(&mut self, v: T) {
+    self.0 = (self.0.clone().to_bigint().unwrap() - v.into().0).to_biguint().unwrap();
+    if self.0.bits() > 256 {
+      panic!("overflow");
+    }
   }
 }
 
@@ -131,6 +126,68 @@ impl CheckedSub for Uint256 {
     }
     let num = self.clone() - v.clone();
     Some(num)
+  }
+}
+
+impl<T> Mul<T> for Uint256 where T: Into<Uint256> {
+  type Output = Uint256;
+  fn mul(self, v: T) -> Uint256 {
+    let num = self.0 * v.into().0;
+    if num.bits() > 255 {
+      panic!("overflow");
+    }
+    Uint256(num)
+  }
+}
+
+impl<T> MulAssign<T> for Uint256 where T: Into<Uint256> {
+  fn mul_assign(&mut self, v: T) {
+    self.0 = self.0.clone() * v.into().0;
+    if self.0.bits() > 256 {
+      panic!("overflow");
+    }
+  }
+}
+
+impl CheckedMul for Uint256 {
+  fn checked_mul(&self, v: &Uint256) -> Option<Uint256> {
+    // drop down to wrapped bigint to stop from panicing in fn above
+    let num = self.0.clone() * v.0.clone();
+    if num.bits() > 255 {
+      return None;
+    }
+    Some(Uint256(num))
+  }
+}
+
+impl<T> Div<T> for Uint256 where T: Into<Uint256> {
+  type Output = Uint256;
+  fn div(self, v: T) -> Uint256 {
+    let num = self.0 / v.into().0;
+    if num.bits() > 255 {
+      panic!("overflow");
+    }
+    Uint256(num)
+  }
+}
+
+impl<T> DivAssign<T> for Uint256 where T: Into<Uint256> {
+  fn div_assign(&mut self, v: T) {
+    self.0 = self.0.clone() / v.into().0;
+    if self.0.bits() > 256 {
+      panic!("overflow");
+    }
+  }
+}
+
+impl CheckedDiv for Uint256 {
+  fn checked_div(&self, v: &Uint256) -> Option<Uint256> {
+    if *v == Uint256::from(0) {
+      return None;
+    }
+    // drop down to wrapped bigint to stop from panicing in fn above
+    let num = self.0.clone() / v.0.clone();
+    Some(Uint256(num))
   }
 }
 
@@ -145,6 +202,14 @@ impl Deref for Int256 {
   }
 }
 
+impl Neg for Int256 where {
+  type Output = Int256;
+  fn neg(self) -> Self::Output {
+    let out = self.clone();
+    Int256(out.0.to_bigint().unwrap() * -1)
+  }
+}
+
 impl From<Uint256> for Int256 {
   fn from(n: Uint256) -> Self {
     let num = n.to_bigint().unwrap();
@@ -152,6 +217,16 @@ impl From<Uint256> for Int256 {
       panic!("overflow");
     }
     Int256(num)
+  }
+}
+
+impl From<Int256> for Uint256 {
+  fn from(n: Int256) -> Self {
+    let num = n.to_bigint().unwrap();
+    if num.bits() > 256 {
+      panic!("overflow");
+    }
+    Uint256(num.to_biguint().unwrap())
   }
 }
 
@@ -173,12 +248,58 @@ impl From<BigInt> for Uint256 {
   }
 }
 
+impl From<BigUint> for Int256 {
+  fn from(n: BigUint) -> Self {
+    if n.bits() > 256 {
+      panic!("Overflow")
+    }
+    Int256(n.to_bigint().unwrap())
+  }
+}
+
+impl From<BigInt> for Int256 {
+  fn from(n: BigInt) -> Self {
+    if n.bits() > 256 {
+      panic!("Overflow")
+    }
+    Int256(n)
+  }
+}
+
 macro_rules! impl_from_int {
     ($T:ty) => {
         impl From<$T> for Int256 {
             #[inline]
             fn from(n: $T) -> Self {
                 Int256(BigInt::from(n))
+            }
+        }
+
+        impl From<$T> for Uint256 {
+            #[inline]
+            fn from(n: $T) -> Self {
+                if n.is_negative(){
+                    panic!("negative")
+                }
+                Uint256(BigUint::from(n as u64))
+            }
+        }
+    }
+}
+
+macro_rules! impl_from_uint {
+    ($T:ty) => {
+        impl From<$T> for Int256 {
+            #[inline]
+            fn from(n: $T) -> Self {
+                Int256(BigInt::from(n))
+            }
+        }
+
+        impl From<$T> for Uint256 {
+            #[inline]
+            fn from(n: $T) -> Self {
+                Uint256(BigUint::from(n as u64))
             }
         }
     }
@@ -189,6 +310,11 @@ impl_from_int!(i16);
 impl_from_int!(i32);
 impl_from_int!(i64);
 impl_from_int!(isize);
+impl_from_uint!(u8);
+impl_from_uint!(u16);
+impl_from_uint!(u32);
+impl_from_uint!(u64);
+impl_from_uint!(usize);
 
 impl fmt::Display for Int256 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -224,14 +350,23 @@ impl<'de: 'a, 'a> Deserialize<'de> for Int256 {
   }
 }
 
-impl Add for Int256 {
+impl<T> Add<T> for Int256 where T: Into<Int256> {
   type Output = Int256;
-  fn add(self, v: Int256) -> Int256 {
-    let num = self.0 + v.0;
+  fn add(self, v: T) -> Int256 {
+    let num = self.0 + v.into().0;
     if num.bits() > 255 {
       panic!("overflow");
     }
     Int256(num)
+  }
+}
+
+impl<T> AddAssign<T> for Int256 where T: Into<Int256> {
+  fn add_assign(&mut self, v: T) {
+    self.0 = self.0.clone() + v.into().0;
+    if self.0.bits() > 255 {
+      panic!("overflow");
+    }
   }
 }
 
@@ -246,14 +381,23 @@ impl CheckedAdd for Int256 {
   }
 }
 
-impl Sub for Int256 {
+impl<T> Sub<T> for Int256 where T: Into<Int256> {
   type Output = Int256;
-  fn sub(self, v: Int256) -> Int256 {
-    let num = self.0 - v.0;
+  fn sub(self, v: T) -> Int256 {
+    let num = self.0 - v.into().0;
     if num.bits() > 255 {
       panic!("overflow");
     }
     Int256(num)
+  }
+}
+
+impl<T> SubAssign<T> for Int256 where T: Into<Int256> {
+  fn sub_assign(&mut self, v: T) {
+    self.0 = self.0.clone() - v.into().0;
+    if self.0.bits() > 255 {
+      panic!("overflow");
+    }
   }
 }
 
@@ -268,14 +412,23 @@ impl CheckedSub for Int256 {
   }
 }
 
-impl Mul for Int256 {
+impl<T> Mul<T> for Int256 where T: Into<Int256> {
   type Output = Int256;
-  fn mul(self, v: Int256) -> Int256 {
-    let num = self.0 * v.0;
+  fn mul(self, v: T) -> Int256 {
+    let num = self.0 * v.into().0;
     if num.bits() > 255 {
       panic!("overflow");
     }
     Int256(num)
+  }
+}
+
+impl<T> MulAssign<T> for Int256 where T: Into<Int256> {
+  fn mul_assign(&mut self, v: T) {
+    self.0 = self.0.clone() * v.into().0;
+    if self.0.bits() > 255 {
+      panic!("overflow");
+    }
   }
 }
 
@@ -290,13 +443,22 @@ impl CheckedMul for Int256 {
   }
 }
 
-impl Div for Int256 {
-  type Output = Int256;
-  fn div(self, v: Int256) -> Int256 {
-    if v == Int256::from(0) {
-      panic!("div by zero")
+impl<T> DivAssign<T> for Int256 where T: Into<Int256> {
+  fn div_assign(&mut self, v: T) {
+    self.0 = self.0.clone() / v.into().0;
+    if self.0.bits() > 255 {
+      panic!("overflow");
     }
-    let num = self.0 / v.0;
+  }
+}
+
+impl<T> Div<T> for Int256 where T: Into<Int256> {
+  type Output = Int256;
+  fn div(self, v: T) -> Int256 {
+    let num = self.0 / v.into().0;
+    if num.bits() > 255 {
+      panic!("overflow");
+    }
     Int256(num)
   }
 }
