@@ -565,16 +565,192 @@ mod tests {
 
   #[test]
   #[should_panic]
+  fn test_uint_add_assign_panic() {
+    let mut big = BIGGEST_UINT.clone();
+    big += Uint256::from(1 as u32);
+  }
+
+  #[test]
+  fn test_uint_add_assign_no_panic() {
+    let mut big = BIGGEST_UINT.clone();
+    big += Uint256::from(0 as u32);
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_uint_from_add_panic() {
+    BIGGEST_UINT.clone() + 1;
+  }
+
+  #[test]
+  fn test_uint_from_add_no_panic() {
+    BIGGEST_UINT.clone() + 0;
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_uint_from_add_assign_panic() {
+    let mut big = BIGGEST_UINT.clone();
+    big += Uint256::from(1);
+  }
+
+  #[test]
+  fn test_uint_from_add_assign_no_panic() {
+    let mut big = BIGGEST_UINT.clone();
+    big += Uint256::from(0);
+  }
+
+  #[test]
+  #[should_panic]
   fn test_uint_sub_panic() {
-    &Uint256::from(1 as u32).sub(Uint256::from(2 as u32));
+    Uint256::from(1 as u32) - Uint256::from(2 as u32);
   }
 
   #[test]
   fn test_uint_sub_no_panic() {
     assert_eq!(
-      Uint256::from(1 as u32).sub(Uint256::from(1 as u32)),
+      Uint256::from(1 as u32) -Uint256::from(1 as u32),
       Uint256::from(0 as u32)
     );
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_uint_sub_assign_panic() {
+    let mut small = Uint256::from(1 as u32);
+    small -= Uint256::from(2);
+  }
+
+  #[test]
+  fn test_uint_sub_assign_no_panic() {
+    let mut small = Uint256::from(1 as u32);
+    small -= Uint256::from(1);
+    assert_eq!(
+      small,
+      Uint256::from(0 as u32)
+    );
+  }
+
+  #[test]
+  fn test_uint_from_sub_assign_no_panic() {
+    let mut small = Uint256::from(1 as u32);
+    small -= 1;
+    assert_eq!(
+      small,
+      Uint256::from(0 as u32)
+    );
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_uint_from_sub_assign_panic() {
+    let mut small = Uint256::from(1 as u32);
+    small -= 2;
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_uint_from_sub_panic() {
+    Uint256::from(1 as u32) - 2;
+  }
+
+  #[test]
+  fn test_uint_from_sub_no_panic() {
+    assert_eq!(
+      Uint256::from(1 as u32) - 1,
+      Uint256::from(0 as u32)
+    );
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_uint_mul_panic() {
+    BIGGEST_UINT.clone() * Int256::from(2);
+  }
+
+  #[test]
+  fn test_uint_mul_no_panic() {
+    assert_eq!(Uint256::from(3) * Uint256::from(2), Uint256::from(6));
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_uint_mul_assign_panic() {
+    let mut big = BIGGEST_UINT.clone();
+    big *= Int256::from(2);
+  }
+
+  #[test]
+  fn test_uint_mul_assign_no_panic() {
+    let mut num = Uint256::from(3);
+    num *= Uint256::from(2);
+    assert_eq!(num, Uint256::from(6));
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_uint_from_mul_panic() {
+    BIGGEST_UINT.clone() * 2;
+  }
+
+  #[test]
+  fn test_uint_from_mul_no_panic() {
+    assert_eq!(Uint256::from(3) * 2, Uint256::from(6));
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_uint_from_mul_assign_panic() {
+    let mut big = BIGGEST_UINT.clone();
+    big *= 2;
+  }
+
+  #[test]
+  fn test_uint_from_mul_assign_no_panic() {
+    let mut num = Uint256::from(3);
+    num *= 2;
+    assert_eq!(num, Uint256::from(6));
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_uint_div_panic() {
+    BIGGEST_UINT.clone()/Uint256::from(0);
+  }
+
+  #[test]
+  fn test_uint_div_no_panic() {
+    assert_eq!(Uint256::from(6)/Uint256::from(2), Uint256::from(3));
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_uint_div_assign_panic() {
+    let mut big = BIGGEST_UINT.clone();
+    big /= Uint256::from(0);
+  }
+
+  #[test]
+  fn test_uint_from_div_assign_no_panic() {
+    assert_eq!(Uint256::from(6)/2, Uint256::from(3));
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_uint_from_div_panic() {
+    BIGGEST_UINT.clone()/0;
+  }
+
+  #[test]
+  fn test_uint_from_div_no_panic() {
+    assert_eq!(Uint256::from(6)/2, Uint256::from(3));
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_uint_from_div_assign_panic() {
+    let mut big = BIGGEST_UINT.clone();
+    big /= 0;
   }
 
   #[test]
@@ -634,23 +810,79 @@ mod tests {
   #[test]
   #[should_panic]
   fn test_int_sub_panic() {
-    SMALLEST_INT.clone().sub(Int256::from(1));
+    SMALLEST_INT.clone() - Int256::from(1);
   }
 
   #[test]
   fn test_int_sub_no_panic() {
-    assert_eq!(Int256::from(1).sub(Int256::from(1)), Int256::from(0));
+    assert_eq!(Int256::from(1) - Int256::from(1), Int256::from(0));
   }
 
   #[test]
   #[should_panic]
   fn test_int_mul_panic() {
-    SMALLEST_INT.clone().mul(Int256::from(2));
+    SMALLEST_INT.clone() * Int256::from(2);
   }
 
   #[test]
   fn test_int_mul_no_panic() {
-    assert_eq!(Int256::from(3).mul(Int256::from(2)), Int256::from(6));
+    assert_eq!(Int256::from(3) * Int256::from(2), Int256::from(6));
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_int_div_panic() {
+    SMALLEST_INT.clone()/Int256::from(0);
+  }
+
+  #[test]
+  fn test_int_div_no_panic() {
+    assert_eq!(Int256::from(6)/Int256::from(2), Int256::from(3));
+  }
+
+
+  #[test]
+  #[should_panic]
+  fn test_int_from_add_panic() {
+    BIGGEST_INT.clone() + 1;
+  }
+
+  #[test]
+  fn test_int_from_add_no_panic() {
+    BIGGEST_INT.clone() + 0;
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_int_from_sub_panic() {
+    SMALLEST_INT.clone() - 1;
+  }
+
+  #[test]
+  fn test_int_from_sub_no_panic() {
+    assert_eq!(Int256::from(1) - 1, Int256::from(0));
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_int_from_mul_panic() {
+    SMALLEST_INT.clone() * 2;
+  }
+
+  #[test]
+  fn test_int_from_mul_no_panic() {
+    assert_eq!(Int256::from(3) * 2, Int256::from(6));
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_int_from_div_panic() {
+    SMALLEST_INT.clone()/0;
+  }
+
+  #[test]
+  fn test_int_from_div_no_panic() {
+    assert_eq!(Int256::from(6)/2, Int256::from(3));
   }
 
 
