@@ -916,6 +916,7 @@ dependencies = [
  "serde 1.0.27 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.27 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "settings 0.1.0",
 ]
 
 [[package]]
@@ -1064,9 +1065,7 @@ dependencies = [
  "althea_kernel_interface 0.1.0",
  "althea_types 0.1.0",
  "babel_monitor 0.1.0",
- "config 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "debt_keeper 0.1.0",
- "docopt 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "ip_network 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "num256 0.1.0",
@@ -1077,6 +1076,7 @@ dependencies = [
  "serde 1.0.27 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.27 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "settings 0.1.0",
  "simple_logger 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "traffic_watcher 0.1.0",
  "tunnel_manager 0.1.0",
@@ -1246,6 +1246,19 @@ dependencies = [
  "itoa 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.27 (registry+https://github.com/rust-lang/crates.io-index)",
  "url 1.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "settings"
+version = "0.1.0"
+dependencies = [
+ "althea_types 0.1.0",
+ "config 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "docopt 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lazy_static 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.27 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_derive 1.0.27 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_json 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

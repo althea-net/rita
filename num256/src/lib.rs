@@ -51,14 +51,14 @@ impl Serialize for Uint256 {
   }
 }
 
-impl<'de: 'a, 'a> Deserialize<'de> for Uint256 {
+impl<'de> Deserialize<'de> for Uint256 {
   fn deserialize<D>(deserializer: D) -> Result<Uint256, D::Error>
   where
     D: Deserializer<'de>,
   {
-    let s = <&str>::deserialize(deserializer)?;
+    let s = String::deserialize(deserializer)?.clone();
 
-    BigUint::from_str(s)
+    BigUint::from_str(&s)
       .map(|v| Uint256(v))
       .map_err(serde::de::Error::custom)
   }
@@ -337,14 +337,14 @@ impl Serialize for Int256 {
   }
 }
 
-impl<'de: 'a, 'a> Deserialize<'de> for Int256 {
+impl<'de> Deserialize<'de> for Int256 {
   fn deserialize<D>(deserializer: D) -> Result<Int256, D::Error>
   where
     D: Deserializer<'de>,
   {
-    let s = <&str>::deserialize(deserializer)?;
+    let s = String::deserialize(deserializer)?;
 
-    BigInt::from_str(s)
+    BigInt::from_str(&s)
       .map(|v| Int256(v))
       .map_err(serde::de::Error::custom)
   }
