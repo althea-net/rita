@@ -88,7 +88,7 @@ fn main() {
             let neighbors = tm.get_neighbors().unwrap();
             info!("got neighbors: {:?}", neighbors);
 
-            let debts = traffic_watcher::watch(neighbors, 5, &mut ki, &mut babel, SETTING.network.own_ip).unwrap();
+            let debts = traffic_watcher::watch(neighbors, 5, &mut ki, &mut babel).unwrap();
             info!("got debts: {:?}", debts);
 
             for (from, amount) in debts {

@@ -9,6 +9,7 @@ babel_monitor = { path = "../../babel_monitor" }
 althea_kernel_interface = { path = "../../althea_kernel_interface" }
 debt_keeper = { path = "../debt_keeper" }
 althea_types = { path = "../../althea_types" }
+settings = { path = "../settings" }
 ip_network = { version = "0.1", features = ["serde"] }
 derive-error = "0.0.4"
 log = "0.3"
