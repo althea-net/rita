@@ -6,8 +6,6 @@
 #[macro_use]
 extern crate serde_derive;
 
-extern crate config;
-
 use std::fs::File;
 use std::io::prelude::*;
 use std::sync::mpsc;
@@ -35,9 +33,6 @@ use payment_controller::{PaymentController, PaymentControllerMsg};
 extern crate althea_types;
 use althea_types::{Identity, PaymentTx, Int256};
 
-extern crate docopt;
-use docopt::Docopt;
-
 extern crate ip_network;
 extern crate simple_logger;
 
@@ -55,38 +50,27 @@ extern crate rand;
 mod network_endpoints;
 use network_endpoints::make_payments;
 
-mod settings;
-
-const USAGE: &'static str = "
-Usage: rita --config <settings>
-Options:
-    --ip   Mesh IP of node
-";
+extern crate settings;
+use settings::SETTING;
 
 fn main() {
     simple_logger::init().unwrap();
     trace!("Starting");
 
-    let args = Docopt::new(USAGE)
-        .and_then(|d| d.parse())
-        .unwrap_or_else(|e| e.exit());
-
-    let ip: Ipv6Addr = args.get_str("<ip addr>").parse().unwrap();
-
     let my_ident = Identity {
-        mac_address: "12:34:56:78:90:ab".parse().unwrap(), // TODO: make this not a hack
-        ip_address: IpAddr::V6(ip),
-        eth_address: "0xb794f5ea0ba39494ce839613fffba74279579268".parse().unwrap()
+        mac_address: SETTING.network.own_mac.clone(),
+        ip_address: SETTING.network.own_ip.clone(),
+        eth_address: SETTING.payment.eth_address.clone(),
     };
 
     trace!("Starting with Identity: {:?}", my_ident);
 
 
     let (debt_keeper_input_master, debt_keeper_output) = DebtKeeper::start(
-        Int256::from(1),
-        Int256::from(-1_000_000_000i64), // -1 billion
-        Int256::from(100),
-        3u32);
+        SETTING.payment.pay_threshold.clone(),
+        SETTING.payment.close_threshold.clone(),
+        SETTING.payment.close_fraction.clone(),
+        SETTING.payment.buffer_period.clone());
 
     let payment_controller_input_master = PaymentController::start(
         &my_ident,
@@ -98,13 +82,13 @@ fn main() {
     thread::spawn(move || {
         let mut ki = KernelInterface {};
         let mut tm = TunnelManager::new();
-        let mut babel = Babel::new(&"[::1]:8080".parse().unwrap());
+        let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port).parse().unwrap());
 
         loop {
             let neighbors = tm.get_neighbors().unwrap();
             info!("got neighbors: {:?}", neighbors);
 
-            let debts = traffic_watcher::watch(neighbors, 5, &mut ki, &mut babel, ip.clone()).unwrap();
+            let debts = traffic_watcher::watch(neighbors, 5, &mut ki, &mut babel, SETTING.network.own_ip).unwrap();
             info!("got debts: {:?}", debts);
 
             for (from, amount) in debts {
@@ -121,7 +105,7 @@ fn main() {
 
     thread::spawn(move || {
         let pc = Arc::new(Mutex::new(payment_controller_input_master.clone()));
-        rouille::start_server("[::0]:4876", move |request| {
+        rouille::start_server(format!("[::0]:{}", SETTING.network.rita_port), move |request| {
             router!(request,
                 (POST) (/make_payment) => {
                     make_payments(request, pc.clone())

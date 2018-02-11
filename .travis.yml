@@ -3,7 +3,7 @@ cache: cargo
 before_install:
   - sudo apt-get -qq update
   - sudo apt-get install -y ebtables libsqlite3-dev iperf3 python3-pip bridge-utils
-  - sudo pip3 install termcolor
+  - sudo pip3 install termcolor toml
   - which diesel || cargo install diesel_cli --no-default-features --features sqlite
 env:
   - TEST_COMMAND="cargo build --verbose --all"

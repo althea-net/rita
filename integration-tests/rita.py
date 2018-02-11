@@ -6,6 +6,7 @@ import time
 import sys
 from termcolor import colored
 import signal
+import toml
 
 network_lab = os.path.join(os.path.dirname(__file__), "deps/network-lab/network-lab.sh")
 babeld = os.path.join(os.path.dirname(__file__), "deps/babeld/babeld")
@@ -17,12 +18,12 @@ tests_passes = True
 
 
 def cleanup():
-    os.system("rm -rf *.log *.pid")
+    os.system("rm -rf *.log *.pid *.toml")
     os.system("killall babeld rita bounty_hunter nc")  # TODO: This is very inconsiderate
 
 
 def teardown():
-    os.system("rm -rf *.pid")
+    os.system("rm -rf *.pid *.toml")
     os.system("killall babeld rita bounty_hunter nc")  # TODO: This is very inconsiderate
 
 
@@ -70,13 +71,22 @@ def create_bridge(a, b):
     os.system('ip netns exec netlab-{} ip link set up "br-{}-{}"'.format(a, a, b))
     os.system('ip netns exec netlab-{} ip addr add 2001::{} dev "br-{}-{}"'.format(a, a, a, b))
 
-
 def start_bounty(id):
     os.system('(RUST_BACKTRACE=full ip netns exec netlab-{id} {bounty} & echo $! > bounty-n{id}.pid) | grep -Ev "<unknown>|mio" > bounty-n{id}.log &'.format(id=id, bounty=bounty))
 
 
+def get_rita_defaults():
+    return toml.load(open("../rita/example.toml"))
+
+
+def save_rita_settings(id, x):
+    return toml.dump(x, open("rita-settings-n{}.toml".format(id), "w"))
+
 def start_rita(id):
-    os.system('(RUST_BACKTRACE=full ip netns exec netlab-{id} {rita} --ip 2001::{id} & echo $! > rita-n{id}.pid) | grep -Ev "<unknown>|mio" > rita-n{id}.log &'.format(id=id, rita=rita))
+    settings = get_rita_defaults()
+    settings["network"]["own_ip"] = "2001::{}".format(id)
+    save_rita_settings(id, settings)
+    os.system('(RUST_BACKTRACE=full ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml & echo $! > rita-n{id}.pid) | grep -Ev "<unknown>|mio" > rita-n{id}.log &'.format(id=id, rita=rita))
 
 
 def assert_test(x, description):
