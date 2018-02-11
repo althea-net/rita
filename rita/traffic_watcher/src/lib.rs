@@ -8,13 +8,10 @@ extern crate althea_kernel_interface;
 use althea_kernel_interface::KernelInterface;
 
 extern crate althea_types;
-use althea_types::Identity;
+use althea_types::{Identity, Int256, MacAddress};
 
 extern crate babel_monitor;
 use babel_monitor::Babel;
-
-extern crate num256;
-use num256::Int256;
 
 use std::net::{IpAddr, Ipv6Addr};
 use std::collections::HashMap;
@@ -23,9 +20,6 @@ extern crate ip_network;
 use ip_network::IpNetwork;
 
 use std::{thread, time};
-
-extern crate eui48;
-use eui48::MacAddress;
 
 #[derive(Debug, Error)]
 pub enum Error {

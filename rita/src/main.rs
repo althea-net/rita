@@ -3,6 +3,11 @@
 
 #[macro_use] extern crate log;
 
+#[macro_use]
+extern crate serde_derive;
+
+extern crate config;
+
 use std::fs::File;
 use std::io::prelude::*;
 use std::sync::mpsc;
@@ -28,7 +33,7 @@ extern crate payment_controller;
 use payment_controller::{PaymentController, PaymentControllerMsg};
 
 extern crate althea_types;
-use althea_types::{Identity, PaymentTx};
+use althea_types::{Identity, PaymentTx, Int256};
 
 extern crate docopt;
 use docopt::Docopt;
@@ -38,9 +43,6 @@ extern crate simple_logger;
 
 extern crate tunnel_manager;
 use tunnel_manager::TunnelManager;
-
-extern crate num256;
-use num256::{Int256, Uint256};
 
 #[macro_use] extern crate rouille;
 use rouille::{Response};
@@ -53,8 +55,10 @@ extern crate rand;
 mod network_endpoints;
 use network_endpoints::make_payments;
 
+mod settings;
+
 const USAGE: &'static str = "
-Usage: rita --ip <ip addr>
+Usage: rita --config <settings>
 Options:
     --ip   Mesh IP of node
 ";
