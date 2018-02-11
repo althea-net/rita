@@ -21,6 +21,9 @@ use ip_network::IpNetwork;
 
 use std::{thread, time};
 
+extern crate settings;
+use settings::SETTING;
+
 #[derive(Debug, Error)]
 pub enum Error {
     BabelMonitorError(babel_monitor::Error),
@@ -39,7 +42,6 @@ pub fn watch(
     duration: u64,
     ki: &mut KernelInterface,
     babel: &mut Babel,
-    own_addr: IpAddr,
 ) -> Result<Vec<(Identity, Int256)>, Error> {
     trace!("Getting routes");
     let routes = babel.parse_routes()?;
@@ -51,7 +53,7 @@ pub fn watch(
     }
 
     let mut destinations = HashMap::new();
-    destinations.insert(own_addr, Int256::from(babel.local_price().unwrap() as i64));
+    destinations.insert(SETTING.network.own_ip, Int256::from(babel.local_price().unwrap() as i64));
 
     for route in &routes {
         // Only ip6
@@ -71,7 +73,7 @@ pub fn watch(
     }
 
     for ident in &neighbors {
-        ki.start_flow_counter(ident.mac_address, own_addr)?;
+        ki.start_flow_counter(ident.mac_address, SETTING.network.own_ip)?;
     }
 
     info!("Destinations: {:?}", destinations);
