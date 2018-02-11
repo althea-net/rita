@@ -20,6 +20,9 @@ pub use eth_private_key::EthPrivateKey;
 pub use eth_signature::EthSignature;
 pub use interop::{Identity, PaymentTx};
 
+pub use eui48::MacAddress;
+pub use num256::{Int256, Uint256};
+
 #[cfg(test)]
 mod tests {
     extern crate serde_json;

@@ -1,9 +1,6 @@
-use althea_types::PaymentTx;
+use althea_types::{PaymentTx, Int256};
 
 use payment_controller::{PaymentControllerMsg};
-
-extern crate num256;
-use num256::Int256;
 
 use rouille::{Request, Response};
 

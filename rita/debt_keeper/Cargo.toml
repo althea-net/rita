@@ -6,11 +6,9 @@ license = "Apache 2.0"
 
 [dependencies]
 althea_types = { path = "../../althea_types" }
-num256 =  { path = "../../num256" }
 num-traits = "0.1"
 stash = "0.1.3"
 derive-error = "0.0.4"
 serde_derive = "1.0.24"
 serde = "1.0.24"
 log = "0.3"
-eui48 = { git = "https://github.com/althea-mesh/eui48", features = ["serde"] }
