@@ -1007,4 +1007,11 @@ mod tests {
 
         assert_eq!(*num, 301, "345 - 44 should = 301");
     }
+    
+    #[test]
+    fn test_int_to_paddedhex() {
+        let padded_hex_val = "00000000000000000000000000000000000000000000000000000000000000ea";
+        assert_eq!(padded_hex_val, Int256::from(234).to_padded_hex());
+    }
+    
 }
