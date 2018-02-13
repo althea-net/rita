@@ -1,6 +1,7 @@
 extern crate num;
 extern crate serde;
 extern crate serde_json;
+extern crate pad;
 
 #[macro_use]
 extern crate serde_derive;
@@ -16,6 +17,11 @@ use num::traits::Signed;
 use serde::ser::Serialize;
 use serde::{Deserialize, Deserializer, Serializer};
 use std::str::FromStr;
+use pad::{Alignment, PadStr};
+
+pub trait PaddedHex {
+    fn to_padded_hex(&self) -> String;
+}
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Uint256(BigUint);
