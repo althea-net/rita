@@ -40,6 +40,16 @@ impl fmt::Display for Uint256 {
     }
 }
 
+impl PaddedHex for Uint256 {
+    fn to_padded_hex(&self) -> String {
+        let num_size = 64;
+        //The number 64 is just the maximum number of characters in Uint256 when converted to hex
+        let hex_str = format!("{}", self.to_str_radix(16));
+        //Converts to hex and added padding to align with ethereum Uint256
+        hex_str.pad(num_size, '0', Alignment::Right, true)
+    }
+}
+
 impl fmt::Debug for Uint256 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Uint256({})", self.to_string())
