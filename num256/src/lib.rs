@@ -862,6 +862,12 @@ mod tests {
     }
     
     #[test]
+    fn test_uint_biggest_to_paddedhex() {
+        let padded_hex_val = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+        assert_eq!(padded_hex_val, BIGGEST_UINT.clone().to_padded_hex());
+    }
+    
+    #[test]
     #[should_panic]
     fn test_int_add_panic() {
         BIGGEST_INT.clone() + Int256::from(1);
