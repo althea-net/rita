@@ -856,6 +856,12 @@ mod tests {
     }
 
     #[test]
+    fn test_uint_to_paddedhex() {
+        let padded_hex_val = "00000000000000000000000000000000000000000000000000000000000000ea";
+        assert_eq!(padded_hex_val, Uint256::from(234).to_padded_hex());
+    }
+    
+    #[test]
     #[should_panic]
     fn test_int_add_panic() {
         BIGGEST_INT.clone() + Int256::from(1);
