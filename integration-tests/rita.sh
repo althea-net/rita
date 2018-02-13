@@ -13,6 +13,10 @@ build_babel () {
   popd
 }
 
+get_python_deps () {
+  sudo pip3 install -r requirements.txt
+}
+
 fetch_netlab () {
   if [ ! -d "deps/network-lab" ] ; then
     git clone "https://github.com/kingoflolz/network-lab" "deps/network-lab" # TODO: Change this back when PR is upstreamed
@@ -37,6 +41,7 @@ build_bounty () {
   popd
 }
 
+get_python_deps
 fetch_netlab
 build_babel
 build_rita

@@ -8,6 +8,7 @@ license = "Apache 2.0"
 babel_monitor = { path = "../../babel_monitor" }
 althea_kernel_interface = { path = "../../althea_kernel_interface" }
 debt_keeper = { path = "../debt_keeper" }
+num256 =  { path = "../../num256" }
 althea_types = { path = "../../althea_types" }
 settings = { path = "../settings" }
 ip_network = { version = "0.1", features = ["serde"] }
@@ -15,4 +16,5 @@ derive-error = "0.0.4"
 log = "0.3"
 docopt = "0.8.1"
 serde_derive = "1.0.24"
+eui48 = { git = "https://github.com/althea-mesh/eui48", features = ["serde"] }
 serde = "1.0.24"

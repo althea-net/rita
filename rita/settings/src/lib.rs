@@ -4,7 +4,13 @@ extern crate config;
 use config::{ConfigError, Config, File, Environment};
 
 extern crate althea_types;
-use althea_types::{EthAddress, MacAddress, Int256};
+use althea_types::{EthAddress};
+
+extern crate eui48;
+use eui48::MacAddress;
+
+extern crate num256;
+use num256::Int256;
 
 extern crate docopt;
 use docopt::Docopt;

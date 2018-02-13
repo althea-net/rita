@@ -12,10 +12,13 @@ extern crate serde;
 extern crate serde_json;
 
 extern crate althea_types;
-use althea_types::{PaymentTx, Identity, Int256, Uint256};
+use althea_types::{PaymentTx, Identity};
 
 extern crate debt_keeper;
 use debt_keeper::DebtKeeperMsg;
+
+extern crate num256;
+use num256::{Uint256, Int256};
 
 extern crate reqwest;
 
@@ -197,6 +200,7 @@ impl PaymentController {
 
 #[cfg(test)]
 mod tests {
+    extern crate eui48;
     extern crate mockito;
 
     use mockito::mock;
@@ -209,8 +213,9 @@ mod tests {
     use std::net::IpAddr;
     use std::net::Ipv6Addr;
     use std::sync::mpsc;
+    use num256::Uint256;
 
-    use althea_types::{EthAddress, PaymentTx, Identity, MacAddress, Int256};
+    use althea_types::{EthAddress, PaymentTx, Identity};
 
     fn new_addr(x: u8) -> EthAddress {
         EthAddress([x; 20])
@@ -228,7 +233,7 @@ mod tests {
         let y = x as u16;
         Identity{
             ip_address: IpAddr::V6(Ipv6Addr::new(y, y, y, y, y, y, y, y)),
-            mac_address: MacAddress::new([x; 6]),
+            mac_address: eui48::MacAddress::new([x; 6]),
             eth_address: new_addr(x)
         }
     }

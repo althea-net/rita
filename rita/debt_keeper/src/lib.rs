@@ -14,10 +14,16 @@ use std::sync::mpsc::{Sender, Receiver, channel};
 extern crate serde;
 
 extern crate althea_types;
-use althea_types::{EthAddress, Identity, Int256, Uint256, MacAddress};
+use althea_types::{EthAddress, Identity};
+
+extern crate num256;
+use num256::{Uint256, Int256};
 
 extern crate num_traits;
 use num_traits::sign::Signed;
+
+extern crate eui48;
+use eui48::MacAddress;
 
 extern crate stash;
 
