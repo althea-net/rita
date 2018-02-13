@@ -31,13 +31,16 @@ extern crate payment_controller;
 use payment_controller::{PaymentController, PaymentControllerMsg};
 
 extern crate althea_types;
-use althea_types::{Identity, PaymentTx, Int256};
+use althea_types::{Identity, PaymentTx};
 
 extern crate ip_network;
 extern crate simple_logger;
 
 extern crate tunnel_manager;
 use tunnel_manager::TunnelManager;
+
+extern crate num256;
+use num256::{Int256, Uint256};
 
 #[macro_use] extern crate rouille;
 use rouille::{Response};
