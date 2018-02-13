@@ -1,7 +1,7 @@
 extern crate num;
+extern crate pad;
 extern crate serde;
 extern crate serde_json;
-extern crate pad;
 
 #[macro_use]
 extern crate serde_derive;
@@ -870,13 +870,13 @@ mod tests {
         let padded_hex_val = "00000000000000000000000000000000000000000000000000000000000000ea";
         assert_eq!(padded_hex_val, Uint256::from(234).to_padded_hex());
     }
-    
+
     #[test]
     fn test_uint_biggest_to_paddedhex() {
         let padded_hex_val = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
         assert_eq!(padded_hex_val, BIGGEST_UINT.clone().to_padded_hex());
     }
-    
+
     #[test]
     #[should_panic]
     fn test_int_add_panic() {
@@ -1007,17 +1007,17 @@ mod tests {
 
         assert_eq!(*num, 301, "345 - 44 should = 301");
     }
-    
+
     #[test]
     fn test_int_to_paddedhex() {
         let padded_hex_val = "00000000000000000000000000000000000000000000000000000000000000ea";
         assert_eq!(padded_hex_val, Int256::from(234).to_padded_hex());
     }
-    
+
     #[test]
     fn test_int_biggest_to_paddedhex() {
         let padded_hex_val = "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
         assert_eq!(padded_hex_val, BIGGEST_INT.clone().to_padded_hex());
     }
-    
+
 }
