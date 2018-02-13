@@ -1,0 +1,15 @@
+[package]
+name = "settings"
+version = "0.1.0"
+authors = ["kindiana <wangben3@gmail.com>"]
+
+[dependencies]
+config = "0.8"
+lazy_static = "1.0"
+althea_types = { path = "../../althea_types" }
+docopt = "0.8.1"
+serde = "1.0.24"
+serde_derive = "1.0.24"
+serde_json = "1.0.8"
+eui48 = { git = "https://github.com/althea-mesh/eui48", features = ["serde"] }
+num256 =  { path = "../../num256" }

@@ -31,6 +31,9 @@ use std::sync::mpsc::{Sender, channel};
 
 use std::net::Ipv6Addr;
 
+extern crate settings;
+use settings::SETTING;
+
 #[derive(Debug, Error)]
 pub enum Error {
     HttpError(reqwest::Error),
@@ -100,13 +103,13 @@ impl PaymentController {
     fn update_bounty(&self, update: BountyUpdate) -> Result<(), Error> {
         trace!("Sending bounty hunter update: {:?}", update);
         let bounty_url = if cfg!(not(test)) {
-            format!("http://[{}]:8888/update", "2001::3".parse::<Ipv6Addr>().unwrap())
+            format!("http://[{}]:{}/update", SETTING.network.bounty_ip, SETTING.network.bounty_port)
         } else {
             String::from("http://127.0.0.1:1234/update") //TODO: This is mockito::SERVER_URL, but don't want to include the crate in a non-test build just for that string
         };
 
         let mut r = self.client
-            .post(&bounty_url) //TODO: what port do we use?, how do we get the IP for the bounty hunter?
+            .post(&bounty_url)
             .body(serde_json::to_string(&update)?)
             .send()?;
 
@@ -166,7 +169,7 @@ impl PaymentController {
         trace!("sending payment of {:?} to {:?}: {:?}", pmt.amount, pmt.to.ip_address, pmt);
 
         let neighbor_url = if cfg!(not(test)) {
-            format!("http://[{}]:4876/make_payment", pmt.to.ip_address)
+            format!("http://[{}]:{}/make_payment", pmt.to.ip_address, SETTING.network.rita_port)
         } else {
             String::from("http://127.0.0.1:1234/make_payment")
         };

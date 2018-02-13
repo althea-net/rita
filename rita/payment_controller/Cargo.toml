@@ -8,6 +8,7 @@ license = "Apache 2.0"
 althea_types = { path = "../../althea_types" }
 num256 =  { path = "../../num256" }
 debt_keeper = { path = "../debt_keeper" }
+settings = { path = "../settings" }
 rouille = "1.0.3"
 reqwest = "0.8.2"
 serde = "1.0.24"
