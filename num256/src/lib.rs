@@ -1014,4 +1014,10 @@ mod tests {
         assert_eq!(padded_hex_val, Int256::from(234).to_padded_hex());
     }
     
+    #[test]
+    fn test_int_biggest_to_paddedhex() {
+        let padded_hex_val = "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+        assert_eq!(padded_hex_val, BIGGEST_INT.clone().to_padded_hex());
+    }
+    
 }
