@@ -1,27 +1,16 @@
 use std::net::IpAddr;
 
-extern crate config;
 use config::{ConfigError, Config, File, Environment};
 
-extern crate althea_types;
-use althea_types::{EthAddress};
+use althea_types::{EthAddress, Identity};
 
-extern crate eui48;
 use eui48::MacAddress;
 
-extern crate num256;
 use num256::Int256;
 
-extern crate docopt;
 use docopt::Docopt;
 
-#[macro_use]
-extern crate serde_derive;
-extern crate serde;
 use serde::{Deserialize};
-
-#[macro_use]
-extern crate lazy_static;
 
 const USAGE: &'static str = "
 Usage: rita --config <settings>
@@ -49,6 +38,7 @@ pub struct NetworkSettings {
     pub babel_port: u16,
     pub rita_port: u16,
     pub bounty_port: u16,
+    pub wg_private_key: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -71,5 +61,13 @@ impl Settings {
         let mut s = Config::new();
         s.merge(File::with_name(file_name))?;
         s.try_into()
+    }
+
+    pub fn get_identity(&self) -> Identity{
+        Identity{
+            eth_address: self.payment.eth_address.clone(),
+            mesh_ip: self.network.own_ip.clone(),
+            wg_public_key: self.network.own_mac.clone()
+        }
     }
 }

@@ -1,26 +1,22 @@
-#[macro_use]
-extern crate derive_error;
-
-#[macro_use]
-extern crate log;
-
 use std::net::{IpAddr, SocketAddr, SocketAddrV6, SocketAddrV4, TcpStream};
-
+use std::path::Path;
+use std::time::Duration;
 use std::io::{Read, Write};
+use std::collections::HashMap;
+use std::sync::mpsc::{Sender, Receiver, channel};
 
-extern crate serde_json;
-
-extern crate minihttpse;
 use minihttpse::Response;
 
-extern crate althea_types;
-use althea_types::{EthAddress, Identity};
+use althea_types::{EthAddress, Identity, LocalIdentity};
 
-extern crate althea_kernel_interface;
 use althea_kernel_interface::KernelInterface;
+use althea_kernel_interface;
 
-extern crate reqwest;
+use reqwest;
 use reqwest::Client;
+use serde_json;
+
+use std;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -32,17 +28,42 @@ pub enum Error {
     #[error(msg_embedded, no_from, non_std)] TunnelManagerError(String),
 }
 
+pub struct TunnelManagerMsg {
+
+}
+
+struct TunnelData {
+    iface_name: String,
+}
+
+impl TunnelData {
+    fn new() -> TunnelData {
+        let mut ki =  KernelInterface {};
+        let iface_name = ki.setup_wg_if().unwrap();
+        TunnelData{
+            iface_name
+        }
+    }
+}
+
 pub struct TunnelManager {
     pub client: Client,
     pub ki: KernelInterface,
+
+    tunnel_map: HashMap<IpAddr, TunnelData>
 }
+
+use settings::SETTING;
 
 impl TunnelManager {
     pub fn new() -> Self {
-        TunnelManager {
+        let mut tm = TunnelManager {
             client: Client::new(),
             ki: KernelInterface {},
-        }
+            tunnel_map: HashMap::new()
+        };
+        tm.ki.create_wg_key(Path::new(&SETTING.network.wg_private_key));
+        tm
     }
 
     /// This gets the list of link-local neighbors, and then contacts them to get their
@@ -56,14 +77,27 @@ impl TunnelManager {
                 .iter()
                 .filter_map(|&(mac_address, ip_address, ref dev)| {
                     trace!("neighbor at interface {}, ip {}, mac {}", dev, ip_address, mac_address);
-                    if &dev[..2] == "br" {
-                        let identity = self.neighbor_inquiry(ip_address, &dev);
-                        match identity {
-                            Ok(mut identity) => {
-                                identity.mac_address = mac_address.clone(); // TODO: make this not a hack
-                                Some(identity)
-                            },
-                            Err(_) => None,
+                    if &dev[..2] != "wg" {
+                        {
+                            //let mut tunnel = self.tunnel_map.entry(ip_address).or_insert(TunnelData::new());
+                            let identity = {self.neighbor_inquiry(ip_address, &dev)};
+//                            if let IpAddr::V6(ip_address) = IpAddr {
+//                                let mut tunnel = self.tunnel_map.entry(ip_address).or_insert(TunnelData::new());
+//                                self.ki.open_tunnel(tunnel.iface_name,
+//                                                    SocketAddrV6::new(ip_address, 0, 0, 0),
+//                                                    identity.pubkey,
+//                                                    SETTINGS.wg_private_key
+//                                )
+//                            } else {
+//                                Err(Error::TunnelManagerError("Only IPv6 is supported"))
+//                            }
+                            match identity {
+                                Ok(mut identity) => {
+                                    identity.wg_public_key = mac_address.clone(); // TODO: make this not a hack
+                                    Some(identity)
+                                },
+                                Err(_) => None,
+                            }
                         }
                     } else {
                         None
@@ -87,7 +121,7 @@ impl TunnelManager {
             }
         };
 
-        let mut stream = TcpStream::connect(socket)?;
+        let mut stream = TcpStream::connect_timeout(&socket, Duration::from_secs(1))?;
 
         // Format HTTP request
         let header = format!("GET /hello HTTP/1.0\r\nHost: {}%{}\r\n\r\n", ip, dev);  //TODO: check if this is a proper HTTP request
@@ -106,6 +140,17 @@ impl TunnelManager {
             Err(Error::HTTPParseError)
         }
     }
+
+//    /// Given a LocalIdentity, connect to the neighbor over wireguard
+//    pub fn connect(&mut self, id: LocalIdentity) -> Result<Identity, Error> {
+//        let mut tunnel = self.tunnel_map.entry(id.global.mesh_ip).or_insert(TunnelData::new());
+//        self.ki.open_tunnel(&tunnel.iface_name,
+//                            SocketAddrV6::new(id.local_ip, id.wg_port, 0, 0),
+//                            id.global.wg_public_key,
+//                            SETTING.wg_private_key,
+//        )?;
+//        Ok(())
+//    }
 }
 
 #[cfg(test)]

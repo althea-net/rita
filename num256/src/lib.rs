@@ -194,6 +194,12 @@ impl CheckedDiv for Uint256 {
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Int256(BigInt);
 
+impl Int256 {
+  pub fn abs(&self) -> Self {
+    Int256(self.clone().0.abs())
+  }
+}
+
 impl Deref for Int256 {
   type Target = BigInt;
 

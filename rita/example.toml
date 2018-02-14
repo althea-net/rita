@@ -12,3 +12,4 @@ own_mac='12:34:56:78:90:12'
 babel_port='8080'
 rita_port='4876'
 bounty_port='8888'
+wg_private_key="priv"
