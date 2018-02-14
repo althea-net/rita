@@ -1,33 +1,22 @@
-#[macro_use]
-extern crate log;
-
-#[macro_use]
-extern crate derive_error;
-
-extern crate althea_kernel_interface;
+use althea_kernel_interface;
 use althea_kernel_interface::KernelInterface;
 
-extern crate althea_types;
 use althea_types::Identity;
 
-extern crate babel_monitor;
+use babel_monitor;
 use babel_monitor::Babel;
 
-extern crate num256;
 use num256::Int256;
 
-extern crate eui48;
 use eui48::MacAddress;
 
 use std::net::{IpAddr, Ipv6Addr};
 use std::collections::HashMap;
 
-extern crate ip_network;
 use ip_network::IpNetwork;
 
 use std::{thread, time};
 
-extern crate settings;
 use settings::SETTING;
 
 #[derive(Debug, Error)]
@@ -39,23 +28,21 @@ pub enum Error {
 }
 
 /// This traffic watcher watches how much traffic each neighbor sends to each destination
-/// during the next `duration` seconds (this blocks the thread).
+/// between the last time watch was run, (This does _not_ block the thread)
 /// It also gathers the price to each destination from Babel and uses this information
-/// to calculate how much each neighbor owes. After `duration` it returns a map of how much
-/// each neighbor owes.
-pub fn watch(
-    neighbors: Vec<Identity>,
-    duration: u64,
-    ki: &mut KernelInterface,
-    babel: &mut Babel,
-) -> Result<Vec<(Identity, Int256)>, Error> {
+/// to calculate how much each neighbor owes. It returns a list of how much each neighbor owes.
+///
+/// This first time this is run, it will create the rules and then immediately read and zero them.
+/// (should return 0)
+pub fn watch(neighbors: Vec<Identity>, ki: &mut KernelInterface, babel: &mut Babel)
+    -> Result<Vec<(Identity, Int256)>, Error> {
     trace!("Getting routes");
     let routes = babel.parse_routes()?;
     info!("Got routes: {:?}", routes);
 
     let mut identities: HashMap<MacAddress, Identity> = HashMap::new();
     for ident in &neighbors {
-        identities.insert(ident.mac_address, *ident);
+        identities.insert(ident.wg_public_key, *ident);
     }
 
     let mut destinations = HashMap::new();
@@ -71,29 +58,23 @@ pub fn watch(
                     Int256::from(route.price),
                 );
                 for ident in &neighbors {
-                    ki.start_flow_counter(ident.mac_address, IpAddr::V6(ip.get_network_address()))?;
-                    ki.start_destination_counter(ident.mac_address, IpAddr::V6(ip.get_network_address()))?;
+                    ki.start_flow_counter(ident.wg_public_key, IpAddr::V6(ip.get_network_address()))?;
+                    ki.start_destination_counter(ident.wg_public_key, IpAddr::V6(ip.get_network_address()))?;
                 }
             }
         }
     }
 
     for ident in &neighbors {
-        ki.start_flow_counter(ident.mac_address, SETTING.network.own_ip)?;
+        ki.start_flow_counter(ident.wg_public_key, SETTING.network.own_ip)?;
     }
-
-    info!("Destinations: {:?}", destinations);
-
-    trace!("Going to sleep");
-    thread::sleep(time::Duration::from_secs(duration));
-
     trace!("Getting flow counters");
     let flow_counters = ki.read_flow_counters(true)?;
-    info!("Got flow counters: {:#?}", flow_counters);
+    info!("Got flow counters: {:?}", flow_counters);
 
     trace!("Getting destination counters");
     let des_counters = ki.read_destination_counters(true)?;
-    info!("Got destination counters: {:#?}", des_counters);
+    info!("Got destination counters: {:?}", des_counters);
 
     // Flow counters should debit your neighbor which you received the packet from
     // Destination counters should credit your neighbor which you sent the packet to

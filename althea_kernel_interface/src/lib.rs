@@ -213,9 +213,9 @@ impl KernelInterface {
             Err(Error::RuntimeError(String::from("not implemented for this platform")))
     }
 
-    pub fn setup_wg_if(&mut self, addr: &IpAddr, peer: &IpAddr) -> Result<String,Error> {
+    pub fn setup_wg_if(&mut self) -> Result<String,Error> {
             if cfg!(target_os = "linux") {
-                return self.setup_wg_if_linux(addr, peer);
+                return self.setup_wg_if_linux();
             }
 
             Err(Error::RuntimeError(String::from("not implemented for this platform")))
@@ -528,20 +528,6 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
             "wg1",
             "type",
             "wireguard"];
-        let addr_add = &[
-            "addr",
-            "add",
-            "fd01::1",
-            "dev",
-            "wg1",
-            "peer",
-            "fd01::2"];
-        let link_set = &[
-            "link",
-            "set",
-            "wg1",
-            "up"
-        ];
         let mut ki = KernelInterface {
             run_command: Box::new(move |program,args|{
                 assert_eq!(program,"ip");
@@ -564,28 +550,12 @@ Bridge chain: INPUT, entries: 3, policy: ACCEPT
                             status: ExitStatus::from_raw(0),
                         })
                     }
-                    3 => {
-                        assert_eq!(args,addr_add);
-                        Ok(Output{
-                            stdout: b"".to_vec(),
-                            stderr: b"".to_vec(),
-                            status: ExitStatus::from_raw(0),
-                        })
-                    }
-                    4 => {
-                        assert_eq!(args,link_set);
-                        Ok(Output{
-                            stdout: b"".to_vec(),
-                            stderr: b"".to_vec(),
-                            status: ExitStatus::from_raw(0),
-                        })
-                    }
                     _ => panic!("command called too many times")
                 }
             })
         };
 
-        ki.setup_wg_if_linux(&addr, &peer).unwrap();
+        ki.setup_wg_if_linux().unwrap();
     }
 
     #[test]

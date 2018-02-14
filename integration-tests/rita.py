@@ -209,6 +209,8 @@ class World:
                 s += int(i["balance"])
                 m += abs(int(i["balance"]))
             n += 1
+            time.sleep(1)
+            print("time {}, value {}".format(n, s))
 
         print("tried {} times".format(n))
         print("sum = {}, magnitude = {}, error = {}".format(s, m, abs(s)/m))
