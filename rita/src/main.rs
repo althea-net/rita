@@ -5,7 +5,6 @@
 #[macro_use] extern crate serde_derive;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate derive_error;
-#[macro_use] extern crate rouille;
 
 extern crate eui48;
 extern crate ip_network;
@@ -19,9 +18,12 @@ extern crate serde;
 extern crate serde_json;
 extern crate rand;
 extern crate futures;
-use actix::prelude::*;
-use actix::fut::*;
-use futures::Future;
+extern crate actix_web;
+extern crate bytes;
+
+use actix::*;
+use actix::registry::SystemService;
+use actix_web::*;
 
 extern crate num256;
 extern crate althea_kernel_interface;
@@ -36,6 +38,7 @@ mod traffic_watcher;
 mod settings;
 mod rita_loop;
 
+use network_endpoints::{make_payments, hello_response};
 use settings::SETTING;
 
 fn main() {
@@ -45,10 +48,19 @@ fn main() {
 
     let system = actix::System::new(format!("main {}", SETTING.network.own_ip));
 
-    let rita = rita_loop::RitaLoop{};
-    let loop_addr: Address<_> = rita.start();
+    assert!(debt_keeper::DebtKeeper::from_registry().connected());
+    assert!(payment_controller::PaymentController::from_registry().connected());
 
-    loop_addr.do_send(rita_loop::Tick);
+    HttpServer::new(
+        || Application::new()
+            .resource("/make_payment", |r| r.h(make_payments))
+            .resource("/hello", |r| r.h(hello_response)))
+        .bind(format!("[::0]:{}", SETTING.network.rita_port)).unwrap()
+        .start();
+
+
+    let rita = rita_loop::RitaLoop{};
+    let _: Address<_> = rita.start();
 
     system.run();
 }

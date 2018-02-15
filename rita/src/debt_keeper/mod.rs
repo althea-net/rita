@@ -14,7 +14,7 @@ use eui48::MacAddress;
 use settings::SETTING;
 
 use payment_controller;
-use payment_controller::{PaymentController, PAYMENT_CONTROLLER};
+use payment_controller::PaymentController;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -71,13 +71,10 @@ pub struct TrafficUpdate{ pub from: Identity, pub amount: Int256 }
 pub struct SendUpdate{ pub from: Identity }
 
 impl Supervised for DebtKeeper {}
-
-lazy_static!{
-    pub static ref DEBT_KEEPER: Addr<Syn, DebtKeeper> = {
-        Supervisor::start_in(&Arbiter::system_arbiter(), |ctx| {
-            DebtKeeper::default()
-        })
-    };
+impl SystemService for DebtKeeper {
+    fn service_started(&mut self, ctx: &mut Context<Self>) {
+        println!("Debt Keeper started");
+    }
 }
 
 /// Actions to be taken upon a neighbor's debt reaching either a negative or positive
@@ -117,7 +114,7 @@ impl Handler<SendUpdate> for DebtKeeper {
 
             }
             DebtAction::MakePayment {to, amount} => {
-                PAYMENT_CONTROLLER.do_send(payment_controller::MakePayment(PaymentTx{
+                PaymentController::from_registry().do_send(payment_controller::MakePayment(PaymentTx{
                     to,
                     from: SETTING.get_identity(),
                     amount,
