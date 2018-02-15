@@ -3,7 +3,8 @@ use std::thread;
 
 use futures::{Future, future};
 use actix::prelude::*;
-use rouille;
+use actix::registry::SystemService;
+
 use serde_json;
 
 use babel_monitor::Babel;
@@ -11,35 +12,24 @@ use tunnel_manager::TunnelManager;
 use traffic_watcher;
 
 use debt_keeper;
-use debt_keeper::DEBT_KEEPER;
+use debt_keeper::DebtKeeper;
 
 use payment_controller;
-use payment_controller::PAYMENT_CONTROLLER;
+use payment_controller::PaymentController;
 
 use settings::SETTING;
 use althea_kernel_interface::KernelInterface;
 
-use network_endpoints::make_payments;
+use network_endpoints::{make_payments};
 
 pub struct RitaLoop;
 impl Actor for RitaLoop {
     type Context = Context<Self>;
 
-    fn started(&mut self, ctx: &mut Self::Context) {
-        assert!(DEBT_KEEPER.connected());
-        assert!(PAYMENT_CONTROLLER.connected());
-        thread::spawn(move || {
-            rouille::start_server(format!("[::0]:{}", SETTING.network.rita_port), move |request| {
-                router!(request,
-                (POST) (/make_payment) => {
-                    make_payments(request)
-                },
-                (GET) (/hello) => {
-                    rouille::Response::text(serde_json::to_string(&SETTING.get_identity()).unwrap())
-                },
-                _ => rouille::Response::text("404")
-            )
-            });
+    fn started(&mut self, ctx: &mut Context<Self>) {
+        ctx.run_later(Duration::from_secs(5), |act, ctx| {
+            let addr: Address<Self> = ctx.address();
+            addr.do_send(Tick);
         });
     }
 }
@@ -67,13 +57,13 @@ impl Handler<Tick> for RitaLoop {
             let adjustment = debt_keeper::SendUpdate { from };
 
             Arbiter::handle().spawn(
-                DEBT_KEEPER.send(update).then(
+                DebtKeeper::from_registry().send(update).then(
                     move |_| {
-                        DEBT_KEEPER.do_send(adjustment);
+                        DebtKeeper::from_registry().do_send(adjustment);
                         future::result(Ok(()))
                     }));
         }
-        PAYMENT_CONTROLLER.do_send(payment_controller::PaymentControllerUpdate);
+        PaymentController::from_registry().do_send(payment_controller::PaymentControllerUpdate);
 
         ctx.run_later(Duration::from_secs(5), |act, ctx| {
             let addr: Address<Self> = ctx.address();

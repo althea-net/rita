@@ -7,6 +7,8 @@ use std::sync::mpsc::{Sender, Receiver, channel};
 
 use minihttpse::Response;
 
+use actix::prelude::*;
+
 use althea_types::{EthAddress, Identity, LocalIdentity};
 
 use althea_kernel_interface::KernelInterface;
@@ -28,9 +30,6 @@ pub enum Error {
     #[error(msg_embedded, no_from, non_std)] TunnelManagerError(String),
 }
 
-pub struct TunnelManagerMsg {
-
-}
 
 struct TunnelData {
     iface_name: String,
@@ -79,18 +78,17 @@ impl TunnelManager {
                     trace!("neighbor at interface {}, ip {}, mac {}", dev, ip_address, mac_address);
                     if &dev[..2] != "wg" {
                         {
-                            //let mut tunnel = self.tunnel_map.entry(ip_address).or_insert(TunnelData::new());
                             let identity = {self.neighbor_inquiry(ip_address, &dev)};
-//                            if let IpAddr::V6(ip_address) = IpAddr {
-//                                let mut tunnel = self.tunnel_map.entry(ip_address).or_insert(TunnelData::new());
-//                                self.ki.open_tunnel(tunnel.iface_name,
-//                                                    SocketAddrV6::new(ip_address, 0, 0, 0),
-//                                                    identity.pubkey,
-//                                                    SETTINGS.wg_private_key
-//                                )
-//                            } else {
-//                                Err(Error::TunnelManagerError("Only IPv6 is supported"))
-//                            }
+                            // let mut tunnel = self.tunnel_map.entry(ip_address).or_insert(TunnelData::new());
+/*                            if let IpAddr::V6(ip_address) = ip_address {
+                                self.ki.open_tunnel(&tunnel.iface_name,
+                                                    &SocketAddr::V6(SocketAddrV6::new(ip_address, 0, 0, 0)),
+                                                    identity.wg_public_key,
+                                                    SETTING.wg_private_key
+                                )
+                            } else {
+                                Err(Error::TunnelManagerError("Only IPv6 is supported"))
+                            }*/
                             match identity {
                                 Ok(mut identity) => {
                                     identity.wg_public_key = mac_address.clone(); // TODO: make this not a hack
@@ -108,7 +106,7 @@ impl TunnelManager {
     }
 
     /// Contacts one neighbor to get its Identity.
-    pub fn neighbor_inquiry(&mut self, ip: IpAddr, dev: &str) -> Result<Identity, Error> {
+    pub fn neighbor_inquiry(&self, ip: IpAddr, dev: &str) -> Result<Identity, Error> {
         let url = format!("http://[{}%{}]:4876/hello", ip, dev);
         trace!("Saying hello to: {:?}", url);
 
@@ -124,8 +122,8 @@ impl TunnelManager {
         let mut stream = TcpStream::connect_timeout(&socket, Duration::from_secs(1))?;
 
         // Format HTTP request
-        let header = format!("GET /hello HTTP/1.0\r\nHost: {}%{}\r\n\r\n", ip, dev);  //TODO: check if this is a proper HTTP request
-        stream.write(header.as_bytes())?;
+        let request = format!("GET /hello HTTP/1.0\r\nHost: {}%{}\r\n\r\n", ip, dev);  //TODO: check if this is a proper HTTP request
+        stream.write(request.as_bytes())?;
 
         // Make request and return response as string
         let mut resp = String::new();

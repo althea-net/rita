@@ -176,7 +176,7 @@ impl KernelInterface {
     }
 
     /// Gets the interface index for a named interface
-    pub fn get_iface_index(&mut self, name: &str) -> Result<u32, Error> {
+    pub fn get_iface_index(&self, name: &str) -> Result<u32, Error> {
         let mut f = File::open(format!("/sys/class/net/{}/ifindex", name))?;
 
         let mut contents = String::new();

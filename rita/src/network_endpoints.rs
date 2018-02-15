@@ -1,48 +1,44 @@
-use althea_types::PaymentTx;
+use althea_types::{PaymentTx, Identity};
+
+use actix::registry::SystemService;
+use actix_web::*;
+use actix_web::dev::*;
+
+use futures::Future;
 
 use payment_controller;
-use payment_controller::{PAYMENT_CONTROLLER};
+use payment_controller::PaymentController;
+
 use tunnel_manager::TunnelManager;
-
-extern crate num256;
-use num256::Int256;
-
-use rouille::{Request, Response};
-
-extern crate serde;
-extern crate serde_json;
-
-extern crate rand;
 
 use std::sync::mpsc::Sender;
 use std::sync::{Mutex, Arc};
 use std::io::Read;
+use std::boxed::Box;
 
-pub fn make_payments(request: &Request) -> Response {
-    if let Some(mut data) = request.data() {
-        let mut pmt_str = String::new();
-        data.read_to_string(&mut pmt_str).unwrap();
-        let pmt: PaymentTx = serde_json::from_str(&pmt_str).unwrap();
-        trace!("Received payment, Payment: {:?}", pmt);
+use serde_json;
 
-        PAYMENT_CONTROLLER.do_send(payment_controller::PaymentReceived(pmt));
-        // Arbiter::r
-        Response::text("Payment Recieved")
-    } else {
-        Response::text("Payment Error")
-    }
+use bytes::Bytes;
+
+use settings::SETTING;
+
+pub fn make_payments(req: HttpRequest) -> Box<Future<Item=HttpResponse, Error=Error>> {
+    trace!("Started processing payment from {:?}", req.connection_info().remote());
+
+    req.body().from_err().and_then(move |bytes: Bytes| {
+        println!("==== BODY ==== {:?} from {:?}", bytes, req.connection_info().remote());
+        let pmt: PaymentTx = serde_json::from_slice(&bytes[..]).unwrap();
+
+        trace!("Received payment from {:?}, Payment: {:?}", pmt, req.connection_info().remote());
+        PaymentController::from_registry().do_send(payment_controller::PaymentReceived(pmt));
+        Ok(httpcodes::HTTPOk.into())
+    }).responder()
 }
 
-//pub fn hello_response(request: &Request,
-//                     tm: Arc<Mutex<TunnelManager>>) -> Response {
-//    if let Some(mut data) = request.data() {
-//        let mut neighbor_id = String::new();
-//        data.read_to_string(&mut neighbor_id).unwrap();
-//        let id: LocalIdentity = serde_json::from_str(&neighbor_id).unwrap();
-//        trace!("Received neighbour identity, Payment: {:?}", LocalIdentity);
-//
-//        Response::text("Hello OK")
-//    } else {
-//        Response::text("Hello Error")
-//    }
-//}
+pub fn hello_response(req: HttpRequest) -> Result<Json<Identity>> {
+    // let id_str = req.body().limit(1024).wait().unwrap();
+    // let id: Identity = serde_json::from_slice(&id_str).unwrap();
+
+    // trace!("Received neighbour identity, Payment: {:?}", id);
+    Ok(Json(SETTING.get_identity()))
+}

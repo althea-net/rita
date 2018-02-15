@@ -177,6 +177,7 @@ class World:
         print("starting rita")
         for id in self.nodes:
             start_rita(id)
+            time.sleep(0.2)
         print("rita started")
 
     @staticmethod

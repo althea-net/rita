@@ -17,6 +17,7 @@ use settings::SETTING;
 use reqwest;
 use serde_json;
 use debt_keeper;
+use debt_keeper::DebtKeeper;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -38,6 +39,11 @@ impl Actor for PaymentController {
     type Context = Context<Self>;
 }
 impl Supervised for PaymentController {}
+impl SystemService for PaymentController {
+    fn service_started(&mut self, ctx: &mut Context<Self>) {
+        println!("Payment Controller started");
+    }
+}
 
 #[derive(Message)]
 pub struct PaymentReceived(pub PaymentTx);
@@ -46,7 +52,7 @@ impl Handler<PaymentReceived> for PaymentController {
     type Result = ();
 
     fn handle(&mut self, msg: PaymentReceived, _: &mut Context<Self>) -> Self::Result {
-        debt_keeper::DEBT_KEEPER.do_send(self.payment_received(msg.0).unwrap());
+        DebtKeeper::from_registry().do_send(self.payment_received(msg.0).unwrap());
     }
 }
 
@@ -85,14 +91,6 @@ pub struct BountyUpdate {
 
 #[cfg(test)]
 extern crate mockito;
-
-lazy_static!{
-    pub static ref PAYMENT_CONTROLLER: Addr<Syn, PaymentController> = {
-        Supervisor::start_in(&Arbiter::system_arbiter(), |ctx| {
-            PaymentController::new(&SETTING.get_identity())
-        })
-    };
-}
 
 impl Default for PaymentController {
     fn default() -> PaymentController {
