@@ -8,6 +8,9 @@ extern crate num256;
 #[macro_use]
 extern crate serde_derive;
 
+#[cfg(feature="actix")]
+extern crate actix;
+
 pub mod bytes_32;
 pub mod eth_address;
 pub mod eth_private_key;

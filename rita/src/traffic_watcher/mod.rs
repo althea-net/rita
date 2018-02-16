@@ -27,6 +27,7 @@ pub enum Error {
     TrafficWatcherError(String),
 }
 
+/*
 /// This traffic watcher watches how much traffic each neighbor sends to each destination
 /// between the last time watch was run, (This does _not_ block the thread)
 /// It also gathers the price to each destination from Babel and uses this information
@@ -40,7 +41,7 @@ pub fn watch(neighbors: Vec<Identity>, ki: &mut KernelInterface, babel: &mut Bab
     let routes = babel.parse_routes()?;
     info!("Got routes: {:?}", routes);
 
-    let mut identities: HashMap<MacAddress, Identity> = HashMap::new();
+    let mut identities: HashMap<String, Identity> = HashMap::new();
     for ident in &neighbors {
         identities.insert(ident.wg_public_key, *ident);
     }
@@ -113,7 +114,7 @@ pub fn watch(neighbors: Vec<Identity>, ki: &mut KernelInterface, babel: &mut Bab
 
     Ok(debts.into_iter().collect())
 }
-
+*/
 
 #[cfg(test)]
 mod tests {

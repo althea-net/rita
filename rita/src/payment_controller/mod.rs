@@ -41,7 +41,7 @@ impl Actor for PaymentController {
 impl Supervised for PaymentController {}
 impl SystemService for PaymentController {
     fn service_started(&mut self, ctx: &mut Context<Self>) {
-        println!("Payment Controller started");
+        info!("Payment Controller started");
     }
 }
 
@@ -145,7 +145,7 @@ impl PaymentController {
 
         trace!("current balance: {:?}", self.balance);
 
-        self.update_bounty(BountyUpdate{from: self.identity, tx: pmt.clone(), balance: self.balance.clone()})?;
+        self.update_bounty(BountyUpdate{from: self.identity.clone(), tx: pmt.clone(), balance: self.balance.clone()})?;
         Ok(debt_keeper::PaymentReceived {
             from: pmt.from,
             amount: pmt.amount.clone()
@@ -156,9 +156,9 @@ impl PaymentController {
     /// balance as well as to log the current balance
     pub fn update(&mut self) {
         self.update_bounty(BountyUpdate{
-            from: self.identity, tx:
-            PaymentTx{from: self.identity,
-                      to: self.identity,
+            from: self.identity.clone(), tx:
+            PaymentTx{from: self.identity.clone(),
+                      to: self.identity.clone(),
                       amount: Uint256::from(0u32)
             },
             balance: self.balance.clone()
@@ -189,7 +189,7 @@ impl PaymentController {
             .send()?;
 
         if r.status() == StatusCode::Ok {
-            self.update_bounty(BountyUpdate{from: self.identity, tx: pmt, balance: self.balance.clone()});
+            self.update_bounty(BountyUpdate{from: self.identity.clone(), tx: pmt, balance: self.balance.clone()});
             Ok(())
         } else {
             trace!("Unsuccessfully paid");
