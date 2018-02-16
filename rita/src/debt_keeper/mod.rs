@@ -73,7 +73,7 @@ pub struct SendUpdate{ pub from: Identity }
 impl Supervised for DebtKeeper {}
 impl SystemService for DebtKeeper {
     fn service_started(&mut self, ctx: &mut Context<Self>) {
-        println!("Debt Keeper started");
+        info!("Debt Keeper started");
     }
 }
 

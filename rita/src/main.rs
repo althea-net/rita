@@ -50,6 +50,7 @@ fn main() {
 
     assert!(debt_keeper::DebtKeeper::from_registry().connected());
     assert!(payment_controller::PaymentController::from_registry().connected());
+    assert!(tunnel_manager::TunnelManager::from_registry().connected());
 
     HttpServer::new(
         || Application::new()

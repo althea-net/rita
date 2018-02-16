@@ -1,14 +1,17 @@
 use std::time::Duration;
 use std::thread;
+use std::path::Path;
 
-use futures::{Future, future};
 use actix::prelude::*;
 use actix::registry::SystemService;
 
 use serde_json;
 
 use babel_monitor::Babel;
+
+use tunnel_manager;
 use tunnel_manager::TunnelManager;
+
 use traffic_watcher;
 
 use debt_keeper;
@@ -23,10 +26,12 @@ use althea_kernel_interface::KernelInterface;
 use network_endpoints::{make_payments};
 
 pub struct RitaLoop;
+
 impl Actor for RitaLoop {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
+        let mut ki = KernelInterface {};
         ctx.run_later(Duration::from_secs(5), |act, ctx| {
             let addr: Address<Self> = ctx.address();
             addr.do_send(Tick);
@@ -43,13 +48,17 @@ impl Handler<Tick> for RitaLoop {
         trace!("Tick!");
 
         let mut ki = KernelInterface {};
-        let mut tm = TunnelManager::new();
+
         let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port).parse().unwrap());
 
-        let neighbors = tm.get_neighbors().unwrap();
-        info!("got neighbors: {:?}", neighbors);
-
+        ctx.spawn(TunnelManager::from_registry().send(
+            tunnel_manager::GetNeighbors).into_actor(self).then(|res, act, ctx| {
+            info!("got neighbors: {:?}", res);
+            actix::fut::ok(())
+        }));
+/*
         let debts = traffic_watcher::watch(neighbors, &mut ki, &mut babel).unwrap();
+
         info!("got debts: {:?}", debts);
 
         for (from, amount) in debts {
@@ -64,6 +73,7 @@ impl Handler<Tick> for RitaLoop {
                     }));
         }
         PaymentController::from_registry().do_send(payment_controller::PaymentControllerUpdate);
+*/
 
         ctx.run_later(Duration::from_secs(5), |act, ctx| {
             let addr: Address<Self> = ctx.address();

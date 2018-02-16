@@ -32,6 +32,7 @@ mod read_flow_counters_linux;
 mod setup_wg_if_linux;
 mod start_destination_counter_linux;
 mod start_flow_counter_linux;
+mod get_link_local_ip_linux;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -55,7 +56,7 @@ pub struct KernelInterface {}
 
 impl KernelInterface {
     #[cfg(not(test))]
-    fn run_command(&mut self, program: &str, args: &[&str]) -> Result<Output, Error> {
+    fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, Error> {
         let output = Command::new(program).args(args).output()?;
         trace!("Command {} {:?} returned: {:?}", program, args, output);
         if !output.status.success() {
@@ -65,13 +66,13 @@ impl KernelInterface {
     }
 
     #[cfg(test)]
-    fn run_command(&mut self, args: &str, program: &[&str]) -> Result<Output, Error> {
+    fn run_command(&self, args: &str, program: &[&str]) -> Result<Output, Error> {
         (self.run_command)(args, program)
     }
 
     /// Returns a vector of neighbors reachable over layer 2, giving the hardware
     /// and IP address of each. Implemented with `ip neighbor` on Linux.
-    pub fn get_neighbors(&mut self) -> Result<Vec<(MacAddress, IpAddr, String)>, Error> {
+    pub fn get_neighbors(&self) -> Result<Vec<(MacAddress, IpAddr, String)>, Error> {
         if cfg!(target_os = "linux") {
             return self.get_neighbors_linux();
         }
@@ -194,12 +195,13 @@ impl KernelInterface {
     pub fn open_tunnel(
         &mut self,
         interface: &String,
+        port:u16,
         endpoint: &SocketAddr,
         remote_pub_key: &String,
         private_key_path: &Path
     ) -> Result<(), Error> {
             if cfg!(target_os = "linux") {
-                return self.open_tunnel_linux(interface, endpoint, remote_pub_key, private_key_path);
+                return self.open_tunnel_linux(interface, port, endpoint, remote_pub_key, private_key_path);
             }
 
             Err(Error::RuntimeError(String::from("not implemented for this platform")))

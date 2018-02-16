@@ -7,7 +7,7 @@ use eui48::MacAddress;
 use regex::Regex;
 
 impl KernelInterface {
-    pub fn get_neighbors_linux(&mut self) -> Result<Vec<(MacAddress, IpAddr, String)>, Error> {
+    pub fn get_neighbors_linux(&self) -> Result<Vec<(MacAddress, IpAddr, String)>, Error> {
         let output = self.run_command("ip", &["neighbor"])?;
         trace!("Got {:?} from `ip neighbor`", output);
 

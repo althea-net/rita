@@ -19,12 +19,12 @@ tests_passes = True
 
 def cleanup():
     os.system("rm -rf *.log *.pid *.toml")
-    os.system("killall babeld rita bounty_hunter nc")  # TODO: This is very inconsiderate
+    os.system("killall babeld rita bounty_hunter iperf")  # TODO: This is very inconsiderate
 
 
 def teardown():
     os.system("rm -rf *.pid *.toml")
-    os.system("killall babeld rita bounty_hunter nc")  # TODO: This is very inconsiderate
+    os.system("killall babeld rita bounty_hunter iperf")  # TODO: This is very inconsiderate
 
 
 class Node:
@@ -85,6 +85,7 @@ def save_rita_settings(id, x):
 def start_rita(id):
     settings = get_rita_defaults()
     settings["network"]["own_ip"] = "2001::{}".format(id)
+    settings["network"]["wg_private_key"] = "private-key-{}".format(id)
     save_rita_settings(id, settings)
     os.system('(RUST_BACKTRACE=full ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml & echo $! > rita-n{id}.pid) | grep -Ev "<unknown>|mio" > rita-n{id}.log &'.format(id=id, rita=rita))
 
