@@ -60,8 +60,4 @@ pub fn hello_response(req: HttpRequest) -> Box<Future<Item=Json<LocalIdentity>, 
             Ok(Json(reply.unwrap()))
         })
     }).responder()
-    // let id_str = req.body().limit(1024).wait().unwrap();
-    // let id: Identity = serde_json::from_slice(&id_str).unwrap();
-
-    // trace!("Received neighbour identity, Payment: {:?}", id);
 }

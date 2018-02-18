@@ -33,6 +33,7 @@ mod setup_wg_if_linux;
 mod start_destination_counter_linux;
 mod start_flow_counter_linux;
 mod get_link_local_ip_linux;
+mod get_interfaces;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -198,10 +199,12 @@ impl KernelInterface {
         port:u16,
         endpoint: &SocketAddr,
         remote_pub_key: &String,
-        private_key_path: &Path
+        private_key_path: &Path,
+        own_ip: &IpAddr,
+        remote_ip: &IpAddr,
     ) -> Result<(), Error> {
             if cfg!(target_os = "linux") {
-                return self.open_tunnel_linux(interface, port, endpoint, remote_pub_key, private_key_path);
+                return self.open_tunnel_linux(interface, port, endpoint, remote_pub_key, private_key_path, own_ip, remote_ip);
             }
 
             Err(Error::RuntimeError(String::from("not implemented for this platform")))

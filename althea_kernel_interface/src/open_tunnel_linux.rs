@@ -1,6 +1,6 @@
 use super::{KernelInterface, Error};
 
-use std::net::{SocketAddr};
+use std::net::{SocketAddr, IpAddr};
 use std::path::Path;
 
 impl KernelInterface {
@@ -10,7 +10,9 @@ impl KernelInterface {
         port: u16,
         endpoint: &SocketAddr,
         remote_pub_key: &String,
-        private_key_path: &Path
+        private_key_path: &Path,
+        own_ip: &IpAddr,
+        remote_ip: &IpAddr,
     ) -> Result<(), Error> {
         if let &SocketAddr::V6(socket) = endpoint {
             let phy_name = self.get_device_name_linux(endpoint.ip())?;
@@ -34,7 +36,19 @@ impl KernelInterface {
             if !output.stderr.is_empty() {
                 return Err(Error::RuntimeError(format!("received error from wg command: {}", String::from_utf8(output.stderr)?)));
             }
-            let output = self.run_command("ip", &["link", "set", &interface, "up"])?;
+            let output = self.run_command("ip", &["address", "add", &format!("{}", own_ip), "dev", &interface])?;
+            if !output.stderr.is_empty() {
+                return Err(Error::RuntimeError(format!("received error adding wg link: {}", String::from_utf8(output.stderr)?)))
+            }
+            let output = self.run_command("ip", &["address", "add", &format!("fe80::{}/64", own_ip.to_string().clone().pop().unwrap()), "dev", &interface])?;
+            if !output.stderr.is_empty() {
+                return Err(Error::RuntimeError(format!("received error adding wg link: {}", String::from_utf8(output.stderr)?)))
+            }
+            let output = self.run_command("ip", &["link", "set", "dev", &interface, "up"])?;
+            if !output.stderr.is_empty() {
+                return Err(Error::RuntimeError(format!("received error setting wg interface up: {}", String::from_utf8(output.stderr)?)))
+            }
+            let output = self.run_command("ifconfig", &[&interface, "up"])?;
             if !output.stderr.is_empty() {
                 return Err(Error::RuntimeError(format!("received error setting wg interface up: {}", String::from_utf8(output.stderr)?)))
             }

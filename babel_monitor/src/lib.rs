@@ -122,7 +122,7 @@ impl<T: Read + Write> InnerBabel<T> {
         Ok(ret)
     }
 
-    fn write(&mut self, command: &'static str) -> Result<(), Error> {
+    fn write(&mut self, command: &str) -> Result<(), Error> {
         self.stream.get_mut().write(command.as_bytes())?;
         Ok(())
     }
@@ -134,6 +134,26 @@ impl<T: Read + Write> InnerBabel<T> {
                 return Ok(find_babel_val("price", entry)?.parse()?);
             }
         }
+        Ok(0)
+    }
+
+    pub fn monitor(&mut self, iface: &str) -> Result<u32, Error> {
+        let commmand = format!("interface {} \n", iface);
+        self.write(&commmand)?;
+        let out = self.read()?;
+        trace!("Babel monitor output: {}", out);
+        let commmand = format!("monitor\n");
+        self.write(&commmand)?;
+        let out = self.read()?;
+        trace!("Babel monitor output: {}", out);
+        Ok(0)
+    }
+
+    pub fn unmonitor(&mut self, iface: &str) -> Result<u32, Error> {
+        let commmand = format!("unmonitor {}\n", iface);
+        self.write(&commmand)?;
+        let out = self.read()?;
+        trace!("{}", out);
         Ok(0)
     }
 

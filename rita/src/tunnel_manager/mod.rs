@@ -9,22 +9,29 @@ use std::sync::mpsc::{Sender, Receiver, channel};
 use minihttpse::Response;
 
 use actix::prelude::*;
+use actix::actors::*;
+
+use futures;
+use futures::Future;
 
 use althea_types::{EthAddress, Identity, LocalIdentity};
 
 use althea_kernel_interface::KernelInterface;
 use althea_kernel_interface;
 
-use reqwest;
-use reqwest::Client;
+use babel_monitor::Babel;
+
+use http_client;
+use http_client::HTTPClient;
+
 use serde_json;
 
 use settings::SETTING;
 
 #[derive(Debug, Error)]
 pub enum Error {
+    HTTPClientError(http_client::Error),
     KernelInterfaceError(althea_kernel_interface::Error),
-    HttpReqError(reqwest::Error),
     IOError(std::io::Error),
     DeserializationError(serde_json::Error),
     HTTPParseError,
@@ -50,7 +57,6 @@ impl TunnelData {
 }
 
 pub struct TunnelManager {
-    pub client: Client,
     pub ki: KernelInterface,
     pub port: u16,
 
@@ -79,10 +85,10 @@ impl Message for GetNeighbors {
 }
 
 impl Handler<GetNeighbors> for TunnelManager {
-    type Result = MessageResult<GetNeighbors>;
+    type Result = ResponseFuture<Vec<LocalIdentity>, Error>;
 
     fn handle(&mut self, _: GetNeighbors, _: &mut Context<Self>) -> Self::Result {
-        MessageResult(self.get_neighbors())
+        self.get_neighbors()
     }
 }
 
@@ -126,7 +132,6 @@ fn is_link_local(ip: IpAddr) -> bool {
 impl TunnelManager {
     pub fn new() -> Self {
         let mut tm = TunnelManager {
-            client: Client::new(),
             ki: KernelInterface {},
             tunnel_map: HashMap::new(),
             port: SETTING.network.wg_start_port,
@@ -156,85 +161,56 @@ impl TunnelManager {
     /// Identity using `neighbor_inquiry`. It also puts the MAC address of each neighbor
     /// into the identity. This is hacky, but the next version of Rita will not use
     /// a public key instead of a MAC address to identify neighbors, meaning that it is very temporary.
-    pub fn get_neighbors(&mut self) -> Result<Vec<LocalIdentity>, Error> {
-        Ok(self.ki
-            .get_neighbors()?
+    pub fn get_neighbors(&mut self) -> ResponseFuture<Vec<LocalIdentity>, Error> {
+        let neighs: Vec<Box<Future<Item=LocalIdentity, Error=Error>>> = self.ki
+            .get_neighbors().unwrap()
             .iter()
             .filter_map(|&(mac_address, ip_address, ref dev)| {
                 trace!("neighbor at interface {}, ip {}, mac {}", dev, ip_address, mac_address);
                 if &dev[..2] != "wg" && is_link_local(ip_address) {
                     {
-                        let identity = self.neighbor_inquiry(ip_address, &dev);
-                        match identity {
-                            Ok(identity) => {
-
-                                trace!("opening tunnel in get neighbour for {:?}", identity);
-                                self.open_tunnel(identity.clone());
-                                Some(identity)
-                            },
-                            Err(something) => {
-                                trace!("error!!!: {:?}", something);
-                                None
-                            },
-                        }
+                        Some(self.neighbor_inquiry(ip_address, &dev))
                     }
                 } else {
                     None
                 }
             })
-            .collect())
+            .collect();
+        Box::new(futures::future::join_all(neighs))
     }
 
     /// Contacts one neighbor with our LocalIdentity to get their LocalIdentity.
-    pub fn neighbor_inquiry(&mut self, their_ip: IpAddr, dev: &str) -> Result<LocalIdentity, Error> {
+    pub fn neighbor_inquiry(&mut self, their_ip: IpAddr, dev: &str) -> ResponseFuture<LocalIdentity, Error> {
         let url = format!("http://[{}%{}]:4876/hello", their_ip, dev);
         trace!("Saying hello to: {:?}", url);
 
         let socket = match their_ip {
             IpAddr::V6(ip_v6) => {
-                SocketAddr::V6(SocketAddrV6::new(ip_v6, 4876, 0, self.ki.get_iface_index(dev)?))
+                SocketAddr::V6(SocketAddrV6::new(ip_v6, 4876, 0, self.ki.get_iface_index(dev).unwrap()))
             }
             IpAddr::V4(_) => {
-                return Err(Error::TunnelManagerError(String::from("IPv4 neighbors are not supported")))
+                return Box::new(futures::future::err(Error::TunnelManagerError(String::from("IPv4 neighbors are not supported"))))
             }
         };
-
-        let mut stream = TcpStream::connect_timeout(&socket, Duration::from_secs(1))?;
 
         trace!("Getting tunnel, inq");
         let tunnel = self.get_if(&their_ip);
 
         let my_id = LocalIdentity {
             global: SETTING.get_identity(),
-            local_ip: self.ki.get_link_local_reply_ip_linux(their_ip)?,
+            local_ip: self.ki.get_link_local_reply_ip_linux(their_ip).unwrap(),
             wg_port: tunnel.listen_port,
         };
 
-        let my_id = serde_json::to_string(&my_id)?;
-
-        // Format HTTP request
-        let request = format!("POST /hello HTTP/1.0\r\n\
-Host: {}%{}\r\n\
-Content-Type:application/json\r\n\
-Content-Length: {}\r\n\r\n
-{}\r\n", their_ip, dev, my_id.len() + 1, my_id);  //TODO: make this a lot less ugly
-
-        trace!("Sending http request:\
-        {}\nEND", request);
-        stream.write(request.as_bytes())?;
-
-        // Make request and return response as string
-        let mut resp = String::new();
-        stream.read_to_string(&mut resp)?;
-
-        trace!("They replied {}", &resp);
-
-        if let Ok(response) = Response::new(resp.into_bytes()){
-            let mut identity: LocalIdentity = serde_json::from_str(&response.text())?;
-            Ok(identity)
-        }else{
-            Err(Error::HTTPParseError)
-        }
+        Box::new(HTTPClient::from_registry().send(http_client::Hello{
+            my_id,
+            to: socket
+        }).then(|res| {
+            match res.unwrap() {
+                Ok(res) => Ok(res),
+                Err(err) => Err(Error::HTTPClientError(err))
+            }
+        }))
     }
 
     pub fn get_local_identity(&mut self, requester: &LocalIdentity) -> LocalIdentity {
@@ -259,7 +235,12 @@ Content-Length: {}\r\n\r\n
                             &SocketAddr::new(their_id.local_ip, their_id.wg_port),
                             &their_id.global.wg_public_key,
                             Path::new(&SETTING.network.wg_private_key),
+                            &SETTING.network.own_ip,
+                            &their_id.global.mesh_ip,
         )?;
+
+        //let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port).parse().unwrap());
+        //babel.monitor(&tunnel.iface_name);
         Ok(())
     }
 }
