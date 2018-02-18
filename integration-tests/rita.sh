@@ -22,7 +22,7 @@ fetch_netlab () {
     git clone "https://github.com/kingoflolz/network-lab" "deps/network-lab" # TODO: Change this back when PR is upstreamed
   fi
 
-  chmod 777 deps/network-lab deps/network-lab/network-lab.sh
+  chmod +x deps/network-lab deps/network-lab/network-lab.sh
 }
 
 build_rita () {

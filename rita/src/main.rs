@@ -20,6 +20,7 @@ extern crate rand;
 extern crate futures;
 extern crate actix_web;
 extern crate bytes;
+extern crate tokio;
 
 use actix::*;
 use actix::registry::SystemService;
@@ -37,6 +38,7 @@ mod network_endpoints;
 mod traffic_watcher;
 mod settings;
 mod rita_loop;
+mod http_client;
 
 use network_endpoints::{make_payments, hello_response};
 use settings::SETTING;
@@ -51,6 +53,7 @@ fn main() {
     assert!(debt_keeper::DebtKeeper::from_registry().connected());
     assert!(payment_controller::PaymentController::from_registry().connected());
     assert!(tunnel_manager::TunnelManager::from_registry().connected());
+    assert!(http_client::HTTPClient::from_registry().connected());
 
     HttpServer::new(
         || Application::new()

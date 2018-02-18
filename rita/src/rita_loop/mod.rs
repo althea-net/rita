@@ -49,7 +49,7 @@ impl Handler<Tick> for RitaLoop {
 
         let mut ki = KernelInterface {};
 
-        let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port).parse().unwrap());
+        // let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port).parse().unwrap());
 
         ctx.spawn(TunnelManager::from_registry().send(
             tunnel_manager::GetNeighbors).into_actor(self).then(|res, act, ctx| {

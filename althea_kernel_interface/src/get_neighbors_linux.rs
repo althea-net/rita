@@ -8,6 +8,10 @@ use regex::Regex;
 
 impl KernelInterface {
     pub fn get_neighbors_linux(&self) -> Result<Vec<(MacAddress, IpAddr, String)>, Error> {
+        for interface in self.get_interfaces()? {
+            self.run_command("ping6", &["-c1", "-I", &interface, "ff02::1"])?;
+        }
+
         let output = self.run_command("ip", &["neighbor"])?;
         trace!("Got {:?} from `ip neighbor`", output);
 
