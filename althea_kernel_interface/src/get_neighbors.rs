@@ -7,11 +7,9 @@ use eui48::MacAddress;
 use regex::Regex;
 
 impl KernelInterface {
-    pub fn get_neighbors_linux(&self) -> Result<Vec<(MacAddress, IpAddr, String)>, Error> {
-        for interface in self.get_interfaces()? {
-            self.run_command("ping6", &["-c1", "-I", &interface, "ff02::1"])?;
-        }
-
+    /// Returns a vector of neighbors reachable over layer 2, giving the hardware
+    /// and IP address of each. Implemented with `ip neighbor` on Linux.
+    pub fn get_neighbors(&self) -> Result<Vec<(MacAddress, IpAddr, String)>, Error> {
         let output = self.run_command("ip", &["neighbor"])?;
         trace!("Got {:?} from `ip neighbor`", output);
 
@@ -29,4 +27,9 @@ impl KernelInterface {
         trace!("Got neighbors {:?}", vec);
         Ok(vec)
     }
-}
+
+    pub fn trigger_neighbor_disc(&self) {
+        for interface in self.get_interfaces().unwrap() {
+            self.run_command("ping6", &["-c1", "-I", &interface, "ff02::1"]).unwrap();
+        }
+    }}

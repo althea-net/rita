@@ -90,6 +90,7 @@ pub struct InnerBabel<T: Read + Write> {
 
 impl Babel {
     pub fn new(addr: &SocketAddr) -> Babel {
+        trace!("Connecting to babel instance at {}", addr);
         let mut babel = InnerBabel { stream: BufReader::new(TcpStream::connect_timeout(addr, time::Duration::from_secs(5)).unwrap()) };
         babel.start_connection().unwrap();
         babel

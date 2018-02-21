@@ -4,7 +4,7 @@ use std::net::{SocketAddr, IpAddr};
 use std::path::Path;
 
 impl KernelInterface {
-    pub fn open_tunnel_linux(
+    pub fn open_tunnel(
         &mut self,
         interface: &String,
         port: u16,
@@ -15,8 +15,8 @@ impl KernelInterface {
         remote_ip: &IpAddr,
     ) -> Result<(), Error> {
         if let &SocketAddr::V6(socket) = endpoint {
-            let phy_name = self.get_device_name_linux(endpoint.ip())?;
-            let local_ip = self.get_link_local_reply_ip_linux(endpoint.ip())?;
+            let phy_name = self.get_device_name(endpoint.ip())?;
+            let local_ip = self.get_link_local_reply_ip(endpoint.ip())?;
             let output = self.run_command("wg", &[
                 "set",
                 &interface,
