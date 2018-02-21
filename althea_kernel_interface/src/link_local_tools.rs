@@ -2,12 +2,14 @@ use super::{KernelInterface, Error};
 
 use std::net::{IpAddr};
 use std::str::FromStr;
+use std::fs::File;
+use std::io::{Read, Write};
 
 use regex::Regex;
 
 impl KernelInterface {
     /// This gets our link local ip for a given device
-    pub fn get_link_local_device_ip_linux(&self, dev: &str) -> Result<IpAddr, Error> {
+    pub fn get_link_local_device_ip(&self, dev: &str) -> Result<IpAddr, Error> {
         let output = self.run_command("ip", &["addr", "show", "dev", dev, "scope", "link"])?;
         trace!("Got {:?} from `ip addr`", output);
 
@@ -23,8 +25,9 @@ impl KernelInterface {
     }
 
     /// Given a neighboring link local ip, return the device name
-    pub fn get_device_name_linux(&self, their_ip: IpAddr) -> Result<String, Error> {
+    pub fn get_device_name(&self, their_ip: IpAddr) -> Result<String, Error> {
         let neigh = self.get_neighbors()?;
+        trace!("looking for {:?} in {:?} for device name", their_ip, neigh);
         for (mac, ip, dev) in neigh {
             if ip == their_ip {
                 return Ok(dev.to_string())
@@ -35,15 +38,32 @@ impl KernelInterface {
     }
 
     /// This gets our link local ip that can be reached by another node with link local ip
-    pub fn get_link_local_reply_ip_linux(&self, their_ip: IpAddr) -> Result<IpAddr, Error> {
+    pub fn get_link_local_reply_ip(&self, their_ip: IpAddr) -> Result<IpAddr, Error> {
         let neigh = self.get_neighbors()?;
 
+        trace!("looking for {:?} in {:?} for reply ip", their_ip, neigh);
         for (mac, ip, dev) in neigh {
             if ip == their_ip {
-                return Ok(self.get_link_local_device_ip_linux(&dev)?)
+                return Ok(self.get_link_local_device_ip(&dev)?)
             }
         }
 
         Err(Error::RuntimeError("Address not found in neighbors".to_string()))
+    }
+
+    /// Gets the interface index for a named interface
+    pub fn get_iface_index(&self, name: &str) -> Result<u32, Error> {
+        let mut f = File::open(format!("/sys/class/net/{}/ifindex", name))?;
+
+        let mut contents = String::new();
+        f.read_to_string(&mut contents)?;
+
+        contents.pop(); //remove trailing newline
+
+        let index = contents.parse::<u32>()?;
+
+        trace!("Got index: {}", index);
+
+        Ok(index)
     }
 }

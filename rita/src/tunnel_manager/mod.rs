@@ -81,11 +81,11 @@ impl Default for TunnelManager {
 
 pub struct GetNeighbors;
 impl Message for GetNeighbors {
-    type Result = Result<Vec<LocalIdentity>, Error>;
+    type Result = Result<Vec<(LocalIdentity, String)>, Error>;
 }
 
 impl Handler<GetNeighbors> for TunnelManager {
-    type Result = ResponseFuture<Vec<LocalIdentity>, Error>;
+    type Result = ResponseFuture<Vec<(LocalIdentity, String)>, Error>;
 
     fn handle(&mut self, _: GetNeighbors, _: &mut Context<Self>) -> Self::Result {
         self.get_neighbors()
@@ -158,11 +158,10 @@ impl TunnelManager {
     }
 
     /// This gets the list of link-local neighbors, and then contacts them to get their
-    /// Identity using `neighbor_inquiry`. It also puts the MAC address of each neighbor
-    /// into the identity. This is hacky, but the next version of Rita will not use
-    /// a public key instead of a MAC address to identify neighbors, meaning that it is very temporary.
-    pub fn get_neighbors(&mut self) -> ResponseFuture<Vec<LocalIdentity>, Error> {
-        let neighs: Vec<Box<Future<Item=LocalIdentity, Error=Error>>> = self.ki
+    /// Identity using `neighbor_inquiry` as well as their wireguard tunnel name
+    pub fn get_neighbors(&mut self) -> ResponseFuture<Vec<(LocalIdentity, String)>, Error> {
+        self.ki.trigger_neighbor_disc();
+        let neighs: Vec<Box<Future<Item=(LocalIdentity, String), Error=Error>>> = self.ki
             .get_neighbors().unwrap()
             .iter()
             .filter_map(|&(mac_address, ip_address, ref dev)| {
@@ -179,8 +178,9 @@ impl TunnelManager {
         Box::new(futures::future::join_all(neighs))
     }
 
-    /// Contacts one neighbor with our LocalIdentity to get their LocalIdentity.
-    pub fn neighbor_inquiry(&mut self, their_ip: IpAddr, dev: &str) -> ResponseFuture<LocalIdentity, Error> {
+    /// Contacts one neighbor with our LocalIdentity to get their LocalIdentity and wireguard tunnel
+    /// interface name.
+    pub fn neighbor_inquiry(&mut self, their_ip: IpAddr, dev: &str) -> ResponseFuture<(LocalIdentity, String), Error> {
         let url = format!("http://[{}%{}]:4876/hello", their_ip, dev);
         trace!("Saying hello to: {:?}", url);
 
@@ -198,7 +198,7 @@ impl TunnelManager {
 
         let my_id = LocalIdentity {
             global: SETTING.get_identity(),
-            local_ip: self.ki.get_link_local_reply_ip_linux(their_ip).unwrap(),
+            local_ip: self.ki.get_link_local_reply_ip(their_ip).unwrap(),
             wg_port: tunnel.listen_port,
         };
 
@@ -207,7 +207,7 @@ impl TunnelManager {
             to: socket
         }).then(|res| {
             match res.unwrap() {
-                Ok(res) => Ok(res),
+                Ok(res) => Ok((res, tunnel.iface_name)),
                 Err(err) => Err(Error::HTTPClientError(err))
             }
         }))
@@ -217,7 +217,7 @@ impl TunnelManager {
         trace!("Getting tunnel, local id");
         let tunnel = self.get_if(&requester.local_ip);
 
-        let local_ip = self.ki.get_link_local_reply_ip_linux(requester.local_ip).unwrap();
+        let local_ip = self.ki.get_link_local_reply_ip(requester.local_ip).unwrap();
 
         LocalIdentity{
             global: SETTING.get_identity(),
@@ -239,8 +239,8 @@ impl TunnelManager {
                             &their_id.global.mesh_ip,
         )?;
 
-        //let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port).parse().unwrap());
-        //babel.monitor(&tunnel.iface_name);
+        let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port).parse().unwrap());
+        babel.monitor(&tunnel.iface_name);
         Ok(())
     }
 }

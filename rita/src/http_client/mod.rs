@@ -7,13 +7,18 @@ use minihttpse::Response;
 
 use actix_web;
 use actix::prelude::*;
+use actix_web::client::*;
+use actix_web::*;
+
 use futures::Future;
 
 use actix::registry::SystemService;
 
 use serde_json;
 
-use althea_types::{LocalIdentity};
+use althea_types::{LocalIdentity, PaymentTx};
+
+use settings::SETTING;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -24,7 +29,7 @@ pub enum Error {
 }
 
 pub struct HTTPClient {
-    executors: SyncAddress<HTTPExecutor>
+    executors: SyncAddress<HTTPSyncExecutor>
 }
 
 impl Actor for HTTPClient {
@@ -40,14 +45,14 @@ impl SystemService for HTTPClient {
 impl Default for HTTPClient {
     fn default() -> HTTPClient {
         HTTPClient{
-            executors: SyncArbiter::start(3, || {HTTPExecutor{}})
+            executors: SyncArbiter::start(10, || { HTTPSyncExecutor {}})
         }
     }
 }
 
-pub struct HTTPExecutor;
+pub struct HTTPSyncExecutor;
 
-impl Actor for HTTPExecutor {
+impl Actor for HTTPSyncExecutor {
     type Context = SyncContext<Self>;
 }
 
@@ -67,7 +72,7 @@ impl Handler<Hello> for HTTPClient {
     }
 }
 
-impl Handler<Hello> for HTTPExecutor {
+impl Handler<Hello> for HTTPSyncExecutor {
     type Result = Result<LocalIdentity, Error>;
 
     fn handle(&mut self, msg: Hello, _: &mut Self::Context) -> Self::Result {

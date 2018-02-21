@@ -5,7 +5,7 @@ use std::io::{Write};
 use std::path::Path;
 
 impl KernelInterface {
-    pub fn create_wg_key_linux(&self, path: &Path) -> Result<(), Error> {
+    pub fn create_wg_key(&self, path: &Path) -> Result<(), Error> {
         if path.exists() {
             Ok(())
         } else {

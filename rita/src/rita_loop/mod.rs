@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::thread;
 use std::path::Path;
 
@@ -13,6 +13,7 @@ use tunnel_manager;
 use tunnel_manager::TunnelManager;
 
 use traffic_watcher;
+use traffic_watcher::TrafficWatcher;
 
 use debt_keeper;
 use debt_keeper::DebtKeeper;
@@ -51,33 +52,24 @@ impl Handler<Tick> for RitaLoop {
 
         // let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port).parse().unwrap());
 
+        let start = Instant::now();
+
         ctx.spawn(TunnelManager::from_registry().send(
-            tunnel_manager::GetNeighbors).into_actor(self).then(|res, act, ctx| {
+            tunnel_manager::GetNeighbors).into_actor(self).then(move |res, act, ctx| {
             info!("got neighbors: {:?}", res);
-            actix::fut::ok(())
+
+            let neigh = Instant::now();
+
+            TrafficWatcher::from_registry().send(traffic_watcher::Watch(res.unwrap().unwrap())).into_actor(act).then(
+                move |res, act, ctx| {
+                    info!("loop completed in {:?}", start.elapsed());
+                    info!("traffic watcher completed in {:?}", neigh.elapsed());
+                    ctx.run_later(Duration::from_secs(5), |act, ctx| {
+                        let addr: Address<Self> = ctx.address();
+                        addr.do_send(Tick);
+                    });
+                    actix::fut::ok(())
+                })
         }));
-/*
-        let debts = traffic_watcher::watch(neighbors, &mut ki, &mut babel).unwrap();
-
-        info!("got debts: {:?}", debts);
-
-        for (from, amount) in debts {
-            let update = debt_keeper::TrafficUpdate { from, amount };
-            let adjustment = debt_keeper::SendUpdate { from };
-
-            Arbiter::handle().spawn(
-                DebtKeeper::from_registry().send(update).then(
-                    move |_| {
-                        DebtKeeper::from_registry().do_send(adjustment);
-                        future::result(Ok(()))
-                    }));
-        }
-        PaymentController::from_registry().do_send(payment_controller::PaymentControllerUpdate);
-*/
-
-        ctx.run_later(Duration::from_secs(5), |act, ctx| {
-            let addr: Address<Self> = ctx.address();
-            addr.do_send(Tick);
-        });
     }
 }

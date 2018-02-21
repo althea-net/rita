@@ -16,6 +16,9 @@ ping6 = os.getenv('PING6', "ping6")
 
 tests_passes = True
 
+abspath = os.path.abspath(__file__)
+dname = os.path.dirname(abspath)
+os.chdir(dname)
 
 def cleanup():
     os.system("rm -rf *.log *.pid *.toml")
@@ -46,7 +49,7 @@ class Node:
     def get_veth_interfaces(self):
         interfaces = ""
         for i in self.neighbors:
-            interfaces += "br-{}-{} ".format(self.id, i)
+            interfaces += "veth-{}-{} ".format(self.id, i)
         return interfaces
 
 class Connection:
@@ -68,7 +71,7 @@ def prep_netns(id):
 
 
 def start_babel(node):
-    os.system("ip netns exec netlab-{id} {0} -I babeld-n{id}.pid -d1 -L babeld-n{id}.log -h 1 -P {price} -w dummy {1} -G 8080 &".
+    os.system("ip netns exec netlab-{id} {0} -I babeld-n{id}.pid -d1 -L babeld-n{id}.log -h 1 -P {price} -G 8080 -w dummy &".
               format(babeld, node.get_interfaces(), id=node.id, price=node.fwd_price))
 
 def create_dummy(id):
@@ -163,6 +166,7 @@ class World:
 
         for id, node in self.nodes.items():
             create_dummy(id)
+            start_babel(node)
 
         print("babel started")
 
@@ -196,7 +200,7 @@ class World:
         m = 0
         balances = {}
 
-        while s != 0 and n < 5:
+        while s != 0 and n < 100:
             status = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(self.bounty), "curl", "-s", "-g", "-6", "[::1]:8888/list"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             status.wait()
             output = status.stdout.read().decode("utf-8")
@@ -209,7 +213,7 @@ class World:
                 s += int(i["balance"])
                 m += abs(int(i["balance"]))
             n += 1
-            time.sleep(1)
+            time.sleep(0.5)
             print("time {}, value {}".format(n, s))
 
         print("tried {} times".format(n))
@@ -272,80 +276,75 @@ if __name__ == "__main__":
     world.create()
 
     print("Waiting for network to stabilize")
-    time.sleep(15)
-
-    for id, node in world.nodes.items():
-        start_babel(node)
-
-    time.sleep(15)
+    time.sleep(40)
 
     print("Test reachabibility...")
     world.test_reach_all()
     time.sleep(12)
-    #
-    # print("Test traffic...")
-    # t1 = world.get_balances()
-    # time.sleep(20)
-    # world.gen_traffic(d, a, 1000000000)
-    # time.sleep(20)
-    #
-    # t2 = world.get_balances()
-    # print("balance change from d->a:")
-    # diff = traffic_diff(t1, t2)
-    # print(diff)
-    #
-    # assert_test(fuzzy_traffic(diff[1], 10e9), "Balance of A")
-    # assert_test(fuzzy_traffic(diff[2], 25e9), "Balance of B")
-    # assert_test(fuzzy_traffic(diff[3], 0), "Balance of C")
-    # assert_test(fuzzy_traffic(diff[4], -85e9), "Balance of D")
-    # assert_test(fuzzy_traffic(diff[6], 50e9), "Balance of F")
-    # assert_test(fuzzy_traffic(diff[7], 0), "Balance of G")
-    #
-    # t2 = world.get_balances()
-    #
-    # time.sleep(22)
-    # world.gen_traffic(a, c, 1000000000)
-    # time.sleep(20)
-    #
-    # t3 = world.get_balances()
-    # print("balance change from a->c:")
-    # diff = traffic_diff(t2, t3)
-    # print(diff)
-    #
-    # assert_test(fuzzy_traffic(diff[1], -120e9), "Balance of A")
-    # assert_test(fuzzy_traffic(diff[2], 0), "Balance of B")
-    # assert_test(fuzzy_traffic(diff[3], 60e9), "Balance of C")
-    # assert_test(fuzzy_traffic(diff[4], 0), "Balance of D")
-    # assert_test(fuzzy_traffic(diff[6], 50e9), "Balance of F")
-    # assert_test(fuzzy_traffic(diff[7], 10e9), "Balance of G")
-    #
-    # t3 = world.get_balances()
-    #
-    # time.sleep(20)
-    # world.gen_traffic(c, f, 1000000000)
-    # time.sleep(20)
-    #
-    # t4 = world.get_balances()
-    # print("balance change from c->f:")
-    # diff = traffic_diff(t3, t4)
-    # print(diff)
-    #
-    # assert_test(fuzzy_traffic(diff[1], 0), "Balance of A")
-    # assert_test(fuzzy_traffic(diff[2], 0), "Balance of B")
-    # assert_test(fuzzy_traffic(diff[3], -60e9), "Balance of C")
-    # assert_test(fuzzy_traffic(diff[4], 0), "Balance of D")
-    # assert_test(fuzzy_traffic(diff[6], 50e9), "Balance of F")
-    # assert_test(fuzzy_traffic(diff[7], 10e9), "Balance of G")
-    #
-    # print("Check that tunnels have not been suspended")
-    #
-    # assert_test(not check_log_contains("rita-n1.log", "Suspending Tunnel"), "Suspension of A")
-    # assert_test(not check_log_contains("rita-n2.log", "Suspending Tunnel"), "Suspension of B")
-    # assert_test(not check_log_contains("rita-n3.log", "Suspending Tunnel"), "Suspension of C")
-    # assert_test(not check_log_contains("rita-n4.log", "Suspending Tunnel"), "Suspension of D")
-    # assert_test(not check_log_contains("rita-n6.log", "Suspending Tunnel"), "Suspension of F")
-    # assert_test(not check_log_contains("rita-n7.log", "Suspending Tunnel"), "Suspension of G")
-    #
+
+    print("Test traffic...")
+    t1 = world.get_balances()
+    time.sleep(20)
+    world.gen_traffic(d, a, 1000000000)
+    time.sleep(20)
+
+    t2 = world.get_balances()
+    print("balance change from d->a:")
+    diff = traffic_diff(t1, t2)
+    print(diff)
+
+    assert_test(fuzzy_traffic(diff[1], 10e9), "Balance of A")
+    assert_test(fuzzy_traffic(diff[2], 25e9), "Balance of B")
+    assert_test(fuzzy_traffic(diff[3], 0), "Balance of C")
+    assert_test(fuzzy_traffic(diff[4], -85e9), "Balance of D")
+    assert_test(fuzzy_traffic(diff[6], 50e9), "Balance of F")
+    assert_test(fuzzy_traffic(diff[7], 0), "Balance of G")
+
+    t2 = world.get_balances()
+
+    time.sleep(22)
+    world.gen_traffic(a, c, 1000000000)
+    time.sleep(20)
+
+    t3 = world.get_balances()
+    print("balance change from a->c:")
+    diff = traffic_diff(t2, t3)
+    print(diff)
+
+    assert_test(fuzzy_traffic(diff[1], -120e9), "Balance of A")
+    assert_test(fuzzy_traffic(diff[2], 0), "Balance of B")
+    assert_test(fuzzy_traffic(diff[3], 60e9), "Balance of C")
+    assert_test(fuzzy_traffic(diff[4], 0), "Balance of D")
+    assert_test(fuzzy_traffic(diff[6], 50e9), "Balance of F")
+    assert_test(fuzzy_traffic(diff[7], 10e9), "Balance of G")
+
+    t3 = world.get_balances()
+
+    time.sleep(20)
+    world.gen_traffic(c, f, 1000000000)
+    time.sleep(20)
+
+    t4 = world.get_balances()
+    print("balance change from c->f:")
+    diff = traffic_diff(t3, t4)
+    print(diff)
+
+    assert_test(fuzzy_traffic(diff[1], 0), "Balance of A")
+    assert_test(fuzzy_traffic(diff[2], 0), "Balance of B")
+    assert_test(fuzzy_traffic(diff[3], -60e9), "Balance of C")
+    assert_test(fuzzy_traffic(diff[4], 0), "Balance of D")
+    assert_test(fuzzy_traffic(diff[6], 50e9), "Balance of F")
+    assert_test(fuzzy_traffic(diff[7], 10e9), "Balance of G")
+
+    print("Check that tunnels have not been suspended")
+
+    assert_test(not check_log_contains("rita-n1.log", "Suspending Tunnel"), "Suspension of A")
+    assert_test(not check_log_contains("rita-n2.log", "Suspending Tunnel"), "Suspension of B")
+    assert_test(not check_log_contains("rita-n3.log", "Suspending Tunnel"), "Suspension of C")
+    assert_test(not check_log_contains("rita-n4.log", "Suspending Tunnel"), "Suspension of D")
+    assert_test(not check_log_contains("rita-n6.log", "Suspending Tunnel"), "Suspension of F")
+    assert_test(not check_log_contains("rita-n7.log", "Suspending Tunnel"), "Suspension of G")
+
     if len(sys.argv) > 1 and sys.argv[1] == "leave-running":
         pass
     else:

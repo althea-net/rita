@@ -3,9 +3,9 @@ use super::{KernelInterface, Error};
 use std::net::{IpAddr};
 
 impl KernelInterface {
-    //checks the existing interfaces to find an interface name that isn't in use.
-    //then calls iproute2 to set up a new interface.
-    pub fn setup_wg_if_linux(&mut self) -> Result<String,Error> {
+    /// checks the existing interfaces to find an interface name that isn't in use.
+    /// then calls iproute2 to set up a new interface.
+    pub fn setup_wg_if(&mut self) -> Result<String,Error> {
         //call "ip links" to get a list of currently set up links
         let links = String::from_utf8(self.run_command("ip", &["link"])?.stdout)?;
         let mut if_num = 0;

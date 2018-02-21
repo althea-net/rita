@@ -54,6 +54,7 @@ fn main() {
     assert!(payment_controller::PaymentController::from_registry().connected());
     assert!(tunnel_manager::TunnelManager::from_registry().connected());
     assert!(http_client::HTTPClient::from_registry().connected());
+    assert!(traffic_watcher::TrafficWatcher::from_registry().connected());
 
     HttpServer::new(
         || Application::new()
