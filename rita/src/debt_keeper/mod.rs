@@ -256,10 +256,10 @@ mod tests {
                 .parse()
                 .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+            wg_public_key: String::from("AAAAAAAAAAA"),
         };
 
-        d.traffic_update(ident, Int256::from(-100));
+        d.traffic_update(ident.clone(), Int256::from(-100));
 
         assert_eq!(
             d.send_update(ident),
@@ -276,11 +276,11 @@ mod tests {
                 .parse()
                 .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+            wg_public_key: String::from("AAAAAAAAAAA"),
         };
 
-        d.traffic_update(ident, Int256::from(-100));
-        d.payment_received(ident, Uint256::from(1000));
+        d.traffic_update(ident.clone(), Int256::from(-100));
+        d.payment_received(ident.clone(), Uint256::from(1000));
 
         assert_eq!(
             d.send_update(ident),
@@ -297,13 +297,13 @@ mod tests {
                 .parse()
                 .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+            wg_public_key: String::from("AAAAAAAAAAA"),
         };
 
-        d.traffic_update(ident, Int256::from(-100));
+        d.traffic_update(ident.clone(), Int256::from(-100));
 
         assert_eq!(
-            d.send_update(ident),
+            d.send_update(ident.clone()),
             DebtAction::None,
         );
 
@@ -322,17 +322,17 @@ mod tests {
                 .parse()
                 .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+            wg_public_key: String::from("AAAAAAAAAAA"),
         };
 
-        d.traffic_update(ident, Int256::from(-100));
+        d.traffic_update(ident.clone(), Int256::from(-100));
 
         assert_eq!(
-            d.send_update(ident),
+            d.send_update(ident.clone()),
             DebtAction::None,
         );
 
-        d.traffic_update(ident, Int256::from(100));
+        d.traffic_update(ident.clone(), Int256::from(100));
 
         assert_eq!(
             d.send_update(ident),
@@ -349,17 +349,17 @@ mod tests {
                 .parse()
                 .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+            wg_public_key: String::from("AAAAAAAAAAA"),
         };
 
-        d.traffic_update(ident, Int256::from(-100));
+        d.traffic_update(ident.clone(), Int256::from(-100));
 
         assert_eq!(
-            d.send_update(ident),
+            d.send_update(ident.clone()),
             DebtAction::None,
         );
 
-        d.payment_received(ident, Uint256::from(100));
+        d.payment_received(ident.clone(), Uint256::from(100));
 
         assert_eq!(
             d.send_update(ident),
@@ -376,18 +376,18 @@ mod tests {
                 .parse()
                 .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+            wg_public_key: String::from("AAAAAAAAAAA"),
         };
 
-        d.traffic_update(ident, Int256::from(-100));
+        d.traffic_update(ident.clone(), Int256::from(-100));
 
         assert_eq!(
-            d.send_update(ident),
+            d.send_update(ident.clone()),
             DebtAction::None,
         );
 
-        d.traffic_update(ident, Int256::from(-100));
-        d.payment_received(ident, Uint256::from(1000));
+        d.traffic_update(ident.clone(), Int256::from(-100));
+        d.payment_received(ident.clone(), Uint256::from(1000));
 
         assert_eq!(
             d.send_update(ident),
@@ -404,27 +404,27 @@ mod tests {
                 .parse()
                 .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+            wg_public_key: String::from("AAAAAAAAAAA"),
         };
 
-        d.traffic_update(ident, Int256::from(-50));
+        d.traffic_update(ident.clone(), Int256::from(-50));
 
         assert_eq!(
-            d.send_update(ident),
+            d.send_update(ident.clone()),
             DebtAction::None,
         );
 
         assert_eq!(
-            d.send_update(ident),
+            d.send_update(ident.clone()),
             DebtAction::None,
         );
 
         // our debt should be -50
 
-        d.traffic_update(ident, Int256::from(100));
+        d.traffic_update(ident.clone(), Int256::from(100));
 
         assert_eq!(
-            d.send_update(ident),
+            d.send_update(ident.clone()),
             DebtAction::MakePayment{amount: Uint256::from(50u32), to: ident}
         );
     }
@@ -438,13 +438,13 @@ mod tests {
                 .parse()
                 .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+            wg_public_key: String::from("AAAAAAAAAAA"),
         };
 
-        d.traffic_update(ident, Int256::from(100));
+        d.traffic_update(ident.clone(), Int256::from(100));
 
         assert_eq!(
-            d.send_update(ident),
+            d.send_update(ident.clone()),
             DebtAction::MakePayment{amount: Uint256::from(100u32), to: ident}
         );
     }
@@ -458,11 +458,11 @@ mod tests {
                 .parse()
                 .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+            wg_public_key: String::from("AAAAAAAAAAA"),
         };
 
-        d.payment_received(ident, Uint256::from(100000));
-        d.traffic_update(ident, Int256::from(-100100));
+        d.payment_received(ident.clone(), Uint256::from(100000));
+        d.traffic_update(ident.clone(), Int256::from(-100100));
 
         assert_eq!(
             d.send_update(ident),
@@ -479,17 +479,17 @@ mod tests {
                 .parse()
                 .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+            wg_public_key: String::from("AAAAAAAAAAA"),
         };
 
-        d.traffic_update(ident, Int256::from(-100));
+        d.traffic_update(ident.clone(), Int256::from(-100));
 
         assert_eq!(
-            d.send_update(ident),
+            d.send_update(ident.clone()),
             DebtAction::SuspendTunnel
         );
 
-        d.payment_received(ident, Uint256::from(110));
+        d.payment_received(ident.clone(), Uint256::from(110));
 
         assert_eq!(
             d.send_update(ident),
@@ -506,16 +506,16 @@ mod tests {
                 .parse()
                 .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+            wg_public_key: String::from("AAAAAAAAAAA"),
         };
 
         // send lots of payments
         for i in 0..100 {
-            d.traffic_update(ident, Int256::from(100))
+            d.traffic_update(ident.clone(), Int256::from(100))
         }
 
         assert_eq!(
-            d.send_update(ident),
+            d.send_update(ident.clone()),
             DebtAction::MakePayment{amount: Uint256::from(10000u32), to: ident}
         );
     }
@@ -529,18 +529,18 @@ mod tests {
                 .parse()
                 .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+            wg_public_key: String::from("AAAAAAAAAAA"),
         };
 
         // send lots of payments
         for i in 0..100 {
-            d.payment_received(ident, Uint256::from(100))
+            d.payment_received(ident.clone(), Uint256::from(100))
         }
 
-        d.traffic_update(ident, Int256::from(-10100));
+        d.traffic_update(ident.clone(), Int256::from(-10100));
 
         assert_eq!(
-            d.send_update(ident),
+            d.send_update(ident.clone()),
             DebtAction::SuspendTunnel
         );
     }
@@ -554,21 +554,21 @@ mod tests {
                 .parse()
                 .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: MacAddress::parse_str("00:00:00:aa:00:02").unwrap(),
+            wg_public_key: String::from("AAAAAAAAAAA"),
         };
 
         for i in 0..100 {
-            d.payment_received(ident, Uint256::from(100))
+            d.payment_received(ident.clone(), Uint256::from(100))
         }
 
-        d.traffic_update(ident, Int256::from(-10100));
+        d.traffic_update(ident.clone(), Int256::from(-10100));
 
         assert_eq!(
-            d.send_update(ident),
+            d.send_update(ident.clone()),
             DebtAction::SuspendTunnel
         );
 
-        d.payment_received(ident, Uint256::from(200));
+        d.payment_received(ident.clone(), Uint256::from(200));
 
         assert_eq!(
             d.send_update(ident),

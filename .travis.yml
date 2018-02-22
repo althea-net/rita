@@ -1,8 +1,9 @@
 language: rust
 cache: cargo
 before_install:
+  - sudo add-apt-repository ppa:wireguard/wireguard -y
   - sudo apt-get -qq update
-  - sudo apt-get install -y ebtables libsqlite3-dev iperf3 python3-pip bridge-utils
+  - sudo apt-get install -y ebtables libsqlite3-dev iperf3 python3-pip bridge-utils wireguard linux-source linux-headers-$(uname -r)
   - sudo pip3 install -r integration-tests/requirements.txt
   - which diesel || cargo install diesel_cli --no-default-features --features sqlite
 env:

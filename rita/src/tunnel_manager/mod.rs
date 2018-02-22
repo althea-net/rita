@@ -236,7 +236,6 @@ impl TunnelManager {
                             &their_id.global.wg_public_key,
                             Path::new(&SETTING.network.wg_private_key),
                             &SETTING.network.own_ip,
-                            &their_id.global.mesh_ip,
         )?;
 
         let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port).parse().unwrap());
