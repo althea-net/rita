@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use eui48::MacAddress;
 use regex::Regex;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum FilterTarget{
     Input,
     Output,
@@ -67,6 +67,7 @@ impl KernelInterface {
     }
 
     pub fn read_counters(&self, zero: bool, target: &FilterTarget) -> Result<HashMap<(IpAddr, String), u64>, Error> {
+        assert!(!(zero && (target == &FilterTarget::ForwardInput || target == &FilterTarget::ForwardOutput)));
         let output = if zero {
             self.run_command("ip6tables", &["-L", target.table(), "-Z", "-x", "-n", "-v", "-w"])?
         } else {
@@ -105,4 +106,184 @@ impl KernelInterface {
         trace!("Read fwd counters {:?}", (&in_map, &out_map));
         Ok((in_map, out_map))
     }
+}
+
+#[test]
+fn test_start_counter_not_found_linux() {
+    use std::process::Output;
+    use std::process::{ExitStatus};
+    use std::cell::RefCell;
+    use std::os::unix::process::ExitStatusExt;
+
+
+    let mut ki = KernelInterface {
+        run_command: RefCell::new(Box::new(move |program,args| {
+            assert_eq!(program, "ip6tables");
+            assert_eq!(args, &["-w", "-A", "INPUT", "-i", "eth0", "-d", "fd::1"]);
+
+            Ok(Output {
+                stdout: b"".to_vec(),
+                stderr: b"".to_vec(),
+                status: ExitStatus::from_raw(0),
+            })
+        }))
+    };
+
+    ki.start_counter("eth0".to_string(), "fd::1".parse().unwrap(), &FilterTarget::Input, &HashMap::new()).unwrap();
+}
+
+#[test]
+fn test_start_counter_found_linux() {
+    use std::process::Output;
+    use std::process::{ExitStatus};
+    use std::cell::RefCell;
+    use std::os::unix::process::ExitStatusExt;
+
+
+    let mut ki = KernelInterface {
+        run_command: RefCell::new(Box::new(move |program,args| {
+            panic!("should not execute")
+        }))
+    };
+
+    let mut existing = HashMap::new();
+
+    existing.insert(("fd::1".parse().unwrap(),"eth0".to_string()), 0);
+
+    ki.start_counter("eth0".to_string(), "fd::1".parse().unwrap(), &FilterTarget::Input, &existing).unwrap();
+}
+
+#[test]
+fn test_read_input_counters_linux() {
+    use std::process::Output;
+    use std::process::{ExitStatus};
+    use std::cell::RefCell;
+    use std::os::unix::process::ExitStatusExt;
+
+
+    let mut ki = KernelInterface {
+        run_command: RefCell::new(Box::new(move |program,args| {
+            assert_eq!(program, "ip6tables");
+            assert_eq!(args, &["-L", "INPUT", "-Z", "-x", "-n", "-v", "-w"]);
+
+            Ok(Output {
+                stdout: b"Chain INPUT (policy ACCEPT 105 packets, 18842 bytes)
+pkts      bytes target     prot opt in     out     source               destination
+   6      678            all      wg0    *       ::/0                 fd::1
+   0        0            all      wg0    *       ::/0                 fd::2
+   0        0            all      wg0    *       ::/0                 fd::3
+   0        0            all      wg0    *       ::/0                 fd::4
+   0        0            all      wg0    *       ::/0                 fd::6
+   0        0            all      wg0    *       ::/0                 fd::7     ".to_vec(),
+                stderr: b"".to_vec(),
+                status: ExitStatus::from_raw(0),
+            })
+        }))
+    };
+
+    let mut out = HashMap::new();
+
+    out.insert(("fd::1".parse().unwrap(),"wg0".to_string()), 678);
+    out.insert(("fd::2".parse().unwrap(),"wg0".to_string()), 0);
+    out.insert(("fd::3".parse().unwrap(),"wg0".to_string()), 0);
+    out.insert(("fd::4".parse().unwrap(),"wg0".to_string()), 0);
+    out.insert(("fd::6".parse().unwrap(),"wg0".to_string()), 0);
+    out.insert(("fd::7".parse().unwrap(),"wg0".to_string()), 0);
+
+
+    let read = ki.read_counters(true, &FilterTarget::Input).unwrap();
+
+    assert_eq!(read, out)
+}
+
+#[test]
+fn test_read_output_counters_linux() {
+    use std::process::Output;
+    use std::process::{ExitStatus};
+    use std::cell::RefCell;
+    use std::os::unix::process::ExitStatusExt;
+
+
+    let mut ki = KernelInterface {
+        run_command: RefCell::new(Box::new(move |program,args| {
+            assert_eq!(program, "ip6tables");
+            assert_eq!(args, &["-L", "OUTPUT", "-Z", "-x", "-n", "-v", "-w"]);
+
+            Ok(Output {
+                stdout: b"Chain OUTPUT (policy ACCEPT 105 packets, 18842 bytes)
+pkts      bytes target     prot opt in     out     source               destination
+   6      678            all   *   wg0           ::/0                 fd::1
+   0        0            all   *   wg0           ::/0                 fd::2
+   0        0            all   *   wg0           ::/0                 fd::3
+   0        0            all   *   wg0           ::/0                 fd::4
+   0        0            all   *   wg0           ::/0                 fd::6
+   0        0            all   *   wg0           ::/0                 fd::7     ".to_vec(),
+                stderr: b"".to_vec(),
+                status: ExitStatus::from_raw(0),
+            })
+        }))
+    };
+
+    let mut out = HashMap::new();
+
+    out.insert(("fd::1".parse().unwrap(),"wg0".to_string()), 678);
+    out.insert(("fd::2".parse().unwrap(),"wg0".to_string()), 0);
+    out.insert(("fd::3".parse().unwrap(),"wg0".to_string()), 0);
+    out.insert(("fd::4".parse().unwrap(),"wg0".to_string()), 0);
+    out.insert(("fd::6".parse().unwrap(),"wg0".to_string()), 0);
+    out.insert(("fd::7".parse().unwrap(),"wg0".to_string()), 0);
+
+
+    let read = ki.read_counters(true, &FilterTarget::Output).unwrap();
+
+    assert_eq!(read, out)
+}
+
+#[test]
+fn test_read_fwd_counters_linux() {
+    use std::process::Output;
+    use std::process::{ExitStatus};
+    use std::cell::RefCell;
+    use std::os::unix::process::ExitStatusExt;
+
+
+    let mut ki = KernelInterface {
+        run_command: RefCell::new(Box::new(move |program,args| {
+            assert_eq!(program, "ip6tables");
+            assert_eq!(args, &["-L", "FORWARD", "-Z", "-x", "-n", "-v", "-w"]);
+
+            Ok(Output {
+                stdout: b"Chain FORWARD (policy ACCEPT 105 packets, 18842 bytes)
+pkts      bytes target     prot opt in     out     source               destination
+   6      678            all   *   wg0           ::/0                 fd::1
+   0        0            all   *   wg0           ::/0                 fd::2
+   0        0            all   *   wg0           ::/0                 fd::3
+   0        0            all   *   wg0           ::/0                 fd::4
+   0        0            all   *   wg0           ::/0                 fd::6
+   0        0            all   *   wg0           ::/0                 fd::7
+   6      678            all       wg0     *     ::/0                 fd::1
+   0        0            all       wg0     *     ::/0                 fd::2
+   0        0            all       wg0     *     ::/0                 fd::3
+   0        0            all       wg0     *     ::/0                 fd::4
+   0        0            all       wg0     *     ::/0                 fd::6
+   0        0            all       wg0     *     ::/0                 fd::7     ".to_vec(),
+                stderr: b"".to_vec(),
+                status: ExitStatus::from_raw(0),
+            })
+        }))
+    };
+
+    let mut out = HashMap::new();
+
+    out.insert(("fd::1".parse().unwrap(),"wg0".to_string()), 678);
+    out.insert(("fd::2".parse().unwrap(),"wg0".to_string()), 0);
+    out.insert(("fd::3".parse().unwrap(),"wg0".to_string()), 0);
+    out.insert(("fd::4".parse().unwrap(),"wg0".to_string()), 0);
+    out.insert(("fd::6".parse().unwrap(),"wg0".to_string()), 0);
+    out.insert(("fd::7".parse().unwrap(),"wg0".to_string()), 0);
+
+
+    let read = ki.read_fwd_counters(true).unwrap();
+
+    assert_eq!(read, (out.clone(), out.clone()))
 }
