@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 use std::path::Path;
 
-use config::{ConfigError, Config, File, Environment};
+use config::{Config, ConfigError, Environment, File};
 
 use althea_types::{EthAddress, Identity};
 
@@ -11,7 +11,7 @@ use num256::Int256;
 
 use docopt::Docopt;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use althea_kernel_interface::KernelInterface;
 
@@ -42,7 +42,7 @@ pub struct NetworkSettings {
     pub rita_port: u16,
     pub bounty_port: u16,
     pub wg_private_key: String,
-    pub wg_start_port: u16
+    pub wg_start_port: u16,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -57,7 +57,7 @@ pub struct PaymentSettings {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Settings {
     pub payment: PaymentSettings,
-    pub network: NetworkSettings
+    pub network: NetworkSettings,
 }
 
 impl Settings {
@@ -68,13 +68,14 @@ impl Settings {
     }
 
     pub fn get_identity(&self) -> Identity {
-        let mut ki = KernelInterface{};
+        let mut ki = KernelInterface {};
         ki.create_wg_key(Path::new(&SETTING.network.wg_private_key));
 
-        Identity{
+        Identity {
             eth_address: self.payment.eth_address.clone(),
             mesh_ip: self.network.own_ip.clone(),
-            wg_public_key: ki.get_wg_pubkey(Path::new(&self.network.wg_private_key)).unwrap(),
+            wg_public_key: ki.get_wg_pubkey(Path::new(&self.network.wg_private_key))
+                .unwrap(),
         }
     }
 }

@@ -1,6 +1,6 @@
-use super::{KernelInterface, Error};
+use super::{Error, KernelInterface};
 
-use std::net::{IpAddr};
+use std::net::IpAddr;
 use std::str::FromStr;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -20,7 +20,9 @@ impl KernelInterface {
             trace!("got link local IP of {} from device {}", &cap[1], &dev);
             return Ok(cap[1].parse()?);
         } else {
-            return Err(Error::RuntimeError("No link local addresses found or no interface found".to_string()))
+            return Err(Error::RuntimeError(
+                "No link local addresses found or no interface found".to_string(),
+            ));
         }
     }
 
@@ -30,11 +32,13 @@ impl KernelInterface {
         trace!("looking for {:?} in {:?} for device name", their_ip, neigh);
         for (mac, ip, dev) in neigh {
             if ip == their_ip {
-                return Ok(dev.to_string())
+                return Ok(dev.to_string());
             }
         }
 
-        Err(Error::RuntimeError("Address not found in neighbors".to_string()))
+        Err(Error::RuntimeError(
+            "Address not found in neighbors".to_string(),
+        ))
     }
 
     /// This gets our link local ip that can be reached by another node with link local ip
@@ -44,11 +48,13 @@ impl KernelInterface {
         trace!("looking for {:?} in {:?} for reply ip", their_ip, neigh);
         for (mac, ip, dev) in neigh {
             if ip == their_ip {
-                return Ok(self.get_link_local_device_ip(&dev)?)
+                return Ok(self.get_link_local_device_ip(&dev)?);
             }
         }
 
-        Err(Error::RuntimeError("Address not found in neighbors".to_string()))
+        Err(Error::RuntimeError(
+            "Address not found in neighbors".to_string(),
+        ))
     }
 
     /// Gets the interface index for a named interface
@@ -71,7 +77,7 @@ impl KernelInterface {
 #[test]
 fn test_get_device_name_linux() {
     use std::process::Output;
-    use std::process::{ExitStatus};
+    use std::process::ExitStatus;
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
 
@@ -95,7 +101,8 @@ fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE
         })),
     };
 
-    let dev = ki.get_device_name("fe80::433:25ff:fe8c:e1ea".parse().unwrap()).unwrap();
+    let dev = ki.get_device_name("fe80::433:25ff:fe8c:e1ea".parse().unwrap())
+        .unwrap();
 
     assert_eq!(dev, "eth2")
 }
@@ -103,7 +110,7 @@ fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE
 #[test]
 fn test_get_link_local_device_ip_linux() {
     use std::process::Output;
-    use std::process::{ExitStatus};
+    use std::process::ExitStatus;
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
 
@@ -132,7 +139,7 @@ fn test_get_link_local_device_ip_linux() {
 #[test]
 fn test_get_link_local_reply_ip_linux() {
     use std::process::Output;
-    use std::process::{ExitStatus};
+    use std::process::ExitStatus;
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
 
@@ -169,14 +176,13 @@ fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE"
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                _ => {
-                    unimplemented!("called too many times")
-                }
+                _ => unimplemented!("called too many times"),
             }
         })),
     };
 
-    let dev = ki.get_link_local_reply_ip("fe80::7459:8eff:fe98:81".parse().unwrap()).unwrap();
+    let dev = ki.get_link_local_reply_ip("fe80::7459:8eff:fe98:81".parse().unwrap())
+        .unwrap();
 
     assert_eq!(dev, "fe80::96:3add:69d9:906a".parse::<IpAddr>().unwrap())
 }

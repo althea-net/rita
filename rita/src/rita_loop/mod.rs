@@ -24,7 +24,7 @@ use payment_controller::PaymentController;
 use settings::SETTING;
 use althea_kernel_interface::KernelInterface;
 
-use network_endpoints::{make_payments};
+use network_endpoints::make_payments;
 
 pub struct RitaLoop;
 
@@ -54,22 +54,28 @@ impl Handler<Tick> for RitaLoop {
 
         let start = Instant::now();
 
-        ctx.spawn(TunnelManager::from_registry().send(
-            tunnel_manager::GetNeighbors).into_actor(self).then(move |res, act, ctx| {
-            info!("got neighbors: {:?}", res);
+        ctx.spawn(
+            TunnelManager::from_registry()
+                .send(tunnel_manager::GetNeighbors)
+                .into_actor(self)
+                .then(move |res, act, ctx| {
+                    info!("got neighbors: {:?}", res);
 
-            let neigh = Instant::now();
+                    let neigh = Instant::now();
 
-            TrafficWatcher::from_registry().send(traffic_watcher::Watch(res.unwrap().unwrap())).into_actor(act).then(
-                move |res, act, ctx| {
-                    info!("loop completed in {:?}", start.elapsed());
-                    info!("traffic watcher completed in {:?}", neigh.elapsed());
-                    ctx.run_later(Duration::from_secs(5), |act, ctx| {
-                        let addr: Address<Self> = ctx.address();
-                        addr.do_send(Tick);
-                    });
-                    actix::fut::ok(())
-                })
-        }));
+                    TrafficWatcher::from_registry()
+                        .send(traffic_watcher::Watch(res.unwrap().unwrap()))
+                        .into_actor(act)
+                        .then(move |res, act, ctx| {
+                            info!("loop completed in {:?}", start.elapsed());
+                            info!("traffic watcher completed in {:?}", neigh.elapsed());
+                            ctx.run_later(Duration::from_secs(5), |act, ctx| {
+                                let addr: Address<Self> = ctx.address();
+                                addr.do_send(Tick);
+                            });
+                            actix::fut::ok(())
+                        })
+                }),
+        );
     }
 }

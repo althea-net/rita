@@ -1,11 +1,11 @@
-use super::{KernelInterface, Error};
+use super::{Error, KernelInterface};
 
-use std::net::{IpAddr};
+use std::net::IpAddr;
 
 impl KernelInterface {
     /// checks the existing interfaces to find an interface name that isn't in use.
     /// then calls iproute2 to set up a new interface.
-    pub fn setup_wg_if(&mut self) -> Result<String,Error> {
+    pub fn setup_wg_if(&mut self) -> Result<String, Error> {
         //call "ip links" to get a list of currently set up links
         let links = String::from_utf8(self.run_command("ip", &["link"])?.stdout)?;
         let mut if_num = 0;
@@ -16,7 +16,10 @@ impl KernelInterface {
         let interface = format!("wg{}", if_num);
         let output = self.run_command("ip", &["link", "add", &interface, "type", "wireguard"])?;
         if !output.stderr.is_empty() {
-            return Err(Error::RuntimeError(format!("received error adding wg link: {}", String::from_utf8(output.stderr)?)))
+            return Err(Error::RuntimeError(format!(
+                "received error adding wg link: {}",
+                String::from_utf8(output.stderr)?
+            )));
         }
         Ok(interface)
     }
@@ -25,27 +28,22 @@ impl KernelInterface {
 #[test]
 fn test_setup_wg_if_linux() {
     use std::process::Output;
-    use std::process::{ExitStatus};
+    use std::process::ExitStatus;
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
 
     let mut counter = 0;
 
     let link_args = &["link"];
-    let link_add = &[
-        "link",
-        "add",
-        "wg1",
-        "type",
-        "wireguard"];
+    let link_add = &["link", "add", "wg1", "type", "wireguard"];
     let mut ki = KernelInterface {
-        run_command: RefCell::new(Box::new(move |program,args|{
-            assert_eq!(program,"ip");
+        run_command: RefCell::new(Box::new(move |program, args| {
+            assert_eq!(program, "ip");
             counter += 1;
 
             match counter {
                 1 => {
-                    assert_eq!(args,link_args);
+                    assert_eq!(args, link_args);
                     Ok(Output{
                         stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
                         stderr: b"".to_vec(),
@@ -53,16 +51,16 @@ fn test_setup_wg_if_linux() {
                     })
                 }
                 2 => {
-                    assert_eq!(args,link_add);
-                    Ok(Output{
+                    assert_eq!(args, link_add);
+                    Ok(Output {
                         stdout: b"".to_vec(),
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                _ => panic!("command called too many times")
+                _ => panic!("command called too many times"),
             }
-        }))
+        })),
     };
 
     ki.setup_wg_if().unwrap();

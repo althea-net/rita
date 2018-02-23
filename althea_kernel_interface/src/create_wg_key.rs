@@ -1,7 +1,7 @@
 use super::{Error, KernelInterface};
 
-use std::fs::{File};
-use std::io::{Write};
+use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 
 impl KernelInterface {
@@ -29,7 +29,7 @@ impl KernelInterface {
 #[test]
 fn test_create_wg_key_linux() {
     use std::process::Output;
-    use std::process::{ExitStatus};
+    use std::process::ExitStatus;
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
 
@@ -37,13 +37,13 @@ fn test_create_wg_key_linux() {
     let mut ki = KernelInterface {
         run_command: RefCell::new(Box::new(move |program, args| {
             assert_eq!(program, "wg");
-            assert_eq!(args,wg_args);
+            assert_eq!(args, wg_args);
             Ok(Output {
                 stdout: b"cD6//mKSM4mhaF4mNY7N93vu5zKad79/MyIRD3L9L0s=".to_vec(),
                 stderr: b"".to_vec(),
-                status: ExitStatus::from_raw(0)
+                status: ExitStatus::from_raw(0),
             })
-        }))
+        })),
     };
     let test_path = Path::new("/tmp/wgtestkey");
     ki.create_wg_key(test_path).unwrap();
