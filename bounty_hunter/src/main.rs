@@ -90,8 +90,8 @@ fn process_updates(request: &Request, conn: &Mutex<SqliteConnection>) -> Respons
         trace!("Received update, balance: {}", update.balance);
 
         let stat = Status {
-            ip: String::from(format!("{}", update.from.ip_address)),
-            mac: String::from(format!("{}", update.from.mac_address)),
+            ip: String::from(format!("{}", update.from.mesh_ip)),
+            mac: String::from(format!("{}", update.from.wg_public_key)),
             balance: String::from(format!("{}", update.balance))
         };
 

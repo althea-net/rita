@@ -1,26 +1,8 @@
-#[macro_use]
-extern crate serde_derive;
+use actix::prelude::*;
 
-#[macro_use]
-extern crate derive_error;
-
-#[macro_use] extern crate log;
-
-// use std::sync::mpsc::{Receiver, Sender};
-
-extern crate serde;
-extern crate serde_json;
-
-extern crate althea_types;
 use althea_types::{PaymentTx, Identity};
 
-extern crate debt_keeper;
-use debt_keeper::DebtKeeperMsg;
-
-extern crate num256;
 use num256::{Uint256, Int256};
-
-extern crate reqwest;
 
 use reqwest::{Client, StatusCode};
 
@@ -30,9 +12,12 @@ use std::sync::{Mutex, Arc};
 use std::sync::mpsc::{Sender, channel};
 
 use std::net::Ipv6Addr;
-
-extern crate settings;
 use settings::SETTING;
+
+use reqwest;
+use serde_json;
+use debt_keeper;
+use debt_keeper::DebtKeeper;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -50,6 +35,49 @@ pub struct PaymentController {
     pub balance: Int256,
 }
 
+impl Actor for PaymentController {
+    type Context = Context<Self>;
+}
+impl Supervised for PaymentController {}
+impl SystemService for PaymentController {
+    fn service_started(&mut self, ctx: &mut Context<Self>) {
+        info!("Payment Controller started");
+    }
+}
+
+#[derive(Message)]
+pub struct PaymentReceived(pub PaymentTx);
+
+impl Handler<PaymentReceived> for PaymentController {
+    type Result = ();
+
+    fn handle(&mut self, msg: PaymentReceived, _: &mut Context<Self>) -> Self::Result {
+        DebtKeeper::from_registry().do_send(self.payment_received(msg.0).unwrap());
+    }
+}
+
+#[derive(Message)]
+pub struct MakePayment(pub PaymentTx);
+
+impl Handler<MakePayment> for PaymentController {
+    type Result = ();
+
+    fn handle(&mut self, msg: MakePayment, _: &mut Context<Self>) -> Self::Result {
+        self.make_payment(msg.0).unwrap();
+    }
+}
+
+#[derive(Message)]
+pub struct PaymentControllerUpdate;
+
+impl Handler<PaymentControllerUpdate> for PaymentController {
+    type Result = ();
+
+    fn handle(&mut self, _msg: PaymentControllerUpdate, _: &mut Context<Self>) -> Self::Result {
+        self.update();
+    }
+}
+
 /// This updates a "bounty hunter" with the current balance and the last PaymentTx. 
 /// Bounty hunters are servers which store and possibly enforce the current state of
 /// a channel. Currently they are actually just showing a completely insecure 
@@ -61,35 +89,16 @@ pub struct BountyUpdate {
     pub tx: PaymentTx,
 }
 
-/// The actions that a `PaymentController` can take. 
-pub enum PaymentControllerMsg {
-    PaymentReceived(PaymentTx),
-    MakePayment(PaymentTx),
-    Update,
-    StopThread
-}
-
 #[cfg(test)]
 extern crate mockito;
 
-impl PaymentController {
-    pub fn start(id: &Identity, m_tx: Arc<Mutex<Sender<DebtKeeperMsg>>>) -> Sender<PaymentControllerMsg> {
-        let mut controller = PaymentController::new(id);
-        let (tx, rx) = channel();
-
-        thread::spawn(move || {
-            for msg in rx {
-                match msg {
-                    PaymentControllerMsg::PaymentReceived(pmt) => controller.payment_received(pmt, m_tx.clone()).unwrap(),
-                    PaymentControllerMsg::MakePayment(pmt) => controller.make_payment(pmt).unwrap(),
-                    PaymentControllerMsg::Update => controller.update(),
-                    PaymentControllerMsg::StopThread => return
-                };
-            }
-        });
-        tx
+impl Default for PaymentController {
+    fn default() -> PaymentController {
+        PaymentController::new(&SETTING.get_identity())
     }
+}
 
+impl PaymentController {
     pub fn new(id: &Identity) -> Self {
         PaymentController {
             identity: id.clone(),
@@ -128,32 +137,28 @@ impl PaymentController {
 
     /// This gets called when a payment from a counterparty has arrived, and updates
     /// the balance in memory and sends an update to the "bounty hunter".
-    pub fn payment_received(&mut self, pmt: PaymentTx, m_tx: Arc<Mutex<Sender<DebtKeeperMsg>>>) -> Result<(), Error> {
+    pub fn payment_received(&mut self, pmt: PaymentTx) -> Result<debt_keeper::PaymentReceived, Error> {
         trace!("current balance: {:?}", self.balance);
-        trace!("payment of {:?} received from {:?}: {:?}", pmt.amount, pmt.from.ip_address, pmt);
+        trace!("payment of {:?} received from {:?}: {:?}", pmt.amount, pmt.from.mesh_ip, pmt);
 
         self.balance = self.balance.clone() + Int256::from(pmt.amount.clone());
 
         trace!("current balance: {:?}", self.balance);
 
-        m_tx.lock().unwrap().send(
-            DebtKeeperMsg::PaymentReceived {
-                from: pmt.from,
-                amount: pmt.amount.clone()
-            }
-        ).unwrap();
-
-        self.update_bounty(BountyUpdate{from: self.identity, tx: pmt, balance: self.balance.clone()})?;
-        Ok(())
+        self.update_bounty(BountyUpdate{from: self.identity.clone(), tx: pmt.clone(), balance: self.balance.clone()})?;
+        Ok(debt_keeper::PaymentReceived {
+            from: pmt.from,
+            amount: pmt.amount.clone()
+        })
     }
 
     /// This should be called on a regular interval to update the bounty hunter of a node's current
     /// balance as well as to log the current balance
     pub fn update(&mut self) {
         self.update_bounty(BountyUpdate{
-            from: self.identity, tx:
-            PaymentTx{from: self.identity,
-                      to: self.identity,
+            from: self.identity.clone(), tx:
+            PaymentTx{from: self.identity.clone(),
+                      to: self.identity.clone(),
                       amount: Uint256::from(0u32)
             },
             balance: self.balance.clone()
@@ -162,14 +167,14 @@ impl PaymentController {
     }
 
     /// This is called by the other modules in Rita to make payments. It sends a 
-    /// PaymentTx to the `ip_address` in its `to` field.
+    /// PaymentTx to the `mesh_ip` in its `to` field.
     pub fn make_payment(&mut self, pmt: PaymentTx) -> Result<(), Error> {
         trace!("current balance: {:?}", self.balance);
 
-        trace!("sending payment of {:?} to {:?}: {:?}", pmt.amount, pmt.to.ip_address, pmt);
+        trace!("sending payment of {:?} to {:?}: {:?}", pmt.amount, pmt.to.mesh_ip, pmt);
 
         let neighbor_url = if cfg!(not(test)) {
-            format!("http://[{}]:{}/make_payment", pmt.to.ip_address, SETTING.network.rita_port)
+            format!("http://[{}]:{}/make_payment", pmt.to.mesh_ip, SETTING.network.rita_port)
         } else {
             String::from("http://127.0.0.1:1234/make_payment")
         };
@@ -184,7 +189,7 @@ impl PaymentController {
             .send()?;
 
         if r.status() == StatusCode::Ok {
-            self.update_bounty(BountyUpdate{from: self.identity, tx: pmt, balance: self.balance.clone()});
+            self.update_bounty(BountyUpdate{from: self.identity.clone(), tx: pmt, balance: self.balance.clone()});
             Ok(())
         } else {
             trace!("Unsuccessfully paid");
@@ -203,7 +208,7 @@ mod tests {
     extern crate eui48;
     extern crate mockito;
 
-    use mockito::mock;
+    use self::mockito::mock;
 
     use super::*;
 
@@ -232,76 +237,10 @@ mod tests {
     fn new_identity(x: u8) -> Identity {
         let y = x as u16;
         Identity{
-            ip_address: IpAddr::V6(Ipv6Addr::new(y, y, y, y, y, y, y, y)),
-            mac_address: eui48::MacAddress::new([x; 6]),
+            mesh_ip: IpAddr::V6(Ipv6Addr::new(y, y, y, y, y, y, y, y)),
+            wg_public_key: String::from("AAAAAAAAAAAAAAAAAAAA"),
             eth_address: new_addr(x)
         }
-    }
-
-    #[test]
-    fn test_thread_stop() {
-        let (rita_rx, rita_tx) = mpsc::channel();
-
-        let id = new_identity(1);
-        let pc_tx = PaymentController::start(&id, Arc::new(Mutex::new(rita_rx)));
-
-        assert!(pc_tx.send(PaymentControllerMsg::StopThread).is_ok());
-
-        thread::sleep(time::Duration::from_millis(100));
-
-        assert!(pc_tx.send(PaymentControllerMsg::StopThread).is_err());
-    }
-
-    #[test]
-    fn test_thread_make_payment() {
-        // mock neighbours
-        let _m = mock("POST", "/make_payment")
-            .with_status(200)
-            .with_body("payment OK")
-            .match_body("{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}")
-            .create();
-
-        let (rita_rx, rita_tx) = mpsc::channel();
-
-        let id = new_identity(1);
-        let pc_tx = PaymentController::start(&id, Arc::new(Mutex::new(rita_rx)));
-
-        assert!(pc_tx.send(PaymentControllerMsg::MakePayment(new_payment(1))).is_ok());
-
-        thread::sleep(time::Duration::from_millis(100));
-
-        assert!(pc_tx.send(PaymentControllerMsg::StopThread).is_ok());
-
-        _m.assert();
-    }
-
-    #[test]
-    fn test_thread_payment_received() {
-        // mock bounty hunter
-        let _m = mock("POST", "/update")
-            .with_status(200)
-            .with_body("bounty OK")
-            .match_body("{\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"balance\":\"1\",\"tx\":{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}}")
-            .create();
-
-        let (rita_tx, rita_rx) = mpsc::channel();
-
-        let id = new_identity(1);
-        let pc_tx = PaymentController::start(&id, Arc::new(Mutex::new(rita_tx)));
-
-        assert!(pc_tx.send(PaymentControllerMsg::PaymentReceived(new_payment(1))).is_ok());
-
-        thread::sleep(time::Duration::from_millis(100));
-
-        let out = rita_rx.try_recv().unwrap();
-
-        assert_eq!(out, DebtKeeperMsg::PaymentReceived {
-            from: new_identity(1),
-            amount: Uint256::from(1)
-        });
-
-        assert!(pc_tx.send(PaymentControllerMsg::StopThread).is_ok());
-        _m.assert();
     }
 
     #[test]
@@ -310,7 +249,7 @@ mod tests {
         let _m = mock("POST", "/make_payment")
             .with_status(200)
             .with_body("payment OK")
-            .match_body("{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}")
+            .match_body("{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"1\"}")
             .create();
 
         let mut pc = PaymentController::new(&new_identity(1));
@@ -328,7 +267,7 @@ mod tests {
         let _m = mock("POST", "/make_payment")
             .with_status(200)
             .with_body("payment OK")
-            .match_body("{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}")
+            .match_body("{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"1\"}")
             .expect(100)
             .create();
 
@@ -349,20 +288,16 @@ mod tests {
         let _m = mock("POST", "/update")
             .with_status(200)
             .with_body("bounty OK")
-            .match_body("{\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"balance\":\"1\",\"tx\":{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"}}")
+            .match_body("{\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"balance\":\"1\",\"tx\":{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"1\"}}")
             .create();
-
-        let (rita_tx, rita_rx) = mpsc::channel();
 
         let mut pc = PaymentController::new(&new_identity(1));
 
-        pc.payment_received(new_payment(1), Arc::new(Mutex::new(rita_tx))).unwrap();
+        let out = pc.payment_received(new_payment(1)).unwrap();
 
         assert_eq!(pc.balance, Int256::from(1));
 
-        let out = rita_rx.try_recv().unwrap();
-
-        assert_eq!(out, DebtKeeperMsg::PaymentReceived {
+        assert_eq!(out, debt_keeper::PaymentReceived {
             from: new_identity(1),
             amount: Uint256::from(1)
         });
@@ -379,20 +314,12 @@ mod tests {
             .expect(100)
             .create();
 
-        let (rita_tx, rita_rx) = mpsc::channel();
-
         let mut pc = PaymentController::new(&new_identity(1));
 
-        for _ in 0..100 {
-            pc.payment_received(new_payment(1), Arc::new(Mutex::new(rita_tx.clone()))).unwrap();
-        }
-
-        assert_eq!(pc.balance, Int256::from(100));
-
-        for _ in 0..100 {
-            let out = rita_rx.try_recv().unwrap();
-
-            assert_eq!(out, DebtKeeperMsg::PaymentReceived {
+        for i in 0..100 {
+            let out = pc.payment_received(new_payment(1)).unwrap();
+            assert_eq!(pc.balance, Int256::from(i + 1));
+            assert_eq!(out, debt_keeper::PaymentReceived {
                 from: new_identity(1),
                 amount: Uint256::from(1)
             });

@@ -3,15 +3,33 @@ use std::net::{IpAddr};
 use eui48::MacAddress;
 use num256::{Uint256, Int256};
 
-/// This is how nodes are identified. `mac_address` will soon be replaced with a 
-/// Wireguard public key. This is because both of these things allow us to track a
-/// neighbor's usage. The advantage of a wireguard public key is that we can be certain
-/// that traffic was sent by a certain neighbor.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+#[cfg(feature="actix")]
+use actix::*;
+
+/// This is how nodes are identified.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct Identity {
-    pub ip_address: IpAddr,
+    pub mesh_ip: IpAddr,
     pub eth_address: EthAddress,
-    pub mac_address: MacAddress,
+    pub wg_public_key: String,
+}
+
+#[cfg(feature="actix")]
+impl Message for Identity {
+    type Result = ();
+}
+
+/// This is all the data we need to give a local neighbor to open a wg connection
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct LocalIdentity {
+    pub local_ip: IpAddr,
+    pub wg_port: u16,
+    pub global: Identity,
+}
+
+#[cfg(feature="actix")]
+impl Message for LocalIdentity {
+    type Result = ();
 }
 
 /// This is a stand-in for channel updates. Completely insecure, but allows us to 

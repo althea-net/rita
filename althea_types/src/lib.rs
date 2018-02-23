@@ -8,6 +8,9 @@ extern crate num256;
 #[macro_use]
 extern crate serde_derive;
 
+#[cfg(feature="actix")]
+extern crate actix;
+
 pub mod bytes_32;
 pub mod eth_address;
 pub mod eth_private_key;
@@ -18,7 +21,7 @@ pub use bytes_32::Bytes32;
 pub use eth_address::EthAddress;
 pub use eth_private_key::EthPrivateKey;
 pub use eth_signature::EthSignature;
-pub use interop::{Identity, PaymentTx};
+pub use interop::{Identity, LocalIdentity, PaymentTx};
 
 #[cfg(test)]
 mod tests {
@@ -64,8 +67,8 @@ mod tests {
     fn new_identity(x: u8) -> Identity {
         let y = x as u16;
         Identity{
-            ip_address: IpAddr::V6(Ipv6Addr::new(y, y, y, y, y, y, y, y)),
-            mac_address: eui48::MacAddress::new([x; 6]),
+            mesh_ip: IpAddr::V6(Ipv6Addr::new(y, y, y, y, y, y, y, y)),
+            wg_public_key: String::from("AAAAAAAAAAAAAAAAAAAA"),
             eth_address: new_addr(x)
         }
     }
@@ -156,9 +159,7 @@ mod tests {
 
         // Serialize it to a JSON string.
         let j = serde_json::to_string(&my_struct).unwrap();
-
-        let s = "{\"addr\":\"0x0101010101010101010101010101010101010101\",\"sig\":\"0x0101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101\",\"key\":\"0x01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101\",\"payment\":{\"to\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"from\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"},\"amount\":\"1\"},\"identity\":{\"ip_address\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"mac_address\":\"01-01-01-01-01-01\"}}";
-
+        let s = "{\"addr\":\"0x0101010101010101010101010101010101010101\",\"sig\":\"0x0101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101\",\"key\":\"0x01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101\",\"payment\":{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"1\"},\"identity\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"}}";
         // Print, write to a file, or send to an HTTP server.
         assert_eq!(s, j);
 

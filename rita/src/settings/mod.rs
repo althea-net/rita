@@ -1,27 +1,19 @@
 use std::net::IpAddr;
+use std::path::Path;
 
-extern crate config;
 use config::{ConfigError, Config, File, Environment};
 
-extern crate althea_types;
-use althea_types::{EthAddress};
+use althea_types::{EthAddress, Identity};
 
-extern crate eui48;
 use eui48::MacAddress;
 
-extern crate num256;
 use num256::Int256;
 
-extern crate docopt;
 use docopt::Docopt;
 
-#[macro_use]
-extern crate serde_derive;
-extern crate serde;
-use serde::{Deserialize};
+use serde::{Serialize, Deserialize};
 
-#[macro_use]
-extern crate lazy_static;
+use althea_kernel_interface::KernelInterface;
 
 const USAGE: &'static str = "
 Usage: rita --config <settings>
@@ -41,7 +33,7 @@ lazy_static! {
     };
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct NetworkSettings {
     pub own_ip: IpAddr,
     pub own_mac: MacAddress,
@@ -49,9 +41,11 @@ pub struct NetworkSettings {
     pub babel_port: u16,
     pub rita_port: u16,
     pub bounty_port: u16,
+    pub wg_private_key: String,
+    pub wg_start_port: u16
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PaymentSettings {
     pub pay_threshold: Int256,
     pub close_threshold: Int256,
@@ -60,7 +54,7 @@ pub struct PaymentSettings {
     pub eth_address: EthAddress,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Settings {
     pub payment: PaymentSettings,
     pub network: NetworkSettings
@@ -71,5 +65,16 @@ impl Settings {
         let mut s = Config::new();
         s.merge(File::with_name(file_name))?;
         s.try_into()
+    }
+
+    pub fn get_identity(&self) -> Identity {
+        let mut ki = KernelInterface{};
+        ki.create_wg_key(Path::new(&SETTING.network.wg_private_key));
+
+        Identity{
+            eth_address: self.payment.eth_address.clone(),
+            mesh_ip: self.network.own_ip.clone(),
+            wg_public_key: ki.get_wg_pubkey(Path::new(&self.network.wg_private_key)).unwrap(),
+        }
     }
 }
