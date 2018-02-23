@@ -1,4 +1,4 @@
-#![cfg_attr(feature="system_alloc", feature(alloc_system, global_allocator, allocator_api))]
+#![cfg_attr(feature = "system_alloc", feature(alloc_system, global_allocator, allocator_api))]
 
 #[cfg(feature = "system_alloc")]
 extern crate alloc_system;
@@ -10,18 +10,22 @@ use alloc_system::System;
 #[global_allocator]
 static A: System = System;
 
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 
-#[macro_use] extern crate rouille;
+#[macro_use]
+extern crate rouille;
 use rouille::{Request, Response};
 
-#[macro_use] extern crate diesel;
+#[macro_use]
+extern crate diesel;
 extern crate dotenv;
 extern crate simple_logger;
 
 extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 extern crate serde_json;
-#[macro_use] extern crate serde_derive;
 
 extern crate num256;
 use num256::Int256;
@@ -48,8 +52,7 @@ use self::schema::status::dsl::*;
 pub fn establish_connection() -> SqliteConnection {
     dotenv().ok();
 
-    let database_url = env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     SqliteConnection::establish(&database_url)
         .expect(&format!("Error connecting to {}", database_url))
 }
@@ -67,7 +70,8 @@ fn main() {
 
     let conn = Mutex::new(establish_connection());
 
-    rouille::start_server("[::0]:8888", move |request| { // TODO: fix the port
+    rouille::start_server("[::0]:8888", move |request| {
+        // TODO: fix the port
         router!(request,
             (POST) (/update) => {
                 process_updates(request, &conn)
@@ -92,7 +96,7 @@ fn process_updates(request: &Request, conn: &Mutex<SqliteConnection>) -> Respons
         let stat = Status {
             ip: String::from(format!("{}", update.from.mesh_ip)),
             mac: String::from(format!("{}", update.from.wg_public_key)),
-            balance: String::from(format!("{}", update.balance))
+            balance: String::from(format!("{}", update.balance)),
         };
 
         trace!("Checking if record exists for {}", stat.ip);
@@ -123,10 +127,10 @@ fn process_updates(request: &Request, conn: &Mutex<SqliteConnection>) -> Respons
 }
 
 fn list_status(_request: &Request, conn: &Mutex<SqliteConnection>) -> Response {
-let conn = conn.lock().unwrap();
-let results = status
-.load::<Status>(&*conn)
-.expect("Error loading statuses");
-trace!("Sending response: {:?}", results);
-rouille::Response::text(serde_json::to_string(&results).unwrap())
+    let conn = conn.lock().unwrap();
+    let results = status
+        .load::<Status>(&*conn)
+        .expect("Error loading statuses");
+    trace!("Sending response: {:?}", results);
+    rouille::Response::text(serde_json::to_string(&results).unwrap())
 }

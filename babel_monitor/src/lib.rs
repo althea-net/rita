@@ -1,4 +1,3 @@
-
 #[macro_use]
 extern crate derive_error;
 
@@ -7,15 +6,15 @@ extern crate log;
 
 extern crate ip_network;
 extern crate mockstream;
-use std::io::{BufReader, BufRead};
+use std::io::{BufRead, BufReader};
 
-use std::{time};
+use std::time;
 use std::io::{Read, Write};
 use std::str;
 use mockstream::SharedMockStream;
 use std::collections::VecDeque;
 use std::net::IpAddr;
-use std::net::{TcpStream, SocketAddr};
+use std::net::{SocketAddr, TcpStream};
 use ip_network::IpNetwork;
 
 #[derive(Debug, Error)]
@@ -27,7 +26,8 @@ pub enum Error {
     ParseFloat(std::num::ParseFloatError),
     AddrParse(std::net::AddrParseError),
     IpNetworkParseError(ip_network::IpNetworkParseError),
-    #[error(msg_embedded, no_from, non_std)] BabelError(String),
+    #[error(msg_embedded, no_from, non_std)]
+    BabelError(String),
 }
 
 // If a function doesn't modify the state of the Babel object
@@ -38,18 +38,18 @@ fn find_babel_val(val: &str, line: &str) -> Result<String, Error> {
         if entry.to_string().contains(val) {
             match iter.next() {
                 Some(v) => return Ok(v.to_string()),
-                None => continue
+                None => continue,
             }
         }
     }
-    return Err(Error::BabelError(format!("{} not found in babel output", val)));
+    return Err(Error::BabelError(format!(
+        "{} not found in babel output",
+        val
+    )));
 }
 
-
 fn is_terminator(line: &String) -> bool {
-    line == "ok" ||
-    line == "no" ||
-    line == "bad"
+    line == "ok" || line == "no" || line == "bad"
 }
 
 fn positive_termination(message: &String) -> bool {
@@ -83,7 +83,7 @@ pub struct Neighbor {
 
 pub type Babel = InnerBabel<TcpStream>;
 
-#[doc(hidden)] 
+#[doc(hidden)]
 pub struct InnerBabel<T: Read + Write> {
     stream: BufReader<T>,
 }
@@ -91,12 +91,15 @@ pub struct InnerBabel<T: Read + Write> {
 impl Babel {
     pub fn new(addr: &SocketAddr) -> Babel {
         trace!("Connecting to babel instance at {}", addr);
-        let mut babel = InnerBabel { stream: BufReader::new(TcpStream::connect_timeout(addr, time::Duration::from_secs(5)).unwrap()) };
+        let mut babel = InnerBabel {
+            stream: BufReader::new(
+                TcpStream::connect_timeout(addr, time::Duration::from_secs(5)).unwrap(),
+            ),
+        };
         babel.start_connection().unwrap();
         babel
     }
 }
-
 
 impl<T: Read + Write> InnerBabel<T> {
     // Consumes the automated Preamble and validates configuration api version
@@ -106,7 +109,10 @@ impl<T: Read + Write> InnerBabel<T> {
         if preamble.contains("ALTHEA 0.1") && positive_termination(&preamble) {
             return Ok(());
         } else {
-            return Err(Error::BabelError(format!("Connection to Babel not started correctly. Invalid preamble: {}", preamble)));
+            return Err(Error::BabelError(format!(
+                "Connection to Babel not started correctly. Invalid preamble: {}",
+                preamble
+            )));
         }
     }
 
@@ -115,7 +121,7 @@ impl<T: Read + Write> InnerBabel<T> {
         for line in self.stream.by_ref().lines() {
             let line = &line?;
             ret.push_str(line);
-            ret.push_str("\n"); 
+            ret.push_str("\n");
             if is_terminator(line) {
                 break;
             }
@@ -158,7 +164,6 @@ impl<T: Read + Write> InnerBabel<T> {
         Ok(0)
     }
 
-
     pub fn parse_neighs(&mut self) -> Result<VecDeque<Neighbor>, Error> {
         let mut vector: VecDeque<Neighbor> = VecDeque::with_capacity(5);
         self.write("dump\n")?;
@@ -178,7 +183,6 @@ impl<T: Read + Write> InnerBabel<T> {
         }
         Ok(vector)
     }
-
 
     pub fn parse_routes(&mut self) -> Result<VecDeque<Route>, Error> {
         let mut vector: VecDeque<Route> = VecDeque::with_capacity(20);
@@ -206,44 +210,48 @@ impl<T: Read + Write> InnerBabel<T> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    static TABLE: &'static str = "local price 1024\n\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\
-                                  \u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}add interface wlan0 up true \
-                                  ipv6 fe80::1a8b:ec1:8542:1bd8 ipv4 10.28.119.131\nadd interface wg0 up true ipv6 \
-                                  fe80::2cee:2fff:7380:8354 ipv4 10.0.236.201\nadd neighbour 14f19a8 address fe80::2cee:2fff:648:8796 \
-                                  if wg0 reach ffff rxcost 256 txcost 256 rtt 26.723 rttcost 912 cost 1168\nadd neighbour 14f0640 \
-                                  address fe80::e841:e384:491e:8eb9 if wlan0 reach 9ff7 rxcost 512 txcost 256 rtt 19.323 rttcost 508 \
-                                  cost 1020\nadd neighbour 14f05f0 address fe80::e9d0:498f:6c61:be29 if wlan0 reach feff rxcost 258 \
-                                  txcost 341 rtt 18.674 rttcost 473 cost 817\nadd neighbour 14f0488 address fe80::e914:2335:a76:bda3 \
-                                  if wlan0 reach feff rxcost 258 txcost 256 rtt 22.805 rttcost 698 cost 956\nadd xroute \
-                                  10.28.119.131/32-::/0 prefix 10.28.119.131/32 from ::/0 metric 0\nadd route 14f0820 prefix \
-                                  10.28.7.7/32 from 0.0.0.0/0 installed yes id ba:27:eb:ff:fe:5b:fe:c7 metric 1596 price 3072 refmetric \
-                                  638 via fe80::e914:2335:a76:bda3 if wlan0\nadd route 14f07a0 prefix 10.28.7.7/32 from 0.0.0.0/0 \
-                                  installed no id ba:27:eb:ff:fe:5b:fe:c7 metric 1569 price 5032 refmetric 752 via \
-                                  fe80::e9d0:498f:6c61:be29 if wlan0\nadd route 14f06d8 prefix 10.28.20.151/32 from 0.0.0.0/0 installed \
-                                  yes id ba:27:eb:ff:fe:c1:2d:d5 metric 817 price 4008 refmetric 0 via fe80::e9d0:498f:6c61:be29 if \
-                                  wlan0\nadd route 14f0548 prefix 10.28.244.138/32 from 0.0.0.0/0 installed yes id \
-                                  ba:27:eb:ff:fe:d1:3e:ba metric 958 price 2048 refmetric 0 via fe80::e914:2335:a76:bda3 if \
-                                  wlan0\nok\n\u{0}\u{0}";
+    static TABLE: &'static str =
+"local price 1024\n\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\
+\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}add interface wlan0 up true \
+ipv6 fe80::1a8b:ec1:8542:1bd8 ipv4 10.28.119.131\nadd interface wg0 up true ipv6 \
+fe80::2cee:2fff:7380:8354 ipv4 10.0.236.201\nadd neighbour 14f19a8 address fe80::2cee:2fff:648:8796\
+ if wg0 reach ffff rxcost 256 txcost 256 rtt 26.723 rttcost 912 cost 1168\nadd neighbour 14f0640 \
+address fe80::e841:e384:491e:8eb9 if wlan0 reach 9ff7 rxcost 512 txcost 256 rtt 19.323 rttcost 508 \
+cost 1020\nadd neighbour 14f05f0 address fe80::e9d0:498f:6c61:be29 if wlan0 reach feff rxcost 258 \
+txcost 341 rtt 18.674 rttcost 473 cost 817\nadd neighbour 14f0488 address fe80::e914:2335:a76:bda3 \
+if wlan0 reach feff rxcost 258 txcost 256 rtt 22.805 rttcost 698 cost 956\nadd xroute \
+10.28.119.131/32-::/0 prefix 10.28.119.131/32 from ::/0 metric 0\nadd route 14f0820 prefix 10.28\
+.7.7/32 from 0.0.0.0/0 installed yes id ba:27:eb:ff:fe:5b:fe:c7 metric 1596 price 3072 refmetric \
+638 via fe80::e914:2335:a76:bda3 if wlan0\nadd route 14f07a0 prefix 10.28.7.7/32 from 0.0.0.0/0 \
+installed no id ba:27:eb:ff:fe:5b:fe:c7 metric 1569 price 5032 refmetric 752 via fe80::e9d0:\
+498f:6c61:be29 if wlan0\nadd route 14f06d8 prefix 10.28.20.151/32 from 0.0.0.0/0 installed \
+yes id ba:27:eb:ff:fe:c1:2d:d5 metric 817 price 4008 refmetric 0 via fe80::e9d0:498f:6c61:be29 if \
+wlan0\nadd route 14f0548 prefix 10.28.244.138/32 from 0.0.0.0/0 installed yes id \
+ba:27:eb:ff:fe:d1:3e:ba metric 958 price 2048 refmetric 0 via fe80::e914:2335:a76:bda3 if \
+wlan0\nok\n\u{0}\u{0}";
 
-    static PREAMBLE: &'static str = "ALTHEA 0.1\nversion babeld-1.8.0-24-g6335378\nhost raspberrypi\nmy-id \
-                                    ba:27:eb:ff:fe:09:06:dd\nok\n\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\
-                                    \u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}";
+    static PREAMBLE: &'static str =
+        "ALTHEA 0.1\nversion babeld-1.8.0-24-g6335378\nhost raspberrypi\nmy-id \
+         ba:27:eb:ff:fe:09:06:dd\nok\n\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\
+         \u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}";
 
-    static XROUTE_LINE: &'static str = "add xroute 10.28.119.131/32-::/0 prefix 10.28.119.131/32 from ::/0 metric 0";
+    static XROUTE_LINE: &'static str =
+        "add xroute 10.28.119.131/32-::/0 prefix 10.28.119.131/32 from ::/0 metric 0";
 
-    static ROUTE_LINE: &'static str = "add route 14f06d8 prefix 10.28.20.151/32 from 0.0.0.0/0 installed yes id \
-                                       ba:27:eb:ff:fe:c1:2d:d5 metric 1306 price 4008 refmetric 0 via \
-                                       fe80::e9d0:498f:6c61:be29 if wlan0";
+    static ROUTE_LINE: &'static str =
+        "add route 14f06d8 prefix 10.28.20.151/32 from 0.0.0.0/0 installed yes id \
+         ba:27:eb:ff:fe:c1:2d:d5 metric 1306 price 4008 refmetric 0 via \
+         fe80::e9d0:498f:6c61:be29 if wlan0";
 
-    static NEIGH_LINE: &'static str = "add neighbour 14f05f0 address fe80::e9d0:498f:6c61:be29 if wlan0 reach ffff rxcost \
-                                       256 txcost 256 rtt 29.264 rttcost 1050 cost 1306";
+    static NEIGH_LINE: &'static str =
+        "add neighbour 14f05f0 address fe80::e9d0:498f:6c61:be29 if wlan0 reach ffff rxcost \
+         256 txcost 256 rtt 29.264 rttcost 1050 cost 1306";
 
-
-    static IFACE_LINE: &'static str = "add interface wlan0 up true ipv6 fe80::1a8b:ec1:8542:1bd8 ipv4 10.28.119.131";
+    static IFACE_LINE: &'static str =
+        "add interface wlan0 up true ipv6 fe80::1a8b:ec1:8542:1bd8 ipv4 10.28.119.131";
 
     static PRICE_LINE: &'static str = "local price 1024";
 
@@ -257,7 +265,9 @@ mod tests {
     #[test]
     fn mock_connect() {
         let mut s = SharedMockStream::new();
-        let mut b1 = InnerBabel { stream: BufReader::new(s.clone()) };
+        let mut b1 = InnerBabel {
+            stream: BufReader::new(s.clone()),
+        };
         s.push_bytes_to_read(PREAMBLE.as_bytes());
         b1.start_connection().unwrap()
     }
@@ -265,7 +275,9 @@ mod tests {
     #[test]
     fn mock_dump() {
         let mut s = SharedMockStream::new();
-        let mut b1 = InnerBabel { stream: BufReader::new(s.clone()) };
+        let mut b1 = InnerBabel {
+            stream: BufReader::new(s.clone()),
+        };
         s.push_bytes_to_read(TABLE.as_bytes());
         b1.write("dump\n").unwrap();
     }
@@ -273,7 +285,10 @@ mod tests {
     #[test]
     fn line_parse() {
         assert_eq!(find_babel_val("metric", XROUTE_LINE).unwrap(), "0");
-        assert_eq!(find_babel_val("prefix", XROUTE_LINE).unwrap(), "10.28.119.131/32");
+        assert_eq!(
+            find_babel_val("prefix", XROUTE_LINE).unwrap(),
+            "10.28.119.131/32"
+        );
         assert_eq!(find_babel_val("route", ROUTE_LINE).unwrap(), "14f06d8");
         assert_eq!(find_babel_val("if", ROUTE_LINE).unwrap(), "wlan0");
         assert_eq!(
@@ -291,7 +306,9 @@ mod tests {
     #[test]
     fn neigh_parse() {
         let mut s = SharedMockStream::new();
-        let mut b1 = InnerBabel { stream: BufReader::new(s.clone()) };
+        let mut b1 = InnerBabel {
+            stream: BufReader::new(s.clone()),
+        };
         s.push_bytes_to_read(TABLE.as_bytes());
         b1.write("dump\n").unwrap();
         let neighs = b1.parse_neighs().unwrap();
@@ -305,7 +322,9 @@ mod tests {
     #[test]
     fn route_parse() {
         let mut s = SharedMockStream::new();
-        let mut b1 = InnerBabel { stream: BufReader::new(s.clone()) };
+        let mut b1 = InnerBabel {
+            stream: BufReader::new(s.clone()),
+        };
         s.push_bytes_to_read(TABLE.as_bytes());
         b1.write("dump\n").unwrap();
 
@@ -319,7 +338,9 @@ mod tests {
     #[test]
     fn local_price_parse() {
         let mut s = SharedMockStream::new();
-        let mut b1 = InnerBabel { stream: BufReader::new(s.clone()) };
+        let mut b1 = InnerBabel {
+            stream: BufReader::new(s.clone()),
+        };
         s.push_bytes_to_read(TABLE.as_bytes());
         b1.write("dump\n").unwrap();
         assert_eq!(b1.local_price().unwrap(), 1024);

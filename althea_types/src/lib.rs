@@ -1,14 +1,14 @@
+extern crate base64;
+extern crate eui48;
+extern crate hex;
+extern crate num256;
 extern crate serde;
 extern crate serde_json;
-extern crate base64;
-extern crate hex;
-extern crate eui48;
-extern crate num256;
 
 #[macro_use]
 extern crate serde_derive;
 
-#[cfg(feature="actix")]
+#[cfg(feature = "actix")]
 extern crate actix;
 
 pub mod bytes_32;
@@ -41,7 +41,7 @@ mod tests {
         sig: EthSignature,
         key: EthPrivateKey,
         payment: PaymentTx,
-        identity: Identity
+        identity: Identity,
     }
 
     fn new_addr(x: u8) -> EthAddress {
@@ -57,19 +57,19 @@ mod tests {
     }
 
     fn new_payment(x: u8) -> PaymentTx {
-        PaymentTx{
+        PaymentTx {
             to: new_identity(x),
             from: new_identity(x),
-            amount: Uint256::from(x)
+            amount: Uint256::from(x),
         }
     }
 
     fn new_identity(x: u8) -> Identity {
         let y = x as u16;
-        Identity{
+        Identity {
             mesh_ip: IpAddr::V6(Ipv6Addr::new(y, y, y, y, y, y, y, y)),
             wg_public_key: String::from("AAAAAAAAAAAAAAAAAAAA"),
-            eth_address: new_addr(x)
+            eth_address: new_addr(x),
         }
     }
 
@@ -79,7 +79,7 @@ mod tests {
             sig: new_sig(x),
             key: new_key(x),
             identity: new_identity(x),
-            payment: new_payment(x)
+            payment: new_payment(x),
         }
     }
 

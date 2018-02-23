@@ -48,7 +48,7 @@ impl SystemService for TrafficWatcher {
 }
 impl Default for TrafficWatcher {
     fn default() -> TrafficWatcher {
-        TrafficWatcher{}
+        TrafficWatcher {}
     }
 }
 
@@ -71,8 +71,10 @@ impl Handler<Watch> for TrafficWatcher {
 /// This first time this is run, it will create the rules and then immediately read and zero them.
 /// (should return 0)
 pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
-    let mut ki = KernelInterface{};
-    let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port).parse().unwrap());
+    let mut ki = KernelInterface {};
+    let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port)
+        .parse()
+        .unwrap());
 
     trace!("Getting routes");
     let routes = babel.parse_routes()?;
@@ -90,11 +92,14 @@ pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
 
     let mut ip_to_if: HashMap<IpAddr, String> = HashMap::new();
     for ident in &neighbors {
-        ip_to_if.insert( ident.0.global.mesh_ip, ident.clone().1);
+        ip_to_if.insert(ident.0.global.mesh_ip, ident.clone().1);
     }
 
     let mut destinations = HashMap::new();
-    destinations.insert(SETTING.network.own_ip, Int256::from(babel.local_price().unwrap() as i64));
+    destinations.insert(
+        SETTING.network.own_ip,
+        Int256::from(babel.local_price().unwrap() as i64),
+    );
 
     let old_input_counters = ki.read_counters(false, &FilterTarget::Input)?;
     let old_output_counters = ki.read_counters(false, &FilterTarget::Output)?;
@@ -111,25 +116,64 @@ pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
                     Int256::from(route.price),
                 );
                 for &(ref ident, ref dev) in &neighbors {
-                    ki.start_counter(dev.to_string(), IpAddr::V6(ip.get_network_address()), &FilterTarget::Input, &old_input_counters)?;
-                    ki.start_counter(dev.to_string(), IpAddr::V6(ip.get_network_address()), &FilterTarget::ForwardInput, &old_fwd_input_counters)?;
-                    ki.start_counter(dev.to_string(), IpAddr::V6(ip.get_network_address()), &FilterTarget::Output, &old_output_counters)?;
-                    ki.start_counter(dev.to_string(), IpAddr::V6(ip.get_network_address()), &FilterTarget::ForwardOutput, &old_fwd_output_counters)?;
+                    ki.start_counter(
+                        dev.to_string(),
+                        IpAddr::V6(ip.get_network_address()),
+                        &FilterTarget::Input,
+                        &old_input_counters,
+                    )?;
+                    ki.start_counter(
+                        dev.to_string(),
+                        IpAddr::V6(ip.get_network_address()),
+                        &FilterTarget::ForwardInput,
+                        &old_fwd_input_counters,
+                    )?;
+                    ki.start_counter(
+                        dev.to_string(),
+                        IpAddr::V6(ip.get_network_address()),
+                        &FilterTarget::Output,
+                        &old_output_counters,
+                    )?;
+                    ki.start_counter(
+                        dev.to_string(),
+                        IpAddr::V6(ip.get_network_address()),
+                        &FilterTarget::ForwardOutput,
+                        &old_fwd_output_counters,
+                    )?;
                 }
             }
         }
     }
 
     for &(ref ident, ref dev) in &neighbors {
-        ki.start_counter(dev.to_string(), SETTING.network.own_ip, &FilterTarget::Input, &old_input_counters)?;
-        ki.start_counter(dev.to_string(), SETTING.network.own_ip, &FilterTarget::Output, &old_output_counters)?;
-        ki.start_counter(dev.to_string(), SETTING.network.own_ip, &FilterTarget::ForwardInput, &old_fwd_input_counters)?;
-        ki.start_counter(dev.to_string(), SETTING.network.own_ip, &FilterTarget::ForwardOutput, &old_fwd_output_counters)?;
+        ki.start_counter(
+            dev.to_string(),
+            SETTING.network.own_ip,
+            &FilterTarget::Input,
+            &old_input_counters,
+        )?;
+        ki.start_counter(
+            dev.to_string(),
+            SETTING.network.own_ip,
+            &FilterTarget::Output,
+            &old_output_counters,
+        )?;
+        ki.start_counter(
+            dev.to_string(),
+            SETTING.network.own_ip,
+            &FilterTarget::ForwardInput,
+            &old_fwd_input_counters,
+        )?;
+        ki.start_counter(
+            dev.to_string(),
+            SETTING.network.own_ip,
+            &FilterTarget::ForwardOutput,
+            &old_fwd_output_counters,
+        )?;
     }
     trace!("Getting input counters");
     let mut input_counters = ki.read_counters(true, &FilterTarget::Input)?;
     info!("Got output counters: {:?}", input_counters);
-
 
     trace!("Getting destination counters");
     let mut output_counters = ki.read_counters(true, &FilterTarget::Output)?;
@@ -137,7 +181,10 @@ pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
 
     trace!("Getting fwd counters");
     let (fwd_input_counters, fwd_output_counters) = ki.read_fwd_counters(true)?;
-    info!("Got fwd counters: {:?}", (&fwd_input_counters, &fwd_output_counters));
+    info!(
+        "Got fwd counters: {:?}",
+        (&fwd_input_counters, &fwd_output_counters)
+    );
 
     for (k, v) in &mut output_counters {
         *v += fwd_output_counters[k]
@@ -149,7 +196,6 @@ pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
 
     info!("Got final input counters: {:?}", input_counters);
     info!("Got final output counters: {:?}", output_counters);
-
 
     // Flow counters should debit your neighbor which you received the packet from
     // Destination counters should credit your neighbor which you sent the packet to
@@ -177,7 +223,8 @@ pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
     for ((ip, interface), bytes) in output_counters {
         if destinations.contains_key(&ip) {
             let id = identities[&if_to_ip[&interface]].clone();
-            *debts.get_mut(&id).unwrap() += (destinations[&ip].clone() - babel.local_price().unwrap()) * bytes;
+            *debts.get_mut(&id).unwrap() +=
+                (destinations[&ip].clone() - babel.local_price().unwrap()) * bytes;
         } else {
             warn!("destination not found {}, {}", ip, bytes);
         }
@@ -186,20 +233,20 @@ pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
     trace!("Collated total debts: {:?}", debts);
 
     for (from, amount) in debts {
-        let update = debt_keeper::TrafficUpdate { from: from.global.clone(), amount };
+        let update = debt_keeper::TrafficUpdate {
+            from: from.global.clone(),
+            amount,
+        };
         let adjustment = debt_keeper::SendUpdate { from: from.global };
 
-        Arbiter::handle().spawn(
-            DebtKeeper::from_registry().send(update).then(
-                move |_| {
-                    DebtKeeper::from_registry().do_send(adjustment);
-                    future::result(Ok(()))
-                }));
+        Arbiter::handle().spawn(DebtKeeper::from_registry().send(update).then(move |_| {
+            DebtKeeper::from_registry().do_send(adjustment);
+            future::result(Ok(()))
+        }));
     }
 
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {

@@ -1,12 +1,12 @@
-use super::{KernelInterface, Error};
+use super::{Error, KernelInterface};
 
-use std::net::{IpAddr};
+use std::net::IpAddr;
 
 use regex::Regex;
 
 impl KernelInterface {
     /// Returns all existing interfaces
-    pub fn get_interfaces(&self) -> Result<Vec<String>,Error> {
+    pub fn get_interfaces(&self) -> Result<Vec<String>, Error> {
         let links = String::from_utf8(self.run_command("ip", &["link"])?.stdout)?;
 
         let mut vec = Vec::new();
@@ -23,7 +23,7 @@ impl KernelInterface {
 #[test]
 fn test_get_interfaces_linux() {
     use std::process::Output;
-    use std::process::{ExitStatus};
+    use std::process::ExitStatus;
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
     let mut ki = KernelInterface {

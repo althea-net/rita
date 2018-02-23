@@ -1,9 +1,9 @@
-use ::eth_address::EthAddress;
-use std::net::{IpAddr};
+use eth_address::EthAddress;
+use std::net::IpAddr;
 use eui48::MacAddress;
-use num256::{Uint256, Int256};
+use num256::{Int256, Uint256};
 
-#[cfg(feature="actix")]
+#[cfg(feature = "actix")]
 use actix::*;
 
 /// This is how nodes are identified.
@@ -14,7 +14,7 @@ pub struct Identity {
     pub wg_public_key: String,
 }
 
-#[cfg(feature="actix")]
+#[cfg(feature = "actix")]
 impl Message for Identity {
     type Result = ();
 }
@@ -27,12 +27,12 @@ pub struct LocalIdentity {
     pub global: Identity,
 }
 
-#[cfg(feature="actix")]
+#[cfg(feature = "actix")]
 impl Message for LocalIdentity {
     type Result = ();
 }
 
-/// This is a stand-in for channel updates. Completely insecure, but allows us to 
+/// This is a stand-in for channel updates. Completely insecure, but allows us to
 /// track how much people would be paying each other if channels were implemented.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PaymentTx {

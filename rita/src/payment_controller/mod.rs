@@ -1,15 +1,15 @@
 use actix::prelude::*;
 
-use althea_types::{PaymentTx, Identity};
+use althea_types::{Identity, PaymentTx};
 
-use num256::{Uint256, Int256};
+use num256::{Int256, Uint256};
 
 use reqwest::{Client, StatusCode};
 
 use std::thread;
 use std::time::Duration;
-use std::sync::{Mutex, Arc};
-use std::sync::mpsc::{Sender, channel};
+use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{channel, Sender};
 
 use std::net::Ipv6Addr;
 use settings::SETTING;
@@ -23,11 +23,13 @@ use debt_keeper::DebtKeeper;
 pub enum Error {
     HttpError(reqwest::Error),
     SerdeError(serde_json::Error),
-    #[error(msg_embedded, no_from, non_std)] PaymentControllerError(String),
-    #[error(msg_embedded, no_from, non_std)] PaymentSendingError(String),
-    #[error(msg_embedded, no_from, non_std)] BountyError(String),
+    #[error(msg_embedded, no_from, non_std)]
+    PaymentControllerError(String),
+    #[error(msg_embedded, no_from, non_std)]
+    PaymentSendingError(String),
+    #[error(msg_embedded, no_from, non_std)]
+    BountyError(String),
 }
-
 
 pub struct PaymentController {
     pub client: Client,
@@ -78,9 +80,9 @@ impl Handler<PaymentControllerUpdate> for PaymentController {
     }
 }
 
-/// This updates a "bounty hunter" with the current balance and the last PaymentTx. 
+/// This updates a "bounty hunter" with the current balance and the last PaymentTx.
 /// Bounty hunters are servers which store and possibly enforce the current state of
-/// a channel. Currently they are actually just showing a completely insecure 
+/// a channel. Currently they are actually just showing a completely insecure
 /// "fake" balance as a stand-in for the real thing.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BountyUpdate {
@@ -104,15 +106,19 @@ impl PaymentController {
             identity: id.clone(),
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(5))
-                .build().unwrap(),
-            balance: Int256::from(0i64)
+                .build()
+                .unwrap(),
+            balance: Int256::from(0i64),
         }
     }
 
     fn update_bounty(&self, update: BountyUpdate) -> Result<(), Error> {
         trace!("Sending bounty hunter update: {:?}", update);
         let bounty_url = if cfg!(not(test)) {
-            format!("http://[{}]:{}/update", SETTING.network.bounty_ip, SETTING.network.bounty_port)
+            format!(
+                "http://[{}]:{}/update",
+                SETTING.network.bounty_ip, SETTING.network.bounty_port
+            )
         } else {
             String::from("http://127.0.0.1:1234/update") //TODO: This is mockito::SERVER_URL, but don't want to include the crate in a non-test build just for that string
         };
@@ -126,61 +132,84 @@ impl PaymentController {
             Ok(())
         } else {
             trace!("Unsuccessfully in sending update to bounty hunter");
-            trace!("Received error from bounty hunter: {:?}", r.text().unwrap_or(String::from("No message received")));
-            Err(Error::BountyError(
-                String::from(format!("Received error from bounty hunter: {:?}",
-                                     r.text().unwrap_or(String::from("No message received"))
-                ))
-            ))
+            trace!(
+                "Received error from bounty hunter: {:?}",
+                r.text().unwrap_or(String::from("No message received"))
+            );
+            Err(Error::BountyError(String::from(format!(
+                "Received error from bounty hunter: {:?}",
+                r.text().unwrap_or(String::from("No message received"))
+            ))))
         }
     }
 
     /// This gets called when a payment from a counterparty has arrived, and updates
     /// the balance in memory and sends an update to the "bounty hunter".
-    pub fn payment_received(&mut self, pmt: PaymentTx) -> Result<debt_keeper::PaymentReceived, Error> {
+    pub fn payment_received(
+        &mut self,
+        pmt: PaymentTx,
+    ) -> Result<debt_keeper::PaymentReceived, Error> {
         trace!("current balance: {:?}", self.balance);
-        trace!("payment of {:?} received from {:?}: {:?}", pmt.amount, pmt.from.mesh_ip, pmt);
+        trace!(
+            "payment of {:?} received from {:?}: {:?}",
+            pmt.amount,
+            pmt.from.mesh_ip,
+            pmt
+        );
 
         self.balance = self.balance.clone() + Int256::from(pmt.amount.clone());
 
         trace!("current balance: {:?}", self.balance);
 
-        self.update_bounty(BountyUpdate{from: self.identity.clone(), tx: pmt.clone(), balance: self.balance.clone()})?;
+        self.update_bounty(BountyUpdate {
+            from: self.identity.clone(),
+            tx: pmt.clone(),
+            balance: self.balance.clone(),
+        })?;
         Ok(debt_keeper::PaymentReceived {
             from: pmt.from,
-            amount: pmt.amount.clone()
+            amount: pmt.amount.clone(),
         })
     }
 
     /// This should be called on a regular interval to update the bounty hunter of a node's current
     /// balance as well as to log the current balance
     pub fn update(&mut self) {
-        self.update_bounty(BountyUpdate{
-            from: self.identity.clone(), tx:
-            PaymentTx{from: self.identity.clone(),
-                      to: self.identity.clone(),
-                      amount: Uint256::from(0u32)
+        self.update_bounty(BountyUpdate {
+            from: self.identity.clone(),
+            tx: PaymentTx {
+                from: self.identity.clone(),
+                to: self.identity.clone(),
+                amount: Uint256::from(0u32),
             },
-            balance: self.balance.clone()
+            balance: self.balance.clone(),
         });
         info!("Balance update: {:?}", self.balance);
     }
 
-    /// This is called by the other modules in Rita to make payments. It sends a 
+    /// This is called by the other modules in Rita to make payments. It sends a
     /// PaymentTx to the `mesh_ip` in its `to` field.
     pub fn make_payment(&mut self, pmt: PaymentTx) -> Result<(), Error> {
         trace!("current balance: {:?}", self.balance);
 
-        trace!("sending payment of {:?} to {:?}: {:?}", pmt.amount, pmt.to.mesh_ip, pmt);
+        trace!(
+            "sending payment of {:?} to {:?}: {:?}",
+            pmt.amount,
+            pmt.to.mesh_ip,
+            pmt
+        );
 
         let neighbor_url = if cfg!(not(test)) {
-            format!("http://[{}]:{}/make_payment", pmt.to.mesh_ip, SETTING.network.rita_port)
+            format!(
+                "http://[{}]:{}/make_payment",
+                pmt.to.mesh_ip, SETTING.network.rita_port
+            )
         } else {
             String::from("http://127.0.0.1:1234/make_payment")
         };
 
         self.balance = self.balance.clone() - Int256::from(pmt.amount.clone());
-        
+
         trace!("current balance: {:?}", self.balance);
 
         let mut r = self.client
@@ -189,16 +218,22 @@ impl PaymentController {
             .send()?;
 
         if r.status() == StatusCode::Ok {
-            self.update_bounty(BountyUpdate{from: self.identity.clone(), tx: pmt, balance: self.balance.clone()});
+            self.update_bounty(BountyUpdate {
+                from: self.identity.clone(),
+                tx: pmt,
+                balance: self.balance.clone(),
+            });
             Ok(())
         } else {
             trace!("Unsuccessfully paid");
-            trace!("Received error from payee: {:?}", r.text().unwrap_or(String::from("No message received")));
-            Err(Error::PaymentSendingError(
-                String::from(format!("Received error from payee: {:?}",
-                                     r.text().unwrap_or(String::from("No message received"))
-                ))
-            ))
+            trace!(
+                "Received error from payee: {:?}",
+                r.text().unwrap_or(String::from("No message received"))
+            );
+            Err(Error::PaymentSendingError(String::from(format!(
+                "Received error from payee: {:?}",
+                r.text().unwrap_or(String::from("No message received"))
+            ))))
         }
     }
 }
@@ -220,26 +255,26 @@ mod tests {
     use std::sync::mpsc;
     use num256::Uint256;
 
-    use althea_types::{EthAddress, PaymentTx, Identity};
+    use althea_types::{EthAddress, Identity, PaymentTx};
 
     fn new_addr(x: u8) -> EthAddress {
         EthAddress([x; 20])
     }
 
     fn new_payment(x: u8) -> PaymentTx {
-        PaymentTx{
+        PaymentTx {
             to: new_identity(x),
             from: new_identity(x),
-            amount: Uint256::from(x)
+            amount: Uint256::from(x),
         }
     }
 
     fn new_identity(x: u8) -> Identity {
         let y = x as u16;
-        Identity{
+        Identity {
             mesh_ip: IpAddr::V6(Ipv6Addr::new(y, y, y, y, y, y, y, y)),
             wg_public_key: String::from("AAAAAAAAAAAAAAAAAAAA"),
-            eth_address: new_addr(x)
+            eth_address: new_addr(x),
         }
     }
 
@@ -297,10 +332,13 @@ mod tests {
 
         assert_eq!(pc.balance, Int256::from(1));
 
-        assert_eq!(out, debt_keeper::PaymentReceived {
-            from: new_identity(1),
-            amount: Uint256::from(1)
-        });
+        assert_eq!(
+            out,
+            debt_keeper::PaymentReceived {
+                from: new_identity(1),
+                amount: Uint256::from(1),
+            }
+        );
 
         _m.assert();
     }
@@ -319,10 +357,13 @@ mod tests {
         for i in 0..100 {
             let out = pc.payment_received(new_payment(1)).unwrap();
             assert_eq!(pc.balance, Int256::from(i + 1));
-            assert_eq!(out, debt_keeper::PaymentReceived {
-                from: new_identity(1),
-                amount: Uint256::from(1)
-            });
+            assert_eq!(
+                out,
+                debt_keeper::PaymentReceived {
+                    from: new_identity(1),
+                    amount: Uint256::from(1),
+                }
+            );
         }
 
         _m.assert();
