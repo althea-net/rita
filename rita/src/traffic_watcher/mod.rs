@@ -25,7 +25,7 @@ use ip_network::IpNetwork;
 
 use std::{thread, time};
 
-use settings::SETTING;
+use SETTING;
 
 #[derive(Debug, Error)]
 pub enum Error {

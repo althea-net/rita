@@ -1,7 +1,23 @@
+extern crate althea_types;
+extern crate config;
+extern crate eui48;
+extern crate num256;
+extern crate toml;
+
+#[macro_use]
+extern crate serde_derive;
+
+extern crate serde;
+extern crate serde_json;
+
+extern crate althea_kernel_interface;
+
 use std::net::IpAddr;
 use std::path::Path;
+use std::fs::File;
+use std::io::Write;
 
-use config::{Config, ConfigError, Environment, File};
+use config::{Config, ConfigError, Environment};
 
 use althea_types::{EthAddress, Identity};
 
@@ -9,29 +25,9 @@ use eui48::MacAddress;
 
 use num256::Int256;
 
-use docopt::Docopt;
-
 use serde::{Deserialize, Serialize};
 
 use althea_kernel_interface::KernelInterface;
-
-const USAGE: &'static str = "
-Usage: rita --config <settings>
-Options:
-    --config   Name of config file
-";
-
-lazy_static! {
-    pub static ref SETTING: Settings = {
-        let args = Docopt::new(USAGE)
-        .and_then(|d| d.parse())
-        .unwrap_or_else(|e| e.exit());
-
-        let settings_file = args.get_str("<settings>");
-
-        Settings::new(settings_file).unwrap()
-    };
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NetworkSettings {
@@ -61,15 +57,16 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn new(file_name: &str) -> Result<Self, ConfigError> {
+    pub fn new(file_name: &str, default: &str) -> Result<Self, ConfigError> {
         let mut s = Config::new();
-        s.merge(File::with_name(file_name))?;
+        s.merge(config::File::with_name(default))?;
+        s.merge(config::File::with_name(file_name).required(false))?;
         s.try_into()
     }
 
     pub fn get_identity(&self) -> Identity {
         let mut ki = KernelInterface {};
-        ki.create_wg_key(Path::new(&SETTING.network.wg_private_key));
+        ki.create_wg_key(Path::new(&self.network.wg_private_key));
 
         Identity {
             eth_address: self.payment.eth_address.clone(),
@@ -77,5 +74,12 @@ impl Settings {
             wg_public_key: ki.get_wg_pubkey(Path::new(&self.network.wg_private_key))
                 .unwrap(),
         }
+    }
+
+    pub fn write(&self, file_name: &str) -> Result<(), std::io::Error> {
+        let ser = toml::to_string(&self).unwrap();
+        let mut file = File::create(file_name)?;
+        file.write_all(ser.as_bytes())?;
+        Ok(())
     }
 }

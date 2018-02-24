@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender};
 
 use std::net::Ipv6Addr;
-use settings::SETTING;
+use SETTING;
 
 use reqwest;
 use serde_json;

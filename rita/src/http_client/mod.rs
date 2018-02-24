@@ -18,7 +18,7 @@ use serde_json;
 
 use althea_types::{LocalIdentity, PaymentTx};
 
-use settings::SETTING;
+use SETTING;
 
 #[derive(Debug, Error)]
 pub enum Error {

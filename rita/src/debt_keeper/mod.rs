@@ -11,7 +11,7 @@ use num256::{Int256, Uint256};
 
 use eui48::MacAddress;
 
-use settings::SETTING;
+use SETTING;
 
 use payment_controller;
 use payment_controller::PaymentController;
