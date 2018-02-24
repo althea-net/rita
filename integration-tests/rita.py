@@ -83,7 +83,7 @@ def start_bounty(id):
 
 
 def get_rita_defaults():
-    return toml.load(open("../rita/example.toml"))
+    return toml.load(open("../settings/default.toml"))
 
 
 def save_rita_settings(id, x):
@@ -95,7 +95,9 @@ def start_rita(id):
     settings["network"]["wg_private_key"] = "{pwd}/private-key-{id}".format(id=id, pwd=dname)
     save_rita_settings(id, settings)
     time.sleep(0.1)
-    os.system('(RUST_BACKTRACE=full ip netns exec netlab-{id} {rita} --config {pwd}/rita-settings-n{id}.toml & echo $! > rita-n{id}.pid) | grep -Ev "<unknown>|mio" > rita-n{id}.log &'.format(id=id, rita=rita, pwd=dname))
+    os.system('(RUST_BACKTRACE=full ip netns exec netlab-{id} {rita} --config rita-settings-n{'
+              'id}.toml --default ../settings/default.toml & echo $! > rita-n{id}.pid) | '
+              'grep -Ev "<unknown>|mio" > rita-n{id}.log &'.format(id=id, rita=rita, pwd=dname))
 
 
 def assert_test(x, description):

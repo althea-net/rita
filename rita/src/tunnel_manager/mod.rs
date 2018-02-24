@@ -26,7 +26,7 @@ use http_client::HTTPClient;
 
 use serde_json;
 
-use settings::SETTING;
+use SETTING;
 
 #[derive(Debug, Error)]
 pub enum Error {

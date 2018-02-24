@@ -24,7 +24,6 @@ extern crate serde_derive;
 extern crate actix;
 extern crate actix_web;
 extern crate bytes;
-extern crate config;
 extern crate docopt;
 extern crate eui48;
 extern crate futures;
@@ -34,8 +33,12 @@ extern crate rand;
 extern crate reqwest;
 extern crate serde;
 extern crate serde_json;
+extern crate settings;
 extern crate simple_logger;
 extern crate tokio;
+
+use settings::Settings;
+use docopt::Docopt;
 
 use actix::*;
 use actix::registry::SystemService;
@@ -51,12 +54,32 @@ mod payment_controller;
 mod tunnel_manager;
 mod network_endpoints;
 mod traffic_watcher;
-mod settings;
 mod rita_loop;
 mod http_client;
 
 use network_endpoints::{hello_response, make_payments};
-use settings::SETTING;
+
+const USAGE: &'static str = "
+Usage: rita --config <settings> --default <default>
+Options:
+    --config   Name of config file
+    --default   Name of default config file
+";
+
+lazy_static! {
+    pub static ref SETTING: Settings = {
+        let args = Docopt::new(USAGE)
+        .and_then(|d| d.parse())
+        .unwrap_or_else(|e| e.exit());
+
+        let settings_file = args.get_str("<settings>");
+        let defaults_file = args.get_str("<default>");
+
+        let s = Settings::new(settings_file, defaults_file).unwrap();
+        s.write(settings_file).unwrap();
+        s
+    };
+}
 
 fn main() {
     simple_logger::init().unwrap();

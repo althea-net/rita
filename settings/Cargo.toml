@@ -1,0 +1,15 @@
+[package]
+name = "settings"
+version = "0.1.0"
+authors = ["Ben <wangben3@gmail.com>"]
+
+[dependencies]
+config = "0.8.0"
+althea_types = { path = "../althea_types", features = ["actix"]}
+althea_kernel_interface = { path = "../althea_kernel_interface" }
+eui48 = {git="https://github.com/althea-mesh/eui48.git"}
+num256 = { path = "../num256" }
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
+toml = "0.4"

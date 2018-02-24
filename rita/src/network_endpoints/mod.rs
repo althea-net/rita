@@ -24,7 +24,7 @@ use serde_json;
 
 use bytes::Bytes;
 
-use settings::SETTING;
+use SETTING;
 
 pub fn make_payments(req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Error>> {
     trace!(

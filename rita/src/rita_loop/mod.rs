@@ -21,7 +21,7 @@ use debt_keeper::DebtKeeper;
 use payment_controller;
 use payment_controller::PaymentController;
 
-use settings::SETTING;
+use SETTING;
 use althea_kernel_interface::KernelInterface;
 
 use network_endpoints::make_payments;

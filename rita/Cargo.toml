@@ -7,6 +7,7 @@ authors = ["Jehan <jehan.tremback@gmail.com>"]
 babel_monitor = { path = "../babel_monitor" }
 althea_types = { path = "../althea_types", features = ["actix"]}
 althea_kernel_interface = { path = "../althea_kernel_interface" }
+settings = { path = "../settings" }
 num256 = { path = "../num256" }
 ip_network = "0.1"
 log = "0.3"
