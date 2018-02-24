@@ -1,10 +1,13 @@
-#[macro_use] extern crate derive_error;
-#[macro_use] extern crate lazy_static;
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate derive_error;
+#[macro_use]
+extern crate lazy_static;
+#[macro_use]
+extern crate log;
 
 extern crate eui48;
-extern crate regex;
 extern crate itertools;
+extern crate regex;
 
 use std::fs::File;
 use std::io::{Read, Write};
@@ -12,9 +15,9 @@ use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
 use std::str::FromStr;
-use std::time::{Instant};
+use std::time::Instant;
 use std::cell::RefCell;
-use std::sync::{Mutex, Arc};
+use std::sync::{Arc, Mutex};
 use std::borrow::BorrowMut;
 
 use std::str;
@@ -62,7 +65,11 @@ impl KernelInterface {
         if !output.status.success() {
             trace!("An error was returned");
         }
-        info!("command completed in {}s {}ms", start.elapsed().as_secs(), start.elapsed().subsec_nanos()/1000000);
+        info!(
+            "command completed in {}s {}ms",
+            start.elapsed().as_secs(),
+            start.elapsed().subsec_nanos() / 1000000
+        );
         return Ok(output);
     }
 

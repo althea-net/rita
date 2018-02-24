@@ -1,6 +1,6 @@
-use super::{KernelInterface, Error};
+use super::{Error, KernelInterface};
 
-use std::net::{IpAddr};
+use std::net::IpAddr;
 use std::str::FromStr;
 
 use eui48::MacAddress;
@@ -21,7 +21,7 @@ impl KernelInterface {
             vec.push((
                 MacAddress::parse_str(&caps[3]).unwrap(), // Ugly and inconsiderate, ditch ASAP
                 IpAddr::from_str(&caps[1])?,
-                caps[2].to_string()
+                caps[2].to_string(),
             ));
         }
         trace!("Got neighbors {:?}", vec);
@@ -30,7 +30,8 @@ impl KernelInterface {
 
     pub fn trigger_neighbor_disc(&self) {
         for interface in self.get_interfaces().unwrap() {
-            self.run_command("ping6", &["-c1", "-I", &interface, "ff02::1"]).unwrap();
+            self.run_command("ping6", &["-c1", "-I", &interface, "ff02::1"])
+                .unwrap();
         }
     }
 }
@@ -38,7 +39,7 @@ impl KernelInterface {
 #[test]
 fn test_get_neighbors_linux() {
     use std::process::Output;
-    use std::process::{ExitStatus};
+    use std::process::ExitStatus;
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
 
