@@ -15,6 +15,8 @@ static A: System = System;
 #[macro_use]
 extern crate derive_error;
 #[macro_use]
+extern crate diesel;
+#[macro_use]
 extern crate lazy_static;
 #[macro_use]
 extern crate log;
@@ -25,6 +27,7 @@ extern crate actix;
 extern crate actix_web;
 extern crate bytes;
 extern crate docopt;
+extern crate dotenv;
 extern crate env_logger;
 extern crate eui48;
 extern crate futures;
@@ -51,13 +54,19 @@ extern crate num256;
 
 mod debt_keeper;
 mod payment_controller;
-mod tunnel_manager;
-mod network_endpoints;
-mod traffic_watcher;
-mod rita_loop;
-mod http_client;
+mod rita_exit;
 
-use network_endpoints::{hello_response, make_payments};
+use diesel::prelude::*;
+use diesel::sqlite::SqliteConnection;
+use diesel::select;
+use diesel::dsl::exists;
+use dotenv::dotenv;
+
+pub mod schema;
+pub mod models;
+use self::models::*;
+
+use self::schema::client::dsl::*;
 
 const USAGE: &'static str = "
 Usage: rita --config <settings> --default <default>
@@ -88,39 +97,5 @@ fn main() {
 
     let system = actix::System::new(format!("main {}", SETTING.network.own_ip));
 
-    assert!(debt_keeper::DebtKeeper::from_registry().connected());
-    assert!(payment_controller::PaymentController::from_registry().connected());
-    assert!(tunnel_manager::TunnelManager::from_registry().connected());
-    assert!(http_client::HTTPClient::from_registry().connected());
-    assert!(traffic_watcher::TrafficWatcher::from_registry().connected());
-
-    HttpServer::new(|| {
-        Application::new()
-            .resource("/make_payment", |r| r.h(make_payments))
-            .resource("/hello", |r| r.h(hello_response))
-    }).bind(format!("[::0]:{}", SETTING.network.rita_port))
-        .unwrap()
-        .start();
-
-    let rita = rita_loop::RitaLoop {};
-    let _: Address<_> = rita.start();
-
-    for msg in debt_keeper_output {
-        match msg {
-            Some(DebtAction::SuspendTunnel) => {
-                trace!("Suspending Tunnel");
-            }, // tunnel manager should suspend forwarding here
-            Some(DebtAction::OpenTunnel) => {
-                trace!("Opening Tunnel");
-            }, // tunnel manager should reopen tunnel here
-            Some(DebtAction::MakePayment {to, amount}) => {
-                payment_controller_input.send(PaymentControllerMsg::MakePayment(PaymentTx {
-                    from: my_ident,
-                    to: to,
-                    amount
-                })).unwrap();
-            },
-            None => ()
-        };
-    }
+    system.run();
 }

@@ -9,8 +9,7 @@ use futures::Future;
 use payment_controller;
 use payment_controller::PaymentController;
 
-use tunnel_manager;
-use tunnel_manager::TunnelManager;
+use rita::tunnel_manager::{GetLocalIdentity, OpenTunnel, TunnelManager};
 
 use althea_kernel_interface::KernelInterface;
 
@@ -76,12 +75,12 @@ pub fn hello_response(req: HttpRequest) -> Box<Future<Item = Json<LocalIdentity>
             let ki = KernelInterface {};
 
             TunnelManager::from_registry()
-                .send(tunnel_manager::GetLocalIdentity {
+                .send(GetLocalIdentity {
                     requester: their_id.clone(),
                 })
                 .then(move |reply| {
                     trace!("opening tunnel in hello_response for {:?}", their_id);
-                    TunnelManager::from_registry().do_send(tunnel_manager::OpenTunnel(their_id));
+                    TunnelManager::from_registry().do_send(OpenTunnel(their_id));
                     Ok(Json(reply.unwrap()))
                 })
         })
