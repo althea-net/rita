@@ -1,8 +1,10 @@
-use super::{Error, KernelInterface};
+use super::{KernelInterface, KernelManagerError};
 
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
+
+use failure::Error;
 
 impl KernelInterface {
     pub fn create_wg_key(&self, path: &Path) -> Result<(), Error> {
@@ -13,10 +15,10 @@ impl KernelInterface {
             trace!("File does not exists, generating key");
             let mut output = self.run_command("wg", &["genkey"])?;
             if !output.stderr.is_empty() {
-                return Err(Error::RuntimeError(format!(
+                return Err(KernelManagerError::RuntimeError(format!(
                     "received error in generating wg key: {}",
                     String::from_utf8(output.stderr)?
-                )));
+                )).into());
             }
             output.stdout.truncate(44); //key should only be 44 bytes
             let mut priv_key_file = File::create(path)?;

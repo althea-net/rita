@@ -1,4 +1,4 @@
-use super::{Error, KernelInterface};
+use super::{KernelInterface, KernelManagerError};
 
 use std::net::IpAddr;
 use std::str::FromStr;
@@ -6,6 +6,8 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 use regex::Regex;
+
+use failure::Error;
 
 impl KernelInterface {
     /// This gets our link local ip for a given device
@@ -20,9 +22,9 @@ impl KernelInterface {
             trace!("got link local IP of {} from device {}", &cap[1], &dev);
             return Ok(cap[1].parse()?);
         } else {
-            return Err(Error::RuntimeError(
+            return Err(KernelManagerError::RuntimeError(
                 "No link local addresses found or no interface found".to_string(),
-            ));
+            ).into());
         }
     }
 
@@ -36,9 +38,7 @@ impl KernelInterface {
             }
         }
 
-        Err(Error::RuntimeError(
-            "Address not found in neighbors".to_string(),
-        ))
+        Err(KernelManagerError::RuntimeError("Address not found in neighbors".to_string()).into())
     }
 
     /// This gets our link local ip that can be reached by another node with link local ip
@@ -52,9 +52,7 @@ impl KernelInterface {
             }
         }
 
-        Err(Error::RuntimeError(
-            "Address not found in neighbors".to_string(),
-        ))
+        Err(KernelManagerError::RuntimeError("Address not found in neighbors".to_string()).into())
     }
 
     /// Gets the interface index for a named interface

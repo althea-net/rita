@@ -1,4 +1,4 @@
-use super::{Error, KernelInterface};
+use super::{KernelInterface, KernelManagerError};
 
 use std::net::IpAddr;
 use std::str::FromStr;
@@ -6,6 +6,8 @@ use std::collections::HashMap;
 
 use eui48::MacAddress;
 use regex::Regex;
+
+use failure::Error;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum FilterTarget {

@@ -1,7 +1,9 @@
-use super::{Error, KernelInterface};
+use super::{KernelInterface, KernelManagerError};
 
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::path::Path;
+
+use failure::Error;
 
 impl KernelInterface {
     pub fn open_tunnel(
@@ -35,20 +37,20 @@ impl KernelInterface {
                 ],
             )?;
             if !output.stderr.is_empty() {
-                return Err(Error::RuntimeError(format!(
+                return Err(KernelManagerError::RuntimeError(format!(
                     "received error from wg command: {}",
                     String::from_utf8(output.stderr)?
-                )));
+                )).into());
             }
             let output = self.run_command(
                 "ip",
                 &["address", "add", &format!("{}", own_ip), "dev", &interface],
             )?;
             if !output.stderr.is_empty() {
-                return Err(Error::RuntimeError(format!(
+                return Err(KernelManagerError::RuntimeError(format!(
                     "received error adding wg link: {}",
                     String::from_utf8(output.stderr)?
-                )));
+                )).into());
             }
             let output = self.run_command(
                 "ip",
@@ -61,23 +63,23 @@ impl KernelInterface {
                 ],
             )?;
             if !output.stderr.is_empty() {
-                return Err(Error::RuntimeError(format!(
+                return Err(KernelManagerError::RuntimeError(format!(
                     "received error adding wg link: {}",
                     String::from_utf8(output.stderr)?
-                )));
+                )).into());
             }
             let output = self.run_command("ip", &["link", "set", "dev", &interface, "up"])?;
             if !output.stderr.is_empty() {
-                return Err(Error::RuntimeError(format!(
+                return Err(KernelManagerError::RuntimeError(format!(
                     "received error setting wg interface up: {}",
                     String::from_utf8(output.stderr)?
-                )));
+                )).into());
             }
             Ok(())
         } else {
-            return Err(Error::RuntimeError(format!(
+            return Err(KernelManagerError::RuntimeError(format!(
                 "Only ipv6 neighbors are supported"
-            )));
+            )).into());
         }
     }
 }

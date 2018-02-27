@@ -1,5 +1,5 @@
 #[macro_use]
-extern crate derive_error;
+extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
@@ -36,15 +36,11 @@ mod get_neighbors;
 
 pub use counter::FilterTarget;
 
-#[derive(Debug, Error)]
-pub enum Error {
-    Io(std::io::Error),
-    StringUTF8(std::string::FromUtf8Error),
-    StrUTF8(std::str::Utf8Error),
-    ParseInt(std::num::ParseIntError),
-    AddrParse(std::net::AddrParseError),
-    MacParse(eui48::ParseError),
-    #[error(msg_embedded, no_from, non_std)]
+use failure::Error;
+
+#[derive(Debug, Fail)]
+pub enum KernelManagerError {
+    #[fail(display = "Runtime Error: {:?}", _0)]
     RuntimeError(String),
 }
 

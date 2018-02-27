@@ -1,6 +1,8 @@
-use super::{Error, KernelInterface};
+use super::{KernelInterface, KernelManagerError};
 
 use std::net::IpAddr;
+
+use failure::Error;
 
 impl KernelInterface {
     /// checks the existing interfaces to find an interface name that isn't in use.
@@ -16,10 +18,10 @@ impl KernelInterface {
         let interface = format!("wg{}", if_num);
         let output = self.run_command("ip", &["link", "add", &interface, "type", "wireguard"])?;
         if !output.stderr.is_empty() {
-            return Err(Error::RuntimeError(format!(
+            return Err(KernelManagerError::RuntimeError(format!(
                 "received error adding wg link: {}",
                 String::from_utf8(output.stderr)?
-            )));
+            )).into());
         }
         Ok(interface)
     }

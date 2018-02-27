@@ -1,10 +1,12 @@
-use super::{Error, KernelInterface};
+use super::{KernelInterface, KernelManagerError};
 
 use std::net::IpAddr;
 use std::str::FromStr;
 
 use eui48::MacAddress;
 use regex::Regex;
+
+use failure::Error;
 
 impl KernelInterface {
     /// Returns a vector of neighbors reachable over layer 2, giving the hardware
