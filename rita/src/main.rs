@@ -25,6 +25,7 @@ extern crate actix;
 extern crate actix_web;
 extern crate bytes;
 extern crate docopt;
+extern crate env_logger;
 extern crate eui48;
 extern crate futures;
 extern crate ip_network;
@@ -34,7 +35,6 @@ extern crate reqwest;
 extern crate serde;
 extern crate serde_json;
 extern crate settings;
-extern crate simple_logger;
 extern crate tokio;
 
 use settings::Settings;
@@ -82,7 +82,7 @@ lazy_static! {
 }
 
 fn main() {
-    simple_logger::init().unwrap();
+    env_logger::init();
     trace!("Starting");
     trace!("Starting with Identity: {:?}", SETTING.get_identity());
 
