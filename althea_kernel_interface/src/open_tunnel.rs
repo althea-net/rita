@@ -5,6 +5,35 @@ use std::path::Path;
 
 use failure::Error;
 
+fn to_wg_local(ip: &IpAddr) -> IpAddr {
+    match ip {
+        &IpAddr::V6(ip) => {
+            let mut seg = ip.segments();
+            assert_eq!(seg[0], 0xfd);
+            seg[0] = 0xfe80;
+            IpAddr::V6(Ipv6Addr::new(
+                seg[0],
+                seg[1],
+                seg[2],
+                seg[3],
+                seg[4],
+                seg[5],
+                seg[6],
+                seg[7],
+            ))
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn test_to_wg_local() {
+    assert_eq!(
+        to_wg_local(&"fd::1".parse().unwrap()),
+        "fe80::1".parse::<IpAddr>().unwrap()
+    )
+}
+
 impl KernelInterface {
     pub fn open_tunnel(
         &mut self,
@@ -57,7 +86,7 @@ impl KernelInterface {
                 &[
                     "address",
                     "add",
-                    &format!("fe80::{}/64", own_ip.to_string().clone().pop().unwrap()),
+                    &format!("{}/64", to_wg_local(own_ip)),
                     "dev",
                     &interface,
                 ],
