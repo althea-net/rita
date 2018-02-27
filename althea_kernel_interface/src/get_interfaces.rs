@@ -1,8 +1,10 @@
-use super::{Error, KernelInterface};
+use super::{KernelInterface, KernelManagerError};
 
 use std::net::IpAddr;
 
 use regex::Regex;
+
+use failure::Error;
 
 impl KernelInterface {
     /// Returns all existing interfaces
