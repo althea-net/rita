@@ -290,13 +290,22 @@ mod tests {
             .match_body("{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"1\"}")
             .create();
 
+        // mock bounty hunter
+        let __m = mock("POST", "/update")
+            .with_status(200)
+            .with_body("bounty OK")
+            .match_body("{\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\
+            \"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"balance\":\"-1\",\"tx\":{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"1\"}}")
+            .create();
+
         let mut pc = PaymentController::new(&new_identity(1));
 
-        pc.make_payment(new_payment(1)).unwrap();
+        pc.make_payment(new_payment(1));
 
         assert_eq!(pc.balance, Int256::from(-1));
 
         _m.assert();
+        __m.assert();
     }
 
     #[test]
@@ -309,6 +318,13 @@ mod tests {
             .expect(100)
             .create();
 
+        // mock bounty hunter
+        let __m = mock("POST", "/update")
+            .with_status(200)
+            .with_body("bounty OK")
+            .expect(100)
+            .create();
+
         let mut pc = PaymentController::new(&new_identity(1));
 
         for _ in 0..100 {
@@ -318,6 +334,7 @@ mod tests {
         assert_eq!(pc.balance, Int256::from(-100));
 
         _m.assert();
+        __m.assert();
     }
 
     #[test]
