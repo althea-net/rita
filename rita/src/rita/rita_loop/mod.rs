@@ -9,22 +9,18 @@ use serde_json;
 
 use babel_monitor::Babel;
 
-use tunnel_manager;
-use tunnel_manager::TunnelManager;
+use rita::tunnel_manager::{GetNeighbors, TunnelManager};
 
-use traffic_watcher;
-use traffic_watcher::TrafficWatcher;
+use rita::traffic_watcher::{TrafficWatcher, Watch};
 
 use debt_keeper;
 use debt_keeper::DebtKeeper;
 
 use payment_controller;
-use payment_controller::PaymentController;
+use payment_controller::{MakePayment, PaymentController};
 
 use SETTING;
 use althea_kernel_interface::KernelInterface;
-
-use network_endpoints::make_payments;
 
 pub struct RitaLoop;
 
@@ -56,7 +52,7 @@ impl Handler<Tick> for RitaLoop {
 
         ctx.spawn(
             TunnelManager::from_registry()
-                .send(tunnel_manager::GetNeighbors)
+                .send(GetNeighbors)
                 .into_actor(self)
                 .then(move |res, act, ctx| {
                     info!("got neighbors: {:?}", res);
@@ -64,7 +60,7 @@ impl Handler<Tick> for RitaLoop {
                     let neigh = Instant::now();
 
                     TrafficWatcher::from_registry()
-                        .send(traffic_watcher::Watch(res.unwrap().unwrap()))
+                        .send(Watch(res.unwrap().unwrap()))
                         .into_actor(act)
                         .then(move |res, act, ctx| {
                             info!("loop completed in {:?}", start.elapsed());

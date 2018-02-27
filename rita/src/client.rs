@@ -51,13 +51,9 @@ extern crate num256;
 
 mod debt_keeper;
 mod payment_controller;
-mod tunnel_manager;
-mod network_endpoints;
-mod traffic_watcher;
-mod rita_loop;
-mod http_client;
+mod rita;
 
-use network_endpoints::{hello_response, make_payments};
+use rita::network_endpoints::{hello_response, make_payments};
 
 const USAGE: &'static str = "
 Usage: rita --config <settings> --default <default>
@@ -90,9 +86,9 @@ fn main() {
 
     assert!(debt_keeper::DebtKeeper::from_registry().connected());
     assert!(payment_controller::PaymentController::from_registry().connected());
-    assert!(tunnel_manager::TunnelManager::from_registry().connected());
-    assert!(http_client::HTTPClient::from_registry().connected());
-    assert!(traffic_watcher::TrafficWatcher::from_registry().connected());
+    assert!(rita::tunnel_manager::TunnelManager::from_registry().connected());
+    assert!(rita::http_client::HTTPClient::from_registry().connected());
+    assert!(rita::traffic_watcher::TrafficWatcher::from_registry().connected());
 
     HttpServer::new(|| {
         Application::new()
@@ -102,7 +98,7 @@ fn main() {
         .unwrap()
         .start();
 
-    let rita = rita_loop::RitaLoop {};
+    let rita = rita::rita_loop::RitaLoop {};
     let _: Address<_> = rita.start();
 
     system.run();

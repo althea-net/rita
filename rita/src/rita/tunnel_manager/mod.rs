@@ -21,8 +21,7 @@ use althea_kernel_interface;
 
 use babel_monitor::Babel;
 
-use http_client;
-use http_client::HTTPClient;
+use rita::http_client::{Error as HTTPError, HTTPClient, Hello};
 
 use serde_json;
 
@@ -30,7 +29,7 @@ use SETTING;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    HTTPClientError(http_client::Error),
+    HTTPClientError(HTTPError),
     KernelInterfaceError(althea_kernel_interface::Error),
     IOError(std::io::Error),
     DeserializationError(serde_json::Error),
@@ -219,7 +218,7 @@ impl TunnelManager {
 
         Box::new(
             HTTPClient::from_registry()
-                .send(http_client::Hello { my_id, to: socket })
+                .send(Hello { my_id, to: socket })
                 .then(|res| match res.unwrap() {
                     Ok(res) => Ok((res, tunnel.iface_name)),
                     Err(err) => Err(Error::HTTPClientError(err)),

@@ -27,7 +27,7 @@ fetch_netlab () {
 
 build_rita () {
   pushd ../rita
-  cargo build
+  cargo build --all
   popd
 }
 
