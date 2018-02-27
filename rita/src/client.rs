@@ -13,7 +13,7 @@ use alloc_system::System;
 static A: System = System;
 
 #[macro_use]
-extern crate derive_error;
+extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
@@ -78,7 +78,7 @@ lazy_static! {
 }
 
 fn main() {
-    env_logger::init();
+    env_logger::init().unwrap();
     trace!("Starting");
     trace!("Starting with Identity: {:?}", SETTING.get_identity());
 

@@ -61,7 +61,11 @@ impl Settings {
         let mut s = Config::new();
         s.merge(config::File::with_name(default))?;
         s.merge(config::File::with_name(file_name).required(false))?;
-        s.try_into()
+        let settings: Self = s.try_into()?;
+
+        let mut ki = KernelInterface {};
+        ki.create_wg_key(Path::new(&settings.network.wg_private_key));
+        Ok(settings)
     }
 
     pub fn get_identity(&self) -> Identity {

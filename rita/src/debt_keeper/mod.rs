@@ -16,12 +16,6 @@ use SETTING;
 use payment_controller;
 use payment_controller::PaymentController;
 
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error(msg_embedded, no_from, non_std)]
-    DebtKeeperError(String),
-}
-
 #[derive(Clone, Debug)]
 struct NodeDebtData {
     total_payment: Uint256,

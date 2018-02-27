@@ -13,9 +13,9 @@ use alloc_system::System;
 static A: System = System;
 
 #[macro_use]
-extern crate derive_error;
-#[macro_use]
 extern crate diesel;
+#[macro_use]
+extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
@@ -62,12 +62,6 @@ use diesel::select;
 use diesel::dsl::exists;
 use dotenv::dotenv;
 
-pub mod schema;
-pub mod models;
-use self::models::*;
-
-use self::schema::client::dsl::*;
-
 const USAGE: &'static str = "
 Usage: rita --config <settings> --default <default>
 Options:
@@ -91,7 +85,7 @@ lazy_static! {
 }
 
 fn main() {
-    env_logger::init();
+    env_logger::init().unwrap();
     trace!("Starting");
     trace!("Starting with Identity: {:?}", SETTING.get_identity());
 

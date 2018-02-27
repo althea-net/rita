@@ -21,21 +21,18 @@ use althea_kernel_interface;
 
 use babel_monitor::Babel;
 
-use rita::http_client::{Error as HTTPError, HTTPClient, Hello};
+use rita::http_client::{HTTPClient, Hello};
 
 use serde_json;
 
 use SETTING;
 
-#[derive(Debug, Error)]
-pub enum Error {
-    HTTPClientError(HTTPError),
-    KernelInterfaceError(althea_kernel_interface::Error),
-    IOError(std::io::Error),
-    DeserializationError(serde_json::Error),
-    HTTPParseError,
-    #[error(msg_embedded, no_from, non_std)]
-    TunnelManagerError(String),
+use failure::Error;
+
+#[derive(Debug, Fail)]
+pub enum TunnelManagerError {
+    #[fail(display = "IPV4 unsupported error")]
+    IPv4UnsupportedError,
 }
 
 #[derive(Debug, Clone)]
@@ -130,7 +127,7 @@ fn is_link_local(ip: IpAddr) -> bool {
 
 impl TunnelManager {
     pub fn new() -> Self {
-        let mut tm = TunnelManager {
+        let tm = TunnelManager {
             ki: KernelInterface {},
             tunnel_map: HashMap::new(),
             port: SETTING.network.wg_start_port,
@@ -201,9 +198,9 @@ impl TunnelManager {
                 self.ki.get_iface_index(dev).unwrap(),
             )),
             IpAddr::V4(_) => {
-                return Box::new(futures::future::err(Error::TunnelManagerError(
-                    String::from("IPv4 neighbors are not supported"),
-                )))
+                return Box::new(futures::future::err(
+                    TunnelManagerError::IPv4UnsupportedError.into(),
+                ))
             }
         };
 
@@ -219,9 +216,9 @@ impl TunnelManager {
         Box::new(
             HTTPClient::from_registry()
                 .send(Hello { my_id, to: socket })
-                .then(|res| match res.unwrap() {
-                    Ok(res) => Ok((res, tunnel.iface_name)),
-                    Err(err) => Err(Error::HTTPClientError(err)),
+                .then(|res| {
+                    let r = res??;
+                    Ok((r, tunnel.iface_name))
                 }),
         )
     }
@@ -255,7 +252,7 @@ impl TunnelManager {
         let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port)
             .parse()
             .unwrap());
-        babel.monitor(&tunnel.iface_name);
+        babel.monitor(&tunnel.iface_name)?;
         Ok(())
     }
 }
