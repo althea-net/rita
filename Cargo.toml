@@ -7,7 +7,7 @@ authors = ["Stan Drozd <drozdziak1@gmail.com>"]
 rita = { path = "./rita" }
 
 [workspace]
-members = ["althea_kernel_interface", "bounty_hunter", "settings"]
+members = ["althea_kernel_interface", "bounty_hunter", "settings", "clu", "post_office"]
 
 [profile.release]
 opt-level = "s"

@@ -1,0 +1,17 @@
+[package]
+name = "clu"
+version = "0.0.1"
+authors = ["Justin <kilpatrickjustin@protonmail.ch>"]
+
+[dependencies]
+settings = { path = "../settings" }
+althea_kernel_interface = { path = "../althea_kernel_interface" }
+lazy_static = "1.0"
+docopt = "0.8.1"
+simple_logger = "0.4.0"
+log = "0.3"
+failure = "0.1.1"
+ipgen = "0.0.4"
+regex = "0.2"
+rand = "0.4"
+reqwest = "0.8"

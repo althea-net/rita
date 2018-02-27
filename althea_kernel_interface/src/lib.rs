@@ -34,6 +34,7 @@ mod get_interfaces;
 mod link_local_tools;
 mod get_neighbors;
 mod exit_counter;
+mod manipulate_uci;
 
 pub use counter::FilterTarget;
 pub use exit_counter::ExitFilterTarget;

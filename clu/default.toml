@@ -8,6 +8,8 @@ eth_address='0x0101010101010101010101010101010101010101'
 [network]
 own_ip='fd::1'
 own_exit_ip='1.1.1.1'
+exit_address='1.1.1.1'
+exit_registration_port=8090
 bounty_ip='fd::3'
 own_mac='12:34:56:78:90:12'
 babel_port=8080
@@ -16,4 +18,5 @@ bounty_port=8888
 wg_private_key="priv"
 wg_public_key="pub"
 wg_start_port=60000
+wg_exit_port=51820
 babel_interfaces="eth0 eth1"
