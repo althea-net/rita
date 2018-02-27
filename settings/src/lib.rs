@@ -32,12 +32,19 @@ use althea_kernel_interface::KernelInterface;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NetworkSettings {
     pub own_ip: IpAddr,
+    pub own_exit_ip: IpAddr,
+    pub exit_address: IpAddr,
+    pub exit_registration_port: u16,
+    pub own_mac: MacAddress,
     pub bounty_ip: IpAddr,
     pub babel_port: u16,
     pub rita_port: u16,
     pub bounty_port: u16,
     pub wg_private_key: String,
+    pub wg_public_key: String,
     pub wg_start_port: u16,
+    pub wg_exit_port: u16,
+    pub babel_interfaces: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -1,0 +1,13 @@
+[package]
+name = "post_office"
+version = "0.1.0"
+authors = ["Justin Kilpatrick <kilpatrickjustin@protonmail.ch>"]
+
+[dependencies]
+rouille = "*"
+config = "0.8"
+lazy_static = "1.0"
+docopt = "0.8.1"
+diesel = { version = "1.0.0", features = ["sqlite"] }
+log = "0.3"
+post_office_settings = { path = "./post_office_settings" }
