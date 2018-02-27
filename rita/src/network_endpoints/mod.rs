@@ -35,7 +35,7 @@ pub fn make_payments(req: HttpRequest) -> Box<Future<Item = HttpResponse, Error 
     req.body()
         .from_err()
         .and_then(move |bytes: Bytes| {
-            println!(
+            trace!(
                 "Payment body: {:?} from {:?}",
                 bytes,
                 req.connection_info().remote()
@@ -64,7 +64,7 @@ pub fn hello_response(req: HttpRequest) -> Box<Future<Item = Json<LocalIdentity>
     req.body()
         .from_err()
         .and_then(move |bytes: Bytes| {
-            println!(
+            trace!(
                 "Hello body: {:?} from {:?}",
                 bytes,
                 req.connection_info().remote()
