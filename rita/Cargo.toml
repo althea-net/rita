@@ -35,7 +35,7 @@ config = "0.8.0"
 eui48 = {git="https://github.com/althea-mesh/eui48.git"}
 minihttpse = "0.1.6"
 docopt = "0.8.3"
-derive-error = "0.0.4"
+failure = "0.1.1"
 futures = "0.1"
 mockito = "0.9"
 bytes = "0.4"

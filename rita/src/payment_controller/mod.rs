@@ -19,15 +19,13 @@ use serde_json;
 use debt_keeper;
 use debt_keeper::DebtKeeper;
 
-#[derive(Debug, Error)]
-pub enum Error {
-    HttpError(reqwest::Error),
-    SerdeError(serde_json::Error),
-    #[error(msg_embedded, no_from, non_std)]
-    PaymentControllerError(String),
-    #[error(msg_embedded, no_from, non_std)]
+use failure::Error;
+
+#[derive(Debug, Fail)]
+pub enum PaymentControllerError {
+    #[fail(display = "Payment Sending Error: {:?}", _0)]
     PaymentSendingError(String),
-    #[error(msg_embedded, no_from, non_std)]
+    #[fail(display = "Bounty Error: {:?}", _0)]
     BountyError(String),
 }
 
@@ -136,10 +134,12 @@ impl PaymentController {
                 "Received error from bounty hunter: {:?}",
                 r.text().unwrap_or(String::from("No message received"))
             );
-            Err(Error::BountyError(String::from(format!(
-                "Received error from bounty hunter: {:?}",
-                r.text().unwrap_or(String::from("No message received"))
-            ))))
+            Err(Error::from(PaymentControllerError::BountyError(
+                String::from(format!(
+                    "Received error from bounty hunter: {:?}",
+                    r.text().unwrap_or(String::from("No message received"))
+                )),
+            )))
         }
     }
 
@@ -174,7 +174,7 @@ impl PaymentController {
 
     /// This should be called on a regular interval to update the bounty hunter of a node's current
     /// balance as well as to log the current balance
-    pub fn update(&mut self) {
+    pub fn update(&mut self) -> Result<(), Error> {
         self.update_bounty(BountyUpdate {
             from: self.identity.clone(),
             tx: PaymentTx {
@@ -183,8 +183,9 @@ impl PaymentController {
                 amount: Uint256::from(0u32),
             },
             balance: self.balance.clone(),
-        });
+        })?;
         info!("Balance update: {:?}", self.balance);
+        Ok(())
     }
 
     /// This is called by the other modules in Rita to make payments. It sends a
@@ -222,7 +223,7 @@ impl PaymentController {
                 from: self.identity.clone(),
                 tx: pmt,
                 balance: self.balance.clone(),
-            });
+            })?;
             Ok(())
         } else {
             trace!("Unsuccessfully paid");
@@ -230,10 +231,12 @@ impl PaymentController {
                 "Received error from payee: {:?}",
                 r.text().unwrap_or(String::from("No message received"))
             );
-            Err(Error::PaymentSendingError(String::from(format!(
-                "Received error from payee: {:?}",
-                r.text().unwrap_or(String::from("No message received"))
-            ))))
+            Err(Error::from(PaymentControllerError::PaymentSendingError(
+                String::from(format!(
+                    "Received error from payee: {:?}",
+                    r.text().unwrap_or(String::from("No message received"))
+                )),
+            )))
         }
     }
 }

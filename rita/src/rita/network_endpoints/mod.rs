@@ -72,8 +72,6 @@ pub fn hello_response(req: HttpRequest) -> Box<Future<Item = Json<LocalIdentity>
 
             trace!("Received neighbour identity, Payment: {:?}", their_id);
 
-            let ki = KernelInterface {};
-
             TunnelManager::from_registry()
                 .send(GetLocalIdentity {
                     requester: their_id.clone(),

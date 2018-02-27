@@ -27,13 +27,7 @@ use std::{thread, time};
 
 use SETTING;
 
-#[derive(Debug, Error)]
-pub enum Error {
-    BabelMonitorError(babel_monitor::Error),
-    KernelInterfaceError(althea_kernel_interface::Error),
-    #[error(msg_embedded, no_from, non_std)]
-    TrafficWatcherError(String),
-}
+use failure::Error;
 
 pub struct TrafficWatcher;
 
@@ -71,7 +65,7 @@ impl Handler<Watch> for TrafficWatcher {
 /// This first time this is run, it will create the rules and then immediately read and zero them.
 /// (should return 0)
 pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
-    let mut ki = KernelInterface {};
+    let ki = KernelInterface {};
     let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port)
         .parse()
         .unwrap());

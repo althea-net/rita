@@ -28,7 +28,6 @@ impl Actor for RitaLoop {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        let mut ki = KernelInterface {};
         ctx.run_later(Duration::from_secs(5), |act, ctx| {
             let addr: Address<Self> = ctx.address();
             addr.do_send(Tick);
@@ -43,8 +42,6 @@ impl Handler<Tick> for RitaLoop {
     type Result = ();
     fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
         trace!("Tick!");
-
-        let mut ki = KernelInterface {};
 
         // let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port).parse().unwrap());
 

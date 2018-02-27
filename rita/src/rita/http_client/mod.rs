@@ -20,13 +20,12 @@ use althea_types::{LocalIdentity, PaymentTx};
 
 use SETTING;
 
-#[derive(Debug, Error)]
-pub enum Error {
-    IOError(std::io::Error),
-    DeserializationError(serde_json::Error),
+use failure::Error;
+
+#[derive(Debug, Fail)]
+pub enum HTTPClientError {
+    #[fail(display = "HTTP Parse Error")]
     HTTPParseError,
-    #[error(msg_embedded, no_from, non_std)]
-    HTTPClientError(String),
 }
 
 pub struct HTTPClient {
@@ -110,7 +109,7 @@ Content-Length: {}\r\n\r\n
             let mut identity: LocalIdentity = serde_json::from_str(&response.text())?;
             Ok(identity)
         } else {
-            Err(Error::HTTPParseError)
+            Err(HTTPClientError::HTTPParseError.into())
         }
     }
 }
