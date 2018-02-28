@@ -136,6 +136,7 @@ impl TunnelManager {
     }
 
     fn new_if(&mut self) -> TunnelData {
+        trace!("creating new interface");
         let r = TunnelData::new(self.port);
         self.port += 1;
         r

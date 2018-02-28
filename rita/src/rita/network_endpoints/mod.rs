@@ -58,8 +58,6 @@ pub fn hello_response(req: HttpRequest) -> Box<Future<Item = Json<LocalIdentity>
         req.connection_info().remote()
     );
 
-    let conn_info: SocketAddr = req.connection_info().remote().unwrap().parse().unwrap();
-
     req.body()
         .from_err()
         .and_then(move |bytes: Bytes| {
