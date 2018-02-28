@@ -42,6 +42,20 @@ impl NodeDebtData {
             },
         }
     }
+
+    fn owes(&self) -> Uint256 {
+        let mut total = Int256::from(0u32);
+        for i in &self.debt_buffer {
+            total -= i; // debt buffer is negative
+        }
+        total -= &self.incoming_payments;
+        total -= &self.debt;
+        if total < Int256::from(0u32) {
+            Uint256::from(0u32)
+        } else {
+            Uint256::from(total)
+        }
+    }
 }
 
 pub struct DebtKeeper {
@@ -71,6 +85,13 @@ pub struct TrafficUpdate {
 #[derive(Message)]
 pub struct SendUpdate {
     pub from: Identity,
+}
+
+pub struct GetDebt {
+    pub from: Identity,
+}
+impl Message for GetDebt {
+    type Result = Result<Uint256, ()>;
 }
 
 impl Supervised for DebtKeeper {}
@@ -103,6 +124,14 @@ impl Handler<TrafficUpdate> for DebtKeeper {
 
     fn handle(&mut self, msg: TrafficUpdate, _: &mut Context<Self>) -> Self::Result {
         self.traffic_update(msg.from, msg.amount)
+    }
+}
+
+impl Handler<GetDebt> for DebtKeeper {
+    type Result = Result<Uint256, ()>;
+
+    fn handle(&mut self, msg: GetDebt, _: &mut Context<Self>) -> Self::Result {
+        Ok(self.debt_data[&msg.from.mesh_ip].owes())
     }
 }
 

@@ -352,6 +352,30 @@ impl_from_uint!(u32);
 impl_from_uint!(u64);
 impl_from_uint!(usize);
 
+impl<'a> From<&'a Int256> for Int256 {
+    fn from(n: &Int256) -> Int256 {
+        n.clone()
+    }
+}
+
+impl<'a> From<&'a Uint256> for Uint256 {
+    fn from(n: &Uint256) -> Uint256 {
+        n.clone()
+    }
+}
+
+impl<'a> From<&'a Int256> for Uint256 {
+    fn from(n: &Int256) -> Uint256 {
+        n.clone().into()
+    }
+}
+
+impl<'a> From<&'a Uint256> for Int256 {
+    fn from(n: &Uint256) -> Int256 {
+        n.clone().into()
+    }
+}
+
 impl fmt::Display for Int256 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", &self.to_str_radix(10))
