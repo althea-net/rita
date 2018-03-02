@@ -40,7 +40,7 @@ extern crate serde_json;
 extern crate settings;
 extern crate tokio;
 
-use settings::Settings;
+use settings::RitaExitSettings;
 use docopt::Docopt;
 
 use actix::*;
@@ -52,9 +52,11 @@ extern crate althea_types;
 extern crate babel_monitor;
 extern crate num256;
 
-mod debt_keeper;
-mod payment_controller;
 mod rita_exit;
+mod rita_common;
+
+use rita_common::network_endpoints::{make_payments, hello_response};
+use rita_exit::network_endpoints::{get_debt, hello_response_exit};
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
@@ -63,14 +65,14 @@ use diesel::dsl::exists;
 use dotenv::dotenv;
 
 const USAGE: &'static str = "
-Usage: rita --config <settings> --default <default>
+Usage: rita_common --config <settings> --default <default>
 Options:
     --config   Name of config file
     --default   Name of default config file
 ";
 
 lazy_static! {
-    pub static ref SETTING: Settings = {
+    pub static ref SETTING: RitaExitSettings = {
         let args = Docopt::new(USAGE)
         .and_then(|d| d.parse())
         .unwrap_or_else(|e| e.exit());
@@ -78,7 +80,7 @@ lazy_static! {
         let settings_file = args.get_str("<settings>");
         let defaults_file = args.get_str("<default>");
 
-        let s = Settings::new(settings_file, defaults_file).unwrap();
+        let s = RitaExitSettings::new(settings_file, defaults_file).unwrap();
         s.write(settings_file).unwrap();
         s
     };
@@ -90,6 +92,33 @@ fn main() {
     trace!("Starting with Identity: {:?}", SETTING.get_identity());
 
     let system = actix::System::new(format!("main {}", SETTING.network.own_ip));
+
+    assert!(rita_common::debt_keeper::DebtKeeper::from_registry().connected());
+    assert!(rita_common::payment_controller::PaymentController::from_registry().connected());
+    assert!(rita_common::tunnel_manager::TunnelManager::from_registry().connected());
+    assert!(rita_common::http_client::HTTPClient::from_registry().connected());
+    assert!(rita_common::traffic_watcher::TrafficWatcher::from_registry().connected());
+
+    assert!(rita_exit::traffic_watcher::TrafficWatcher::from_registry().connected());
+    assert!(rita_exit::db_client::DbClient::from_registry().connected());
+
+    HttpServer::new(|| {
+        Application::new()
+            // Client stuff
+            .resource("/make_payment", |r| r.h(make_payments))
+            .resource("/hello", |r| r.h(hello_response))
+            // Exit stuff
+            .resource("/exit_hello", |r| r.h(hello_response_exit))
+            .resource("/get_debt", |r| r.h(get_debt))
+    }).bind(format!("[::0]:{}", SETTING.network.rita_port))
+        .unwrap()
+        .start();
+
+    let common = rita_common::rita_loop::RitaLoop {};
+    let _: Address<_> = common.start();
+
+    let exit = rita_exit::rita_loop::RitaLoop {};
+    let _: Address<_> = exit.start();
 
     system.run();
 }

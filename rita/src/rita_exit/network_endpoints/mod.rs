@@ -8,11 +8,11 @@ use actix_web::dev::*;
 
 use futures::Future;
 
-use payment_controller;
-use payment_controller::PaymentController;
+use rita_common::payment_controller;
+use rita_common::payment_controller::PaymentController;
 
-use debt_keeper;
-use debt_keeper::{DebtKeeper, GetDebt};
+use rita_common::debt_keeper;
+use rita_common::debt_keeper::{DebtKeeper, GetDebt};
 
 use althea_kernel_interface::KernelInterface;
 
@@ -29,33 +29,6 @@ use bytes::Bytes;
 use SETTING;
 
 use failure::Error;
-
-pub fn make_payments(req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Error>> {
-    trace!(
-        "Started processing payment from {:?}",
-        req.connection_info().remote()
-    );
-
-    req.body()
-        .from_err()
-        .and_then(move |bytes: Bytes| {
-            trace!(
-                "Payment body: {:?} from {:?}",
-                bytes,
-                req.connection_info().remote()
-            );
-            let pmt: PaymentTx = serde_json::from_slice(&bytes[..]).unwrap();
-
-            trace!(
-                "Received payment from {:?}, Payment: {:?}",
-                pmt,
-                req.connection_info().remote()
-            );
-            PaymentController::from_registry().do_send(payment_controller::PaymentReceived(pmt));
-            Ok(httpcodes::HTTPOk.into())
-        })
-        .responder()
-}
 
 pub fn get_debt(req: HttpRequest) -> Box<Future<Item = Json<Uint256>, Error = Error>> {
     trace!("Getting debt for {:?}", req.connection_info().remote());
@@ -81,4 +54,14 @@ pub fn get_debt(req: HttpRequest) -> Box<Future<Item = Json<Uint256>, Error = Er
                 })
         })
         .responder()
+}
+
+pub fn hello_response_exit(req: HttpRequest) -> Result<Json<LocalIdentity>, Error> {
+    trace!("Saying exit hello back to {:?}", req.connection_info().remote());
+
+    Ok(Json(LocalIdentity{
+        global: SETTING.get_identity(),
+        local_ip: SETTING.get_identity().mesh_ip,
+        wg_port: SETTING.exit_network.wg_tunnel_port,
+    }))
 }

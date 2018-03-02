@@ -37,7 +37,7 @@ extern crate serde_json;
 extern crate settings;
 extern crate tokio;
 
-use settings::Settings;
+use settings::RitaSettings;
 use docopt::Docopt;
 
 use actix::*;
@@ -49,21 +49,20 @@ extern crate althea_types;
 extern crate babel_monitor;
 extern crate num256;
 
-mod debt_keeper;
-mod payment_controller;
-mod rita;
+mod rita_common;
+mod rita_client;
 
-use rita::network_endpoints::{hello_response, make_payments};
+use rita_common::network_endpoints::{hello_response, make_payments};
 
 const USAGE: &'static str = "
-Usage: rita --config <settings> --default <default>
+Usage: rita_common --config <settings> --default <default>
 Options:
     --config   Name of config file
     --default   Name of default config file
 ";
 
 lazy_static! {
-    pub static ref SETTING: Settings = {
+    pub static ref SETTING: RitaSettings = {
         let args = Docopt::new(USAGE)
         .and_then(|d| d.parse())
         .unwrap_or_else(|e| e.exit());
@@ -71,7 +70,7 @@ lazy_static! {
         let settings_file = args.get_str("<settings>");
         let defaults_file = args.get_str("<default>");
 
-        let s = Settings::new(settings_file, defaults_file).unwrap();
+        let s = RitaSettings::new(settings_file, defaults_file).unwrap();
         s.write(settings_file).unwrap();
         s
     };
@@ -84,11 +83,12 @@ fn main() {
 
     let system = actix::System::new(format!("main {}", SETTING.network.own_ip));
 
-    assert!(debt_keeper::DebtKeeper::from_registry().connected());
-    assert!(payment_controller::PaymentController::from_registry().connected());
-    assert!(rita::tunnel_manager::TunnelManager::from_registry().connected());
-    assert!(rita::http_client::HTTPClient::from_registry().connected());
-    assert!(rita::traffic_watcher::TrafficWatcher::from_registry().connected());
+    assert!(rita_common::debt_keeper::DebtKeeper::from_registry().connected());
+    assert!(rita_common::payment_controller::PaymentController::from_registry().connected());
+    assert!(rita_common::tunnel_manager::TunnelManager::from_registry().connected());
+    assert!(rita_common::http_client::HTTPClient::from_registry().connected());
+    assert!(rita_common::traffic_watcher::TrafficWatcher::from_registry().connected());
+    assert!(rita_client::exit_manager::ExitManager::from_registry().connected());
 
     HttpServer::new(|| {
         Application::new()
@@ -98,8 +98,11 @@ fn main() {
         .unwrap()
         .start();
 
-    let rita = rita::rita_loop::RitaLoop {};
-    let _: Address<_> = rita.start();
+    let common = rita_common::rita_loop::RitaLoop {};
+    let _: Address<_> = common.start();
+
+    let client = rita_client::rita_loop::RitaLoop {};
+    let _: Address<_> = client.start();
 
     for msg in debt_keeper_output {
         match msg {

@@ -10,7 +10,7 @@ import toml
 
 network_lab = os.path.join(os.path.dirname(__file__), "deps/network-lab/network-lab.sh")
 babeld = os.path.join(os.path.dirname(__file__), "deps/babeld/babeld")
-rita = os.path.join(os.path.dirname(__file__), "../target/debug/rita")
+rita = os.path.join(os.path.dirname(__file__), "../target/debug/rita_common")
 bounty = os.path.join(os.path.dirname(__file__), "../target/debug/bounty_hunter")
 ping6 = os.getenv('PING6', "ping6")
 
@@ -22,12 +22,12 @@ os.chdir(dname)
 
 def cleanup():
     os.system("rm -rf *.log *.pid *.toml")
-    os.system("killall babeld rita bounty_hunter iperf")  # TODO: This is very inconsiderate
+    os.system("killall babeld rita_common bounty_hunter iperf")  # TODO: This is very inconsiderate
 
 
 def teardown():
     os.system("rm -rf *.pid *.toml")
-    os.system("killall babeld rita bounty_hunter iperf")  # TODO: This is very inconsiderate
+    os.system("killall babeld rita_common bounty_hunter iperf")  # TODO: This is very inconsiderate
 
 
 class Node:
@@ -87,7 +87,7 @@ def get_rita_defaults():
 
 
 def save_rita_settings(id, x):
-    toml.dump(x, open("rita-settings-n{}.toml".format(id), "w"))
+    toml.dump(x, open("rita_common-settings-n{}.toml".format(id), "w"))
 
 def start_rita(id):
     settings = get_rita_defaults()
@@ -96,9 +96,9 @@ def start_rita(id):
     save_rita_settings(id, settings)
     time.sleep(0.1)
     os.system('(RUST_BACKTRACE=full RUST_LOG=trace ip netns exec netlab-{id} {rita} --config '
-              'rita-settings-n{'
-              'id}.toml --default ../settings/default.toml 2>&1 & echo $! > rita-n{id}.pid) | '
-              'grep -Ev "<unknown>|mio" > rita-n{id}.log &'.format(id=id, rita=rita, pwd=dname))
+              'rita_common-settings-n{'
+              'id}.toml --default ../settings/default.toml 2>&1 & echo $! > rita_common-n{id}.pid) | '
+              'grep -Ev "<unknown>|mio" > rita_common-n{id}.log &'.format(id=id, rita=rita, pwd=dname))
 
 
 def assert_test(x, description):
@@ -179,11 +179,11 @@ class World:
 
         time.sleep(1)
 
-        print("starting rita")
+        print("starting rita_common")
         for id in self.nodes:
             start_rita(id)
             time.sleep(0.2)
-        print("rita started")
+        print("rita_common started")
 
     @staticmethod
     def test_reach(id_from, id_to):
@@ -341,12 +341,12 @@ if __name__ == "__main__":
 
     print("Check that tunnels have not been suspended")
 
-    # assert_test(not check_log_contains("rita-n1.log", "Suspending Tunnel"), "Suspension of A")
-    # assert_test(not check_log_contains("rita-n2.log", "Suspending Tunnel"), "Suspension of B")
-    # assert_test(not check_log_contains("rita-n3.log", "Suspending Tunnel"), "Suspension of C")
-    # assert_test(not check_log_contains("rita-n4.log", "Suspending Tunnel"), "Suspension of D")
-    # assert_test(not check_log_contains("rita-n6.log", "Suspending Tunnel"), "Suspension of F")
-    # assert_test(not check_log_contains("rita-n7.log", "Suspending Tunnel"), "Suspension of G")
+    # assert_test(not check_log_contains("rita_common-n1.log", "Suspending Tunnel"), "Suspension of A")
+    # assert_test(not check_log_contains("rita_common-n2.log", "Suspending Tunnel"), "Suspension of B")
+    # assert_test(not check_log_contains("rita_common-n3.log", "Suspending Tunnel"), "Suspension of C")
+    # assert_test(not check_log_contains("rita_common-n4.log", "Suspending Tunnel"), "Suspension of D")
+    # assert_test(not check_log_contains("rita_common-n6.log", "Suspending Tunnel"), "Suspension of F")
+    # assert_test(not check_log_contains("rita_common-n7.log", "Suspending Tunnel"), "Suspension of G")
 
     if len(sys.argv) > 1 and sys.argv[1] == "leave-running":
         pass
