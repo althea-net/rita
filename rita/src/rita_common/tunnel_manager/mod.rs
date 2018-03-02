@@ -21,7 +21,7 @@ use althea_kernel_interface;
 
 use babel_monitor::Babel;
 
-use rita::http_client::{HTTPClient, Hello};
+use rita_common::http_client::{HTTPClient, Hello};
 
 use serde_json;
 

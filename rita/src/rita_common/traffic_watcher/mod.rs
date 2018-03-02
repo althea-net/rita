@@ -1,17 +1,16 @@
-/*
 use actix::prelude::*;
 
 use althea_kernel_interface;
 use althea_kernel_interface::KernelInterface;
 use althea_kernel_interface::FilterTarget;
 
-use althea_types::Identity;
+use althea_types::LocalIdentity;
 
 use babel_monitor;
 use babel_monitor::Babel;
 
-use debt_keeper;
-use debt_keeper::DebtKeeper;
+use rita_common::debt_keeper;
+use rita_common::debt_keeper::DebtKeeper;
 
 use futures::{future, Future};
 
@@ -38,6 +37,13 @@ impl Actor for TrafficWatcher {
 impl Supervised for TrafficWatcher {}
 impl SystemService for TrafficWatcher {
     fn service_started(&mut self, ctx: &mut Context<Self>) {
+        let ki = KernelInterface {};
+
+        ki.init_counter(&FilterTarget::Input).unwrap();
+        ki.init_counter(&FilterTarget::Output).unwrap();
+        ki.init_counter(&FilterTarget::ForwardInput).unwrap();
+        ki.init_counter(&FilterTarget::ForwardOutput).unwrap();
+
         info!("Traffic Watcher started");
     }
 }
@@ -48,7 +54,7 @@ impl Default for TrafficWatcher {
 }
 
 #[derive(Message)]
-pub struct Watch(pub Vec<(Identity, String)>);
+pub struct Watch(pub Vec<(LocalIdentity, String)>);
 
 impl Handler<Watch> for TrafficWatcher {
     type Result = ();
@@ -65,7 +71,7 @@ impl Handler<Watch> for TrafficWatcher {
 ///
 /// This first time this is run, it will create the rules and then immediately read and zero them.
 /// (should return 0)
-pub fn watch(neighbors: Vec<(Identity, String)>) -> Result<(), Error> {
+pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
     let ki = KernelInterface {};
     let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port)
         .parse()
@@ -75,7 +81,7 @@ pub fn watch(neighbors: Vec<(Identity, String)>) -> Result<(), Error> {
     let routes = babel.parse_routes()?;
     info!("Got routes: {:?}", routes);
 
-    let mut identities: HashMap<IpAddr, Identity> = HashMap::new();
+    let mut identities: HashMap<IpAddr, LocalIdentity> = HashMap::new();
     for ident in &neighbors {
         identities.insert(ident.0.global.mesh_ip, ident.0.clone());
     }
@@ -96,9 +102,6 @@ pub fn watch(neighbors: Vec<(Identity, String)>) -> Result<(), Error> {
         Int256::from(babel.local_price().unwrap() as i64),
     );
 
-    let old_input_counters = ki.read_counters(false, &FilterTarget::Input)?;
-    let old_output_counters = ki.read_counters(false, &FilterTarget::Output)?;
-
     for route in &routes {
         // Only ip6
         if let IpNetwork::V6(ref ip) = route.prefix {
@@ -112,57 +115,44 @@ pub fn watch(neighbors: Vec<(Identity, String)>) -> Result<(), Error> {
         }
     }
 
-    for &(ref ident, ref dev) in &neighbors {
-        ki.start_counter(
-            dev.to_string(),
-            SETTING.network.own_ip,
-            &FilterTarget::Input,
-            &old_input_counters,
-        )?;
-        ki.start_counter(
-            dev.to_string(),
-            SETTING.network.own_ip,
-            &FilterTarget::Output,
-            &old_output_counters,
-        )?;
-        ki.start_counter(
-            dev.to_string(),
-            SETTING.network.own_ip,
-            &FilterTarget::ForwardInput,
-            &old_fwd_input_counters,
-        )?;
-        ki.start_counter(
-            dev.to_string(),
-            SETTING.network.own_ip,
-            &FilterTarget::ForwardOutput,
-            &old_fwd_output_counters,
-        )?;
-    }
     trace!("Getting input counters");
-    let mut input_counters = ki.read_counters(true, &FilterTarget::Input)?;
+    let input_counters = ki.read_counters(&FilterTarget::Input)?;
     info!("Got output counters: {:?}", input_counters);
 
     trace!("Getting destination counters");
-    let mut output_counters = ki.read_counters(true, &FilterTarget::Output)?;
+    let output_counters = ki.read_counters(&FilterTarget::Output)?;
     info!("Got destination counters: {:?}", output_counters);
 
     trace!("Getting fwd counters");
-    let (fwd_input_counters, fwd_output_counters) = ki.read_fwd_counters(true)?;
+    let fwd_input_counters = ki.read_counters(&FilterTarget::ForwardInput)?;
+    let fwd_output_counters = ki.read_counters(&FilterTarget::ForwardOutput)?;
+
     info!(
         "Got fwd counters: {:?}",
         (&fwd_input_counters, &fwd_output_counters)
     );
 
-    for (k, v) in &mut output_counters {
-        *v += fwd_output_counters[k]
+    let mut total_input_counters = HashMap::new();
+    let mut total_output_counters = HashMap::new();
+
+    for (k, v) in input_counters {
+        *total_input_counters.entry(k).or_insert(0) += v
     }
 
-    for (k, v) in &mut input_counters {
-        *v += fwd_input_counters[k]
+    for (k, v) in fwd_input_counters {
+        *total_input_counters.entry(k).or_insert(0) += v
     }
 
-    info!("Got final input counters: {:?}", input_counters);
-    info!("Got final output counters: {:?}", output_counters);
+    for (k, v) in output_counters {
+        *total_output_counters.entry(k).or_insert(0) += v
+    }
+
+    for (k, v) in fwd_output_counters {
+        *total_output_counters.entry(k).or_insert(0) += v
+    }
+
+    info!("Got final input counters: {:?}", total_input_counters);
+    info!("Got final output counters: {:?}", total_output_counters);
 
     // Flow counters should debit your neighbor which you received the packet from
     // Destination counters should credit your neighbor which you sent the packet to
@@ -175,7 +165,7 @@ pub fn watch(neighbors: Vec<(Identity, String)>) -> Result<(), Error> {
     }
 
     // Flow counters should charge the "full price"
-    for ((ip, interface), bytes) in input_counters {
+    for ((ip, interface), bytes) in total_input_counters {
         if destinations.contains_key(&ip) {
             let id = identities[&if_to_ip[&interface]].clone();
             *debts.get_mut(&id).unwrap() -= destinations[&ip].clone() * bytes;
@@ -187,7 +177,7 @@ pub fn watch(neighbors: Vec<(Identity, String)>) -> Result<(), Error> {
     trace!("Collated flow debts: {:?}", debts);
 
     // Destination counters should not give your cost to your neighbor
-    for ((ip, interface), bytes) in output_counters {
+    for ((ip, interface), bytes) in total_output_counters {
         if destinations.contains_key(&ip) {
             let id = identities[&if_to_ip[&interface]].clone();
             *debts.get_mut(&id).unwrap() +=
@@ -221,4 +211,4 @@ mod tests {
     fn it_works() {
         assert_eq!(2 + 2, 4);
     }
-}*/
+}

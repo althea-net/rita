@@ -6,10 +6,11 @@ use actix_web::dev::*;
 
 use futures::Future;
 
-use payment_controller;
-use payment_controller::PaymentController;
+use rita_common;
 
-use rita::tunnel_manager::{GetLocalIdentity, OpenTunnel, TunnelManager};
+use rita_common::payment_controller::PaymentController;
+
+use rita_common::tunnel_manager::{GetLocalIdentity, OpenTunnel, TunnelManager};
 
 use althea_kernel_interface::KernelInterface;
 
@@ -46,7 +47,7 @@ pub fn make_payments(req: HttpRequest) -> Box<Future<Item = HttpResponse, Error 
                 pmt,
                 req.connection_info().remote()
             );
-            PaymentController::from_registry().do_send(payment_controller::PaymentReceived(pmt));
+            PaymentController::from_registry().do_send(rita_common::payment_controller::PaymentReceived(pmt));
             Ok(httpcodes::HTTPOk.into())
         })
         .responder()

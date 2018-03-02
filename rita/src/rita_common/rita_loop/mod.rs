@@ -9,15 +9,17 @@ use serde_json;
 
 use babel_monitor::Babel;
 
-use rita::tunnel_manager::{GetNeighbors, TunnelManager};
+use rita_common::tunnel_manager::{GetNeighbors, TunnelManager};
 
-use rita::traffic_watcher::{TrafficWatcher, Watch};
+use rita_common::traffic_watcher::{TrafficWatcher, Watch};
 
-use debt_keeper;
-use debt_keeper::DebtKeeper;
+use rita_common::debt_keeper;
+use rita_common::debt_keeper::DebtKeeper;
 
-use payment_controller;
-use payment_controller::{MakePayment, PaymentController};
+use rita_common::payment_controller;
+use rita_common::payment_controller::{MakePayment, PaymentController};
+
+use failure::Error;
 
 use SETTING;
 use althea_kernel_interface::KernelInterface;
@@ -35,18 +37,20 @@ impl Actor for RitaLoop {
     }
 }
 
-#[derive(Message)]
 pub struct Tick;
 
+impl Message for Tick {
+    type Result = Result<(), Error>;
+}
+
 impl Handler<Tick> for RitaLoop {
-    type Result = ();
+    type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
         trace!("Tick!");
 
         // let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port).parse().unwrap());
 
         let start = Instant::now();
-
         ctx.spawn(
             TunnelManager::from_registry()
                 .send(GetNeighbors)
@@ -70,5 +74,6 @@ impl Handler<Tick> for RitaLoop {
                         })
                 }),
         );
+        Ok(())
     }
 }

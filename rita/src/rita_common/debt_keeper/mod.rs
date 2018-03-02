@@ -13,8 +13,8 @@ use eui48::MacAddress;
 
 use SETTING;
 
-use payment_controller;
-use payment_controller::PaymentController;
+use rita_common::payment_controller;
+use rita_common::payment_controller::PaymentController;
 
 #[derive(Clone, Debug)]
 struct NodeDebtData {
@@ -56,6 +56,17 @@ impl NodeDebtData {
             Uint256::from(total)
         }
     }
+}
+
+#[test]
+fn test_node_debt_owes() {
+    let mut debt = NodeDebtData::new(5);
+
+    debt.incoming_payments = Int256::from(10);
+    debt.debt = Int256::from(-10);
+    debt.debt_buffer[1] = Int256::from(-30);
+
+    assert_eq!(debt.owes(), Uint256::from(30));
 }
 
 pub struct DebtKeeper {

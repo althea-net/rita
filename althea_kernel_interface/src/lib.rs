@@ -33,8 +33,10 @@ mod counter;
 mod get_interfaces;
 mod link_local_tools;
 mod get_neighbors;
+mod exit_counter;
 
 pub use counter::FilterTarget;
+pub use exit_counter::ExitFilterTarget;
 
 use failure::Error;
 

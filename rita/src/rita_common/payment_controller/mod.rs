@@ -6,18 +6,15 @@ use num256::{Int256, Uint256};
 
 use reqwest::{Client, StatusCode};
 
-use std::thread;
 use std::time::Duration;
-use std::sync::{Arc, Mutex};
-use std::sync::mpsc::{channel, Sender};
 
 use std::net::Ipv6Addr;
 use SETTING;
 
 use reqwest;
 use serde_json;
-use debt_keeper;
-use debt_keeper::DebtKeeper;
+use rita_common::debt_keeper;
+use rita_common::debt_keeper::DebtKeeper;
 
 use failure::Error;
 
