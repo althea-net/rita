@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 use failure::Error;
 
 impl KernelInterface {
-    pub fn get_wg_pubkey(&mut self, path: &Path) -> Result<String, Error> {
+    pub fn get_wg_pubkey(&self, path: &Path) -> Result<String, Error> {
         let priv_key_file = File::open(path)?;
         let mut output = Command::new("wg")
             .args(&["pubkey"])

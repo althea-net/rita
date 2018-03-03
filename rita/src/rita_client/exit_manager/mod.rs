@@ -95,14 +95,12 @@ impl Handler<Tick> for ExitManager {
                 ).into())
             }
         } else {
-            if let Some(ref exit_settings) = SETTING.exit_client {
-                let exit_hello_url = format!("[{}]:{}/exit_hello", exit_settings.exit_ip, SETTING.network.rita_port);
-                let mut r = self.client
-                    .get(&exit_hello_url)
-                    .send()?;
-
-                let exit_id: LocalIdentity = r.json()?;
-                self.exit_id = Some(exit_id);
+            if let Some(ref exit_details) = SETTING.exit_client.details {
+                self.exit_id = Some(LocalIdentity {
+                    local_ip: SETTING.exit_client.exit_ip,
+                    wg_port: exit_details.wg_exit_port,
+                    global: SETTING.get_exit_id().unwrap()
+                })
             }
             ctx.notify_later(Tick, Duration::from_secs(5));
             Ok(())

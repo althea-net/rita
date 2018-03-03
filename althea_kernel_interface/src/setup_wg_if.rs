@@ -16,14 +16,20 @@ impl KernelInterface {
             if_num += 1;
         }
         let interface = format!("wg{}", if_num);
-        let output = self.run_command("ip", &["link", "add", &interface, "type", "wireguard"])?;
+        self.setup_wg_if_named(&interface)?;
+        Ok(interface)
+    }
+
+    /// calls iproute2 to set up a new interface with a given name.
+    pub fn setup_wg_if_named(&mut self, name: &str) -> Result<(), Error> {
+        let output = self.run_command("ip", &["link", "add", &name, "type", "wireguard"])?;
         if !output.stderr.is_empty() {
             return Err(KernelManagerError::RuntimeError(format!(
                 "received error adding wg link: {}",
                 String::from_utf8(output.stderr)?
             )).into());
         }
-        Ok(interface)
+        Ok(())
     }
 }
 

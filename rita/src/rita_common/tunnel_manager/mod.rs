@@ -246,7 +246,7 @@ impl TunnelManager {
             tunnel.listen_port,
             &SocketAddr::new(their_id.local_ip, their_id.wg_port),
             &their_id.global.wg_public_key,
-            Path::new(&SETTING.network.wg_private_key),
+            Path::new(&SETTING.network.wg_private_key_path),
             &SETTING.network.own_ip,
         )?;
 

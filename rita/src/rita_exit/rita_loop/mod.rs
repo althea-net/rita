@@ -47,6 +47,9 @@ impl Handler<Tick> for RitaLoop {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
         trace!("Tick!");
+
+
+
         Ok(())
     }
 }

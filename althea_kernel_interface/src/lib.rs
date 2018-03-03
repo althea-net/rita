@@ -19,6 +19,7 @@ use std::time::Instant;
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
 use std::borrow::BorrowMut;
+use std::ffi::OsStr;
 
 use std::str;
 
@@ -35,6 +36,8 @@ mod link_local_tools;
 mod get_neighbors;
 mod exit_counter;
 mod manipulate_uci;
+mod exit_client_tunnel;
+mod exit_server_tunnel;
 
 pub use counter::FilterTarget;
 pub use exit_counter::ExitFilterTarget;
@@ -57,10 +60,17 @@ pub struct KernelInterface {}
 
 impl KernelInterface {
     #[cfg(not(test))]
-    fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, Error> {
+    fn run_command<S>(&self, program: S, args: &[S]) -> Result<Output, Error> where S: AsRef<OsStr> {
         let start = Instant::now();
-        let output = Command::new(program).args(args).output()?;
-        trace!("Command {} {:?} returned: {:?}", program, args, output);
+        let output = Command::new(&program).args(args).output()?;
+        let mut display_args = String::new();
+
+        for a in args {
+            display_args.push_str(a.as_ref().to_str().unwrap());
+            display_args.push_str(" ");
+        }
+
+        trace!("Command {:?} {:?} returned: {:?}", program.as_ref(), display_args, output);
         if !output.status.success() {
             trace!("An error was returned");
         }
@@ -73,7 +83,7 @@ impl KernelInterface {
     }
 
     #[cfg(test)]
-    fn run_command(&self, args: &str, program: &[&str]) -> Result<Output, Error> {
+    fn run_command<S: AsRef<OsStr>>(&self, program: S, args: &[S]) -> Result<Output, Error> {
         (&mut *self.run_command.borrow_mut())(args, program)
     }
 }
