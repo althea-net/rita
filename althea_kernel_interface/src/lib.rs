@@ -41,6 +41,7 @@ mod exit_server_tunnel;
 
 pub use counter::FilterTarget;
 pub use exit_counter::ExitFilterTarget;
+pub use exit_server_tunnel::ExitClient;
 
 use failure::Error;
 

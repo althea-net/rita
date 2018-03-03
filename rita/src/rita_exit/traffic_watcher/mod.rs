@@ -52,7 +52,7 @@ impl Default for TrafficWatcher {
 }
 
 #[derive(Message)]
-pub struct Watch(pub Vec<(Identity, String)>);
+pub struct Watch(pub Vec<Identity>);
 
 impl Handler<Watch> for TrafficWatcher {
     type Result = ();
@@ -63,7 +63,7 @@ impl Handler<Watch> for TrafficWatcher {
 }
 
 /// This traffic watcher watches how much traffic each we send and receive from each client.
-pub fn watch(clients: Vec<(Identity, String)>) -> Result<(), Error> {
+pub fn watch(clients: Vec<Identity>) -> Result<(), Error> {
     let ki = KernelInterface {};
     let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port)
         .parse()
@@ -81,7 +81,7 @@ pub fn watch(clients: Vec<(Identity, String)>) -> Result<(), Error> {
 
     let mut identities: HashMap<IpAddr, Identity> = HashMap::new();
     for ident in &clients {
-        identities.insert(ident.0.mesh_ip, ident.0.clone());
+        identities.insert(ident.mesh_ip, ident.clone());
     }
 
     for route in &routes {

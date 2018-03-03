@@ -1,6 +1,6 @@
 use super::schema::client;
 
-#[derive(Queryable, Serialize, Deserialize, Debug, Insertable)]
+#[derive(Queryable, Serialize, Deserialize, Debug, Insertable, Clone)]
 #[table_name = "client"]
 pub struct Client {
     pub mesh_ip: String,
