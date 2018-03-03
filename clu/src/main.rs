@@ -1,7 +1,8 @@
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 
 #[macro_use]
-extern crate derive_error;
+extern crate failure;
 
 use std::fs::{File};
 use std::io::{Read, Write};
@@ -11,7 +12,7 @@ use std::time::Duration;
 use std::collections::HashMap;
 
 extern crate settings;
-use settings::Settings;
+use settings::RitaSettings; //we should have one settings struct shared
 
 extern crate docopt;
 use docopt::Docopt;
@@ -21,6 +22,8 @@ extern crate rand;
 use rand::Rng;
 
 use std::str;
+
+use failure::Error;
 
 extern crate reqwest;
 
@@ -32,20 +35,13 @@ extern crate simple_logger;
 #[macro_use]
 extern crate lazy_static;
 
-#[derive(Debug, Error)]
-pub enum Error {
-    Io(std::io::Error),
-    StringUTF8(std::string::FromUtf8Error),
-    StrUTF8(std::str::Utf8Error),
-    ParseInt(std::num::ParseIntError),
-    AddrParse(std::net::AddrParseError),
-    althea_kernel_interface(althea_kernel_interface::Error),
-    request(reqwest::Error),
-    #[error(msg_embedded, no_from, non_std)]
+#[derive(Debug, Fail)]
+pub enum CluError {
+    #[fail(display = "Runtime Error: {:?}", _0)]
     RuntimeError(String),
 }
 
-fn openwrt_generate_and_set_wg_keys(SETTINGS :&mut settings::Settings) -> Result<(), Error> {
+fn openwrt_generate_and_set_wg_keys(SETTINGS :&mut settings::RitaSettings) -> Result<(), Error> {
     let mut ki = KernelInterface{};
     let keys = ki.create_wg_keypair()?;
     let wg_public_key = &keys[0];
@@ -61,7 +57,7 @@ fn openwrt_generate_and_set_wg_keys(SETTINGS :&mut settings::Settings) -> Result
     Ok(())
 }
 
-fn openwrt_generate_and_set_mesh_ip(SETTINGS :&mut settings::Settings) -> Result<(), Error> {
+fn openwrt_generate_and_set_mesh_ip(SETTINGS :&mut settings::RitaSettings) -> Result<(), Error> {
     let mut ki = KernelInterface{};
     let seed = rand::thread_rng().gen::<[u8;10]>();
     let mesh_ip = ipgen::ip(std::str::from_utf8(&seed)?,"fd::/120").unwrap();
@@ -98,7 +94,7 @@ fn openwrt_validate_exit_setup() -> Result<(), Error> {
     Ok(())
 }
 
-fn request_own_exit_ip(SETTINGS :&mut settings::Settings) -> Result<(), Error> {
+fn request_own_exit_ip(SETTINGS :&mut settings::RitaSettings) -> Result<(), Error> {
     let exit_server = SETTINGS.network.exit_address;
     let mut map = HashMap::new();
     map.insert("wg_public_key", SETTINGS.network.wg_public_key.clone());
@@ -118,7 +114,7 @@ fn request_own_exit_ip(SETTINGS :&mut settings::Settings) -> Result<(), Error> {
 }
 
 // Replacement for the setup.ash file in althea firmware
-fn openwrt_init(mut SETTINGS :settings::Settings) -> Result<(), Error> {
+fn openwrt_init(mut SETTINGS :settings::RitaSettings) -> Result<(), Error> {
     let privkey = SETTINGS.network.wg_private_key.clone();
     let pubkey = SETTINGS.network.wg_public_key.clone();
     let mesh_ip = SETTINGS.network.own_ip.clone();
@@ -155,6 +151,7 @@ fn main() {
     let settings_file = args.get_str("<settings>");
     let defaults_file = args.get_str("<default>");
 
+    let mut SETTINGS = RitaSettings::new(settings_file, defaults_file).unwrap();
     let mut SETTINGS = Settings::new(settings_file, defaults_file).unwrap();
     simple_logger::init().unwrap();
     trace!("Starting");
