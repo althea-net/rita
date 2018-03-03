@@ -5,6 +5,9 @@ extern crate num256;
 extern crate toml;
 
 #[macro_use]
+extern crate failure;
+
+#[macro_use]
 extern crate serde_derive;
 
 extern crate serde;
@@ -29,21 +32,21 @@ use serde::{Deserialize, Serialize};
 
 use althea_kernel_interface::KernelInterface;
 
+use failure::Error;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NetworkSettings {
     pub own_ip: IpAddr,
     pub own_exit_ip: IpAddr,
-    pub exit_address: IpAddr,
-    pub exit_registration_port: u16,
     pub own_mac: MacAddress,
     pub bounty_ip: IpAddr,
     pub babel_port: u16,
     pub rita_port: u16,
     pub bounty_port: u16,
     pub wg_private_key: String,
+    pub wg_private_key_path: String,
     pub wg_public_key: String,
     pub wg_start_port: u16,
-    pub wg_exit_port: u16,
     pub babel_interfaces: String,
 }
 
@@ -57,21 +60,32 @@ pub struct PaymentSettings {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ExitNetworkSettings {
-    pub wg_tunnel_port: u16,
+pub struct ExitClientSettings {
+    pub exit_ip: IpAddr,
+    pub exit_registration_port: u16,
+    pub wg_listen_port: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<ExitClientDetails>
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ExitClientSettings {
-    pub exit_ip: IpAddr,
+pub struct ExitClientDetails {
+    pub internal_ip: IpAddr,
+    pub eth_address: EthAddress,
+    pub wg_public_key: String,
+    pub wg_exit_port: u16,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RitaSettings {
     pub payment: PaymentSettings,
     pub network: NetworkSettings,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub exit_client: Option<ExitClientSettings>,
+    pub exit_client: ExitClientSettings,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ExitNetworkSettings {
+    pub wg_tunnel_port: u16,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -83,28 +97,34 @@ pub struct RitaExitSettings {
 }
 
 impl RitaSettings {
-    pub fn new(file_name: &str, default: &str) -> Result<Self, ConfigError> {
+    pub fn new(file_name: &str, default: &str) -> Result<Self, Error> {
         let mut s = Config::new();
         s.merge(config::File::with_name(default))?;
         s.merge(config::File::with_name(file_name).required(false))?;
         let settings: Self = s.try_into()?;
 
-        let mut ki = KernelInterface {};
-        ki.create_wg_key(Path::new(&settings.network.wg_private_key));
+        let mut file = File::create(&Path::new(&settings.network.wg_private_key_path))?;
+        file.write_all(&settings.network.wg_private_key.as_bytes())?;
+
         Ok(settings)
     }
 
     pub fn get_identity(&self) -> Identity {
-        let mut ki = KernelInterface {};
-        ki.create_wg_key(Path::new(&self.network.wg_private_key));
-
+        let ki = KernelInterface{};
         Identity::new(self.network.own_ip.clone(), self.payment.eth_address.clone(),
-                      ki.get_wg_pubkey(Path::new(&self.network.wg_private_key))
+                      ki.get_wg_pubkey(Path::new(&self.network.wg_private_key_path))
                                 .unwrap()
         )
     }
 
-    pub fn write(&self, file_name: &str) -> Result<(), std::io::Error> {
+    pub fn get_exit_id(&self) -> Option<Identity> {
+        let details = self.exit_client.details.clone()?;
+
+        Some(Identity::new(self.exit_client.exit_ip.clone(), details.eth_address.clone(), details.wg_public_key.clone()))
+
+    }
+
+    pub fn write(&self, file_name: &str) -> Result<(), Error> {
         let ser = toml::to_string(&self).unwrap();
         let mut file = File::create(file_name)?;
         file.write_all(ser.as_bytes())?;
@@ -113,28 +133,28 @@ impl RitaSettings {
 }
 
 impl RitaExitSettings {
-    pub fn new(file_name: &str, default: &str) -> Result<Self, ConfigError> {
+    pub fn new(file_name: &str, default: &str) -> Result<Self, Error> {
         let mut s = Config::new();
         s.merge(config::File::with_name(default))?;
         s.merge(config::File::with_name(file_name).required(false))?;
         let settings: Self = s.try_into()?;
 
-        let mut ki = KernelInterface {};
-        ki.create_wg_key(Path::new(&settings.network.wg_private_key));
+        let mut file = File::create(&Path::new(&settings.network.wg_private_key_path))?;
+        file.write_all(&settings.network.wg_private_key.as_bytes())?;
+
         Ok(settings)
     }
 
     pub fn get_identity(&self) -> Identity {
-        let mut ki = KernelInterface {};
-        ki.create_wg_key(Path::new(&self.network.wg_private_key));
+        let ki = KernelInterface{};
 
         Identity::new(self.network.own_ip.clone(), self.payment.eth_address.clone(),
-                      ki.get_wg_pubkey(Path::new(&self.network.wg_private_key))
+                      ki.get_wg_pubkey(Path::new(&self.network.wg_private_key_path))
                                 .unwrap()
         )
     }
 
-    pub fn write(&self, file_name: &str) -> Result<(), std::io::Error> {
+    pub fn write(&self, file_name: &str) -> Result<(), Error> {
         let ser = toml::to_string(&self).unwrap();
         let mut file = File::create(file_name)?;
         file.write_all(ser.as_bytes())?;

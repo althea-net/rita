@@ -95,14 +95,14 @@ fn openwrt_validate_exit_setup() -> Result<(), Error> {
 }
 
 fn request_own_exit_ip(SETTINGS :&mut settings::RitaSettings) -> Result<(), Error> {
-    let exit_server = SETTINGS.network.exit_address;
+    let exit_server = SETTINGS.exit_client.exit_ip;
     let mut map = HashMap::new();
     map.insert("wg_public_key", SETTINGS.network.wg_public_key.clone());
     map.insert("mesh_ip", SETTINGS.network.own_ip.to_string());
-    map.insert("port", SETTINGS.network.wg_exit_port.to_string());
+    map.insert("port", SETTINGS.exit_client.wg_listen_port.to_string());
 
     let endpoint = "http://".to_string()+&exit_server.to_string()+":"
-    +&SETTINGS.network.exit_registration_port.to_string()+"/setup";
+    +&SETTINGS.exit_client.exit_registration_port.to_string()+"/setup";
 
     trace!("Sending exit setup request to {:?}", endpoint);
     let client = reqwest::Client::new();
@@ -118,8 +118,8 @@ fn openwrt_init(mut SETTINGS :settings::RitaSettings) -> Result<(), Error> {
     let privkey = SETTINGS.network.wg_private_key.clone();
     let pubkey = SETTINGS.network.wg_public_key.clone();
     let mesh_ip = SETTINGS.network.own_ip.clone();
-    let exit_ip = SETTINGS.network.exit_address.clone();
-    let our_exit_ip = SETTINGS.network.exit_address.clone();
+    let exit_ip = SETTINGS.exit_client.exit_ip.clone();
+    let our_exit_ip = SETTINGS.exit_client.exit_ip.clone();
 
     request_own_exit_ip(&mut SETTINGS);
     trace!("Exit ip request exited");
@@ -152,7 +152,6 @@ fn main() {
     let defaults_file = args.get_str("<default>");
 
     let mut SETTINGS = RitaSettings::new(settings_file, defaults_file).unwrap();
-    let mut SETTINGS = Settings::new(settings_file, defaults_file).unwrap();
     simple_logger::init().unwrap();
     trace!("Starting");
     println!("{:?}", openwrt_init(SETTINGS));
