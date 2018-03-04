@@ -12,18 +12,23 @@ pub struct Identity {
     pub mesh_ip: IpAddr,
     pub eth_address: EthAddress,
     pub wg_public_key: String,
-    pub wg_port: u16,
 }
 
 impl Identity {
-    pub fn new(mesh_ip: IpAddr, eth_address: EthAddress, wg_public_key: String, wg_port: u16) -> Identity {
+    pub fn new(mesh_ip: IpAddr, eth_address: EthAddress, wg_public_key: String) -> Identity {
         Identity {
             mesh_ip,
             eth_address,
             wg_public_key,
-            wg_port,
         }
     }
+}
+
+/// This is all the data we need to give a exit to open a wg tunnel
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct ExitIdentity {
+    pub wg_port: u16,
+    pub global: Identity,
 }
 
 #[cfg(feature = "actix")]

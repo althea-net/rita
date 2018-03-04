@@ -1,6 +1,7 @@
-use super::schema::client;
+use schema::client;
+use std::net::IpAddr;
 
-#[derive(Queryable, Serialize, Deserialize, Debug, Insertable, Clone)]
+#[derive(Queryable, Serialize, Deserialize, Debug, Insertable, Clone, AsChangeset)]
 #[table_name = "client"]
 pub struct Client {
     pub mesh_ip: String,
