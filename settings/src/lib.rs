@@ -46,6 +46,7 @@ pub struct NetworkSettings {
     pub wg_private_key: String,
     pub wg_private_key_path: String,
     pub wg_public_key: String,
+    pub wg_listen_port: u16,
     pub wg_start_port: u16,
     pub babel_interfaces: String,
 }
@@ -112,15 +113,15 @@ impl RitaSettings {
     pub fn get_identity(&self) -> Identity {
         let ki = KernelInterface{};
         Identity::new(self.network.own_ip.clone(), self.payment.eth_address.clone(),
-                      ki.get_wg_pubkey(Path::new(&self.network.wg_private_key_path))
-                                .unwrap()
+                      ki.get_wg_pubkey(Path::new(&self.network.wg_private_key_path)).unwrap(),
+                      self.network.wg_listen_port
         )
     }
 
     pub fn get_exit_id(&self) -> Option<Identity> {
         let details = self.exit_client.details.clone()?;
 
-        Some(Identity::new(self.exit_client.exit_ip.clone(), details.eth_address.clone(), details.wg_public_key.clone()))
+        Some(Identity::new(self.exit_client.exit_ip.clone(), details.eth_address.clone(), details.wg_public_key.clone(), details.wg_exit_port))
 
     }
 
@@ -149,8 +150,8 @@ impl RitaExitSettings {
         let ki = KernelInterface{};
 
         Identity::new(self.network.own_ip.clone(), self.payment.eth_address.clone(),
-                      ki.get_wg_pubkey(Path::new(&self.network.wg_private_key_path))
-                                .unwrap()
+                      ki.get_wg_pubkey(Path::new(&self.network.wg_private_key_path)).unwrap(),
+                      self.network.wg_listen_port
         )
     }
 

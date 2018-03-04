@@ -12,14 +12,16 @@ pub struct Identity {
     pub mesh_ip: IpAddr,
     pub eth_address: EthAddress,
     pub wg_public_key: String,
+    pub wg_port: u16,
 }
 
 impl Identity {
-    pub fn new(mesh_ip: IpAddr, eth_address: EthAddress, wg_public_key: String) -> Identity {
+    pub fn new(mesh_ip: IpAddr, eth_address: EthAddress, wg_public_key: String, wg_port: u16) -> Identity {
         Identity {
             mesh_ip,
             eth_address,
             wg_public_key,
+            wg_port,
         }
     }
 }

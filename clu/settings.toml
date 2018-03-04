@@ -7,7 +7,6 @@ eth_address='0x0101010101010101010101010101010101010101'
 
 [network]
 own_ip='fd::1'
-exit_address='127.0.0.1'
 own_exit_ip='1.1.1.1'
 bounty_ip='fd::3'
 own_mac='12:34:56:78:90:12'
@@ -18,3 +17,8 @@ wg_private_key=""
 wg_public_key=""
 wg_start_port=60000
 babel_interfaces="eth0 eth1"
+
+[exit_client]
+exit_ip='127.0.0.1'
+exit_registration_port=8090
+wg_listen_port=51820

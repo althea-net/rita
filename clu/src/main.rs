@@ -30,6 +30,8 @@ extern crate reqwest;
 extern crate althea_kernel_interface;
 use althea_kernel_interface::KernelInterface;
 
+extern crate althea_types;
+
 extern crate simple_logger;
 
 #[macro_use]
@@ -96,17 +98,17 @@ fn openwrt_validate_exit_setup() -> Result<(), Error> {
 
 fn request_own_exit_ip(SETTINGS :&mut settings::RitaSettings) -> Result<(), Error> {
     let exit_server = SETTINGS.exit_client.exit_ip;
-    let mut map = HashMap::new();
-    map.insert("wg_public_key", SETTINGS.network.wg_public_key.clone());
-    map.insert("mesh_ip", SETTINGS.network.own_ip.to_string());
-    map.insert("port", SETTINGS.exit_client.wg_listen_port.to_string());
+    let ident = althea_types::Identity::new(SETTINGS.network.own_ip.clone(),
+                                            SETTINGS.payment.eth_address.clone(),
+                                            SETTINGS.network.wg_public_key.clone(),
+                                            SETTINGS.network.wg_listen_port.clone());
 
     let endpoint = "http://".to_string()+&exit_server.to_string()+":"
     +&SETTINGS.exit_client.exit_registration_port.to_string()+"/setup";
 
     trace!("Sending exit setup request to {:?}", endpoint);
     let client = reqwest::Client::new();
-    let response = client.post(&endpoint).json(&map).send();
+    let response = client.post(&endpoint).json(&ident).send();
 
     trace!("Got exit setup response {:?}", response);
 
