@@ -37,8 +37,6 @@ use failure::Error;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NetworkSettings {
     pub own_ip: IpAddr,
-    pub own_exit_ip: IpAddr,
-    pub own_mac: MacAddress,
     pub bounty_ip: IpAddr,
     pub babel_port: u16,
     pub rita_port: u16,

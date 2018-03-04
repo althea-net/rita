@@ -36,17 +36,14 @@ pub fn make_payments(req: HttpRequest) -> Box<Future<Item = HttpResponse, Error 
         .from_err()
         .and_then(move |bytes: Bytes| {
             trace!(
-                "Payment body: {:?} from {:?}",
+                "Payment body: {:?}",
                 bytes,
-                req.connection_info().remote()
             );
             let pmt: PaymentTx = serde_json::from_slice(&bytes[..]).unwrap();
 
             trace!(
-                "Received payment from {:?}, Payment: {:?}",
-                pmt,
-                req.connection_info().remote()
-            );
+                "Received payment: {:?}",
+                pmt, );
             PaymentController::from_registry().do_send(rita_common::payment_controller::PaymentReceived(pmt));
             Ok(httpcodes::HTTPOk.into())
         })
@@ -63,9 +60,8 @@ pub fn hello_response(req: HttpRequest) -> Box<Future<Item = Json<LocalIdentity>
         .from_err()
         .and_then(move |bytes: Bytes| {
             trace!(
-                "Hello body: {:?} from {:?}",
+                "Hello body: {:?}",
                 bytes,
-                req.connection_info().remote()
             );
             let their_id: LocalIdentity = serde_json::from_slice(&bytes[..]).unwrap();
 
