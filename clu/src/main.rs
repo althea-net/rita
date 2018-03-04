@@ -98,10 +98,10 @@ fn openwrt_validate_exit_setup() -> Result<(), Error> {
 
 fn request_own_exit_ip(SETTINGS :&mut settings::RitaSettings) -> Result<(), Error> {
     let exit_server = SETTINGS.exit_client.exit_ip;
-    let ident = althea_types::Identity::new(SETTINGS.network.own_ip.clone(),
-                                            SETTINGS.payment.eth_address.clone(),
-                                            SETTINGS.network.wg_public_key.clone(),
-                                            SETTINGS.network.wg_listen_port.clone());
+    let ident = althea_types::ExitIdentity{
+        global: SETTINGS.get_identity(),
+        wg_port: SETTINGS.exit_client.wg_listen_port.clone()
+    };
 
     let endpoint = "http://".to_string()+&exit_server.to_string()+":"
     +&SETTINGS.exit_client.exit_registration_port.to_string()+"/setup";

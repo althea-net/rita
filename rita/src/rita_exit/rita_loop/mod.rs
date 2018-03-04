@@ -13,7 +13,7 @@ use rita_exit::db_client::{DbClient, ListClients};
 
 use rita_exit::traffic_watcher::{TrafficWatcher, Watch};
 
-use rita_exit::db_client::models::Client;
+use exit_db::models::Client;
 
 use failure::Error;
 

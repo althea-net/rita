@@ -17,6 +17,7 @@ diesel = { version = "1.0.0", features = ["sqlite"] }
 dotenv = "0.9.0"
 althea_types = { path = "../althea_types", features = ["actix"]}
 althea_kernel_interface = { path = "../althea_kernel_interface" }
+exit_db = { path = "../exit_db" }
 settings = { path = "../settings" }
 num256 = { path = "../num256" }
 ip_network = "0.1"

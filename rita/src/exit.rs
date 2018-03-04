@@ -51,6 +51,7 @@ extern crate althea_kernel_interface;
 extern crate althea_types;
 extern crate babel_monitor;
 extern crate num256;
+extern crate exit_db;
 
 mod rita_exit;
 mod rita_common;

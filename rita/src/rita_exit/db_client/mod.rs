@@ -3,8 +3,7 @@ use actix_web::*;
 use actix::prelude::*;
 use diesel::prelude::*;
 
-pub mod models;
-pub mod schema;
+use exit_db::{models, schema};
 
 use SETTING;
 

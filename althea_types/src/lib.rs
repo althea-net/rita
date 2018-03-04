@@ -21,7 +21,7 @@ pub use bytes_32::Bytes32;
 pub use eth_address::EthAddress;
 pub use eth_private_key::EthPrivateKey;
 pub use eth_signature::EthSignature;
-pub use interop::{Identity, LocalIdentity, PaymentTx};
+pub use interop::{Identity, LocalIdentity, PaymentTx, ExitIdentity};
 
 #[cfg(test)]
 mod tests {
