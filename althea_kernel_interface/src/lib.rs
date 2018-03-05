@@ -61,17 +61,11 @@ pub struct KernelInterface {}
 
 impl KernelInterface {
     #[cfg(not(test))]
-    fn run_command<S>(&self, program: S, args: &[S]) -> Result<Output, Error> where S: AsRef<OsStr> {
+    fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, Error> {
         let start = Instant::now();
-        let output = Command::new(&program).args(args).output()?;
-        let mut display_args = String::new();
+        let output = Command::new(program).args(args).output()?;
 
-        for a in args {
-            display_args.push_str(a.as_ref().to_str().unwrap());
-            display_args.push_str(" ");
-        }
-
-        trace!("Command {:?} {:?} returned: {:?}", program.as_ref(), display_args, output);
+        trace!("Command {:?} {:?} returned: {:?}", program, args, output);
         if !output.status.success() {
             trace!("An error was returned");
         }
@@ -84,7 +78,7 @@ impl KernelInterface {
     }
 
     #[cfg(test)]
-    fn run_command<S: AsRef<OsStr>>(&self, program: S, args: &[S]) -> Result<Output, Error> {
-        (&mut *self.run_command.borrow_mut())(args, program)
+    fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, Error> {
+        (&mut *self.run_command.borrow_mut())(program, args)
     }
 }
