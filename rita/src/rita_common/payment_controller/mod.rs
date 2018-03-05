@@ -91,7 +91,7 @@ extern crate mockito;
 
 impl Default for PaymentController {
     fn default() -> PaymentController {
-        PaymentController::new(&SETTING.get_identity())
+        PaymentController::new(&SETTING.read().unwrap().get_identity())
     }
 }
 
@@ -112,7 +112,7 @@ impl PaymentController {
         let bounty_url = if cfg!(not(test)) {
             format!(
                 "http://[{}]:{}/update",
-                SETTING.network.bounty_ip, SETTING.network.bounty_port
+                SETTING.read().unwrap().network.bounty_ip, SETTING.read().unwrap().network.bounty_port
             )
         } else {
             String::from("http://127.0.0.1:1234/update") //TODO: This is mockito::SERVER_URL, but don't want to include the crate in a non-test build just for that string
@@ -200,7 +200,7 @@ impl PaymentController {
         let neighbor_url = if cfg!(not(test)) {
             format!(
                 "http://[{}]:{}/make_payment",
-                pmt.to.mesh_ip, SETTING.network.rita_port
+                pmt.to.mesh_ip, SETTING.read().unwrap().network.rita_port
             )
         } else {
             String::from("http://127.0.0.1:1234/make_payment")

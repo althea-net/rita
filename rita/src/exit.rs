@@ -65,6 +65,8 @@ use diesel::select;
 use diesel::dsl::exists;
 use dotenv::dotenv;
 
+use std::sync::{Arc, RwLock};
+
 const USAGE: &'static str = "
 Usage: rita_common --config <settings> --default <default>
 Options:
@@ -73,7 +75,7 @@ Options:
 ";
 
 lazy_static! {
-    pub static ref SETTING: RitaExitSettings = {
+    pub static ref SETTING: Arc<RwLock<RitaExitSettings>> = {
         let args = Docopt::new(USAGE)
         .and_then(|d| d.parse())
         .unwrap_or_else(|e| e.exit());
@@ -81,8 +83,8 @@ lazy_static! {
         let settings_file = args.get_str("<settings>");
         let defaults_file = args.get_str("<default>");
 
-        let s = RitaExitSettings::new(settings_file, defaults_file).unwrap();
-        s.write(settings_file).unwrap();
+        let s = RitaExitSettings::new_watched(settings_file, defaults_file).unwrap();
+        s.read().unwrap().write(settings_file).unwrap();
         s
     };
 }
@@ -90,9 +92,9 @@ lazy_static! {
 fn main() {
     env_logger::init().unwrap();
     trace!("Starting");
-    trace!("Starting with Identity: {:?}", SETTING.get_identity());
+    trace!("Starting with Identity: {:?}", SETTING.read().unwrap().get_identity());
 
-    let system = actix::System::new(format!("main {}", SETTING.network.own_ip));
+    let system = actix::System::new(format!("main {}", SETTING.read().unwrap().network.own_ip));
 
     assert!(rita_common::debt_keeper::DebtKeeper::from_registry().connected());
     assert!(rita_common::payment_controller::PaymentController::from_registry().connected());
@@ -111,7 +113,7 @@ fn main() {
             // Exit stuff
             .resource("/exit_hello", |r| r.h(hello_response_exit))
             .resource("/get_debt", |r| r.h(get_debt))
-    }).bind(format!("[::0]:{}", SETTING.network.rita_port))
+    }).bind(format!("[::0]:{}", SETTING.read().unwrap().network.rita_port))
         .unwrap()
         .start();
 

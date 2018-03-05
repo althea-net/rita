@@ -73,7 +73,7 @@ impl Handler<Watch> for TrafficWatcher {
 /// (should return 0)
 pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
     let ki = KernelInterface {};
-    let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port)
+    let mut babel = Babel::new(&format!("[::1]:{}", SETTING.read().unwrap().network.babel_port)
         .parse()
         .unwrap());
 
@@ -98,7 +98,7 @@ pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
 
     let mut destinations = HashMap::new();
     destinations.insert(
-        SETTING.network.own_ip,
+        SETTING.read().unwrap().network.own_ip,
         Int256::from(babel.local_price().unwrap() as i64),
     );
 

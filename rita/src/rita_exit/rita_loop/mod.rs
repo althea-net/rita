@@ -44,7 +44,7 @@ impl Message for Tick {
 fn to_identity(client: Client) -> Identity {
     Identity{
         mesh_ip: client.mesh_ip.parse().unwrap(),
-        eth_address: SETTING.payment.eth_address, // we should never be paying them, but if somehow we do, it goes back to us
+        eth_address: SETTING.read().unwrap().payment.eth_address, // we should never be paying them, but if somehow we do, it goes back to us
         wg_public_key: client.wg_pubkey
     }
 }
@@ -73,7 +73,7 @@ impl Handler<Tick> for RitaLoop {
                 let ki = KernelInterface{};
                 let wg_clients = clients.into_iter().map(|c| to_exit_client(c)).collect();
 
-                ki.set_exit_wg_config(wg_clients, SETTING.exit_network.wg_tunnel_port);
+                ki.set_exit_wg_config(wg_clients, SETTING.read().unwrap().exit_network.wg_tunnel_port);
 
                 actix::fut::ok(())
         });

@@ -64,11 +64,11 @@ impl Handler<Tick> for ExitManager {
 
     fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
         if let Some(ref id) = self.exit_id {
-            let exit_debt_url = format!("[{}]:{}/get_debt", id.global.mesh_ip, SETTING.network.rita_port);
+            let exit_debt_url = format!("[{}]:{}/get_debt", id.global.mesh_ip, SETTING.read().unwrap().network.rita_port);
             trace!("sending payment query to {}", exit_debt_url);
 
             let mut r = self.client.get(&exit_debt_url)
-                .body(serde_json::to_string(&SETTING.get_identity())?)
+                .body(serde_json::to_string(&SETTING.read().unwrap().get_identity())?)
                 .send()?;
 
             if r.status() == StatusCode::Ok {
@@ -77,7 +77,7 @@ impl Handler<Tick> for ExitManager {
                 trace!("we owe {:?}", owes);
 
                 let pmt = PaymentTx{
-                    from: SETTING.get_identity(),
+                    from: SETTING.read().unwrap().get_identity(),
                     to: id.global.clone(),
                     amount: owes
                 };
@@ -95,11 +95,11 @@ impl Handler<Tick> for ExitManager {
                 ).into())
             }
         } else {
-            if let Some(ref exit_details) = SETTING.exit_client.details {
+            if let Some(ref exit_details) = SETTING.read().unwrap().exit_client.details {
                 self.exit_id = Some(LocalIdentity {
-                    local_ip: SETTING.exit_client.exit_ip,
+                    local_ip: SETTING.read().unwrap().exit_client.exit_ip,
                     wg_port: exit_details.wg_exit_port,
-                    global: SETTING.get_exit_id().unwrap()
+                    global: SETTING.read().unwrap().get_exit_id().unwrap()
                 })
             }
             ctx.notify_later(Tick, Duration::from_secs(5));
