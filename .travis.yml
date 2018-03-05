@@ -10,7 +10,7 @@ env:
   - TEST_COMMAND="cargo install rustfmt-nightly --force && cargo fmt --all -- --write-mode=diff"
   - TEST_COMMAND="cargo build --verbose --all"
   - TEST_COMMAND="cargo test --verbose --all" RUST_TEST_THREADS=1
-  - TEST_COMMAND="./integration-tests/rita_common.sh"
+  - TEST_COMMAND="./integration-tests/rita.sh"
 rust:
   - stable
   - beta

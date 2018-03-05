@@ -36,7 +36,15 @@ impl KernelInterface {
             args.push("5".into());
         }
 
-        self.run_command(command, &args);
+        let mut args_str = Vec::new();
+
+        let arg_count = args.len();
+
+        for i in 0..arg_count {
+            args_str.push(args[i].as_str())
+        }
+
+        self.run_command(&command, &args_str[..]);
 
         Ok(())
     }
