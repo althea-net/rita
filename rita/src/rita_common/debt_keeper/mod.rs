@@ -156,7 +156,7 @@ impl Handler<SendUpdate> for DebtKeeper {
             DebtAction::MakePayment { to, amount } => PaymentController::from_registry().do_send(
                 payment_controller::MakePayment(PaymentTx {
                     to,
-                    from: SETTING.get_identity(),
+                    from: SETTING.read().unwrap().get_identity(),
                     amount,
                 }),
             ),
@@ -169,10 +169,10 @@ impl Default for DebtKeeper {
     fn default() -> DebtKeeper {
         DebtKeeper {
             debt_data: HashMap::new(),
-            pay_threshold: SETTING.payment.pay_threshold.clone(),
-            close_fraction: SETTING.payment.close_fraction.clone(),
-            close_threshold: SETTING.payment.close_threshold.clone(),
-            buffer_period: SETTING.payment.buffer_period.clone(),
+            pay_threshold: SETTING.read().unwrap().payment.pay_threshold.clone(),
+            close_fraction: SETTING.read().unwrap().payment.close_fraction.clone(),
+            close_threshold: SETTING.read().unwrap().payment.close_threshold.clone(),
+            buffer_period: SETTING.read().unwrap().payment.buffer_period.clone(),
         }
     }
 }

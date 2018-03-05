@@ -44,6 +44,8 @@ use actix::*;
 use actix::registry::SystemService;
 use actix_web::*;
 
+use std::sync::{Arc, RwLock};
+
 extern crate althea_kernel_interface;
 extern crate althea_types;
 extern crate babel_monitor;
@@ -62,7 +64,7 @@ Options:
 ";
 
 lazy_static! {
-    pub static ref SETTING: RitaSettings = {
+    pub static ref SETTING: Arc<RwLock<RitaSettings>> = {
         let args = Docopt::new(USAGE)
         .and_then(|d| d.parse())
         .unwrap_or_else(|e| e.exit());
@@ -70,8 +72,8 @@ lazy_static! {
         let settings_file = args.get_str("<settings>");
         let defaults_file = args.get_str("<default>");
 
-        let s = RitaSettings::new(settings_file, defaults_file).unwrap();
-        s.write(settings_file).unwrap();
+        let s = RitaSettings::new_watched(settings_file, defaults_file).unwrap();
+        s.read().unwrap().write(settings_file).unwrap();
         s
     };
 }
@@ -79,9 +81,9 @@ lazy_static! {
 fn main() {
     env_logger::init().unwrap();
     trace!("Starting");
-    trace!("Starting with Identity: {:?}", SETTING.get_identity());
+    trace!("Starting with Identity: {:?}", SETTING.read().unwrap().get_identity());
 
-    let system = actix::System::new(format!("main {}", SETTING.network.own_ip));
+    let system = actix::System::new(format!("main {}", SETTING.read().unwrap().network.own_ip));
 
     assert!(rita_common::debt_keeper::DebtKeeper::from_registry().connected());
     assert!(rita_common::payment_controller::PaymentController::from_registry().connected());
@@ -94,7 +96,7 @@ fn main() {
         Application::new()
             .resource("/make_payment", |r| r.h(make_payments))
             .resource("/hello", |r| r.h(hello_response))
-    }).bind(format!("[::0]:{}", SETTING.network.rita_port))
+    }).bind(format!("[::0]:{}", SETTING.read().unwrap().network.rita_port))
         .unwrap()
         .start();
 

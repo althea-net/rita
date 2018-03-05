@@ -34,7 +34,7 @@ impl Handler<ListClients> for DbClient {
 
     fn handle(&mut self, _: ListClients, _: &mut Self::Context) -> Self::Result {
         use self::schema::client::dsl::*;
-        let connection = SqliteConnection::establish(&SETTING.db_file).unwrap();
+        let connection = SqliteConnection::establish(&SETTING.read().unwrap().db_file).unwrap();
 
         let res = client.load::<models::Client>(&connection)?;
         trace!("Got clients list {:?}", res);

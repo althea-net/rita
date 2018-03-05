@@ -10,15 +10,25 @@ extern crate failure;
 #[macro_use]
 extern crate serde_derive;
 
+#[macro_use]
+extern crate log;
+
 extern crate serde;
 extern crate serde_json;
 
 extern crate althea_kernel_interface;
 
+extern crate notify;
+use notify::{RecommendedWatcher, DebouncedEvent, Watcher, RecursiveMode};
+
 use std::net::IpAddr;
 use std::path::Path;
 use std::fs::File;
 use std::io::Write;
+use std::thread;
+use std::sync::{RwLock, Arc};
+use std::sync::mpsc::channel;
+use std::time::Duration;
 
 use config::{Config, ConfigError, Environment};
 
@@ -94,6 +104,40 @@ pub struct RitaExitSettings {
     pub db_file: String,
 }
 
+fn spawn_watch_thread<'de, T: 'static>(settings: Arc<RwLock<T>>, mut config: Config, file_path: &str) -> Result<(), Error>
+    where T: serde::Deserialize<'de> + Sync + Send + std::fmt::Debug {
+    let (tx, rx) = channel();
+
+    let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_secs(2)).unwrap();
+
+    watcher
+        .watch(file_path, RecursiveMode::NonRecursive)
+        .unwrap();
+
+
+    thread::spawn(move || {
+        loop {
+            match rx.recv() {
+                Ok(DebouncedEvent::Write(_)) => {
+                    info!("config file written; refreshing configuration ...");
+                    let config = config.refresh().unwrap();
+                    let new_settings: T = config.clone().try_into().unwrap();
+                    info!("new config: {:#?}", new_settings);
+                    *settings.write().unwrap() = new_settings;
+                }
+
+                Err(e) => warn!("watch error: {:?}", e),
+
+                _ => {
+                    // Ignore event
+                }
+            }
+        }
+    });
+
+    Ok(())
+}
+
 impl RitaSettings {
     pub fn new(file_name: &str, default: &str) -> Result<Self, Error> {
         let mut s = Config::new();
@@ -103,6 +147,22 @@ impl RitaSettings {
 
         let mut file = File::create(&Path::new(&settings.network.wg_private_key_path))?;
         file.write_all(&settings.network.wg_private_key.as_bytes())?;
+
+        Ok(settings)
+    }
+
+    pub fn new_watched(file_name: &str, default: &str) -> Result<Arc<RwLock<Self>>, Error> {
+        let mut s = Config::new();
+        s.merge(config::File::with_name(default))?;
+        s.merge(config::File::with_name(file_name).required(false))?;
+        let settings: Self = s.clone().try_into()?;
+
+        let mut file = File::create(&Path::new(&settings.network.wg_private_key_path))?;
+        file.write_all(&settings.network.wg_private_key.as_bytes())?;
+
+        let settings = Arc::new(RwLock::new(settings));
+
+        spawn_watch_thread(settings.clone(), s,file_name);
 
         Ok(settings)
     }
@@ -137,6 +197,22 @@ impl RitaExitSettings {
 
         let mut file = File::create(&Path::new(&settings.network.wg_private_key_path))?;
         file.write_all(&settings.network.wg_private_key.as_bytes())?;
+
+        Ok(settings)
+    }
+
+    pub fn new_watched(file_name: &str, default: &str) -> Result<Arc<RwLock<Self>>, Error> {
+        let mut s = Config::new();
+        s.merge(config::File::with_name(default))?;
+        s.merge(config::File::with_name(file_name).required(false))?;
+        let settings: Self = s.clone().try_into()?;
+
+        let mut file = File::create(&Path::new(&settings.network.wg_private_key_path))?;
+        file.write_all(&settings.network.wg_private_key.as_bytes())?;
+
+        let settings = Arc::new(RwLock::new(settings));
+
+        spawn_watch_thread(settings.clone(), s,file_name);
 
         Ok(settings)
     }

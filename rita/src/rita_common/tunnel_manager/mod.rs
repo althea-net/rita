@@ -130,7 +130,7 @@ impl TunnelManager {
         let tm = TunnelManager {
             ki: KernelInterface {},
             tunnel_map: HashMap::new(),
-            port: SETTING.network.wg_start_port,
+            port: SETTING.read().unwrap().network.wg_start_port,
         };
         tm
     }
@@ -209,7 +209,7 @@ impl TunnelManager {
         let tunnel = self.get_if(&their_ip);
 
         let my_id = LocalIdentity {
-            global: SETTING.get_identity(),
+            global: SETTING.read().unwrap().get_identity(),
             local_ip: self.ki.get_link_local_reply_ip(their_ip).unwrap(),
             wg_port: tunnel.listen_port,
         };
@@ -231,7 +231,7 @@ impl TunnelManager {
         let local_ip = self.ki.get_link_local_reply_ip(requester.local_ip).unwrap();
 
         LocalIdentity {
-            global: SETTING.get_identity(),
+            global: SETTING.read().unwrap().get_identity(),
             local_ip,
             wg_port: tunnel.listen_port,
         }
@@ -246,11 +246,11 @@ impl TunnelManager {
             tunnel.listen_port,
             &SocketAddr::new(their_id.local_ip, their_id.wg_port),
             &their_id.global.wg_public_key,
-            Path::new(&SETTING.network.wg_private_key_path),
-            &SETTING.network.own_ip,
+            Path::new(&SETTING.read().unwrap().network.wg_private_key_path),
+            &SETTING.read().unwrap().network.own_ip,
         )?;
 
-        let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port)
+        let mut babel = Babel::new(&format!("[::1]:{}", SETTING.read().unwrap().network.babel_port)
             .parse()
             .unwrap());
         babel.monitor(&tunnel.iface_name)?;
