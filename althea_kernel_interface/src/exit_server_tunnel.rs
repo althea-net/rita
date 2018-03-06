@@ -10,11 +10,15 @@ pub struct ExitClient {
     pub internal_ip: IpAddr,
     pub public_key: String,
     pub mesh_ip: IpAddr,
-    pub port: u16
+    pub port: u16,
 }
 
 impl KernelInterface {
-    pub fn set_exit_wg_config(&self, clients: Vec<(ExitClient)>, listen_port: u16) -> Result<(), Error> {
+    pub fn set_exit_wg_config(
+        &self,
+        clients: Vec<(ExitClient)>,
+        listen_port: u16,
+    ) -> Result<(), Error> {
         let command = "wg".to_string();
 
         let mut args = Vec::new();

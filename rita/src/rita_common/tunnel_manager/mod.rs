@@ -250,8 +250,10 @@ impl TunnelManager {
             &SETTING.read().unwrap().network.own_ip,
         )?;
 
-        let mut babel = Babel::new(&format!("[::1]:{}", SETTING.read().unwrap().network.babel_port)
-            .parse()
+        let mut babel = Babel::new(&format!(
+            "[::1]:{}",
+            SETTING.read().unwrap().network.babel_port
+        ).parse()
             .unwrap());
         babel.monitor(&tunnel.iface_name)?;
         Ok(())

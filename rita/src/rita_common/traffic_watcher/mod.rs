@@ -73,9 +73,11 @@ impl Handler<Watch> for TrafficWatcher {
 /// (should return 0)
 pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
     let ki = KernelInterface {};
-    let mut babel = Babel::new(&format!("[::1]:{}", SETTING.read().unwrap().network.babel_port)
-        .parse()
-        .unwrap());
+    let mut babel = Babel::new(
+        &format!("[::1]:{}", SETTING.read().unwrap().network.babel_port)
+            .parse()
+            .unwrap(),
+    );
 
     trace!("Getting routes");
     let routes = babel.parse_routes()?;
