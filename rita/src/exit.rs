@@ -57,7 +57,7 @@ mod rita_exit;
 mod rita_common;
 
 use rita_common::network_endpoints::{hello_response, make_payments};
-use rita_exit::network_endpoints::{get_debt, hello_response_exit};
+use rita_exit::network_endpoints::{get_debt, setup_request};
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
@@ -114,7 +114,7 @@ fn main() {
             .resource("/make_payment", |r| r.h(make_payments))
             .resource("/hello", |r| r.h(hello_response))
             // Exit stuff
-            .resource("/exit_hello", |r| r.h(hello_response_exit))
+            .resource("/setup", |r| r.h(setup_request))
             .resource("/get_debt", |r| r.h(get_debt))
     }).bind(format!(
         "[::0]:{}",

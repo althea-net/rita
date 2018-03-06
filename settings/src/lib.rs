@@ -98,10 +98,10 @@ pub struct ExitNetworkSettings {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RitaExitSettings {
+    pub db_file: String,
     pub payment: PaymentSettings,
     pub network: NetworkSettings,
     pub exit_network: ExitNetworkSettings,
-    pub db_file: String,
 }
 
 fn spawn_watch_thread<'de, T: 'static>(

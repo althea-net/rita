@@ -1,8 +1,8 @@
-use schema::client;
+use schema::clients;
 use std::net::IpAddr;
 
 #[derive(Queryable, Serialize, Deserialize, Debug, Insertable, Clone, AsChangeset)]
-#[table_name = "client"]
+#[table_name = "clients"]
 pub struct Client {
     pub mesh_ip: String,
     pub wg_pubkey: String,
