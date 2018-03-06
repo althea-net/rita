@@ -4,18 +4,9 @@ extern crate log;
 #[macro_use]
 extern crate failure;
 
-use std::fs::File;
-use std::io::{Read, Write};
-use std::path::Path;
-use std::net::{SocketAddr, TcpStream};
-use std::time::Duration;
-use std::collections::HashMap;
+use std::net::IpAddr;
 
 extern crate settings;
-use settings::RitaSettings; //we should have one settings struct shared
-
-extern crate docopt;
-use docopt::Docopt;
 
 extern crate ipgen;
 extern crate rand;
@@ -34,8 +25,6 @@ extern crate althea_types;
 
 extern crate simple_logger;
 
-#[macro_use]
-extern crate lazy_static;
 
 #[derive(Debug, Fail)]
 pub enum CluError {
@@ -50,7 +39,9 @@ fn openwrt_generate_and_set_wg_keys(SETTINGS: &mut settings::RitaSettings) -> Re
     let wg_private_key = &keys[1];
 
     let ret = ki.set_uci_var("network.wgExit.private_key", &wg_private_key);
+    ret.expect("Failed to set UCI var! {:?}");
     let ret = ki.uci_commit();
+    ret.expect("Failed to commit UCI changes!");
 
     //Mutates settings, intentional side effect
     SETTINGS.network.wg_private_key = wg_private_key.to_string();
@@ -77,17 +68,21 @@ fn openwrt_generate_and_set_mesh_ip(SETTINGS: &mut settings::RitaSettings) -> Re
     Ok(())
 }
 
-fn openwrt_validate_wg_key(key: &str) -> bool {
-    let empty_string = "".to_string();
-    if key == empty_string || key.len() != 45 {
+fn validate_wg_key(key: &str) -> bool {
+    if key.len() != 44 || !key.ends_with("=") {
         false
     } else {
         true
     }
 }
 
-fn openwrt_validate_mesh_ip() -> Result<(), Error> {
-    Ok(())
+fn validate_mesh_ip(ip: &IpAddr) -> bool {
+    if !ip.is_ipv6() || ip.is_unspecified() {
+        false
+    }
+    else {
+        true
+    }
 }
 
 fn openwrt_validate_exit_setup() -> Result<(), Error> {
@@ -118,15 +113,14 @@ fn openwrt_init(mut SETTINGS: settings::RitaSettings) -> Result<(), Error> {
     let privkey = SETTINGS.network.wg_private_key.clone();
     let pubkey = SETTINGS.network.wg_public_key.clone();
     let mesh_ip = SETTINGS.network.own_ip.clone();
-    let exit_ip = SETTINGS.exit_client.exit_ip.clone();
     let our_exit_ip = SETTINGS.exit_client.exit_ip.clone();
 
     request_own_exit_ip(&mut SETTINGS);
     trace!("Exit ip request exited");
-    if openwrt_validate_wg_key(&privkey) || openwrt_validate_wg_key(&pubkey) {
+    if validate_wg_key(&privkey) || validate_wg_key(&pubkey) {
         openwrt_generate_and_set_wg_keys(&mut SETTINGS);
     }
-    if !mesh_ip.is_ipv6() && !mesh_ip.is_unspecified() {
+    if validate_mesh_ip(&mesh_ip) {
         openwrt_generate_and_set_mesh_ip(&mut SETTINGS);
     }
     if !our_exit_ip.is_ipv4() && !our_exit_ip.is_unspecified() {
@@ -135,32 +129,35 @@ fn openwrt_init(mut SETTINGS: settings::RitaSettings) -> Result<(), Error> {
     Ok(())
 }
 
-//fn openwrt_generate_and_set_wg_keys
-const USAGE: &'static str = "
-Usage: clu --config <settings> --default <default>
-Options:
-    --config   Name of config file
-    --default   Name of default config file
-";
-
-fn main() {
-    let args = Docopt::new(USAGE)
-        .and_then(|d| d.parse())
-        .unwrap_or_else(|e| e.exit());
-
-    let settings_file = args.get_str("<settings>");
-    let defaults_file = args.get_str("<default>");
-
-    let mut SETTINGS = RitaSettings::new(settings_file, defaults_file).unwrap();
-    simple_logger::init().unwrap();
-    trace!("Starting");
-    println!("{:?}", openwrt_init(SETTINGS));
-}
-
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    fn test_validate_wg_key() {
+        let good_key = "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk=";
+        let bad_key1 = "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpXk=";
+        let bad_key2 = "look at me, I'm the same length as a key but";
+        assert_eq!(validate_wg_key(&good_key), true);
+        assert_eq!(validate_wg_key(&bad_key1), false);
+        assert_eq!(validate_wg_key(&bad_key2), false);
+    }
+
+    #[test]
+    fn test_generate_wg_key() {
+        let mut ki = KernelInterface{};
+        let keys = ki.create_wg_keypair().unwrap();
+        let wg_public_key = &keys[0];
+        let wg_private_key = &keys[1];
+        assert_eq!(validate_wg_key(&wg_public_key), true);
+        assert_eq!(validate_wg_key(&wg_private_key), true);
+    }
+
+    #[test]
+    fn test_validate_mesh_ip() {
+        let good_ip = "fd44:94c:41e2::9e6".parse::<IpAddr>().unwrap();
+        let bad_ip = "192.168.1.1".parse::<IpAddr>().unwrap();
+        assert_eq!(validate_mesh_ip(&good_ip), true);
+        assert_eq!(validate_mesh_ip(&bad_ip), false);
     }
 }
