@@ -56,7 +56,7 @@ impl KernelInterface {
 }
 
 #[test]
-fn test_create_wg_key_linux() {
+fn test_create_wg_key() {
     use std::process::Output;
     use std::process::ExitStatus;
     use std::cell::RefCell;
