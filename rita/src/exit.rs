@@ -50,13 +50,13 @@ use actix_web::*;
 extern crate althea_kernel_interface;
 extern crate althea_types;
 extern crate babel_monitor;
-extern crate num256;
 extern crate exit_db;
+extern crate num256;
 
 mod rita_exit;
 mod rita_common;
 
-use rita_common::network_endpoints::{make_payments, hello_response};
+use rita_common::network_endpoints::{hello_response, make_payments};
 use rita_exit::network_endpoints::{get_debt, hello_response_exit};
 
 use diesel::prelude::*;
@@ -92,7 +92,10 @@ lazy_static! {
 fn main() {
     env_logger::init().unwrap();
     trace!("Starting");
-    trace!("Starting with Identity: {:?}", SETTING.read().unwrap().get_identity());
+    trace!(
+        "Starting with Identity: {:?}",
+        SETTING.read().unwrap().get_identity()
+    );
 
     let system = actix::System::new(format!("main {}", SETTING.read().unwrap().network.own_ip));
 
@@ -113,7 +116,10 @@ fn main() {
             // Exit stuff
             .resource("/exit_hello", |r| r.h(hello_response_exit))
             .resource("/get_debt", |r| r.h(get_debt))
-    }).bind(format!("[::0]:{}", SETTING.read().unwrap().network.rita_port))
+    }).bind(format!(
+        "[::0]:{}",
+        SETTING.read().unwrap().network.rita_port
+    ))
         .unwrap()
         .start();
 

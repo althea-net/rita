@@ -1,12 +1,12 @@
 use std::net::IpAddr;
 
 extern crate config;
-use config::{ConfigError, Config, File, Environment};
+use config::{Config, ConfigError, Environment, File};
 
+extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate serde;
-use serde::{Deserialize};
+use serde::Deserialize;
 
 extern crate docopt;
 use docopt::Docopt;
@@ -34,12 +34,12 @@ lazy_static! {
 
 #[derive(Debug, Deserialize)]
 pub struct ServerSettings {
-    pub bind_ip: IpAddr
+    pub bind_ip: IpAddr,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Settings {
-    pub server: ServerSettings
+    pub server: ServerSettings,
 }
 
 impl Settings {

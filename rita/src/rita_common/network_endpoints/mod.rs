@@ -35,16 +35,12 @@ pub fn make_payments(req: HttpRequest) -> Box<Future<Item = HttpResponse, Error 
     req.body()
         .from_err()
         .and_then(move |bytes: Bytes| {
-            trace!(
-                "Payment body: {:?}",
-                bytes,
-            );
+            trace!("Payment body: {:?}", bytes,);
             let pmt: PaymentTx = serde_json::from_slice(&bytes[..]).unwrap();
 
-            trace!(
-                "Received payment: {:?}",
-                pmt, );
-            PaymentController::from_registry().do_send(rita_common::payment_controller::PaymentReceived(pmt));
+            trace!("Received payment: {:?}", pmt,);
+            PaymentController::from_registry()
+                .do_send(rita_common::payment_controller::PaymentReceived(pmt));
             Ok(httpcodes::HTTPOk.into())
         })
         .responder()
@@ -59,10 +55,7 @@ pub fn hello_response(req: HttpRequest) -> Box<Future<Item = Json<LocalIdentity>
     req.body()
         .from_err()
         .and_then(move |bytes: Bytes| {
-            trace!(
-                "Hello body: {:?}",
-                bytes,
-            );
+            trace!("Hello body: {:?}", bytes,);
             let their_id: LocalIdentity = serde_json::from_slice(&bytes[..]).unwrap();
 
             trace!("Received neighbour identity, Payment: {:?}", their_id);

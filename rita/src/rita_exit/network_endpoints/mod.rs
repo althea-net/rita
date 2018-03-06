@@ -57,9 +57,12 @@ pub fn get_debt(req: HttpRequest) -> Box<Future<Item = Json<Uint256>, Error = Er
 }
 
 pub fn hello_response_exit(req: HttpRequest) -> Result<Json<LocalIdentity>, Error> {
-    trace!("Saying exit hello back to {:?}", req.connection_info().remote());
+    trace!(
+        "Saying exit hello back to {:?}",
+        req.connection_info().remote()
+    );
 
-    Ok(Json(LocalIdentity{
+    Ok(Json(LocalIdentity {
         global: SETTING.read().unwrap().get_identity(),
         local_ip: SETTING.read().unwrap().get_identity().mesh_ip,
         wg_port: SETTING.read().unwrap().exit_network.wg_tunnel_port,

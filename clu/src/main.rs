@@ -4,7 +4,7 @@ extern crate log;
 #[macro_use]
 extern crate failure;
 
-use std::fs::{File};
+use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::net::{SocketAddr, TcpStream};
@@ -43,8 +43,8 @@ pub enum CluError {
     RuntimeError(String),
 }
 
-fn openwrt_generate_and_set_wg_keys(SETTINGS :&mut settings::RitaSettings) -> Result<(), Error> {
-    let mut ki = KernelInterface{};
+fn openwrt_generate_and_set_wg_keys(SETTINGS: &mut settings::RitaSettings) -> Result<(), Error> {
+    let mut ki = KernelInterface {};
     let keys = ki.create_wg_keypair()?;
     let wg_public_key = &keys[0];
     let wg_private_key = &keys[1];
@@ -59,10 +59,10 @@ fn openwrt_generate_and_set_wg_keys(SETTINGS :&mut settings::RitaSettings) -> Re
     Ok(())
 }
 
-fn openwrt_generate_and_set_mesh_ip(SETTINGS :&mut settings::RitaSettings) -> Result<(), Error> {
-    let mut ki = KernelInterface{};
-    let seed = rand::thread_rng().gen::<[u8;10]>();
-    let mesh_ip = ipgen::ip(std::str::from_utf8(&seed)?,"fd::/120").unwrap();
+fn openwrt_generate_and_set_mesh_ip(SETTINGS: &mut settings::RitaSettings) -> Result<(), Error> {
+    let mut ki = KernelInterface {};
+    let seed = rand::thread_rng().gen::<[u8; 10]>();
+    let mesh_ip = ipgen::ip(std::str::from_utf8(&seed)?, "fd::/120").unwrap();
     let ifaces = SETTINGS.network.babel_interfaces.split(" ");
 
     // Mutates Settings intentional side effect
@@ -81,8 +81,7 @@ fn openwrt_validate_wg_key(key: &str) -> bool {
     let empty_string = "".to_string();
     if key == empty_string || key.len() != 45 {
         false
-    }
-    else {
+    } else {
         true
     }
 }
@@ -91,20 +90,19 @@ fn openwrt_validate_mesh_ip() -> Result<(), Error> {
     Ok(())
 }
 
-
 fn openwrt_validate_exit_setup() -> Result<(), Error> {
     Ok(())
 }
 
-fn request_own_exit_ip(SETTINGS :&mut settings::RitaSettings) -> Result<(), Error> {
+fn request_own_exit_ip(SETTINGS: &mut settings::RitaSettings) -> Result<(), Error> {
     let exit_server = SETTINGS.exit_client.exit_ip;
-    let ident = althea_types::ExitIdentity{
+    let ident = althea_types::ExitIdentity {
         global: SETTINGS.get_identity(),
-        wg_port: SETTINGS.exit_client.wg_listen_port.clone()
+        wg_port: SETTINGS.exit_client.wg_listen_port.clone(),
     };
 
-    let endpoint = "http://".to_string()+&exit_server.to_string()+":"
-    +&SETTINGS.exit_client.exit_registration_port.to_string()+"/setup";
+    let endpoint = "http://".to_string() + &exit_server.to_string() + ":"
+        + &SETTINGS.exit_client.exit_registration_port.to_string() + "/setup";
 
     trace!("Sending exit setup request to {:?}", endpoint);
     let client = reqwest::Client::new();
@@ -116,7 +114,7 @@ fn request_own_exit_ip(SETTINGS :&mut settings::RitaSettings) -> Result<(), Erro
 }
 
 // Replacement for the setup.ash file in althea firmware
-fn openwrt_init(mut SETTINGS :settings::RitaSettings) -> Result<(), Error> {
+fn openwrt_init(mut SETTINGS: settings::RitaSettings) -> Result<(), Error> {
     let privkey = SETTINGS.network.wg_private_key.clone();
     let pubkey = SETTINGS.network.wg_public_key.clone();
     let mesh_ip = SETTINGS.network.own_ip.clone();

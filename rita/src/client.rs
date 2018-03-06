@@ -81,7 +81,10 @@ lazy_static! {
 fn main() {
     env_logger::init().unwrap();
     trace!("Starting");
-    trace!("Starting with Identity: {:?}", SETTING.read().unwrap().get_identity());
+    trace!(
+        "Starting with Identity: {:?}",
+        SETTING.read().unwrap().get_identity()
+    );
 
     let system = actix::System::new(format!("main {}", SETTING.read().unwrap().network.own_ip));
 
@@ -96,7 +99,10 @@ fn main() {
         Application::new()
             .resource("/make_payment", |r| r.h(make_payments))
             .resource("/hello", |r| r.h(hello_response))
-    }).bind(format!("[::0]:{}", SETTING.read().unwrap().network.rita_port))
+    }).bind(format!(
+        "[::0]:{}",
+        SETTING.read().unwrap().network.rita_port
+    ))
         .unwrap()
         .start();
 

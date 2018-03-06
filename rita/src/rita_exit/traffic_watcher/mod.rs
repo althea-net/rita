@@ -65,9 +65,11 @@ impl Handler<Watch> for TrafficWatcher {
 /// This traffic watcher watches how much traffic each we send and receive from each client.
 pub fn watch(clients: Vec<Identity>) -> Result<(), Error> {
     let ki = KernelInterface {};
-    let mut babel = Babel::new(&format!("[::1]:{}", SETTING.read().unwrap().network.babel_port)
-        .parse()
-        .unwrap());
+    let mut babel = Babel::new(
+        &format!("[::1]:{}", SETTING.read().unwrap().network.babel_port)
+            .parse()
+            .unwrap(),
+    );
 
     trace!("Getting routes");
     let routes = babel.parse_routes()?;
@@ -152,4 +154,3 @@ mod tests {
         assert_eq!(2 + 2, 4);
     }
 }
-

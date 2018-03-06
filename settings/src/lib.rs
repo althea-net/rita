@@ -19,14 +19,14 @@ extern crate serde_json;
 extern crate althea_kernel_interface;
 
 extern crate notify;
-use notify::{RecommendedWatcher, DebouncedEvent, Watcher, RecursiveMode};
+use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 
 use std::net::IpAddr;
 use std::path::Path;
 use std::fs::File;
 use std::io::Write;
 use std::thread;
-use std::sync::{RwLock, Arc};
+use std::sync::{Arc, RwLock};
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
@@ -73,7 +73,7 @@ pub struct ExitClientSettings {
     pub exit_registration_port: u16,
     pub wg_listen_port: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<ExitClientDetails>
+    pub details: Option<ExitClientDetails>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -104,8 +104,14 @@ pub struct RitaExitSettings {
     pub db_file: String,
 }
 
-fn spawn_watch_thread<'de, T: 'static>(settings: Arc<RwLock<T>>, mut config: Config, file_path: &str) -> Result<(), Error>
-    where T: serde::Deserialize<'de> + Sync + Send + std::fmt::Debug {
+fn spawn_watch_thread<'de, T: 'static>(
+    settings: Arc<RwLock<T>>,
+    mut config: Config,
+    file_path: &str,
+) -> Result<(), Error>
+where
+    T: serde::Deserialize<'de> + Sync + Send + std::fmt::Debug,
+{
     let (tx, rx) = channel();
 
     let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_secs(2)).unwrap();
@@ -113,7 +119,6 @@ fn spawn_watch_thread<'de, T: 'static>(settings: Arc<RwLock<T>>, mut config: Con
     watcher
         .watch(file_path, RecursiveMode::NonRecursive)
         .unwrap();
-
 
     thread::spawn(move || {
         loop {
@@ -162,22 +167,29 @@ impl RitaSettings {
 
         let settings = Arc::new(RwLock::new(settings));
 
-        spawn_watch_thread(settings.clone(), s,file_name);
+        spawn_watch_thread(settings.clone(), s, file_name);
 
         Ok(settings)
     }
 
     pub fn get_identity(&self) -> Identity {
-        let ki = KernelInterface{};
-        Identity::new(self.network.own_ip.clone(), self.payment.eth_address.clone(),
-                      ki.get_wg_pubkey(Path::new(&self.network.wg_private_key_path)).unwrap())
+        let ki = KernelInterface {};
+        Identity::new(
+            self.network.own_ip.clone(),
+            self.payment.eth_address.clone(),
+            ki.get_wg_pubkey(Path::new(&self.network.wg_private_key_path))
+                .unwrap(),
+        )
     }
 
     pub fn get_exit_id(&self) -> Option<Identity> {
         let details = self.exit_client.details.clone()?;
 
-        Some(Identity::new(self.exit_client.exit_ip.clone(), details.eth_address.clone(), details.wg_public_key.clone()))
-
+        Some(Identity::new(
+            self.exit_client.exit_ip.clone(),
+            details.eth_address.clone(),
+            details.wg_public_key.clone(),
+        ))
     }
 
     pub fn write(&self, file_name: &str) -> Result<(), Error> {
@@ -212,16 +224,20 @@ impl RitaExitSettings {
 
         let settings = Arc::new(RwLock::new(settings));
 
-        spawn_watch_thread(settings.clone(), s,file_name);
+        spawn_watch_thread(settings.clone(), s, file_name);
 
         Ok(settings)
     }
 
     pub fn get_identity(&self) -> Identity {
-        let ki = KernelInterface{};
+        let ki = KernelInterface {};
 
-        Identity::new(self.network.own_ip.clone(), self.payment.eth_address.clone(),
-                      ki.get_wg_pubkey(Path::new(&self.network.wg_private_key_path)).unwrap())
+        Identity::new(
+            self.network.own_ip.clone(),
+            self.payment.eth_address.clone(),
+            ki.get_wg_pubkey(Path::new(&self.network.wg_private_key_path))
+                .unwrap(),
+        )
     }
 
     pub fn write(&self, file_name: &str) -> Result<(), Error> {

@@ -18,7 +18,7 @@ use exit_db::models::Client;
 use failure::Error;
 
 use SETTING;
-use althea_kernel_interface::{KernelInterface, ExitClient};
+use althea_kernel_interface::{ExitClient, KernelInterface};
 
 use althea_types::Identity;
 
@@ -42,19 +42,19 @@ impl Message for Tick {
 }
 
 fn to_identity(client: Client) -> Identity {
-    Identity{
+    Identity {
         mesh_ip: client.mesh_ip.parse().unwrap(),
         eth_address: SETTING.read().unwrap().payment.eth_address, // we should never be paying them, but if somehow we do, it goes back to us
-        wg_public_key: client.wg_pubkey
+        wg_public_key: client.wg_pubkey,
     }
 }
 
 fn to_exit_client(client: Client) -> ExitClient {
-    ExitClient{
+    ExitClient {
         mesh_ip: client.mesh_ip.parse().unwrap(),
         internal_ip: client.internal_ip.parse().unwrap(),
         port: client.wg_port.parse().unwrap(),
-        public_key: client.wg_pubkey
+        public_key: client.wg_pubkey,
     }
 }
 
@@ -63,20 +63,28 @@ impl Handler<Tick> for RitaLoop {
     fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
         trace!("Tick!");
 
-        DbClient::from_registry().send(ListClients{})
+        DbClient::from_registry()
+            .send(ListClients {})
             .into_actor(self)
             .and_then(|res, act, ctx| {
                 let clients = res.unwrap();
-                let ids = clients.clone().into_iter().map(|c| to_identity(c)).collect();
+                let ids = clients
+                    .clone()
+                    .into_iter()
+                    .map(|c| to_identity(c))
+                    .collect();
                 TrafficWatcher::from_registry().do_send(Watch(ids));
 
-                let ki = KernelInterface{};
+                let ki = KernelInterface {};
                 let wg_clients = clients.into_iter().map(|c| to_exit_client(c)).collect();
 
-                ki.set_exit_wg_config(wg_clients, SETTING.read().unwrap().exit_network.wg_tunnel_port);
+                ki.set_exit_wg_config(
+                    wg_clients,
+                    SETTING.read().unwrap().exit_network.wg_tunnel_port,
+                );
 
                 actix::fut::ok(())
-        });
+            });
 
         Ok(())
     }

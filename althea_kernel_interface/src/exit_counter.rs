@@ -12,21 +12,21 @@ use failure::Error;
 #[derive(Debug, Eq, PartialEq)]
 pub enum ExitFilterTarget {
     Input,
-    Output
+    Output,
 }
 
 impl ExitFilterTarget {
     pub fn table(&self) -> &str {
         match self {
             &ExitFilterTarget::Input => "INPUT",
-            &ExitFilterTarget::Output => "OUTPUT"
+            &ExitFilterTarget::Output => "OUTPUT",
         }
     }
 
     pub fn set_name(&self) -> &str {
         match self {
             &ExitFilterTarget::Input => "rita_exit_input",
-            &ExitFilterTarget::Output => "rita_exit_output"
+            &ExitFilterTarget::Output => "rita_exit_output",
         }
     }
 }
@@ -37,10 +37,7 @@ fn parse_exit_ipset(input: &str) -> Result<HashMap<IpAddr, u64>, Error> {
     // example line `add aa fd::1 packets 28 bytes 2212`
     let reg = Regex::new(r"(?m)^add \S+ ([a-f0-9:]+) packets (\d+) bytes (\d+)")?;
     for caps in reg.captures_iter(input) {
-        map.insert(
-            IpAddr::from_str(&caps[1])?,
-            caps[4].parse::<u64>()?,
-        );
+        map.insert(IpAddr::from_str(&caps[1])?, caps[4].parse::<u64>()?);
     }
     Ok(map)
 }

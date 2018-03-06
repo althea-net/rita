@@ -1,11 +1,14 @@
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 
 extern crate env_logger;
 
-#[macro_use] extern crate rouille;
+#[macro_use]
+extern crate rouille;
 use rouille::{Request, Response};
 
-#[macro_use] extern crate diesel;
+#[macro_use]
+extern crate diesel;
 
 use diesel::prelude::*;
 use diesel::select;
@@ -27,7 +30,6 @@ use exit_db::schema::client::dsl::*;
 
 extern crate althea_types;
 use althea_types::ExitIdentity;
-
 
 pub fn establish_connection() -> SqliteConnection {
     dotenv().ok();
@@ -77,12 +79,9 @@ fn setup(request: &Request, conn: &Mutex<SqliteConnection>) -> Response {
 
     trace!("Checking if record exists for {:?}", &c.internal_ip);
 
-    let exists = select(exists(
-        client
-        .filter(mesh_ip.eq(c.internal_ip.clone()))))
+    let exists = select(exists(client.filter(mesh_ip.eq(c.internal_ip.clone()))))
         .get_result(&*conn)
         .expect("Error loading statuses");
-
 
     if exists {
         trace!("record exists, updating");
