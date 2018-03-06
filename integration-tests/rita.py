@@ -11,6 +11,7 @@ import toml
 network_lab = os.path.join(os.path.dirname(__file__), "deps/network-lab/network-lab.sh")
 babeld = os.path.join(os.path.dirname(__file__), "deps/babeld/babeld")
 rita = os.path.join(os.path.dirname(__file__), "../target/debug/rita")
+rita_exit = os.path.join(os.path.dirname(__file__), "../target/debug/rita_exit")
 bounty = os.path.join(os.path.dirname(__file__), "../target/debug/bounty_hunter")
 ping6 = os.getenv('PING6', "ping6")
 
@@ -98,6 +99,8 @@ def start_bounty(id):
 def get_rita_defaults():
     return toml.load(open("../settings/default.toml"))
 
+def get_rita_exit_defaults():
+    return toml.load(open("../settings/default_exit.toml"))
 
 def save_rita_settings(id, x):
     toml.dump(x, open("rita-settings-n{}.toml".format(id), "w"))
@@ -115,6 +118,19 @@ def start_rita(id):
               'grep -Ev "<unknown>|mio" > rita-n{id}.log &'.format(id=id, rita=rita, pwd=dname))
 
 
+def start_rita_exit(id):
+    settings = get_rita_exit_defaults()
+    settings["network"]["own_ip"] = "fd::{}".format(id)
+    settings["network"]["wg_private_key_path"] = "{pwd}/private-key-{id}".format(id=id, pwd=dname)
+    settings["network"]["wg_private_key"] = get_wg_private_key()
+    settings["network"]["wg_public_key"] = get_wg_public_key(settings["network"]["wg_private_key"])
+    save_rita_settings(id, settings)
+    time.sleep(0.1)
+    os.system('(RUST_BACKTRACE=full RUST_LOG=trace ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml'
+              ' 2>&1 & echo $! > rita-n{id}.pid) | '
+              'grep -Ev "<unknown>|mio" > rita-n{id}.log &'.format(id=id, rita=rita_exit, pwd=dname))
+
+
 def assert_test(x, description):
     if x:
         print(colored(" + ", "green") + "{} Succeeded".format(description))
@@ -128,10 +144,16 @@ class World:
         self.nodes = {}
         self.connections = {}
         self.bounty = None
+        self.exit = None
 
     def add_node(self, node):
         assert node.id not in self.nodes
         self.nodes[node.id] = node
+
+    def add_exit_node(self, node):
+        assert node.id not in self.nodes
+        self.nodes[node.id] = node
+        self.exit = node.id
 
     def add_connection(self, connection):
         connection.canonicalize()
@@ -195,7 +217,10 @@ class World:
 
         print("starting rita")
         for id in self.nodes:
-            start_rita(id)
+            if id == self.exit:
+                start_rita_exit(id)
+            else:
+                start_rita(id)
             time.sleep(0.2)
         print("rita started")
 
@@ -264,11 +289,11 @@ def check_log_contains(f, x):
 
 
 if __name__ == "__main__":
-    a = Node(1, 10)  # TODO: Currently unspecified
+    a = Node(1, 10)
     b = Node(2, 25)
     c = Node(3, 60)
-    d = Node(4, 10)  # TODO: Currently unspecified
-    # e = Node(5, 10)  # TODO: Does not exist in diagram
+    d = Node(4, 10)
+    e = Node(5, 10)
     f = Node(6, 50)
     g = Node(7, 10)
 
@@ -277,7 +302,7 @@ if __name__ == "__main__":
     world.add_node(b)
     world.add_node(c)
     world.add_node(d)
-    # world.add_node(e)
+    world.add_exit_node(e)
     world.add_node(f)
     world.add_node(g)
 
@@ -287,6 +312,7 @@ if __name__ == "__main__":
     world.add_connection(Connection(b, c))
     world.add_connection(Connection(b, f))
     world.add_connection(Connection(b, d))
+    world.add_connection(Connection(e, g))
 
     world.set_bounty(3)  # TODO: Who should be the bounty hunter?
 

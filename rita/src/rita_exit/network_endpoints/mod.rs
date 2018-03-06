@@ -1,4 +1,4 @@
-use althea_types::{Identity, LocalIdentity, PaymentTx};
+use althea_types::{ExitIdentity, Identity, LocalIdentity, PaymentTx};
 use num256::Uint256;
 
 use actix;
@@ -13,6 +13,8 @@ use rita_common::payment_controller::PaymentController;
 
 use rita_common::debt_keeper;
 use rita_common::debt_keeper::{DebtKeeper, GetDebt};
+
+use rita_exit::db_client::{DbClient, SetupClient};
 
 use althea_kernel_interface::KernelInterface;
 
@@ -56,15 +58,24 @@ pub fn get_debt(req: HttpRequest) -> Box<Future<Item = Json<Uint256>, Error = Er
         .responder()
 }
 
-pub fn hello_response_exit(req: HttpRequest) -> Result<Json<LocalIdentity>, Error> {
-    trace!(
-        "Saying exit hello back to {:?}",
-        req.connection_info().remote()
-    );
+pub fn setup_request(req: HttpRequest) -> Box<Future<Item = Json<LocalIdentity>, Error = Error>> {
+    req.body()
+        .from_err()
+        .and_then(move |bytes: Bytes| {
+            trace!("setup request body: {:?}", bytes);
+            let their_id: ExitIdentity = serde_json::from_slice(&bytes[..]).unwrap();
 
-    Ok(Json(LocalIdentity {
-        global: SETTING.read().unwrap().get_identity(),
-        local_ip: SETTING.read().unwrap().get_identity().mesh_ip,
-        wg_port: SETTING.read().unwrap().exit_network.wg_tunnel_port,
-    }))
+            trace!("Received requester identity, {:?}", their_id);
+            DbClient::from_registry()
+                .send(SetupClient(their_id))
+                .from_err()
+                .and_then(move |reply| {
+                    Ok(Json(LocalIdentity {
+                        global: SETTING.read().unwrap().get_identity(),
+                        local_ip: reply.unwrap(),
+                        wg_port: SETTING.read().unwrap().exit_network.wg_tunnel_port,
+                    }))
+                })
+        })
+        .responder()
 }
