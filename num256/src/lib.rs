@@ -303,7 +303,7 @@ impl From<BigInt> for Int256 {
 }
 
 macro_rules! impl_from_int {
-    ($T:ty) => {
+    ($T: ty) => {
         impl From<$T> for Int256 {
             #[inline]
             fn from(n: $T) -> Self {
@@ -314,17 +314,17 @@ macro_rules! impl_from_int {
         impl From<$T> for Uint256 {
             #[inline]
             fn from(n: $T) -> Self {
-                if n.is_negative(){
+                if n.is_negative() {
                     panic!("negative")
                 }
                 Uint256(BigUint::from(n as u64))
             }
         }
-    }
+    };
 }
 
 macro_rules! impl_from_uint {
-    ($T:ty) => {
+    ($T: ty) => {
         impl From<$T> for Int256 {
             #[inline]
             fn from(n: $T) -> Self {
@@ -338,7 +338,7 @@ macro_rules! impl_from_uint {
                 Uint256(BigUint::from(n as u64))
             }
         }
-    }
+    };
 }
 
 impl_from_int!(i8);
@@ -567,15 +567,12 @@ mod tests {
     use serde_json;
 
     lazy_static! {
-      static ref BIGGEST_UINT: Uint256 =
-        Uint256(pow(BigUint::from(2 as u32), 256) - BigUint::from(1 as u32));
-
-      static ref BIGGEST_INT: Int256 = Int256(pow(BigInt::from(2), 255) - BigInt::from(1));
-
-      static ref SMALLEST_INT: Int256 = Int256(pow(BigInt::from(-2), 255) + BigInt::from(1));
-
-      static ref BIGGEST_INT_AS_UINT: Uint256 =
-        Uint256(pow(BigUint::from(2 as u32), 255) - BigUint::from(1 as u32));
+        static ref BIGGEST_UINT: Uint256 =
+            Uint256(pow(BigUint::from(2 as u32), 256) - BigUint::from(1 as u32));
+        static ref BIGGEST_INT: Int256 = Int256(pow(BigInt::from(2), 255) - BigInt::from(1));
+        static ref SMALLEST_INT: Int256 = Int256(pow(BigInt::from(-2), 255) + BigInt::from(1));
+        static ref BIGGEST_INT_AS_UINT: Uint256 =
+            Uint256(pow(BigUint::from(2 as u32), 255) - BigUint::from(1 as u32));
     }
 
     #[derive(Serialize, Deserialize, Debug)]

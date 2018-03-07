@@ -115,14 +115,10 @@ where
     let file_path = file_path.to_string();
 
     thread::spawn(move || {
-        let mut inotify = Inotify::init()
-            .expect("Failed to initialize inotify");
+        let mut inotify = Inotify::init().expect("Failed to initialize inotify");
 
         inotify
-            .add_watch(
-                &file_path,
-                WatchMask::MODIFY,
-            )
+            .add_watch(&file_path, WatchMask::MODIFY)
             .expect("Failed to add inotify watch");
 
         println!("Watching file for activity...");
