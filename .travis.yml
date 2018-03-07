@@ -13,7 +13,7 @@ before_install:
 env:
   - TEST_COMMAND="cargo install rustfmt-nightly --force && cargo fmt --all -- --write-mode=diff"
   - TEST_COMMAND="cargo build --verbose --all"
-  - TEST_COMMAND="cargo build --target powerpc64le-unknown-linux-gnu --verbose --all" PKG_CONFIG_ALLOW_CROSS=1
+  - TEST_COMMAND="PKG_CONFIG_ALLOW_CROSS=1 TARGET_CC=powerpc64le-linux-gnu-gcc TARGET_LD=powerpc64le-linux-gnu-ld TARGET_AR=powerpc64le-linux-gnu-ar HOST_CC=gcc CC=$TARGET_CC LD=$TARGET_LD cargo build --target powerpc64le-unknown-linux-gnu --verbose --all" 
   - TEST_COMMAND="cargo test --verbose --all" RUST_TEST_THREADS=1
   - TEST_COMMAND="./integration-tests/rita.sh"
 rust:
