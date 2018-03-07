@@ -77,8 +77,8 @@ Options:
 lazy_static! {
     pub static ref SETTING: Arc<RwLock<RitaExitSettings>> = {
         let args = Docopt::new(USAGE)
-        .and_then(|d| d.parse())
-        .unwrap_or_else(|e| e.exit());
+            .and_then(|d| d.parse())
+            .unwrap_or_else(|e| e.exit());
 
         let settings_file = args.get_str("<settings>");
         let defaults_file = args.get_str("<default>");

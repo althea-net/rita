@@ -25,7 +25,6 @@ extern crate althea_types;
 
 extern crate simple_logger;
 
-
 #[derive(Debug, Fail)]
 pub enum CluError {
     #[fail(display = "Runtime Error: {:?}", _0)]
@@ -79,8 +78,7 @@ fn validate_wg_key(key: &str) -> bool {
 fn validate_mesh_ip(ip: &IpAddr) -> bool {
     if !ip.is_ipv6() || ip.is_unspecified() {
         false
-    }
-    else {
+    } else {
         true
     }
 }
@@ -145,7 +143,7 @@ mod tests {
 
     #[test]
     fn test_generate_wg_key() {
-        let mut ki = KernelInterface{};
+        let mut ki = KernelInterface {};
         let keys = ki.create_wg_keypair().unwrap();
         let wg_public_key = &keys[0];
         let wg_private_key = &keys[1];
