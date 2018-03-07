@@ -18,8 +18,8 @@ extern crate serde_json;
 
 extern crate althea_kernel_interface;
 
-extern crate notify;
-use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
+extern crate inotify;
+use inotify::{Inotify, WatchMask};
 
 use std::net::IpAddr;
 use std::path::Path;
@@ -112,30 +112,33 @@ fn spawn_watch_thread<'de, T: 'static>(
 where
     T: serde::Deserialize<'de> + Sync + Send + std::fmt::Debug,
 {
-    let (tx, rx) = channel();
-
-    let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_secs(2)).unwrap();
-
-    watcher
-        .watch(file_path, RecursiveMode::NonRecursive)
-        .unwrap();
+    let file_path = file_path.to_string();
 
     thread::spawn(move || {
+        let mut inotify = Inotify::init()
+            .expect("Failed to initialize inotify");
+
+        inotify
+            .add_watch(
+                &file_path,
+                WatchMask::MODIFY,
+            )
+            .expect("Failed to add inotify watch");
+
+        println!("Watching file for activity...");
+
+        let mut buffer = [0u8; 4096];
         loop {
-            match rx.recv() {
-                Ok(DebouncedEvent::Write(_)) => {
-                    info!("config file written; refreshing configuration ...");
-                    let config = config.refresh().unwrap();
-                    let new_settings: T = config.clone().try_into().unwrap();
-                    info!("new config: {:#?}", new_settings);
-                    *settings.write().unwrap() = new_settings;
-                }
+            let events = inotify
+                .read_events_blocking(&mut buffer)
+                .expect("Failed to read inotify events");
 
-                Err(e) => warn!("watch error: {:?}", e),
-
-                _ => {
-                    // Ignore event
-                }
+            for event in events {
+                info!("config file written; refreshing configuration ...");
+                let config = config.refresh().unwrap();
+                let new_settings: T = config.clone().try_into().unwrap();
+                info!("new config: {:#?}", new_settings);
+                *settings.write().unwrap() = new_settings;
             }
         }
     });
