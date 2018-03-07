@@ -49,13 +49,13 @@ fn to_identity(client: Client) -> Identity {
     }
 }
 
-fn to_exit_client(client: Client) -> ExitClient {
-    ExitClient {
-        mesh_ip: client.mesh_ip.parse().unwrap(),
-        internal_ip: client.internal_ip.parse().unwrap(),
-        port: client.wg_port.parse().unwrap(),
+fn to_exit_client(client: Client) -> Result<ExitClient, Error> {
+    Ok(ExitClient {
+        mesh_ip: client.mesh_ip.parse()?,
+        internal_ip: client.internal_ip.parse()?,
+        port: client.wg_port.parse()?,
         public_key: client.wg_pubkey,
-    }
+    })
 }
 
 impl Handler<Tick> for RitaLoop {
@@ -63,11 +63,12 @@ impl Handler<Tick> for RitaLoop {
     fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
         trace!("Tick!");
 
+        ctx.spawn(
         DbClient::from_registry()
             .send(ListClients {})
             .into_actor(self)
-            .and_then(|res, act, ctx| {
-                let clients = res.unwrap();
+            .then(|res, act, ctx| {
+                let clients = res.unwrap().unwrap();
                 let ids = clients
                     .clone()
                     .into_iter()
@@ -76,7 +77,17 @@ impl Handler<Tick> for RitaLoop {
                 TrafficWatcher::from_registry().do_send(Watch(ids));
 
                 let ki = KernelInterface {};
-                let wg_clients = clients.into_iter().map(|c| to_exit_client(c)).collect();
+                let mut wg_clients = Vec::new();
+
+                trace!("got clients from db {:?}", clients);
+
+                for c in clients {
+                    if let Ok(c) = to_exit_client(c) {
+                        wg_clients.push(c);
+                    }
+                }
+
+                trace!("converted clients {:?}", wg_clients);
 
                 ki.set_exit_wg_config(
                     wg_clients,
@@ -84,7 +95,7 @@ impl Handler<Tick> for RitaLoop {
                 );
 
                 actix::fut::ok(())
-            });
+            }));
 
         Ok(())
     }
