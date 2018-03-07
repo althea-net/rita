@@ -6,6 +6,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use std::collections::HashMap;
 
+#[derive(Debug)]
 pub struct ExitClient {
     pub internal_ip: IpAddr,
     pub public_key: String,
@@ -33,7 +34,7 @@ impl KernelInterface {
             args.push("peer".into());
             args.push(format!("{}", c.public_key));
             args.push("endpoint".into());
-            args.push(format!("{}:{}", c.mesh_ip, c.port));
+            args.push(format!("[{}]:{}", c.mesh_ip, c.port));
             args.push("allowed-ips".into());
             args.push(format!("{}", c.internal_ip));
             args.push("persistent-keepalive".into());
