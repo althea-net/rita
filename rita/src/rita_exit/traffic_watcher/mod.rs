@@ -42,6 +42,10 @@ impl SystemService for TrafficWatcher {
         ki.init_exit_counter(&ExitFilterTarget::Input).unwrap();
         ki.init_exit_counter(&ExitFilterTarget::Output).unwrap();
 
+        ki.init_exit_counter(&ExitFilterTarget::Output).unwrap();
+
+        ki.setup_wg_if_named("wg_exit");
+
         info!("Traffic Watcher started");
     }
 }
@@ -110,7 +114,7 @@ pub fn watch(clients: Vec<Identity>) -> Result<(), Error> {
     }
 
     for (ip, bytes) in input_counters {
-        if destinations.contains_key(&ip) {
+        if identities.contains_key(&ip) && destinations.contains_key(&ip) {
             let id = identities[&ip].clone();
             *debts.get_mut(&id).unwrap() -= destinations[&ip].clone() * bytes;
         } else {
@@ -118,10 +122,10 @@ pub fn watch(clients: Vec<Identity>) -> Result<(), Error> {
         }
     }
 
-    trace!("Collated flow debts: {:?}", debts);
+    trace!("Collated exit flow debts: {:?}", debts);
 
     for (ip, bytes) in output_counters {
-        if destinations.contains_key(&ip) {
+        if identities.contains_key(&ip) && destinations.contains_key(&ip) {
             let id = identities[&ip].clone();
             *debts.get_mut(&id).unwrap() -= destinations[&ip].clone() * bytes;
         } else {
@@ -129,7 +133,7 @@ pub fn watch(clients: Vec<Identity>) -> Result<(), Error> {
         }
     }
 
-    trace!("Collated total debts: {:?}", debts);
+    trace!("Collated total exit debts: {:?}", debts);
 
     for (from, amount) in debts {
         let update = debt_keeper::TrafficUpdate {

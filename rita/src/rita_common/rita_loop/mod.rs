@@ -46,7 +46,7 @@ impl Message for Tick {
 impl Handler<Tick> for RitaLoop {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
-        trace!("Tick!");
+        trace!("Common tick!");
 
         // let mut babel = Babel::new(&format!("[::1]:{}", SETTING.network.babel_port).parse().unwrap());
 
@@ -66,10 +66,7 @@ impl Handler<Tick> for RitaLoop {
                         .then(move |res, act, ctx| {
                             info!("loop completed in {:?}", start.elapsed());
                             info!("traffic watcher completed in {:?}", neigh.elapsed());
-                            ctx.run_later(Duration::from_secs(5), |act, ctx| {
-                                let addr: Address<Self> = ctx.address();
-                                addr.do_send(Tick);
-                            });
+                            ctx.notify_later(Tick {}, Duration::from_secs(5));
                             actix::fut::ok(())
                         })
                 }),

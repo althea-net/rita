@@ -20,4 +20,4 @@ wg_start_port = 60000
 babel_interfaces = "eth0 eth1"
 
 [exit_network]
-wg_tunnel_port = 12345
+wg_tunnel_port = 59999
