@@ -19,6 +19,7 @@ impl KernelInterface {
         &self,
         clients: Vec<(ExitClient)>,
         listen_port: u16,
+        private_key_path: &str,
     ) -> Result<(), Error> {
         let command = "wg".to_string();
 
@@ -28,7 +29,7 @@ impl KernelInterface {
         args.push("listen-port".into());
         args.push(format!("{}", listen_port));
         args.push("private-key".into());
-        args.push("priv".into());
+        args.push(private_key_path.to_string());
 
         for c in clients {
             args.push("peer".into());
@@ -49,7 +50,15 @@ impl KernelInterface {
             args_str.push(args[i].as_str())
         }
 
-        self.run_command(&command, &args_str[..]);
+        self.run_command(&command, &args_str[..])?;
+
+        let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "up"])?;
+        if !output.stderr.is_empty() {
+            return Err(KernelManagerError::RuntimeError(format!(
+                "received error setting wg interface up: {}",
+                String::from_utf8(output.stderr)?
+            )).into());
+        }
 
         Ok(())
     }

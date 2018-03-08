@@ -24,6 +24,7 @@ extern crate serde_derive;
 extern crate actix;
 extern crate actix_web;
 extern crate bytes;
+extern crate clu;
 extern crate docopt;
 extern crate env_logger;
 extern crate eui48;
@@ -57,10 +58,11 @@ mod rita_client;
 use rita_common::network_endpoints::{hello_response, make_payments};
 
 const USAGE: &'static str = "
-Usage: rita_common --config <settings> --default <default>
+Usage: rita_common --config <settings> --default <default> --platform <platform>
 Options:
     --config   Name of config file
     --default   Name of default config file
+    --platform   Platform (linux or openwrt)
 ";
 
 lazy_static! {
@@ -71,8 +73,12 @@ lazy_static! {
 
         let settings_file = args.get_str("<settings>");
         let defaults_file = args.get_str("<default>");
+        let platform = args.get_str("<platform>");
 
         let s = RitaSettings::new_watched(settings_file, defaults_file).unwrap();
+
+        clu::init(platform, settings_file, s.clone());
+
         s.read().unwrap().write(settings_file).unwrap();
         s
     };

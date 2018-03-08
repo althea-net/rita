@@ -113,7 +113,7 @@ def start_rita(id):
     settings["network"]["wg_public_key"] = get_wg_public_key(settings["network"]["wg_private_key"])
     save_rita_settings(id, settings)
     time.sleep(0.1)
-    os.system('(RUST_BACKTRACE=full RUST_LOG=trace ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml'
+    os.system('(RUST_BACKTRACE=full RUST_LOG=trace ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml --platform linux'
               ' 2>&1 & echo $! > rita-n{id}.pid) | '
               'grep -Ev "<unknown>|mio" > rita-n{id}.log &'.format(id=id, rita=rita, pwd=dname))
 

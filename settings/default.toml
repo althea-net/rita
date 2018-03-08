@@ -18,6 +18,6 @@ wg_start_port = 60000
 babel_interfaces = "eth0 eth1"
 
 [exit_client]
-exit_ip = "1.1.1.1"
-exit_registration_port = 1234
-wg_listen_port = 12345
+exit_ip = "fd::5"
+exit_registration_port = 4876
+wg_listen_port = 59999

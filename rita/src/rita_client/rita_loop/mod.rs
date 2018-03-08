@@ -46,14 +46,11 @@ impl Message for Tick {
 impl Handler<Tick> for RitaLoop {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
-        trace!("Tick!");
+        trace!("Client Tick!");
 
         ExitManager::from_registry().do_send(Tick {});
 
-        ctx.run_later(Duration::from_secs(5), |act, ctx| {
-            let addr: Address<Self> = ctx.address();
-            addr.do_send(Tick);
-        });
+        ctx.notify_later(Tick {}, Duration::from_secs(5));
 
         Ok(())
     }
