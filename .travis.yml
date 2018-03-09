@@ -4,16 +4,13 @@ before_install:
   - sudo add-apt-repository ppa:wireguard/wireguard -y
   - sudo add-apt-repository universe
   - sudo apt-get -qq update
-  - sudo apt-get install -y libsqlite3-dev iperf3 python3-pip bridge-utils wireguard linux-source linux-headers-$(uname -r) ipset binutils-powerpc64le-linux-gnu gcc-powerpc64le-linux-gnu cpp-powerpc64le-linux-gnu curl git libssl-dev pkg-config
+  - sudo apt-get install -y libsqlite3-dev iperf3 python3-pip bridge-utils wireguard linux-source linux-headers-$(uname -r) curl git libssl-dev pkg-config build-essential
   - sudo pip3 install -r integration-tests/requirements.txt
   - which diesel || cargo install diesel_cli --no-default-features --features sqlite
-  - rustup target add powerpc64le-unknown-linux-gnu
-  - rustup update
-  - sudo cp /usr/include/x86_64-linux-gnu/openssl/* /usr/include/openssl/
 env:
   - TEST_COMMAND="cargo install rustfmt-nightly --force && cargo fmt --all -- --write-mode=diff"
   - TEST_COMMAND="cargo build --verbose --all"
-  - TEST_COMMAND="PKG_CONFIG_ALLOW_CROSS=1 TARGET_CC=powerpc64le-linux-gnu-gcc TARGET_LD=powerpc64le-linux-gnu-ld TARGET_AR=powerpc64le-linux-gnu-ar HOST_CC=gcc CC=$TARGET_CC LD=$TARGET_LD cargo build --target powerpc64le-unknown-linux-gnu --verbose --all"
+  - TEST_COMMAND="./integration-tests/cross-build.sh"
   - TEST_COMMAND="cargo test --verbose --all" RUST_TEST_THREADS=1
   - TEST_COMMAND="./integration-tests/rita.sh"
 rust:
@@ -28,3 +25,7 @@ matrix:
     env: TEST_COMMAND="cargo install rustfmt-nightly --force && cargo fmt --all -- --write-mode=diff"
   - rust: beta
     env: TEST_COMMAND="cargo install rustfmt-nightly --force && cargo fmt --all -- --write-mode=diff"
+  - rust: stable
+    env: TEST_COMMAND="./integration-tests/cross-build.sh"
+  - rust: beta
+    env: TEST_COMMAND="./integration-tests/cross-build.sh"
