@@ -78,7 +78,11 @@ impl Handler<Hello> for HTTPSyncExecutor {
     fn handle(&mut self, msg: Hello, _: &mut Self::Context) -> Self::Result {
         let my_id = serde_json::to_string(&msg.my_id)?;
 
-        let mut stream = TcpStream::connect_timeout(&msg.to, Duration::from_secs(1))?;
+        let mut stream = TcpStream::connect_timeout(&msg.to, Duration::from_secs(1));
+
+        trace!("stream status {:?}, to: {:?}", stream, &msg.to);
+
+        let mut stream = stream?;
 
         // Format HTTP request
         let request = format!(
@@ -103,7 +107,11 @@ Content-Length: {}\r\n\r\n
         let mut resp = String::new();
         stream.read_to_string(&mut resp)?;
 
-        trace!("They replied {}", &resp);
+        trace!("{:?} replied {} END", msg.to, &resp);
+
+        if resp.len() == 0 {
+            panic!("{:?} replied with empty", &resp);
+        }
 
         if let Ok(response) = Response::new(resp.into_bytes()) {
             let mut identity: LocalIdentity = serde_json::from_str(&response.text())?;

@@ -29,6 +29,10 @@ build_rita () {
   pushd ../rita
   cargo build --all
   popd
+  pushd ../exit_db
+  rm -rf test.db
+  diesel migration run
+  popd
 }
 
 build_bounty () {
@@ -47,4 +51,5 @@ build_babel
 build_rita
 build_bounty
 
+pwd
 sudo python3 rita.py
