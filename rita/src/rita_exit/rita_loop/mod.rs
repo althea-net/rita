@@ -93,6 +93,7 @@ impl Handler<Tick> for RitaLoop {
                         wg_clients,
                         SETTING.read().unwrap().exit_network.wg_tunnel_port,
                         &SETTING.read().unwrap().network.wg_private_key_path,
+                        &"172.168.1.254".parse().unwrap(),
                     );
 
                     ctx.notify_later(Tick {}, Duration::from_secs(5));

@@ -141,6 +141,7 @@ fn linux_setup_exit_tunnel(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Res
         SETTINGS.read().unwrap().exit_client.wg_listen_port,
         details.internal_ip,
     );
+    ki.set_route_to_tunnel(&"172.168.1.254".parse()?);
     Ok(())
 }
 

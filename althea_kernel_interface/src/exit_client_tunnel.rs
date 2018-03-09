@@ -36,7 +36,13 @@ impl KernelInterface {
 
         let output = self.run_command(
             "ip",
-            &["address", "add", &format!("{}", local_ip), "dev", "wg_exit"],
+            &[
+                "address",
+                "add",
+                &format!("{}/24", local_ip),
+                "dev",
+                "wg_exit",
+            ],
         )?;
         if !output.stderr.is_empty() {
             return Err(KernelManagerError::RuntimeError(format!(
@@ -49,6 +55,21 @@ impl KernelInterface {
         if !output.stderr.is_empty() {
             return Err(KernelManagerError::RuntimeError(format!(
                 "received error setting wg interface up: {}",
+                String::from_utf8(output.stderr)?
+            )).into());
+        }
+
+        Ok(())
+    }
+
+    pub fn set_route_to_tunnel(&self, gateway: &IpAddr) -> Result<(), Error> {
+        let output = self.run_command(
+            "ip",
+            &["route", "add", "default", "via", &gateway.to_string()],
+        )?;
+        if !output.stderr.is_empty() {
+            return Err(KernelManagerError::RuntimeError(format!(
+                "received error setting ip route: {}",
                 String::from_utf8(output.stderr)?
             )).into());
         }

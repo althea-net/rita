@@ -21,6 +21,7 @@ abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
 
+
 def cleanup():
     os.system("rm -rf *.log *.pid *.toml")
     os.system("killall babeld rita bounty_hunter iperf")  # TODO: This is very inconsiderate
@@ -53,6 +54,7 @@ class Node:
             interfaces += "veth-{}-{} ".format(self.id, i)
         return interfaces
 
+
 class Connection:
     def __init__(self, a, b):
         self.a = a
@@ -64,11 +66,13 @@ class Connection:
             self.b = self.a
             self.a = t
 
+
 def get_wg_private_key():
     proc = subprocess.Popen(["wg", "genkey"], stdout=subprocess.PIPE)
     key = proc.stdout.read()
     print(key[0:44])
     return key[0:44].decode("utf-8")
+
 
 def get_wg_public_key(private_key):
     proc = subprocess.Popen(["wg", "pubkey"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
@@ -78,6 +82,7 @@ def get_wg_public_key(private_key):
     print(key[0:44])
     return key[0:44].decode("utf-8")
 
+
 def prep_netns(id):
     os.system("ip netns exec netlab-{} sysctl -w net.ipv4.ip_forward=1".format(id))
     os.system("ip netns exec netlab-{} sysctl -w net.ipv6.conf.all.forwarding=1".format(id))
@@ -85,25 +90,33 @@ def prep_netns(id):
 
 
 def start_babel(node):
-    os.system("ip netns exec netlab-{id} {0} -I babeld-n{id}.pid -d1 -L babeld-n{id}.log -h 1 -P {price} -G 8080 -w dummy &".
-              format(babeld, node.get_interfaces(), id=node.id, price=node.fwd_price))
+    os.system(
+        "ip netns exec netlab-{id} {0} -I babeld-n{id}.pid -d1 -L babeld-n{id}.log -h 1 -P {price} -G 8080 -w dummy &".
+        format(babeld, node.get_interfaces(), id=node.id, price=node.fwd_price))
+
 
 def create_dummy(id):
     os.system('ip netns exec netlab-{} brctl addbr dummy'.format(id))
     os.system('ip netns exec netlab-{} ip link set up dummy'.format(id))
 
+
 def start_bounty(id):
-    os.system('(RUST_BACKTRACE=full ip netns exec netlab-{id} {bounty} & echo $! > bounty-n{id}.pid) | grep -Ev "<unknown>|mio" > bounty-n{id}.log &'.format(id=id, bounty=bounty))
+    os.system(
+        '(RUST_BACKTRACE=full ip netns exec netlab-{id} {bounty} & echo $! > bounty-n{id}.pid) | grep -Ev "<unknown>|mio" > bounty-n{id}.log &'.format(
+            id=id, bounty=bounty))
 
 
 def get_rita_defaults():
     return toml.load(open("../settings/default.toml"))
 
+
 def get_rita_exit_defaults():
     return toml.load(open("../settings/default_exit.toml"))
 
+
 def save_rita_settings(id, x):
     toml.dump(x, open("rita-settings-n{}.toml".format(id), "w"))
+
 
 def start_rita(id):
     settings = get_rita_defaults()
@@ -113,9 +126,10 @@ def start_rita(id):
     settings["network"]["wg_public_key"] = get_wg_public_key(settings["network"]["wg_private_key"])
     save_rita_settings(id, settings)
     time.sleep(0.1)
-    os.system('(RUST_BACKTRACE=full RUST_LOG=trace ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml --platform linux'
-              ' 2>&1 & echo $! > rita-n{id}.pid) | '
-              'grep -Ev "<unknown>|mio" > rita-n{id}.log &'.format(id=id, rita=rita, pwd=dname))
+    os.system(
+        '(RUST_BACKTRACE=full RUST_LOG=trace ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml --platform linux'
+        ' 2>&1 & echo $! > rita-n{id}.pid) | '
+        'grep -Ev "<unknown>|mio" > rita-n{id}.log &'.format(id=id, rita=rita, pwd=dname))
 
 
 def start_rita_exit(id):
@@ -126,9 +140,10 @@ def start_rita_exit(id):
     settings["network"]["wg_public_key"] = get_wg_public_key(settings["network"]["wg_private_key"])
     save_rita_settings(id, settings)
     time.sleep(0.1)
-    os.system('(RUST_BACKTRACE=full RUST_LOG=trace ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml'
-              ' 2>&1 & echo $! > rita-n{id}.pid) | '
-              'grep -Ev "<unknown>|mio" > rita-n{id}.log &'.format(id=id, rita=rita_exit, pwd=dname))
+    os.system(
+        '(RUST_BACKTRACE=full RUST_LOG=trace ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml'
+        ' 2>&1 & echo $! > rita-n{id}.pid) | '
+        'grep -Ev "<unknown>|mio" > rita-n{id}.log &'.format(id=id, rita=rita_exit, pwd=dname))
 
 
 def assert_test(x, description):
@@ -139,12 +154,14 @@ def assert_test(x, description):
         global tests_passes
         tests_passes = False
 
+
 class World:
     def __init__(self):
         self.nodes = {}
         self.connections = {}
         self.bounty = None
         self.exit = None
+        self.external = None
 
     def add_node(self, node):
         assert node.id not in self.nodes
@@ -154,6 +171,11 @@ class World:
         assert node.id not in self.nodes
         self.nodes[node.id] = node
         self.exit = node.id
+
+    def add_external_node(self, node):
+        assert node.id not in self.nodes
+        self.nodes[node.id] = node
+        self.external = node.id
 
     def add_connection(self, connection):
         connection.canonicalize()
@@ -219,6 +241,8 @@ class World:
         for id in self.nodes:
             if id == self.exit:
                 start_rita_exit(id)
+            elif id == self.external:
+                pass
             else:
                 start_rita(id)
             time.sleep(0.2)
@@ -226,15 +250,22 @@ class World:
 
     @staticmethod
     def test_reach(id_from, id_to):
-        ping = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(id_from), ping6, "fd::{}".format(id_to), "-c", "1"], stdout=subprocess.PIPE)
+        ping = subprocess.Popen(
+            ["ip", "netns", "exec", "netlab-{}".format(id_from), ping6, "fd::{}".format(id_to),
+             "-c", "1"], stdout=subprocess.PIPE)
         output = ping.stdout.read().decode("utf-8")
         return "1 packets transmitted, 1 received, 0% packet loss" in output
 
     def test_reach_all(self):
         for i in self.nodes:
             for j in self.nodes:
-                assert_test(self.test_reach(i, j), "Reachability from node {} to {}".format(i, j))
-                assert_test(self.test_reach(j, i), "Reachability from node {} to {}".format(j, i))
+                if i == self.external or j == self.external:
+                    pass
+                else:
+                    assert_test(self.test_reach(i, j),
+                                "Reachability from node {} to {}".format(i, j))
+                    assert_test(self.test_reach(j, i),
+                                "Reachability from node {} to {}".format(j, i))
 
     def get_balances(self):
         s = 1
@@ -243,7 +274,9 @@ class World:
         balances = {}
 
         while s != 0 and n < 100:
-            status = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(self.bounty), "curl", "-s", "-g", "-6", "[::1]:8888/list"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            status = subprocess.Popen(
+                ["ip", "netns", "exec", "netlab-{}".format(self.bounty), "curl", "-s", "-g", "-6",
+                 "[::1]:8888/list"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             status.wait()
             output = status.stdout.read().decode("utf-8")
             status = json.loads(output)
@@ -259,14 +292,17 @@ class World:
             print("time {}, value {}".format(n, s))
 
         print("tried {} times".format(n))
-        print("sum = {}, magnitude = {}, error = {}".format(s, m, abs(s)/m))
+        print("sum = {}, magnitude = {}, error = {}".format(s, m, abs(s) / m))
         assert_test(s == 0 and m != 0, "Conservation of balance")
         return balances
 
     def gen_traffic(self, from_node, to_node, bytes):
-        server = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(to_node.id), "iperf3", "-s", "-V"])
+        server = subprocess.Popen(
+            ["ip", "netns", "exec", "netlab-{}".format(to_node.id), "iperf3", "-s", "-V"])
         time.sleep(0.1)
-        client = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(from_node.id), "iperf3", "-c", "fd::{}".format(to_node.id), "-V", "-n", str(bytes), "-Z"])
+        client = subprocess.Popen(
+            ["ip", "netns", "exec", "netlab-{}".format(from_node.id), "iperf3", "-c",
+             "fd::{}".format(to_node.id), "-V", "-n", str(bytes), "-Z"])
         client.wait()
         time.sleep(0.1)
         server.send_signal(signal.SIGINT)
@@ -276,6 +312,7 @@ class World:
 def traffic_diff(a, b):
     assert set(a.keys()) == set(b.keys())
     return {key: b[key] - a.get(key, 0) for key in b.keys()}
+
 
 def fuzzy_traffic(a, b):
     return b - 5e9 < a < b + 5e9
@@ -296,6 +333,7 @@ if __name__ == "__main__":
     e = Node(5, 10)
     f = Node(6, 50)
     g = Node(7, 10)
+    h = Node(8, 0)
 
     world = World()
     world.add_node(a)
@@ -305,6 +343,7 @@ if __name__ == "__main__":
     world.add_exit_node(e)
     world.add_node(f)
     world.add_node(g)
+    world.add_external_node(h)
 
     world.add_connection(Connection(a, f))
     world.add_connection(Connection(f, g))
@@ -313,6 +352,7 @@ if __name__ == "__main__":
     world.add_connection(Connection(b, f))
     world.add_connection(Connection(b, d))
     world.add_connection(Connection(e, g))
+    world.add_connection(Connection(e, h))
 
     world.set_bounty(3)  # TODO: Who should be the bounty hunter?
 
