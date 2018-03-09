@@ -132,12 +132,13 @@ impl PaymentController {
                 "Received error from bounty hunter: {:?}",
                 r.text().unwrap_or(String::from("No message received"))
             );
-            Err(Error::from(PaymentControllerError::BountyError(
-                String::from(format!(
-                    "Received error from bounty hunter: {:?}",
-                    r.text().unwrap_or(String::from("No message received"))
-                )),
-            )))
+            Ok(())
+            // Err(Error::from(PaymentControllerError::BountyError(
+            //     String::from(format!(
+            //         "Received error from bounty hunter: {:?}",
+            //         r.text().unwrap_or(String::from("No message received"))
+            //     )),
+            // )))
         }
     }
 
