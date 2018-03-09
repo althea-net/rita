@@ -52,4 +52,4 @@ build_rita
 build_bounty
 
 pwd
-sudo python3 rita.py
+sudo python3 rita.py "$@"

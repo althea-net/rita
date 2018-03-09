@@ -158,27 +158,55 @@ impl TunnelManager {
     /// Identity using `neighbor_inquiry` as well as their wireguard tunnel name
     pub fn get_neighbors(&mut self) -> ResponseFuture<Vec<(LocalIdentity, String)>, Error> {
         self.ki.trigger_neighbor_disc();
-        let neighs: Vec<Box<Future<Item = (LocalIdentity, String), Error = Error>>> = self.ki
-            .get_neighbors()
-            .unwrap()
-            .iter()
-            .filter_map(|&(mac_address, ip_address, ref dev)| {
-                trace!(
-                    "neighbor at interface {}, ip {}, mac {}",
-                    dev,
-                    ip_address,
-                    mac_address
-                );
-                if &dev[..2] != "wg" && is_link_local(ip_address) {
-                    {
-                        Some(self.neighbor_inquiry(ip_address, &dev))
+        let neighs: Vec<Box<Future<Item = Option<(LocalIdentity, String)>, Error = Error>>> =
+            self.ki
+                .get_neighbors()
+                .unwrap()
+                .iter()
+                .filter_map(|&(mac_address, ip_address, ref dev)| {
+                    trace!(
+                        "neighbor at interface {}, ip {}, mac {}",
+                        dev,
+                        ip_address,
+                        mac_address
+                    );
+                    if &dev[..2] != "wg" && is_link_local(ip_address) {
+                        {
+                            Some(
+                                Box::new(self.neighbor_inquiry(ip_address, &dev).then(|res| {
+                                    match res {
+                                        Ok(res) => futures::future::ok(Some(res)),
+                                        Err(err) => {
+                                            warn!("got error {:} from neighbor inquiry", err);
+                                            futures::future::ok(None)
+                                        }
+                                    }
+                                }))
+                                    as Box<
+                                        Future<
+                                            Item = Option<(LocalIdentity, String)>,
+                                            Error = Error,
+                                        >,
+                                    >,
+                            )
+                        }
+                    } else {
+                        None
                     }
-                } else {
-                    None
+                })
+                .collect();
+        Box::new(futures::future::join_all(neighs).then(|res| {
+            let mut output = Vec::new();
+            for i in res.unwrap() {
+                match i {
+                    Some(i) => {
+                        output.push(i);
+                    }
+                    _ => {}
                 }
-            })
-            .collect();
-        Box::new(futures::future::join_all(neighs))
+            }
+            futures::future::ok(output)
+        }))
     }
 
     /// Contacts one neighbor with our LocalIdentity to get their LocalIdentity and wireguard tunnel

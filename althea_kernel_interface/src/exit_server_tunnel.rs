@@ -20,6 +20,7 @@ impl KernelInterface {
         clients: Vec<(ExitClient)>,
         listen_port: u16,
         private_key_path: &str,
+        local_ip: &IpAddr,
     ) -> Result<(), Error> {
         let command = "wg".to_string();
 
@@ -52,6 +53,23 @@ impl KernelInterface {
 
         self.run_command(&command, &args_str[..])?;
 
+        let output = self.run_command(
+            "ip",
+            &[
+                "address",
+                "add",
+                &format!("{}/24", local_ip),
+                "dev",
+                "wg_exit",
+            ],
+        )?;
+        if !output.stderr.is_empty() {
+            return Err(KernelManagerError::RuntimeError(format!(
+                "received error adding wg link: {}",
+                String::from_utf8(output.stderr)?
+            )).into());
+        }
+
         let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "up"])?;
         if !output.stderr.is_empty() {
             return Err(KernelManagerError::RuntimeError(format!(
@@ -59,6 +77,25 @@ impl KernelInterface {
                 String::from_utf8(output.stderr)?
             )).into());
         }
+
+        Ok(())
+    }
+
+    pub fn setup_nat(&self, external_interface: &str) -> Result<(), Error> {
+        self.run_command(
+            "iptables",
+            &[
+                "-w",
+                "-t",
+                "nat",
+                "-A",
+                "POSTROUTING",
+                "-o",
+                external_interface,
+                "-j",
+                "MASQUERADE",
+            ],
+        )?;
 
         Ok(())
     }

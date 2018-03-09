@@ -45,6 +45,7 @@ impl SystemService for TrafficWatcher {
         ki.init_exit_counter(&ExitFilterTarget::Output).unwrap();
 
         ki.setup_wg_if_named("wg_exit");
+        ki.setup_nat(&SETTING.read().unwrap().exit_network.external_nic);
 
         info!("Traffic Watcher started");
     }

@@ -94,6 +94,7 @@ pub struct RitaSettings {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ExitNetworkSettings {
     pub wg_tunnel_port: u16,
+    pub external_nic: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
