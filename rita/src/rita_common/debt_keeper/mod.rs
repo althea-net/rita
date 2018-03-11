@@ -42,31 +42,6 @@ impl NodeDebtData {
             },
         }
     }
-
-    fn owes(&self) -> Uint256 {
-        let mut total = Int256::from(0u32);
-        for i in &self.debt_buffer {
-            total -= i; // debt buffer is negative
-        }
-        total -= &self.incoming_payments;
-        total -= &self.debt;
-        if total < Int256::from(0u32) {
-            Uint256::from(0u32)
-        } else {
-            Uint256::from(total)
-        }
-    }
-}
-
-#[test]
-fn test_node_debt_owes() {
-    let mut debt = NodeDebtData::new(5);
-
-    debt.incoming_payments = Int256::from(10);
-    debt.debt = Int256::from(-10);
-    debt.debt_buffer[1] = Int256::from(-30);
-
-    assert_eq!(debt.owes(), Uint256::from(30));
 }
 
 pub struct DebtKeeper {
@@ -135,14 +110,6 @@ impl Handler<TrafficUpdate> for DebtKeeper {
 
     fn handle(&mut self, msg: TrafficUpdate, _: &mut Context<Self>) -> Self::Result {
         self.traffic_update(msg.from, msg.amount)
-    }
-}
-
-impl Handler<GetDebt> for DebtKeeper {
-    type Result = Result<Uint256, ()>;
-
-    fn handle(&mut self, msg: GetDebt, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.debt_data[&msg.from.mesh_ip].owes())
     }
 }
 
@@ -218,19 +185,31 @@ impl DebtKeeper {
         );
     }
 
-    fn traffic_update(&mut self, ident: Identity, amount: Int256) {
+    fn traffic_update(&mut self, ident: Identity, mut amount: Int256) {
         {
+            trace!("traffic update for {} is {}", ident.mesh_ip, amount);
             let debt_data = self.debt_data
                 .entry(ident.mesh_ip)
                 .or_insert(NodeDebtData::new(self.buffer_period));
 
             if amount < Int256::from(0) {
-                // Buffer debt in the back of the debt buffer
-                debt_data.debt_buffer[(self.buffer_period - 1) as usize] += amount;
+                if debt_data.incoming_payments > -amount.clone() {
+                    // can pay off debt fully
+                    debt_data.incoming_payments += amount;
+                    amount = Int256::from(0);
+                } else {
+                    // pay off part of it
+                    amount += debt_data.incoming_payments.clone();
+                    debt_data.incoming_payments = Int256::from(0);
+
+                    // Buffer debt in the back of the debt buffer
+                    debt_data.debt_buffer[(self.buffer_period - 1) as usize] += amount;
+                }
             } else {
                 // Immediately apply credit
                 debt_data.debt += amount;
             }
+            trace!("debt data for {} is {:?}", ident.mesh_ip, debt_data);
         } // borrowck
 
         let mut imbalance = Uint256::from(0u32);

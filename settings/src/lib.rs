@@ -82,6 +82,7 @@ pub struct ExitClientDetails {
     pub eth_address: EthAddress,
     pub wg_public_key: String,
     pub wg_exit_port: u16,
+    pub exit_price: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -95,6 +96,7 @@ pub struct RitaSettings {
 pub struct ExitNetworkSettings {
     pub wg_tunnel_port: u16,
     pub external_nic: String,
+    pub exit_price: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

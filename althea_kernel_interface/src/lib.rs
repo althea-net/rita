@@ -34,13 +34,14 @@ mod counter;
 mod get_interfaces;
 mod link_local_tools;
 mod get_neighbors;
-mod exit_counter;
+mod exit_server_counter;
+mod exit_client_counter;
 mod manipulate_uci;
 mod exit_client_tunnel;
 mod exit_server_tunnel;
 
 pub use counter::FilterTarget;
-pub use exit_counter::ExitFilterTarget;
+pub use exit_server_counter::ExitFilterTarget;
 pub use exit_server_tunnel::ExitClient;
 
 use failure::Error;

@@ -107,7 +107,7 @@ impl PaymentController {
         }
     }
 
-    fn update_bounty(&self, update: BountyUpdate) -> Result<(), Error> {
+    fn update_bounty_actual(&self, update: BountyUpdate) -> Result<(), Error> {
         trace!("Sending bounty hunter update: {:?}", update);
         let bounty_url = if cfg!(not(test)) {
             format!(
@@ -132,14 +132,21 @@ impl PaymentController {
                 "Received error from bounty hunter: {:?}",
                 r.text().unwrap_or(String::from("No message received"))
             );
-            Ok(())
-            // Err(Error::from(PaymentControllerError::BountyError(
-            //     String::from(format!(
-            //         "Received error from bounty hunter: {:?}",
-            //         r.text().unwrap_or(String::from("No message received"))
-            //     )),
-            // )))
+            Err(Error::from(PaymentControllerError::BountyError(
+                String::from(format!(
+                    "Received error from bounty hunter: {:?}",
+                    r.text().unwrap_or(String::from("No message received"))
+                )),
+            )))
         }
+    }
+
+    fn update_bounty(&self, update: BountyUpdate) -> Result<(), Error> {
+        match self.update_bounty_actual(update) {
+            Ok(()) => {}
+            Err(err) => warn!("Bounty hunter returned error {:?}, ignoring", err),
+        };
+        Ok(())
     }
 
     /// This gets called when a payment from a counterparty has arrived, and updates

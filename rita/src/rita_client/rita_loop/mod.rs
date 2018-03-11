@@ -30,10 +30,7 @@ impl Actor for RitaLoop {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        ctx.run_later(Duration::from_secs(5), |act, ctx| {
-            let addr: Address<Self> = ctx.address();
-            addr.do_send(Tick);
-        });
+        ctx.notify_later(Tick {}, Duration::from_secs(5));
     }
 }
 
@@ -48,7 +45,15 @@ impl Handler<Tick> for RitaLoop {
     fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
         trace!("Client Tick!");
 
-        ExitManager::from_registry().do_send(Tick {});
+        ctx.spawn(
+            ExitManager::from_registry()
+                .send(Tick {})
+                .into_actor(self)
+                .then(|res, act, ctx| {
+                    trace!("exit manager said {:?}", res);
+                    actix::fut::ok(())
+                }),
+        );
 
         ctx.notify_later(Tick {}, Duration::from_secs(5));
 
