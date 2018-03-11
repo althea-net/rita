@@ -166,9 +166,10 @@ pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
         debts.insert(ident, Int256::from(0));
     }
 
-    // Flow counters should charge the "full price"
     for ((ip, interface), bytes) in total_input_counters {
-        if destinations.contains_key(&ip) {
+        if destinations.contains_key(&ip) && if_to_ip.contains_key(&interface)
+            && identities.contains_key(&if_to_ip[&interface])
+        {
             let id = identities[&if_to_ip[&interface]].clone();
             *debts.get_mut(&id).unwrap() -= destinations[&ip].clone() * bytes;
         } else {
@@ -178,12 +179,14 @@ pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
 
     trace!("Collated flow debts: {:?}", debts);
 
-    // Destination counters should not give your cost to your neighbor
+    let local_price = babel.local_price().unwrap();
+
     for ((ip, interface), bytes) in total_output_counters {
-        if destinations.contains_key(&ip) {
+        if destinations.contains_key(&ip) && if_to_ip.contains_key(&interface)
+            && identities.contains_key(&if_to_ip[&interface])
+        {
             let id = identities[&if_to_ip[&interface]].clone();
-            *debts.get_mut(&id).unwrap() +=
-                (destinations[&ip].clone() - babel.local_price().unwrap()) * bytes;
+            *debts.get_mut(&id).unwrap() += (destinations[&ip].clone() - local_price) * bytes;
         } else {
             warn!("destination not found {}, {}", ip, bytes);
         }

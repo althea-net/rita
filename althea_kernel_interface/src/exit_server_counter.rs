@@ -29,13 +29,27 @@ impl ExitFilterTarget {
             &ExitFilterTarget::Output => "rita_exit_output",
         }
     }
+
+    pub fn direction(&self) -> &str {
+        match self {
+            &ExitFilterTarget::Input => "src",
+            &ExitFilterTarget::Output => "dst",
+        }
+    }
+
+    pub fn interface(&self) -> &str {
+        match self {
+            &ExitFilterTarget::Input => "-o",
+            &ExitFilterTarget::Output => "-i",
+        }
+    }
 }
 
 fn parse_exit_ipset(input: &str) -> Result<HashMap<IpAddr, u64>, Error> {
     let mut map = HashMap::new();
 
     // example line `add aa fd::1 packets 28 bytes 2212`
-    let reg = Regex::new(r"(?m)^add \S+ ([a-f0-9:]+) packets (\d+) bytes (\d+)")?;
+    let reg = Regex::new(r"(?m)^add \S+ (fd::[a-f0-9:]+) packets (\d+) bytes (\d+)")?;
     for caps in reg.captures_iter(input) {
         map.insert(IpAddr::from_str(&caps[1])?, caps[3].parse::<u64>()?);
     }
@@ -66,18 +80,18 @@ impl KernelInterface {
                 "!",
                 "--match-set",
                 target.set_name(),
-                "dst",
+                target.direction(),
                 "-j",
                 "SET",
                 "--add-set",
                 target.set_name(),
-                "dst",
+                target.direction(),
             ],
         )?;
         Ok(())
     }
 
-    pub fn read_exit_counters(
+    pub fn read_exit_server_counters(
         &self,
         target: &ExitFilterTarget,
     ) -> Result<HashMap<IpAddr, u64>, Error> {

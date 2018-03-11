@@ -42,8 +42,6 @@ impl SystemService for TrafficWatcher {
         ki.init_exit_counter(&ExitFilterTarget::Input).unwrap();
         ki.init_exit_counter(&ExitFilterTarget::Output).unwrap();
 
-        ki.init_exit_counter(&ExitFilterTarget::Output).unwrap();
-
         ki.setup_wg_if_named("wg_exit");
         ki.setup_nat(&SETTING.read().unwrap().exit_network.external_nic);
 
@@ -104,8 +102,11 @@ pub fn watch(clients: Vec<Identity>) -> Result<(), Error> {
         }
     }
 
-    let input_counters = ki.read_exit_counters(&ExitFilterTarget::Input)?;
-    let output_counters = ki.read_exit_counters(&ExitFilterTarget::Output)?;
+    let input_counters = ki.read_exit_server_counters(&ExitFilterTarget::Input)?;
+    let output_counters = ki.read_exit_server_counters(&ExitFilterTarget::Output)?;
+
+    trace!("input exit counters: {:?}", input_counters);
+    trace!("output exit counters: {:?}", output_counters);
 
     let mut debts = HashMap::new();
 
@@ -114,21 +115,24 @@ pub fn watch(clients: Vec<Identity>) -> Result<(), Error> {
         debts.insert(ident, Int256::from(0));
     }
 
+    let price = SETTING.read().unwrap().exit_network.exit_price;
+
     for (ip, bytes) in input_counters {
         if identities.contains_key(&ip) && destinations.contains_key(&ip) {
             let id = identities[&ip].clone();
-            *debts.get_mut(&id).unwrap() -= destinations[&ip].clone() * bytes;
+            *debts.get_mut(&id).unwrap() -= price * bytes;
         } else {
             warn!("input sender not found {}, {}", ip, bytes);
         }
     }
 
-    trace!("Collated exit flow debts: {:?}", debts);
+    trace!("Collated input exit debts: {:?}", debts);
+    let local_price = babel.local_price().unwrap();
 
     for (ip, bytes) in output_counters {
         if identities.contains_key(&ip) && destinations.contains_key(&ip) {
             let id = identities[&ip].clone();
-            *debts.get_mut(&id).unwrap() -= destinations[&ip].clone() * bytes;
+            *debts.get_mut(&id).unwrap() -= (destinations[&ip].clone() + price) * bytes;
         } else {
             warn!("input sender not found {}, {}", ip, bytes);
         }

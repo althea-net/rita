@@ -164,7 +164,7 @@ fn request_own_exit_ip(
     let client = reqwest::Client::new();
     let response = client.post(&endpoint).json(&ident).send();
 
-    let exit_id: LocalIdentity = response?.json()?;
+    let (exit_id, price): (LocalIdentity, u64) = response?.json()?;
 
     trace!("Got exit setup response {:?}", exit_id);
 
@@ -173,6 +173,7 @@ fn request_own_exit_ip(
         eth_address: exit_id.global.eth_address,
         wg_public_key: exit_id.global.wg_public_key,
         wg_exit_port: exit_id.wg_port,
+        exit_price: price,
     })
 }
 
