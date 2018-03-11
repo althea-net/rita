@@ -1,5 +1,3 @@
-
-
 macro_rules! impl_eth {
     ($ads:ident[ $x:ty; $y:expr]) => (
 	#[derive(Copy, Clone)]
@@ -65,6 +63,5 @@ macro_rules! impl_eth {
 	}
 
   );
- 
-}
 
+}
