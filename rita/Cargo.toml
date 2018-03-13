@@ -22,8 +22,8 @@ settings = { path = "../settings" }
 clu = { path = "../clu" }
 num256 = { path = "../num256" }
 ip_network = "0.1"
-log = "0.3"
-env_logger = "0.4"
+log = "^0.4"
+env_logger = "^0.5.5"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"

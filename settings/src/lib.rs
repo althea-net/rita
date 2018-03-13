@@ -134,6 +134,7 @@ where
 
             for event in events {
                 info!("config file written; refreshing configuration ...");
+                thread::sleep(Duration::from_secs(1));
                 let config = config.refresh().unwrap();
                 let new_settings: T = config.clone().try_into().unwrap();
                 info!("new config: {:#?}", new_settings);
@@ -198,6 +199,7 @@ impl RitaSettings {
         let ser = toml::to_string(&self).unwrap();
         let mut file = File::create(file_name)?;
         file.write_all(ser.as_bytes())?;
+        file.flush();
         Ok(())
     }
 }

@@ -85,7 +85,7 @@ lazy_static! {
 }
 
 fn main() {
-    env_logger::init().unwrap();
+    env_logger::init();
     trace!("Starting");
     trace!(
         "Starting with Identity: {:?}",

@@ -53,14 +53,20 @@ impl Handler<PaymentReceived> for PaymentController {
     }
 }
 
-#[derive(Message)]
+#[derive(Message, Clone)]
 pub struct MakePayment(pub PaymentTx);
 
 impl Handler<MakePayment> for PaymentController {
     type Result = ();
 
-    fn handle(&mut self, msg: MakePayment, _: &mut Context<Self>) -> Self::Result {
-        self.make_payment(msg.0).unwrap();
+    fn handle(&mut self, msg: MakePayment, ctx: &mut Context<Self>) -> Self::Result {
+        match self.make_payment(msg.clone().0) {
+            Ok(()) => {}
+            Err(err) => {
+                warn!("got error from make payment {:?}, retrying", err);
+                ctx.notify_later(msg, Duration::from_secs(5));
+            }
+        }
     }
 }
 
@@ -216,8 +222,6 @@ impl PaymentController {
             String::from("http://127.0.0.1:1234/make_payment")
         };
 
-        self.balance = self.balance.clone() - Int256::from(pmt.amount.clone());
-
         trace!("current balance: {:?}", self.balance);
 
         let mut r = self.client
@@ -226,6 +230,7 @@ impl PaymentController {
             .send()?;
 
         if r.status() == StatusCode::Ok {
+            self.balance = self.balance.clone() - Int256::from(pmt.amount.clone());
             self.update_bounty(BountyUpdate {
                 from: self.identity.clone(),
                 tx: pmt,
