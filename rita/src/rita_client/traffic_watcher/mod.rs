@@ -102,7 +102,7 @@ pub fn watch(exit: Identity, exit_price: u64) -> Result<(), Error> {
 
     let mut owes: Int256 = Int256::from(0);
 
-    let local_price = babel.local_price().unwrap();
+    let local_price = babel.local_fee().unwrap();
 
     trace!("exit price {}", exit_price);
     trace!(
@@ -119,12 +119,7 @@ pub fn watch(exit: Identity, exit_price: u64) -> Result<(), Error> {
         amount: owes,
     };
 
-    let adjustment = debt_keeper::SendUpdate { from: exit };
-
-    Arbiter::handle().spawn(DebtKeeper::from_registry().send(update).then(move |_| {
-        DebtKeeper::from_registry().do_send(adjustment);
-        future::result(Ok(()))
-    }));
+    DebtKeeper::from_registry().do_send(update);
     Ok(())
 }
 

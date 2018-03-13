@@ -29,8 +29,6 @@ use std::time::Duration;
 
 extern crate althea_types;
 
-extern crate simple_logger;
-
 #[derive(Debug, Fail)]
 pub enum CluError {
     #[fail(display = "Runtime Error: {:?}", _0)]

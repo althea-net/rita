@@ -12,7 +12,7 @@ env:
   - TEST_COMMAND="cargo build --verbose --all"
   - TEST_COMMAND="./integration-tests/cross-build.sh"
   - TEST_COMMAND="cargo test --verbose --all" RUST_TEST_THREADS=1
-  - TEST_COMMAND="./integration-tests/rita.sh"
+  - TEST_COMMAND="./integration-tests/rita.sh" BUILD_BABELD=1
 rust:
   - stable
   - beta

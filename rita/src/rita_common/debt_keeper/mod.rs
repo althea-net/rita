@@ -46,7 +46,7 @@ impl NodeDebtData {
 
 pub struct DebtKeeper {
     buffer_period: u32,
-    debt_data: HashMap<IpAddr, NodeDebtData>,
+    debt_data: HashMap<Identity, NodeDebtData>,
     pay_threshold: Int256,
     close_fraction: Int256,
     close_threshold: Int256, // Connection is closed when debt < total_payment/close_fraction + close_threshold
@@ -69,9 +69,7 @@ pub struct TrafficUpdate {
 }
 
 #[derive(Message)]
-pub struct SendUpdate {
-    pub from: Identity,
-}
+pub struct SendUpdate;
 
 pub struct GetDebt {
     pub from: Identity,
@@ -117,17 +115,21 @@ impl Handler<SendUpdate> for DebtKeeper {
     type Result = ();
 
     fn handle(&mut self, msg: SendUpdate, ctx: &mut Context<Self>) -> Self::Result {
-        match self.send_update(msg.from) {
-            DebtAction::SuspendTunnel => {}
-            DebtAction::OpenTunnel => {}
-            DebtAction::MakePayment { to, amount } => PaymentController::from_registry().do_send(
-                payment_controller::MakePayment(PaymentTx {
-                    to,
-                    from: SETTING.read().unwrap().get_identity(),
-                    amount,
-                }),
-            ),
-            DebtAction::None => {}
+        info!("sending debt keeper update");
+        trace!("total debt data: {:?}", self.debt_data);
+        for (k, v) in self.debt_data.clone() {
+            trace!("sending update for {:?}", k);
+            match self.send_update(k) {
+                DebtAction::SuspendTunnel => {}
+                DebtAction::OpenTunnel => {}
+                DebtAction::MakePayment { to, amount } => PaymentController::from_registry()
+                    .do_send(payment_controller::MakePayment(PaymentTx {
+                        to,
+                        from: SETTING.read().unwrap().get_identity(),
+                        amount,
+                    })),
+                DebtAction::None => {}
+            }
         }
     }
 }
@@ -164,14 +166,13 @@ impl DebtKeeper {
     }
 
     fn payment_received(&mut self, ident: Identity, amount: Uint256) {
-        trace!("debt data: {:?}", self.debt_data);
         let debt_data = self.debt_data
-            .entry(ident.mesh_ip)
+            .entry(ident.clone())
             .or_insert(NodeDebtData::new(self.buffer_period));
 
         let old_balance = debt_data.incoming_payments.clone();
         trace!(
-            "payment_recieved: old balance for {:?}: {:?}",
+            "payment received: old balance for {:?}: {:?}",
             ident.mesh_ip,
             old_balance
         );
@@ -189,7 +190,7 @@ impl DebtKeeper {
         {
             trace!("traffic update for {} is {}", ident.mesh_ip, amount);
             let debt_data = self.debt_data
-                .entry(ident.mesh_ip)
+                .entry(ident.clone())
                 .or_insert(NodeDebtData::new(self.buffer_period));
 
             if amount < Int256::from(0) {
@@ -223,7 +224,7 @@ impl DebtKeeper {
     fn send_update(&mut self, ident: Identity) -> DebtAction {
         trace!("debt data: {:?}", self.debt_data);
         let debt_data = self.debt_data
-            .entry(ident.mesh_ip)
+            .entry(ident.clone())
             .or_insert(NodeDebtData::new(self.buffer_period));
         let debt = debt_data.debt.clone();
 
@@ -264,14 +265,21 @@ impl DebtKeeper {
             - debt_data.total_payment.clone() / self.close_fraction.clone();
 
         if debt_data.debt < close_threshold {
-            trace!("debt is below close threshold. suspending forwarding");
+            trace!(
+                "debt is below close threshold for {}. suspending forwarding",
+                ident.mesh_ip
+            );
             DebtAction::SuspendTunnel
         } else if (close_threshold < debt_data.debt) && (debt < close_threshold) {
             trace!("debt is above close threshold. resuming forwarding");
             DebtAction::OpenTunnel
         } else if debt_data.debt > self.pay_threshold {
-            trace!("debt is above payment threshold. making payment");
             let d = debt_data.debt.clone();
+            trace!(
+                "debt is above payment threshold for {}. making payment of {}",
+                ident.mesh_ip,
+                d
+            );
             debt_data.debt = Int256::from(0);
             DebtAction::MakePayment {
                 to: ident,

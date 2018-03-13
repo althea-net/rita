@@ -91,8 +91,8 @@ def prep_netns(id):
 
 def start_babel(node):
     os.system(
-        "ip netns exec netlab-{id} {0} -I babeld-n{id}.pid -d1 -L babeld-n{id}.log -H 1 -P {price} -G 8080 -w dummy &".
-        format(babeld, node.get_interfaces(), id=node.id, price=node.fwd_price))
+        "ip netns exec netlab-{id} {0} -I babeld-n{id}.pid -d1 -L babeld-n{id}.log -H 1 -F {price} -a 0 -G 8080 -w dummy &".
+            format(babeld, node.get_interfaces(), id=node.id, price=node.fwd_price))
     time.sleep(2)
 
 
@@ -130,7 +130,8 @@ def start_rita(id):
     os.system(
         '(RUST_BACKTRACE=full RUST_LOG=trace ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml --platform linux'
         ' 2>&1 & echo $! > rita-n{id}.pid) | '
-        'grep -Ev "<unknown>|mio" > rita-n{id}.log &'.format(id=id, rita=rita, pwd=dname))
+        'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=rita,
+                                                                              pwd=dname))
 
 
 def start_rita_exit(id):
@@ -144,7 +145,8 @@ def start_rita_exit(id):
     os.system(
         '(RUST_BACKTRACE=full RUST_LOG=trace ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml'
         ' 2>&1 & echo $! > rita-n{id}.pid) | '
-        'grep -Ev "<unknown>|mio" > rita-n{id}.log &'.format(id=id, rita=rita_exit, pwd=dname))
+        'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=rita_exit,
+                                                                              pwd=dname))
 
 
 def assert_test(x, description):
@@ -257,7 +259,8 @@ class World:
 
     def test_reach(self, node_from, node_to):
         ping = subprocess.Popen(
-            ["ip", "netns", "exec", "netlab-{}".format(node_from.id), ping6, "fd::{}".format(node_to.id),
+            ["ip", "netns", "exec", "netlab-{}".format(node_from.id), ping6,
+             "fd::{}".format(node_to.id),
              "-c", "1"], stdout=subprocess.PIPE)
         output = ping.stdout.read().decode("utf-8")
         return "1 packets transmitted, 1 received, 0% packet loss" in output
@@ -323,7 +326,7 @@ class World:
         print("Test traffic...")
         t1 = self.get_balances()
         self.gen_traffic(from_node, to_node, 1e8)
-        time.sleep(25)
+        time.sleep(30)
 
         t2 = self.get_balances()
         print("balance change from {}->{}:".format(from_node.id, to_node.id))
@@ -331,7 +334,8 @@ class World:
         print(diff)
 
         for node_id, balance in results.items():
-            assert_test(fuzzy_traffic(diff[node_id], balance*1e8), "Balance of {}".format(node_id))
+            assert_test(fuzzy_traffic(diff[node_id], balance * 1e8),
+                        "Balance of {}".format(node_id))
 
 
 def traffic_diff(a, b):
@@ -390,80 +394,75 @@ if __name__ == "__main__":
     print("Test reachabibility...")
 
     world.test_reach_all()
-    time.sleep(10)
-    world.test_reach_all()
-    time.sleep(10)
-    world.test_reach_all()
-    time.sleep(10)
 
     world.test_traffic(c, f, {
         1: 0,
         2: 0,
-        3: -60,
+        3: -10 * 1.05,
         4: 0,
         5: 0,
-        6: 50,
-        7: 10
+        6: 0 * 1.05,
+        7: 10 * 1.05
     })
 
     world.test_traffic(d, a, {
-        1: 10,
-        2: 25,
+        1: 0 * 1.05,
+        2: 25 * 1.05,
         3: 0,
-        4: -85,
+        4: -75 * 1.05,
         5: 0,
-        6: 50,
+        6: 50 * 1.05,
         7: 0
     })
 
     world.test_traffic(a, c, {
-        1: -120,
+        1: -60 * 1.05,
         2: 0,
-        3: 60,
+        3: 0,
         4: 0,
         5: 0,
-        6: 50,
-        7: 10
+        6: 50 * 1.05,
+        7: 10 * 1.05
     })
 
     world.test_traffic(d, e, {
         1: 0,
-        2: 25,
+        2: 25 * 1.1,
         3: 0,
-        4: -135,
-        5: 50,
-        6: 50,
-        7: 10
+        4: -135 * 1.1,
+        5: 50 * 1.1,
+        6: 50 * 1.1,
+        7: 10 * 1.1
     })
 
     world.test_traffic(e, d, {
         1: 0,
-        2: 25,
+        2: 25 * 1.1,
         3: 0,
-        4: -135,
-        5: 50,
-        6: 50,
-        7: 10
+        4: -135 * 1.1,
+        5: 50 * 1.1,
+        6: 50 * 1.1,
+        7: 10 * 1.1
     })
 
     world.test_traffic(c, e, {
         1: 0,
         2: 0,
-        3: -60,
+        3: -60 * 1.1,
         4: 0,
-        5: 50,
+        5: 50 * 1.1,
         6: 0,
-        7: 10
+        7: 10 * 1.1
     })
 
     world.test_traffic(e, c, {
         1: 0,
         2: 0,
-        3: -60,
+        3: -60 * 1.1,
         4: 0,
-        5: 50,
+        5: 50 * 1.1,
         6: 0,
-        7: 10
+        7: 10 * 1.1
     })
 
     world.test_traffic(g, e, {
@@ -471,9 +470,9 @@ if __name__ == "__main__":
         2: 0,
         3: 0,
         4: 0,
-        5: 50,
+        5: 50 * 1.1,
         6: 0,
-        7: -50
+        7: -50 * 1.1
     })
 
     world.test_traffic(e, g, {
@@ -481,19 +480,19 @@ if __name__ == "__main__":
         2: 0,
         3: 0,
         4: 0,
-        5: 50,
+        5: 50 * 1.1,
         6: 0,
-        7: -50
+        7: -50 * 1.1
     })
 
-    # print("Check that tunnels have not been suspended")
+    print("Check that tunnels have not been suspended")
 
-    # assert_test(not check_log_contains("rita-n1.log", "Suspending Tunnel"), "Suspension of A")
-    # assert_test(not check_log_contains("rita-n2.log", "Suspending Tunnel"), "Suspension of B")
-    # assert_test(not check_log_contains("rita-n3.log", "Suspending Tunnel"), "Suspension of C")
-    # assert_test(not check_log_contains("rita-n4.log", "Suspending Tunnel"), "Suspension of D")
-    # assert_test(not check_log_contains("rita-n6.log", "Suspending Tunnel"), "Suspension of F")
-    # assert_test(not check_log_contains("rita-n7.log", "Suspending Tunnel"), "Suspension of G")
+    assert_test(not check_log_contains("rita-n1.log", "debt is below close threshold"), "Suspension of A")
+    assert_test(not check_log_contains("rita-n2.log", "debt is below close threshold"), "Suspension of B")
+    assert_test(not check_log_contains("rita-n3.log", "debt is below close threshold"), "Suspension of C")
+    assert_test(not check_log_contains("rita-n4.log", "debt is below close threshold"), "Suspension of D")
+    assert_test(not check_log_contains("rita-n6.log", "debt is below close threshold"), "Suspension of F")
+    assert_test(not check_log_contains("rita-n7.log", "debt is below close threshold"), "Suspension of G")
 
     if len(sys.argv) > 1 and sys.argv[1] == "leave-running":
         pass

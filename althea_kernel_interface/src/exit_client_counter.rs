@@ -22,7 +22,7 @@ impl KernelInterface {
 
         let caps = re.captures(&stdout).unwrap();
 
-        return Ok(caps[2].parse().unwrap());
+        return Ok(caps[2].parse::<u64>()? + (caps[1].parse::<u64>()? * 80));
     }
 
     pub fn read_exit_client_counters_input(&self) -> Result<u64, Error> {
@@ -34,6 +34,6 @@ impl KernelInterface {
 
         let caps = re.captures(&stdout).unwrap();
 
-        return Ok(caps[2].parse().unwrap());
+        return Ok(caps[2].parse::<u64>()? + (caps[1].parse::<u64>()? * 80));
     }
 }

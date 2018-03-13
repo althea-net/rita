@@ -14,10 +14,10 @@ use rita_common::tunnel_manager::{GetNeighbors, TunnelManager};
 use rita_common::traffic_watcher::{TrafficWatcher, Watch};
 
 use rita_common::debt_keeper;
-use rita_common::debt_keeper::DebtKeeper;
+use rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 
 use rita_common::payment_controller;
-use rita_common::payment_controller::{MakePayment, PaymentController};
+use rita_common::payment_controller::{MakePayment, PaymentController, PaymentControllerUpdate};
 
 use failure::Error;
 
@@ -66,6 +66,8 @@ impl Handler<Tick> for RitaLoop {
                         .then(move |res, act, ctx| {
                             info!("loop completed in {:?}", start.elapsed());
                             info!("traffic watcher completed in {:?}", neigh.elapsed());
+                            DebtKeeper::from_registry().do_send(SendUpdate {});
+                            PaymentController::from_registry().do_send(PaymentControllerUpdate {});
                             ctx.notify_later(Tick {}, Duration::from_secs(5));
                             actix::fut::ok(())
                         })

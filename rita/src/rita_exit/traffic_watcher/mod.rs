@@ -81,7 +81,7 @@ pub fn watch(clients: Vec<Identity>) -> Result<(), Error> {
     let mut destinations = HashMap::new();
     destinations.insert(
         SETTING.read().unwrap().network.own_ip,
-        Int256::from(babel.local_price().unwrap() as i64),
+        Int256::from(babel.local_fee().unwrap() as i64),
     );
 
     let mut identities: HashMap<IpAddr, Identity> = HashMap::new();
@@ -127,7 +127,6 @@ pub fn watch(clients: Vec<Identity>) -> Result<(), Error> {
     }
 
     trace!("Collated input exit debts: {:?}", debts);
-    let local_price = babel.local_price().unwrap();
 
     for (ip, bytes) in output_counters {
         if identities.contains_key(&ip) && destinations.contains_key(&ip) {
@@ -145,12 +144,8 @@ pub fn watch(clients: Vec<Identity>) -> Result<(), Error> {
             from: from.clone(),
             amount,
         };
-        let adjustment = debt_keeper::SendUpdate { from };
 
-        Arbiter::handle().spawn(DebtKeeper::from_registry().send(update).then(move |_| {
-            DebtKeeper::from_registry().do_send(adjustment);
-            future::result(Ok(()))
-        }));
+        DebtKeeper::from_registry().do_send(update);
     }
 
     Ok(())

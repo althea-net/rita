@@ -51,7 +51,10 @@ fn parse_exit_ipset(input: &str) -> Result<HashMap<IpAddr, u64>, Error> {
     // example line `add aa fd::1 packets 28 bytes 2212`
     let reg = Regex::new(r"(?m)^add \S+ (fd::[a-f0-9:]+) packets (\d+) bytes (\d+)")?;
     for caps in reg.captures_iter(input) {
-        map.insert(IpAddr::from_str(&caps[1])?, caps[3].parse::<u64>()?);
+        map.insert(
+            IpAddr::from_str(&caps[1])?,
+            caps[3].parse::<u64>()? + caps[2].parse::<u64>()? * 80,
+        );
     }
     Ok(map)
 }

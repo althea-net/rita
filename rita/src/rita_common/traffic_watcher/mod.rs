@@ -99,10 +99,7 @@ pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
     }
 
     let mut destinations = HashMap::new();
-    destinations.insert(
-        SETTING.read().unwrap().network.own_ip,
-        Int256::from(babel.local_price().unwrap() as i64),
-    );
+    let local_price = babel.local_fee().unwrap();
 
     for route in &routes {
         // Only ip6
@@ -111,11 +108,13 @@ pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
             if ip.get_netmask() == 128 && route.installed {
                 destinations.insert(
                     IpAddr::V6(ip.get_network_address()),
-                    Int256::from(route.price),
+                    Int256::from(route.price + local_price),
                 );
             }
         }
     }
+
+    destinations.insert(SETTING.read().unwrap().network.own_ip, Int256::from(0));
 
     trace!("Getting input counters");
     let input_counters = ki.read_counters(&FilterTarget::Input)?;
@@ -171,15 +170,13 @@ pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
             && identities.contains_key(&if_to_ip[&interface])
         {
             let id = identities[&if_to_ip[&interface]].clone();
-            *debts.get_mut(&id).unwrap() -= destinations[&ip].clone() * bytes;
+            *debts.get_mut(&id).unwrap() -= (destinations[&ip].clone()) * bytes;
         } else {
             warn!("flow destination not found {}, {}", ip, bytes);
         }
     }
 
     trace!("Collated flow debts: {:?}", debts);
-
-    let local_price = babel.local_price().unwrap();
 
     for ((ip, interface), bytes) in total_output_counters {
         if destinations.contains_key(&ip) && if_to_ip.contains_key(&interface)
@@ -194,17 +191,17 @@ pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
 
     trace!("Collated total debts: {:?}", debts);
 
+    for (k, v) in &debts {
+        trace!("collated debt for {} is {}", k.global.mesh_ip, v);
+    }
+
     for (from, amount) in debts {
         let update = debt_keeper::TrafficUpdate {
             from: from.global.clone(),
             amount,
         };
-        let adjustment = debt_keeper::SendUpdate { from: from.global };
 
-        Arbiter::handle().spawn(DebtKeeper::from_registry().send(update).then(move |_| {
-            DebtKeeper::from_registry().do_send(adjustment);
-            future::result(Ok(()))
-        }));
+        DebtKeeper::from_registry().do_send(update);
     }
 
     Ok(())

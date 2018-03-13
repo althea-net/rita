@@ -51,7 +51,7 @@ fn parse_ipset(input: &str) -> Result<HashMap<(IpAddr, String), u64>, Error> {
     for caps in reg.captures_iter(input) {
         map.insert(
             (IpAddr::from_str(&caps[1])?, String::from(&caps[2])),
-            caps[4].parse::<u64>()?,
+            caps[4].parse::<u64>()? + caps[3].parse::<u64>()? * 40,
         );
     }
     Ok(map)

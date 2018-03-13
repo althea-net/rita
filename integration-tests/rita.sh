@@ -4,11 +4,12 @@ set -euo pipefail
 cd $(dirname $0)
 
 build_babel () {
-  if [ ! -d "deps/babeld" ] ; then
-      git clone -b althea "https://github.com/althea-mesh/babeld" "deps/babeld"
-  fi
+  rm -rf "deps/babeld"
+  git clone -b althea "https://github.com/drozdziak1/babeld" "deps/babeld"
 
   pushd deps/babeld
+  git checkout code-cleanup
+
   make
   popd
 }
@@ -47,7 +48,11 @@ build_bounty () {
 
 get_python_deps
 fetch_netlab
-build_babel
+
+if [ ! -z "${BUILD_BABELD-}" ]; then
+    build_babel
+fi
+
 build_rita
 build_bounty
 
