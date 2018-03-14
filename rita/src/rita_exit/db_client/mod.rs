@@ -24,7 +24,7 @@ impl Actor for DbClient {
 
 impl Supervised for DbClient {}
 impl SystemService for DbClient {
-    fn service_started(&mut self, ctx: &mut Context<Self>) {
+    fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("DB Client started");
     }
 }
@@ -81,7 +81,7 @@ impl Handler<SetupClient> for DbClient {
                 internal_ip: "172.168.1.100".to_string(),
             };
 
-            diesel::insert_into(clients).values(&dummy).execute(&conn); // this will fail most of the time
+            diesel::insert_into(clients).values(&dummy).execute(&conn); // this will fail most of the time, ignoring error
 
             trace!("Checking if record exists for {:?}", client.global.mesh_ip);
 

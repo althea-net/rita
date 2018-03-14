@@ -63,12 +63,6 @@ impl KernelInterface {
                 "wg_exit",
             ],
         )?;
-        if !output.stderr.is_empty() {
-            return Err(KernelManagerError::RuntimeError(format!(
-                "received error adding wg link: {}",
-                String::from_utf8(output.stderr)?
-            )).into());
-        }
 
         let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "mtu", "1340"])?;
         if !output.stderr.is_empty() {

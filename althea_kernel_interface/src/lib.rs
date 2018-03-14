@@ -9,12 +9,8 @@ extern crate eui48;
 extern crate itertools;
 extern crate regex;
 
-use std::fs::File;
-use std::io::{Read, Write};
-use std::net::{IpAddr, SocketAddr};
-use std::path::Path;
-use std::process::{Command, Output, Stdio};
-use std::str::FromStr;
+use std::io::Write;
+use std::process::{Command, Output};
 use std::time::Instant;
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex};

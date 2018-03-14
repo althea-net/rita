@@ -69,7 +69,7 @@ fn openwrt_generate_and_set_wg_keys(
 }
 
 fn linux_generate_mesh_ip(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Result<(), Error> {
-    let mut ki = KernelInterface {};
+    let ki = KernelInterface {};
     let seed = rand::thread_rng().gen::<[u8; 10]>();
     let mesh_ip = ipgen::ip(std::str::from_utf8(&seed)?, "fd::/120").unwrap();
 
@@ -79,7 +79,7 @@ fn linux_generate_mesh_ip(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Resu
 }
 
 fn openwrt_generate_mesh_ip(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Result<(), Error> {
-    let mut ki = KernelInterface {};
+    let ki = KernelInterface {};
     let seed = rand::thread_rng().gen::<[u8; 10]>();
     let mesh_ip = ipgen::ip(std::str::from_utf8(&seed)?, "fd::/120").unwrap();
     let ifaces = SETTINGS.read().unwrap().network.babel_interfaces.clone();
@@ -90,10 +90,10 @@ fn openwrt_generate_mesh_ip(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Re
 
     for interface in ifaces {
         let identifier = "network.babel_".to_string() + interface;
-        ki.set_uci_var(&identifier, &mesh_ip.to_string());
+        ki.set_uci_var(&identifier, &mesh_ip.to_string()).unwrap();
     }
 
-    ki.uci_commit();
+    ki.uci_commit().unwrap();
     Ok(())
 }
 
@@ -128,7 +128,7 @@ fn linux_setup_exit_tunnel(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Res
         .clone()
         .unwrap();
 
-    ki.setup_wg_if_named("wg_exit");
+    ki.setup_wg_if_named("wg_exit").unwrap();
     ki.set_client_exit_tunnel_config(
         SocketAddr::new(
             SETTINGS.read().unwrap().exit_client.exit_ip,
@@ -139,7 +139,7 @@ fn linux_setup_exit_tunnel(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Res
         SETTINGS.read().unwrap().exit_client.wg_listen_port,
         details.internal_ip,
     );
-    ki.set_route_to_tunnel(&"172.168.1.254".parse()?);
+    ki.set_route_to_tunnel(&"172.168.1.254".parse()?).unwrap();
     Ok(())
 }
 
@@ -182,22 +182,22 @@ fn openwrt_init(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Result<(), Err
     let mesh_ip = SETTINGS.read().unwrap().network.own_ip.clone();
     let our_exit_ip = SETTINGS.read().unwrap().exit_client.exit_ip.clone();
 
-    request_own_exit_ip(SETTINGS.clone());
+    request_own_exit_ip(SETTINGS.clone())?;
     trace!("Exit ip request exited");
     if validate_wg_key(&privkey) || validate_wg_key(&pubkey) {
-        openwrt_generate_and_set_wg_keys(SETTINGS.clone());
+        openwrt_generate_and_set_wg_keys(SETTINGS.clone())?;
     }
     if validate_mesh_ip(&mesh_ip) {
-        openwrt_generate_mesh_ip(SETTINGS.clone());
+        openwrt_generate_mesh_ip(SETTINGS.clone())?;
     }
     if !our_exit_ip.is_ipv4() && !our_exit_ip.is_unspecified() {
-        request_own_exit_ip(SETTINGS.clone());
+        request_own_exit_ip(SETTINGS.clone())?;
     }
     Ok(())
 }
 
 fn linux_init(
-    mut SETTINGS: Arc<RwLock<settings::RitaSettings>>,
+    SETTINGS: Arc<RwLock<settings::RitaSettings>>,
     file_name: String,
 ) -> Result<(), Error> {
     let privkey = SETTINGS.read().unwrap().network.wg_private_key.clone();

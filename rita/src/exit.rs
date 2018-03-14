@@ -59,15 +59,9 @@ mod rita_common;
 use rita_common::network_endpoints::{hello_response, make_payments};
 use rita_exit::network_endpoints::setup_request;
 
-use diesel::prelude::*;
-use diesel::sqlite::SqliteConnection;
-use diesel::select;
-use diesel::dsl::exists;
-use dotenv::dotenv;
-
 use std::sync::{Arc, RwLock};
 
-const USAGE: &'static str = "
+const USAGE: &str = "
 Usage: rita_common --config <settings> --default <default>
 Options:
     --config   Name of config file
@@ -123,10 +117,10 @@ fn main() {
         .start();
 
     let common = rita_common::rita_loop::RitaLoop {};
-    let _: Address<_> = common.start();
+    let _: Addr<Unsync, _> = common.start();
 
     let exit = rita_exit::rita_loop::RitaLoop {};
-    let _: Address<_> = exit.start();
+    let _: Addr<Unsync, _> = exit.start();
 
     system.run();
 }
