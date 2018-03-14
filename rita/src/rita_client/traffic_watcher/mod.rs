@@ -1,35 +1,24 @@
 use actix::prelude::*;
 
-use althea_kernel_interface;
 use althea_kernel_interface::KernelInterface;
-use althea_kernel_interface::FilterTarget;
 
 use althea_types::Identity;
 
-use babel_monitor;
 use babel_monitor::Babel;
 
 use rita_common::debt_keeper;
 use rita_common::debt_keeper::DebtKeeper;
 
-use futures::{future, Future};
-
 use num256::Int256;
 
-use eui48::MacAddress;
-
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::IpAddr;
 use std::collections::HashMap;
 
 use ip_network::IpNetwork;
 
-use std::{thread, time};
-
 use SETTING;
 
 use failure::Error;
-use althea_types::PaymentTx;
-use rita_common::payment_controller::{MakePayment, PaymentController};
 
 pub struct TrafficWatcher;
 
@@ -38,12 +27,12 @@ impl Actor for TrafficWatcher {
 }
 impl Supervised for TrafficWatcher {}
 impl SystemService for TrafficWatcher {
-    fn service_started(&mut self, ctx: &mut Context<Self>) {
+    fn service_started(&mut self, _ctx: &mut Context<Self>) {
         let ki = KernelInterface {};
 
         info!("Client traffic watcher started");
 
-        ki.init_exit_client_counters();
+        ki.init_exit_client_counters().unwrap();
     }
 }
 impl Default for TrafficWatcher {
@@ -59,7 +48,7 @@ impl Handler<Watch> for TrafficWatcher {
     type Result = ();
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        watch(msg.0, msg.1);
+        watch(msg.0, msg.1).unwrap();
     }
 }
 
@@ -101,8 +90,6 @@ pub fn watch(exit: Identity, exit_price: u64) -> Result<(), Error> {
     let output = output?;
 
     let mut owes: Int256 = Int256::from(0);
-
-    let local_price = babel.local_fee().unwrap();
 
     trace!("exit price {}", exit_price);
     trace!(

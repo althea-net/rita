@@ -1,28 +1,11 @@
-use std::time::{Duration, Instant};
-use std::thread;
-use std::path::Path;
+use std::time::Duration;
 
 use actix::prelude::*;
 use actix::registry::SystemService;
 
-use serde_json;
-
-use babel_monitor::Babel;
-
 use rita_client::exit_manager::ExitManager;
 
-use rita_common::debt_keeper;
-use rita_common::debt_keeper::DebtKeeper;
-
-use rita_common::payment_controller;
-use rita_common::payment_controller::{MakePayment, PaymentController};
-
-use rita_common;
-
 use failure::Error;
-
-use SETTING;
-use althea_kernel_interface::KernelInterface;
 
 pub struct RitaLoop;
 
@@ -49,7 +32,7 @@ impl Handler<Tick> for RitaLoop {
             ExitManager::from_registry()
                 .send(Tick {})
                 .into_actor(self)
-                .then(|res, act, ctx| {
+                .then(|res, _act, _ctx| {
                     trace!("exit manager said {:?}", res);
                     actix::fut::ok(())
                 }),

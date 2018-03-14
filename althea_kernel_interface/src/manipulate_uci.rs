@@ -4,7 +4,7 @@ use failure::Error;
 
 impl KernelInterface {
     //Sets an arbitrary UCI variable on OpenWRT
-    pub fn set_uci_var(&mut self, key: &str, value: &str) -> Result<bool, Error> {
+    pub fn set_uci_var(&self, key: &str, value: &str) -> Result<bool, Error> {
         let output = self.run_command("uci", &["set", &key, "=", &value])?;
         if !output.stderr.is_empty() {
             return Err(KernelManagerError::RuntimeError(format!(
@@ -16,7 +16,7 @@ impl KernelInterface {
     }
 
     //Retrieves the value of a given UCI path, could be one or multiple values
-    pub fn get_uci_var(&mut self, key: &str) -> Result<String, Error> {
+    pub fn get_uci_var(&self, key: &str) -> Result<String, Error> {
         let output = self.run_command("uci", &["show", &key])?;
         if !output.stderr.is_empty() {
             return Err(KernelManagerError::RuntimeError(format!(
@@ -28,7 +28,7 @@ impl KernelInterface {
     }
 
     //Commits changes to UCI
-    pub fn uci_commit(&mut self) -> Result<bool, Error> {
+    pub fn uci_commit(&self) -> Result<bool, Error> {
         let output = self.run_command("uci", &["commit"])?;
         if !output.stderr.is_empty() {
             return Err(KernelManagerError::RuntimeError(format!(

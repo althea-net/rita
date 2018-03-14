@@ -1,29 +1,21 @@
 use actix::prelude::*;
 
-use althea_kernel_interface;
 use althea_kernel_interface::KernelInterface;
 use althea_kernel_interface::FilterTarget;
 
 use althea_types::LocalIdentity;
 
-use babel_monitor;
 use babel_monitor::Babel;
 
 use rita_common::debt_keeper;
 use rita_common::debt_keeper::DebtKeeper;
 
-use futures::{future, Future};
-
 use num256::Int256;
 
-use eui48::MacAddress;
-
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::IpAddr;
 use std::collections::HashMap;
 
 use ip_network::IpNetwork;
-
-use std::{thread, time};
 
 use SETTING;
 
@@ -36,7 +28,7 @@ impl Actor for TrafficWatcher {
 }
 impl Supervised for TrafficWatcher {}
 impl SystemService for TrafficWatcher {
-    fn service_started(&mut self, ctx: &mut Context<Self>) {
+    fn service_started(&mut self, _ctx: &mut Context<Self>) {
         let ki = KernelInterface {};
 
         ki.init_counter(&FilterTarget::Input).unwrap();
@@ -60,7 +52,7 @@ impl Handler<Watch> for TrafficWatcher {
     type Result = ();
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        watch(msg.0);
+        watch(&msg.0).unwrap();
     }
 }
 
@@ -71,7 +63,7 @@ impl Handler<Watch> for TrafficWatcher {
 ///
 /// This first time this is run, it will create the rules and then immediately read and zero them.
 /// (should return 0)
-pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
+pub fn watch(neighbors: &[(LocalIdentity, String)]) -> Result<(), Error> {
     let ki = KernelInterface {};
     let mut babel = Babel::new(
         &format!("[::1]:{}", SETTING.read().unwrap().network.babel_port)
@@ -84,17 +76,17 @@ pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
     info!("Got routes: {:?}", routes);
 
     let mut identities: HashMap<IpAddr, LocalIdentity> = HashMap::new();
-    for ident in &neighbors {
+    for ident in neighbors {
         identities.insert(ident.0.global.mesh_ip, ident.0.clone());
     }
 
     let mut if_to_ip: HashMap<String, IpAddr> = HashMap::new();
-    for ident in &neighbors {
+    for ident in neighbors {
         if_to_ip.insert(ident.clone().1, ident.0.global.mesh_ip);
     }
 
     let mut ip_to_if: HashMap<IpAddr, String> = HashMap::new();
-    for ident in &neighbors {
+    for ident in neighbors {
         ip_to_if.insert(ident.0.global.mesh_ip, ident.clone().1);
     }
 
@@ -161,7 +153,7 @@ pub fn watch(neighbors: Vec<(LocalIdentity, String)>) -> Result<(), Error> {
     let mut debts = HashMap::new();
 
     // Setup the debts table
-    for (mac, ident) in identities.clone() {
+    for (_, ident) in identities.clone() {
         debts.insert(ident, Int256::from(0));
     }
 

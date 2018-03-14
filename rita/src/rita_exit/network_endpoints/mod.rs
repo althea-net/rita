@@ -1,28 +1,13 @@
-use althea_types::{ExitIdentity, Identity, LocalIdentity, PaymentTx};
-use num256::Uint256;
+use althea_types::{ExitIdentity, LocalIdentity};
 
-use actix;
 use actix::registry::SystemService;
 use actix_web::*;
-use actix_web::dev::*;
 
 use futures::Future;
 
-use rita_common::payment_controller;
-use rita_common::payment_controller::PaymentController;
-
-use rita_common::debt_keeper;
-use rita_common::debt_keeper::{DebtKeeper, GetDebt};
-
 use rita_exit::db_client::{DbClient, SetupClient};
 
-use althea_kernel_interface::KernelInterface;
-
-use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex};
-use std::io::Read;
 use std::boxed::Box;
-use std::net::SocketAddr;
 
 use serde_json;
 

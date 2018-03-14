@@ -27,18 +27,13 @@ use std::fs::File;
 use std::io::Write;
 use std::thread;
 use std::sync::{Arc, RwLock};
-use std::sync::mpsc::channel;
 use std::time::Duration;
 
-use config::{Config, ConfigError, Environment};
+use config::Config;
 
 use althea_types::{EthAddress, Identity};
 
-use eui48::MacAddress;
-
 use num256::Int256;
-
-use serde::{Deserialize, Serialize};
 
 use althea_kernel_interface::KernelInterface;
 
@@ -132,7 +127,7 @@ where
                 .read_events_blocking(&mut buffer)
                 .expect("Failed to read inotify events");
 
-            for event in events {
+            for _ in events {
                 info!("config file written; refreshing configuration ...");
                 thread::sleep(Duration::from_secs(1));
                 let config = config.refresh().unwrap();
@@ -170,7 +165,7 @@ impl RitaSettings {
 
         let settings = Arc::new(RwLock::new(settings));
 
-        spawn_watch_thread(settings.clone(), s, file_name);
+        spawn_watch_thread(settings.clone(), s, file_name).unwrap();
 
         Ok(settings)
     }
@@ -199,7 +194,7 @@ impl RitaSettings {
         let ser = toml::to_string(&self).unwrap();
         let mut file = File::create(file_name)?;
         file.write_all(ser.as_bytes())?;
-        file.flush();
+        file.flush().unwrap();
         Ok(())
     }
 }
@@ -228,7 +223,7 @@ impl RitaExitSettings {
 
         let settings = Arc::new(RwLock::new(settings));
 
-        spawn_watch_thread(settings.clone(), s, file_name);
+        spawn_watch_thread(settings.clone(), s, file_name).unwrap();
 
         Ok(settings)
     }

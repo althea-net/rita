@@ -1,29 +1,21 @@
 use actix::prelude::*;
 
-use althea_kernel_interface;
 use althea_kernel_interface::KernelInterface;
 use althea_kernel_interface::ExitFilterTarget;
 
 use althea_types::Identity;
 
-use babel_monitor;
 use babel_monitor::Babel;
 
 use rita_common::debt_keeper;
 use rita_common::debt_keeper::DebtKeeper;
 
-use futures::{future, Future};
-
 use num256::Int256;
 
-use eui48::MacAddress;
-
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::IpAddr;
 use std::collections::HashMap;
 
 use ip_network::IpNetwork;
-
-use std::{thread, time};
 
 use SETTING;
 
@@ -36,14 +28,15 @@ impl Actor for TrafficWatcher {
 }
 impl Supervised for TrafficWatcher {}
 impl SystemService for TrafficWatcher {
-    fn service_started(&mut self, ctx: &mut Context<Self>) {
+    fn service_started(&mut self, _ctx: &mut Context<Self>) {
         let ki = KernelInterface {};
 
         ki.init_exit_counter(&ExitFilterTarget::Input).unwrap();
         ki.init_exit_counter(&ExitFilterTarget::Output).unwrap();
 
-        ki.setup_wg_if_named("wg_exit");
-        ki.setup_nat(&SETTING.read().unwrap().exit_network.external_nic);
+        ki.setup_wg_if_named("wg_exit").unwrap();
+        ki.setup_nat(&SETTING.read().unwrap().exit_network.external_nic)
+            .unwrap();
 
         info!("Traffic Watcher started");
     }
@@ -61,7 +54,7 @@ impl Handler<Watch> for TrafficWatcher {
     type Result = ();
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        watch(msg.0);
+        watch(msg.0).unwrap();
     }
 }
 
@@ -81,7 +74,7 @@ pub fn watch(clients: Vec<Identity>) -> Result<(), Error> {
     let mut destinations = HashMap::new();
     destinations.insert(
         SETTING.read().unwrap().network.own_ip,
-        Int256::from(babel.local_fee().unwrap() as i64),
+        Int256::from(babel.local_fee().unwrap()),
     );
 
     let mut identities: HashMap<IpAddr, Identity> = HashMap::new();
@@ -111,7 +104,7 @@ pub fn watch(clients: Vec<Identity>) -> Result<(), Error> {
     let mut debts = HashMap::new();
 
     // Setup the debts table
-    for (mac, ident) in identities.clone() {
+    for (_, ident) in identities.clone() {
         debts.insert(ident, Int256::from(0));
     }
 

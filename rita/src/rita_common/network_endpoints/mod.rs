@@ -1,8 +1,7 @@
-use althea_types::{Identity, LocalIdentity, PaymentTx};
+use althea_types::{LocalIdentity, PaymentTx};
 
 use actix::registry::SystemService;
 use actix_web::*;
-use actix_web::dev::*;
 
 use futures::Future;
 
@@ -12,19 +11,11 @@ use rita_common::payment_controller::PaymentController;
 
 use rita_common::tunnel_manager::{GetLocalIdentity, OpenTunnel, TunnelManager};
 
-use althea_kernel_interface::KernelInterface;
-
-use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex};
-use std::io::Read;
 use std::boxed::Box;
-use std::net::SocketAddr;
 
 use serde_json;
 
 use bytes::Bytes;
-
-use SETTING;
 
 pub fn make_payments(req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Error>> {
     trace!(
