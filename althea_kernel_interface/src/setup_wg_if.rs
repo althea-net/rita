@@ -1,11 +1,13 @@
-use super::{Error, KernelInterface};
+use super::{KernelInterface, KernelManagerError};
 
 use std::net::IpAddr;
+
+use failure::Error;
 
 impl KernelInterface {
     /// checks the existing interfaces to find an interface name that isn't in use.
     /// then calls iproute2 to set up a new interface.
-    pub fn setup_wg_if(&mut self) -> Result<String, Error> {
+    pub fn setup_wg_if(&self) -> Result<String, Error> {
         //call "ip links" to get a list of currently set up links
         let links = String::from_utf8(self.run_command("ip", &["link"])?.stdout)?;
         let mut if_num = 0;
@@ -14,14 +16,20 @@ impl KernelInterface {
             if_num += 1;
         }
         let interface = format!("wg{}", if_num);
-        let output = self.run_command("ip", &["link", "add", &interface, "type", "wireguard"])?;
+        self.setup_wg_if_named(&interface)?;
+        Ok(interface)
+    }
+
+    /// calls iproute2 to set up a new interface with a given name.
+    pub fn setup_wg_if_named(&self, name: &str) -> Result<(), Error> {
+        let output = self.run_command("ip", &["link", "add", &name, "type", "wireguard"])?;
         if !output.stderr.is_empty() {
-            return Err(Error::RuntimeError(format!(
+            return Err(KernelManagerError::RuntimeError(format!(
                 "received error adding wg link: {}",
                 String::from_utf8(output.stderr)?
-            )));
+            )).into());
         }
-        Ok(interface)
+        Ok(())
     }
 }
 

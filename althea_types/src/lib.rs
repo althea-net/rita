@@ -21,7 +21,7 @@ pub use bytes_32::Bytes32;
 pub use eth_address::EthAddress;
 pub use eth_private_key::EthPrivateKey;
 pub use eth_signature::EthSignature;
-pub use interop::{Identity, LocalIdentity, PaymentTx};
+pub use interop::{ExitIdentity, Identity, LocalIdentity, PaymentTx};
 
 #[cfg(test)]
 mod tests {
@@ -84,52 +84,52 @@ mod tests {
     }
 
     macro_rules! test_eq {
-    ($func_name:ident, $test_name:ident) => (
-        #[test]
-        fn $test_name() {
-            let a = $func_name(1);
-            let b = $func_name(1);
+        ($func_name: ident, $test_name: ident) => {
+            #[test]
+            fn $test_name() {
+                let a = $func_name(1);
+                let b = $func_name(1);
 
-            assert_eq!(a, b);
+                assert_eq!(a, b);
 
-            let a = $func_name(1);
-            let b = $func_name(2);
+                let a = $func_name(1);
+                let b = $func_name(2);
 
-            assert_ne!(a, b);
-        }
-    )
+                assert_ne!(a, b);
+            }
+        };
     }
 
     macro_rules! test_hash {
-    ($func_name:ident, $test_name:ident) => (
-        #[test]
-        fn $test_name() {
-            let a = $func_name(1);
-            let b = $func_name(1);
+        ($func_name: ident, $test_name: ident) => {
+            #[test]
+            fn $test_name() {
+                let a = $func_name(1);
+                let b = $func_name(1);
 
-            assert_eq!(calculate_hash(&a), calculate_hash(&b));
+                assert_eq!(calculate_hash(&a), calculate_hash(&b));
 
-            let a = $func_name(1);
-            let b = $func_name(2);
+                let a = $func_name(1);
+                let b = $func_name(2);
 
-            assert_ne!(calculate_hash(&a), calculate_hash(&b));
-        }
-    )
+                assert_ne!(calculate_hash(&a), calculate_hash(&b));
+            }
+        };
     }
 
     macro_rules! test_serde {
-    ($func_name:ident, $test_name:ident) => (
-        #[test]
-        fn $test_name() {
-            let a = $func_name(1);
+        ($func_name: ident, $test_name: ident) => {
+            #[test]
+            fn $test_name() {
+                let a = $func_name(1);
 
-            let s = serde_json::to_string(&a).unwrap();
+                let s = serde_json::to_string(&a).unwrap();
 
-            let b = serde_json::from_str(&s).unwrap();
+                let b = serde_json::from_str(&s).unwrap();
 
-            assert_eq!(a, b)
-        }
-    )
+                assert_eq!(a, b)
+            }
+        };
     }
 
     test_eq!(new_addr, addr_eq);

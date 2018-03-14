@@ -14,12 +14,29 @@ pub struct Identity {
     pub wg_public_key: String,
 }
 
+impl Identity {
+    pub fn new(mesh_ip: IpAddr, eth_address: EthAddress, wg_public_key: String) -> Identity {
+        Identity {
+            mesh_ip,
+            eth_address,
+            wg_public_key,
+        }
+    }
+}
+
+/// This is all the data we need to give a exit to open a wg tunnel
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct ExitIdentity {
+    pub wg_port: u16,
+    pub global: Identity,
+}
+
 #[cfg(feature = "actix")]
 impl Message for Identity {
     type Result = ();
 }
 
-/// This is all the data we need to give a local neighbor to open a wg connection
+/// This is all the data we need to give a neighbor to open a wg connection
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct LocalIdentity {
     pub local_ip: IpAddr,
