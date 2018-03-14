@@ -5,11 +5,9 @@ cd $(dirname $0)
 
 build_babel () {
   rm -rf "deps/babeld"
-  git clone -b althea "https://github.com/drozdziak1/babeld" "deps/babeld"
+  git clone -b pre-0.1.0 "https://github.com/althea-mesh/babeld.git" "deps/babeld"
 
   pushd deps/babeld
-  git checkout code-cleanup
-
   make
   popd
 }
