@@ -1,13 +1,7 @@
-use std::time::{Duration, Instant};
-use std::thread;
-use std::path::Path;
+use std::time::Duration;
 
 use actix::prelude::*;
 use actix::registry::SystemService;
-
-use serde_json;
-
-use babel_monitor::Babel;
 
 use rita_exit::db_client::{DbClient, ListClients};
 
@@ -28,8 +22,8 @@ impl Actor for RitaLoop {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        ctx.run_later(Duration::from_secs(5), |act, ctx| {
-            let addr: Address<Self> = ctx.address();
+        ctx.run_later(Duration::from_secs(5), |_act, ctx| {
+            let addr: Addr<Unsync, Self> = ctx.address();
             addr.do_send(Tick);
         });
     }
@@ -67,13 +61,9 @@ impl Handler<Tick> for RitaLoop {
             DbClient::from_registry()
                 .send(ListClients {})
                 .into_actor(self)
-                .then(|res, act, ctx| {
+                .then(|res, _act, ctx| {
                     let clients = res.unwrap().unwrap();
-                    let ids = clients
-                        .clone()
-                        .into_iter()
-                        .map(|c| to_identity(c))
-                        .collect();
+                    let ids = clients.clone().into_iter().map(to_identity).collect();
                     TrafficWatcher::from_registry().do_send(Watch(ids));
 
                     let ki = KernelInterface {};
@@ -94,7 +84,7 @@ impl Handler<Tick> for RitaLoop {
                         SETTING.read().unwrap().exit_network.wg_tunnel_port,
                         &SETTING.read().unwrap().network.wg_private_key_path,
                         &"172.168.1.254".parse().unwrap(),
-                    );
+                    ).unwrap();
 
                     ctx.notify_later(Tick {}, Duration::from_secs(5));
                     actix::fut::ok(())

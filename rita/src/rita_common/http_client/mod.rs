@@ -1,13 +1,10 @@
-use std;
 use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
 use std::io::{Read, Write};
 
 use minihttpse::Response;
 
-use actix_web;
 use actix::prelude::*;
-use actix_web::client::*;
 use actix_web::*;
 
 use futures::Future;
@@ -16,9 +13,7 @@ use actix::registry::SystemService;
 
 use serde_json;
 
-use althea_types::{LocalIdentity, PaymentTx};
-
-use SETTING;
+use althea_types::LocalIdentity;
 
 use failure::Error;
 
@@ -29,7 +24,7 @@ pub enum HTTPClientError {
 }
 
 pub struct HTTPClient {
-    executors: SyncAddress<HTTPSyncExecutor>,
+    executors: Addr<Syn, HTTPSyncExecutor>,
 }
 
 impl Actor for HTTPClient {
@@ -38,7 +33,7 @@ impl Actor for HTTPClient {
 
 impl Supervised for HTTPClient {}
 impl SystemService for HTTPClient {
-    fn service_started(&mut self, ctx: &mut Context<Self>) {
+    fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("HTTP Client started");
     }
 }
@@ -78,7 +73,7 @@ impl Handler<Hello> for HTTPSyncExecutor {
     fn handle(&mut self, msg: Hello, _: &mut Self::Context) -> Self::Result {
         let my_id = serde_json::to_string(&msg.my_id)?;
 
-        let mut stream = TcpStream::connect_timeout(&msg.to, Duration::from_secs(1));
+        let stream = TcpStream::connect_timeout(&msg.to, Duration::from_secs(1));
 
         trace!("stream status {:?}, to: {:?}", stream, &msg.to);
 
@@ -101,7 +96,7 @@ Content-Length: {}\r\n\r\n
              {}\nEND",
             request
         );
-        stream.write(request.as_bytes())?;
+        stream.write_all(request.as_bytes())?;
 
         // Make request and return response as string
         let mut resp = String::new();
@@ -109,7 +104,7 @@ Content-Length: {}\r\n\r\n
 
         trace!("{:?} replied {} END", msg.to, &resp);
 
-        if resp.len() == 0 {
+        if resp.is_empty() {
             panic!("{:?} replied with empty", &resp);
         }
 

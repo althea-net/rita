@@ -75,12 +75,7 @@ impl KernelInterface {
                 "ip",
                 &["address", "add", &format!("{}", own_ip), "dev", &interface],
             )?;
-            if !output.stderr.is_empty() {
-                return Err(KernelManagerError::RuntimeError(format!(
-                    "received error adding wg link: {}",
-                    String::from_utf8(output.stderr)?
-                )).into());
-            }
+
             let output = self.run_command(
                 "ip",
                 &[
@@ -91,12 +86,7 @@ impl KernelInterface {
                     &interface,
                 ],
             )?;
-            if !output.stderr.is_empty() {
-                return Err(KernelManagerError::RuntimeError(format!(
-                    "received error adding wg link: {}",
-                    String::from_utf8(output.stderr)?
-                )).into());
-            }
+
             let output = self.run_command("ip", &["link", "set", "dev", &interface, "up"])?;
             if !output.stderr.is_empty() {
                 return Err(KernelManagerError::RuntimeError(format!(

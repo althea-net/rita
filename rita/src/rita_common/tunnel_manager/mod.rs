@@ -1,29 +1,19 @@
-use std;
-use std::net::{IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream};
+use std::net::{IpAddr, SocketAddr, SocketAddrV6};
 use std::path::Path;
-use std::time::Duration;
-use std::io::{Read, Write};
 use std::collections::HashMap;
-use std::sync::mpsc::{channel, Receiver, Sender};
-
-use minihttpse::Response;
 
 use actix::prelude::*;
-use actix::actors::*;
 
 use futures;
 use futures::Future;
 
-use althea_types::{EthAddress, Identity, LocalIdentity};
+use althea_types::LocalIdentity;
 
 use althea_kernel_interface::KernelInterface;
-use althea_kernel_interface;
 
 use babel_monitor::Babel;
 
 use rita_common::http_client::{HTTPClient, Hello};
-
-use serde_json;
 
 use SETTING;
 
@@ -43,7 +33,7 @@ struct TunnelData {
 
 impl TunnelData {
     fn new(listen_port: u16) -> TunnelData {
-        let mut ki = KernelInterface {};
+        let ki = KernelInterface {};
         let iface_name = ki.setup_wg_if().unwrap();
         TunnelData {
             iface_name,
@@ -64,7 +54,7 @@ impl Actor for TunnelManager {
 }
 impl Supervised for TunnelManager {}
 impl SystemService for TunnelManager {
-    fn service_started(&mut self, ctx: &mut Context<Self>) {
+    fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("Tunnel manager started");
     }
 }
@@ -113,7 +103,7 @@ impl Handler<OpenTunnel> for TunnelManager {
     type Result = ();
 
     fn handle(&mut self, their_id: OpenTunnel, _: &mut Context<Self>) -> Self::Result {
-        self.open_tunnel(their_id.0);
+        self.open_tunnel(their_id.0).unwrap();
         ()
     }
 }
@@ -127,12 +117,11 @@ fn is_link_local(ip: IpAddr) -> bool {
 
 impl TunnelManager {
     pub fn new() -> Self {
-        let tm = TunnelManager {
+        TunnelManager {
             ki: KernelInterface {},
             tunnel_map: HashMap::new(),
             port: SETTING.read().unwrap().network.wg_start_port,
-        };
-        tm
+        }
     }
 
     fn new_if(&mut self) -> TunnelData {
@@ -143,7 +132,7 @@ impl TunnelManager {
     }
 
     fn get_if(&mut self, ip: &IpAddr) -> TunnelData {
-        if self.tunnel_map.contains_key(&ip) {
+        if self.tunnel_map.contains_key(ip) {
             trace!("found existing wg interface for {}", ip);
             self.tunnel_map[ip].clone()
         } else {
@@ -157,7 +146,7 @@ impl TunnelManager {
     /// This gets the list of link-local neighbors, and then contacts them to get their
     /// Identity using `neighbor_inquiry` as well as their wireguard tunnel name
     pub fn get_neighbors(&mut self) -> ResponseFuture<Vec<(LocalIdentity, String)>, Error> {
-        self.ki.trigger_neighbor_disc();
+        self.ki.trigger_neighbor_disc().unwrap();
         let neighs: Vec<Box<Future<Item = Option<(LocalIdentity, String)>, Error = Error>>> =
             self.ki
                 .get_neighbors()
@@ -172,23 +161,18 @@ impl TunnelManager {
                     );
                     if &dev[..2] != "wg" && is_link_local(ip_address) {
                         {
-                            Some(
-                                Box::new(self.neighbor_inquiry(ip_address, &dev).then(|res| {
-                                    match res {
-                                        Ok(res) => futures::future::ok(Some(res)),
-                                        Err(err) => {
-                                            warn!("got error {:} from neighbor inquiry", err);
-                                            futures::future::ok(None)
-                                        }
+                            Some(Box::new(self.neighbor_inquiry(ip_address, dev).then(|res| {
+                                match res {
+                                    Ok(res) => futures::future::ok(Some(res)),
+                                    Err(err) => {
+                                        warn!("got error {:} from neighbor inquiry", err);
+                                        futures::future::ok(None)
                                     }
-                                }))
-                                    as Box<
-                                        Future<
-                                            Item = Option<(LocalIdentity, String)>,
-                                            Error = Error,
-                                        >,
-                                    >,
-                            )
+                                }
+                            }))
+                                as Box<
+                                    Future<Item = Option<(LocalIdentity, String)>, Error = Error>,
+                                >)
                         }
                     } else {
                         None
@@ -198,11 +182,8 @@ impl TunnelManager {
         Box::new(futures::future::join_all(neighs).then(|res| {
             let mut output = Vec::new();
             for i in res.unwrap() {
-                match i {
-                    Some(i) => {
-                        output.push(i);
-                    }
-                    _ => {}
+                if let Some(i) = i {
+                    output.push(i);
                 }
             }
             futures::future::ok(output)

@@ -1,28 +1,17 @@
 use std::time::{Duration, Instant};
-use std::thread;
-use std::path::Path;
 
 use actix::prelude::*;
 use actix::registry::SystemService;
-
-use serde_json;
-
-use babel_monitor::Babel;
 
 use rita_common::tunnel_manager::{GetNeighbors, TunnelManager};
 
 use rita_common::traffic_watcher::{TrafficWatcher, Watch};
 
-use rita_common::debt_keeper;
 use rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 
-use rita_common::payment_controller;
-use rita_common::payment_controller::{MakePayment, PaymentController, PaymentControllerUpdate};
+use rita_common::payment_controller::{PaymentController, PaymentControllerUpdate};
 
 use failure::Error;
-
-use SETTING;
-use althea_kernel_interface::KernelInterface;
 
 pub struct RitaLoop;
 
@@ -30,8 +19,8 @@ impl Actor for RitaLoop {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        ctx.run_later(Duration::from_secs(5), |act, ctx| {
-            let addr: Address<Self> = ctx.address();
+        ctx.run_later(Duration::from_secs(5), |_act, ctx| {
+            let addr: Addr<Unsync, Self> = ctx.address();
             addr.do_send(Tick);
         });
     }
@@ -55,7 +44,7 @@ impl Handler<Tick> for RitaLoop {
             TunnelManager::from_registry()
                 .send(GetNeighbors)
                 .into_actor(self)
-                .then(move |res, act, ctx| {
+                .then(move |res, act, _ctx| {
                     info!("got neighbors: {:?}", res);
 
                     let neigh = Instant::now();
@@ -63,7 +52,7 @@ impl Handler<Tick> for RitaLoop {
                     TrafficWatcher::from_registry()
                         .send(Watch(res.unwrap().unwrap()))
                         .into_actor(act)
-                        .then(move |res, act, ctx| {
+                        .then(move |_res, _act, ctx| {
                             info!("loop completed in {:?}", start.elapsed());
                             info!("traffic watcher completed in {:?}", neigh.elapsed());
                             DebtKeeper::from_registry().do_send(SendUpdate {});

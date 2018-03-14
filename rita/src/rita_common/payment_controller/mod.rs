@@ -8,7 +8,6 @@ use reqwest::{Client, StatusCode};
 
 use std::time::Duration;
 
-use std::net::Ipv6Addr;
 use SETTING;
 
 use reqwest;
@@ -37,7 +36,7 @@ impl Actor for PaymentController {
 }
 impl Supervised for PaymentController {}
 impl SystemService for PaymentController {
-    fn service_started(&mut self, ctx: &mut Context<Self>) {
+    fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("Payment Controller started");
     }
 }
@@ -76,12 +75,18 @@ pub struct PaymentControllerUpdate;
 impl Handler<PaymentControllerUpdate> for PaymentController {
     type Result = ();
 
-    fn handle(&mut self, _msg: PaymentControllerUpdate, _: &mut Context<Self>) -> Self::Result {
-        self.update();
+    fn handle(&mut self, msg: PaymentControllerUpdate, ctx: &mut Context<Self>) -> Self::Result {
+        match self.update() {
+            Ok(()) => {}
+            Err(err) => {
+                warn!("got error from update {:?}, retrying", err);
+                ctx.notify_later(msg, Duration::from_secs(5));
+            }
+        }
     }
 }
 
-/// This updates a "bounty hunter" with the current balance and the last PaymentTx.
+/// This updates a "bounty hunter" with the current balance and the last `PaymentTx`.
 /// Bounty hunters are servers which store and possibly enforce the current state of
 /// a channel. Currently they are actually just showing a completely insecure
 /// "fake" balance as a stand-in for the real thing.

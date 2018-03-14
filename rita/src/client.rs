@@ -57,7 +57,7 @@ mod rita_client;
 
 use rita_common::network_endpoints::{hello_response, make_payments};
 
-const USAGE: &'static str = "
+const USAGE: &str = "
 Usage: rita_common --config <settings> --default <default> --platform <platform>
 Options:
     --config   Name of config file
@@ -113,10 +113,10 @@ fn main() {
         .start();
 
     let common = rita_common::rita_loop::RitaLoop {};
-    let _: Address<_> = common.start();
+    let _: Addr<Unsync, _> = common.start();
 
     let client = rita_client::rita_loop::RitaLoop {};
-    let _: Address<_> = client.start();
+    let _: Addr<Unsync, _> = client.start();
 
     for msg in debt_keeper_output {
         match msg {
