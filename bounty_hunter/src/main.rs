@@ -20,7 +20,7 @@ use rouille::{Request, Response};
 #[macro_use]
 extern crate diesel;
 extern crate dotenv;
-extern crate simple_logger;
+extern crate env_logger;
 
 extern crate serde;
 #[macro_use]
@@ -65,7 +65,7 @@ pub struct BountyUpdate {
 }
 
 fn main() {
-    simple_logger::init().unwrap();
+    env_logger::init();
     trace!("Starting");
 
     let conn = Mutex::new(establish_connection());

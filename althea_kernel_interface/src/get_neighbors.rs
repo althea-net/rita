@@ -1,10 +1,12 @@
-use super::{Error, KernelInterface};
+use super::{KernelInterface, KernelManagerError};
 
 use std::net::IpAddr;
 use std::str::FromStr;
 
 use eui48::MacAddress;
 use regex::Regex;
+
+use failure::Error;
 
 impl KernelInterface {
     /// Returns a vector of neighbors reachable over layer 2, giving the hardware
@@ -19,7 +21,7 @@ impl KernelInterface {
             trace!("Regex captured {:?}", caps);
 
             vec.push((
-                MacAddress::parse_str(&caps[3]).unwrap(), // Ugly and inconsiderate, ditch ASAP
+                MacAddress::parse_str(&caps[3])?, // Ugly and inconsiderate, ditch ASAP
                 IpAddr::from_str(&caps[1])?,
                 caps[2].to_string(),
             ));
@@ -28,11 +30,11 @@ impl KernelInterface {
         Ok(vec)
     }
 
-    pub fn trigger_neighbor_disc(&self) {
-        for interface in self.get_interfaces().unwrap() {
-            self.run_command("ping6", &["-c1", "-I", &interface, "ff02::1"])
-                .unwrap();
+    pub fn trigger_neighbor_disc(&self) -> Result<(), Error> {
+        for interface in self.get_interfaces()? {
+            self.run_command("ping6", &["-c1", "-I", &interface, "ff02::1"])?;
         }
+        Ok(())
     }
 }
 

@@ -11,6 +11,7 @@ import toml
 network_lab = os.path.join(os.path.dirname(__file__), "deps/network-lab/network-lab.sh")
 babeld = os.path.join(os.path.dirname(__file__), "deps/babeld/babeld")
 rita = os.path.join(os.path.dirname(__file__), "../target/debug/rita")
+rita_exit = os.path.join(os.path.dirname(__file__), "../target/debug/rita_exit")
 bounty = os.path.join(os.path.dirname(__file__), "../target/debug/bounty_hunter")
 ping6 = os.getenv('PING6', "ping6")
 
@@ -19,6 +20,7 @@ tests_passes = True
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
+
 
 def cleanup():
     os.system("rm -rf *.log *.pid *.toml")
@@ -52,6 +54,7 @@ class Node:
             interfaces += "veth-{}-{} ".format(self.id, i)
         return interfaces
 
+
 class Connection:
     def __init__(self, a, b):
         self.a = a
@@ -64,6 +67,22 @@ class Connection:
             self.a = t
 
 
+def get_wg_private_key():
+    proc = subprocess.Popen(["wg", "genkey"], stdout=subprocess.PIPE)
+    key = proc.stdout.read()
+    print(key[0:44])
+    return key[0:44].decode("utf-8")
+
+
+def get_wg_public_key(private_key):
+    proc = subprocess.Popen(["wg", "pubkey"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+    proc.stdin.write(private_key.encode('utf-8'))
+    proc.stdin.close()
+    key = proc.stdout.read()
+    print(key[0:44])
+    return key[0:44].decode("utf-8")
+
+
 def prep_netns(id):
     os.system("ip netns exec netlab-{} sysctl -w net.ipv4.ip_forward=1".format(id))
     os.system("ip netns exec netlab-{} sysctl -w net.ipv6.conf.all.forwarding=1".format(id))
@@ -71,31 +90,63 @@ def prep_netns(id):
 
 
 def start_babel(node):
-    os.system("ip netns exec netlab-{id} {0} -I babeld-n{id}.pid -d1 -L babeld-n{id}.log -h 1 -P {price} -G 8080 -w dummy &".
-              format(babeld, node.get_interfaces(), id=node.id, price=node.fwd_price))
+    os.system(
+        "ip netns exec netlab-{id} {0} -I babeld-n{id}.pid -d1 -L babeld-n{id}.log -H 1 -F {price} -a 0 -G 8080 -w dummy &".
+            format(babeld, node.get_interfaces(), id=node.id, price=node.fwd_price))
+    time.sleep(2)
+
 
 def create_dummy(id):
     os.system('ip netns exec netlab-{} brctl addbr dummy'.format(id))
     os.system('ip netns exec netlab-{} ip link set up dummy'.format(id))
 
+
 def start_bounty(id):
-    os.system('(RUST_BACKTRACE=full ip netns exec netlab-{id} {bounty} & echo $! > bounty-n{id}.pid) | grep -Ev "<unknown>|mio" > bounty-n{id}.log &'.format(id=id, bounty=bounty))
+    os.system(
+        '(RUST_BACKTRACE=full ip netns exec netlab-{id} {bounty} & echo $! > bounty-n{id}.pid) | grep -Ev "<unknown>|mio" > bounty-n{id}.log &'.format(
+            id=id, bounty=bounty))
 
 
 def get_rita_defaults():
-    return toml.load(open("../rita/example.toml"))
+    return toml.load(open("../settings/default.toml"))
+
+
+def get_rita_exit_defaults():
+    return toml.load(open("../settings/default_exit.toml"))
 
 
 def save_rita_settings(id, x):
     toml.dump(x, open("rita-settings-n{}.toml".format(id), "w"))
 
+
 def start_rita(id):
     settings = get_rita_defaults()
     settings["network"]["own_ip"] = "fd::{}".format(id)
-    settings["network"]["wg_private_key"] = "{pwd}/private-key-{id}".format(id=id, pwd=dname)
+    settings["network"]["wg_private_key_path"] = "{pwd}/private-key-{id}".format(id=id, pwd=dname)
+    settings["network"]["wg_private_key"] = get_wg_private_key()
+    settings["network"]["wg_public_key"] = get_wg_public_key(settings["network"]["wg_private_key"])
     save_rita_settings(id, settings)
     time.sleep(0.1)
-    os.system('(RUST_BACKTRACE=full ip netns exec netlab-{id} {rita} --config {pwd}/rita-settings-n{id}.toml & echo $! > rita-n{id}.pid) | grep -Ev "<unknown>|mio" > rita-n{id}.log &'.format(id=id, rita=rita, pwd=dname))
+    os.system(
+        '(RUST_BACKTRACE=full RUST_LOG=trace ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml --platform linux'
+        ' 2>&1 & echo $! > rita-n{id}.pid) | '
+        'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=rita,
+                                                                              pwd=dname))
+
+
+def start_rita_exit(id):
+    settings = get_rita_exit_defaults()
+    settings["network"]["own_ip"] = "fd::{}".format(id)
+    settings["network"]["wg_private_key_path"] = "{pwd}/private-key-{id}".format(id=id, pwd=dname)
+    settings["network"]["wg_private_key"] = get_wg_private_key()
+    settings["network"]["wg_public_key"] = get_wg_public_key(settings["network"]["wg_private_key"])
+    save_rita_settings(id, settings)
+    time.sleep(0.1)
+    os.system(
+        '(RUST_BACKTRACE=full RUST_LOG=trace ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml'
+        ' 2>&1 & echo $! > rita-n{id}.pid) | '
+        'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=rita_exit,
+                                                                              pwd=dname))
 
 
 def assert_test(x, description):
@@ -106,15 +157,28 @@ def assert_test(x, description):
         global tests_passes
         tests_passes = False
 
+
 class World:
     def __init__(self):
         self.nodes = {}
         self.connections = {}
         self.bounty = None
+        self.exit = None
+        self.external = None
 
     def add_node(self, node):
         assert node.id not in self.nodes
         self.nodes[node.id] = node
+
+    def add_exit_node(self, node):
+        assert node.id not in self.nodes
+        self.nodes[node.id] = node
+        self.exit = node.id
+
+    def add_external_node(self, node):
+        assert node.id not in self.nodes
+        self.nodes[node.id] = node
+        self.external = node.id
 
     def add_connection(self, connection):
         connection.canonicalize()
@@ -124,6 +188,12 @@ class World:
 
     def set_bounty(self, bounty_id):
         self.bounty = bounty_id
+
+    def to_ip(self, node):
+        if self.exit == node.id:
+            return "172.168.1.254"
+        else:
+            return "fd::{}".format(node.id)
 
     def create(self):
         cleanup()
@@ -178,21 +248,28 @@ class World:
 
         print("starting rita")
         for id in self.nodes:
-            start_rita(id)
+            if id == self.exit:
+                start_rita_exit(id)
+            elif id == self.external:
+                pass
+            else:
+                start_rita(id)
             time.sleep(0.2)
         print("rita started")
 
-    @staticmethod
-    def test_reach(id_from, id_to):
-        ping = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(id_from), ping6, "fd::{}".format(id_to), "-c", "1"], stdout=subprocess.PIPE)
+    def test_reach(self, node_from, node_to):
+        ping = subprocess.Popen(
+            ["ip", "netns", "exec", "netlab-{}".format(node_from.id), ping6,
+             "fd::{}".format(node_to.id),
+             "-c", "1"], stdout=subprocess.PIPE)
         output = ping.stdout.read().decode("utf-8")
         return "1 packets transmitted, 1 received, 0% packet loss" in output
 
     def test_reach_all(self):
-        for i in self.nodes:
-            for j in self.nodes:
-                assert_test(self.test_reach(i, j), "Reachability from node {} to {}".format(i, j))
-                assert_test(self.test_reach(j, i), "Reachability from node {} to {}".format(j, i))
+        for i in self.nodes.values():
+            for j in self.nodes.values():
+                assert_test(self.test_reach(i, j),
+                            "Reachability from node {} to {}".format(i.id, j.id))
 
     def get_balances(self):
         s = 1
@@ -201,7 +278,9 @@ class World:
         balances = {}
 
         while s != 0 and n < 100:
-            status = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(self.bounty), "curl", "-s", "-g", "-6", "[::1]:8888/list"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            status = subprocess.Popen(
+                ["ip", "netns", "exec", "netlab-{}".format(self.bounty), "curl", "-s", "-g", "-6",
+                 "[::1]:8888/list"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             status.wait()
             output = status.stdout.read().decode("utf-8")
             status = json.loads(output)
@@ -217,26 +296,56 @@ class World:
             print("time {}, value {}".format(n, s))
 
         print("tried {} times".format(n))
-        print("sum = {}, magnitude = {}, error = {}".format(s, m, abs(s)/m))
+        print("sum = {}, magnitude = {}, error = {}".format(s, m, abs(s) / m))
         assert_test(s == 0 and m != 0, "Conservation of balance")
         return balances
 
     def gen_traffic(self, from_node, to_node, bytes):
-        server = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(to_node.id), "iperf3", "-s", "-V"])
-        time.sleep(0.1)
-        client = subprocess.Popen(["ip", "netns", "exec", "netlab-{}".format(from_node.id), "iperf3", "-c", "fd::{}".format(to_node.id), "-V", "-n", str(bytes), "-Z"])
+        if from_node.id == self.exit:
+            server = subprocess.Popen(
+                ["ip", "netns", "exec", "netlab-{}".format(from_node.id), "iperf3", "-s", "-V"])
+            time.sleep(0.1)
+            client = subprocess.Popen(
+                ["ip", "netns", "exec", "netlab-{}".format(to_node.id), "iperf3", "-c",
+                 self.to_ip(from_node), "-V", "-n", str(bytes), "-Z", "-R"])
+
+        else:
+            server = subprocess.Popen(
+                ["ip", "netns", "exec", "netlab-{}".format(to_node.id), "iperf3", "-s", "-V"])
+            time.sleep(0.1)
+            client = subprocess.Popen(
+                ["ip", "netns", "exec", "netlab-{}".format(from_node.id), "iperf3", "-c",
+                 self.to_ip(to_node), "-V", "-n", str(bytes), "-Z"])
+
         client.wait()
         time.sleep(0.1)
         server.send_signal(signal.SIGINT)
         server.wait()
 
+    def test_traffic(self, from_node, to_node, results):
+        print("Test traffic...")
+        t1 = self.get_balances()
+        self.gen_traffic(from_node, to_node, 1e8)
+        time.sleep(30)
+
+        t2 = self.get_balances()
+        print("balance change from {}->{}:".format(from_node.id, to_node.id))
+        diff = traffic_diff(t1, t2)
+        print(diff)
+
+        for node_id, balance in results.items():
+            assert_test(fuzzy_traffic(diff[node_id], balance * 1e8),
+                        "Balance of {}".format(node_id))
+
 
 def traffic_diff(a, b):
+    print(a, b)
     assert set(a.keys()) == set(b.keys())
     return {key: b[key] - a.get(key, 0) for key in b.keys()}
 
+
 def fuzzy_traffic(a, b):
-    return b - 5e9 < a < b + 5e9
+    return b - 5e8 - abs(a) * 0.1 < a < b + 5e8 + abs(a) * 0.1
 
 
 def check_log_contains(f, x):
@@ -247,22 +356,24 @@ def check_log_contains(f, x):
 
 
 if __name__ == "__main__":
-    a = Node(1, 10)  # TODO: Currently unspecified
+    a = Node(1, 10)
     b = Node(2, 25)
     c = Node(3, 60)
-    d = Node(4, 10)  # TODO: Currently unspecified
-    # e = Node(5, 10)  # TODO: Does not exist in diagram
+    d = Node(4, 10)
+    e = Node(5, 0)
     f = Node(6, 50)
     g = Node(7, 10)
+    # h = Node(8, 0)
 
     world = World()
     world.add_node(a)
     world.add_node(b)
     world.add_node(c)
     world.add_node(d)
-    # world.add_node(e)
+    world.add_exit_node(e)
     world.add_node(f)
     world.add_node(g)
+    # world.add_external_node(h)
 
     world.add_connection(Connection(a, f))
     world.add_connection(Connection(f, g))
@@ -270,80 +381,118 @@ if __name__ == "__main__":
     world.add_connection(Connection(b, c))
     world.add_connection(Connection(b, f))
     world.add_connection(Connection(b, d))
+    world.add_connection(Connection(e, g))
+    # world.add_connection(Connection(e, h))
 
     world.set_bounty(3)  # TODO: Who should be the bounty hunter?
 
     world.create()
 
     print("Waiting for network to stabilize")
-    time.sleep(40)
+    time.sleep(50)
 
     print("Test reachabibility...")
+
     world.test_reach_all()
-    time.sleep(12)
 
-    print("Test traffic...")
-    t1 = world.get_balances()
-    time.sleep(20)
-    world.gen_traffic(d, a, 1000000000)
-    time.sleep(20)
+    world.test_traffic(c, f, {
+        1: 0,
+        2: 0,
+        3: -10 * 1.05,
+        4: 0,
+        5: 0,
+        6: 0 * 1.05,
+        7: 10 * 1.05
+    })
 
-    t2 = world.get_balances()
-    print("balance change from d->a:")
-    diff = traffic_diff(t1, t2)
-    print(diff)
+    world.test_traffic(d, a, {
+        1: 0 * 1.05,
+        2: 25 * 1.05,
+        3: 0,
+        4: -75 * 1.05,
+        5: 0,
+        6: 50 * 1.05,
+        7: 0
+    })
 
-    assert_test(fuzzy_traffic(diff[1], 10e9), "Balance of A")
-    assert_test(fuzzy_traffic(diff[2], 25e9), "Balance of B")
-    assert_test(fuzzy_traffic(diff[3], 0), "Balance of C")
-    assert_test(fuzzy_traffic(diff[4], -85e9), "Balance of D")
-    assert_test(fuzzy_traffic(diff[6], 50e9), "Balance of F")
-    assert_test(fuzzy_traffic(diff[7], 0), "Balance of G")
+    world.test_traffic(a, c, {
+        1: -60 * 1.05,
+        2: 0,
+        3: 0,
+        4: 0,
+        5: 0,
+        6: 50 * 1.05,
+        7: 10 * 1.05
+    })
 
-    t2 = world.get_balances()
+    world.test_traffic(d, e, {
+        1: 0,
+        2: 25 * 1.1,
+        3: 0,
+        4: -135 * 1.1,
+        5: 50 * 1.1,
+        6: 50 * 1.1,
+        7: 10 * 1.1
+    })
 
-    time.sleep(22)
-    world.gen_traffic(a, c, 1000000000)
-    time.sleep(20)
+    world.test_traffic(e, d, {
+        1: 0,
+        2: 25 * 1.1,
+        3: 0,
+        4: -135 * 1.1,
+        5: 50 * 1.1,
+        6: 50 * 1.1,
+        7: 10 * 1.1
+    })
 
-    t3 = world.get_balances()
-    print("balance change from a->c:")
-    diff = traffic_diff(t2, t3)
-    print(diff)
+    world.test_traffic(c, e, {
+        1: 0,
+        2: 0,
+        3: -60 * 1.1,
+        4: 0,
+        5: 50 * 1.1,
+        6: 0,
+        7: 10 * 1.1
+    })
 
-    assert_test(fuzzy_traffic(diff[1], -120e9), "Balance of A")
-    assert_test(fuzzy_traffic(diff[2], 0), "Balance of B")
-    assert_test(fuzzy_traffic(diff[3], 60e9), "Balance of C")
-    assert_test(fuzzy_traffic(diff[4], 0), "Balance of D")
-    assert_test(fuzzy_traffic(diff[6], 50e9), "Balance of F")
-    assert_test(fuzzy_traffic(diff[7], 10e9), "Balance of G")
+    world.test_traffic(e, c, {
+        1: 0,
+        2: 0,
+        3: -60 * 1.1,
+        4: 0,
+        5: 50 * 1.1,
+        6: 0,
+        7: 10 * 1.1
+    })
 
-    t3 = world.get_balances()
+    world.test_traffic(g, e, {
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 0,
+        5: 50 * 1.1,
+        6: 0,
+        7: -50 * 1.1
+    })
 
-    time.sleep(20)
-    world.gen_traffic(c, f, 1000000000)
-    time.sleep(20)
-
-    t4 = world.get_balances()
-    print("balance change from c->f:")
-    diff = traffic_diff(t3, t4)
-    print(diff)
-
-    assert_test(fuzzy_traffic(diff[1], 0), "Balance of A")
-    assert_test(fuzzy_traffic(diff[2], 0), "Balance of B")
-    assert_test(fuzzy_traffic(diff[3], -60e9), "Balance of C")
-    assert_test(fuzzy_traffic(diff[4], 0), "Balance of D")
-    assert_test(fuzzy_traffic(diff[6], 50e9), "Balance of F")
-    assert_test(fuzzy_traffic(diff[7], 10e9), "Balance of G")
+    world.test_traffic(e, g, {
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 0,
+        5: 50 * 1.1,
+        6: 0,
+        7: -50 * 1.1
+    })
 
     print("Check that tunnels have not been suspended")
 
-    # assert_test(not check_log_contains("rita-n1.log", "Suspending Tunnel"), "Suspension of A")
-    # assert_test(not check_log_contains("rita-n2.log", "Suspending Tunnel"), "Suspension of B")
-    # assert_test(not check_log_contains("rita-n3.log", "Suspending Tunnel"), "Suspension of C")
-    # assert_test(not check_log_contains("rita-n4.log", "Suspending Tunnel"), "Suspension of D")
-    # assert_test(not check_log_contains("rita-n6.log", "Suspending Tunnel"), "Suspension of F")
-    # assert_test(not check_log_contains("rita-n7.log", "Suspending Tunnel"), "Suspension of G")
+    assert_test(not check_log_contains("rita-n1.log", "debt is below close threshold"), "Suspension of A")
+    assert_test(not check_log_contains("rita-n2.log", "debt is below close threshold"), "Suspension of B")
+    assert_test(not check_log_contains("rita-n3.log", "debt is below close threshold"), "Suspension of C")
+    assert_test(not check_log_contains("rita-n4.log", "debt is below close threshold"), "Suspension of D")
+    assert_test(not check_log_contains("rita-n6.log", "debt is below close threshold"), "Suspension of F")
+    assert_test(not check_log_contains("rita-n7.log", "debt is below close threshold"), "Suspension of G")
 
     if len(sys.argv) > 1 and sys.argv[1] == "leave-running":
         pass
