@@ -10,7 +10,7 @@ extern crate settings;
 
 extern crate ipgen;
 extern crate rand;
-use rand::Rng;
+use rand::{thread_rng, Rng};
 
 use std::str;
 
@@ -70,8 +70,8 @@ fn openwrt_generate_and_set_wg_keys(
 
 fn linux_generate_mesh_ip(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Result<(), Error> {
     let ki = KernelInterface {};
-    let seed = rand::thread_rng().gen::<[u8; 10]>();
-    let mesh_ip = ipgen::ip(std::str::from_utf8(&seed)?, "fd::/120").unwrap();
+    let seed: String = thread_rng().gen_ascii_chars().take(50).collect();
+    let mesh_ip = ipgen::ip(&seed, "fd::/120").unwrap();
 
     // Mutates Settings intentional side effect
     SETTINGS.write().unwrap().network.own_ip = mesh_ip;
@@ -184,10 +184,10 @@ fn openwrt_init(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Result<(), Err
 
     request_own_exit_ip(SETTINGS.clone())?;
     trace!("Exit ip request exited");
-    if validate_wg_key(&privkey) || validate_wg_key(&pubkey) {
+    if !validate_wg_key(&privkey) || validate_wg_key(&pubkey) {
         openwrt_generate_and_set_wg_keys(SETTINGS.clone())?;
     }
-    if validate_mesh_ip(&mesh_ip) {
+    if !validate_mesh_ip(&mesh_ip) {
         openwrt_generate_mesh_ip(SETTINGS.clone())?;
     }
     if !our_exit_ip.is_ipv4() && !our_exit_ip.is_unspecified() {
@@ -205,13 +205,11 @@ fn linux_init(
     let mesh_ip = SETTINGS.read().unwrap().network.own_ip.clone();
     let our_exit_ip = SETTINGS.read().unwrap().exit_client.exit_ip.clone();
 
-    request_own_exit_ip(SETTINGS.clone());
-    trace!("Exit ip request exited");
-    if validate_wg_key(&privkey) || validate_wg_key(&pubkey) {
-        linux_generate_wg_keys(SETTINGS.clone());
+    if !validate_wg_key(&privkey) || validate_wg_key(&pubkey) {
+        linux_generate_wg_keys(SETTINGS.clone()).expect("failed to generate wg keys");
     }
-    if validate_mesh_ip(&mesh_ip) {
-        linux_generate_mesh_ip(SETTINGS.clone());
+    if !validate_mesh_ip(&mesh_ip) {
+        linux_generate_mesh_ip(SETTINGS.clone()).expect("failed to generate ip");
     }
 
     thread::spawn(move || {
@@ -223,10 +221,18 @@ fn linux_init(
 
             match details {
                 Ok(details) => {
-                    SETTINGS.write().unwrap().exit_client.details = Some(details);
-                    SETTINGS.read().unwrap().write(&file_name);
+                    SETTINGS
+                        .write()
+                        .expect("can't write config!")
+                        .exit_client
+                        .details = Some(details);
+                    SETTINGS
+                        .read()
+                        .expect("can't read config!")
+                        .write(&file_name)
+                        .expect("can't write config!");
 
-                    linux_setup_exit_tunnel(SETTINGS.clone());
+                    linux_setup_exit_tunnel(SETTINGS.clone()).expect("can't set exit tunnel up!");
 
                     trace!("got exit details, exiting");
                     break;
