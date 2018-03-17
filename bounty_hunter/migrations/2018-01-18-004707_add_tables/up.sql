@@ -1,6 +1,5 @@
 -- Your SQL goes here
-CREATE TABLE status (
+CREATE TABLE nodes (
   ip VARCHAR NOT NULL PRIMARY KEY,
-  mac VARCHAR NOT NULL,
   balance VARCHAR NOT NULL
 )

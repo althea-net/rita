@@ -103,7 +103,7 @@ def create_dummy(id):
 
 def start_bounty(id):
     os.system(
-        '(RUST_BACKTRACE=full ip netns exec netlab-{id} {bounty} & echo $! > bounty-n{id}.pid) | grep -Ev "<unknown>|mio" > bounty-n{id}.log &'.format(
+        '(RUST_BACKTRACE=full RUST_LOG=trace ip netns exec netlab-{id} {bounty} 2>&1 & echo $! > bounty-n{id}.pid ) | grep -Ev "<unknown>|mio" > bounty-n{id}.log &'.format(
             id=id, bounty=bounty))
 
 
@@ -288,9 +288,10 @@ class World:
             s = 0
             m = 0
             for i in status:
-                balances[int(i["ip"].replace("fd::", ""))] = int(i["balance"])
-                s += int(i["balance"])
-                m += abs(int(i["balance"]))
+                bal = int(i["balance"])
+                balances[int(i["ip"].replace("fd::", ""))] = bal
+                s += bal
+                m += abs(bal)
             n += 1
             time.sleep(0.5)
             print("time {}, value {}".format(n, s))

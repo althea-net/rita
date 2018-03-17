@@ -1,7 +1,6 @@
 table! {
-    status (ip) {
+    nodes (ip) {
         ip -> Text,
-        mac -> Text,
         balance -> Text,
     }
 }

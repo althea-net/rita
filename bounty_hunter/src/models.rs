@@ -1,9 +1,15 @@
-use super::schema::status;
+use super::schema::*;
+
+use althea_types::{Identity, PaymentTx};
+use num256::Uint256;
+
+use failure::Error;
+
+use serde_json;
 
 #[derive(Queryable, Serialize, Deserialize, Debug, Insertable)]
-#[table_name = "status"]
-pub struct Status {
+#[table_name = "nodes"]
+pub struct Node {
     pub ip: String,
-    pub mac: String,
     pub balance: String,
 }
