@@ -208,8 +208,8 @@ class World:
         for id, conn in self.connections.items():
             edges.append({
                 "nodes": ["{}".format(conn.a.id), "{}".format(conn.b.id)],
-                "->": "loss random 0%",
-                "<-": "loss random 0%"
+                "->": "",
+                "<-": ""
             })
 
         network = {"nodes": nodes, "edges": edges}
