@@ -4,7 +4,8 @@
 target-mac
 **/*.rs.bk
 .idea
-integration-tests/test.db
-bounty_hunter/test.db
+**/test.db
 test.db-journal
 *.log
+integration-tests/private-key*
+integration-tests/rita-settings*
