@@ -15,6 +15,10 @@ rita_exit = os.path.join(os.path.dirname(__file__), "../target/debug/rita_exit")
 bounty = os.path.join(os.path.dirname(__file__), "../target/debug/bounty_hunter")
 ping6 = os.getenv('PING6', "ping6")
 
+es_home = os.getenv('ES_HOME', "/usr/share/elasticsearch")
+
+elastic_search = os.path.join(es_home, "bin/elasticsearch")
+
 tests_passes = True
 
 abspath = os.path.abspath(__file__)
@@ -25,7 +29,7 @@ os.chdir(dname)
 def cleanup():
     os.system("rm -rf *.log *.pid *.toml")
     os.system("killall babeld rita bounty_hunter iperf")  # TODO: This is very inconsiderate
-
+    os.system("pkill -9 -f elasticsearch")  # TODO: This is very inconsiderate
 
 def teardown():
     os.system("rm -rf *.pid *.toml")
@@ -93,7 +97,14 @@ def start_babel(node):
     os.system(
         "ip netns exec netlab-{id} {0} -I babeld-n{id}.pid -d1 -L babeld-n{id}.log -H 1 -F {price} -a 0 -G 8080 -w dummy &".
             format(babeld, node.get_interfaces(), id=node.id, price=node.fwd_price))
-    time.sleep(2)
+
+
+def start_elastic(id):
+    os.system(
+        "ip netns exec netlab-{id} sudo -u elasticsearch {0} -E 'network.host'='[::0]'&".
+            format(elastic_search, id=id))
+    time.sleep(20)
+    os.system("ip netns exec netlab-{id}  curl -XPUT 'localhost:9200/stats'".format(id=id))
 
 
 def create_dummy(id):
@@ -250,6 +261,7 @@ class World:
         for id in self.nodes:
             if id == self.exit:
                 start_rita_exit(id)
+                start_elastic(id)
             elif id == self.external:
                 pass
             else:

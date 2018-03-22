@@ -23,3 +23,7 @@ babel_interfaces = "eth0 eth1"
 wg_tunnel_port = 59999
 external_nic = "veth-5-8"
 exit_price = 50
+
+[stat_server]
+stat_address="[fd::5]"
+stat_port=9200
