@@ -148,9 +148,6 @@ impl RitaSettings {
         s.merge(config::File::with_name(file_name).required(false))?;
         let settings: Self = s.try_into()?;
 
-        let mut file = File::create(&Path::new(&settings.network.wg_private_key_path))?;
-        file.write_all(&settings.network.wg_private_key.as_bytes())?;
-
         Ok(settings)
     }
 
@@ -159,9 +156,6 @@ impl RitaSettings {
         s.merge(config::File::with_name(default))?;
         s.merge(config::File::with_name(file_name).required(false))?;
         let settings: Self = s.clone().try_into()?;
-
-        let mut file = File::create(&Path::new(&settings.network.wg_private_key_path))?;
-        file.write_all(&settings.network.wg_private_key.as_bytes())?;
 
         let settings = Arc::new(RwLock::new(settings));
 
