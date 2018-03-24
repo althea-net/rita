@@ -1,25 +1,66 @@
 #!/usr/bin/python3
+
+from termcolor import colored
+
+import errno
 import json
 import os
-import subprocess
-import time
-import sys
-from termcolor import colored
+import random
 import signal
+import shlex
+import subprocess
+import sys
+import time
 import toml
 
-network_lab = os.path.join(os.path.dirname(__file__), "deps/network-lab/network-lab.sh")
-babeld = os.path.join(os.path.dirname(__file__), "deps/babeld/babeld")
-rita = os.path.join(os.path.dirname(__file__), "../target/debug/rita")
-rita_exit = os.path.join(os.path.dirname(__file__), "../target/debug/rita_exit")
-bounty = os.path.join(os.path.dirname(__file__), "../target/debug/bounty_hunter")
-ping6 = os.getenv('PING6', "ping6")
+NETWORK_LAB = os.path.join(os.path.dirname(__file__), "deps/network-lab/network-lab.sh")
+BABELD = os.path.join(os.path.dirname(__file__), "deps/babeld/babeld")
+RITA = os.path.join(os.path.dirname(__file__), "../target/debug/rita")
+RITA_EXIT = os.path.join(os.path.dirname(__file__), "../target/debug/rita_exit")
+BOUNTY_HUNTER = os.path.join(os.path.dirname(__file__), "../target/debug/bounty_hunter")
+PING6 = os.getenv('PING6', "ping6")
+CONVERGENCE_DELAY = float(os.getenv('CONVERGENCE_DELAY', 10))
 
 tests_passes = True
 
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
+
+
+def exec_or_exit(command, blocking=True, delay=0.01):
+    """
+    Executes a command and terminates the program if it fails.
+
+    :param str command: A string containing the command to run
+    :param bool blocking: Decides whether to block until :data:`command` exits
+    :param float delay: How long to wait before obtaining the return value
+    (useful in non-blocking mode where e.g. a ``cat`` command with a
+    non-existent file would very likely fail before, say, 100ms pass)
+    """
+    process = subprocess.Popen(shlex.split(command))
+
+    time.sleep(delay)
+
+    if not blocking:
+        # If it didn't fail yet we get a None
+        retval = process.poll() or 0
+    else:
+        retval = process.wait()
+
+    if retval != 0:
+        try:
+            errname = errno.errorcode[retval]
+        except KeyError: # The error code doesn't have a canonical name
+            errname = '<unknown>'
+        print('Command "{c}" failed: "{strerr}" (code {rv})'.format(
+            c=command,
+            strerr=os.strerror(retval), # strerror handles unknown errors gracefuly
+            rv=errname,
+            file=sys.stderr
+            )
+            )
+        sys.exit(retval)
 
 
 def cleanup():
@@ -84,27 +125,34 @@ def get_wg_public_key(private_key):
 
 
 def prep_netns(id):
-    os.system("ip netns exec netlab-{} sysctl -w net.ipv4.ip_forward=1".format(id))
-    os.system("ip netns exec netlab-{} sysctl -w net.ipv6.conf.all.forwarding=1".format(id))
-    os.system("ip netns exec netlab-{} ip link set up lo".format(id))
+    exec_or_exit("ip netns exec netlab-{} sysctl -w net.ipv4.ip_forward=1".format(id))
+    exec_or_exit("ip netns exec netlab-{} sysctl -w net.ipv6.conf.all.forwarding=1".format(id))
+    exec_or_exit("ip netns exec netlab-{} ip link set up lo".format(id))
 
 
 def start_babel(node):
-    os.system(
-        "ip netns exec netlab-{id} {0} -I babeld-n{id}.pid -d1 -L babeld-n{id}.log -H 1 -F {price} -a 0 -G 8080 -w dummy &".
-            format(babeld, node.get_interfaces(), id=node.id, price=node.fwd_price))
-    time.sleep(2)
-
-
-def create_dummy(id):
-    os.system('ip netns exec netlab-{} brctl addbr dummy'.format(id))
-    os.system('ip netns exec netlab-{} ip link set up dummy'.format(id))
+    exec_or_exit(
+            (
+                "ip netns exec netlab-{id} {babeld_path} " +
+                "-I babeld-n{id}.pid " +
+                "-d 1 " +
+                "-r " +
+                "-L babeld-n{id}.log " +
+                "-H 1 " +
+                "-F {price} " +
+                "-a 0 " +
+                "-G 8080 " +
+                '-C "default update-interval 1" ' +
+                "-w lo"
+            ).format(babeld_path=BABELD, ifaces=node.get_interfaces(), id=node.id, price=node.fwd_price),
+            blocking=False
+        )
 
 
 def start_bounty(id):
     os.system(
         '(RUST_BACKTRACE=full ip netns exec netlab-{id} {bounty} & echo $! > bounty-n{id}.pid) | grep -Ev "<unknown>|mio" > bounty-n{id}.log &'.format(
-            id=id, bounty=bounty))
+            id=id, bounty=BOUNTY_HUNTER))
 
 
 def get_rita_defaults():
@@ -130,8 +178,9 @@ def start_rita(id):
     os.system(
         '(RUST_BACKTRACE=full RUST_LOG=trace ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml --platform linux'
         ' 2>&1 & echo $! > rita-n{id}.pid) | '
-        'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=rita,
-                                                                              pwd=dname))
+        'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA,
+                                                                              pwd=dname)
+        )
 
 
 def start_rita_exit(id):
@@ -145,8 +194,9 @@ def start_rita_exit(id):
     os.system(
         '(RUST_BACKTRACE=full RUST_LOG=trace ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml'
         ' 2>&1 & echo $! > rita-n{id}.pid) | '
-        'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=rita_exit,
-                                                                              pwd=dname))
+        'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA_EXIT,
+                                                                              pwd=dname)
+        )
 
 
 def assert_test(x, description):
@@ -218,8 +268,8 @@ class World:
 
         print("network topology: {}".format(network))
 
-        print(network_lab)
-        proc = subprocess.Popen([network_lab], stdin=subprocess.PIPE, universal_newlines=True)
+        print(NETWORK_LAB)
+        proc = subprocess.Popen([NETWORK_LAB], stdin=subprocess.PIPE, universal_newlines=True)
         proc.stdin.write(network_string)
         proc.stdin.close()
 
@@ -235,7 +285,6 @@ class World:
         print("starting babel")
 
         for id, node in self.nodes.items():
-            create_dummy(id)
             start_babel(node)
 
         print("babel started")
@@ -254,12 +303,12 @@ class World:
                 pass
             else:
                 start_rita(id)
-            time.sleep(0.2)
+            time.sleep(0.5 + random.random() / 2) # wait 0.5s - 1s
         print("rita started")
 
     def test_reach(self, node_from, node_to):
         ping = subprocess.Popen(
-            ["ip", "netns", "exec", "netlab-{}".format(node_from.id), ping6,
+            ["ip", "netns", "exec", "netlab-{}".format(node_from.id), PING6,
              "fd::{}".format(node_to.id),
              "-c", "1"], stdout=subprocess.PIPE)
         output = ping.stdout.read().decode("utf-8")
@@ -389,7 +438,7 @@ if __name__ == "__main__":
     world.create()
 
     print("Waiting for network to stabilize")
-    time.sleep(50)
+    time.sleep(CONVERGENCE_DELAY)
 
     print("Test reachabibility...")
 
