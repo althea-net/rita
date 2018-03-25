@@ -9,3 +9,4 @@ test.db-journal
 *.log
 integration-tests/private-key*
 integration-tests/rita-settings*
+integration-tests/staging*
