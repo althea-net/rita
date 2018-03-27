@@ -11,15 +11,17 @@ use SETTING;
 use rita_common::payment_controller;
 use rita_common::payment_controller::PaymentController;
 
+use rand::{thread_rng, Rng};
+
 #[derive(Clone, Debug)]
-struct NodeDebtData {
-    total_payment: Uint256,
-    debt: Int256,
-    incoming_payments: Int256,
+pub struct NodeDebtData {
+    pub total_payment: Uint256,
+    pub debt: Int256,
+    pub incoming_payments: Int256,
     /// Front = older
     /// Only pop from front
     /// Only push to back
-    debt_buffer: VecDeque<Int256>,
+    pub debt_buffer: VecDeque<Int256>,
 }
 
 impl NodeDebtData {
@@ -51,28 +53,6 @@ impl Actor for DebtKeeper {
     type Context = Context<Self>;
 }
 
-#[derive(Message, PartialEq, Eq, Debug)]
-pub struct PaymentReceived {
-    pub from: Identity,
-    pub amount: Uint256,
-}
-
-#[derive(Message)]
-pub struct TrafficUpdate {
-    pub from: Identity,
-    pub amount: Int256,
-}
-
-#[derive(Message)]
-pub struct SendUpdate;
-
-pub struct GetDebt {
-    pub from: Identity,
-}
-impl Message for GetDebt {
-    type Result = Result<Uint256, ()>;
-}
-
 impl Supervised for DebtKeeper {}
 impl SystemService for DebtKeeper {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
@@ -80,14 +60,23 @@ impl SystemService for DebtKeeper {
     }
 }
 
-/// Actions to be taken upon a neighbor's debt reaching either a negative or positive
-/// threshold.
-#[derive(Debug, PartialEq)]
-pub enum DebtAction {
-    SuspendTunnel,
-    OpenTunnel,
-    MakePayment { to: Identity, amount: Uint256 },
-    None,
+pub struct Dump;
+
+impl Message for Dump {
+    type Result = Result<HashMap<Identity, NodeDebtData>, ()>;
+}
+
+impl Handler<Dump> for DebtKeeper {
+    type Result = Result<HashMap<Identity, NodeDebtData>, ()>;
+    fn handle(&mut self, msg: Dump, _: &mut Context<Self>) -> Self::Result {
+        Ok(self.debt_data.clone())
+    }
+}
+
+#[derive(Message, PartialEq, Eq, Debug)]
+pub struct PaymentReceived {
+    pub from: Identity,
+    pub amount: Uint256,
 }
 
 impl Handler<PaymentReceived> for DebtKeeper {
@@ -98,12 +87,31 @@ impl Handler<PaymentReceived> for DebtKeeper {
     }
 }
 
+#[derive(Message)]
+pub struct TrafficUpdate {
+    pub from: Identity,
+    pub amount: Int256,
+}
+
 impl Handler<TrafficUpdate> for DebtKeeper {
     type Result = ();
 
     fn handle(&mut self, msg: TrafficUpdate, _: &mut Context<Self>) -> Self::Result {
         self.traffic_update(&msg.from, msg.amount)
     }
+}
+
+#[derive(Message)]
+pub struct SendUpdate;
+
+/// Actions to be taken upon a neighbor's debt reaching either a negative or positive
+/// threshold.
+#[derive(Debug, PartialEq)]
+pub enum DebtAction {
+    SuspendTunnel,
+    OpenTunnel,
+    MakePayment { to: Identity, amount: Uint256 },
+    None,
 }
 
 impl Handler<SendUpdate> for DebtKeeper {

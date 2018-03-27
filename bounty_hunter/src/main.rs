@@ -43,11 +43,15 @@ use std::env;
 use std::io::Read;
 use std::sync::Mutex;
 
+extern crate failure;
+
+use failure::Error;
+
 pub mod schema;
 pub mod models;
 use self::models::*;
 
-use self::schema::status::dsl::*;
+use self::schema::nodes::dsl::*;
 
 pub fn establish_connection() -> SqliteConnection {
     dotenv().ok();
@@ -57,13 +61,6 @@ pub fn establish_connection() -> SqliteConnection {
         .expect(&format!("Error connecting to {}", database_url))
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct BountyUpdate {
-    pub from: Identity,
-    pub balance: Int256,
-    pub tx: PaymentTx,
-}
-
 fn main() {
     env_logger::init();
     trace!("Starting");
@@ -71,66 +68,117 @@ fn main() {
     let conn = Mutex::new(establish_connection());
 
     rouille::start_server("[::0]:8888", move |request| {
-        // TODO: fix the port
         router!(request,
             (POST) (/update) => {
                 process_updates(request, &conn)
             },
+            (POST) (/checkin) => {
+                checkin(request, &conn)
+            },
             (GET) (/list) => {
-                list_status(request, &conn)
+                list_nodes(request, &conn)
             },
             _ => rouille::Response::empty_404()
         )
     });
 }
 
-fn process_updates(request: &Request, conn: &Mutex<SqliteConnection>) -> Response {
-    let conn = conn.lock().unwrap();
-    if let Some(mut data) = request.data() {
-        let mut status_str = String::new();
-        data.read_to_string(&mut status_str).unwrap();
-        let update: BountyUpdate = serde_json::from_str(&status_str).unwrap();
-        trace!("Received update, status: {:?}", update);
-        trace!("Received update, balance: {}", update.balance);
+fn insert_node(identity: &Identity, conn: &SqliteConnection) {
+    let exists = select(exists(nodes.filter(ip.eq(identity.mesh_ip.to_string()))))
+        .get_result(conn)
+        .expect("Error loading statuses");
 
-        let stat = Status {
-            ip: String::from(format!("{}", update.from.mesh_ip)),
-            mac: String::from(format!("{}", update.from.wg_public_key)),
-            balance: String::from(format!("{}", update.balance)),
+    if exists {
+        trace!("record exists for {:?}, skipping", identity);
+    } else {
+        trace!("record does not exist, creating");
+        let stat = Node {
+            ip: identity.mesh_ip.to_string(),
+            balance: "0".to_string(),
         };
 
-        trace!("Checking if record exists for {}", stat.ip);
+        diesel::insert_into(nodes)
+            .values(&stat)
+            .execute(conn)
+            .expect("Error saving");
+    }
+}
 
-        let exists = select(exists(status.filter(ip.eq(stat.ip.clone()))))
-            .get_result(&*conn)
-            .expect("Error loading statuses");
+fn get_balance(identity: &Identity, conn: &SqliteConnection) -> Int256 {
+    insert_node(identity, conn);
 
-        if exists {
-            trace!("record exists, updating");
-            // updating
-            diesel::update(status.find(stat.ip))
-                .set(balance.eq(stat.balance))
-                .execute(&*conn)
-                .expect("Error saving");
-        } else {
-            trace!("record does not exist, creating");
-            // first time seeing
-            diesel::insert_into(status)
-                .values(&stat)
-                .execute(&*conn)
-                .expect("Error saving");
-        }
-        Response::text("Received Successfully")
+    let node = nodes
+        .filter(ip.eq(identity.mesh_ip.to_string()))
+        .limit(2)
+        .load::<Node>(conn)
+        .unwrap();
+
+    assert_eq!(node.len(), 1);
+
+    return serde_json::from_str(&format!("\"{}\"", &node[0].balance)).unwrap();
+}
+
+fn save_balance(identity: &Identity, new_balance: Int256, conn: &SqliteConnection) {
+    insert_node(identity, conn);
+
+    diesel::update(nodes.find(identity.mesh_ip.to_string()))
+        .set(balance.eq(format!("{}", new_balance)))
+        .execute(conn)
+        .expect("Error saving");
+}
+
+fn process_updates(request: &Request, conn: &Mutex<SqliteConnection>) -> Response {
+    let conn = conn.lock().unwrap();
+
+    if let Some(mut data) = request.data() {
+        let to_balance = conn.transaction::<_, Error, _>(|| {
+            let mut payment_str = String::new();
+            data.read_to_string(&mut payment_str).unwrap();
+            let payment: PaymentTx = serde_json::from_str(&payment_str).unwrap();
+            trace!("Received update, status: {:?}", payment);
+
+            let mut from_balance = get_balance(&payment.from, &*conn);
+            let mut to_balance = get_balance(&payment.to, &*conn);
+
+            from_balance -= payment.amount.clone();
+            to_balance += payment.amount.clone();
+
+            save_balance(&payment.from, from_balance, &*conn);
+            save_balance(&payment.to, to_balance.clone(), &*conn);
+
+            let list = nodes.load::<Node>(&*conn).expect("Error loading nodes");
+
+            trace!("nodes: {:?}", list);
+
+            Ok(to_balance)
+        }).unwrap();
+
+        Response::json(&to_balance)
     } else {
         panic!("Empty body")
     }
 }
 
-fn list_status(_request: &Request, conn: &Mutex<SqliteConnection>) -> Response {
+fn checkin(request: &Request, conn: &Mutex<SqliteConnection>) -> Response {
     let conn = conn.lock().unwrap();
-    let results = status
-        .load::<Status>(&*conn)
-        .expect("Error loading statuses");
+    if let Some(mut data) = request.data() {
+        let mut id_str = String::new();
+        data.read_to_string(&mut id_str).unwrap();
+        let identity: Identity = serde_json::from_str(&id_str).unwrap();
+        let client_balance = conn.transaction::<_, Error, _>(|| {
+            insert_node(&identity, &*conn);
+            let client_balance = get_balance(&identity, &*conn);
+            Ok(client_balance)
+        }).unwrap();
+        Response::json(&client_balance)
+    } else {
+        panic!("Empty body")
+    }
+}
+
+fn list_nodes(_request: &Request, conn: &Mutex<SqliteConnection>) -> Response {
+    let conn = conn.lock().unwrap();
+    let results = nodes.load::<Node>(&*conn).expect("Error loading nodes");
     trace!("Sending response: {:?}", results);
     rouille::Response::text(serde_json::to_string(&results).unwrap())
 }

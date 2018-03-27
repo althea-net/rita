@@ -81,10 +81,18 @@ pub struct ExitClientDetails {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct StatServerSettings {
+    pub stat_address: String,
+    pub stat_port: u16,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RitaSettings {
     pub payment: PaymentSettings,
     pub network: NetworkSettings,
     pub exit_client: ExitClientSettings,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stat_server: Option<StatServerSettings>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -100,6 +108,8 @@ pub struct RitaExitSettings {
     pub payment: PaymentSettings,
     pub network: NetworkSettings,
     pub exit_network: ExitNetworkSettings,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stat_server: Option<StatServerSettings>,
 }
 
 fn spawn_watch_thread<'de, T: 'static>(

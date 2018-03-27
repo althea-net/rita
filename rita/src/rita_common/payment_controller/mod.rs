@@ -41,14 +41,22 @@ impl SystemService for PaymentController {
     }
 }
 
-#[derive(Message)]
+#[derive(Message, Clone)]
 pub struct PaymentReceived(pub PaymentTx);
 
 impl Handler<PaymentReceived> for PaymentController {
     type Result = ();
 
-    fn handle(&mut self, msg: PaymentReceived, _: &mut Context<Self>) -> Self::Result {
-        DebtKeeper::from_registry().do_send(self.payment_received(msg.0).unwrap());
+    fn handle(&mut self, msg: PaymentReceived, ctx: &mut Context<Self>) -> Self::Result {
+        match self.payment_received(msg.clone().0) {
+            Ok(debt_update) => {
+                DebtKeeper::from_registry().do_send(debt_update);
+            }
+            Err(err) => {
+                warn!("got error from payment recieved {:?}, retrying", err);
+                ctx.notify_later(msg, Duration::from_secs(5));
+            }
+        }
     }
 }
 
@@ -79,22 +87,10 @@ impl Handler<PaymentControllerUpdate> for PaymentController {
         match self.update() {
             Ok(()) => {}
             Err(err) => {
-                warn!("got error from update {:?}, retrying", err);
-                ctx.notify_later(msg, Duration::from_secs(5));
+                warn!("got error from update {:?}", err);
             }
         }
     }
-}
-
-/// This updates a "bounty hunter" with the current balance and the last `PaymentTx`.
-/// Bounty hunters are servers which store and possibly enforce the current state of
-/// a channel. Currently they are actually just showing a completely insecure
-/// "fake" balance as a stand-in for the real thing.
-#[derive(Serialize, Deserialize, Debug)]
-pub struct BountyUpdate {
-    pub from: Identity,
-    pub balance: Int256,
-    pub tx: PaymentTx,
 }
 
 #[cfg(test)]
@@ -118,8 +114,8 @@ impl PaymentController {
         }
     }
 
-    fn update_bounty_actual(&self, update: BountyUpdate) -> Result<(), Error> {
-        trace!("Sending bounty hunter update: {:?}", update);
+    fn update_bounty(&mut self, tx: PaymentTx) -> Result<(), Error> {
+        trace!("Sending bounty hunter update: {:?}", tx);
         let bounty_url = if cfg!(not(test)) {
             format!(
                 "http://[{}]:{}/update",
@@ -132,10 +128,11 @@ impl PaymentController {
 
         let mut r = self.client
             .post(&bounty_url)
-            .body(serde_json::to_string(&update)?)
+            .body(serde_json::to_string(&tx)?)
             .send()?;
 
         if r.status() == StatusCode::Ok {
+            self.balance = r.json()?;
             Ok(())
         } else {
             trace!("Unsuccessfully in sending update to bounty hunter");
@@ -152,12 +149,40 @@ impl PaymentController {
         }
     }
 
-    fn update_bounty(&self, update: BountyUpdate) -> Result<(), Error> {
-        match self.update_bounty_actual(update) {
-            Ok(()) => {}
-            Err(err) => warn!("Bounty hunter returned error {:?}, ignoring", err),
+    fn register_bounty(&self) -> Result<Int256, Error> {
+        let bounty_url = if cfg!(not(test)) {
+            format!(
+                "http://[{}]:{}/checkin",
+                SETTING.read().unwrap().network.bounty_ip,
+                SETTING.read().unwrap().network.bounty_port
+            )
+        } else {
+            String::from("http://127.0.0.1:1234/checkin") //TODO: This is mockito::SERVER_URL, but don't want to include the crate in a non-test build just for that string
         };
-        Ok(())
+
+        let mut r = self.client
+            .post(&bounty_url)
+            .body(serde_json::to_string(&SETTING
+                .read()
+                .unwrap()
+                .get_identity())?)
+            .send()?;
+
+        if r.status() == StatusCode::Ok {
+            Ok(r.json()?)
+        } else {
+            trace!("Unsuccessfully in sending update to bounty hunter");
+            trace!(
+                "Received error from bounty hunter: {:?}",
+                r.text().unwrap_or(String::from("No message received"))
+            );
+            Err(Error::from(PaymentControllerError::BountyError(
+                String::from(format!(
+                    "Received error from bounty hunter: {:?}",
+                    r.text().unwrap_or(String::from("No message received"))
+                )),
+            )))
+        }
     }
 
     /// This gets called when a payment from a counterparty has arrived, and updates
@@ -174,15 +199,9 @@ impl PaymentController {
             pmt
         );
 
-        self.balance = self.balance.clone() + Int256::from(pmt.amount.clone());
-
         trace!("current balance: {:?}", self.balance);
 
-        self.update_bounty(BountyUpdate {
-            from: self.identity.clone(),
-            tx: pmt.clone(),
-            balance: self.balance.clone(),
-        })?;
+        self.update_bounty(pmt.clone())?;
         Ok(debt_keeper::PaymentReceived {
             from: pmt.from,
             amount: pmt.amount.clone(),
@@ -192,16 +211,7 @@ impl PaymentController {
     /// This should be called on a regular interval to update the bounty hunter of a node's current
     /// balance as well as to log the current balance
     pub fn update(&mut self) -> Result<(), Error> {
-        self.update_bounty(BountyUpdate {
-            from: self.identity.clone(),
-            tx: PaymentTx {
-                from: self.identity.clone(),
-                to: self.identity.clone(),
-                amount: Uint256::from(0u32),
-            },
-            balance: self.balance.clone(),
-        })?;
-        info!("Balance update: {:?}", self.balance);
+        self.balance = self.register_bounty()?;
         Ok(())
     }
 
@@ -235,12 +245,6 @@ impl PaymentController {
             .send()?;
 
         if r.status() == StatusCode::Ok {
-            self.balance = self.balance.clone() - Int256::from(pmt.amount.clone());
-            self.update_bounty(BountyUpdate {
-                from: self.identity.clone(),
-                tx: pmt,
-                balance: self.balance.clone(),
-            })?;
             Ok(())
         } else {
             trace!("Unsuccessfully paid");
@@ -307,22 +311,11 @@ mod tests {
             .match_body("{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"1\"}")
             .create();
 
-        // mock bounty hunter
-        let __m = mock("POST", "/update")
-            .with_status(200)
-            .with_body("bounty OK")
-            .match_body("{\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\
-            \"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"balance\":\"-1\",\"tx\":{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"1\"}}")
-            .create();
-
         let mut pc = PaymentController::new(&new_identity(1));
 
         pc.make_payment(new_payment(1));
 
-        assert_eq!(pc.balance, Int256::from(-1));
-
         _m.assert();
-        __m.assert();
     }
 
     #[test]
@@ -335,23 +328,13 @@ mod tests {
             .expect(100)
             .create();
 
-        // mock bounty hunter
-        let __m = mock("POST", "/update")
-            .with_status(200)
-            .with_body("bounty OK")
-            .expect(100)
-            .create();
-
         let mut pc = PaymentController::new(&new_identity(1));
 
         for _ in 0..100 {
             pc.make_payment(new_payment(1)).unwrap();
         }
 
-        assert_eq!(pc.balance, Int256::from(-100));
-
         _m.assert();
-        __m.assert();
     }
 
     #[test]
@@ -359,15 +342,13 @@ mod tests {
         // mock bounty hunter
         let _m = mock("POST", "/update")
             .with_status(200)
-            .with_body("bounty OK")
-            .match_body("{\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"balance\":\"1\",\"tx\":{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"1\"}}")
+            .with_body("\"1\"")
+            .match_body("{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"1\"}")
             .create();
 
         let mut pc = PaymentController::new(&new_identity(1));
 
         let out = pc.payment_received(new_payment(1)).unwrap();
-
-        assert_eq!(pc.balance, Int256::from(1));
 
         assert_eq!(
             out,
@@ -385,7 +366,7 @@ mod tests {
         // mock bounty hunter
         let _m = mock("POST", "/update")
             .with_status(200)
-            .with_body("bounty OK")
+            .with_body("\"1\"")
             .expect(100)
             .create();
 
@@ -393,7 +374,6 @@ mod tests {
 
         for i in 0..100 {
             let out = pc.payment_received(new_payment(1)).unwrap();
-            assert_eq!(pc.balance, Int256::from(i + 1));
             assert_eq!(
                 out,
                 debt_keeper::PaymentReceived {

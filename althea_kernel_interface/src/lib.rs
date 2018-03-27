@@ -35,6 +35,7 @@ mod exit_client_counter;
 mod manipulate_uci;
 mod exit_client_tunnel;
 mod exit_server_tunnel;
+mod stats;
 
 pub use counter::FilterTarget;
 pub use exit_server_counter::ExitFilterTarget;

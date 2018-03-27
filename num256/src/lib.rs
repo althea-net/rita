@@ -1,4 +1,5 @@
 extern crate num;
+extern crate rand;
 extern crate serde;
 extern crate serde_json;
 
@@ -16,9 +17,18 @@ use num::traits::Signed;
 use serde::ser::Serialize;
 use serde::{Deserialize, Deserializer, Serializer};
 use std::str::FromStr;
+use rand::{Rand, Rng};
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Uint256(BigUint);
+
+impl Rand for Uint256 {
+    fn rand<R: Rng>(rng: &mut R) -> Uint256 {
+        let x: [u8; 32] = rng.gen();
+
+        Uint256(BigUint::from_radix_be(&x, 256).unwrap())
+    }
+}
 
 impl Deref for Uint256 {
     type Target = BigUint;

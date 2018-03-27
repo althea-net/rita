@@ -21,6 +21,10 @@ BOUNTY_HUNTER = os.path.join(os.path.dirname(__file__), "../target/debug/bounty_
 PING6 = os.getenv('PING6', "ping6")
 CONVERGENCE_DELAY = float(os.getenv('CONVERGENCE_DELAY', 10))
 
+es_home = os.getenv('ES_HOME', "/usr/share/elasticsearch")
+
+elastic_search = os.path.join(es_home, "bin/elasticsearch")
+
 tests_passes = True
 
 abspath = os.path.abspath(__file__)
@@ -66,7 +70,7 @@ def exec_or_exit(command, blocking=True, delay=0.01):
 def cleanup():
     os.system("rm -rf *.log *.pid *.toml")
     os.system("killall babeld rita bounty_hunter iperf")  # TODO: This is very inconsiderate
-
+    os.system("pkill -9 -f elasticsearch")  # TODO: This is very inconsiderate
 
 def teardown():
     os.system("rm -rf *.pid *.toml")
@@ -148,10 +152,8 @@ def start_babel(node):
             blocking=False
         )
 
-
 def start_bounty(id):
-    os.system(
-        '(RUST_BACKTRACE=full ip netns exec netlab-{id} {bounty} & echo $! > bounty-n{id}.pid) | grep -Ev "<unknown>|mio" > bounty-n{id}.log &'.format(
+    os.system('(RUST_BACKTRACE=full RUST_LOG=trace ip netns exec netlab-{id} {bounty} 2>&1 & echo $! > bounty-n{id}.pid ) | grep -Ev "<unknown>|mio" > bounty-n{id}.log &'.format(
             id=id, bounty=BOUNTY_HUNTER))
 
 
@@ -299,6 +301,7 @@ class World:
         for id in self.nodes:
             if id == self.exit:
                 start_rita_exit(id)
+                start_elastic(id)
             elif id == self.external:
                 pass
             else:
@@ -337,9 +340,10 @@ class World:
             s = 0
             m = 0
             for i in status:
-                balances[int(i["ip"].replace("fd::", ""))] = int(i["balance"])
-                s += int(i["balance"])
-                m += abs(int(i["balance"]))
+                bal = int(i["balance"])
+                balances[int(i["ip"].replace("fd::", ""))] = bal
+                s += bal
+                m += abs(bal)
             n += 1
             time.sleep(0.5)
             print("time {}, value {}".format(n, s))
