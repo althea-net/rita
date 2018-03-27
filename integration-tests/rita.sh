@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -euxo pipefail
 
 cd $(dirname $0)
 
@@ -55,4 +55,4 @@ build_rita
 build_bounty
 
 pwd
-sudo python3 rita.py "$@"
+sudo -E python3 rita.py "$@"
