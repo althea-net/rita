@@ -27,7 +27,7 @@ mod get_wg_pubkey;
 mod open_tunnel;
 mod setup_wg_if;
 mod counter;
-mod get_interfaces;
+mod interface_tools;
 mod link_local_tools;
 mod get_neighbors;
 mod exit_server_counter;
