@@ -28,8 +28,10 @@ use althea_types::LocalIdentity;
 use std::time::Duration;
 use std::path::Path;
 use althea_types::interop::ExitServerIdentity;
+use regex::Regex;
 
 extern crate althea_types;
+extern crate regex;
 
 #[derive(Debug, Fail)]
 pub enum CluError {
@@ -252,11 +254,28 @@ fn request_own_exit_ip(
     })
 }
 
+/// called before anything is started to delete existing wireguard per hop tunnels
+fn cleanup() -> Result<(), Error> {
+    let ki = KernelInterface{};
+
+    let interfaces = ki.get_interfaces()?;
+
+    let re = Regex::new(r"^wg[0-9]+$").unwrap();
+
+    for i in interfaces {
+        if re.is_match(&i) {
+            ki.del_interface(&i)
+        }
+    }
+}
+
 // Replacement for the setup.ash file in althea firmware
 fn openwrt_init(
     SETTINGS: Arc<RwLock<settings::RitaSettings>>,
     file_name: String,
 ) -> Result<(), Error> {
+    cleanup();
+
     let privkey = SETTINGS.read().unwrap().network.wg_private_key.clone();
     let pubkey = SETTINGS.read().unwrap().network.wg_public_key.clone();
     let mesh_ip = SETTINGS.read().unwrap().network.own_ip.clone();
@@ -315,6 +334,8 @@ fn linux_init(
     SETTINGS: Arc<RwLock<settings::RitaSettings>>,
     file_name: String,
 ) -> Result<(), Error> {
+    cleanup();
+
     let privkey = SETTINGS.read().unwrap().network.wg_private_key.clone();
     let pubkey = SETTINGS.read().unwrap().network.wg_public_key.clone();
     let mesh_ip = SETTINGS.read().unwrap().network.own_ip.clone();
