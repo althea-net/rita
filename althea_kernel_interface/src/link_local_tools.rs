@@ -32,7 +32,7 @@ impl KernelInterface {
     pub fn get_device_name(&self, their_ip: IpAddr) -> Result<String, Error> {
         let neigh = self.get_neighbors()?;
         trace!("looking for {:?} in {:?} for device name", their_ip, neigh);
-        for (mac, ip, dev) in neigh {
+        for (ip, dev) in neigh {
             if ip == their_ip {
                 return Ok(dev.to_string());
             }
@@ -42,17 +42,23 @@ impl KernelInterface {
     }
 
     /// This gets our link local ip that can be reached by another node with link local ip
-    pub fn get_link_local_reply_ip(&self, their_ip: IpAddr) -> Result<IpAddr, Error> {
+    pub fn get_reply_ip(&self, their_ip: IpAddr, global_non_mesh_ip: Option<IpAddr>) -> Result<IpAddr, Error> {
         let neigh = self.get_neighbors()?;
 
         trace!("looking for {:?} in {:?} for reply ip", their_ip, neigh);
-        for (mac, ip, dev) in neigh {
+        for ( ip, dev) in neigh {
             if ip == their_ip {
                 return Ok(self.get_link_local_device_ip(&dev)?);
             }
         }
 
-        Err(KernelManagerError::RuntimeError("Address not found in neighbors".to_string()).into())
+        trace!("didn't find {:?} in neighbors, sending global ip {:?}", their_ip, global_non_mesh_ip);
+
+        if let Some(global_non_mesh_ip) = global_non_mesh_ip {
+            Ok(global_non_mesh_ip)
+        } else {
+            Err(KernelManagerError::RuntimeError("Address not found in neighbors".to_string()).into())
+        }
     }
 
     /// Gets the interface index for a named interface
@@ -179,7 +185,7 @@ fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE"
         })),
     };
 
-    let dev = ki.get_link_local_reply_ip("fe80::7459:8eff:fe98:81".parse().unwrap())
+    let dev = ki.get_reply_ip("fe80::7459:8eff:fe98:81".parse().unwrap())
         .unwrap();
 
     assert_eq!(dev, "fe80::96:3add:69d9:906a".parse::<IpAddr>().unwrap())

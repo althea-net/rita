@@ -910,25 +910,6 @@ version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "inotify"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "bitflags 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures 0.1.18 (registry+https://github.com/rust-lang/crates.io-index)",
- "inotify-sys 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "libc 0.2.37 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "inotify-sys"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "libc 0.2.37 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "iovec"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1877,7 +1858,6 @@ dependencies = [
  "config 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "eui48 0.4.0 (git+https://github.com/althea-mesh/eui48)",
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "inotify 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "num256 0.1.0",
  "serde 1.0.27 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2513,8 +2493,6 @@ dependencies = [
 "checksum hyper-tls 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "9c81fa95203e2a6087242c38691a0210f23e9f3f8f944350bd676522132e2985"
 "checksum idna 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)" = "014b298351066f1512874135335d62a789ffe78a9974f94b43ed5621951eaf7d"
 "checksum if_chain 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "61bb90bdd39e3af69b0172dfc6130f6cd6332bf040fbb9bdd4401d37adbd48b8"
-"checksum inotify 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)" = "3ad0bfe014aafc0f4e177fbe66c5f2b59ba59f66f58b022aa1963bbe71ab4118"
-"checksum inotify-sys 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7dceb94c43f70baf4c4cd6afbc1e9037d4161dbe68df8a2cd4351a23319ee4fb"
 "checksum iovec 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "dbe6e417e7d0975db6512b90796e8ce223145ac4e33c377e4a42882a0e88bb08"
 "checksum ip_network 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7648e7d710afe39cd0af5c465c384959a61b9619dab3115f23edfad5dd03f539"
 "checksum ipconfig 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "9ec4e18c0a0d4340870c14284293632d8421f419008371422dd327892b88877c"

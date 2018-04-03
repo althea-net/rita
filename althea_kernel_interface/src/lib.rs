@@ -64,9 +64,9 @@ impl KernelInterface {
 
         trace!("Command {:?} {:?} returned: {:?}", program, args, output);
         if !output.status.success() {
-            trace!("An error was returned");
+            info!("Command {:?} {:?} returned: an error {:?}", program, args, output);
         }
-        info!(
+        trace!(
             "command completed in {}s {}ms",
             start.elapsed().as_secs(),
             start.elapsed().subsec_nanos() / 1000000

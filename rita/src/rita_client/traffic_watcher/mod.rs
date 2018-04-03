@@ -97,16 +97,21 @@ pub fn watch(exit: Identity, exit_price: u64) -> Result<(), Error> {
         destinations[&exit.mesh_ip].clone() + exit_price
     );
 
-    owes += Int256::from(exit_price * output);
+    if destinations.contains_key(&exit.mesh_ip) {
+        owes += Int256::from(exit_price * output);
 
-    owes += (destinations[&exit.mesh_ip].clone() + exit_price) * input;
+        owes += (destinations[&exit.mesh_ip].clone() + exit_price) * input;
 
-    let update = debt_keeper::TrafficUpdate {
-        from: exit.clone(),
-        amount: owes,
-    };
+        let update = debt_keeper::TrafficUpdate {
+            from: exit.clone(),
+            amount: owes,
+        };
 
-    DebtKeeper::from_registry().do_send(update);
+        DebtKeeper::from_registry().do_send(update);
+    } else {
+        warn!("not yet have route to exit at {:?}, ignoring payment", &exit.mesh_ip)
+    }
+
     Ok(())
 }
 

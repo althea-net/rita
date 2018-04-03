@@ -11,7 +11,7 @@ members = ["althea_kernel_interface", "bounty_hunter", "settings", "clu", "exit_
 
 [profile.release]
 opt-level = "s"
-lto = true
+debug = true
 
 [features]
 default = []
