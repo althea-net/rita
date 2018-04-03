@@ -18,15 +18,12 @@ use serde_json;
 use bytes::Bytes;
 
 pub fn make_payments(req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Error>> {
-    trace!(
-        "Started processing payment from {:?}",
-        req.connection_info().remote()
-    );
+    info!("Got Payment from {:?}", req.connection_info().remote());
 
     req.body()
         .from_err()
         .and_then(move |bytes: Bytes| {
-            trace!("Payment body: {:?}", bytes,);
+            info!("Payment body: {:?}", bytes);
             let pmt: PaymentTx = serde_json::from_slice(&bytes[..]).unwrap();
 
             trace!("Received payment: {:?}", pmt,);
@@ -38,25 +35,22 @@ pub fn make_payments(req: HttpRequest) -> Box<Future<Item = HttpResponse, Error 
 }
 
 pub fn hello_response(req: HttpRequest) -> Box<Future<Item = Json<LocalIdentity>, Error = Error>> {
-    trace!(
-        "Started saying hello back to {:?}",
-        req.connection_info().remote()
-    );
+    info!("Got Hello from {:?}", req.connection_info().remote());
 
     req.body()
         .from_err()
         .and_then(move |bytes: Bytes| {
-            trace!("Hello body: {:?}", bytes,);
+            info!("Hello body: {:?}", bytes,);
             let their_id: LocalIdentity = serde_json::from_slice(&bytes[..]).unwrap();
 
-            trace!("Received neighbour identity, Payment: {:?}", their_id);
+            trace!("Received neighbour identity: {:?}", their_id);
 
             TunnelManager::from_registry()
                 .send(GetLocalIdentity {
                     requester: their_id.clone(),
                 })
                 .then(move |reply| {
-                    trace!("opening tunnel in hello_response for {:?}", their_id);
+                    info!("opening tunnel in hello_response for {:?}", their_id);
                     TunnelManager::from_registry().do_send(OpenTunnel(their_id));
                     Ok(Json(reply.unwrap()))
                 })

@@ -16,6 +16,7 @@ wg_private_key_path = "/tmp/priv"
 wg_public_key = "pub"
 wg_start_port = 60000
 babel_interfaces = "eth0 eth1"
+manual_peers = []
 
 [exit_client]
 exit_ip = "fd::5"

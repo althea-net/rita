@@ -13,7 +13,7 @@ use SETTING;
 
 use failure::Error;
 
-use althea_types::ExitIdentity;
+use althea_types::ExitClientIdentity;
 
 #[derive(Default)]
 pub struct DbClient;
@@ -57,7 +57,7 @@ fn increment(address: IpAddr) -> Option<IpAddr> {
     None
 }
 
-pub struct SetupClient(pub ExitIdentity);
+pub struct SetupClient(pub ExitClientIdentity);
 
 impl Message for SetupClient {
     type Result = Result<IpAddr, Error>;

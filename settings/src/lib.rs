@@ -18,9 +18,6 @@ extern crate serde_json;
 
 extern crate althea_kernel_interface;
 
-extern crate inotify;
-use inotify::{Inotify, WatchMask};
-
 use std::net::IpAddr;
 use std::path::Path;
 use std::fs::File;
@@ -38,6 +35,7 @@ use num256::Int256;
 use althea_kernel_interface::KernelInterface;
 
 use failure::Error;
+use althea_types::LocalIdentity;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NetworkSettings {
@@ -51,6 +49,9 @@ pub struct NetworkSettings {
     pub wg_public_key: String,
     pub wg_start_port: u16,
     pub babel_interfaces: String,
+    pub manual_peers: Vec<LocalIdentity>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub global_non_mesh_ip: Option<IpAddr>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -73,7 +74,9 @@ pub struct ExitClientSettings {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ExitClientDetails {
-    pub internal_ip: IpAddr,
+    pub own_internal_ip: IpAddr,
+    pub server_internal_ip: IpAddr,
+    pub netmask: IpAddr,
     pub eth_address: EthAddress,
     pub wg_public_key: String,
     pub wg_exit_port: u16,
@@ -92,6 +95,8 @@ pub struct ExitNetworkSettings {
     pub wg_tunnel_port: u16,
     pub external_nic: String,
     pub exit_price: u64,
+    pub own_internal_ip: IpAddr,
+    pub netmask: IpAddr,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -113,28 +118,15 @@ where
     let file_path = file_path.to_string();
 
     thread::spawn(move || {
-        let mut inotify = Inotify::init().expect("Failed to initialize inotify");
-
-        inotify
-            .add_watch(&file_path, WatchMask::MODIFY)
-            .expect("Failed to add inotify watch");
-
         println!("Watching file for activity...");
 
-        let mut buffer = [0u8; 4096];
         loop {
-            let events = inotify
-                .read_events_blocking(&mut buffer)
-                .expect("Failed to read inotify events");
-
-            for _ in events {
-                info!("config file written; refreshing configuration ...");
-                thread::sleep(Duration::from_secs(1));
-                let config = config.refresh().unwrap();
-                let new_settings: T = config.clone().try_into().unwrap();
-                info!("new config: {:#?}", new_settings);
-                *settings.write().unwrap() = new_settings;
-            }
+            info!("refreshing configuration ...");
+            thread::sleep(Duration::from_secs(5));
+            let config = config.refresh().unwrap();
+            let new_settings: T = config.clone().try_into().unwrap();
+            trace!("new config: {:#?}", new_settings);
+            *settings.write().unwrap() = new_settings;
         }
     });
 

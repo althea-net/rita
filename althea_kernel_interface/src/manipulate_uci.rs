@@ -15,11 +15,23 @@ impl KernelInterface {
         Ok(true)
     }
 
+    //Adds an arbitrary UCI variable on OpenWRT
+    pub fn add_uci_var(&self, key: &str, value: &str) -> Result<bool, Error> {
+        let output = self.run_command("uci", &["add", key, value])?;
+        if !output.stderr.is_empty() {
+            return Err(KernelManagerError::RuntimeError(format!(
+                "recieved error while setting UCI: {}",
+                String::from_utf8(output.stderr)?
+            )).into());
+        }
+        Ok(true)
+    }
+
     //Sets an arbitrary UCI list on OpenWRT
     pub fn set_uci_list(&self, key: &str, value: &[&str]) -> Result<bool, Error> {
-        self.del_uci_var(&key)?;
+        self.del_uci_var(&key);
         for v in value {
-            let output = self.run_command("uci", &["add_list", &key, "=", &v])?;
+            let output = self.run_command("uci", &["add_list", &format!("{}={}", &key, &v)])?;
             if !output.stderr.is_empty() {
                 return Err(KernelManagerError::RuntimeError(format!(
                     "recieved error while setting UCI: {}",
@@ -64,5 +76,16 @@ impl KernelInterface {
             )).into());
         }
         Ok(true)
+    }
+
+    pub fn refresh_initd(&self, program: &str) -> Result<(), Error> {
+        let output = self.run_command(&format!("/etc/init.d/{}", program), &["reload"])?;
+        if !output.status.success() {
+            return Err(KernelManagerError::RuntimeError(format!(
+            "recieved error while refreshing {}: {}",
+                program,
+            String::from_utf8(output.stderr)?)).into());
+        }
+        Ok(())
     }
 }

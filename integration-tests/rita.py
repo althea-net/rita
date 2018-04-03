@@ -157,7 +157,7 @@ def start_rita(id):
     save_rita_settings(id, settings)
     time.sleep(0.1)
     os.system(
-        '(RUST_BACKTRACE=full RUST_LOG=trace ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml --platform linux'
+        '(RUST_BACKTRACE=full RUST_LOG=TRACE ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml --platform linux'
         ' 2>&1 & echo $! > rita-n{id}.pid) | '
         'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA,
                                                                               pwd=dname)
@@ -171,7 +171,7 @@ def start_rita_exit(id):
     save_rita_settings(id, settings)
     time.sleep(0.1)
     os.system(
-        '(RUST_BACKTRACE=full RUST_LOG=trace ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml'
+        '(RUST_BACKTRACE=full RUST_LOG=TRACE ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml'
         ' 2>&1 & echo $! > rita-n{id}.pid) | '
         'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA_EXIT,
                                                                               pwd=dname)
@@ -368,7 +368,6 @@ class World:
 
 def traffic_diff(a, b):
     print(a, b)
-    assert set(a.keys()) == set(b.keys())
     return {key: b[key] - a.get(key, 0) for key in b.keys()}
 
 
