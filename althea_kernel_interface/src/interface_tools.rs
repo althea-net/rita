@@ -20,6 +20,12 @@ impl KernelInterface {
         trace!("interfaces: {:?}", vec);
         Ok(vec)
     }
+
+    /// Deletes an named interface
+    pub fn del_interface(&self, name: &str) -> Result<(), Error> {
+        self.run_command("ip", &["link", "del", "dev", name])?;
+        Ok(())
+    }
 }
 
 #[test]
