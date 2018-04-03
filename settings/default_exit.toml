@@ -18,8 +18,11 @@ wg_private_key_path = "/tmp/priv"
 wg_public_key = "GGdAlEoj2NSKhtx7HhyATDDraMwCztQl62qckvrRBU4="
 wg_start_port = 60000
 babel_interfaces = "eth0 eth1"
+manual_peers = []
 
 [exit_network]
 wg_tunnel_port = 59999
 external_nic = "veth-5-8"
 exit_price = 50
+own_internal_ip = "172.168.1.254"
+netmask = "255.255.255.0"

@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["Ben <wangben3@gmail.com>"]
 
 [dependencies]
-inotify = "0.5.1"
 config = "0.8.0"
 althea_types = { path = "../althea_types", features = ["actix"]}
 althea_kernel_interface = { path = "../althea_kernel_interface" }

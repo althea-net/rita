@@ -18,6 +18,7 @@ use rita_common::http_client::{HTTPClient, Hello};
 use SETTING;
 
 use failure::Error;
+use std::net::SocketAddrV4;
 
 #[derive(Debug, Fail)]
 pub enum TunnelManagerError {
@@ -125,8 +126,9 @@ impl TunnelManager {
     }
 
     fn new_if(&mut self) -> TunnelData {
-        trace!("creating new interface");
         let r = TunnelData::new(self.port);
+        info!("creating new wg interface {:?}", r);
+
         self.port += 1;
         r
     }
@@ -152,31 +154,34 @@ impl TunnelManager {
                 .get_neighbors()
                 .unwrap()
                 .iter()
-                .filter_map(|&(mac_address, ip_address, ref dev)| {
-                    trace!(
-                        "neighbor at interface {}, ip {}, mac {}",
+                .map(
+                    |&(ip_address, ref dev)| {
+                        (ip_address, Some(dev))
+                    }
+                )
+                .filter_map(|(ip_address, ref dev)| {
+                    info!(
+                        "neighbor at interface {:?}, ip {}",
                         dev,
                         ip_address,
-                        mac_address
                     );
-                    if &dev[..2] != "wg" && is_link_local(ip_address) {
-                        {
-                            Some(Box::new(self.neighbor_inquiry(ip_address, dev).then(|res| {
-                                match res {
-                                    Ok(res) => futures::future::ok(Some(res)),
-                                    Err(err) => {
-                                        warn!("got error {:} from neighbor inquiry", err);
-                                        futures::future::ok(None)
-                                    }
-                                }
-                            }))
-                                as Box<
-                                    Future<Item = Option<(LocalIdentity, String)>, Error = Error>,
-                                >)
+                    if let Some(dev) = dev.clone() {
+                        if &dev[..2] == "wg" {
+                            return None
                         }
-                    } else {
-                        None
                     }
+                    Some(Box::new(self.neighbor_inquiry(ip_address, dev.clone()).then(|res| {
+                        match res {
+                            Ok(res) => futures::future::ok(Some(res)),
+                            Err(err) => {
+                                warn!("got error {:} from neighbor inquiry", err);
+                                futures::future::ok(None)
+                            }
+                        }
+                    }))
+                        as Box<
+                            Future<Item = Option<(LocalIdentity, String)>, Error = Error>,
+                        >)
                 })
                 .collect();
         Box::new(futures::future::join_all(neighs).then(|res| {
@@ -195,21 +200,26 @@ impl TunnelManager {
     pub fn neighbor_inquiry(
         &mut self,
         their_ip: IpAddr,
-        dev: &str,
+        dev: Option<&String>,
     ) -> ResponseFuture<(LocalIdentity, String), Error> {
-        let url = format!("http://[{}%{}]:4876/hello", their_ip, dev);
-        trace!("Saying hello to: {:?}", url);
+        let url = format!("http://[{}%{:?}]:4876/hello", their_ip, dev);
+        info!("Saying hello to: {:?}", url);
 
         let socket = match their_ip {
             IpAddr::V6(ip_v6) => SocketAddr::V6(SocketAddrV6::new(
                 ip_v6,
                 4876,
                 0,
-                self.ki.get_iface_index(dev).unwrap(),
+                if let Some(dev) = dev {
+                    self.ki.get_iface_index(dev).unwrap()
+                } else {
+                    0
+                }
             )),
-            IpAddr::V4(_) => {
-                return Box::new(futures::future::err(
-                    TunnelManagerError::IPv4UnsupportedError.into(),
+            IpAddr::V4(ip_v4) => {
+                SocketAddr::V4(SocketAddrV4::new(
+                    ip_v4,
+                    4876,
                 ))
             }
         };
@@ -219,7 +229,7 @@ impl TunnelManager {
 
         let my_id = LocalIdentity {
             global: SETTING.read().unwrap().get_identity(),
-            local_ip: self.ki.get_link_local_reply_ip(their_ip).unwrap(),
+            local_ip: self.ki.get_reply_ip(their_ip, SETTING.read().unwrap().network.global_non_mesh_ip.clone()).unwrap(),
             wg_port: tunnel.listen_port,
         };
 
@@ -237,7 +247,7 @@ impl TunnelManager {
         trace!("Getting tunnel, local id");
         let tunnel = self.get_if(&requester.local_ip);
 
-        let local_ip = self.ki.get_link_local_reply_ip(requester.local_ip).unwrap();
+        let local_ip = self.ki.get_reply_ip(requester.local_ip, SETTING.read().unwrap().network.global_non_mesh_ip.clone()).unwrap();
 
         LocalIdentity {
             global: SETTING.read().unwrap().get_identity(),

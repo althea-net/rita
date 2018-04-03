@@ -9,9 +9,9 @@ use regex::Regex;
 use failure::Error;
 
 impl KernelInterface {
-    /// Returns a vector of neighbors reachable over layer 2, giving the hardware
-    /// and IP address of each. Implemented with `ip neighbor` on Linux.
-    pub fn get_neighbors(&self) -> Result<Vec<(MacAddress, IpAddr, String)>, Error> {
+    /// Returns a vector of neighbors reachable over layer 2, giving IP address of each.
+    /// Implemented with `ip neighbor` on Linux.
+    pub fn get_neighbors(&self) -> Result<Vec<(IpAddr, String)>, Error> {
         let output = self.run_command("ip", &["neighbor"])?;
         trace!("Got {:?} from `ip neighbor`", output);
 
@@ -21,7 +21,6 @@ impl KernelInterface {
             trace!("Regex captured {:?}", caps);
 
             vec.push((
-                MacAddress::parse_str(&caps[3])?, // Ugly and inconsiderate, ditch ASAP
                 IpAddr::from_str(&caps[1])?,
                 caps[2].to_string(),
             ));

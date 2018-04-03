@@ -149,11 +149,7 @@ impl<T: Read + Write> InnerBabel<T> {
         let commmand = format!("interface {} \n", iface);
         self.write(&commmand)?;
         let out = self.read()?;
-        trace!("Babel monitor output: {}", out);
-        let commmand = format!("monitor\n");
-        self.write(&commmand)?;
-        let out = self.read()?;
-        trace!("Babel monitor output: {}", out);
+        info!("Babel started monitoring: {}", iface);
         Ok(0)
     }
 

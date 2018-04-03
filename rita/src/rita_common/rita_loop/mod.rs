@@ -12,6 +12,7 @@ use rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 use rita_common::payment_controller::{PaymentController, PaymentControllerUpdate};
 
 use failure::Error;
+use rita_common::tunnel_manager::OpenTunnel;
 
 pub struct RitaLoop;
 
@@ -45,12 +46,17 @@ impl Handler<Tick> for RitaLoop {
                 .send(GetNeighbors)
                 .into_actor(self)
                 .then(move |res, act, _ctx| {
+                    let res = res.unwrap().unwrap();
                     info!("got neighbors: {:?}", res);
 
                     let neigh = Instant::now();
 
+                    for &(ref their_id, ref interface) in &res {
+                        TunnelManager::from_registry().do_send(OpenTunnel(their_id.clone()));
+                    }
+
                     TrafficWatcher::from_registry()
-                        .send(Watch(res.unwrap().unwrap()))
+                        .send(Watch(res))
                         .into_actor(act)
                         .then(move |_res, _act, ctx| {
                             info!("loop completed in {:?}", start.elapsed());

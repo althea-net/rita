@@ -51,6 +51,7 @@ impl Actor for HTTPSyncExecutor {
     type Context = SyncContext<Self>;
 }
 
+#[derive(Debug)]
 pub struct Hello {
     pub my_id: LocalIdentity,
     pub to: SocketAddr,
@@ -71,6 +72,7 @@ impl Handler<Hello> for HTTPSyncExecutor {
     type Result = Result<LocalIdentity, Error>;
 
     fn handle(&mut self, msg: Hello, _: &mut Self::Context) -> Self::Result {
+        info!("sending {:?}", msg);
         let my_id = serde_json::to_string(&msg.my_id)?;
 
         let stream = TcpStream::connect_timeout(&msg.to, Duration::from_secs(1));
