@@ -11,6 +11,7 @@ impl KernelInterface {
     pub fn create_wg_key(&self, path: &Path, private_key :&String) -> Result<(), Error> {
         if path.exists() {
             warn!("System private key exists in {:?}", path);
+            Ok(())
         } else {
             trace!("File does not exist, creating");
             let mut priv_key_file = File::create(path)?;
