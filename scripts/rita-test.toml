@@ -1,0 +1,24 @@
+[payment]
+pay_threshold = "0"
+close_threshold = "-1000000000"
+close_fraction = "100"
+buffer_period = 3
+eth_address = "0x0101010101010101010101010101010101010101"
+
+[network]
+own_ip = "fdb4:5a79:7f9a:8ef8:ec40:5701:5b57:7e3"
+bounty_ip = "fd::3"
+babel_port = 8080
+rita_port = 4876
+bounty_port = 8888
+wg_private_key = "priv"
+wg_private_key_path = "/tmp/priv"
+wg_public_key = "pub"
+wg_start_port = 60000
+babel_interfaces = "eth0.2 eth0.3 eth0.4"
+manual_peers = []
+
+[exit_client]
+exit_ip = "fd96::1337:0e1f"
+exit_registration_port = 4876
+wg_listen_port = 59999
