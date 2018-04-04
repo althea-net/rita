@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-export OPENWRT_DIR=/home/ben/src/althea-firmware/build
+export OPENWRT_DIR=/home/justin/repos/althea-firmware/build
 export TOOLCHAIN=toolchain-mipsel_24kc_gcc-7.3.0_musl
 export TARGET_NAME=target-mipsel_24kc_musl
 export TARGET=mipsel-unknown-linux-musl
@@ -19,7 +19,6 @@ export LIBRARY_PATH=$OPENWRT_DIR/staging_dir/$TARGET_NAME/usr/lib/
 export SQLITE3_LIB_DIR=$LIBRARY_PATH
 export SQLITE3_LIB_DIR=$LIBRARY_PATH
 export PKG_CONFIG_ALLOW_CROSS=1
-export RUSTC_WRAPPER=sccache
 export RUSTFLAGS="-C linker=$TARGET_CC -C ar=$TARGET_AR"
-pushd rita
-cargo build --bin rita --release --target $RUST_TRIPLE --features "system_alloc"
+cargo build --all --target $RUST_TRIPLE --features "system_alloc"
+#$OPENWRT_DIR/staging_dir/$TOOLCHAIN/bin/mipsel-openwrt-linux-musl-strip target/$RUST_TRIPLE/release/rita
