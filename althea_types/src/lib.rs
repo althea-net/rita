@@ -11,6 +11,8 @@ extern crate serde_derive;
 #[cfg(feature = "actix")]
 extern crate actix;
 
+#[macro_use]
+mod eth_macro;
 pub mod bytes_32;
 pub mod eth_address;
 pub mod eth_private_key;
