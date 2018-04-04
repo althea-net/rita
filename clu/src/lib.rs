@@ -264,9 +264,10 @@ fn cleanup() -> Result<(), Error> {
 
     for i in interfaces {
         if re.is_match(&i) {
-            ki.del_interface(&i)
+            ki.del_interface(&i);
         }
     }
+    Ok(())
 }
 
 // Replacement for the setup.ash file in althea firmware
