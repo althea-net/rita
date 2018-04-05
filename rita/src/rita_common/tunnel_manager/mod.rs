@@ -159,6 +159,15 @@ impl TunnelManager {
                         (ip_address, Some(dev))
                     }
                 )
+                .chain(
+                    {
+                        let mut out = Vec::new();
+                        for i in SETTING.read().unwrap().network.manual_peers.clone() {
+                            out.push((i, None))
+                        }
+                        out
+                    }
+                )
                 .filter_map(|(ip_address, ref dev)| {
                     info!(
                         "neighbor at interface {:?}, ip {}",
