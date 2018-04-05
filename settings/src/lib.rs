@@ -49,7 +49,7 @@ pub struct NetworkSettings {
     pub wg_public_key: String,
     pub wg_start_port: u16,
     pub babel_interfaces: String,
-    pub manual_peers: Vec<LocalIdentity>,
+    pub manual_peers: Vec<IpAddr>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub global_non_mesh_ip: Option<IpAddr>,
 }
