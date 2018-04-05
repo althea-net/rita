@@ -20,6 +20,7 @@ RITA_EXIT = os.path.join(os.path.dirname(__file__), "../target/debug/rita_exit")
 BOUNTY_HUNTER = os.path.join(os.path.dirname(__file__), "../target/debug/bounty_hunter")
 PING6 = os.getenv('PING6', "ping6")
 CONVERGENCE_DELAY = float(os.getenv('CONVERGENCE_DELAY', 10))
+VERBOSE = os.getenv('VERBOSE', None)
 
 tests_passes = True
 
@@ -372,7 +373,14 @@ def traffic_diff(a, b):
 
 
 def fuzzy_traffic(a, b):
-    return b - 5e8 - abs(a) * 0.1 < a < b + 5e8 + abs(a) * 0.1
+    retval = b - 5e8 - abs(a) * 0.1 < a < b + 5e8 + abs(a) * 0.1
+    if VERBOSE is not None:
+        print('fuzzy_traffic({a}, {b}) is {retval}'.format(a=a, b=b,
+              retval=retval))
+        print('Expression: {b} - 5e8 - abs({a}) * 0.1 < {a} < {b} + 5e8 + ' +
+              'abs({a}) * 0.1'.format(a=a, b=b))
+
+    return retval
 
 
 def check_log_contains(f, x):
