@@ -25,6 +25,7 @@ use std::io::Write;
 use std::thread;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+use std::collections::HashSet;
 
 use config::Config;
 
@@ -48,7 +49,7 @@ pub struct NetworkSettings {
     pub wg_private_key_path: String,
     pub wg_public_key: String,
     pub wg_start_port: u16,
-    pub babel_interfaces: String,
+    pub peer_interfaces: HashSet<String>,
     pub manual_peers: Vec<IpAddr>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub global_non_mesh_ip: Option<IpAddr>,
