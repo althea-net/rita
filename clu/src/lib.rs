@@ -86,16 +86,9 @@ fn openwrt_generate_mesh_ip(config: Arc<RwLock<settings::RitaSettings>>) -> Resu
     let ki = KernelInterface {};
     let seed = rand::thread_rng().gen::<[u8; 10]>();
     let mesh_ip = ipgen::ip(std::str::from_utf8(&seed)?, "fd::/120").unwrap();
-    let ifaces = config.read().unwrap().network.babel_interfaces.clone();
-    let ifaces = ifaces.split(" ");
 
     // Mutates Settings intentional side effect
     config.write().unwrap().network.own_ip = mesh_ip;
-
-    for interface in ifaces {
-        let identifier = "network.babel_".to_string() + interface;
-        ki.set_uci_var(&identifier, &mesh_ip.to_string()).unwrap();
-    }
 
     ki.uci_commit().unwrap();
     Ok(())
