@@ -45,18 +45,18 @@ impl KernelInterface {
     pub fn get_reply_ip(&self, their_ip: IpAddr, global_non_mesh_ip: Option<IpAddr>) -> Result<IpAddr, Error> {
         let neigh = self.get_neighbors()?;
 
-        trace!("looking for {:?} in {:?} for reply ip", their_ip, neigh);
+        trace!("Looking for {:?} in {:?} for reply ip", their_ip, neigh);
         for ( ip, dev) in neigh {
             if ip == their_ip {
                 return Ok(self.get_link_local_device_ip(&dev)?);
             }
         }
 
-        trace!("didn't find {:?} in neighbors, sending global ip {:?}", their_ip, global_non_mesh_ip);
-
         if let Some(global_non_mesh_ip) = global_non_mesh_ip {
+            trace!("Didn't find {:?} in neighbors, sending global ip {:?}", their_ip, global_non_mesh_ip);
             Ok(global_non_mesh_ip)
         } else {
+            trace!("Didn't find {:?} in neighbors, bailing out", their_ip);
             Err(KernelManagerError::RuntimeError("Address not found in neighbors".to_string()).into())
         }
     }
@@ -185,7 +185,7 @@ fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE"
         })),
     };
 
-    let dev = ki.get_reply_ip("fe80::7459:8eff:fe98:81".parse().unwrap())
+    let dev = ki.get_reply_ip("fe80::7459:8eff:fe98:81".parse().unwrap(), None)
         .unwrap();
 
     assert_eq!(dev, "fe80::96:3add:69d9:906a".parse::<IpAddr>().unwrap())
