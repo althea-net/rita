@@ -1,5 +1,5 @@
 #!/bin/bash
-wget https://updates.altheamesh.com/staging-mips.tar.gz > /dev/null; tar -xf staging-mips.tar.gz
+wget -N https://updates.altheamesh.com/staging-mips.tar.gz > /dev/null; tar -xf staging-mips.tar.gz
 
 export TARGET_CC=$PWD/staging_dir/toolchain-mips_24kc_gcc-5.5.0_musl/bin/mips-openwrt-linux-gcc
 export TARGET_LD=$PWD/staging_dir/toolchain-mips_24kc_gcc-5.5.0_musl/bin/mips-openwrt-linux-ld
