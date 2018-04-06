@@ -154,43 +154,39 @@ impl TunnelManager {
                 .get_neighbors()
                 .unwrap()
                 .iter()
-                .map(
-                    |&(ip_address, ref dev)| {
-                        (ip_address, Some(dev))
+                .map(|&(ip_address, ref dev)| (ip_address, Some(dev)))
+                .chain({
+                    let mut out = Vec::new();
+                    for i in SETTING.read().unwrap().network.manual_peers.clone() {
+                        out.push((i, None))
                     }
-                )
-                .chain(
-                    {
-                        let mut out = Vec::new();
-                        for i in SETTING.read().unwrap().network.manual_peers.clone() {
-                            out.push((i, None))
-                        }
-                        out
-                    }
-                )
+                    out
+                })
                 .filter_map(|(ip_address, ref dev)| {
-                    info!(
-                        "neighbor at interface {:?}, ip {}",
-                        dev,
-                        ip_address,
-                    );
+                    info!("neighbor at interface {:?}, ip {}", dev, ip_address,);
                     if let Some(dev) = dev.clone() {
-                        if !SETTING.read().unwrap().network.peer_interfaces.contains(dev) {
-                            return None
+                        if !SETTING
+                            .read()
+                            .unwrap()
+                            .network
+                            .peer_interfaces
+                            .contains(dev)
+                        {
+                            return None;
                         }
                     }
-                    Some(Box::new(self.neighbor_inquiry(ip_address, dev.clone()).then(|res| {
-                        match res {
-                            Ok(res) => futures::future::ok(Some(res)),
-                            Err(err) => {
-                                warn!("got error {:} from neighbor inquiry", err);
-                                futures::future::ok(None)
-                            }
-                        }
-                    }))
-                        as Box<
-                            Future<Item = Option<(LocalIdentity, String)>, Error = Error>,
-                        >)
+                    Some(
+                        Box::new(self.neighbor_inquiry(ip_address, dev.clone()).then(
+                            |res| match res {
+                                Ok(res) => futures::future::ok(Some(res)),
+                                Err(err) => {
+                                    warn!("got error {:} from neighbor inquiry", err);
+                                    futures::future::ok(None)
+                                }
+                            },
+                        ))
+                            as Box<Future<Item = Option<(LocalIdentity, String)>, Error = Error>>,
+                    )
                 })
                 .collect();
         Box::new(futures::future::join_all(neighs).then(|res| {
@@ -223,14 +219,9 @@ impl TunnelManager {
                     self.ki.get_iface_index(dev).unwrap()
                 } else {
                     0
-                }
+                },
             )),
-            IpAddr::V4(ip_v4) => {
-                SocketAddr::V4(SocketAddrV4::new(
-                    ip_v4,
-                    4876,
-                ))
-            }
+            IpAddr::V4(ip_v4) => SocketAddr::V4(SocketAddrV4::new(ip_v4, 4876)),
         };
 
         trace!("Getting tunnel, inq");
@@ -238,7 +229,12 @@ impl TunnelManager {
 
         let my_id = LocalIdentity {
             global: SETTING.read().unwrap().get_identity(),
-            local_ip: self.ki.get_reply_ip(their_ip, SETTING.read().unwrap().network.global_non_mesh_ip.clone()).unwrap(),
+            local_ip: self.ki
+                .get_reply_ip(
+                    their_ip,
+                    SETTING.read().unwrap().network.global_non_mesh_ip.clone(),
+                )
+                .unwrap(),
             wg_port: tunnel.listen_port,
         };
 
@@ -256,7 +252,12 @@ impl TunnelManager {
         trace!("Getting tunnel, local id");
         let tunnel = self.get_if(&requester.local_ip);
 
-        let local_ip = self.ki.get_reply_ip(requester.local_ip, SETTING.read().unwrap().network.global_non_mesh_ip.clone()).unwrap();
+        let local_ip = self.ki
+            .get_reply_ip(
+                requester.local_ip,
+                SETTING.read().unwrap().network.global_non_mesh_ip.clone(),
+            )
+            .unwrap();
 
         LocalIdentity {
             global: SETTING.read().unwrap().get_identity(),

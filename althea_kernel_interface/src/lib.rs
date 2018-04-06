@@ -64,7 +64,10 @@ impl KernelInterface {
 
         trace!("Command {:?} {:?} returned: {:?}", program, args, output);
         if !output.status.success() {
-            info!("Command {:?} {:?} returned: an error {:?}", program, args, output);
+            info!(
+                "Command {:?} {:?} returned: an error {:?}",
+                program, args, output
+            );
         }
         trace!(
             "command completed in {}s {}ms",
