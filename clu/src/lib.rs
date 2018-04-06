@@ -113,13 +113,7 @@ fn validate_mesh_ip(ip: &IpAddr) -> bool {
 fn linux_setup_exit_tunnel(config: Arc<RwLock<settings::RitaSettings>>) -> Result<(), Error> {
     let ki = KernelInterface {};
 
-    let details = config
-        .read()
-        .unwrap()
-        .exit_client
-        .details
-        .clone()
-        .unwrap();
+    let details = config.read().unwrap().exit_client.details.clone().unwrap();
 
     ki.setup_wg_if_named("wg_exit").unwrap();
     ki.set_client_exit_tunnel_config(
@@ -140,13 +134,7 @@ fn linux_setup_exit_tunnel(config: Arc<RwLock<settings::RitaSettings>>) -> Resul
 fn openwrt_setup_exit_tunnel(config: Arc<RwLock<settings::RitaSettings>>) -> Result<(), Error> {
     let ki = KernelInterface {};
 
-    let details = config
-        .read()
-        .unwrap()
-        .exit_client
-        .details
-        .clone()
-        .unwrap();
+    let details = config.read().unwrap().exit_client.details.clone().unwrap();
 
     // This is a named interface, so ok if we set it multiple times
     ki.set_uci_var("network.wgExit", "interface").unwrap();
@@ -166,7 +154,10 @@ fn openwrt_setup_exit_tunnel(config: Arc<RwLock<settings::RitaSettings>>) -> Res
             .to_string(),
     ).unwrap();
 
-    ki.set_uci_var("network.wgExit.address", &details.own_internal_ip.to_string()).unwrap();
+    ki.set_uci_var(
+        "network.wgExit.address",
+        &details.own_internal_ip.to_string(),
+    ).unwrap();
 
     // This is an anonymous section, so we need to delete the old one first
     if let Err(_) = ki.del_uci_var("network.@wireguard_wgExit[-1]") {
@@ -190,17 +181,23 @@ fn openwrt_setup_exit_tunnel(config: Arc<RwLock<settings::RitaSettings>>) -> Res
     ki.set_uci_var("network.@wireguard_wgExit[0].persistent_keepalive", "25")
         .unwrap();
 
-    ki.set_uci_var("network.@wireguard_wgExit[0].address", &details.own_internal_ip.to_string())
-        .unwrap();
+    ki.set_uci_var(
+        "network.@wireguard_wgExit[0].address",
+        &details.own_internal_ip.to_string(),
+    ).unwrap();
 
     ki.set_uci_var("network.defaultOverWg", "route").unwrap();
     ki.set_uci_var("network.defaultOverWg.interface", "wgExit")
         .unwrap();
-    ki.set_uci_var("network.defaultOverWg.target", &details.server_internal_ip.to_string())
-        .unwrap();
+    ki.set_uci_var(
+        "network.defaultOverWg.target",
+        &details.server_internal_ip.to_string(),
+    ).unwrap();
 
-    ki.set_uci_var("network.defaultOverWg.netmask", &details.netmask.to_string())
-        .unwrap();
+    ki.set_uci_var(
+        "network.defaultOverWg.netmask",
+        &details.netmask.to_string(),
+    ).unwrap();
 
     ki.set_uci_var("network.defaultOverWg.gateway", "0.0.0.0")
         .unwrap();
@@ -246,7 +243,7 @@ fn request_own_exit_ip(
 
 /// called before anything is started to delete existing wireguard per hop tunnels
 fn cleanup() -> Result<(), Error> {
-    let ki = KernelInterface{};
+    let ki = KernelInterface {};
 
     let interfaces = ki.get_interfaces()?;
 
@@ -280,8 +277,8 @@ fn openwrt_init(
     //Creates file on disk containing key
     ki.create_wg_key(
         &Path::new(&config.read().unwrap().network.wg_private_key_path),
-        &config.read().unwrap().network.wg_private_key
-        )?;
+        &config.read().unwrap().network.wg_private_key,
+    )?;
 
     if !validate_mesh_ip(&mesh_ip) {
         openwrt_generate_mesh_ip(config.clone()).expect("failed to generate ip");
@@ -324,10 +321,7 @@ fn openwrt_init(
     Ok(())
 }
 
-fn linux_init(
-    config: Arc<RwLock<settings::RitaSettings>>,
-    file_name: String,
-) -> Result<(), Error> {
+fn linux_init(config: Arc<RwLock<settings::RitaSettings>>, file_name: String) -> Result<(), Error> {
     cleanup()?;
 
     let privkey = config.read().unwrap().network.wg_private_key.clone();

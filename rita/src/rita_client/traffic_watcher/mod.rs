@@ -109,7 +109,10 @@ pub fn watch(exit: Identity, exit_price: u64) -> Result<(), Error> {
 
         DebtKeeper::from_registry().do_send(update);
     } else {
-        warn!("not yet have route to exit at {:?}, ignoring payment", &exit.mesh_ip)
+        warn!(
+            "not yet have route to exit at {:?}, ignoring payment",
+            &exit.mesh_ip
+        )
     }
 
     Ok(())

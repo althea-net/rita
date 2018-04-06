@@ -32,16 +32,14 @@ pub fn setup_request(
                 .send(SetupClient(their_id))
                 .from_err()
                 .and_then(move |reply| {
-                    Ok(Json(
-                        ExitServerIdentity{
-                            own_local_ip: reply.unwrap(),
-                            server_local_ip: SETTING.read().unwrap().exit_network.own_internal_ip,
-                            wg_port: SETTING.read().unwrap().exit_network.wg_tunnel_port,
-                            global: SETTING.read().unwrap().get_identity(),
-                            price: SETTING.read().unwrap().exit_network.exit_price,
-                            netmask: SETTING.read().unwrap().exit_network.netmask,
-                        }
-                    ))
+                    Ok(Json(ExitServerIdentity {
+                        own_local_ip: reply.unwrap(),
+                        server_local_ip: SETTING.read().unwrap().exit_network.own_internal_ip,
+                        wg_port: SETTING.read().unwrap().exit_network.wg_tunnel_port,
+                        global: SETTING.read().unwrap().get_identity(),
+                        price: SETTING.read().unwrap().exit_network.exit_price,
+                        netmask: SETTING.read().unwrap().exit_network.netmask,
+                    }))
                 })
         })
         .responder()
