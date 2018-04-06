@@ -20,10 +20,7 @@ impl KernelInterface {
         for caps in re.captures_iter(&String::from_utf8(output.stdout)?) {
             trace!("Regex captured {:?}", caps);
 
-            vec.push((
-                IpAddr::from_str(&caps[1])?,
-                caps[2].to_string(),
-            ));
+            vec.push((IpAddr::from_str(&caps[1])?, caps[2].to_string()));
         }
         trace!("Got neighbors {:?}", vec);
         Ok(vec)

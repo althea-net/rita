@@ -8,7 +8,7 @@ use std::process::{Command, Output, Stdio};
 use failure::Error;
 
 impl KernelInterface {
-    pub fn create_wg_key(&self, path: &Path, private_key :&String) -> Result<(), Error> {
+    pub fn create_wg_key(&self, path: &Path, private_key: &String) -> Result<(), Error> {
         if path.exists() {
             warn!("System private key exists in {:?}", path);
             Ok(())
@@ -45,7 +45,6 @@ impl KernelInterface {
 
         Ok([pubkey_str, privkey_str])
     }
-
 }
 
 //TODO some tests

@@ -82,9 +82,10 @@ impl KernelInterface {
         let output = self.run_command(&format!("/etc/init.d/{}", program), &["reload"])?;
         if !output.status.success() {
             return Err(KernelManagerError::RuntimeError(format!(
-            "recieved error while refreshing {}: {}",
+                "recieved error while refreshing {}: {}",
                 program,
-            String::from_utf8(output.stderr)?)).into());
+                String::from_utf8(output.stderr)?
+            )).into());
         }
         Ok(())
     }

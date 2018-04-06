@@ -42,22 +42,33 @@ impl KernelInterface {
     }
 
     /// This gets our link local ip that can be reached by another node with link local ip
-    pub fn get_reply_ip(&self, their_ip: IpAddr, global_non_mesh_ip: Option<IpAddr>) -> Result<IpAddr, Error> {
+    pub fn get_reply_ip(
+        &self,
+        their_ip: IpAddr,
+        global_non_mesh_ip: Option<IpAddr>,
+    ) -> Result<IpAddr, Error> {
         let neigh = self.get_neighbors()?;
 
         trace!("Looking for {:?} in {:?} for reply ip", their_ip, neigh);
-        for ( ip, dev) in neigh {
+        for (ip, dev) in neigh {
             if ip == their_ip {
                 return Ok(self.get_link_local_device_ip(&dev)?);
             }
         }
 
         if let Some(global_non_mesh_ip) = global_non_mesh_ip {
-            trace!("Didn't find {:?} in neighbors, sending global ip {:?}", their_ip, global_non_mesh_ip);
+            trace!(
+                "Didn't find {:?} in neighbors, sending global ip {:?}",
+                their_ip,
+                global_non_mesh_ip
+            );
             Ok(global_non_mesh_ip)
         } else {
             trace!("Didn't find {:?} in neighbors, bailing out", their_ip);
-            Err(KernelManagerError::RuntimeError("Address not found in neighbors".to_string()).into())
+            Err(
+                KernelManagerError::RuntimeError("Address not found in neighbors".to_string())
+                    .into(),
+            )
         }
     }
 
