@@ -175,7 +175,7 @@ impl TunnelManager {
                         ip_address,
                     );
                     if let Some(dev) = dev.clone() {
-                        if &dev[..2] == "wg" {
+                        if !SETTING.read().unwrap().network.peer_interfaces.contains(dev) {
                             return None
                         }
                     }
