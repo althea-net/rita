@@ -58,10 +58,9 @@ mod rita_client;
 use rita_common::network_endpoints::{hello_response, make_payments};
 
 const USAGE: &str = "
-Usage: rita_common --config <settings> --default <default> --platform <platform>
+Usage: rita --config <settings> --platform <platform>
 Options:
     --config   Name of config file
-    --default   Name of default config file
     --platform   Platform (linux or openwrt)
 ";
 
@@ -72,10 +71,9 @@ lazy_static! {
             .unwrap_or_else(|e| e.exit());
 
         let settings_file = args.get_str("<settings>");
-        let defaults_file = args.get_str("<default>");
         let platform = args.get_str("<platform>");
 
-        let s = RitaSettings::new_watched(settings_file, defaults_file).unwrap();
+        let s = RitaSettings::new_watched(settings_file).unwrap();
 
         clu::init(platform, settings_file, s.clone());
 

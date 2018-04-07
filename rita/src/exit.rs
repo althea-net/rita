@@ -62,10 +62,9 @@ use rita_exit::network_endpoints::{list_clients, setup_request};
 use std::sync::{Arc, RwLock};
 
 const USAGE: &str = "
-Usage: rita_common --config <settings> --default <default>
+Usage: rita_exit --config <settings>
 Options:
     --config   Name of config file
-    --default   Name of default config file
 ";
 
 lazy_static! {
@@ -75,9 +74,8 @@ lazy_static! {
             .unwrap_or_else(|e| e.exit());
 
         let settings_file = args.get_str("<settings>");
-        let defaults_file = args.get_str("<default>");
 
-        let s = RitaExitSettings::new_watched(settings_file, defaults_file).unwrap();
+        let s = RitaExitSettings::new_watched(settings_file).unwrap();
         s.read().unwrap().write(settings_file).unwrap();
         s
     };
