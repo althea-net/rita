@@ -57,7 +57,7 @@ mod rita_exit;
 mod rita_common;
 
 use rita_common::network_endpoints::{hello_response, make_payments};
-use rita_exit::network_endpoints::setup_request;
+use rita_exit::network_endpoints::{list_clients, setup_request};
 
 use std::sync::{Arc, RwLock};
 
@@ -111,7 +111,33 @@ fn main() {
             .resource("/setup", |r| r.h(setup_request))
     }).bind(format!(
         "[::0]:{}",
-        SETTING.read().unwrap().network.rita_port
+        SETTING.read().unwrap().network.rita_hello_port
+    ))
+        .unwrap()
+        .start();
+
+    // Exit stuff
+    HttpServer::new(|| {
+        Application::new()
+            .resource("/setup", |r| r.h(setup_request))
+            .resource("/list", |r| r.h(list_clients))
+    }).bind(format!(
+        "[::0]:{}",
+        SETTING.read().unwrap().exit_network.exit_hello_port
+    ))
+        .unwrap()
+        .start();
+
+    // Dashboard
+    HttpServer::new(|| {
+        Application::new()
+            // assuming exit nodes dont need wifi
+            //.resource("/wifisettings", |r| r.route().filter(pred::Get()).h(get_wifi_config))
+            //.resource("/wifisettings", |r| r.route().filter(pred::Post()).h(set_wifi_config))
+            .resource("/neighbors", |r| r.route().filter(pred::Get()).h(get_node_info))
+    }).bind(format!(
+        "[::0]:{}",
+        SETTING.read().unwrap().network.rita_dashboard_port
     ))
         .unwrap()
         .start();
