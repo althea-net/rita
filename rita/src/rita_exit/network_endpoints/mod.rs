@@ -17,6 +17,8 @@ use SETTING;
 
 use failure::Error;
 use althea_types::interop::ExitServerIdentity;
+use rita_exit::db_client::ListClients;
+use exit_db::models::Client;
 
 pub fn setup_request(
     req: HttpRequest,
@@ -41,6 +43,22 @@ pub fn setup_request(
                         netmask: SETTING.read().unwrap().exit_network.netmask,
                     }))
                 })
+        })
+        .responder()
+}
+
+pub fn list_clients(req: HttpRequest) -> Box<Future<Item = Json<Vec<Client>>, Error = Error>> {
+    req.body()
+        .from_err()
+        .and_then(move |bytes: Bytes| {
+            trace!("setup request body: {:?}", bytes);
+            let their_id: ExitClientIdentity = serde_json::from_slice(&bytes[..]).unwrap();
+
+            trace!("Received requester identity, {:?}", their_id);
+            DbClient::from_registry()
+                .send(ListClients {})
+                .from_err()
+                .and_then(move |reply| Ok(Json(reply.unwrap())))
         })
         .responder()
 }

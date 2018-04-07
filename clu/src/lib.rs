@@ -254,6 +254,8 @@ fn cleanup() -> Result<(), Error> {
             ki.del_interface(&i)?;
         }
     }
+
+    ki.del_interface("wg_exit")?;
     Ok(())
 }
 
