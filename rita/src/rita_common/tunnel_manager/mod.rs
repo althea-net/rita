@@ -3,6 +3,7 @@ use std::path::Path;
 use std::collections::HashMap;
 
 use actix::prelude::*;
+use actix::actors;
 
 use futures;
 use futures::Future;
@@ -47,7 +48,8 @@ pub struct TunnelManager {
     pub ki: KernelInterface,
     pub port: u16,
 
-    tunnel_map: HashMap<IpAddr, TunnelData>,
+    tunnel_map: HashMap<String, TunnelData>,
+    listen_interfaces: HashSet<String>,
 }
 
 impl Actor for TunnelManager {
@@ -133,10 +135,10 @@ impl TunnelManager {
         r
     }
 
-    fn get_if(&mut self, ip: &IpAddr) -> TunnelData {
-        if self.tunnel_map.contains_key(ip) {
+    fn get_if(&mut self, ip: String) -> TunnelData {
+        if self.tunnel_map.contains_key(&ip) {
             trace!("found existing wg interface for {}", ip);
-            self.tunnel_map[ip].clone()
+            self.tunnel_map[&ip].clone()
         } else {
             trace!("creating new wg interface for {}", ip);
             let new = self.new_if();
@@ -149,16 +151,23 @@ impl TunnelManager {
     /// Identity using `neighbor_inquiry` as well as their wireguard tunnel name
     pub fn get_neighbors(&mut self) -> ResponseFuture<Vec<(LocalIdentity, String)>, Error> {
         self.ki.trigger_neighbor_disc().unwrap();
-        let neighs: Vec<Box<Future<Item = Option<(LocalIdentity, String)>, Error = Error>>> =
-            self.ki
-                .get_neighbors()
-                .unwrap()
-                .iter()
-                .map(|&(ip_address, ref dev)| (ip_address, Some(dev)))
-                .chain({
-                    let mut out = Vec::new();
-                    for i in SETTING.read().unwrap().network.manual_peers.clone() {
-                        out.push((i, None))
+        let neighs: Vec<Box<Future<Item = Option<(LocalIdentity, String)>, Error = ()>>> = self.ki
+            .get_neighbors()
+            .unwrap()
+            .iter()
+            .map(|&(ip_address, ref dev)| (ip_address.to_string(), Some(dev.clone())))
+            .chain({
+                let mut out = Vec::new();
+                for i in SETTING.read().unwrap().network.manual_peers.clone() {
+                    out.push((i, None))
+                }
+                out
+            })
+            .filter_map(|(ip_address, dev)| {
+                info!("neighbor at interface {:?}, ip {}", dev, ip_address,);
+                if let Some(dev) = dev.clone() {
+                    if !self.listen_interfaces.contains(&dev) {
+                        return None;
                     }
                     out
                 })
@@ -204,53 +213,91 @@ impl TunnelManager {
     /// interface name.
     pub fn neighbor_inquiry(
         &mut self,
-        their_ip: IpAddr,
-        dev: Option<&String>,
-    ) -> ResponseFuture<(LocalIdentity, String), Error> {
-        let url = format!("http://[{}%{:?}]:4876/hello", their_ip, dev);
-        info!("Saying hello to: {:?}", url);
-
-        let socket = match their_ip {
-            IpAddr::V6(ip_v6) => SocketAddr::V6(SocketAddrV6::new(
-                ip_v6,
-                4876,
-                0,
-                if let Some(dev) = dev {
-                    self.ki.get_iface_index(dev).unwrap()
-                } else {
-                    0
-                },
-            )),
-            IpAddr::V4(ip_v4) => SocketAddr::V4(SocketAddrV4::new(ip_v4, 4876)),
-        };
+        their_ip: String,
+        dev: Option<String>,
+    ) -> Box<Future<Item = (LocalIdentity, String), Error=Error>> {
+        let resolver: Addr<Unsync, _> = actors::Connector::from_registry();
 
         trace!("Getting tunnel, inq");
-        let tunnel = self.get_if(&their_ip);
+        let tunnel = self.get_if(their_ip.clone());
+        let iface_index = if let Some(dev) = dev.clone() {self.ki.get_iface_index(&dev).unwrap()} else {0};
 
-        let my_id = LocalIdentity {
-            global: SETTING.read().unwrap().get_identity(),
-            local_ip: self.ki
-                .get_reply_ip(
-                    their_ip,
-                    SETTING.read().unwrap().network.global_non_mesh_ip.clone(),
-                )
-                .unwrap(),
-            wg_port: tunnel.listen_port,
-        };
+        Box::new(resolver.send(actors::Resolve::host(their_ip.clone())).from_err().and_then( move |res| {
+            let url = format!("http://[{}%{:?}]:4876/hello", their_ip, dev);
+            info!("Saying hello to: {:?} at ip {:?}", url, res);
 
-        Box::new(
-            HTTPClient::from_registry()
-                .send(Hello { my_id, to: socket })
-                .then(|res| {
-                    let r = res??;
-                    Ok((r, tunnel.iface_name))
-                }),
-        )
+            if let Ok(res) = res {
+                if res.len() > 0 {
+                    let their_ip = res[0].ip();
+
+                    let socket = match their_ip {
+                        IpAddr::V6(ip_v6) => SocketAddr::V6(SocketAddrV6::new(
+                            ip_v6,
+                            SETTING.read().unwrap().network.rita_hello_port,
+                            0,
+                            iface_index
+                        )),
+                        IpAddr::V4(ip_v4) => SocketAddr::V4(SocketAddrV4::new(ip_v4, SETTING.read().unwrap().network.rita_hello_port)),
+                    };
+
+                    let ki = KernelInterface{};
+
+                    let my_id = LocalIdentity {
+                        global: SETTING.read().unwrap().get_identity(),
+                        local_ip: ki.get_reply_ip(
+                                their_ip,
+                                SETTING.read().unwrap().network.global_non_mesh_ip.clone(),
+                            ).unwrap(),
+                        wg_port: tunnel.listen_port,
+                    };
+
+                    Box::new(HTTPClient::from_registry()
+                            .send(Hello { my_id, to: socket })
+                            .then(|res| {
+                                let r = res??;
+                                Ok((r, tunnel.iface_name))
+                            }
+                    )) as ResponseFuture<(LocalIdentity, String), Error>
+                } else {
+                    Box::new(futures::future::err(TunnelManagerError::IPv4UnsupportedError.into())) as ResponseFuture<(LocalIdentity, String), Error>
+                }
+            } else {
+                let their_ip: IpAddr = their_ip.parse().unwrap();
+
+                let socket = match their_ip {
+                    IpAddr::V6(ip_v6) => SocketAddr::V6(SocketAddrV6::new(
+                        ip_v6,
+                        SETTING.read().unwrap().network.rita_hello_port,
+                        0,
+                        iface_index
+                    )),
+                    IpAddr::V4(ip_v4) => SocketAddr::V4(SocketAddrV4::new(ip_v4, SETTING.read().unwrap().network.rita_hello_port)),
+                };
+
+                let ki = KernelInterface{};
+
+                let my_id = LocalIdentity {
+                    global: SETTING.read().unwrap().get_identity(),
+                    local_ip: ki.get_reply_ip(
+                        their_ip,
+                        SETTING.read().unwrap().network.global_non_mesh_ip.clone(),
+                    ).unwrap(),
+                    wg_port: tunnel.listen_port,
+                };
+
+                Box::new(HTTPClient::from_registry()
+                    .send(Hello { my_id, to: socket })
+                    .then(|res| {
+                        let r = res??;
+                        Ok((r, tunnel.iface_name))
+                    }
+                    )) as ResponseFuture<(LocalIdentity, String), Error>            }
+        }))
     }
 
     pub fn get_local_identity(&mut self, requester: &LocalIdentity) -> LocalIdentity {
         trace!("Getting tunnel, local id");
-        let tunnel = self.get_if(&requester.local_ip);
+        let tunnel = self.get_if(requester.local_ip.to_string());
 
         let local_ip = self.ki
             .get_reply_ip(
@@ -269,7 +316,7 @@ impl TunnelManager {
     /// Given a LocalIdentity, connect to the neighbor over wireguard
     pub fn open_tunnel(&mut self, their_id: LocalIdentity) -> Result<(), Error> {
         trace!("Getting tunnel, open tunnel");
-        let tunnel = self.get_if(&their_id.local_ip);
+        let tunnel = self.get_if(their_id.local_ip.to_string());
         self.ki.open_tunnel(
             &tunnel.iface_name,
             tunnel.listen_port,
