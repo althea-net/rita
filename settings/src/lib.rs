@@ -50,7 +50,7 @@ pub struct NetworkSettings {
     pub wg_public_key: String,
     pub wg_start_port: u16,
     pub peer_interfaces: HashSet<String>,
-    pub manual_peers: Vec<IpAddr>,
+    pub manual_peers: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub global_non_mesh_ip: Option<IpAddr>,
 }
