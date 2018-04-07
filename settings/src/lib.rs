@@ -135,18 +135,16 @@ where
 }
 
 impl RitaSettings {
-    pub fn new(file_name: &str, default: &str) -> Result<Self, Error> {
+    pub fn new(file_name: &str) -> Result<Self, Error> {
         let mut s = Config::new();
-        s.merge(config::File::with_name(default))?;
         s.merge(config::File::with_name(file_name).required(false))?;
         let settings: Self = s.try_into()?;
 
         Ok(settings)
     }
 
-    pub fn new_watched(file_name: &str, default: &str) -> Result<Arc<RwLock<Self>>, Error> {
+    pub fn new_watched(file_name: &str) -> Result<Arc<RwLock<Self>>, Error> {
         let mut s = Config::new();
-        s.merge(config::File::with_name(default))?;
         s.merge(config::File::with_name(file_name).required(false))?;
         let settings: Self = s.clone().try_into()?;
 
@@ -187,9 +185,8 @@ impl RitaSettings {
 }
 
 impl RitaExitSettings {
-    pub fn new(file_name: &str, default: &str) -> Result<Self, Error> {
+    pub fn new(file_name: &str) -> Result<Self, Error> {
         let mut s = Config::new();
-        s.merge(config::File::with_name(default))?;
         s.merge(config::File::with_name(file_name).required(false))?;
         let settings: Self = s.try_into()?;
 
@@ -199,9 +196,8 @@ impl RitaExitSettings {
         Ok(settings)
     }
 
-    pub fn new_watched(file_name: &str, default: &str) -> Result<Arc<RwLock<Self>>, Error> {
+    pub fn new_watched(file_name: &str) -> Result<Arc<RwLock<Self>>, Error> {
         let mut s = Config::new();
-        s.merge(config::File::with_name(default))?;
         s.merge(config::File::with_name(file_name).required(false))?;
         let settings: Self = s.clone().try_into()?;
 
