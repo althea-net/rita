@@ -50,7 +50,6 @@ impl Message for Identity {
 /// This is all the data we need to give a neighbor to open a wg connection
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct LocalIdentity {
-    pub local_ip: IpAddr,
     pub wg_port: u16,
     pub global: Identity,
 }
