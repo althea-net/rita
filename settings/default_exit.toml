@@ -19,10 +19,11 @@ wg_public_key = "GGdAlEoj2NSKhtx7HhyATDDraMwCztQl62qckvrRBU4="
 wg_start_port = 60000
 peer_interfaces = []
 manual_peers = []
+external_nic = "veth-5-8"
 
 [exit_network]
 wg_tunnel_port = 59999
-external_nic = "veth-5-8"
+exit_hello_port = 4875
 exit_price = 50
 own_internal_ip = "172.168.1.254"
 netmask = "255.255.255.0"

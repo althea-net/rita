@@ -52,7 +52,7 @@ pub struct NetworkSettings {
     pub peer_interfaces: HashSet<String>,
     pub manual_peers: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub global_non_mesh_ip: Option<IpAddr>,
+    pub external_nic: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -94,7 +94,6 @@ pub struct RitaSettings {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ExitNetworkSettings {
     pub wg_tunnel_port: u16,
-    pub external_nic: String,
     pub exit_price: u64,
     pub own_internal_ip: IpAddr,
     pub netmask: IpAddr,
