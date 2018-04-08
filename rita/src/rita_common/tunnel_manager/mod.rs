@@ -25,6 +25,8 @@ use std::net::SocketAddrV4;
 pub enum TunnelManagerError {
     #[fail(display = "IPV4 unsupported error")]
     IPv4UnsupportedError,
+    #[fail(display = "DNS lookup error")]
+    DNSLookupError
 }
 
 #[derive(Debug, Clone)]
@@ -230,69 +232,48 @@ impl TunnelManager {
                 if res.len() > 0 {
                     let their_ip = res[0].ip();
 
-                    let socket = match their_ip {
-                        IpAddr::V6(ip_v6) => SocketAddr::V6(SocketAddrV6::new(
-                            ip_v6,
-                            SETTING.read().unwrap().network.rita_hello_port,
-                            0,
-                            iface_index
-                        )),
-                        IpAddr::V4(ip_v4) => SocketAddr::V4(SocketAddrV4::new(ip_v4, SETTING.read().unwrap().network.rita_hello_port)),
-                    };
-
-                    let ki = KernelInterface{};
-
-                    let my_id = LocalIdentity {
-                        global: SETTING.read().unwrap().get_identity(),
-                        local_ip: ki.get_reply_ip(
-                                their_ip,
-                                SETTING.read().unwrap().network.global_non_mesh_ip.clone(),
-                            ).unwrap(),
-                        wg_port: tunnel.listen_port,
-                    };
-
-                    Box::new(HTTPClient::from_registry()
-                            .send(Hello { my_id, to: socket })
-                            .then(|res| {
-                                let r = res??;
-                                Ok((r, tunnel.iface_name))
-                            }
-                    )) as ResponseFuture<(LocalIdentity, String), Error>
+                    TunnelManager::contact_neighbor(tunnel, iface_index, their_ip)
                 } else {
                     Box::new(futures::future::err(TunnelManagerError::IPv4UnsupportedError.into())) as ResponseFuture<(LocalIdentity, String), Error>
                 }
             } else {
-                let their_ip: IpAddr = their_ip.parse().unwrap();
-
-                let socket = match their_ip {
-                    IpAddr::V6(ip_v6) => SocketAddr::V6(SocketAddrV6::new(
-                        ip_v6,
-                        SETTING.read().unwrap().network.rita_hello_port,
-                        0,
-                        iface_index
-                    )),
-                    IpAddr::V4(ip_v4) => SocketAddr::V4(SocketAddrV4::new(ip_v4, SETTING.read().unwrap().network.rita_hello_port)),
-                };
-
-                let ki = KernelInterface{};
-
-                let my_id = LocalIdentity {
-                    global: SETTING.read().unwrap().get_identity(),
-                    local_ip: ki.get_reply_ip(
-                        their_ip,
-                        SETTING.read().unwrap().network.global_non_mesh_ip.clone(),
-                    ).unwrap(),
-                    wg_port: tunnel.listen_port,
-                };
-
-                Box::new(HTTPClient::from_registry()
-                    .send(Hello { my_id, to: socket })
-                    .then(|res| {
-                        let r = res??;
-                        Ok((r, tunnel.iface_name))
+                match their_ip.parse() {
+                    Ok(their_ip) => {
+                        TunnelManager::contact_neighbor(tunnel, iface_index, their_ip)
                     }
-                    )) as ResponseFuture<(LocalIdentity, String), Error>            }
+                    Err(err) => {Box::new(futures::future::err(err.into()))}
+                }
+            }
+
         }))
+    }
+
+    fn contact_neighbor(tunnel: TunnelData, iface_index: u32, their_ip: IpAddr) -> Box<Future<Item=(LocalIdentity, String), Error=Error>> {
+        let socket = match their_ip {
+            IpAddr::V6(ip_v6) => SocketAddr::V6(SocketAddrV6::new(
+                ip_v6,
+                SETTING.read().unwrap().network.rita_hello_port,
+                0,
+                iface_index
+            )),
+            IpAddr::V4(ip_v4) => SocketAddr::V4(SocketAddrV4::new(ip_v4, SETTING.read().unwrap().network.rita_hello_port)),
+        };
+        let ki = KernelInterface {};
+        let my_id = LocalIdentity {
+            global: SETTING.read().unwrap().get_identity(),
+            local_ip: ki.get_reply_ip(
+                their_ip,
+                SETTING.read().unwrap().network.external_nic.clone(),
+            ).unwrap(),
+            wg_port: tunnel.listen_port,
+        };
+        Box::new(HTTPClient::from_registry()
+            .send(Hello { my_id, to: socket })
+            .then(|res| {
+                let r = res??;
+                Ok((r, tunnel.iface_name))
+            }
+            )) as ResponseFuture<(LocalIdentity, String), Error>
     }
 
     pub fn get_local_identity(&mut self, requester: &LocalIdentity) -> LocalIdentity {
@@ -302,7 +283,7 @@ impl TunnelManager {
         let local_ip = self.ki
             .get_reply_ip(
                 requester.local_ip,
-                SETTING.read().unwrap().network.global_non_mesh_ip.clone(),
+                SETTING.read().unwrap().network.external_nic.clone(),
             )
             .unwrap();
 

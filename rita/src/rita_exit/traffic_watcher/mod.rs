@@ -36,8 +36,7 @@ impl SystemService for TrafficWatcher {
 
         // ignore if setup multiple times
         ki.setup_wg_if_named("wg_exit");
-        ki.setup_nat(&SETTING.read().unwrap().exit_network.external_nic)
-            .unwrap();
+        ki.setup_nat(&SETTING.read().unwrap().network.external_nic.clone().unwrap()).unwrap();
 
         info!("Traffic Watcher started");
     }
