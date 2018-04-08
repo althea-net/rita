@@ -47,13 +47,16 @@ impl Handler<Tick> for RitaLoop {
                 .into_actor(self)
                 .then(move |res, act, _ctx| {
                     let res = res.unwrap().unwrap();
+
                     info!("got neighbors: {:?}", res);
 
                     let neigh = Instant::now();
 
-                    for &(ref their_id, ref interface) in &res {
-                        TunnelManager::from_registry().do_send(OpenTunnel(their_id.clone()));
+                    for &(ref their_id, ref interface, ref ip) in &res {
+                        TunnelManager::from_registry().do_send(OpenTunnel(their_id.clone(), ip.clone()));
                     }
+
+                    let res = res.iter().map(|input| (input.0.clone(), input.1.clone())).collect();
 
                     TrafficWatcher::from_registry()
                         .send(Watch(res))
