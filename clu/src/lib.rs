@@ -309,6 +309,13 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettings>>) -> Result<(), Error> 
         linux_generate_mesh_ip(config.clone()).expect("failed to generate ip");
     }
 
+    let ki = KernelInterface {};
+    //Creates file on disk containing key
+    ki.create_wg_key(
+        &Path::new(&config.read().unwrap().network.wg_private_key_path),
+        &config.read().unwrap().network.wg_private_key,
+    )?;
+
     thread::spawn(move || loop {
         if config.read().unwrap().exit_client.is_some() {
             let our_exit_ip = config

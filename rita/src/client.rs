@@ -101,6 +101,7 @@ fn main() {
     assert!(rita_common::traffic_watcher::TrafficWatcher::from_registry().connected());
     assert!(rita_client::exit_manager::ExitManager::from_registry().connected());
 
+    // rita
     HttpServer::new(|| {
         Application::new()
             .resource("/make_payment", |r| r.h(make_payments))
