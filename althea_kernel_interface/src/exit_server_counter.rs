@@ -71,7 +71,7 @@ impl KernelInterface {
                 "inet6",
                 "counters",
             ],
-        )?;
+        );
         self.run_command(
             "ip6tables",
             &[
@@ -108,7 +108,7 @@ impl KernelInterface {
                 "inet6",
                 "counters",
             ],
-        )?;
+        );
 
         self.run_command(
             "ipset",
