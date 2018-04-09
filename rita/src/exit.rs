@@ -40,7 +40,7 @@ extern crate serde_json;
 extern crate settings;
 extern crate tokio;
 
-use settings::RitaExitSettings;
+use settings::{RitaExitSettings, FileWrite};
 use docopt::Docopt;
 
 use actix::*;
