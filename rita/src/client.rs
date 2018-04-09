@@ -106,7 +106,7 @@ fn main() {
         Application::new()
             .resource("/make_payment", |r| r.h(make_payments))
             .resource("/hello", |r| r.h(hello_response))
-    }).bind(format!(
+    }).threads(1).bind(format!(
         "[::0]:{}",
         SETTING.read().unwrap().network.rita_hello_port
     ))
@@ -124,7 +124,7 @@ fn main() {
             })
             .resource("/neighbors", |r| r.h(get_node_info))
             .resource("/exit_setup", |r| r.h(setup_exit))
-    }).bind(format!(
+    }).threads(1).bind(format!(
         "[::0]:{}",
         SETTING.read().unwrap().network.rita_dashboard_port
     ))
