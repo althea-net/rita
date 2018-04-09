@@ -8,8 +8,9 @@ eth_address = "0x0101010101010101010101010101010101010101"
 [network]
 own_ip = "fdb4:5a79:7f9a:8ef8:ec40:5701:5b57:7e3"
 bounty_ip = "fd::3"
-babel_port = 8080
-rita_port = 4876
+babel_port = 6872
+rita_hello_port = 4876
+rita_dashboard_port = 4877
 bounty_port = 8888
 wg_private_key = "priv"
 wg_private_key_path = "/tmp/priv"
@@ -21,7 +22,7 @@ global_non_mesh_ip = "3.3.3.3"
 
 [exit_client]
 exit_ip = "fd96::1337:0e1f"
-exit_registration_port = 4876
+exit_registration_port = 4875
 wg_listen_port = 59999
 
 [exit_client.reg_details]
