@@ -38,7 +38,7 @@ extern crate serde_json;
 extern crate settings;
 extern crate tokio;
 
-use settings::RitaSettings;
+use settings::{RitaSettings, FileWrite};
 use docopt::Docopt;
 
 use actix::*;

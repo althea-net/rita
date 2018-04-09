@@ -25,6 +25,7 @@ use std::thread;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use std::collections::HashSet;
+use std::clone;
 
 use config::Config;
 
@@ -36,12 +37,13 @@ use althea_kernel_interface::KernelInterface;
 
 use failure::Error;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
     pub own_ip: IpAddr,
     pub bounty_ip: IpAddr,
     pub babel_port: u16,
-    pub rita_port: u16,
+    pub rita_hello_port: u16,
+    pub rita_dashboard_port: u16,
     pub bounty_port: u16,
     pub wg_private_key: String,
     pub wg_private_key_path: String,
@@ -53,7 +55,7 @@ pub struct NetworkSettings {
     pub external_nic: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct PaymentSettings {
     pub pay_threshold: Int256,
     pub close_threshold: Int256,
@@ -62,7 +64,7 @@ pub struct PaymentSettings {
     pub eth_address: EthAddress,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitClientSettings {
     pub exit_ip: IpAddr,
     pub exit_registration_port: u16,
@@ -72,7 +74,7 @@ pub struct ExitClientSettings {
     pub reg_details: ExitRegistrationDetails,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitClientDetails {
     pub own_internal_ip: IpAddr,
     pub server_internal_ip: IpAddr,
@@ -83,7 +85,7 @@ pub struct ExitClientDetails {
     pub exit_price: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct RitaSettings {
     pub payment: PaymentSettings,
     pub network: NetworkSettings,
@@ -91,20 +93,25 @@ pub struct RitaSettings {
     pub exit_client: Option<ExitClientSettings>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitNetworkSettings {
+    pub exit_hello_port: u16,
     pub wg_tunnel_port: u16,
     pub exit_price: u64,
     pub own_internal_ip: IpAddr,
     pub netmask: IpAddr,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct RitaExitSettings {
     pub db_file: String,
     pub payment: PaymentSettings,
     pub network: NetworkSettings,
     pub exit_network: ExitNetworkSettings,
+}
+
+pub trait FileWrite {
+    fn write(&self, file_name: &str) -> Result<(), Error>;
 }
 
 fn spawn_watch_thread<'de, T: 'static>(
@@ -113,7 +120,7 @@ fn spawn_watch_thread<'de, T: 'static>(
     file_path: &str,
 ) -> Result<(), Error>
 where
-    T: serde::Deserialize<'de> + Sync + Send + std::fmt::Debug,
+    T: serde::Deserialize<'de> + Sync + Send + std::fmt::Debug + Clone + Eq + FileWrite,
 {
     let file_path = file_path.to_string();
 
@@ -135,7 +142,7 @@ where
                 trace!("new config: {:#?}", new_settings);
                 *settings.write().unwrap() = new_settings;
             } else {
-                settings.read().unwrap().write(&file_path).unwrap();
+                settings.read().unwrap().write(&file_path);
             }
         }
     });
@@ -183,8 +190,10 @@ impl RitaSettings {
             details.wg_public_key.clone(),
         ))
     }
+}
 
-    pub fn write(&self, file_name: &str) -> Result<(), Error> {
+impl FileWrite for RitaSettings {
+    fn write(&self, file_name: &str) -> Result<(), Error> {
         let ser = toml::to_string(&self).unwrap();
         let mut file = File::create(file_name)?;
         file.write_all(ser.as_bytes())?;
@@ -230,11 +239,14 @@ impl RitaExitSettings {
                 .unwrap(),
         )
     }
+}
 
-    pub fn write(&self, file_name: &str) -> Result<(), Error> {
+impl FileWrite for RitaExitSettings {
+    fn write(&self, file_name: &str) -> Result<(), Error> {
         let ser = toml::to_string(&self).unwrap();
         let mut file = File::create(file_name)?;
         file.write_all(ser.as_bytes())?;
+        file.flush().unwrap();
         Ok(())
     }
 }

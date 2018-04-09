@@ -134,7 +134,7 @@ def start_babel(node):
                 "-H 1 " +
                 "-F {price} " +
                 "-a 0 " +
-                "-G 8080 " +
+                "-G 6872 " +
                 '-C "default update-interval 1" ' +
                 "-w lo"
             ).format(babeld_path=BABELD, ifaces=node.get_interfaces(), id=node.id, price=node.fwd_price),
@@ -174,7 +174,7 @@ def start_rita(node):
         'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA,
                                                                               pwd=dname)
         )
-    time.sleep(0.1)
+    time.sleep(0.2)
     os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/exit_setup -H 'Accept: application/json' -i -d '{data}'".format(id=id, data=json.dumps(exit_settings)))
 
 

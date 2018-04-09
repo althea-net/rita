@@ -1,6 +1,6 @@
 use std::net::{IpAddr, SocketAddr, SocketAddrV6};
 use std::path::Path;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use actix::prelude::*;
 use actix::actors;
@@ -61,12 +61,57 @@ impl Supervised for TunnelManager {}
 impl SystemService for TunnelManager {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("Tunnel manager started");
+
+        for i in SETTING.read().unwrap().network.peer_interfaces.clone() {
+            self.listen_interfaces.insert(i);
+        }
+        trace!("Loaded listen interfaces {:?}", self.listen_interfaces);
     }
 }
 
 impl Default for TunnelManager {
     fn default() -> TunnelManager {
         TunnelManager::new()
+    }
+}
+
+pub struct Listen(pub String);
+impl Message for Listen {
+    type Result = ();
+}
+
+impl Handler<Listen> for TunnelManager {
+    type Result = ();
+
+    fn handle(&mut self, listen: Listen, _: &mut Context<Self>) -> Self::Result {
+        self.listen_interfaces.insert(listen.0);
+        SETTING.write().unwrap().network.peer_interfaces = self.listen_interfaces.clone();
+    }
+}
+
+pub struct UnListen(pub String);
+impl Message for UnListen {
+    type Result = ();
+}
+
+impl Handler<UnListen> for TunnelManager {
+    type Result = ();
+
+    fn handle(&mut self, un_listen: UnListen, _: &mut Context<Self>) -> Self::Result {
+        self.listen_interfaces.remove(&un_listen.0);
+        SETTING.write().unwrap().network.peer_interfaces = self.listen_interfaces.clone();
+    }
+}
+
+pub struct GetListen;
+impl Message for GetListen {
+    type Result = Result<HashSet<String>, Error>;
+}
+
+impl Handler<GetListen> for TunnelManager {
+    type Result = Result<HashSet<String>, Error>;
+    fn handle(&mut self, _: GetListen, _: &mut Context<Self>) -> Self::Result {
+        Ok(self.listen_interfaces.clone())
     }
 }
 
@@ -126,10 +171,12 @@ impl TunnelManager {
             ki: KernelInterface {},
             tunnel_map: HashMap::new(),
             port: SETTING.read().unwrap().network.wg_start_port,
+            listen_interfaces: HashSet::new(),
         }
     }
 
     fn new_if(&mut self) -> TunnelData {
+        trace!("creating new interface");
         let r = TunnelData::new(self.port);
         info!("creating new wg interface {:?}", r);
 
@@ -173,32 +220,17 @@ impl TunnelManager {
                     if !self.listen_interfaces.contains(&dev) {
                         return None;
                     }
-                    out
-                })
-                .filter_map(|(ip_address, ref dev)| {
-                    info!("neighbor at interface {:?}, ip {}", dev, ip_address,);
-                    if let Some(dev) = dev.clone() {
-                        if !SETTING
-                            .read()
-                            .unwrap()
-                            .network
-                            .peer_interfaces
-                            .contains(dev)
-                        {
-                            return None;
-                        }
-                    }
-                    Some(
-                        Box::new(self.neighbor_inquiry(ip_address, dev.clone()).then(
-                            |res| match res {
+                }
+                Some(
+                    Box::new(
+                        self.neighbor_inquiry(ip_address, dev.clone())
+                            .then(|res| match res {
                                 Ok(res) => futures::future::ok(Some(res)),
                                 Err(err) => {
                                     warn!("got error {:} from neighbor inquiry", err);
                                     futures::future::ok(None)
                                 }
-                            },
-                        ))
-                            as Box<Future<Item = Option<(LocalIdentity, String)>, Error = Error>>,
+                            }),
                     )
                         as Box<Future<Item = Option<(LocalIdentity, String, IpAddr)>, Error = ()>>,
                 )
