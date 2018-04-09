@@ -221,7 +221,7 @@ impl PaymentController {
             format!(
                 "http://[{}]:{}/make_payment",
                 pmt.to.mesh_ip,
-                SETTING.read().unwrap().network.rita_port
+                SETTING.read().unwrap().network.rita_hello_port
             )
         } else {
             String::from("http://127.0.0.1:1234/make_payment")
