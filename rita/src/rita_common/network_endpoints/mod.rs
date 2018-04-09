@@ -12,6 +12,7 @@ use rita_common::payment_controller::PaymentController;
 use rita_common::tunnel_manager::{GetLocalIdentity, OpenTunnel, TunnelManager};
 
 use std::boxed::Box;
+use std::net::SocketAddr;
 
 use serde_json;
 
@@ -37,6 +38,13 @@ pub fn make_payments(req: HttpRequest) -> Box<Future<Item = HttpResponse, Error 
 pub fn hello_response(req: HttpRequest) -> Box<Future<Item = Json<LocalIdentity>, Error = Error>> {
     info!("Got Hello from {:?}", req.connection_info().remote());
 
+    let remote_ip = req.connection_info()
+        .remote()
+        .unwrap()
+        .parse::<SocketAddr>()
+        .unwrap()
+        .ip();
+
     req.body()
         .from_err()
         .and_then(move |bytes: Bytes| {
@@ -46,12 +54,10 @@ pub fn hello_response(req: HttpRequest) -> Box<Future<Item = Json<LocalIdentity>
             trace!("Received neighbour identity: {:?}", their_id);
 
             TunnelManager::from_registry()
-                .send(GetLocalIdentity {
-                    requester: their_id.clone(),
-                })
+                .send(GetLocalIdentity { from: remote_ip })
                 .then(move |reply| {
                     info!("opening tunnel in hello_response for {:?}", their_id);
-                    TunnelManager::from_registry().do_send(OpenTunnel(their_id));
+                    TunnelManager::from_registry().do_send(OpenTunnel(their_id, remote_ip));
                     Ok(Json(reply.unwrap()))
                 })
         })

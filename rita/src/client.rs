@@ -56,12 +56,13 @@ mod rita_common;
 mod rita_client;
 
 use rita_common::network_endpoints::{hello_response, make_payments};
+use rita_common::dashboard::network_endpoints::{get_node_info, get_wifi_config, set_wifi_config};
+use rita_client::network_endpoints::setup_exit;
 
 const USAGE: &str = "
-Usage: rita_common --config <settings> --default <default> --platform <platform>
+Usage: rita --config <settings> --platform <platform>
 Options:
     --config   Name of config file
-    --default   Name of default config file
     --platform   Platform (linux or openwrt)
 ";
 
@@ -72,12 +73,11 @@ lazy_static! {
             .unwrap_or_else(|e| e.exit());
 
         let settings_file = args.get_str("<settings>");
-        let defaults_file = args.get_str("<default>");
         let platform = args.get_str("<platform>");
 
-        let s = RitaSettings::new_watched(settings_file, defaults_file).unwrap();
+        let s = RitaSettings::new_watched(settings_file).unwrap();
 
-        clu::init(platform, settings_file, s.clone());
+        clu::init(platform, s.clone());
 
         s.read().unwrap().write(settings_file).unwrap();
         s
@@ -107,7 +107,25 @@ fn main() {
             .resource("/hello", |r| r.h(hello_response))
     }).bind(format!(
         "[::0]:{}",
-        SETTING.read().unwrap().network.rita_port
+        SETTING.read().unwrap().network.rita_hello_port
+    ))
+        .unwrap()
+        .start();
+
+    // dashboard
+    HttpServer::new(|| {
+        Application::new()
+            .resource("/wifisettings", |r| {
+                r.route().filter(pred::Get()).h(get_wifi_config)
+            })
+            .resource("/wifisettings", |r| {
+                r.route().filter(pred::Post()).h(set_wifi_config)
+            })
+            .resource("/neighbors", |r| r.h(get_node_info))
+            .resource("/exit_setup", |r| r.h(setup_exit))
+    }).bind(format!(
+        "[::0]:{}",
+        SETTING.read().unwrap().network.rita_dashboard_port
     ))
         .unwrap()
         .start();

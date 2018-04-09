@@ -1,4 +1,4 @@
-use althea_types::{ExitClientIdentity, LocalIdentity};
+use althea_types::ExitClientIdentity;
 
 use actix::registry::SystemService;
 use actix_web::*;
@@ -17,6 +17,8 @@ use SETTING;
 
 use failure::Error;
 use althea_types::interop::ExitServerIdentity;
+use rita_exit::db_client::ListClients;
+use exit_db::models::Client;
 
 pub fn setup_request(
     req: HttpRequest,
@@ -41,6 +43,18 @@ pub fn setup_request(
                         netmask: SETTING.read().unwrap().exit_network.netmask,
                     }))
                 })
+        })
+        .responder()
+}
+
+pub fn list_clients(req: HttpRequest) -> Box<Future<Item = Json<Vec<Client>>, Error = Error>> {
+    req.body()
+        .from_err()
+        .and_then(move |_: Bytes| {
+            DbClient::from_registry()
+                .send(ListClients {})
+                .from_err()
+                .and_then(move |reply| Ok(Json(reply.unwrap())))
         })
         .responder()
 }
