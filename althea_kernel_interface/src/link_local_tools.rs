@@ -15,7 +15,7 @@ impl KernelInterface {
         let output = self.run_command("ip", &["addr", "show", "dev", dev, "scope", "link"])?;
         trace!("Got {:?} from `ip addr`", output);
 
-        let re = Regex::new(r"inet6 (\S*?)/[0-9]{2} scope link").unwrap();
+        let re = Regex::new(r"inet6 (\S*?)(/[0-9]+)? scope link").unwrap();
         let str = String::from_utf8(output.stdout)?;
         let cap = re.captures(&str);
         if let Some(cap) = cap {
@@ -24,6 +24,24 @@ impl KernelInterface {
         } else {
             return Err(KernelManagerError::RuntimeError(
                 "No link local addresses found or no interface found".to_string(),
+            ).into());
+        }
+    }
+
+    /// This gets our global ip for a given device
+    pub fn get_global_device_ip(&self, dev: &str) -> Result<IpAddr, Error> {
+        let output = self.run_command("ip", &["addr", "show", "dev", dev, "scope", "global"])?;
+        trace!("Got {:?} from `ip addr`", output);
+
+        let re = Regex::new(r"inet (\S*?)(/[0-9]+)? scope global").unwrap();
+        let str = String::from_utf8(output.stdout)?;
+        let cap = re.captures(&str);
+        if let Some(cap) = cap {
+            trace!("got global IP of {} from device {}", &cap[1], &dev);
+            return Ok(cap[1].parse()?);
+        } else {
+            return Err(KernelManagerError::RuntimeError(
+                "No global found or no interface found".to_string(),
             ).into());
         }
     }
@@ -45,7 +63,7 @@ impl KernelInterface {
     pub fn get_reply_ip(
         &self,
         their_ip: IpAddr,
-        global_non_mesh_ip: Option<IpAddr>,
+        external_interface: Option<String>,
     ) -> Result<IpAddr, Error> {
         let neigh = self.get_neighbors()?;
 
@@ -56,13 +74,14 @@ impl KernelInterface {
             }
         }
 
-        if let Some(global_non_mesh_ip) = global_non_mesh_ip {
+        if let Some(external_interface) = external_interface {
+            let global_ip = self.get_global_device_ip(&external_interface)?;
             trace!(
                 "Didn't find {:?} in neighbors, sending global ip {:?}",
                 their_ip,
-                global_non_mesh_ip
+                global_ip
             );
-            Ok(global_non_mesh_ip)
+            Ok(global_ip)
         } else {
             trace!("Didn't find {:?} in neighbors, bailing out", their_ip);
             Err(

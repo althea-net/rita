@@ -28,6 +28,15 @@ abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
 
+exit_settings = {
+    "exit_ip": "fd::5",
+    "exit_registration_port": 4875,
+    "wg_listen_port": 59999,
+    "reg_details": {
+        "zip_code": "1234",
+        "email": "1234@gmail.com"
+    }
+}
 
 def exec_or_exit(command, blocking=True, delay=0.01):
     """
@@ -125,7 +134,7 @@ def start_babel(node):
                 "-H 1 " +
                 "-F {price} " +
                 "-a 0 " +
-                "-G 8080 " +
+                "-G 6872 " +
                 '-C "default update-interval 1" ' +
                 "-w lo"
             ).format(babeld_path=BABELD, ifaces=node.get_interfaces(), id=node.id, price=node.fwd_price),
@@ -160,11 +169,13 @@ def start_rita(node):
     save_rita_settings(id, settings)
     time.sleep(0.1)
     os.system(
-        '(RUST_BACKTRACE=full RUST_LOG=TRACE ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml --platform linux'
+        '(RUST_BACKTRACE=full RUST_LOG=TRACE ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --platform linux'
         ' 2>&1 & echo $! > rita-n{id}.pid) | '
         'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA,
                                                                               pwd=dname)
         )
+    time.sleep(0.2)
+    os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/exit_setup -H 'Accept: application/json' -i -d '{data}'".format(id=id, data=json.dumps(exit_settings)))
 
 
 def start_rita_exit(node):
@@ -176,7 +187,7 @@ def start_rita_exit(node):
     save_rita_settings(id, settings)
     time.sleep(0.1)
     os.system(
-        '(RUST_BACKTRACE=full RUST_LOG=TRACE ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --default rita-settings-n{id}.toml'
+        '(RUST_BACKTRACE=full RUST_LOG=TRACE ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml'
         ' 2>&1 & echo $! > rita-n{id}.pid) | '
         'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA_EXIT,
                                                                               pwd=dname)

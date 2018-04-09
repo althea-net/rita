@@ -13,6 +13,7 @@ use num::bigint::{BigInt, BigUint, ToBigInt};
 use std::ops::{Add, AddAssign, Deref, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use num::traits::ops::checked::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
 use num::traits::Signed;
+use num::ToPrimitive;
 use serde::ser::Serialize;
 use serde::{Deserialize, Deserializer, Serializer};
 use std::str::FromStr;
@@ -351,6 +352,35 @@ impl_from_uint!(u16);
 impl_from_uint!(u32);
 impl_from_uint!(u64);
 impl_from_uint!(usize);
+
+macro_rules! impl_to {
+    ($T: ty, $F: ident) => {
+        impl Into<$T> for Int256 {
+            #[inline]
+            fn into(self) -> $T {
+                (self.0).$F().unwrap()
+            }
+        }
+
+        impl Into<$T> for Uint256 {
+            #[inline]
+            fn into(self) -> $T {
+                (self.0).$F().unwrap()
+            }
+        }
+    };
+}
+
+impl_to!(i8, to_i8);
+impl_to!(i16, to_i16);
+impl_to!(i32, to_i32);
+impl_to!(i64, to_i64);
+impl_to!(isize, to_isize);
+impl_to!(u8, to_u8);
+impl_to!(u16, to_u16);
+impl_to!(u32, to_u32);
+impl_to!(u64, to_u64);
+impl_to!(usize, to_usize);
 
 impl<'a> From<&'a Int256> for Int256 {
     fn from(n: &Int256) -> Int256 {
