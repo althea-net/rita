@@ -4,7 +4,6 @@ extern crate eui48;
 extern crate num256;
 extern crate toml;
 
-#[macro_use]
 extern crate failure;
 
 #[macro_use]
@@ -29,14 +28,13 @@ use std::collections::HashSet;
 
 use config::Config;
 
-use althea_types::{EthAddress, Identity};
+use althea_types::{EthAddress, ExitRegistrationDetails, Identity};
 
 use num256::Int256;
 
 use althea_kernel_interface::KernelInterface;
 
 use failure::Error;
-use althea_types::LocalIdentity;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NetworkSettings {
@@ -71,6 +69,7 @@ pub struct ExitClientSettings {
     pub wg_listen_port: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<ExitClientDetails>,
+    pub reg_details: ExitRegistrationDetails,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -88,7 +87,8 @@ pub struct ExitClientDetails {
 pub struct RitaSettings {
     pub payment: PaymentSettings,
     pub network: NetworkSettings,
-    pub exit_client: ExitClientSettings,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exit_client: Option<ExitClientSettings>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -118,15 +118,25 @@ where
     let file_path = file_path.to_string();
 
     thread::spawn(move || {
-        println!("Watching file for activity...");
+        info!("Watching file {} for activity...", file_path);
+
+        let old_settings = settings.read().unwrap().clone();
 
         loop {
             info!("refreshing configuration ...");
             thread::sleep(Duration::from_secs(5));
-            let config = config.refresh().unwrap();
-            let new_settings: T = config.clone().try_into().unwrap();
-            trace!("new config: {:#?}", new_settings);
-            *settings.write().unwrap() = new_settings;
+
+            let new_settings = settings.read().unwrap().clone();
+
+            if old_settings == new_settings {
+                // settings struct was not mutated locally
+                let config = config.refresh().unwrap();
+                let new_settings: T = config.clone().try_into().unwrap();
+                trace!("new config: {:#?}", new_settings);
+                *settings.write().unwrap() = new_settings;
+            } else {
+                settings.read().unwrap().write(&file_path).unwrap();
+            }
         }
     });
 
@@ -165,10 +175,10 @@ impl RitaSettings {
     }
 
     pub fn get_exit_id(&self) -> Option<Identity> {
-        let details = self.exit_client.details.clone()?;
+        let details = self.exit_client.clone()?.details?;
 
         Some(Identity::new(
-            self.exit_client.exit_ip.clone(),
+            self.exit_client.clone()?.exit_ip,
             details.eth_address.clone(),
             details.wg_public_key.clone(),
         ))

@@ -5,5 +5,7 @@ table! {
         wg_port -> Text,
         luci_pass -> Text,
         internal_ip -> Text,
+        email -> Text,
+        zip -> Text,
     }
 }

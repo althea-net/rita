@@ -17,8 +17,3 @@ wg_public_key = "pub"
 wg_start_port = 60000
 peer_interfaces = []
 manual_peers = []
-
-[exit_client]
-exit_ip = "fd::5"
-exit_registration_port = 4876
-wg_listen_port = 59999

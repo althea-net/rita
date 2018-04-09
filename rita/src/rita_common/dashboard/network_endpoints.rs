@@ -18,7 +18,7 @@ pub fn get_wifi_config(
 ) -> Box<Future<Item = Json<Vec<WifiInterface>>, Error = Error>> {
     req.body()
         .from_err()
-        .and_then(move |bytes: Bytes| {
+        .and_then(move |_: Bytes| {
             Dashboard::from_registry()
                 .send(GetWifiConfig {})
                 .then(move |reply| Ok(Json(reply.unwrap().unwrap())))
@@ -42,7 +42,7 @@ pub fn set_wifi_config(req: HttpRequest) -> Box<Future<Item = Json<()>, Error = 
 pub fn get_node_info(req: HttpRequest) -> Box<Future<Item = Json<Vec<NodeInfo>>, Error = Error>> {
     req.body()
         .from_err()
-        .and_then(move |bytes: Bytes| {
+        .and_then(move |_: Bytes| {
             Dashboard::from_registry()
                 .send(GetNodeInfo {})
                 .then(move |reply| Ok(Json(reply.unwrap().unwrap())))

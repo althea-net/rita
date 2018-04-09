@@ -51,6 +51,26 @@ impl Actor for DebtKeeper {
     type Context = Context<Self>;
 }
 
+impl Supervised for DebtKeeper {}
+impl SystemService for DebtKeeper {
+    fn service_started(&mut self, _ctx: &mut Context<Self>) {
+        info!("Debt Keeper started");
+    }
+}
+
+pub struct Dump;
+
+impl Message for Dump {
+    type Result = Result<HashMap<Identity, NodeDebtData>, ()>;
+}
+
+impl Handler<Dump> for DebtKeeper {
+    type Result = Result<HashMap<Identity, NodeDebtData>, ()>;
+    fn handle(&mut self, _msg: Dump, _: &mut Context<Self>) -> Self::Result {
+        Ok(self.debt_data.clone())
+    }
+}
+
 #[derive(Message, PartialEq, Eq, Debug)]
 pub struct PaymentReceived {
     pub from: Identity,

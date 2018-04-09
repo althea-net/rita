@@ -56,6 +56,7 @@ extern crate num256;
 mod rita_exit;
 mod rita_common;
 
+use rita_common::dashboard::network_endpoints::get_node_info;
 use rita_common::network_endpoints::{hello_response, make_payments};
 use rita_exit::network_endpoints::{list_clients, setup_request};
 
