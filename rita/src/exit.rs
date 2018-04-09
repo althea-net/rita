@@ -61,6 +61,7 @@ use rita_common::network_endpoints::{hello_response, make_payments};
 use rita_exit::network_endpoints::{list_clients, setup_request};
 
 use std::sync::{Arc, RwLock};
+use althea_kernel_interface::KernelInterface;
 
 const USAGE: &str = "
 Usage: rita_exit --config <settings>
@@ -89,6 +90,9 @@ fn main() {
         "Starting with Identity: {:?}",
         SETTING.read().unwrap().get_identity()
     );
+
+    let ki = KernelInterface{};
+    ki.del_interface("wg_exit");
 
     let system = actix::System::new(format!("main {}", SETTING.read().unwrap().network.own_ip));
 

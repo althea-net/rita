@@ -212,7 +212,7 @@ fn cleanup() -> Result<(), Error> {
         }
     }
 
-    ki.del_interface("wg_exit")?;
+    ki.del_interface("wg_exit");
     Ok(())
 }
 
