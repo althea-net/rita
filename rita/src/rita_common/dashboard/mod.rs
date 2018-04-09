@@ -6,7 +6,7 @@ use failure::Error;
 use serde_json;
 use serde_json::Value;
 
-use rita_common::tunnel_manager::{GetListen, GetNeighbors, Listen, TunnelManager, UnListen};
+use rita_common::tunnel_manager::{GetListen, Listen, TunnelManager, UnListen};
 use rita_common::debt_keeper::{DebtKeeper, Dump};
 
 use futures;
@@ -55,7 +55,7 @@ impl Message for GetWifiConfig {
 impl Handler<GetWifiConfig> for Dashboard {
     type Result = ResponseFuture<Vec<WifiInterface>, Error>;
 
-    fn handle(&mut self, msg: GetWifiConfig, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, _msg: GetWifiConfig, _ctx: &mut Self::Context) -> Self::Result {
         Box::new(
             TunnelManager::from_registry()
                 .send(GetListen {})
@@ -95,7 +95,7 @@ impl Message for SetWifiConfig {
 impl Handler<SetWifiConfig> for Dashboard {
     type Result = Result<(), Error>;
 
-    fn handle(&mut self, msg: SetWifiConfig, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: SetWifiConfig, _ctx: &mut Self::Context) -> Self::Result {
         let ki = KernelInterface {};
 
         for i in msg.0 {
@@ -134,7 +134,7 @@ impl Message for GetNodeInfo {
 impl Handler<GetNodeInfo> for Dashboard {
     type Result = ResponseFuture<Vec<NodeInfo>, Error>;
 
-    fn handle(&mut self, msg: GetNodeInfo, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, _msg: GetNodeInfo, _ctx: &mut Self::Context) -> Self::Result {
         Box::new(
             DebtKeeper::from_registry()
                 .send(Dump {})

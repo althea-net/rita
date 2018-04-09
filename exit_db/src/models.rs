@@ -9,4 +9,6 @@ pub struct Client {
     pub wg_port: String,
     pub luci_pass: String,
     pub internal_ip: String,
+    pub email: String,
+    pub zip: String,
 }

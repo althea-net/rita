@@ -28,6 +28,15 @@ abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
 
+exit_settings = {
+    "exit_ip": "fd::5",
+    "exit_registration_port": 4875,
+    "wg_listen_port": 59999,
+    "reg_details": {
+        "zip_code": "1234",
+        "email": "1234@gmail.com"
+    }
+}
 
 def exec_or_exit(command, blocking=True, delay=0.01):
     """
@@ -165,6 +174,8 @@ def start_rita(node):
         'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA,
                                                                               pwd=dname)
         )
+    time.sleep(0.1)
+    os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/exit_setup -H 'Accept: application/json' -i -d '{data}'".format(id=id, data=json.dumps(exit_settings)))
 
 
 def start_rita_exit(node):

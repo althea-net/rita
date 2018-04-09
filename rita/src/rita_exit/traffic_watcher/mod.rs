@@ -34,9 +34,18 @@ impl SystemService for TrafficWatcher {
         ki.init_exit_counter(&ExitFilterTarget::Input).unwrap();
         ki.init_exit_counter(&ExitFilterTarget::Output).unwrap();
 
-        // ignore if setup multiple times
-        ki.setup_wg_if_named("wg_exit");
-        ki.setup_nat(&SETTING.read().unwrap().network.external_nic.clone().unwrap()).unwrap();
+        match ki.setup_wg_if_named("wg_exit") {
+            Err(e) => warn!("exit setup returned {}", e),
+            _ => {}
+        }
+        ki.setup_nat(&SETTING
+            .read()
+            .unwrap()
+            .network
+            .external_nic
+            .clone()
+            .unwrap())
+            .unwrap();
 
         info!("Traffic Watcher started");
     }

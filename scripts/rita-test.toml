@@ -23,3 +23,7 @@ global_non_mesh_ip = "3.3.3.3"
 exit_ip = "fd96::1337:0e1f"
 exit_registration_port = 4876
 wg_listen_port = 59999
+
+[exit_client.reg_details]
+zip_code = "1234"
+email = "1234@gmail.com"

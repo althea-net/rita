@@ -26,7 +26,7 @@ pub enum TunnelManagerError {
     #[fail(display = "IPV4 unsupported error")]
     IPv4UnsupportedError,
     #[fail(display = "DNS lookup error")]
-    DNSLookupError
+    DNSLookupError,
 }
 
 #[derive(Debug, Clone)]
@@ -84,7 +84,6 @@ impl Handler<GetNeighbors> for TunnelManager {
 }
 
 pub struct GetLocalIdentity {
-    pub requester: LocalIdentity,
     pub from: IpAddr,
 }
 impl Message for GetLocalIdentity {
@@ -95,7 +94,7 @@ impl Handler<GetLocalIdentity> for TunnelManager {
     type Result = MessageResult<GetLocalIdentity>;
 
     fn handle(&mut self, their_id: GetLocalIdentity, _: &mut Context<Self>) -> Self::Result {
-        MessageResult(self.get_local_identity(&their_id.requester, their_id.from))
+        MessageResult(self.get_local_identity(their_id.from))
     }
 }
 
@@ -154,7 +153,9 @@ impl TunnelManager {
     /// Identity using `neighbor_inquiry` as well as their wireguard tunnel name
     pub fn get_neighbors(&mut self) -> ResponseFuture<Vec<(LocalIdentity, String, IpAddr)>, Error> {
         self.ki.trigger_neighbor_disc().unwrap();
-        let neighs: Vec<Box<Future<Item = Option<(LocalIdentity, String, IpAddr)>, Error = ()>>> = self.ki
+        let neighs: Vec<
+            Box<Future<Item = Option<(LocalIdentity, String, IpAddr)>, Error = ()>>,
+        > = self.ki
             .get_neighbors()
             .unwrap()
             .iter()
@@ -220,62 +221,80 @@ impl TunnelManager {
         &mut self,
         their_ip: String,
         dev: Option<String>,
-    ) -> Box<Future<Item = (LocalIdentity, String, IpAddr), Error=Error>> {
+    ) -> Box<Future<Item = (LocalIdentity, String, IpAddr), Error = Error>> {
         let resolver: Addr<Unsync, _> = actors::Connector::from_registry();
 
         trace!("Getting tunnel, inq");
         let tunnel = self.get_if(their_ip.clone());
-        let iface_index = if let Some(dev) = dev.clone() {self.ki.get_iface_index(&dev).unwrap()} else {0};
+        let iface_index = if let Some(dev) = dev.clone() {
+            self.ki.get_iface_index(&dev).unwrap()
+        } else {
+            0
+        };
 
-        Box::new(resolver.send(actors::Resolve::host(their_ip.clone())).from_err().and_then( move |res| {
-            let url = format!("http://[{}%{:?}]:4876/hello", their_ip, dev);
-            info!("Saying hello to: {:?} at ip {:?}", url, res);
+        Box::new(
+            resolver
+                .send(actors::Resolve::host(their_ip.clone()))
+                .from_err()
+                .and_then(move |res| {
+                    let url = format!("http://[{}%{:?}]:4876/hello", their_ip, dev);
+                    info!("Saying hello to: {:?} at ip {:?}", url, res);
 
-            if let Ok(res) = res {
-                if res.len() > 0 {
-                    let their_ip = res[0].ip();
+                    if let Ok(res) = res {
+                        if res.len() > 0 {
+                            let their_ip = res[0].ip();
 
-                    TunnelManager::contact_neighbor(tunnel, iface_index, their_ip)
-                } else {
-                    Box::new(futures::future::err(TunnelManagerError::IPv4UnsupportedError.into())) as ResponseFuture<(LocalIdentity, String, IpAddr), Error>
-                }
-            } else {
-                match their_ip.parse() {
-                    Ok(their_ip) => {
-                        TunnelManager::contact_neighbor(tunnel, iface_index, their_ip)
+                            TunnelManager::contact_neighbor(tunnel, iface_index, their_ip)
+                        } else {
+                            Box::new(futures::future::err(
+                                TunnelManagerError::DNSLookupError.into(),
+                            ))
+                                as ResponseFuture<(LocalIdentity, String, IpAddr), Error>
+                        }
+                    } else {
+                        match their_ip.parse() {
+                            Ok(their_ip) => {
+                                TunnelManager::contact_neighbor(tunnel, iface_index, their_ip)
+                            }
+                            Err(err) => Box::new(futures::future::err(err.into())),
+                        }
                     }
-                    Err(err) => {Box::new(futures::future::err(err.into()))}
-                }
-            }
-
-        }))
+                }),
+        )
     }
 
-    fn contact_neighbor(tunnel: TunnelData, iface_index: u32, their_ip: IpAddr) -> Box<Future<Item=(LocalIdentity, String, IpAddr), Error=Error>> {
+    fn contact_neighbor(
+        tunnel: TunnelData,
+        iface_index: u32,
+        their_ip: IpAddr,
+    ) -> Box<Future<Item = (LocalIdentity, String, IpAddr), Error = Error>> {
         let socket = match their_ip {
             IpAddr::V6(ip_v6) => SocketAddr::V6(SocketAddrV6::new(
                 ip_v6,
                 SETTING.read().unwrap().network.rita_hello_port,
                 0,
-                iface_index
+                iface_index,
             )),
-            IpAddr::V4(ip_v4) => SocketAddr::V4(SocketAddrV4::new(ip_v4, SETTING.read().unwrap().network.rita_hello_port)),
+            IpAddr::V4(ip_v4) => SocketAddr::V4(SocketAddrV4::new(
+                ip_v4,
+                SETTING.read().unwrap().network.rita_hello_port,
+            )),
         };
-        let ki = KernelInterface {};
         let my_id = LocalIdentity {
             global: SETTING.read().unwrap().get_identity(),
             wg_port: tunnel.listen_port,
         };
-        Box::new(HTTPClient::from_registry()
-            .send(Hello { my_id, to: socket })
-            .then(move |res| {
-                let r = res??;
-                Ok((r, tunnel.iface_name, socket.ip()))
-            }
-            )) as ResponseFuture<(LocalIdentity, String, IpAddr), Error>
+        Box::new(
+            HTTPClient::from_registry()
+                .send(Hello { my_id, to: socket })
+                .then(move |res| {
+                    let r = res??;
+                    Ok((r, tunnel.iface_name, socket.ip()))
+                }),
+        ) as ResponseFuture<(LocalIdentity, String, IpAddr), Error>
     }
 
-    pub fn get_local_identity(&mut self, requester: &LocalIdentity, local_ip: IpAddr) -> LocalIdentity {
+    pub fn get_local_identity(&mut self, local_ip: IpAddr) -> LocalIdentity {
         trace!("Getting tunnel, local id");
         let tunnel = self.get_if(local_ip.to_string());
 

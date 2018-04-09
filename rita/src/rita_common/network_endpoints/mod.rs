@@ -38,7 +38,12 @@ pub fn make_payments(req: HttpRequest) -> Box<Future<Item = HttpResponse, Error 
 pub fn hello_response(req: HttpRequest) -> Box<Future<Item = Json<LocalIdentity>, Error = Error>> {
     info!("Got Hello from {:?}", req.connection_info().remote());
 
-    let remote_ip = req.connection_info().remote().unwrap().parse::<SocketAddr>().unwrap().ip();
+    let remote_ip = req.connection_info()
+        .remote()
+        .unwrap()
+        .parse::<SocketAddr>()
+        .unwrap()
+        .ip();
 
     req.body()
         .from_err()
@@ -49,10 +54,7 @@ pub fn hello_response(req: HttpRequest) -> Box<Future<Item = Json<LocalIdentity>
             trace!("Received neighbour identity: {:?}", their_id);
 
             TunnelManager::from_registry()
-                .send(GetLocalIdentity {
-                    requester: their_id.clone(),
-                    from: remote_ip
-                })
+                .send(GetLocalIdentity { from: remote_ip })
                 .then(move |reply| {
                     info!("opening tunnel in hello_response for {:?}", their_id);
                     TunnelManager::from_registry().do_send(OpenTunnel(their_id, remote_ip));

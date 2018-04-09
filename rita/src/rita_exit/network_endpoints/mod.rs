@@ -1,4 +1,4 @@
-use althea_types::{ExitClientIdentity, LocalIdentity};
+use althea_types::ExitClientIdentity;
 
 use actix::registry::SystemService;
 use actix_web::*;
@@ -50,11 +50,7 @@ pub fn setup_request(
 pub fn list_clients(req: HttpRequest) -> Box<Future<Item = Json<Vec<Client>>, Error = Error>> {
     req.body()
         .from_err()
-        .and_then(move |bytes: Bytes| {
-            trace!("setup request body: {:?}", bytes);
-            let their_id: ExitClientIdentity = serde_json::from_slice(&bytes[..]).unwrap();
-
-            trace!("Received requester identity, {:?}", their_id);
+        .and_then(move |_: Bytes| {
             DbClient::from_registry()
                 .send(ListClients {})
                 .from_err()
