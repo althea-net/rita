@@ -40,7 +40,7 @@ extern crate serde_json;
 extern crate settings;
 extern crate tokio;
 
-use settings::{RitaExitSettings, FileWrite};
+use settings::{FileWrite, RitaExitSettings};
 use docopt::Docopt;
 
 use actix::*;
@@ -91,7 +91,7 @@ fn main() {
         SETTING.read().unwrap().get_identity()
     );
 
-    let ki = KernelInterface{};
+    let ki = KernelInterface {};
     ki.del_interface("wg_exit");
 
     let system = actix::System::new(format!("main {}", SETTING.read().unwrap().network.own_ip));
