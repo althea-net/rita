@@ -38,7 +38,7 @@ extern crate serde_json;
 extern crate settings;
 extern crate tokio;
 
-use settings::{RitaSettings, FileWrite};
+use settings::{FileWrite, RitaSettings};
 use docopt::Docopt;
 
 use actix::*;
@@ -106,10 +106,11 @@ fn main() {
         Application::new()
             .resource("/make_payment", |r| r.h(make_payments))
             .resource("/hello", |r| r.h(hello_response))
-    }).threads(1).bind(format!(
-        "[::0]:{}",
-        SETTING.read().unwrap().network.rita_hello_port
-    ))
+    }).threads(1)
+        .bind(format!(
+            "[::0]:{}",
+            SETTING.read().unwrap().network.rita_hello_port
+        ))
         .unwrap()
         .start();
 
@@ -124,10 +125,11 @@ fn main() {
             })
             .resource("/neighbors", |r| r.h(get_node_info))
             .resource("/exit_setup", |r| r.h(setup_exit))
-    }).threads(1).bind(format!(
-        "[::0]:{}",
-        SETTING.read().unwrap().network.rita_dashboard_port
-    ))
+    }).threads(1)
+        .bind(format!(
+            "[::0]:{}",
+            SETTING.read().unwrap().network.rita_dashboard_port
+        ))
         .unwrap()
         .start();
 
