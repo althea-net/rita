@@ -34,6 +34,27 @@ fn test_to_wg_local() {
     )
 }
 
+fn is_link_local(ip: IpAddr) -> bool {
+    if let IpAddr::V6(ip) = ip {
+        return (ip.segments()[0] & 0xffc0) == 0xfe80;
+    }
+    false
+}
+
+/// socket to string with interface id support
+fn socket_to_string(endpoint: &SocketAddr, interface_name: String) -> String {
+    match endpoint {
+        &SocketAddr::V6(endpoint) => {
+            if is_link_local(IpAddr::V6(endpoint.ip().clone())) {
+                format!("[{}%{}]:{}", endpoint.ip(), interface_name, endpoint.port())
+            } else {
+                format!("[{}]:{}", endpoint.ip(), endpoint.port())
+            }
+        },
+        &SocketAddr::V4(endpoint) => format!("{}:{}", endpoint.ip(), endpoint.port())
+    }
+}
+
 impl KernelInterface {
     pub fn open_tunnel(
         &mut self,
@@ -43,63 +64,63 @@ impl KernelInterface {
         remote_pub_key: &String,
         private_key_path: &Path,
         own_ip: &IpAddr,
+        external_nic: Option<String>
     ) -> Result<(), Error> {
-        if let &SocketAddr::V6(socket) = endpoint {
-            let phy_name = self.get_device_name(endpoint.ip())?;
-            let output = self.run_command(
-                "wg",
-                &[
-                    "set",
-                    &interface,
-                    "listen-port",
-                    &format!("{}", port),
-                    "private-key",
-                    &format!("{}", private_key_path.to_str().unwrap()),
-                    "peer",
-                    &format!("{}", remote_pub_key),
-                    "endpoint",
-                    &format!("[{}%{}]:{}", endpoint.ip(), phy_name, endpoint.port()),
-                    "allowed-ips",
-                    "::/0",
-                    "persistent-keepalive",
-                    "5",
-                ],
-            )?;
-            if !output.stderr.is_empty() {
-                return Err(KernelManagerError::RuntimeError(format!(
-                    "received error from wg command: {}",
-                    String::from_utf8(output.stderr)?
-                )).into());
-            }
-            let output = self.run_command(
-                "ip",
-                &["address", "add", &format!("{}", own_ip), "dev", &interface],
-            )?;
-
-            let output = self.run_command(
-                "ip",
-                &[
-                    "address",
-                    "add",
-                    &format!("{}/64", to_wg_local(own_ip)),
-                    "dev",
-                    &interface,
-                ],
-            )?;
-
-            let output = self.run_command("ip", &["link", "set", "dev", &interface, "up"])?;
-            if !output.stderr.is_empty() {
-                return Err(KernelManagerError::RuntimeError(format!(
-                    "received error setting wg interface up: {}",
-                    String::from_utf8(output.stderr)?
-                )).into());
-            }
-            Ok(())
-        } else {
+        let phy_name = match self.get_device_name(endpoint.ip()) {
+            Ok(phy_name) => phy_name,
+            Err(err) => external_nic.unwrap_or("no_nic".to_string()),
+        };
+        let socket_connect_str = socket_to_string(endpoint, phy_name);
+        trace!("socket conenct string: {}", socket_connect_str);
+        let output = self.run_command(
+            "wg",
+            &[
+                "set",
+                &interface,
+                "listen-port",
+                &format!("{}", port),
+                "private-key",
+                &format!("{}", private_key_path.to_str().unwrap()),
+                "peer",
+                &format!("{}", remote_pub_key),
+                "endpoint",
+                &socket_connect_str,
+                "allowed-ips",
+                "::/0",
+                "persistent-keepalive",
+                "5",
+            ],
+        )?;
+        if !output.stderr.is_empty() {
             return Err(KernelManagerError::RuntimeError(format!(
-                "Only ipv6 neighbors are supported"
+                "received error from wg command: {}",
+                String::from_utf8(output.stderr)?
             )).into());
         }
+        let output = self.run_command(
+            "ip",
+            &["address", "add", &format!("{}", own_ip), "dev", &interface],
+        )?;
+
+        let output = self.run_command(
+            "ip",
+            &[
+                "address",
+                "add",
+                &format!("{}/64", to_wg_local(own_ip)),
+                "dev",
+                &interface,
+            ],
+        )?;
+
+        let output = self.run_command("ip", &["link", "set", "dev", &interface, "up"])?;
+        if !output.stderr.is_empty() {
+            return Err(KernelManagerError::RuntimeError(format!(
+                "received error setting wg interface up: {}",
+                String::from_utf8(output.stderr)?
+            )).into());
+        }
+        Ok(())
     }
 }
 
