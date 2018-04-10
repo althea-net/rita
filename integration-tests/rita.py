@@ -202,9 +202,9 @@ def assert_test(x, description, verbose=True, global_fail=True):
         else:
             sys.stderr.write(colored(" + ", "red") + "{} Failed\n".format(description))
 
-    if global_fail:
+    if global_fail and not x:
         global tests_passes
-        tests_passes = x
+        tests_passes = False
     return x
 
 
