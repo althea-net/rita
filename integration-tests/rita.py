@@ -19,7 +19,8 @@ RITA = os.path.join(os.path.dirname(__file__), "../target/debug/rita")
 RITA_EXIT = os.path.join(os.path.dirname(__file__), "../target/debug/rita_exit")
 BOUNTY_HUNTER = os.path.join(os.path.dirname(__file__), "../target/debug/bounty_hunter")
 PING6 = os.getenv('PING6', "ping6")
-CONVERGENCE_DELAY = float(os.getenv('CONVERGENCE_DELAY', 10))
+CONVERGENCE_DELAY = float(os.getenv('CONVERGENCE_DELAY', 50))
+INITIAL_POLL_INTERVAL = float(os.getenv('INITIAL_POLL_INTERVAL', 1))
 VERBOSE = os.getenv('VERBOSE', None)
 
 tests_passes = True
@@ -194,13 +195,17 @@ def start_rita_exit(node):
         )
 
 
-def assert_test(x, description):
-    if x:
-        print(colored(" + ", "green") + "{} Succeeded".format(description))
-    else:
-        sys.stderr.write(colored(" + ", "red") + "{} Failed\n".format(description))
+def assert_test(x, description, verbose=True, global_fail=True):
+    if verbose:
+        if x:
+            print(colored(" + ", "green") + "{} Succeeded".format(description))
+        else:
+            sys.stderr.write(colored(" + ", "red") + "{} Failed\n".format(description))
+
+    if global_fail and not x:
         global tests_passes
         tests_passes = False
+    return x
 
 
 class World:
@@ -309,11 +314,14 @@ class World:
         output = ping.stdout.read().decode("utf-8")
         return "1 packets transmitted, 1 received, 0% packet loss" in output
 
-    def test_reach_all(self):
+    def test_reach_all(self, verbose=True, global_fail=True):
         for i in self.nodes.values():
             for j in self.nodes.values():
-                assert_test(self.test_reach(i, j),
-                            "Reachability from node {} to {}".format(i.id, j.id))
+                if not assert_test(self.test_reach(i, j), "Reachability " +
+                                   "from node {} to {}".format(i.id, j.id),
+                                   verbose=verbose, global_fail=global_fail):
+                    return False
+        return True
 
     def get_balances(self):
         s = 1
@@ -392,8 +400,8 @@ def fuzzy_traffic(a, b):
     if VERBOSE is not None:
         print('fuzzy_traffic({a}, {b}) is {retval}'.format(a=a, b=b,
               retval=retval))
-        print('Expression: {b} - 5e8 - abs({a}) * 0.1 < {a} < {b} + 5e8 + ' +
-              'abs({a}) * 0.1'.format(a=a, b=b))
+        print(('Expression: {b} - 5e8 - abs({a}) * 0.1 < {a} < {b} + 5e8 + ' +
+               'abs({a}) * 0.1').format(a=a, b=b))
 
     return retval
 
@@ -439,11 +447,24 @@ if __name__ == "__main__":
     world.create()
 
     print("Waiting for network to stabilize")
-    time.sleep(CONVERGENCE_DELAY)
+    start_time = time.time()
+
+    interval = INITIAL_POLL_INTERVAL
+
+    # While we're before convergence deadline
+    while (time.time() - start_time) <= CONVERGENCE_DELAY:
+        if world.test_reach_all(verbose=False, global_fail=False):
+            break      # We converged!
+        time.sleep(interval)  # Let's check again in a second
+        interval *= 2
 
     print("Test reachabibility...")
 
-    world.test_reach_all()
+    end_time = time.time()
+
+    # Test (and fail if necessary) for real and print stats on success
+    if world.test_reach_all():
+        print("Converged in %.2f seconds" % (end_time - start_time))
 
     world.test_traffic(c, f, {
         1: 0,
