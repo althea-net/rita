@@ -9,7 +9,7 @@ fn to_wg_local(ip: &IpAddr) -> IpAddr {
     match ip {
         &IpAddr::V6(ip) => {
             let mut seg = ip.segments();
-            assert_eq!(seg[0], 0xfd);
+            assert_eq!((seg[0] & 0xfd00), 0xfd00);
             seg[0] = 0xfe80;
             IpAddr::V6(Ipv6Addr::new(
                 seg[0],
@@ -29,7 +29,7 @@ fn to_wg_local(ip: &IpAddr) -> IpAddr {
 #[test]
 fn test_to_wg_local() {
     assert_eq!(
-        to_wg_local(&"fd::1".parse().unwrap()),
+        to_wg_local(&"fd00::1".parse().unwrap()),
         "fe80::1".parse::<IpAddr>().unwrap()
     )
 }
@@ -133,7 +133,7 @@ fn test_open_tunnel_linux() {
 
     let interface = String::from("wg1");
     let endpoint_link_local_ip = Ipv6Addr::new(0xfe80, 0, 0, 0x12, 0x34, 0x56, 0x78, 0x90);
-    let own_mesh_ip = "fd::1".parse::<IpAddr>().unwrap();
+    let own_mesh_ip = "fd00::1".parse::<IpAddr>().unwrap();
     let endpoint = SocketAddr::V6(SocketAddrV6::new(endpoint_link_local_ip, 8088, 0, 123));
     let remote_pub_key = String::from("x8AcR9wI4t97aowYFlis077BDBk9SLdq6khMiixuTsQ=");
     let private_key_path = Path::new("private_key");
@@ -192,7 +192,7 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
                 3 => {
                     // add global ip
                     assert_eq!(program, "ip");
-                    assert_eq!(args, ["address", "add", "fd::1", "dev", "wg1"]);
+                    assert_eq!(args, ["address", "add", "fd00::1", "dev", "wg1"]);
                     Ok(Output {
                         stdout: b"".to_vec(),
                         stderr: b"".to_vec(),

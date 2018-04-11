@@ -29,7 +29,7 @@ dname = os.path.dirname(abspath)
 os.chdir(dname)
 
 exit_settings = {
-    "exit_ip": "fd::5",
+    "exit_ip": "fd00::5",
     "exit_registration_port": 4875,
     "wg_listen_port": 59999,
     "reg_details": {
@@ -163,7 +163,7 @@ def save_rita_settings(id, x):
 def start_rita(node):
     id = node.id
     settings = get_rita_defaults()
-    settings["network"]["own_ip"] = "fd::{}".format(id)
+    settings["network"]["own_ip"] = "fd00::{}".format(id)
     settings["network"]["wg_private_key_path"] = "{pwd}/private-key-{id}".format(id=id, pwd=dname)
     settings["network"]["peer_interfaces"] = node.get_veth_interfaces()
     save_rita_settings(id, settings)
@@ -181,7 +181,7 @@ def start_rita(node):
 def start_rita_exit(node):
     id = node.id
     settings = get_rita_exit_defaults()
-    settings["network"]["own_ip"] = "fd::{}".format(id)
+    settings["network"]["own_ip"] = "fd00::{}".format(id)
     settings["network"]["wg_private_key_path"] = "{pwd}/private-key-{id}".format(id=id, pwd=dname)
     settings["network"]["peer_interfaces"] = node.get_veth_interfaces()
     save_rita_settings(id, settings)
@@ -238,7 +238,7 @@ class World:
         if self.exit == node.id:
             return "172.168.1.254"
         else:
-            return "fd::{}".format(node.id)
+            return "fd00::{}".format(node.id)
 
     def create(self):
         cleanup()
@@ -246,7 +246,7 @@ class World:
         assert self.bounty
         nodes = {}
         for id in self.nodes:
-            nodes[str(id)] = {"ip": "fd::{}".format(id)}
+            nodes[str(id)] = {"ip": "fd00::{}".format(id)}
 
         edges = []
 
@@ -304,7 +304,7 @@ class World:
     def test_reach(self, node_from, node_to):
         ping = subprocess.Popen(
             ["ip", "netns", "exec", "netlab-{}".format(node_from.id), PING6,
-             "fd::{}".format(node_to.id),
+             "fd00::{}".format(node_to.id),
              "-c", "1"], stdout=subprocess.PIPE)
         output = ping.stdout.read().decode("utf-8")
         return "1 packets transmitted, 1 received, 0% packet loss" in output
@@ -332,7 +332,7 @@ class World:
             s = 0
             m = 0
             for i in status:
-                balances[int(i["ip"].replace("fd::", ""))] = int(i["balance"])
+                balances[int(i["ip"].replace("fd00::", ""))] = int(i["balance"])
                 s += int(i["balance"])
                 m += abs(int(i["balance"]))
             n += 1

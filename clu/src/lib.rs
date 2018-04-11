@@ -73,9 +73,9 @@ fn openwrt_generate_and_set_wg_keys(
 
 fn linux_generate_mesh_ip(config: Arc<RwLock<settings::RitaSettings>>) -> Result<(), Error> {
     let seed: String = thread_rng().gen_ascii_chars().take(50).collect();
-    let mesh_ip = ipgen::ip(&seed, "fd::/120").unwrap();
+    let mesh_ip = ipgen::ip(&seed, "fd00::/8").unwrap();
 
-    trace!("generated new ip address {}", mesh_ip);
+    info!("generated new ip address {}", mesh_ip);
 
     // Mutates Settings intentional side effect
     config.write().unwrap().network.own_ip = mesh_ip;
@@ -84,8 +84,8 @@ fn linux_generate_mesh_ip(config: Arc<RwLock<settings::RitaSettings>>) -> Result
 
 fn openwrt_generate_mesh_ip(config: Arc<RwLock<settings::RitaSettings>>) -> Result<(), Error> {
     let ki = KernelInterface {};
-    let seed = rand::thread_rng().gen::<[u8; 10]>();
-    let mesh_ip = ipgen::ip(std::str::from_utf8(&seed)?, "fd::/120").unwrap();
+    let seed: String = thread_rng().gen_ascii_chars().take(50).collect();
+    let mesh_ip = ipgen::ip(&seed, "fd00::/8").unwrap();
 
     // Mutates Settings intentional side effect
     config.write().unwrap().network.own_ip = mesh_ip;

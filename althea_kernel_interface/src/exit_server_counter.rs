@@ -48,8 +48,8 @@ impl ExitFilterTarget {
 fn parse_exit_ipset(input: &str) -> Result<HashMap<IpAddr, u64>, Error> {
     let mut map = HashMap::new();
 
-    // example line `add aa fd::1 packets 28 bytes 2212`
-    let reg = Regex::new(r"(?m)^add \S+ (fd::[a-f0-9:]+) packets (\d+) bytes (\d+)")?;
+    // example line `add aa fd00::1 packets 28 bytes 2212`
+    let reg = Regex::new(r"(?m)^add \S+ (fd00::[a-f0-9:]+) packets (\d+) bytes (\d+)")?;
     for caps in reg.captures_iter(input) {
         map.insert(
             IpAddr::from_str(&caps[1])?,

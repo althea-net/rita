@@ -84,7 +84,7 @@ impl Handler<Tick> for RitaLoop {
                         SETTING.read().unwrap().exit_network.wg_tunnel_port,
                         &SETTING.read().unwrap().network.wg_private_key_path,
                         &"172.168.1.254".parse().unwrap(),
-                    ).unwrap();
+                    );
 
                     ctx.notify_later(Tick {}, Duration::from_secs(5));
                     actix::fut::ok(())
