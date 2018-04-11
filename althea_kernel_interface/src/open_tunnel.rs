@@ -231,5 +231,6 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
         &remote_pub_key,
         &private_key_path,
         &own_mesh_ip,
+        None
     ).unwrap();
 }
