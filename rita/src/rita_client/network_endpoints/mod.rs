@@ -11,6 +11,7 @@ use serde_json;
 use bytes::Bytes;
 
 use SETTING;
+use settings::RitaClientSettings;
 
 use failure::Error;
 
@@ -21,7 +22,7 @@ pub fn setup_exit(req: HttpRequest) -> Box<Future<Item = String, Error = Error>>
             trace!("setup exit body: {:?}", bytes);
             let setting: ExitClientSettings = serde_json::from_slice(&bytes[..]).unwrap();
 
-            SETTING.write().unwrap().exit_client = Some(setting);
+            SETTING.init_exit_client(setting);
 
             Ok("Setup Ok".to_string())
         })

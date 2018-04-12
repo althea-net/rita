@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use ip_network::IpNetwork;
 
 use SETTING;
+use settings::{RitaCommonSettings, RitaExitSettings};
 
 use failure::Error;
 
@@ -38,13 +39,7 @@ impl SystemService for TrafficWatcher {
             Err(e) => warn!("exit setup returned {}", e),
             _ => {}
         }
-        ki.setup_nat(&SETTING
-            .read()
-            .unwrap()
-            .network
-            .external_nic
-            .clone()
-            .unwrap())
+        ki.setup_nat(&SETTING.get_network().external_nic.clone().unwrap())
             .unwrap();
 
         info!("Traffic Watcher started");
@@ -70,11 +65,9 @@ impl Handler<Watch> for TrafficWatcher {
 /// This traffic watcher watches how much traffic each we send and receive from each client.
 pub fn watch(clients: Vec<Identity>) -> Result<(), Error> {
     let ki = KernelInterface {};
-    let mut babel = Babel::new(
-        &format!("[::1]:{}", SETTING.read().unwrap().network.babel_port)
-            .parse()
-            .unwrap(),
-    );
+    let mut babel = Babel::new(&format!("[::1]:{}", SETTING.get_network().babel_port)
+        .parse()
+        .unwrap());
 
     trace!("Getting routes");
     let routes = babel.parse_routes()?;
@@ -82,7 +75,7 @@ pub fn watch(clients: Vec<Identity>) -> Result<(), Error> {
 
     let mut destinations = HashMap::new();
     destinations.insert(
-        SETTING.read().unwrap().network.own_ip,
+        SETTING.get_network().own_ip,
         Int256::from(babel.local_fee().unwrap()),
     );
 
@@ -117,7 +110,7 @@ pub fn watch(clients: Vec<Identity>) -> Result<(), Error> {
         debts.insert(ident, Int256::from(0));
     }
 
-    let price = SETTING.read().unwrap().exit_network.exit_price;
+    let price = SETTING.get_exit_network().exit_price;
 
     for (ip, bytes) in input_counters {
         if identities.contains_key(&ip) && destinations.contains_key(&ip) {

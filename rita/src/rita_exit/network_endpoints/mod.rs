@@ -14,6 +14,7 @@ use serde_json;
 use bytes::Bytes;
 
 use SETTING;
+use settings::{RitaCommonSettings, RitaExitSettings};
 
 use failure::Error;
 use althea_types::interop::ExitServerIdentity;
@@ -36,11 +37,11 @@ pub fn setup_request(
                 .and_then(move |reply| {
                     Ok(Json(ExitServerIdentity {
                         own_local_ip: reply.unwrap(),
-                        server_local_ip: SETTING.read().unwrap().exit_network.own_internal_ip,
-                        wg_port: SETTING.read().unwrap().exit_network.wg_tunnel_port,
-                        global: SETTING.read().unwrap().get_identity(),
-                        price: SETTING.read().unwrap().exit_network.exit_price,
-                        netmask: SETTING.read().unwrap().exit_network.netmask,
+                        server_local_ip: SETTING.get_exit_network().own_internal_ip,
+                        wg_port: SETTING.get_exit_network().wg_tunnel_port,
+                        global: SETTING.get_identity(),
+                        price: SETTING.get_exit_network().exit_price,
+                        netmask: SETTING.get_exit_network().netmask,
                     }))
                 })
         })

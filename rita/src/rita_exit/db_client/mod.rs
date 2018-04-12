@@ -10,6 +10,7 @@ use std::net::IpAddr;
 use exit_db::{models, schema};
 
 use SETTING;
+use settings::RitaExitSettings;
 
 use failure::Error;
 
@@ -45,8 +46,8 @@ impl Handler<ListClients> for DbClient {
 
     fn handle(&mut self, _: ListClients, _: &mut Self::Context) -> Self::Result {
         use self::schema::clients::dsl::*;
-        info!("Opening {:?}", &SETTING.read().unwrap().db_file);
-        let connection = SqliteConnection::establish(&SETTING.read().unwrap().db_file).unwrap();
+        info!("Opening {:?}", &SETTING.get_db_file());
+        let connection = SqliteConnection::establish(&SETTING.get_db_file()).unwrap();
 
         let res = clients.load::<models::Client>(&connection)?;
         trace!("Got clients list {:?}", res);
@@ -79,7 +80,7 @@ impl Handler<SetupClient> for DbClient {
 
     fn handle(&mut self, msg: SetupClient, _: &mut Self::Context) -> Self::Result {
         use self::schema::clients::dsl::*;
-        let conn = SqliteConnection::establish(&SETTING.read().unwrap().db_file).unwrap();
+        let conn = SqliteConnection::establish(&SETTING.get_db_file()).unwrap();
 
         if verify_identity(&msg.0.reg_details)? {
             let client = msg.0;

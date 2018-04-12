@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use ip_network::IpNetwork;
 
 use SETTING;
+use settings::RitaCommonSettings;
 
 use failure::Error;
 
@@ -56,11 +57,9 @@ impl Handler<Watch> for TrafficWatcher {
 /// back to us.
 pub fn watch(exit: Identity, exit_price: u64) -> Result<(), Error> {
     let ki = KernelInterface {};
-    let mut babel = Babel::new(
-        &format!("[::1]:{}", SETTING.read().unwrap().network.babel_port)
-            .parse()
-            .unwrap(),
-    );
+    let mut babel = Babel::new(&format!("[::1]:{}", SETTING.get_network().babel_port)
+        .parse()
+        .unwrap());
 
     trace!("Getting routes");
     let routes = babel.parse_routes()?;

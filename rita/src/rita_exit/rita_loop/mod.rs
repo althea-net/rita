@@ -12,6 +12,8 @@ use exit_db::models::Client;
 use failure::Error;
 
 use SETTING;
+use settings::{RitaCommonSettings, RitaExitSettings};
+
 use althea_kernel_interface::{ExitClient, KernelInterface};
 
 use althea_types::Identity;
@@ -38,7 +40,7 @@ impl Message for Tick {
 fn to_identity(client: Client) -> Identity {
     Identity {
         mesh_ip: client.mesh_ip.parse().unwrap(),
-        eth_address: SETTING.read().unwrap().payment.eth_address, // we should never be paying them, but if somehow we do, it goes back to us
+        eth_address: SETTING.get_payment().eth_address, // we should never be paying them, but if somehow we do, it goes back to us
         wg_public_key: client.wg_pubkey,
     }
 }
@@ -81,8 +83,8 @@ impl Handler<Tick> for RitaLoop {
 
                     ki.set_exit_wg_config(
                         wg_clients,
-                        SETTING.read().unwrap().exit_network.wg_tunnel_port,
-                        &SETTING.read().unwrap().network.wg_private_key_path,
+                        SETTING.get_exit_network().wg_tunnel_port,
+                        &SETTING.get_network().wg_private_key_path,
                         &"172.168.1.254".parse().unwrap(),
                     );
 

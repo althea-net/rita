@@ -3,6 +3,7 @@ use actix::prelude::*;
 use althea_types::Identity;
 
 use SETTING;
+use settings::RitaClientSettings;
 
 use rita_client::rita_loop::Tick;
 use rita_client::traffic_watcher::{TrafficWatcher, Watch};
@@ -28,19 +29,15 @@ impl Handler<Tick> for ExitManager {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
-        if SETTING.read().unwrap().exit_client.is_some() {
-            if let Some(ref exit_details) =
-                SETTING.read().unwrap().clone().exit_client.unwrap().details
-            {
-                TrafficWatcher::from_registry().do_send(Watch(
-                    Identity {
-                        mesh_ip: SETTING.read().unwrap().exit_client.clone().unwrap().exit_ip,
-                        wg_public_key: exit_details.wg_public_key.clone(),
-                        eth_address: exit_details.eth_address,
-                    },
-                    exit_details.exit_price,
-                ))
-            };
+        if SETTING.exit_client_is_set() && SETTING.exit_client_details_is_set() {
+            TrafficWatcher::from_registry().do_send(Watch(
+                Identity {
+                    mesh_ip: SETTING.get_exit_client().exit_ip,
+                    wg_public_key: SETTING.get_exit_client_details().wg_public_key.clone(),
+                    eth_address: SETTING.get_exit_client_details().eth_address,
+                },
+                SETTING.get_exit_client_details().exit_price,
+            ));
         }
 
         Ok(())

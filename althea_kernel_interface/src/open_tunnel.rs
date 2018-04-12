@@ -50,8 +50,8 @@ fn socket_to_string(endpoint: &SocketAddr, interface_name: String) -> String {
             } else {
                 format!("[{}]:{}", endpoint.ip(), endpoint.port())
             }
-        },
-        &SocketAddr::V4(endpoint) => format!("{}:{}", endpoint.ip(), endpoint.port())
+        }
+        &SocketAddr::V4(endpoint) => format!("{}:{}", endpoint.ip(), endpoint.port()),
     }
 }
 
@@ -64,7 +64,7 @@ impl KernelInterface {
         remote_pub_key: &String,
         private_key_path: &Path,
         own_ip: &IpAddr,
-        external_nic: Option<String>
+        external_nic: Option<String>,
     ) -> Result<(), Error> {
         let phy_name = match self.get_device_name(endpoint.ip()) {
             Ok(phy_name) => phy_name,
@@ -231,6 +231,6 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
         &remote_pub_key,
         &private_key_path,
         &own_mesh_ip,
-        None
+        None,
     ).unwrap();
 }
