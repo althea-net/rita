@@ -8,14 +8,14 @@ extern crate serde_derive;
 #[macro_use]
 extern crate lazy_static;
 
-use std::fmt;
 use num::bigint::{BigInt, BigUint, ToBigInt};
-use std::ops::{Add, AddAssign, Deref, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use num::traits::ops::checked::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
 use num::traits::Signed;
 use num::ToPrimitive;
 use serde::ser::Serialize;
 use serde::{Deserialize, Deserializer, Serializer};
+use std::fmt;
+use std::ops::{Add, AddAssign, Deref, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use std::str::FromStr;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -304,7 +304,7 @@ impl From<BigInt> for Int256 {
 }
 
 macro_rules! impl_from_int {
-    ($T: ty) => {
+    ($T:ty) => {
         impl From<$T> for Int256 {
             #[inline]
             fn from(n: $T) -> Self {
@@ -325,7 +325,7 @@ macro_rules! impl_from_int {
 }
 
 macro_rules! impl_from_uint {
-    ($T: ty) => {
+    ($T:ty) => {
         impl From<$T> for Int256 {
             #[inline]
             fn from(n: $T) -> Self {
@@ -354,7 +354,7 @@ impl_from_uint!(u64);
 impl_from_uint!(usize);
 
 macro_rules! impl_to {
-    ($T: ty, $F: ident) => {
+    ($T:ty, $F:ident) => {
         impl Into<$T> for Int256 {
             #[inline]
             fn into(self) -> $T {
@@ -592,8 +592,8 @@ impl CheckedDiv for Int256 {
 mod tests {
     use super::*;
     use num::pow::pow;
-    use num::traits::ops::checked::{CheckedAdd, CheckedSub};
     use num::traits::cast::ToPrimitive;
+    use num::traits::ops::checked::{CheckedAdd, CheckedSub};
     use serde_json;
 
     lazy_static! {

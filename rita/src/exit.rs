@@ -40,11 +40,11 @@ extern crate serde_json;
 extern crate settings;
 extern crate tokio;
 
-use settings::{FileWrite, RitaExitSettings};
 use docopt::Docopt;
+use settings::{FileWrite, RitaCommonSettings, RitaExitSettings, RitaExitSettingsStruct};
 
-use actix::*;
 use actix::registry::SystemService;
+use actix::*;
 use actix_web::*;
 
 extern crate althea_kernel_interface;
@@ -53,15 +53,15 @@ extern crate babel_monitor;
 extern crate exit_db;
 extern crate num256;
 
-mod rita_exit;
 mod rita_common;
+mod rita_exit;
 
 use rita_common::dashboard::network_endpoints::get_node_info;
 use rita_common::network_endpoints::{hello_response, make_payments};
 use rita_exit::network_endpoints::{list_clients, setup_request};
 
-use std::sync::{Arc, RwLock};
 use althea_kernel_interface::KernelInterface;
+use std::sync::{Arc, RwLock};
 
 const USAGE: &str = "
 Usage: rita_exit --config <settings>
@@ -70,14 +70,14 @@ Options:
 ";
 
 lazy_static! {
-    pub static ref SETTING: Arc<RwLock<RitaExitSettings>> = {
+    pub static ref SETTING: Arc<RwLock<RitaExitSettingsStruct>> = {
         let args = Docopt::new(USAGE)
             .and_then(|d| d.parse())
             .unwrap_or_else(|e| e.exit());
 
         let settings_file = args.get_str("<settings>");
 
-        let s = RitaExitSettings::new_watched(settings_file).unwrap();
+        let s = RitaExitSettingsStruct::new_watched(settings_file).unwrap();
         s.read().unwrap().write(settings_file).unwrap();
         s
     };
@@ -86,15 +86,12 @@ lazy_static! {
 fn main() {
     env_logger::init();
     trace!("Starting");
-    trace!(
-        "Starting with Identity: {:?}",
-        SETTING.read().unwrap().get_identity()
-    );
+    trace!("Starting with Identity: {:?}", SETTING.get_identity());
 
     let ki = KernelInterface {};
     ki.del_interface("wg_exit");
 
-    let system = actix::System::new(format!("main {}", SETTING.read().unwrap().network.own_ip));
+    let system = actix::System::new(format!("main {}", SETTING.get_network().own_ip));
 
     assert!(rita_common::debt_keeper::DebtKeeper::from_registry().connected());
     assert!(rita_common::payment_controller::PaymentController::from_registry().connected());
@@ -112,10 +109,7 @@ fn main() {
             .resource("/hello", |r| r.h(hello_response))
             // Exit stuff
             .resource("/setup", |r| r.h(setup_request))
-    }).bind(format!(
-        "[::0]:{}",
-        SETTING.read().unwrap().network.rita_hello_port
-    ))
+    }).bind(format!("[::0]:{}", SETTING.get_network().rita_hello_port))
         .unwrap()
         .start();
 
@@ -126,7 +120,7 @@ fn main() {
             .resource("/list", |r| r.h(list_clients))
     }).bind(format!(
         "[::0]:{}",
-        SETTING.read().unwrap().exit_network.exit_hello_port
+        SETTING.get_exit_network().exit_hello_port
     ))
         .unwrap()
         .start();
@@ -140,7 +134,7 @@ fn main() {
             .resource("/neighbors", |r| r.route().filter(pred::Get()).h(get_node_info))
     }).bind(format!(
         "[::0]:{}",
-        SETTING.read().unwrap().network.rita_dashboard_port
+        SETTING.get_network().rita_dashboard_port
     ))
         .unwrap()
         .start();

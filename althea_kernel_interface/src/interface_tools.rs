@@ -30,10 +30,10 @@ impl KernelInterface {
 
 #[test]
 fn test_get_interfaces_linux() {
-    use std::process::Output;
-    use std::process::ExitStatus;
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
     let mut ki = KernelInterface {
         run_command: RefCell::new(Box::new(|program, args| {
             assert_eq!(program, "ip");

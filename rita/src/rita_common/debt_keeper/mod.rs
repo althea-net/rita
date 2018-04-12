@@ -6,6 +6,7 @@ use althea_types::{Identity, PaymentTx};
 
 use num256::{Int256, Uint256};
 
+use settings::RitaCommonSettings;
 use SETTING;
 
 use rita_common::payment_controller;
@@ -128,7 +129,7 @@ impl Handler<SendUpdate> for DebtKeeper {
                 DebtAction::MakePayment { to, amount } => PaymentController::from_registry()
                     .do_send(payment_controller::MakePayment(PaymentTx {
                         to,
-                        from: SETTING.read().unwrap().get_identity(),
+                        from: SETTING.get_identity(),
                         amount,
                     })),
                 DebtAction::None => {}
@@ -140,10 +141,10 @@ impl Handler<SendUpdate> for DebtKeeper {
 impl Default for DebtKeeper {
     fn default() -> DebtKeeper {
         Self::new(
-            SETTING.read().unwrap().payment.pay_threshold.clone(),
-            SETTING.read().unwrap().payment.close_threshold.clone(),
-            SETTING.read().unwrap().payment.close_fraction.clone(),
-            SETTING.read().unwrap().payment.buffer_period.clone(),
+            SETTING.get_payment().pay_threshold.clone(),
+            SETTING.get_payment().close_threshold.clone(),
+            SETTING.get_payment().close_fraction.clone(),
+            SETTING.get_payment().buffer_period.clone(),
         )
     }
 }

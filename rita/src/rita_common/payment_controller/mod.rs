@@ -8,12 +8,13 @@ use reqwest::{Client, StatusCode};
 
 use std::time::Duration;
 
+use settings::RitaCommonSettings;
 use SETTING;
 
 use reqwest;
-use serde_json;
 use rita_common::debt_keeper;
 use rita_common::debt_keeper::DebtKeeper;
+use serde_json;
 
 use failure::Error;
 
@@ -102,7 +103,7 @@ extern crate mockito;
 
 impl Default for PaymentController {
     fn default() -> PaymentController {
-        PaymentController::new(&SETTING.read().unwrap().get_identity())
+        PaymentController::new(&SETTING.get_identity())
     }
 }
 
@@ -123,8 +124,8 @@ impl PaymentController {
         let bounty_url = if cfg!(not(test)) {
             format!(
                 "http://[{}]:{}/update",
-                SETTING.read().unwrap().network.bounty_ip,
-                SETTING.read().unwrap().network.bounty_port
+                SETTING.get_network().bounty_ip,
+                SETTING.get_network().bounty_port
             )
         } else {
             String::from("http://127.0.0.1:1234/update") //TODO: This is mockito::SERVER_URL, but don't want to include the crate in a non-test build just for that string
@@ -221,7 +222,7 @@ impl PaymentController {
             format!(
                 "http://[{}]:{}/make_payment",
                 pmt.to.mesh_ip,
-                SETTING.read().unwrap().network.rita_hello_port
+                SETTING.get_network().rita_hello_port
             )
         } else {
             String::from("http://127.0.0.1:1234/make_payment")
@@ -269,11 +270,11 @@ mod tests {
 
     use std::time;
 
+    use num256::Uint256;
     use std::collections::hash_map::DefaultHasher;
     use std::net::IpAddr;
     use std::net::Ipv6Addr;
     use std::sync::mpsc;
-    use num256::Uint256;
 
     use althea_types::{EthAddress, Identity, PaymentTx};
 

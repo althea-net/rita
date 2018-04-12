@@ -10,8 +10,8 @@ use serde_json;
 use super::{Dashboard, GetWifiConfig, NodeInfo, SetWifiConfig};
 
 use bytes::Bytes;
-use rita_common::dashboard::WifiInterface;
 use rita_common::dashboard::GetNodeInfo;
+use rita_common::dashboard::WifiInterface;
 
 pub fn get_wifi_config(
     req: HttpRequest,

@@ -11,11 +11,12 @@ use rita_common::debt_keeper::DebtKeeper;
 
 use num256::Int256;
 
-use std::net::IpAddr;
 use std::collections::HashMap;
+use std::net::IpAddr;
 
 use ip_network::IpNetwork;
 
+use settings::RitaCommonSettings;
 use SETTING;
 
 use failure::Error;
@@ -56,11 +57,9 @@ impl Handler<Watch> for TrafficWatcher {
 /// back to us.
 pub fn watch(exit: Identity, exit_price: u64) -> Result<(), Error> {
     let ki = KernelInterface {};
-    let mut babel = Babel::new(
-        &format!("[::1]:{}", SETTING.read().unwrap().network.babel_port)
-            .parse()
-            .unwrap(),
-    );
+    let mut babel = Babel::new(&format!("[::1]:{}", SETTING.get_network().babel_port)
+        .parse()
+        .unwrap());
 
     trace!("Getting routes");
     let routes = babel.parse_routes()?;

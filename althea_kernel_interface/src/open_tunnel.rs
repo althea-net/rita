@@ -12,14 +12,7 @@ fn to_wg_local(ip: &IpAddr) -> IpAddr {
             assert_eq!((seg[0] & 0xfd00), 0xfd00);
             seg[0] = 0xfe80;
             IpAddr::V6(Ipv6Addr::new(
-                seg[0],
-                seg[1],
-                seg[2],
-                seg[3],
-                seg[4],
-                seg[5],
-                seg[6],
-                seg[7],
+                seg[0], seg[1], seg[2], seg[3], seg[4], seg[5], seg[6], seg[7],
             ))
         }
         _ => unreachable!(),
@@ -50,8 +43,8 @@ fn socket_to_string(endpoint: &SocketAddr, interface_name: String) -> String {
             } else {
                 format!("[{}]:{}", endpoint.ip(), endpoint.port())
             }
-        },
-        &SocketAddr::V4(endpoint) => format!("{}:{}", endpoint.ip(), endpoint.port())
+        }
+        &SocketAddr::V4(endpoint) => format!("{}:{}", endpoint.ip(), endpoint.port()),
     }
 }
 
@@ -64,7 +57,7 @@ impl KernelInterface {
         remote_pub_key: &String,
         private_key_path: &Path,
         own_ip: &IpAddr,
-        external_nic: Option<String>
+        external_nic: Option<String>,
     ) -> Result<(), Error> {
         let phy_name = match self.get_device_name(endpoint.ip()) {
             Ok(phy_name) => phy_name,
@@ -126,10 +119,10 @@ impl KernelInterface {
 
 #[test]
 fn test_open_tunnel_linux() {
-    use std::process::Output;
-    use std::process::ExitStatus;
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
 
     let interface = String::from("wg1");
     let endpoint_link_local_ip = Ipv6Addr::new(0xfe80, 0, 0, 0x12, 0x34, 0x56, 0x78, 0x90);
@@ -231,6 +224,6 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
         &remote_pub_key,
         &private_key_path,
         &own_mesh_ip,
-        None
+        None,
     ).unwrap();
 }

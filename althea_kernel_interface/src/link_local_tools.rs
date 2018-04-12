@@ -1,9 +1,9 @@
 use super::{KernelInterface, KernelManagerError};
 
-use std::net::IpAddr;
-use std::str::FromStr;
 use std::fs::File;
 use std::io::{Read, Write};
+use std::net::IpAddr;
+use std::str::FromStr;
 
 use regex::Regex;
 
@@ -110,10 +110,10 @@ impl KernelInterface {
 
 #[test]
 fn test_get_device_name_linux() {
-    use std::process::Output;
-    use std::process::ExitStatus;
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
 
     let mut ki = KernelInterface {
         run_command: RefCell::new(Box::new(|program, args| {
@@ -143,10 +143,10 @@ fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE
 
 #[test]
 fn test_get_link_local_device_ip_linux() {
-    use std::process::Output;
-    use std::process::ExitStatus;
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
 
     let mut ki = KernelInterface {
         run_command: RefCell::new(Box::new(|program, args| {
@@ -172,10 +172,10 @@ fn test_get_link_local_device_ip_linux() {
 
 #[test]
 fn test_get_link_local_reply_ip_linux() {
-    use std::process::Output;
-    use std::process::ExitStatus;
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
 
     let mut counter = 0;
 

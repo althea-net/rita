@@ -1,9 +1,9 @@
+use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr, SocketAddrV6};
 use std::path::Path;
-use std::collections::{HashMap, HashSet};
 
-use actix::prelude::*;
 use actix::actors;
+use actix::prelude::*;
 
 use futures;
 use futures::Future;
@@ -16,6 +16,7 @@ use babel_monitor::Babel;
 
 use rita_common::http_client::{HTTPClient, Hello};
 
+use settings::RitaCommonSettings;
 use SETTING;
 
 use failure::Error;
@@ -62,7 +63,7 @@ impl SystemService for TunnelManager {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("Tunnel manager started");
 
-        for i in SETTING.read().unwrap().network.peer_interfaces.clone() {
+        for i in SETTING.get_network().peer_interfaces.clone() {
             self.listen_interfaces.insert(i);
         }
         trace!("Loaded listen interfaces {:?}", self.listen_interfaces);
@@ -85,7 +86,7 @@ impl Handler<Listen> for TunnelManager {
 
     fn handle(&mut self, listen: Listen, _: &mut Context<Self>) -> Self::Result {
         self.listen_interfaces.insert(listen.0);
-        SETTING.write().unwrap().network.peer_interfaces = self.listen_interfaces.clone();
+        SETTING.set_network().peer_interfaces = self.listen_interfaces.clone();
     }
 }
 
@@ -99,7 +100,7 @@ impl Handler<UnListen> for TunnelManager {
 
     fn handle(&mut self, un_listen: UnListen, _: &mut Context<Self>) -> Self::Result {
         self.listen_interfaces.remove(&un_listen.0);
-        SETTING.write().unwrap().network.peer_interfaces = self.listen_interfaces.clone();
+        SETTING.set_network().peer_interfaces = self.listen_interfaces.clone();
     }
 }
 
@@ -170,7 +171,7 @@ impl TunnelManager {
         TunnelManager {
             ki: KernelInterface {},
             tunnel_map: HashMap::new(),
-            port: SETTING.read().unwrap().network.wg_start_port,
+            port: SETTING.get_network().wg_start_port,
             listen_interfaces: HashSet::new(),
         }
     }
@@ -209,7 +210,7 @@ impl TunnelManager {
             .map(|&(ip_address, ref dev)| (ip_address.to_string(), Some(dev.clone())))
             .chain({
                 let mut out = Vec::new();
-                for i in SETTING.read().unwrap().network.manual_peers.clone() {
+                for i in SETTING.get_network().manual_peers.clone() {
                     out.push((i, None))
                 }
                 out
@@ -303,17 +304,17 @@ impl TunnelManager {
         let socket = match their_ip {
             IpAddr::V6(ip_v6) => SocketAddr::V6(SocketAddrV6::new(
                 ip_v6,
-                SETTING.read().unwrap().network.rita_hello_port,
+                SETTING.get_network().rita_hello_port,
                 0,
                 iface_index,
             )),
             IpAddr::V4(ip_v4) => SocketAddr::V4(SocketAddrV4::new(
                 ip_v4,
-                SETTING.read().unwrap().network.rita_hello_port,
+                SETTING.get_network().rita_hello_port,
             )),
         };
         let my_id = LocalIdentity {
-            global: SETTING.read().unwrap().get_identity(),
+            global: SETTING.get_identity(),
             wg_port: tunnel.listen_port,
         };
         Box::new(
@@ -331,7 +332,7 @@ impl TunnelManager {
         let tunnel = self.get_if(local_ip.to_string());
 
         LocalIdentity {
-            global: SETTING.read().unwrap().get_identity(),
+            global: SETTING.get_identity(),
             wg_port: tunnel.listen_port,
         }
     }
@@ -345,15 +346,13 @@ impl TunnelManager {
             tunnel.listen_port,
             &SocketAddr::new(ip, their_id.wg_port),
             &their_id.global.wg_public_key,
-            Path::new(&SETTING.read().unwrap().network.wg_private_key_path),
-            &SETTING.read().unwrap().network.own_ip,
-            SETTING.read().unwrap().network.external_nic.clone(),
+            Path::new(&SETTING.get_network().wg_private_key_path),
+            &SETTING.get_network().own_ip,
+            SETTING.get_network().external_nic.clone(),
         )?;
 
-        let mut babel = Babel::new(&format!(
-            "[::1]:{}",
-            SETTING.read().unwrap().network.babel_port
-        ).parse()
+        let mut babel = Babel::new(&format!("[::1]:{}", SETTING.get_network().babel_port)
+            .parse()
             .unwrap());
         babel.monitor(&tunnel.iface_name)?;
         Ok(())
