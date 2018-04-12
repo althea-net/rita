@@ -21,14 +21,14 @@ extern crate reqwest;
 
 extern crate althea_kernel_interface;
 use althea_kernel_interface::KernelInterface;
+use althea_types::interop::ExitServerIdentity;
+use regex::Regex;
+use settings::ExitClientDetails;
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::thread;
-use settings::ExitClientDetails;
 use std::time::Duration;
-use std::path::Path;
-use althea_types::interop::ExitServerIdentity;
-use regex::Regex;
 
 extern crate althea_types;
 extern crate regex;

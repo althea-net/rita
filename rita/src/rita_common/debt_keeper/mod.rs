@@ -6,8 +6,8 @@ use althea_types::{Identity, PaymentTx};
 
 use num256::{Int256, Uint256};
 
-use SETTING;
 use settings::RitaCommonSettings;
+use SETTING;
 
 use rita_common::payment_controller;
 use rita_common::payment_controller::PaymentController;

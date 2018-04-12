@@ -10,8 +10,8 @@ use serde_json;
 
 use bytes::Bytes;
 
-use SETTING;
 use settings::RitaClientSettings;
+use SETTING;
 
 use failure::Error;
 

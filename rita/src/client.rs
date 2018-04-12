@@ -38,11 +38,11 @@ extern crate serde_json;
 extern crate settings;
 extern crate tokio;
 
-use settings::{FileWrite, RitaCommonSettings, RitaSettingsStruct};
 use docopt::Docopt;
+use settings::{FileWrite, RitaCommonSettings, RitaSettingsStruct};
 
-use actix::*;
 use actix::registry::SystemService;
+use actix::*;
 use actix_web::*;
 
 use std::sync::{Arc, RwLock};
@@ -52,12 +52,12 @@ extern crate althea_types;
 extern crate babel_monitor;
 extern crate num256;
 
-mod rita_common;
 mod rita_client;
+mod rita_common;
 
-use rita_common::network_endpoints::{hello_response, make_payments};
-use rita_common::dashboard::network_endpoints::{get_node_info, get_wifi_config, set_wifi_config};
 use rita_client::network_endpoints::setup_exit;
+use rita_common::dashboard::network_endpoints::{get_node_info, get_wifi_config, set_wifi_config};
+use rita_common::network_endpoints::{hello_response, make_payments};
 
 const USAGE: &str = "
 Usage: rita --config <settings> --platform <platform>

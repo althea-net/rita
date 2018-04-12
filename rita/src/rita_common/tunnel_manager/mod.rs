@@ -1,9 +1,9 @@
+use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr, SocketAddrV6};
 use std::path::Path;
-use std::collections::{HashMap, HashSet};
 
-use actix::prelude::*;
 use actix::actors;
+use actix::prelude::*;
 
 use futures;
 use futures::Future;
@@ -16,8 +16,8 @@ use babel_monitor::Babel;
 
 use rita_common::http_client::{HTTPClient, Hello};
 
-use SETTING;
 use settings::RitaCommonSettings;
+use SETTING;
 
 use failure::Error;
 use std::net::SocketAddrV4;

@@ -27,11 +27,11 @@ pub use interop::{ExitClientIdentity, ExitRegistrationDetails, Identity, LocalId
 mod tests {
     extern crate serde_json;
 
+    use num256::Uint256;
     use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
     use std::net::IpAddr;
     use std::net::Ipv6Addr;
-    use std::hash::{Hash, Hasher};
-    use num256::Uint256;
 
     use super::*;
 
@@ -84,7 +84,7 @@ mod tests {
     }
 
     macro_rules! test_eq {
-        ($func_name: ident, $test_name: ident) => {
+        ($func_name:ident, $test_name:ident) => {
             #[test]
             fn $test_name() {
                 let a = $func_name(1);
@@ -101,7 +101,7 @@ mod tests {
     }
 
     macro_rules! test_hash {
-        ($func_name: ident, $test_name: ident) => {
+        ($func_name:ident, $test_name:ident) => {
             #[test]
             fn $test_name() {
                 let a = $func_name(1);
@@ -118,7 +118,7 @@ mod tests {
     }
 
     macro_rules! test_serde {
-        ($func_name: ident, $test_name: ident) => {
+        ($func_name:ident, $test_name:ident) => {
             #[test]
             fn $test_name() {
                 let a = $func_name(1);

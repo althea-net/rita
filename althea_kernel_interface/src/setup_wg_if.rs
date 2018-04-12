@@ -35,10 +35,10 @@ impl KernelInterface {
 
 #[test]
 fn test_setup_wg_if_linux() {
-    use std::process::Output;
-    use std::process::ExitStatus;
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
 
     let mut counter = 0;
 

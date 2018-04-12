@@ -13,13 +13,13 @@ use serde_json;
 
 use bytes::Bytes;
 
-use SETTING;
 use settings::{RitaCommonSettings, RitaExitSettings};
+use SETTING;
 
-use failure::Error;
 use althea_types::interop::ExitServerIdentity;
-use rita_exit::db_client::ListClients;
 use exit_db::models::Client;
+use failure::Error;
+use rita_exit::db_client::ListClients;
 
 pub fn setup_request(
     req: HttpRequest,

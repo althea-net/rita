@@ -2,9 +2,9 @@ use super::{KernelInterface, KernelManagerError};
 
 use failure::Error;
 
+use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
-use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct ExitClient {
