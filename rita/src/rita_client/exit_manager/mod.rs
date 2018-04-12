@@ -2,8 +2,8 @@ use actix::prelude::*;
 
 use althea_types::Identity;
 
-use SETTING;
 use settings::RitaClientSettings;
+use SETTING;
 
 use rita_client::rita_loop::Tick;
 use rita_client::traffic_watcher::{TrafficWatcher, Watch};

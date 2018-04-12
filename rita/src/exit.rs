@@ -40,11 +40,11 @@ extern crate serde_json;
 extern crate settings;
 extern crate tokio;
 
-use settings::{FileWrite, RitaCommonSettings, RitaExitSettings, RitaExitSettingsStruct};
 use docopt::Docopt;
+use settings::{FileWrite, RitaCommonSettings, RitaExitSettings, RitaExitSettingsStruct};
 
-use actix::*;
 use actix::registry::SystemService;
+use actix::*;
 use actix_web::*;
 
 extern crate althea_kernel_interface;
@@ -53,15 +53,15 @@ extern crate babel_monitor;
 extern crate exit_db;
 extern crate num256;
 
-mod rita_exit;
 mod rita_common;
+mod rita_exit;
 
 use rita_common::dashboard::network_endpoints::get_node_info;
 use rita_common::network_endpoints::{hello_response, make_payments};
 use rita_exit::network_endpoints::{list_clients, setup_request};
 
-use std::sync::{Arc, RwLock};
 use althea_kernel_interface::KernelInterface;
+use std::sync::{Arc, RwLock};
 
 const USAGE: &str = "
 Usage: rita_exit --config <settings>

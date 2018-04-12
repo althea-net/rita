@@ -1,8 +1,8 @@
 use super::{KernelInterface, KernelManagerError};
 
+use std::collections::HashMap;
 use std::net::IpAddr;
 use std::str::FromStr;
-use std::collections::HashMap;
 
 use eui48::MacAddress;
 use regex::Regex;

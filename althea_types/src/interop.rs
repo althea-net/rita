@@ -1,7 +1,7 @@
 use eth_address::EthAddress;
-use std::net::IpAddr;
 use eui48::MacAddress;
 use num256::{Int256, Uint256};
+use std::net::IpAddr;
 
 #[cfg(feature = "actix")]
 use actix::*;

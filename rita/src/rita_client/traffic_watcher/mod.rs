@@ -11,13 +11,13 @@ use rita_common::debt_keeper::DebtKeeper;
 
 use num256::Int256;
 
-use std::net::IpAddr;
 use std::collections::HashMap;
+use std::net::IpAddr;
 
 use ip_network::IpNetwork;
 
-use SETTING;
 use settings::RitaCommonSettings;
+use SETTING;
 
 use failure::Error;
 

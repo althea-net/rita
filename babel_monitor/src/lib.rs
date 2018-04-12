@@ -8,14 +8,14 @@ extern crate ip_network;
 extern crate mockstream;
 use std::io::{BufRead, BufReader};
 
-use std::time;
-use std::io::{Read, Write};
-use std::str;
+use ip_network::IpNetwork;
 use mockstream::SharedMockStream;
 use std::collections::VecDeque;
+use std::io::{Read, Write};
 use std::net::IpAddr;
 use std::net::{SocketAddr, TcpStream};
-use ip_network::IpNetwork;
+use std::str;
+use std::time;
 
 #[derive(Debug, Error)]
 pub enum Error {

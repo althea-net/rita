@@ -17,10 +17,10 @@ impl KernelInterface {
 
 #[test]
 fn test_delete_tunnel_linux() {
-    use std::process::Output;
-    use std::process::ExitStatus;
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
 
     let ip_args = &["link", "del", "wg1"];
 

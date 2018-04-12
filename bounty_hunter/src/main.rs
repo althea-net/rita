@@ -33,18 +33,18 @@ use num256::Int256;
 extern crate althea_types;
 use althea_types::{Identity, PaymentTx};
 
-use diesel::prelude::*;
-use diesel::sqlite::SqliteConnection;
-use diesel::select;
 use diesel::dsl::exists;
+use diesel::prelude::*;
+use diesel::select;
+use diesel::sqlite::SqliteConnection;
 use dotenv::dotenv;
 
 use std::env;
 use std::io::Read;
 use std::sync::Mutex;
 
-pub mod schema;
 pub mod models;
+pub mod schema;
 use self::models::*;
 
 use self::schema::status::dsl::*;

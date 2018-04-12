@@ -20,15 +20,15 @@ extern crate althea_kernel_interface;
 
 use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
 
-use std::net::IpAddr;
-use std::path::Path;
+use std::clone;
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::Write;
-use std::thread;
+use std::net::IpAddr;
+use std::path::Path;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::thread;
 use std::time::Duration;
-use std::collections::HashSet;
-use std::clone;
 
 use config::Config;
 

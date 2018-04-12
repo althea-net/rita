@@ -1,16 +1,16 @@
-use diesel;
-use actix_web::*;
 use actix::prelude::*;
-use diesel::prelude::*;
+use actix_web::*;
+use diesel;
 use diesel::dsl::*;
+use diesel::prelude::*;
 use diesel::select;
 
 use std::net::IpAddr;
 
 use exit_db::{models, schema};
 
-use SETTING;
 use settings::RitaExitSettings;
+use SETTING;
 
 use failure::Error;
 

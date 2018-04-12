@@ -8,13 +8,13 @@ use reqwest::{Client, StatusCode};
 
 use std::time::Duration;
 
-use SETTING;
 use settings::RitaCommonSettings;
+use SETTING;
 
 use reqwest;
-use serde_json;
 use rita_common::debt_keeper;
 use rita_common::debt_keeper::DebtKeeper;
+use serde_json;
 
 use failure::Error;
 
@@ -270,11 +270,11 @@ mod tests {
 
     use std::time;
 
+    use num256::Uint256;
     use std::collections::hash_map::DefaultHasher;
     use std::net::IpAddr;
     use std::net::Ipv6Addr;
     use std::sync::mpsc;
-    use num256::Uint256;
 
     use althea_types::{EthAddress, Identity, PaymentTx};
 

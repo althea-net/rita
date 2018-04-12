@@ -1,10 +1,10 @@
-use std::ops::Deref;
-use std::str::FromStr;
-use std::fmt;
 use hex;
 use serde;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::ops::Deref;
+use std::str::FromStr;
 
 #[derive(Copy, Clone)]
 pub struct EthAddress(pub [u8; 20]);
