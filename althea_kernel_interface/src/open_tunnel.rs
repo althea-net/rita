@@ -1,4 +1,4 @@
-use super::{KernelInterface, KernelManagerError};
+use super::{KernelInterface, KernelInterfaceError, KI};
 
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::path::Path;
@@ -50,7 +50,7 @@ fn socket_to_string(endpoint: &SocketAddr, interface_name: String) -> String {
 
 impl KernelInterface {
     pub fn open_tunnel(
-        &mut self,
+        &self,
         interface: &String,
         port: u16,
         endpoint: &SocketAddr,
@@ -85,7 +85,7 @@ impl KernelInterface {
             ],
         )?;
         if !output.stderr.is_empty() {
-            return Err(KernelManagerError::RuntimeError(format!(
+            return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error from wg command: {}",
                 String::from_utf8(output.stderr)?
             )).into());
@@ -108,7 +108,7 @@ impl KernelInterface {
 
         let output = self.run_command("ip", &["link", "set", "dev", &interface, "up"])?;
         if !output.stderr.is_empty() {
-            return Err(KernelManagerError::RuntimeError(format!(
+            return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error setting wg interface up: {}",
                 String::from_utf8(output.stderr)?
             )).into());
@@ -150,74 +150,72 @@ fn test_open_tunnel_linux() {
 
     let mut counter = 0;
 
-    let mut ki = KernelInterface {
-        run_command: RefCell::new(Box::new(move |program, args| {
-            counter += 1;
-            match counter {
-                1 => {
-                    //get interfaces
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, &["neighbor"]);
+    KI.set_mock(Box::new(move |program, args| {
+        counter += 1;
+        match counter {
+            1 => {
+                //get interfaces
+                assert_eq!(program, "ip");
+                assert_eq!(args, &["neighbor"]);
 
-                    Ok(Output {
-                        stdout: b"10.0.2.2 dev eth0 lladdr 00:00:00:aa:00:03 STALE
+                Ok(Output {
+                    stdout: b"10.0.2.2 dev eth0 lladdr 00:00:00:aa:00:03 STALE
 10.0.0.2 dev eth0  FAILED
 10.0.1.2 dev eth0 lladdr 00:00:00:aa:00:05 REACHABLE
 2001::2 dev eth0 lladdr 00:00:00:aa:00:56 REACHABLE
 fe80:0:0:12:34:56:78:90 dev eth2 lladdr 76:59:8e:98:00:81 STALE
 fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
 2001::2 dev eth0  FAILED"
-                            .to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                2 => {
-                    // setup wg interface
-                    assert_eq!(program, "wg");
-                    assert_eq!(args, wg_args);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                3 => {
-                    // add global ip
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, ["address", "add", "fd00::1", "dev", "wg1"]);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                4 => {
-                    // add link local ip
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, ["address", "add", "fe80::1/64", "dev", "wg1"]);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                5 => {
-                    // bring if up
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, ["link", "set", "dev", "wg1", "up"]);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                _ => unimplemented!(),
+                        .to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
             }
-        })),
-    };
+            2 => {
+                // setup wg interface
+                assert_eq!(program, "wg");
+                assert_eq!(args, wg_args);
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            3 => {
+                // add global ip
+                assert_eq!(program, "ip");
+                assert_eq!(args, ["address", "add", "fd00::1", "dev", "wg1"]);
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            4 => {
+                // add link local ip
+                assert_eq!(program, "ip");
+                assert_eq!(args, ["address", "add", "fe80::1/64", "dev", "wg1"]);
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            5 => {
+                // bring if up
+                assert_eq!(program, "ip");
+                assert_eq!(args, ["link", "set", "dev", "wg1", "up"]);
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            _ => unimplemented!(),
+        }
+    }));
 
-    ki.open_tunnel(
+    KI.open_tunnel(
         &interface,
         8088,
         &endpoint,

@@ -1,4 +1,4 @@
-use super::{KernelInterface, KernelManagerError};
+use super::{KernelInterface, KernelInterfaceError, KI};
 
 use std::net::IpAddr;
 
@@ -34,12 +34,12 @@ fn test_get_interfaces_linux() {
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
     use std::process::Output;
-    let mut ki = KernelInterface {
-        run_command: RefCell::new(Box::new(|program, args| {
-            assert_eq!(program, "ip");
-            assert_eq!(args, &["link"]);
 
-            Ok(Output {
+    KI.set_mock(Box::new(move |program, args| {
+        assert_eq!(program, "ip");
+        assert_eq!(args, &["link"]);
+
+        Ok(Output {
                 stdout: b"
     1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
@@ -53,10 +53,9 @@ fn test_get_interfaces_linux() {
                 stderr: b"".to_vec(),
                 status: ExitStatus::from_raw(0),
             })
-        })),
-    };
+    }));
 
-    let interfaces = ki.get_interfaces().unwrap();
+    let interfaces = KI.get_interfaces().unwrap();
 
     assert_eq!(format!("{}", interfaces[0]), "lo");
     assert_eq!(format!("{}", interfaces[1]), "dummy");

@@ -1,4 +1,4 @@
-use super::{KernelInterface, KernelManagerError};
+use super::{KernelInterface, KernelInterfaceError};
 
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
@@ -20,7 +20,7 @@ impl KernelInterface {
         }
     }
 
-    pub fn create_wg_keypair(&mut self) -> Result<[String; 2], Error> {
+    pub fn create_wg_keypair(&self) -> Result<[String; 2], Error> {
         let mut genkey = Command::new("wg")
             .args(&["genkey"])
             .stdout(Stdio::piped())

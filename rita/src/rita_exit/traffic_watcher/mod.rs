@@ -1,7 +1,7 @@
 use actix::prelude::*;
 
 use althea_kernel_interface::ExitFilterTarget;
-use althea_kernel_interface::KernelInterface;
+use althea_kernel_interface::KI;
 
 use althea_types::Identity;
 
@@ -30,16 +30,14 @@ impl Actor for TrafficWatcher {
 impl Supervised for TrafficWatcher {}
 impl SystemService for TrafficWatcher {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        let ki = KernelInterface {};
+        KI.init_exit_counter(&ExitFilterTarget::Input).unwrap();
+        KI.init_exit_counter(&ExitFilterTarget::Output).unwrap();
 
-        ki.init_exit_counter(&ExitFilterTarget::Input).unwrap();
-        ki.init_exit_counter(&ExitFilterTarget::Output).unwrap();
-
-        match ki.setup_wg_if_named("wg_exit") {
+        match KI.setup_wg_if_named("wg_exit") {
             Err(e) => warn!("exit setup returned {}", e),
             _ => {}
         }
-        ki.setup_nat(&SETTING.get_network().external_nic.clone().unwrap())
+        KI.setup_nat(&SETTING.get_network().external_nic.clone().unwrap())
             .unwrap();
 
         info!("Traffic Watcher started");
@@ -64,7 +62,6 @@ impl Handler<Watch> for TrafficWatcher {
 
 /// This traffic watcher watches how much traffic each we send and receive from each client.
 pub fn watch(clients: Vec<Identity>) -> Result<(), Error> {
-    let ki = KernelInterface {};
     let mut babel = Babel::new(&format!("[::1]:{}", SETTING.get_network().babel_port)
         .parse()
         .unwrap());
@@ -97,8 +94,8 @@ pub fn watch(clients: Vec<Identity>) -> Result<(), Error> {
         }
     }
 
-    let input_counters = ki.read_exit_server_counters(&ExitFilterTarget::Input)?;
-    let output_counters = ki.read_exit_server_counters(&ExitFilterTarget::Output)?;
+    let input_counters = KI.read_exit_server_counters(&ExitFilterTarget::Input)?;
+    let output_counters = KI.read_exit_server_counters(&ExitFilterTarget::Output)?;
 
     trace!("input exit counters: {:?}", input_counters);
     trace!("output exit counters: {:?}", output_counters);

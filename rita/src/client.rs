@@ -66,6 +66,7 @@ Options:
     --platform   Platform (linux or openwrt)
 ";
 
+#[cfg(not(test))]
 lazy_static! {
     pub static ref SETTING: Arc<RwLock<RitaSettingsStruct>> = {
         let args = Docopt::new(USAGE)
@@ -82,6 +83,12 @@ lazy_static! {
         s.read().unwrap().write(settings_file).unwrap();
         s
     };
+}
+
+#[cfg(test)]
+lazy_static! {
+    pub static ref SETTING: Arc<RwLock<RitaSettingsStruct>> =
+        { Arc::new(RwLock::new(RitaSettingsStruct::default())) };
 }
 
 fn main() {
