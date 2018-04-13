@@ -68,7 +68,7 @@ impl KernelInterface {
         private_key_path: &Path,
         own_ip: &IpAddr,
         external_nic: Option<String>,
-        settings_default_route: &mut Vec<String>,
+        conf_link_local: bool,
     ) -> Result<(), Error> {
         let external_peer;
 
@@ -114,16 +114,18 @@ impl KernelInterface {
             &["address", "add", &format!("{}", own_ip), "dev", &interface],
         )?;
 
-        self.run_command(
-            "ip",
-            &[
-                "address",
-                "add",
-                &format!("{}/64", to_wg_local(own_ip)),
-                "dev",
-                &interface,
-            ],
-        )?;
+        if conf_link_local {
+            let output = self.run_command(
+                "ip",
+                &[
+                    "address",
+                    "add",
+                    &format!("{}/64", to_wg_local(own_ip)),
+                    "dev",
+                    &interface,
+                ],
+            )?;
+        }
 
         if external_peer {
             self.manual_peers_route(&endpoint.ip(), settings_default_route)?;
@@ -248,6 +250,6 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
         &private_key_path,
         &own_mesh_ip,
         None,
-        &mut vec![],
+        false,
     ).unwrap();
 }

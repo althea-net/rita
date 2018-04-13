@@ -19,7 +19,7 @@ wg_start_port = 60000
 peer_interfaces = ["eth0.2", "eth0.3", "eth0.4"]
 manual_peers = ["1.1.1.1", "2.2.2.2"]
 global_non_mesh_ip = "3.3.3.3"
-default_route = []
+conf_link_local = false
 
 [exit_client]
 exit_ip = "fd96::1337:0e1f"
