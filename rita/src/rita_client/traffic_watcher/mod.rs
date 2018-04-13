@@ -1,6 +1,6 @@
 use actix::prelude::*;
 
-use althea_kernel_interface::KernelInterface;
+use althea_kernel_interface::KI;
 
 use althea_types::Identity;
 
@@ -29,11 +29,9 @@ impl Actor for TrafficWatcher {
 impl Supervised for TrafficWatcher {}
 impl SystemService for TrafficWatcher {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        let ki = KernelInterface {};
-
         info!("Client traffic watcher started");
 
-        ki.init_exit_client_counters().unwrap();
+        KI.init_exit_client_counters().unwrap();
     }
 }
 impl Default for TrafficWatcher {
@@ -56,7 +54,6 @@ impl Handler<Watch> for TrafficWatcher {
 /// This traffic watcher watches how much traffic we send to the exit, and how much the exit sends
 /// back to us.
 pub fn watch(exit: Identity, exit_price: u64) -> Result<(), Error> {
-    let ki = KernelInterface {};
     let mut babel = Babel::new(&format!("[::1]:{}", SETTING.get_network().babel_port)
         .parse()
         .unwrap());
@@ -80,8 +77,8 @@ pub fn watch(exit: Identity, exit_price: u64) -> Result<(), Error> {
         }
     }
 
-    let input = ki.read_exit_client_counters_input();
-    let output = ki.read_exit_client_counters_output();
+    let input = KI.read_exit_client_counters_input();
+    let output = KI.read_exit_client_counters_output();
 
     trace!("got {:?} from client exit counters", (&input, &output));
 

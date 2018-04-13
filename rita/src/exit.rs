@@ -26,6 +26,7 @@ extern crate serde_derive;
 extern crate actix;
 extern crate actix_web;
 extern crate bytes;
+extern crate clu;
 extern crate docopt;
 extern crate dotenv;
 extern crate env_logger;
@@ -56,11 +57,12 @@ extern crate num256;
 mod rita_common;
 mod rita_exit;
 
+use clu::cleanup;
 use rita_common::dashboard::network_endpoints::get_node_info;
 use rita_common::network_endpoints::{hello_response, make_payments};
 use rita_exit::network_endpoints::{list_clients, setup_request};
 
-use althea_kernel_interface::KernelInterface;
+use althea_kernel_interface::KI;
 use std::sync::{Arc, RwLock};
 
 const USAGE: &str = "
@@ -69,6 +71,7 @@ Options:
     --config   Name of config file
 ";
 
+#[cfg(not(test))]
 lazy_static! {
     pub static ref SETTING: Arc<RwLock<RitaExitSettingsStruct>> = {
         let args = Docopt::new(USAGE)
@@ -83,13 +86,18 @@ lazy_static! {
     };
 }
 
+#[cfg(test)]
+lazy_static! {
+    pub static ref SETTING: Arc<RwLock<RitaExitSettingsStruct>> =
+        { Arc::new(RwLock::new(RitaExitSettingsStruct::default())) };
+}
+
 fn main() {
     env_logger::init();
     trace!("Starting");
     trace!("Starting with Identity: {:?}", SETTING.get_identity());
 
-    let ki = KernelInterface {};
-    ki.del_interface("wg_exit");
+    cleanup().unwrap();
 
     let system = actix::System::new(format!("main {}", SETTING.get_network().own_ip));
 

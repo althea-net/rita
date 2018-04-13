@@ -20,7 +20,7 @@ use failure::Error;
 extern crate reqwest;
 
 extern crate althea_kernel_interface;
-use althea_kernel_interface::KernelInterface;
+use althea_kernel_interface::KI;
 use althea_types::interop::ExitServerIdentity;
 use regex::Regex;
 use settings::ExitClientDetails;
@@ -40,8 +40,7 @@ pub enum CluError {
 }
 
 fn linux_generate_wg_keys(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), Error> {
-    let mut ki = KernelInterface {};
-    let keys = ki.create_wg_keypair()?;
+    let keys = KI.create_wg_keypair()?;
     let wg_public_key = &keys[0];
     let wg_private_key = &keys[1];
 
@@ -80,19 +79,17 @@ fn validate_mesh_ip(ip: &IpAddr) -> bool {
 }
 
 fn linux_setup_exit_tunnel(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), Error> {
-    let ki = KernelInterface {};
-
     let details = config.get_exit_client_details().clone();
 
-    ki.setup_wg_if_named("wg_exit").unwrap();
-    ki.set_client_exit_tunnel_config(
+    KI.setup_wg_if_named("wg_exit").unwrap();
+    KI.set_client_exit_tunnel_config(
         SocketAddr::new(config.get_exit_client().exit_ip, details.wg_exit_port),
         details.wg_public_key,
         config.get_network().wg_private_key_path.clone(),
         config.get_exit_client().wg_listen_port,
         details.own_internal_ip,
     )?;
-    ki.set_route_to_tunnel(&"172.168.1.254".parse()?).unwrap();
+    KI.set_route_to_tunnel(&"172.168.1.254".parse()?).unwrap();
     Ok(())
 }
 
@@ -132,20 +129,18 @@ fn request_own_exit_ip(
 }
 
 /// called before anything is started to delete existing wireguard per hop tunnels
-fn cleanup() -> Result<(), Error> {
-    let ki = KernelInterface {};
-
-    let interfaces = ki.get_interfaces()?;
+pub fn cleanup() -> Result<(), Error> {
+    let interfaces = KI.get_interfaces()?;
 
     let re = Regex::new(r"^wg[0-9]+$")?;
 
     for i in interfaces {
         if re.is_match(&i) {
-            ki.del_interface(&i)?;
+            KI.del_interface(&i)?;
         }
     }
 
-    ki.del_interface("wg_exit");
+    KI.del_interface("wg_exit");
     Ok(())
 }
 
@@ -163,9 +158,8 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
         linux_generate_mesh_ip(config.clone()).expect("failed to generate ip");
     }
 
-    let ki = KernelInterface {};
     //Creates file on disk containing key
-    ki.create_wg_key(
+    KI.create_wg_key(
         &Path::new(&config.get_network().wg_private_key_path),
         &config.get_network().wg_private_key,
     )?;
@@ -222,8 +216,7 @@ mod tests {
 
     #[test]
     fn test_generate_wg_key() {
-        let mut ki = KernelInterface {};
-        let keys = ki.create_wg_keypair().unwrap();
+        let keys = KI.create_wg_keypair().unwrap();
         let wg_public_key = &keys[0];
         let wg_private_key = &keys[1];
         assert_eq!(validate_wg_key(&wg_public_key), true);

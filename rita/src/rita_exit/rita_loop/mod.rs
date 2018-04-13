@@ -14,7 +14,7 @@ use failure::Error;
 use settings::{RitaCommonSettings, RitaExitSettings};
 use SETTING;
 
-use althea_kernel_interface::{ExitClient, KernelInterface};
+use althea_kernel_interface::{ExitClient, KI};
 
 use althea_types::Identity;
 
@@ -68,7 +68,6 @@ impl Handler<Tick> for RitaLoop {
                     let ids = clients.clone().into_iter().map(to_identity).collect();
                     TrafficWatcher::from_registry().do_send(Watch(ids));
 
-                    let ki = KernelInterface {};
                     let mut wg_clients = Vec::new();
 
                     trace!("got clients from db {:?}", clients);
@@ -81,7 +80,7 @@ impl Handler<Tick> for RitaLoop {
 
                     trace!("converted clients {:?}", wg_clients);
 
-                    ki.set_exit_wg_config(
+                    KI.set_exit_wg_config(
                         wg_clients,
                         SETTING.get_exit_network().wg_tunnel_port,
                         &SETTING.get_network().wg_private_key_path,

@@ -1,4 +1,4 @@
-use super::{KernelInterface, KernelManagerError};
+use super::{KernelInterface, KernelInterfaceError};
 
 use std::fs::File;
 use std::path::Path;
@@ -14,7 +14,7 @@ impl KernelInterface {
             .stdin(Stdio::from(priv_key_file))
             .output()?;
         if !output.stderr.is_empty() {
-            return Err(KernelManagerError::RuntimeError(format!(
+            return Err(KernelInterfaceError::RuntimeError(format!(
                 "recieved error in getting wg public key: {}",
                 String::from_utf8(output.stderr)?
             )).into());

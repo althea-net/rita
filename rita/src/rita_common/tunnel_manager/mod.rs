@@ -10,7 +10,7 @@ use futures::Future;
 
 use althea_types::LocalIdentity;
 
-use althea_kernel_interface::KernelInterface;
+use althea_kernel_interface::KI;
 
 use babel_monitor::Babel;
 
@@ -38,8 +38,7 @@ struct TunnelData {
 
 impl TunnelData {
     fn new(listen_port: u16) -> TunnelData {
-        let ki = KernelInterface {};
-        let iface_name = ki.setup_wg_if().unwrap();
+        let iface_name = KI.setup_wg_if().unwrap();
         TunnelData {
             iface_name,
             listen_port,
@@ -48,7 +47,6 @@ impl TunnelData {
 }
 
 pub struct TunnelManager {
-    pub ki: KernelInterface,
     pub port: u16,
 
     tunnel_map: HashMap<String, TunnelData>,
@@ -169,7 +167,6 @@ fn is_link_local(ip: IpAddr) -> bool {
 impl TunnelManager {
     pub fn new() -> Self {
         TunnelManager {
-            ki: KernelInterface {},
             tunnel_map: HashMap::new(),
             port: SETTING.get_network().wg_start_port,
             listen_interfaces: HashSet::new(),
@@ -200,11 +197,10 @@ impl TunnelManager {
     /// This gets the list of link-local neighbors, and then contacts them to get their
     /// Identity using `neighbor_inquiry` as well as their wireguard tunnel name
     pub fn get_neighbors(&mut self) -> ResponseFuture<Vec<(LocalIdentity, String, IpAddr)>, Error> {
-        self.ki.trigger_neighbor_disc().unwrap();
+        KI.trigger_neighbor_disc().unwrap();
         let neighs: Vec<
             Box<Future<Item = Option<(LocalIdentity, String, IpAddr)>, Error = ()>>,
-        > = self.ki
-            .get_neighbors()
+        > = KI.get_neighbors()
             .unwrap()
             .iter()
             .map(|&(ip_address, ref dev)| (ip_address.to_string(), Some(dev.clone())))
@@ -260,7 +256,7 @@ impl TunnelManager {
         trace!("Getting tunnel, inq");
         let tunnel = self.get_if(their_ip.clone());
         let iface_index = if let Some(dev) = dev.clone() {
-            self.ki.get_iface_index(&dev).unwrap()
+            KI.get_iface_index(&dev).unwrap()
         } else {
             0
         };
@@ -341,7 +337,7 @@ impl TunnelManager {
     pub fn open_tunnel(&mut self, their_id: LocalIdentity, ip: IpAddr) -> Result<(), Error> {
         trace!("Getting tunnel, open tunnel");
         let tunnel = self.get_if(ip.to_string());
-        self.ki.open_tunnel(
+        KI.open_tunnel(
             &tunnel.iface_name,
             tunnel.listen_port,
             &SocketAddr::new(ip, their_id.wg_port),

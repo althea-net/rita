@@ -44,14 +44,28 @@ pub use exit_server_tunnel::ExitClient;
 use failure::Error;
 
 #[derive(Debug, Fail)]
-pub enum KernelManagerError {
+pub enum KernelInterfaceError {
     #[fail(display = "Runtime Error: {:?}", _0)]
     RuntimeError(String),
 }
 
 #[cfg(test)]
 pub struct KernelInterface {
-    run_command: RefCell<Box<FnMut(&str, &[&str]) -> Result<Output, Error>>>,
+    run_command: Arc<Mutex<Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>>>,
+}
+
+#[cfg(not(test))]
+lazy_static! {
+    pub static ref KI: KernelInterface = KernelInterface {};
+}
+
+#[cfg(test)]
+lazy_static! {
+    pub static ref KI: KernelInterface = KernelInterface {
+        run_command: Arc::new(Mutex::new(Box::new(|program, args| {
+            panic!("kernel interface used before initialized");
+        })))
+    };
 }
 
 #[cfg(not(test))]
@@ -79,7 +93,17 @@ impl KernelInterface {
     }
 
     #[cfg(test)]
+    fn set_mock(&self, mock: Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>) {
+        *self.run_command.lock().unwrap() = mock
+    }
+
+    #[cfg(test)]
     fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, Error> {
-        (&mut *self.run_command.borrow_mut())(program, args)
+        let mut args_owned = Vec::new();
+        for a in args {
+            args_owned.push(a.to_string())
+        }
+
+        (&mut *self.run_command.lock().unwrap())(program.to_string(), args_owned)
     }
 }

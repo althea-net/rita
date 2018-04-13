@@ -43,11 +43,7 @@ impl NodeDebtData {
 }
 
 pub struct DebtKeeper {
-    buffer_period: u32,
     debt_data: HashMap<Identity, NodeDebtData>,
-    pay_threshold: Int256,
-    close_fraction: Int256,
-    close_threshold: Int256, // Connection is closed when debt < total_payment/close_fraction + close_threshold
 }
 
 impl Actor for DebtKeeper {
@@ -140,36 +136,22 @@ impl Handler<SendUpdate> for DebtKeeper {
 
 impl Default for DebtKeeper {
     fn default() -> DebtKeeper {
-        Self::new(
-            SETTING.get_payment().pay_threshold.clone(),
-            SETTING.get_payment().close_threshold.clone(),
-            SETTING.get_payment().close_fraction.clone(),
-            SETTING.get_payment().buffer_period.clone(),
-        )
+        Self::new()
     }
 }
 
 impl DebtKeeper {
-    pub fn new(
-        pay_threshold: Int256,
-        close_threshold: Int256,
-        close_fraction: Int256,
-        buffer_period: u32,
-    ) -> Self {
-        assert!(pay_threshold >= Int256::from(0));
-        assert!(close_fraction > Int256::from(0));
+    pub fn new() -> Self {
+        assert!(SETTING.get_payment().pay_threshold >= Int256::from(0));
+        assert!(SETTING.get_payment().close_fraction > Int256::from(0));
 
         DebtKeeper {
             debt_data: HashMap::new(),
-            pay_threshold,
-            close_fraction,
-            close_threshold,
-            buffer_period,
         }
     }
 
     fn payment_received(&mut self, ident: &Identity, amount: Uint256) {
-        let buffer = self.buffer_period;
+        let buffer = SETTING.get_payment().buffer_period;
         let debt_data = self.debt_data
             .entry(ident.clone())
             .or_insert_with(|| NodeDebtData::new(buffer));
@@ -193,7 +175,7 @@ impl DebtKeeper {
     fn traffic_update(&mut self, ident: &Identity, mut amount: Int256) {
         {
             trace!("traffic update for {} is {}", ident.mesh_ip, amount);
-            let buffer = self.buffer_period;
+            let buffer = SETTING.get_payment().buffer_period;
             let debt_data = self.debt_data
                 .entry(ident.clone())
                 .or_insert_with(|| NodeDebtData::new(buffer));
@@ -209,7 +191,8 @@ impl DebtKeeper {
                     debt_data.incoming_payments = Int256::from(0);
 
                     // Buffer debt in the back of the debt buffer
-                    debt_data.debt_buffer[(self.buffer_period - 1) as usize] += amount;
+                    debt_data.debt_buffer[(SETTING.get_payment().buffer_period - 1) as usize] +=
+                        amount;
                 }
             } else {
                 // Immediately apply credit
@@ -228,7 +211,7 @@ impl DebtKeeper {
     /// This updates a neighbor's debt and outputs a DebtAction if one is necessary.
     fn send_update(&mut self, ident: &Identity) -> DebtAction {
         trace!("debt data: {:?}", self.debt_data);
-        let buffer = self.buffer_period;
+        let buffer = SETTING.get_payment().buffer_period;
         let debt_data = self.debt_data
             .entry(ident.clone())
             .or_insert_with(|| NodeDebtData::new(buffer));
@@ -267,8 +250,9 @@ impl DebtKeeper {
             debt_data.incoming_payments = Int256::from(0);
         }
 
-        let close_threshold = self.close_threshold.clone()
-            - debt_data.total_payment_recieved.clone() / self.close_fraction.clone();
+        let close_threshold = SETTING.get_payment().close_threshold.clone()
+            - debt_data.total_payment_recieved.clone()
+                / SETTING.get_payment().close_fraction.clone();
 
         if debt_data.debt < close_threshold {
             trace!(
@@ -279,7 +263,7 @@ impl DebtKeeper {
         } else if (close_threshold < debt_data.debt) && (debt < close_threshold) {
             trace!("debt is above close threshold. resuming forwarding");
             DebtAction::OpenTunnel
-        } else if debt_data.debt > self.pay_threshold {
+        } else if debt_data.debt > SETTING.get_payment().pay_threshold {
             let d = debt_data.debt.clone();
             trace!(
                 "debt is above payment threshold for {}. making payment of {}",
@@ -304,7 +288,12 @@ mod tests {
 
     #[test]
     fn test_single_suspend() {
-        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100), 1u32);
+        SETTING.set_payment().pay_threshold = Int256::from(5);
+        SETTING.set_payment().close_threshold = Int256::from(-10);
+        SETTING.set_payment().close_fraction = Int256::from(100);
+        SETTING.set_payment().buffer_period = 1;
+
+        let mut d = DebtKeeper::new();
 
         let ident = Identity {
             eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
@@ -321,7 +310,12 @@ mod tests {
 
     #[test]
     fn test_single_overpay() {
-        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100), 1u32);
+        SETTING.set_payment().pay_threshold = Int256::from(5);
+        SETTING.set_payment().close_threshold = Int256::from(-10);
+        SETTING.set_payment().close_fraction = Int256::from(100);
+        SETTING.set_payment().buffer_period = 1;
+
+        let mut d = DebtKeeper::new();
 
         let ident = Identity {
             eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
@@ -339,7 +333,12 @@ mod tests {
 
     #[test]
     fn test_buffer_suspend() {
-        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100), 2u32);
+        SETTING.set_payment().pay_threshold = Int256::from(5);
+        SETTING.set_payment().close_threshold = Int256::from(-10);
+        SETTING.set_payment().close_fraction = Int256::from(100);
+        SETTING.set_payment().buffer_period = 2;
+
+        let mut d = DebtKeeper::new();
 
         let ident = Identity {
             eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
@@ -358,7 +357,12 @@ mod tests {
 
     #[test]
     fn test_buffer_average() {
-        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100), 2u32);
+        SETTING.set_payment().pay_threshold = Int256::from(5);
+        SETTING.set_payment().close_threshold = Int256::from(-10);
+        SETTING.set_payment().close_fraction = Int256::from(100);
+        SETTING.set_payment().buffer_period = 2;
+
+        let mut d = DebtKeeper::new();
 
         let ident = Identity {
             eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
@@ -379,7 +383,12 @@ mod tests {
 
     #[test]
     fn test_buffer_repay() {
-        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100), 2u32);
+        SETTING.set_payment().pay_threshold = Int256::from(5);
+        SETTING.set_payment().close_threshold = Int256::from(-10);
+        SETTING.set_payment().close_fraction = Int256::from(100);
+        SETTING.set_payment().buffer_period = 2;
+
+        let mut d = DebtKeeper::new();
 
         let ident = Identity {
             eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
@@ -400,7 +409,12 @@ mod tests {
 
     #[test]
     fn test_buffer_overpay() {
-        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100), 2u32);
+        SETTING.set_payment().pay_threshold = Int256::from(5);
+        SETTING.set_payment().close_threshold = Int256::from(-10);
+        SETTING.set_payment().close_fraction = Int256::from(100);
+        SETTING.set_payment().buffer_period = 2;
+
+        let mut d = DebtKeeper::new();
 
         let ident = Identity {
             eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
@@ -422,7 +436,12 @@ mod tests {
 
     #[test]
     fn test_buffer_debt() {
-        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-100), Int256::from(100), 2u32);
+        SETTING.set_payment().pay_threshold = Int256::from(5);
+        SETTING.set_payment().close_threshold = Int256::from(-100);
+        SETTING.set_payment().close_fraction = Int256::from(100);
+        SETTING.set_payment().buffer_period = 2;
+
+        let mut d = DebtKeeper::new();
 
         let ident = Identity {
             eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
@@ -453,7 +472,12 @@ mod tests {
 
     #[test]
     fn test_single_pay() {
-        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100), 1u32);
+        SETTING.set_payment().pay_threshold = Int256::from(5);
+        SETTING.set_payment().close_threshold = Int256::from(-10);
+        SETTING.set_payment().close_fraction = Int256::from(100);
+        SETTING.set_payment().buffer_period = 2;
+
+        let mut d = DebtKeeper::new();
 
         let ident = Identity {
             eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
@@ -476,7 +500,12 @@ mod tests {
 
     #[test]
     fn test_fudge() {
-        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-1), Int256::from(100), 1u32);
+        SETTING.set_payment().pay_threshold = Int256::from(5);
+        SETTING.set_payment().close_threshold = Int256::from(-10);
+        SETTING.set_payment().close_fraction = Int256::from(100);
+        SETTING.set_payment().buffer_period = 1;
+
+        let mut d = DebtKeeper::new();
 
         let ident = Identity {
             eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
@@ -494,7 +523,12 @@ mod tests {
 
     #[test]
     fn test_single_reopen() {
-        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100), 1u32);
+        SETTING.set_payment().pay_threshold = Int256::from(5);
+        SETTING.set_payment().close_threshold = Int256::from(-10);
+        SETTING.set_payment().close_fraction = Int256::from(100);
+        SETTING.set_payment().buffer_period = 1;
+
+        let mut d = DebtKeeper::new();
 
         let ident = Identity {
             eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
@@ -515,7 +549,12 @@ mod tests {
 
     #[test]
     fn test_multi_pay() {
-        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100), 1u32);
+        SETTING.set_payment().pay_threshold = Int256::from(5);
+        SETTING.set_payment().close_threshold = Int256::from(-10);
+        SETTING.set_payment().close_fraction = Int256::from(100);
+        SETTING.set_payment().buffer_period = 1;
+
+        let mut d = DebtKeeper::new();
 
         let ident = Identity {
             eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
@@ -541,7 +580,12 @@ mod tests {
 
     #[test]
     fn test_multi_fail() {
-        let mut d = DebtKeeper::new(Int256::from(5), Int256::from(-10), Int256::from(100000), 1);
+        SETTING.set_payment().pay_threshold = Int256::from(5);
+        SETTING.set_payment().close_threshold = Int256::from(-10);
+        SETTING.set_payment().close_fraction = Int256::from(100000);
+        SETTING.set_payment().buffer_period = 1;
+
+        let mut d = DebtKeeper::new();
 
         let ident = Identity {
             eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
@@ -563,12 +607,12 @@ mod tests {
 
     #[test]
     fn test_multi_reopen() {
-        let mut d = DebtKeeper::new(
-            Int256::from(5),
-            Int256::from(-10),
-            Int256::from(1000000000),
-            1u32,
-        );
+        SETTING.set_payment().pay_threshold = Int256::from(5);
+        SETTING.set_payment().close_threshold = Int256::from(-10);
+        SETTING.set_payment().close_fraction = Int256::from(1000000000);
+        SETTING.set_payment().buffer_period = 1;
+
+        let mut d = DebtKeeper::new();
 
         let ident = Identity {
             eth_address: "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"

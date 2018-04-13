@@ -1,4 +1,4 @@
-use super::{KernelInterface, KernelManagerError};
+use super::{KernelInterface, KernelInterfaceError};
 
 use failure::Error;
 
@@ -7,7 +7,7 @@ impl KernelInterface {
     pub fn set_uci_var(&self, key: &str, value: &str) -> Result<bool, Error> {
         let output = self.run_command("uci", &["set", &format!("{}={}", key, value)])?;
         if !output.stderr.is_empty() {
-            return Err(KernelManagerError::RuntimeError(format!(
+            return Err(KernelInterfaceError::RuntimeError(format!(
                 "recieved error while setting UCI: {}",
                 String::from_utf8(output.stderr)?
             )).into());
@@ -19,7 +19,7 @@ impl KernelInterface {
     pub fn add_uci_var(&self, key: &str, value: &str) -> Result<bool, Error> {
         let output = self.run_command("uci", &["add", key, value])?;
         if !output.stderr.is_empty() {
-            return Err(KernelManagerError::RuntimeError(format!(
+            return Err(KernelInterfaceError::RuntimeError(format!(
                 "recieved error while setting UCI: {}",
                 String::from_utf8(output.stderr)?
             )).into());
@@ -33,7 +33,7 @@ impl KernelInterface {
         for v in value {
             let output = self.run_command("uci", &["add_list", &format!("{}={}", &key, &v)])?;
             if !output.stderr.is_empty() {
-                return Err(KernelManagerError::RuntimeError(format!(
+                return Err(KernelInterfaceError::RuntimeError(format!(
                     "recieved error while setting UCI: {}",
                     String::from_utf8(output.stderr)?
                 )).into());
@@ -46,7 +46,7 @@ impl KernelInterface {
     pub fn del_uci_var(&self, key: &str) -> Result<bool, Error> {
         let output = self.run_command("uci", &["delete", &key])?;
         if !output.stderr.is_empty() {
-            return Err(KernelManagerError::RuntimeError(format!(
+            return Err(KernelInterfaceError::RuntimeError(format!(
                 "recieved error while setting UCI: {}",
                 String::from_utf8(output.stderr)?
             )).into());
@@ -58,7 +58,7 @@ impl KernelInterface {
     pub fn get_uci_var(&self, key: &str) -> Result<String, Error> {
         let output = self.run_command("uci", &["show", &key])?;
         if !output.stderr.is_empty() {
-            return Err(KernelManagerError::RuntimeError(format!(
+            return Err(KernelInterfaceError::RuntimeError(format!(
                 "recieved error while getting UCI: {}",
                 String::from_utf8(output.stderr)?
             )).into());
@@ -70,7 +70,7 @@ impl KernelInterface {
     pub fn uci_commit(&self) -> Result<bool, Error> {
         let output = self.run_command("uci", &["commit"])?;
         if !output.status.success() {
-            return Err(KernelManagerError::RuntimeError(format!(
+            return Err(KernelInterfaceError::RuntimeError(format!(
                 "recieved error while commiting UCI: {}",
                 String::from_utf8(output.stderr)?
             )).into());
@@ -81,7 +81,7 @@ impl KernelInterface {
     pub fn refresh_initd(&self, program: &str) -> Result<(), Error> {
         let output = self.run_command(&format!("/etc/init.d/{}", program), &["reload"])?;
         if !output.status.success() {
-            return Err(KernelManagerError::RuntimeError(format!(
+            return Err(KernelInterfaceError::RuntimeError(format!(
                 "recieved error while refreshing {}: {}",
                 program,
                 String::from_utf8(output.stderr)?

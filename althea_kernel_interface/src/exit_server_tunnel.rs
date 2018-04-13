@@ -1,4 +1,4 @@
-use super::{KernelInterface, KernelManagerError};
+use super::{KernelInterface, KernelInterfaceError};
 
 use failure::Error;
 
@@ -66,7 +66,7 @@ impl KernelInterface {
 
         let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "mtu", "1340"])?;
         if !output.stderr.is_empty() {
-            return Err(KernelManagerError::RuntimeError(format!(
+            return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error adding wg link: {}",
                 String::from_utf8(output.stderr)?
             )).into());
@@ -74,7 +74,7 @@ impl KernelInterface {
 
         let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "up"])?;
         if !output.stderr.is_empty() {
-            return Err(KernelManagerError::RuntimeError(format!(
+            return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error setting wg interface up: {}",
                 String::from_utf8(output.stderr)?
             )).into());
