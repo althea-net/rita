@@ -1,5 +1,5 @@
 use actix::prelude::*;
-use althea_kernel_interface::KernelInterface;
+use althea_kernel_interface::KI;
 
 use failure::Error;
 
@@ -61,10 +61,9 @@ impl Handler<GetWifiConfig> for Dashboard {
                 .send(GetListen {})
                 .and_then(|res| {
                     let res = res.unwrap();
-                    let ki = KernelInterface {};
                     let mut interfaces = Vec::new();
 
-                    let config = ki.ubus_call("uci.get", "{ \"package\": \"wireless\"}")
+                    let config = KI.ubus_call("uci.get", "{ \"package\": \"wireless\"}")
                         .unwrap();
 
                     let val: Value = serde_json::from_str(&config).unwrap();
@@ -96,8 +95,6 @@ impl Handler<SetWifiConfig> for Dashboard {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: SetWifiConfig, _ctx: &mut Self::Context) -> Self::Result {
-        let ki = KernelInterface {};
-
         for i in msg.0 {
             if i.mesh {
                 TunnelManager::from_registry().do_send(Listen(i.device.clone()))
@@ -105,12 +102,12 @@ impl Handler<SetWifiConfig> for Dashboard {
                 TunnelManager::from_registry().do_send(UnListen(i.device.clone()))
             }
 
-            ki.set_uci_var(&format!("wireless.{}.ssid", i.section_name), &i.ssid)?;
-            ki.set_uci_var(
+            KI.set_uci_var(&format!("wireless.{}.ssid", i.section_name), &i.ssid)?;
+            KI.set_uci_var(
                 &format!("wireless.{}.encryption", i.section_name),
                 &i.encryption,
             )?;
-            ki.set_uci_var(&format!("wireless.{}.key", i.section_name), &i.key)?;
+            KI.set_uci_var(&format!("wireless.{}.key", i.section_name), &i.key)?;
         }
 
         Ok(())

@@ -1,4 +1,4 @@
-use super::{KernelInterface, KernelManagerError};
+use super::{KernelInterface, KernelInterfaceError, KI};
 
 use std::fs::File;
 use std::io::{Read, Write};
@@ -22,7 +22,7 @@ impl KernelInterface {
             trace!("got link local IP of {} from device {}", &cap[1], &dev);
             return Ok(cap[1].parse()?);
         } else {
-            return Err(KernelManagerError::RuntimeError(
+            return Err(KernelInterfaceError::RuntimeError(
                 "No link local addresses found or no interface found".to_string(),
             ).into());
         }
@@ -40,7 +40,7 @@ impl KernelInterface {
             trace!("got global IP of {} from device {}", &cap[1], &dev);
             return Ok(cap[1].parse()?);
         } else {
-            return Err(KernelManagerError::RuntimeError(
+            return Err(KernelInterfaceError::RuntimeError(
                 "No global found or no interface found".to_string(),
             ).into());
         }
@@ -56,7 +56,7 @@ impl KernelInterface {
             }
         }
 
-        Err(KernelManagerError::RuntimeError("Address not found in neighbors".to_string()).into())
+        Err(KernelInterfaceError::RuntimeError("Address not found in neighbors".to_string()).into())
     }
 
     /// This gets our link local ip that can be reached by another node with link local ip
@@ -85,7 +85,7 @@ impl KernelInterface {
         } else {
             trace!("Didn't find {:?} in neighbors, bailing out", their_ip);
             Err(
-                KernelManagerError::RuntimeError("Address not found in neighbors".to_string())
+                KernelInterfaceError::RuntimeError("Address not found in neighbors".to_string())
                     .into(),
             )
         }
@@ -115,27 +115,25 @@ fn test_get_device_name_linux() {
     use std::process::ExitStatus;
     use std::process::Output;
 
-    let mut ki = KernelInterface {
-        run_command: RefCell::new(Box::new(|program, args| {
-            assert_eq!(program, "ip");
-            assert_eq!(args, &["neighbor"]);
+    KI.set_mock(Box::new(move |program, args| {
+        assert_eq!(program, "ip");
+        assert_eq!(args, &["neighbor"]);
 
-            Ok(Output {
-                stdout: b"10.0.2.2 dev eth0 lladdr 00:00:00:aa:00:03 STALE
+        Ok(Output {
+            stdout: b"10.0.2.2 dev eth0 lladdr 00:00:00:aa:00:03 STALE
 10.0.0.2 dev eth0  FAILED
 10.0.1.2 dev eth0 lladdr 00:00:00:aa:00:05 REACHABLE
 2001::2 dev eth0 lladdr 00:00:00:aa:00:56 REACHABLE
 fe80::7459:8eff:fe98:81 dev eth0 lladdr 76:59:8e:98:00:81 STALE
 fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE
 2001::2 dev eth0  FAILED"
-                    .to_vec(),
-                stderr: b"".to_vec(),
-                status: ExitStatus::from_raw(0),
-            })
-        })),
-    };
+                .to_vec(),
+            stderr: b"".to_vec(),
+            status: ExitStatus::from_raw(0),
+        })
+    }));
 
-    let dev = ki.get_device_name("fe80::433:25ff:fe8c:e1ea".parse().unwrap())
+    let dev = KI.get_device_name("fe80::433:25ff:fe8c:e1ea".parse().unwrap())
         .unwrap();
 
     assert_eq!(dev, "eth2")
@@ -148,12 +146,11 @@ fn test_get_link_local_device_ip_linux() {
     use std::process::ExitStatus;
     use std::process::Output;
 
-    let mut ki = KernelInterface {
-        run_command: RefCell::new(Box::new(|program, args| {
-            assert_eq!(program, "ip");
-            assert_eq!(args, &["addr", "show", "dev", "eth0", "scope", "link"]);
+    KI.set_mock(Box::new(move |program, args| {
+        assert_eq!(program, "ip");
+        assert_eq!(args, &["addr", "show", "dev", "eth0", "scope", "link"]);
 
-            Ok(Output {
+        Ok(Output {
                 stdout: b"2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
     link/ether 74:df:bf:30:37:f3 brd ff:ff:ff:ff:ff:ff
     inet6 fe80::96:3add:69d9:906a/64 scope link
@@ -162,10 +159,9 @@ fn test_get_link_local_device_ip_linux() {
                 stderr: b"".to_vec(),
                 status: ExitStatus::from_raw(0),
             })
-        })),
-    };
+    }));
 
-    let ip = ki.get_link_local_device_ip("eth0").unwrap();
+    let ip = KI.get_link_local_device_ip("eth0").unwrap();
 
     assert_eq!(ip, "fe80::96:3add:69d9:906a".parse::<IpAddr>().unwrap())
 }
@@ -179,28 +175,27 @@ fn test_get_link_local_reply_ip_linux() {
 
     let mut counter = 0;
 
-    let mut ki = KernelInterface {
-        run_command: RefCell::new(Box::new(move |program, args| {
-            counter += 1;
-            match counter {
-                1 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, &["neighbor"]);
+    KI.set_mock(Box::new(move |program, args| {
+        counter += 1;
+        match counter {
+            1 => {
+                assert_eq!(program, "ip");
+                assert_eq!(args, &["neighbor"]);
 
-                    Ok(Output {
-                        stdout: b"
+                Ok(Output {
+                    stdout: b"
 fe80::7459:8eff:fe98:81 dev eth0 lladdr 76:59:8e:98:00:81 STALE
 fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE"
-                            .to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                2 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, &["addr", "show", "dev", "eth0", "scope", "link"]);
+                        .to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            2 => {
+                assert_eq!(program, "ip");
+                assert_eq!(args, &["addr", "show", "dev", "eth0", "scope", "link"]);
 
-                    Ok(Output {
+                Ok(Output {
                         stdout: b"2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
     link/ether 74:df:bf:30:37:f3 brd ff:ff:ff:ff:ff:ff
     inet6 fe80::96:3add:69d9:906a/64 scope link
@@ -209,13 +204,12 @@ fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE"
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
                     })
-                }
-                _ => unimplemented!("called too many times"),
             }
-        })),
-    };
+            _ => unimplemented!("called too many times"),
+        }
+    }));
 
-    let dev = ki.get_reply_ip("fe80::7459:8eff:fe98:81".parse().unwrap(), None)
+    let dev = KI.get_reply_ip("fe80::7459:8eff:fe98:81".parse().unwrap(), None)
         .unwrap();
 
     assert_eq!(dev, "fe80::96:3add:69d9:906a".parse::<IpAddr>().unwrap())

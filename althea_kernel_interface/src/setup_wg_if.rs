@@ -1,4 +1,4 @@
-use super::{KernelInterface, KernelManagerError};
+use super::{KernelInterface, KernelInterfaceError, KI};
 
 use std::net::IpAddr;
 
@@ -24,7 +24,7 @@ impl KernelInterface {
     pub fn setup_wg_if_named(&self, name: &str) -> Result<(), Error> {
         let output = self.run_command("ip", &["link", "add", &name, "type", "wireguard"])?;
         if !output.stderr.is_empty() {
-            return Err(KernelManagerError::RuntimeError(format!(
+            return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error adding wg link: {}",
                 String::from_utf8(output.stderr)?
             )).into());
@@ -44,32 +44,30 @@ fn test_setup_wg_if_linux() {
 
     let link_args = &["link"];
     let link_add = &["link", "add", "wg1", "type", "wireguard"];
-    let mut ki = KernelInterface {
-        run_command: RefCell::new(Box::new(move |program, args| {
-            assert_eq!(program, "ip");
-            counter += 1;
+    KI.set_mock(Box::new(move |program, args| {
+        assert_eq!(program, "ip");
+        counter += 1;
 
-            match counter {
-                1 => {
-                    assert_eq!(args, link_args);
-                    Ok(Output{
+        match counter {
+            1 => {
+                assert_eq!(args, link_args);
+                Ok(Output{
                         stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
                     })
-                }
-                2 => {
-                    assert_eq!(args, link_add);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                _ => panic!("command called too many times"),
             }
-        })),
-    };
+            2 => {
+                assert_eq!(args, link_add);
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            _ => panic!("command called too many times"),
+        }
+    }));
 
-    ki.setup_wg_if().unwrap();
+    KI.setup_wg_if().unwrap();
 }

@@ -58,6 +58,26 @@ pub struct NetworkSettings {
     pub external_nic: Option<String>,
 }
 
+impl Default for NetworkSettings {
+    fn default() -> Self {
+        NetworkSettings {
+            own_ip: "fd00::1".parse().unwrap(),
+            bounty_ip: "fd00::3".parse().unwrap(),
+            babel_port: 6872,
+            rita_hello_port: 4876,
+            rita_dashboard_port: 4877,
+            bounty_port: 8888,
+            wg_private_key: String::new(),
+            wg_private_key_path: String::new(),
+            wg_public_key: String::new(),
+            wg_start_port: 60000,
+            peer_interfaces: HashSet::new(),
+            manual_peers: Vec::new(),
+            external_nic: None,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct PaymentSettings {
     pub pay_threshold: Int256,
@@ -65,6 +85,18 @@ pub struct PaymentSettings {
     pub close_fraction: Int256,
     pub buffer_period: u32,
     pub eth_address: EthAddress,
+}
+
+impl Default for PaymentSettings {
+    fn default() -> Self {
+        PaymentSettings {
+            pay_threshold: 0.into(),
+            close_threshold: (-10000).into(),
+            close_fraction: 100.into(),
+            buffer_period: 3,
+            eth_address: EthAddress([1; 20]),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -75,6 +107,21 @@ pub struct ExitClientSettings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<ExitClientDetails>,
     pub reg_details: ExitRegistrationDetails,
+}
+
+impl Default for ExitClientSettings {
+    fn default() -> Self {
+        ExitClientSettings {
+            exit_ip: "fd00::8".parse().unwrap(),
+            exit_registration_port: 4875,
+            wg_listen_port: 59999,
+            details: None,
+            reg_details: ExitRegistrationDetails {
+                zip_code: Some("1234".into()),
+                email: Some("1234@gmail.com".into()),
+            },
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -88,7 +135,7 @@ pub struct ExitClientDetails {
     pub exit_price: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct RitaSettingsStruct {
     payment: PaymentSettings,
     network: NetworkSettings,
@@ -105,7 +152,19 @@ pub struct ExitNetworkSettings {
     pub netmask: IpAddr,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+impl Default for ExitNetworkSettings {
+    fn default() -> Self {
+        ExitNetworkSettings {
+            exit_hello_port: 4875,
+            wg_tunnel_port: 59999,
+            exit_price: 10,
+            own_internal_ip: "172.168.1.254".parse().unwrap(),
+            netmask: "255.255.255.0".parse().unwrap(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct RitaExitSettingsStruct {
     db_file: String,
     payment: PaymentSettings,

@@ -1,4 +1,4 @@
-use super::{KernelInterface, KernelManagerError};
+use super::{KernelInterface, KernelInterfaceError};
 
 use std::collections::HashMap;
 use std::net::IpAddr;

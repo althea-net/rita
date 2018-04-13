@@ -1,7 +1,7 @@
 use actix::prelude::*;
 
 use althea_kernel_interface::FilterTarget;
-use althea_kernel_interface::KernelInterface;
+use althea_kernel_interface::KI;
 
 use althea_types::LocalIdentity;
 
@@ -30,12 +30,10 @@ impl Actor for TrafficWatcher {
 impl Supervised for TrafficWatcher {}
 impl SystemService for TrafficWatcher {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        let ki = KernelInterface {};
-
-        ki.init_counter(&FilterTarget::Input).unwrap();
-        ki.init_counter(&FilterTarget::Output).unwrap();
-        ki.init_counter(&FilterTarget::ForwardInput).unwrap();
-        ki.init_counter(&FilterTarget::ForwardOutput).unwrap();
+        KI.init_counter(&FilterTarget::Input).unwrap();
+        KI.init_counter(&FilterTarget::Output).unwrap();
+        KI.init_counter(&FilterTarget::ForwardInput).unwrap();
+        KI.init_counter(&FilterTarget::ForwardOutput).unwrap();
 
         info!("Traffic Watcher started");
     }
@@ -65,7 +63,6 @@ impl Handler<Watch> for TrafficWatcher {
 /// This first time this is run, it will create the rules and then immediately read and zero them.
 /// (should return 0)
 pub fn watch(neighbors: &[(LocalIdentity, String)]) -> Result<(), Error> {
-    let ki = KernelInterface {};
     let mut babel = Babel::new(&format!("[::1]:{}", SETTING.get_network().babel_port)
         .parse()
         .unwrap());
@@ -108,16 +105,16 @@ pub fn watch(neighbors: &[(LocalIdentity, String)]) -> Result<(), Error> {
     destinations.insert(SETTING.get_network().own_ip, Int256::from(0));
 
     trace!("Getting input counters");
-    let input_counters = ki.read_counters(&FilterTarget::Input)?;
+    let input_counters = KI.read_counters(&FilterTarget::Input)?;
     info!("Got output counters: {:?}", input_counters);
 
     trace!("Getting destination counters");
-    let output_counters = ki.read_counters(&FilterTarget::Output)?;
+    let output_counters = KI.read_counters(&FilterTarget::Output)?;
     info!("Got destination counters: {:?}", output_counters);
 
     trace!("Getting fwd counters");
-    let fwd_input_counters = ki.read_counters(&FilterTarget::ForwardInput)?;
-    let fwd_output_counters = ki.read_counters(&FilterTarget::ForwardOutput)?;
+    let fwd_input_counters = KI.read_counters(&FilterTarget::ForwardInput)?;
+    let fwd_output_counters = KI.read_counters(&FilterTarget::ForwardOutput)?;
 
     info!(
         "Got fwd counters: {:?}",
