@@ -1,5 +1,5 @@
 use actix::prelude::*;
-use althea_kernel_interface::KI;
+use KI;
 
 use failure::Error;
 

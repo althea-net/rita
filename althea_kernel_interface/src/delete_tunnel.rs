@@ -1,4 +1,4 @@
-use super::{KernelInterface, KernelInterfaceError, KI};
+use super::{KernelInterface, KernelInterfaceError};
 
 use failure::Error;
 
@@ -21,6 +21,8 @@ fn test_delete_tunnel_linux() {
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
     use std::process::Output;
+
+    use KI;
 
     let ip_args = &["link", "del", "wg1"];
 
