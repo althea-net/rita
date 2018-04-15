@@ -24,7 +24,7 @@ pub fn setup_exit(req: HttpRequest) -> Box<Future<Item = String, Error = Error>>
 
             SETTING.init_exit_client(setting);
 
-            Ok("Setup Ok".to_string())
+            Ok("Setup Ok\n".to_string())
         })
         .responder()
 }

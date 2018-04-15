@@ -1,4 +1,4 @@
-use super::{KernelInterface, KernelInterfaceError, KI};
+use super::{KernelInterface, KernelInterfaceError};
 
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::path::Path;
@@ -122,6 +122,8 @@ impl KernelInterface {
 
 #[test]
 fn test_open_tunnel_linux() {
+    use KI;
+
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
@@ -226,6 +228,6 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
         &private_key_path,
         &own_mesh_ip,
         None,
-        false,
+        true,
     ).unwrap();
 }

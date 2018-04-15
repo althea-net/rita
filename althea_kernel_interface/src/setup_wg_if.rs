@@ -1,4 +1,4 @@
-use super::{KernelInterface, KernelInterfaceError, KI};
+use super::{KernelInterface, KernelInterfaceError};
 
 use std::net::IpAddr;
 
@@ -35,6 +35,8 @@ impl KernelInterface {
 
 #[test]
 fn test_setup_wg_if_linux() {
+    use KI;
+
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;

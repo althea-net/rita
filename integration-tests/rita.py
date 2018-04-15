@@ -75,12 +75,12 @@ def exec_or_exit(command, blocking=True, delay=0.01):
 
 
 def cleanup():
-    os.system("rm -rf *.log *.pid *.toml")
+    os.system("rm -rf *.log *.pid *.toml private-key*")
     os.system("killall babeld rita bounty_hunter iperf")  # TODO: This is very inconsiderate
 
 
 def teardown():
-    os.system("rm -rf *.pid *.toml")
+    os.system("rm -rf *.pid *.toml private-key*")
     os.system("killall babeld rita bounty_hunter iperf")  # TODO: This is very inconsiderate
 
 

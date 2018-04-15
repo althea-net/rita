@@ -7,7 +7,7 @@ extern crate failure;
 use std::net::{IpAddr, SocketAddr};
 
 extern crate settings;
-use settings::{RitaClientSettings, RitaCommonSettings};
+use settings::{NetworkSettings, RitaClientSettings, RitaCommonSettings};
 
 extern crate ipgen;
 extern crate rand;
@@ -19,8 +19,9 @@ use failure::Error;
 
 extern crate reqwest;
 
-extern crate althea_kernel_interface;
 use althea_kernel_interface::KI;
+
+extern crate althea_kernel_interface;
 use althea_types::interop::ExitServerIdentity;
 use regex::Regex;
 use settings::ExitClientDetails;
@@ -39,26 +40,26 @@ pub enum CluError {
     RuntimeError(String),
 }
 
-fn linux_generate_wg_keys(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), Error> {
+fn linux_generate_wg_keys(config: &mut NetworkSettings) -> Result<(), Error> {
     let keys = KI.create_wg_keypair()?;
     let wg_public_key = &keys[0];
     let wg_private_key = &keys[1];
 
     //Mutates settings, intentional side effect
-    config.set_network().wg_private_key = wg_private_key.to_string();
-    config.set_network().wg_public_key = wg_public_key.to_string();
+    config.wg_private_key = wg_private_key.to_string();
+    config.wg_public_key = wg_public_key.to_string();
 
     Ok(())
 }
 
-fn linux_generate_mesh_ip(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), Error> {
+fn linux_generate_mesh_ip(config: &mut NetworkSettings) -> Result<(), Error> {
     let seed: String = thread_rng().gen_ascii_chars().take(50).collect();
     let mesh_ip = ipgen::ip(&seed, "fd00::/8").unwrap();
 
     info!("generated new ip address {}", mesh_ip);
 
     // Mutates Settings intentional side effect
-    config.set_network().own_ip = mesh_ip;
+    config.own_ip = mesh_ip;
     Ok(())
 }
 
@@ -152,10 +153,10 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
     let mesh_ip = config.get_network().own_ip.clone();
 
     if !validate_wg_key(&privkey) || !validate_wg_key(&pubkey) {
-        linux_generate_wg_keys(config.clone()).expect("failed to generate wg keys");
+        linux_generate_wg_keys(&mut config.set_network()).expect("failed to generate wg keys");
     }
     if !validate_mesh_ip(&mesh_ip) {
-        linux_generate_mesh_ip(config.clone()).expect("failed to generate ip");
+        linux_generate_mesh_ip(&mut config.set_network()).expect("failed to generate ip");
     }
 
     //Creates file on disk containing key
@@ -193,9 +194,39 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
     Ok(())
 }
 
+fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Result<(), Error> {
+    cleanup()?;
+
+    let privkey = config.get_network().wg_private_key.clone();
+    let pubkey = config.get_network().wg_public_key.clone();
+    let mesh_ip = config.get_network().own_ip.clone();
+
+    if !validate_wg_key(&privkey) || !validate_wg_key(&pubkey) {
+        linux_generate_wg_keys(&mut config.set_network()).expect("failed to generate wg keys");
+    }
+    if !validate_mesh_ip(&mesh_ip) {
+        linux_generate_mesh_ip(&mut config.set_network()).expect("failed to generate ip");
+    }
+
+    //Creates file on disk containing key
+    KI.create_wg_key(
+        &Path::new(&config.get_network().wg_private_key_path),
+        &config.get_network().wg_private_key,
+    )?;
+
+    Ok(())
+}
+
 pub fn init(platform: &str, settings: Arc<RwLock<settings::RitaSettingsStruct>>) {
     match platform {
-        "linux" => linux_init(settings.clone()).unwrap(),
+        "linux" => linux_init(settings).unwrap(),
+        _ => unimplemented!(),
+    }
+}
+
+pub fn exit_init(platform: &str, settings: Arc<RwLock<settings::RitaExitSettingsStruct>>) {
+    match platform {
+        "linux" => linux_exit_init(settings).unwrap(),
         _ => unimplemented!(),
     }
 }
