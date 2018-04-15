@@ -14,9 +14,9 @@ babel_port = 6872
 rita_hello_port = 4876
 rita_dashboard_port = 4877
 bounty_port = 8888
-wg_private_key = "4FHz1vrk/IP+2Yzvu215c8wRUTq/QvBpRDxv0ZCLlX4="
+wg_private_key = ""
 wg_private_key_path = "/tmp/priv"
-wg_public_key = "GGdAlEoj2NSKhtx7HhyATDDraMwCztQl62qckvrRBU4="
+wg_public_key = ""
 wg_start_port = 60000
 peer_interfaces = []
 manual_peers = []

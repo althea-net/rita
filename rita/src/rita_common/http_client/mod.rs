@@ -51,7 +51,7 @@ impl Actor for HTTPSyncExecutor {
     type Context = SyncContext<Self>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Hello {
     pub my_id: LocalIdentity,
     pub to: SocketAddr,

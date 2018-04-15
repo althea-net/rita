@@ -3,6 +3,7 @@ use std::net::{IpAddr, SocketAddr, SocketAddrV6};
 use std::path::Path;
 
 use actix::actors;
+use actix::actors::mocker::Mocker;
 use actix::prelude::*;
 
 use futures;
@@ -10,17 +11,30 @@ use futures::Future;
 
 use althea_types::LocalIdentity;
 
-use althea_kernel_interface::KI;
+use KI;
 
 use babel_monitor::Babel;
 
-use rita_common::http_client::{HTTPClient, Hello};
+use rita_common;
+use rita_common::http_client::Hello;
 
 use settings::RitaCommonSettings;
 use SETTING;
 
 use failure::Error;
 use std::net::SocketAddrV4;
+
+#[cfg(test)]
+type HTTPClient = Mocker<rita_common::http_client::HTTPClient>;
+
+#[cfg(not(test))]
+type HTTPClient = rita_common::http_client::HTTPClient;
+
+#[cfg(test)]
+type Connector = Mocker<actors::Connector>;
+
+#[cfg(not(test))]
+type Connector = actors::Connector;
 
 #[derive(Debug, Fail)]
 pub enum TunnelManagerError {
@@ -160,7 +174,7 @@ impl TunnelManager {
         TunnelManager {
             tunnel_map: HashMap::new(),
             port: SETTING.get_network().wg_start_port,
-            listen_interfaces: HashSet::new(),
+            listen_interfaces: SETTING.get_network().peer_interfaces.clone(),
         }
     }
 
@@ -242,8 +256,6 @@ impl TunnelManager {
         their_ip: String,
         dev: Option<String>,
     ) -> Box<Future<Item = (LocalIdentity, String, IpAddr), Error = Error>> {
-        let resolver: Addr<Unsync, _> = actors::Connector::from_registry();
-
         trace!("Getting tunnel, inq");
         let tunnel = self.get_if(their_ip.clone());
         let iface_index = if let Some(dev) = dev.clone() {
@@ -253,7 +265,7 @@ impl TunnelManager {
         };
 
         Box::new(
-            resolver
+            Connector::from_registry()
                 .send(actors::Resolve::host(their_ip.clone()))
                 .from_err()
                 .and_then(move |res| {
@@ -352,8 +364,477 @@ impl TunnelManager {
 
 #[cfg(test)]
 mod tests {
+    use actix::*;
+    use futures::{future, Future};
+
+    use env_logger;
+
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
+
+    use super::*;
+
+    use actix::actors::ConnectorError;
+    use std::collections::{HashSet, VecDeque};
+    use std::net::Ipv4Addr;
+
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    fn test_contact_neighbor_ipv4() {
+        let link_args = &["link"];
+        let link_add = &["link", "add", "wg1", "type", "wireguard"];
+
+        let mut counter = 0;
+        KI.set_mock(Box::new(move |program, args| {
+            assert_eq!(program, "ip");
+            counter += 1;
+
+            match counter {
+                1 => {
+                    assert_eq!(args, link_args);
+                    Ok(Output {
+                        stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                2 => {
+                    assert_eq!(args, link_add);
+                    Ok(Output {
+                        stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                _ => panic!("command called too many times"),
+            }
+        }));
+
+        let sys = System::new("test");
+
+        let _: Addr<Syn, _> = HTTPClient::init_actor(|_| {
+            HTTPClient::mock(Box::new(|msg, ctx| {
+                assert_eq!(
+                    msg.downcast_ref::<Hello>(),
+                    Some(&Hello {
+                        my_id: LocalIdentity {
+                            wg_port: 60000,
+                            global: SETTING.get_identity()
+                        },
+                        to: SocketAddr::V4(SocketAddrV4::new("1.1.1.1".parse().unwrap(), 4876))
+                    })
+                );
+
+                let ret: Result<LocalIdentity, Error> = Ok(LocalIdentity {
+                    wg_port: 60000,
+                    global: SETTING.get_identity(),
+                });
+                Box::new(Some(ret))
+            }))
+        });
+
+        let mut tm = TunnelManager::new();
+        let res = TunnelManager::contact_neighbor(
+            tm.get_if(String::from("aa")),
+            0,
+            "1.1.1.1".parse().unwrap(),
+        );
+
+        sys.handle().spawn(res.then(|res| {
+            assert_eq!(
+                res.unwrap(),
+                (
+                    LocalIdentity {
+                        wg_port: 60000,
+                        global: SETTING.get_identity(),
+                    },
+                    "wg1".to_string(),
+                    "1.1.1.1".parse().unwrap()
+                )
+            );
+
+            Arbiter::system().do_send(msgs::SystemExit(0));
+            future::result(Ok(()))
+        }));
+
+        sys.run();
+    }
+
+    #[test]
+    fn test_neighbor_inquiry_domain() {
+        let link_args = &["link"];
+        let link_add = &["link", "add", "wg1", "type", "wireguard"];
+
+        let mut counter = 0;
+        KI.set_mock(Box::new(move |program, args| {
+            assert_eq!(program, "ip");
+            counter += 1;
+
+            match counter {
+                1 => {
+                    assert_eq!(args, link_args);
+                    Ok(Output {
+                        stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                2 => {
+                    assert_eq!(args, link_add);
+                    Ok(Output {
+                        stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                _ => panic!("command called too many times"),
+            }
+        }));
+
+        let sys = System::new("test");
+
+        let _: Addr<Syn, _> = HTTPClient::init_actor(|_| {
+            HTTPClient::mock(Box::new(|msg, ctx| {
+                assert_eq!(
+                    msg.downcast_ref::<Hello>(),
+                    Some(&Hello {
+                        my_id: LocalIdentity {
+                            wg_port: 60000,
+                            global: SETTING.get_identity()
+                        },
+                        to: SocketAddr::V4(SocketAddrV4::new("1.1.1.1".parse().unwrap(), 4876))
+                    })
+                );
+
+                let ret: Result<LocalIdentity, Error> = Ok(LocalIdentity {
+                    wg_port: 60000,
+                    global: SETTING.get_identity(),
+                });
+                Box::new(Some(ret))
+            }))
+        });
+
+        let _: Addr<Unsync, _> = Connector::init_actor(|_| {
+            Connector::mock(Box::new(|msg, ctx| {
+                assert_eq!(
+                    msg.downcast_ref::<actors::Resolve>(),
+                    Some(&actors::Resolve::host("test.altheamesh.com"))
+                );
+
+                let ret: Result<VecDeque<SocketAddr>, ConnectorError> = Ok({
+                    let mut ips = VecDeque::new();
+                    ips.push_back(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 0));
+                    ips
+                });
+                Box::new(Some(ret))
+            }))
+        });
+
+        let mut tm = TunnelManager::new();
+        let res = tm.neighbor_inquiry("test.altheamesh.com".to_string(), None);
+
+        sys.handle().spawn(res.then(|res| {
+            assert_eq!(
+                res.unwrap(),
+                (
+                    LocalIdentity {
+                        wg_port: 60000,
+                        global: SETTING.get_identity(),
+                    },
+                    "wg1".to_string(),
+                    "1.1.1.1".parse().unwrap()
+                )
+            );
+
+            Arbiter::system().do_send(msgs::SystemExit(0));
+            future::result(Ok(()))
+        }));
+
+        sys.run();
+    }
+
+    #[test]
+    fn test_neighbor_inquiry_ip() {
+        let link_args = &["link"];
+        let link_add = &["link", "add", "wg1", "type", "wireguard"];
+
+        let mut counter = 0;
+        KI.set_mock(Box::new(move |program, args| {
+            assert_eq!(program, "ip");
+
+            counter += 1;
+
+            match counter {
+                1 => {
+                    assert_eq!(args, link_args);
+                    Ok(Output {
+                        stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                2 => {
+                    assert_eq!(args, link_add);
+                    Ok(Output {
+                        stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                _ => panic!("command called too many times"),
+            }
+        }));
+
+        let sys = System::new("test");
+
+        let _: Addr<Syn, _> = HTTPClient::init_actor(|_| {
+            HTTPClient::mock(Box::new(|msg, ctx| {
+                assert_eq!(
+                    msg.downcast_ref::<Hello>(),
+                    Some(&Hello {
+                        my_id: LocalIdentity {
+                            wg_port: 60000,
+                            global: SETTING.get_identity()
+                        },
+                        to: SocketAddr::V4(SocketAddrV4::new("1.1.1.1".parse().unwrap(), 4876))
+                    })
+                );
+
+                let ret: Result<LocalIdentity, Error> = Ok(LocalIdentity {
+                    wg_port: 60000,
+                    global: SETTING.get_identity(),
+                });
+                Box::new(Some(ret))
+            }))
+        });
+
+        let _: Addr<Unsync, _> = Connector::init_actor(|_| {
+            Connector::mock(Box::new(|msg, ctx| {
+                assert_eq!(
+                    msg.downcast_ref::<actors::Resolve>(),
+                    Some(&actors::Resolve::host("1.1.1.1"))
+                );
+
+                let ret: Result<VecDeque<SocketAddr>, ConnectorError> =
+                    Err(ConnectorError::Resolver("Thats an IP address!".to_string()));
+                Box::new(Some(ret))
+            }))
+        });
+
+        let mut tm = TunnelManager::new();
+        let res = tm.neighbor_inquiry("1.1.1.1".to_string(), None);
+
+        sys.handle().spawn(res.then(|res| {
+            assert_eq!(
+                res.unwrap(),
+                (
+                    LocalIdentity {
+                        wg_port: 60000,
+                        global: SETTING.get_identity(),
+                    },
+                    "wg1".to_string(),
+                    "1.1.1.1".parse().unwrap()
+                )
+            );
+
+            Arbiter::system().do_send(msgs::SystemExit(0));
+            future::result(Ok(()))
+        }));
+
+        sys.run();
+    }
+
+    #[test]
+    fn test_get_neighbors() {
+        env_logger::init();
+        let mut counter = 0;
+        KI.set_mock(Box::new(move |program, args| {
+            trace!("program {:?}, args {:?}", program, args);
+            if program == "ping6" {
+                return Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                });
+            }
+
+            counter += 1;
+
+            match counter {
+                1 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, &["link"]);
+                    Ok(Output {
+                        stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                2 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, &["neighbor"]);
+                    Ok(Output {
+                        stdout: b"fe80::1234 dev eth0 lladdr dc:6d:cd:ae:bd:a6 REACHABLE".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                3 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, &["link"]);
+                    Ok(Output {
+                        stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                4 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, &["link", "add", "wg0", "type", "wireguard"]);
+                    Ok(Output {
+                        stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                5 | 6 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, &["link"]);
+                    Ok(Output {
+                        stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
+83: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                7 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, &["link", "add", "wg1", "type", "wireguard"]);
+                    Ok(Output {
+                        stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                8 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, &["link"]);
+                    Ok(Output {
+                        stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
+83: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
+84: wg1: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                9 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, &["link", "add", "wg2", "type", "wireguard"]);
+                    Ok(Output {
+                        stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                _ => panic!("command called too many times"),
+            }
+        }));
+
+        let sys = System::new("test");
+
+        SETTING.set_network().manual_peers =
+            vec!["test.altheamesh.com".to_string(), "2.2.2.2".to_string()];
+        SETTING
+            .set_network()
+            .peer_interfaces
+            .insert("eth0".to_string());
+
+        let _: Addr<Syn, _> = HTTPClient::init_actor(|_| {
+            HTTPClient::mock(Box::new(|msg, ctx| {
+                trace!("{:?}", msg.downcast_ref::<Hello>());
+                let ret: Result<LocalIdentity, Error> = match msg.downcast_ref::<Hello>() {
+                    Some(&Hello {
+                        my_id:
+                            LocalIdentity {
+                                wg_port: port,
+                                global: ref id,
+                            },
+                        to: _,
+                    }) => {
+                        assert_eq!(id, &SETTING.get_identity());
+                        Ok(LocalIdentity {
+                            wg_port: port,
+                            global: SETTING.get_identity(),
+                        })
+                    }
+                    _ => {
+                        panic!("Wrong message sent to HTTPClient");
+                    }
+                };
+                Box::new(Some(ret))
+            }))
+        });
+
+        let _: Addr<Unsync, _> = Connector::init_actor(|_| {
+            Connector::mock(Box::new(|msg, ctx| {
+                let msg = msg.downcast_ref::<actors::Resolve>().unwrap();
+                let ret: Result<VecDeque<SocketAddr>, ConnectorError> = if msg
+                    == &actors::Resolve::host("fe80::1234")
+                {
+                    Err(ConnectorError::Resolver("Thats an IP address!".to_string()))
+                } else if msg == &actors::Resolve::host("2.2.2.2") {
+                    Err(ConnectorError::Resolver("Thats an IP address!".to_string()))
+                } else if msg == &actors::Resolve::host("test.altheamesh.com") {
+                    Ok({
+                        let mut ips = VecDeque::new();
+                        ips.push_back(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 0));
+                        ips
+                    })
+                } else {
+                    panic!("unexpected host found")
+                };
+                Box::new(Some(ret))
+            }))
+        });
+
+        let mut tm = TunnelManager::new();
+        let res = tm.get_neighbors();
+
+        sys.handle().spawn(res.then(|res| {
+            assert_eq!(
+                res.unwrap(),
+                vec![
+                    (
+                        LocalIdentity {
+                            wg_port: 60000,
+                            global: SETTING.get_identity(),
+                        },
+                        "wg0".to_string(),
+                        "fe80::1234".parse().unwrap(),
+                    ),
+                    (
+                        LocalIdentity {
+                            wg_port: 60001,
+                            global: SETTING.get_identity(),
+                        },
+                        "wg1".to_string(),
+                        "1.1.1.1".parse().unwrap(),
+                    ),
+                    (
+                        LocalIdentity {
+                            wg_port: 60002,
+                            global: SETTING.get_identity(),
+                        },
+                        "wg2".to_string(),
+                        "2.2.2.2".parse().unwrap(),
+                    ),
+                ]
+            );
+
+            Arbiter::system().do_send(msgs::SystemExit(0));
+            future::result(Ok(()))
+        }));
+
+        sys.run();
     }
 }
