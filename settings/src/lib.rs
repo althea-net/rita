@@ -54,6 +54,7 @@ pub struct NetworkSettings {
     pub wg_start_port: u16,
     pub peer_interfaces: HashSet<String>,
     pub manual_peers: Vec<String>,
+    pub conf_link_local: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_nic: Option<String>,
 }
@@ -74,6 +75,7 @@ impl Default for NetworkSettings {
             peer_interfaces: HashSet::new(),
             manual_peers: Vec::new(),
             external_nic: None,
+            conf_link_local: true,
         }
     }
 }
