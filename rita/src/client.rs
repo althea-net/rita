@@ -45,7 +45,7 @@ use actix::registry::SystemService;
 use actix::*;
 use actix_web::*;
 
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 extern crate althea_kernel_interface;
 extern crate althea_types;

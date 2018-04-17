@@ -7,7 +7,7 @@ extern crate failure;
 use std::net::{IpAddr, SocketAddr};
 
 extern crate settings;
-use settings::{RitaClientSettings, RitaCommonSettings};
+use settings::{NetworkSettings, RitaClientSettings, RitaCommonSettings};
 
 extern crate ipgen;
 extern crate rand;
@@ -29,6 +29,8 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::thread;
 use std::time::Duration;
+use std::fs::File;
+use std::io::Write;
 
 extern crate althea_types;
 extern crate regex;
@@ -47,6 +49,9 @@ fn linux_generate_wg_keys(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> 
     //Mutates settings, intentional side effect
     config.set_network().wg_private_key = wg_private_key.to_string();
     config.set_network().wg_public_key = wg_public_key.to_string();
+
+    let mut file = File::create(&Path::new(&config.get_network().wg_private_key_path))?;
+    file.write_all(wg_private_key.as_bytes())?;
 
     Ok(())
 }
@@ -89,7 +94,10 @@ fn linux_setup_exit_tunnel(config: Arc<RwLock<settings::RitaSettingsStruct>>) ->
         config.get_exit_client().wg_listen_port,
         details.own_internal_ip,
     )?;
-    KI.set_route_to_tunnel(&"172.168.1.254".parse()?).unwrap();
+
+    for i in config.get_exit_tunnel_settings().clone().lan_nics {
+        KI.set_interface_route_via_exit(&i, details.server_internal_ip)?;
+    }
     Ok(())
 }
 

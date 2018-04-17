@@ -62,8 +62,7 @@ use rita_common::dashboard::network_endpoints::get_node_info;
 use rita_common::network_endpoints::{hello_response, make_payments};
 use rita_exit::network_endpoints::{list_clients, setup_request};
 
-use althea_kernel_interface::KI;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 const USAGE: &str = "
 Usage: rita_exit --config <settings>

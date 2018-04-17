@@ -18,4 +18,6 @@ wg_public_key = "pub"
 wg_start_port = 60000
 peer_interfaces = []
 manual_peers = []
-conf_link_local = true
+
+[exit_tunnel_settings]
+lan_nics = ["lo"]

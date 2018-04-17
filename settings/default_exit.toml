@@ -21,7 +21,6 @@ wg_start_port = 60000
 peer_interfaces = []
 manual_peers = []
 external_nic = "veth-5-8"
-conf_link_local = true
 
 [exit_network]
 wg_tunnel_port = 59999
