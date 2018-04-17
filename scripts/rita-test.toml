@@ -19,7 +19,6 @@ wg_start_port = 60000
 peer_interfaces = ["eth0.2", "eth0.3", "eth0.4"]
 manual_peers = ["1.1.1.1", "2.2.2.2"]
 global_non_mesh_ip = "3.3.3.3"
-conf_link_local = false
 
 [exit_client]
 exit_ip = "fd96::1337:0e1f"
@@ -29,3 +28,6 @@ wg_listen_port = 59999
 [exit_client.reg_details]
 zip_code = "1234"
 email = "1234@gmail.com"
+
+[exit_tunnel_settings]
+lan_nics = ["lo"]
