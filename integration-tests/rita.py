@@ -6,8 +6,9 @@ import errno
 import json
 import os
 import random
-import signal
+import re
 import shlex
+import signal
 import subprocess
 import sys
 import time
@@ -22,6 +23,7 @@ PING6 = os.getenv('PING6', "ping6")
 CONVERGENCE_DELAY = float(os.getenv('CONVERGENCE_DELAY', 50))
 INITIAL_POLL_INTERVAL = float(os.getenv('INITIAL_POLL_INTERVAL', 1))
 VERBOSE = os.getenv('VERBOSE', None)
+BACKOFF_FACTOR = float(os.getenv('BACKOFF_FACTOR', 1))
 
 tests_passes = True
 
@@ -105,6 +107,55 @@ class Node:
         for i in self.neighbors:
             interfaces.append("veth-{}-{}".format(self.id, i))
         return interfaces
+
+    def has_route(self, dest, price, next_hop, backlog=5000, verbose=False):
+        """
+        This function takes :data:`self` and returns ``True`` if a specified
+        route is installed in the last :data:`backlog` characters of the node's
+        Babel log file.
+
+        :param Node dest: Who the route goes to
+        :param int price: What the route costs
+        :param Node next_hop_ip: Who's the next hop
+        :param int backlog: How big chunk from the end to use for dump matching
+
+        :rtype bool: Whether the requested route was found
+        """
+        buf = None
+        fname = 'babeld-n{}.log'.format(self.id)
+        with open(fname, 'r') as f:
+
+            flen = f.seek(0, 2)  # Go to the end
+            f.seek((flen - backlog) if backlog < flen else 0)
+            buf = f.read()
+
+        last_dump_pat = re.compile(r'.*(My id .*)', re.S | re.M)
+        last_dump_match = last_dump_pat.match(buf)
+        if last_dump_match is None:
+            if verbose:
+                print('Could not find the last dump ({}) in {}'
+                      .format(last_dump_pat, fname),
+                      file=sys.stderr)
+            return False
+
+        last_dump = last_dump_match.group(1)
+        route_pat = re.compile(r'fd00::{d}.*price {p}.*fee {f}.*neigh fe80::{nh}.*(installed)'
+                               .format(
+                                       d=dest.id,
+                                       p=price,
+                                       f=self.fwd_price,
+                                       nh=next_hop.id
+                                       ))
+
+        if route_pat.search(last_dump) is None:
+            if verbose:
+                print('{} not found in {}:\n{}'.format(route_pat, fname,
+                      last_dump),
+                      file=sys.stderr)
+            return False
+
+        return True
+
 
 
 class Connection:
@@ -304,13 +355,14 @@ class World:
             else:
                 start_rita(node)
             time.sleep(0.5 + random.random() / 2) # wait 0.5s - 1s
+            print()
         print("rita started")
 
     def test_reach(self, node_from, node_to):
         ping = subprocess.Popen(
             ["ip", "netns", "exec", "netlab-{}".format(node_from.id), PING6,
              "fd00::{}".format(node_to.id),
-             "-c", "1"], stdout=subprocess.PIPE)
+             "-c", "1"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         output = ping.stdout.read().decode("utf-8")
         return "1 packets transmitted, 1 received, 0% packet loss" in output
 
@@ -322,6 +374,98 @@ class World:
                                    verbose=verbose, global_fail=global_fail):
                     return False
         return True
+
+    def test_routes(self, verbose=True, global_fail=True):
+        """
+        Check the presence of all optimal routes.
+        """
+        result = True
+        nodes = self.nodes
+
+        # Caution: all_routes directly relies on the layout of the netlab mesh.
+        #
+        # The routes are organized into a dictionary with nodes as keys and
+        # the expected routes as values:
+        # all_routes = {
+        #     <where_from>: [
+        #                 (<where_to>, <price>, <next_hop>),
+        #                 [...]
+        #             ],
+        #     [...]
+        # }
+
+        all_routes = {
+                nodes[1]: [
+                    (nodes[2], 50, nodes[6]),
+                    (nodes[3], 60, nodes[6]),
+                    (nodes[4], 75, nodes[6]),
+                    (nodes[5], 60, nodes[6]),
+                    (nodes[6], 0, nodes[6]),
+                    (nodes[7], 50, nodes[6]),
+                    ],
+                nodes[2]: [
+                    (nodes[1], 50, nodes[6]),
+                    (nodes[3], 0, nodes[3]),
+                    (nodes[4], 0, nodes[4]),
+                    (nodes[5], 60, nodes[6]),
+                    (nodes[6], 0, nodes[6]),
+                    (nodes[7], 50, nodes[6]),
+                    ],
+                nodes[3]: [
+                    (nodes[1], 60, nodes[7]),
+                    (nodes[2], 0, nodes[2]),
+                    (nodes[4], 25, nodes[2]),
+                    (nodes[5], 10, nodes[7]),
+                    (nodes[6], 10, nodes[7]),
+                    (nodes[7], 0, nodes[7]),
+                    ],
+                nodes[4]: [
+                    (nodes[1], 75, nodes[2]),
+                    (nodes[2], 0, nodes[2]),
+                    (nodes[3], 25, nodes[2]),
+                    (nodes[5], 85, nodes[2]),
+                    (nodes[6], 25, nodes[2]),
+                    (nodes[7], 75, nodes[2]),
+                    ],
+                nodes[5]: [
+                    (nodes[1], 60, nodes[7]),
+                    (nodes[2], 60, nodes[7]),
+                    (nodes[3], 10, nodes[7]),
+                    (nodes[4], 85, nodes[7]),
+                    (nodes[6], 10, nodes[7]),
+                    (nodes[7], 0, nodes[7]),
+                    ],
+                nodes[6]: [
+                    (nodes[1], 0, nodes[1]),
+                    (nodes[2], 0, nodes[2]),
+                    (nodes[3], 10, nodes[7]),
+                    (nodes[4], 25, nodes[2]),
+                    (nodes[5], 10, nodes[7]),
+                    (nodes[7], 0, nodes[7]),
+                    ],
+                nodes[7]: [
+                    (nodes[1], 50, nodes[6]),
+                    (nodes[2], 50, nodes[6]),
+                    (nodes[3], 0, nodes[3]),
+                    (nodes[4], 75, nodes[6]),
+                    (nodes[5], 0, nodes[5]),
+                    (nodes[6], 0, nodes[6]),
+                    ],
+                }
+
+        for node, routes in all_routes.items():
+            for route in routes:
+                desc = ("Optimal route from node {} " +
+                        "to {} with next-hop {} and price {}").format(node.id,
+                                                                      route[0].id,
+                                                                      route[2].id,
+                                                                      route[1])
+                result = result and assert_test(node.has_route(*route,
+                                                               verbose=verbose
+                                                ),
+                                                desc, verbose=verbose,
+                                                global_fail=global_fail)
+        return result
 
     def get_balances(self):
         s = 1
@@ -414,33 +558,36 @@ def check_log_contains(f, x):
 
 
 if __name__ == "__main__":
-    a = Node(1, 10)
-    b = Node(2, 25)
-    c = Node(3, 60)
-    d = Node(4, 10)
-    e = Node(5, 0)
-    f = Node(6, 50)
-    g = Node(7, 10)
-    # h = Node(8, 0)
+    a1 = Node(1, 10)
+    b2 = Node(2, 25)
+    c3 = Node(3, 60)
+    d4 = Node(4, 10)
+    e5 = Node(5, 0)
+    f6 = Node(6, 50)
+    g7 = Node(7, 10)
+    # h8 = Node(8, 0)
 
+    # Note: test_routes() relies heavily on this node and price layout not to
+    # change. If you need to alter the test mesh, please update test_routes()
+    # accordingly
     world = World()
-    world.add_node(a)
-    world.add_node(b)
-    world.add_node(c)
-    world.add_node(d)
-    world.add_exit_node(e)
-    world.add_node(f)
-    world.add_node(g)
-    # world.add_external_node(h)
+    world.add_node(a1)
+    world.add_node(b2)
+    world.add_node(c3)
+    world.add_node(d4)
+    world.add_exit_node(e5)
+    world.add_node(f6)
+    world.add_node(g7)
+    # world.add_external_node(h8)
 
-    world.add_connection(Connection(a, f))
-    world.add_connection(Connection(f, g))
-    world.add_connection(Connection(c, g))
-    world.add_connection(Connection(b, c))
-    world.add_connection(Connection(b, f))
-    world.add_connection(Connection(b, d))
-    world.add_connection(Connection(e, g))
-    # world.add_connection(Connection(e, h))
+    world.add_connection(Connection(a1, f6))
+    world.add_connection(Connection(f6, g7))
+    world.add_connection(Connection(c3, g7))
+    world.add_connection(Connection(b2, c3))
+    world.add_connection(Connection(b2, f6))
+    world.add_connection(Connection(b2, d4))
+    world.add_connection(Connection(e5, g7))
+    # world.add_connection(Connection(e5, h8))
 
     world.set_bounty(3)  # TODO: Who should be the bounty hunter?
 
@@ -453,20 +600,30 @@ if __name__ == "__main__":
 
     # While we're before convergence deadline
     while (time.time() - start_time) <= CONVERGENCE_DELAY:
-        if world.test_reach_all(verbose=False, global_fail=False):
+        all_reachable = world.test_reach_all(verbose=False, global_fail=False)
+        routes_ok = world.test_routes(verbose=False, global_fail=False)
+        if all_reachable and routes_ok:
             break      # We converged!
-        time.sleep(interval)  # Let's check again in a second
-        interval *= 2
+        time.sleep(interval)  # Let's check again after a delay
+        interval *= BACKOFF_FACTOR
+        if VERBOSE is not None:
+            print("%.2fs/%.2fs (going to sleep for %.2fs)" %
+                  (time.time() - start_time, CONVERGENCE_DELAY, interval))
 
-    print("Test reachabibility...")
+    print("Test reachabibility and optimum routes...")
 
-    end_time = time.time()
+    duration = time.time() - start_time
 
     # Test (and fail if necessary) for real and print stats on success
-    if world.test_reach_all():
-        print("Converged in %.2f seconds" % (end_time - start_time))
+    if world.test_reach_all() and world.test_routes():
+        print(("Converged in " + colored("%.2f seconds", "green")) % duration)
+    else:
+        print(("No convergence after more than " +
+        colored("%d seconds", "red") +
+        ", quitting...") % CONVERGENCE_DELAY)
+        sys.exit(1)
 
-    world.test_traffic(c, f, {
+    world.test_traffic(c3, f6, {
         1: 0,
         2: 0,
         3: -10 * 1.05,
@@ -476,7 +633,7 @@ if __name__ == "__main__":
         7: 10 * 1.05
     })
 
-    world.test_traffic(d, a, {
+    world.test_traffic(d4, a1, {
         1: 0 * 1.05,
         2: 25 * 1.05,
         3: 0,
@@ -486,7 +643,7 @@ if __name__ == "__main__":
         7: 0
     })
 
-    world.test_traffic(a, c, {
+    world.test_traffic(a1, c3, {
         1: -60 * 1.05,
         2: 0,
         3: 0,
@@ -496,7 +653,7 @@ if __name__ == "__main__":
         7: 10 * 1.05
     })
 
-    world.test_traffic(d, e, {
+    world.test_traffic(d4, e5, {
         1: 0,
         2: 25 * 1.1,
         3: 0,
@@ -506,7 +663,7 @@ if __name__ == "__main__":
         7: 10 * 1.1
     })
 
-    world.test_traffic(e, d, {
+    world.test_traffic(e5, d4, {
         1: 0,
         2: 25 * 1.1,
         3: 0,
@@ -516,7 +673,7 @@ if __name__ == "__main__":
         7: 10 * 1.1
     })
 
-    world.test_traffic(c, e, {
+    world.test_traffic(c3, e5, {
         1: 0,
         2: 0,
         3: -60 * 1.1,
@@ -526,7 +683,7 @@ if __name__ == "__main__":
         7: 10 * 1.1
     })
 
-    world.test_traffic(e, c, {
+    world.test_traffic(e5, c3, {
         1: 0,
         2: 0,
         3: -60 * 1.1,
@@ -536,7 +693,7 @@ if __name__ == "__main__":
         7: 10 * 1.1
     })
 
-    world.test_traffic(g, e, {
+    world.test_traffic(g7, e5, {
         1: 0,
         2: 0,
         3: 0,
@@ -546,7 +703,7 @@ if __name__ == "__main__":
         7: -50 * 1.1
     })
 
-    world.test_traffic(e, g, {
+    world.test_traffic(e5, g7, {
         1: 0,
         2: 0,
         3: 0,
@@ -558,12 +715,12 @@ if __name__ == "__main__":
 
     print("Check that tunnels have not been suspended")
 
-    assert_test(not check_log_contains("rita-n1.log", "debt is below close threshold"), "Suspension of A")
-    assert_test(not check_log_contains("rita-n2.log", "debt is below close threshold"), "Suspension of B")
-    assert_test(not check_log_contains("rita-n3.log", "debt is below close threshold"), "Suspension of C")
-    assert_test(not check_log_contains("rita-n4.log", "debt is below close threshold"), "Suspension of D")
-    assert_test(not check_log_contains("rita-n6.log", "debt is below close threshold"), "Suspension of F")
-    assert_test(not check_log_contains("rita-n7.log", "debt is below close threshold"), "Suspension of G")
+    assert_test(not check_log_contains("rita-n1.log", "debt is below close threshold"), "Suspension of 1 (A)")
+    assert_test(not check_log_contains("rita-n2.log", "debt is below close threshold"), "Suspension of 2 (B)")
+    assert_test(not check_log_contains("rita-n3.log", "debt is below close threshold"), "Suspension of 3 (C)")
+    assert_test(not check_log_contains("rita-n4.log", "debt is below close threshold"), "Suspension of 4 (D)")
+    assert_test(not check_log_contains("rita-n6.log", "debt is below close threshold"), "Suspension of 6 (F)")
+    assert_test(not check_log_contains("rita-n7.log", "debt is below close threshold"), "Suspension of 7 (G)")
 
     if len(sys.argv) > 1 and sys.argv[1] == "leave-running":
         pass
@@ -573,8 +730,8 @@ if __name__ == "__main__":
     print("done... exiting")
 
     if tests_passes:
-        print("All tests passed!!")
+        print("All Rita tests passed!!")
         exit(0)
     else:
-        print("Tests have failed :(")
+        print("Rita tests have failed :(")
         exit(1)
