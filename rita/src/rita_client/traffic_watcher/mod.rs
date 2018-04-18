@@ -88,12 +88,13 @@ pub fn watch(exit: Identity, exit_price: u64) -> Result<(), Error> {
     let mut owes: Int256 = Int256::from(0);
 
     trace!("exit price {}", exit_price);
-    trace!(
-        "exit destination price {}",
-        destinations[&exit.mesh_ip].clone() + exit_price
-    );
 
     if destinations.contains_key(&exit.mesh_ip) {
+        trace!(
+            "exit destination price {}",
+            destinations[&exit.mesh_ip].clone() + exit_price
+        );
+
         owes += Int256::from(exit_price * output);
 
         owes += (destinations[&exit.mesh_ip].clone() + exit_price) * input;
