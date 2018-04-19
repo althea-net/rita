@@ -91,7 +91,7 @@ impl Handler<SetupClient> for DbClient {
                     wg_pubkey: "".to_string(),
                     wg_port: "".to_string(),
                     luci_pass: "".to_string(),
-                    internal_ip: "172.168.1.100".to_string(),
+                    internal_ip: SETTING.get_exit_network().exit_start_ip.to_string(),
                     email: "".to_string(),
                     zip: "".to_string(),
                 };

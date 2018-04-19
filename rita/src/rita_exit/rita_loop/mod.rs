@@ -11,7 +11,7 @@ use exit_db::models::Client;
 
 use failure::Error;
 
-use settings::{RitaCommonSettings, RitaExitSettings};
+use settings::{RitaClientSettings, RitaCommonSettings, RitaExitSettings};
 use SETTING;
 
 use althea_kernel_interface::{ExitClient, KI};
@@ -84,7 +84,8 @@ impl Handler<Tick> for RitaLoop {
                         wg_clients,
                         SETTING.get_exit_network().wg_tunnel_port,
                         &SETTING.get_network().wg_private_key_path,
-                        &"172.168.1.254".parse().unwrap(),
+                        &SETTING.get_exit_network().own_internal_ip,
+                        SETTING.get_exit_network().netmask,
                     );
 
                     ctx.notify_later(Tick {}, Duration::from_secs(5));
