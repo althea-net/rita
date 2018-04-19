@@ -46,7 +46,7 @@ pub struct ExitClientIdentity {
 pub struct ExitServerIdentity {
     pub own_local_ip: IpAddr,
     pub server_local_ip: IpAddr,
-    pub netmask: IpAddr,
+    pub netmask: u8,
     pub wg_port: u16,
     pub global: Identity,
     pub price: u64,

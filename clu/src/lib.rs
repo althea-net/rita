@@ -24,13 +24,13 @@ use althea_kernel_interface::KI;
 use althea_types::interop::ExitServerIdentity;
 use regex::Regex;
 use settings::ExitClientDetails;
+use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::thread;
 use std::time::Duration;
-use std::fs::File;
-use std::io::Write;
 
 extern crate althea_types;
 extern crate regex;
@@ -93,11 +93,10 @@ fn linux_setup_exit_tunnel(config: Arc<RwLock<settings::RitaSettingsStruct>>) ->
         config.get_network().wg_private_key_path.clone(),
         config.get_exit_client().wg_listen_port,
         details.own_internal_ip,
+        details.netmask,
     )?;
+    KI.set_route_to_tunnel(&details.server_internal_ip);
 
-    for i in config.get_exit_tunnel_settings().clone().lan_nics {
-        KI.set_interface_route_via_exit(&i, details.server_internal_ip)?;
-    }
     Ok(())
 }
 
@@ -154,6 +153,7 @@ pub fn cleanup() -> Result<(), Error> {
 
 fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), Error> {
     cleanup()?;
+    KI.restore_default_route(&mut config.set_network().default_route);
 
     let privkey = config.get_network().wg_private_key.clone();
     let pubkey = config.get_network().wg_public_key.clone();

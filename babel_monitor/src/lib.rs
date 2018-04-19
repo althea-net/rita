@@ -127,11 +127,17 @@ impl<T: Read + Write> InnerBabel<T> {
                 break;
             }
         }
-        Ok(ret)
+        trace!("babel returned {}", ret);
+        if ret.ends_with("ok\n") {
+            Ok(ret)
+        } else {
+            Err(Error::BabelError(ret))
+        }
     }
 
     fn write(&mut self, command: &str) -> Result<(), Error> {
         self.stream.get_mut().write(command.as_bytes())?;
+        trace!("sending {} to babel", command);
         Ok(())
     }
 
@@ -150,6 +156,17 @@ impl<T: Read + Write> InnerBabel<T> {
         self.write(&commmand)?;
         let out = self.read()?;
         info!("Babel started monitoring: {}", iface);
+        Ok(0)
+    }
+
+    pub fn redistribute_ip(&mut self, ip: &IpAddr, allow: bool) -> Result<u32, Error> {
+        let commmand = format!(
+            "redistribute ip {}/128 {}\n",
+            ip,
+            if allow { "allow" } else { "deny" }
+        );
+        self.write(&commmand)?;
+        let out = self.read()?;
         Ok(0)
     }
 

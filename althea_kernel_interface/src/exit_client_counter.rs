@@ -6,9 +6,8 @@ use regex::Regex;
 
 impl KernelInterface {
     pub fn init_exit_client_counters(&self) -> Result<(), Error> {
-        self.run_command("iptables", &["-w", "-A", "OUTPUT", "-o", "wg_exit"])?;
-
-        self.run_command("iptables", &["-w", "-A", "INPUT", "-i", "wg_exit"])?;
+        self.add_iptables_rule("iptables", &["-w", "-A", "OUTPUT", "-o", "wg_exit"])?;
+        self.add_iptables_rule("iptables", &["-w", "-A", "INPUT", "-i", "wg_exit"])?;
 
         Ok(())
     }

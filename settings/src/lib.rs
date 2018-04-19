@@ -54,6 +54,7 @@ pub struct NetworkSettings {
     pub wg_start_port: u16,
     pub peer_interfaces: HashSet<String>,
     pub manual_peers: Vec<String>,
+    pub default_route: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_nic: Option<String>,
 }
@@ -74,6 +75,7 @@ impl Default for NetworkSettings {
             peer_interfaces: HashSet::new(),
             manual_peers: Vec::new(),
             external_nic: None,
+            default_route: Vec::new(),
         }
     }
 }
@@ -128,7 +130,7 @@ impl Default for ExitClientSettings {
 pub struct ExitClientDetails {
     pub own_internal_ip: IpAddr,
     pub server_internal_ip: IpAddr,
-    pub netmask: IpAddr,
+    pub netmask: u8,
     pub eth_address: EthAddress,
     pub wg_public_key: String,
     pub wg_exit_port: u16,
@@ -155,7 +157,8 @@ pub struct ExitNetworkSettings {
     pub wg_tunnel_port: u16,
     pub exit_price: u64,
     pub own_internal_ip: IpAddr,
-    pub netmask: IpAddr,
+    pub exit_start_ip: IpAddr,
+    pub netmask: u8,
 }
 
 impl Default for ExitNetworkSettings {
@@ -165,7 +168,8 @@ impl Default for ExitNetworkSettings {
             wg_tunnel_port: 59999,
             exit_price: 10,
             own_internal_ip: "172.168.1.254".parse().unwrap(),
-            netmask: "255.255.255.0".parse().unwrap(),
+            exit_start_ip: "172.168.1.100".parse().unwrap(),
+            netmask: 24,
         }
     }
 }
