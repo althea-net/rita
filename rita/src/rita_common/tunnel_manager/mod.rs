@@ -24,8 +24,6 @@ use std::net::SocketAddrV4;
 
 #[derive(Debug, Fail)]
 pub enum TunnelManagerError {
-    #[fail(display = "IPV4 unsupported error")]
-    IPv4UnsupportedError,
     #[fail(display = "DNS lookup error")]
     DNSLookupError,
 }
@@ -157,13 +155,6 @@ impl Handler<OpenTunnel> for TunnelManager {
     }
 }
 
-fn is_link_local(ip: IpAddr) -> bool {
-    if let IpAddr::V6(ip) = ip {
-        return (ip.segments()[0] & 0xffc0) == 0xfe80;
-    }
-    false
-}
-
 impl TunnelManager {
     pub fn new() -> Self {
         TunnelManager {
@@ -278,7 +269,6 @@ impl TunnelManager {
                             Box::new(futures::future::err(
                                 TunnelManagerError::DNSLookupError.into(),
                             ))
-                                as ResponseFuture<(LocalIdentity, String, IpAddr), Error>
                         }
                     } else {
                         match their_ip.parse() {
@@ -337,20 +327,24 @@ impl TunnelManager {
     pub fn open_tunnel(&mut self, their_id: LocalIdentity, ip: IpAddr) -> Result<(), Error> {
         trace!("Getting tunnel, open tunnel");
         let tunnel = self.get_if(ip.to_string());
+        let network = SETTING.get_network().clone();
+
         KI.open_tunnel(
             &tunnel.iface_name,
             tunnel.listen_port,
             &SocketAddr::new(ip, their_id.wg_port),
             &their_id.global.wg_public_key,
-            Path::new(&SETTING.get_network().wg_private_key_path),
-            &SETTING.get_network().own_ip,
-            SETTING.get_network().external_nic.clone(),
-            SETTING.get_network().conf_link_local
+            Path::new(&network.wg_private_key_path),
+            &network.own_ip,
+            network.external_nic.clone(),
+            &mut SETTING.set_network().default_route,
         )?;
 
         let mut babel = Babel::new(&format!("[::1]:{}", SETTING.get_network().babel_port)
             .parse()
             .unwrap());
+
+        // babel.redistribute_ip(&SETTING.get_network().own_ip, true)?;
         babel.monitor(&tunnel.iface_name)?;
         Ok(())
     }

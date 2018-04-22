@@ -13,6 +13,7 @@ impl KernelInterface {
         private_key_path: String,
         listen_port: u16,
         local_ip: IpAddr,
+        netmask: u8,
     ) -> Result<(), Error> {
         self.run_command(
             "wg",
@@ -28,7 +29,7 @@ impl KernelInterface {
                 "endpoint",
                 &format!("[{}]:{}", endpoint.ip(), endpoint.port()),
                 "allowed-ips",
-                "172.168.1.254",
+                "0.0.0.0/0",
                 "persistent-keepalive",
                 "5",
             ],
@@ -39,7 +40,7 @@ impl KernelInterface {
             &[
                 "address",
                 "add",
-                &format!("{}/24", local_ip),
+                &format!("{}/{}", local_ip, netmask),
                 "dev",
                 "wg_exit",
             ],
@@ -65,9 +66,19 @@ impl KernelInterface {
     }
 
     pub fn set_route_to_tunnel(&self, gateway: &IpAddr) -> Result<(), Error> {
+        self.run_command("ip", &["route", "del", "default"]);
+
         let output = self.run_command(
             "ip",
-            &["route", "add", "default", "via", &gateway.to_string()],
+            &[
+                "route",
+                "add",
+                "default",
+                "via",
+                &gateway.to_string(),
+                "dev",
+                "wg_exit",
+            ],
         )?;
         if !output.stderr.is_empty() {
             return Err(KernelInterfaceError::RuntimeError(format!(

@@ -21,6 +21,7 @@ impl KernelInterface {
         listen_port: u16,
         private_key_path: &str,
         local_ip: &IpAddr,
+        netmask: u8,
     ) -> Result<(), Error> {
         let command = "wg".to_string();
 
@@ -43,22 +44,16 @@ impl KernelInterface {
             args.push("5".into());
         }
 
-        let mut args_str = Vec::new();
+        let arg_str: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
 
-        let arg_count = args.len();
-
-        for i in 0..arg_count {
-            args_str.push(args[i].as_str())
-        }
-
-        self.run_command(&command, &args_str[..])?;
+        self.run_command(&command, &arg_str[..])?;
 
         let output = self.run_command(
             "ip",
             &[
                 "address",
                 "add",
-                &format!("{}/24", local_ip),
+                &format!("{}/{}", local_ip, netmask),
                 "dev",
                 "wg_exit",
             ],
@@ -84,7 +79,7 @@ impl KernelInterface {
     }
 
     pub fn setup_nat(&self, external_interface: &str) -> Result<(), Error> {
-        self.run_command(
+        self.add_iptables_rule(
             "iptables",
             &[
                 "-w",
@@ -96,6 +91,44 @@ impl KernelInterface {
                 external_interface,
                 "-j",
                 "MASQUERADE",
+            ],
+        )?;
+
+        self.add_iptables_rule(
+            "iptables",
+            &[
+                "-w",
+                "-t",
+                "filter",
+                "-A",
+                "FORWARD",
+                "-o",
+                external_interface,
+                "-i",
+                "wg_exit",
+                "-j",
+                "ACCEPT",
+            ],
+        )?;
+
+        self.add_iptables_rule(
+            "iptables",
+            &[
+                "-w",
+                "-t",
+                "filter",
+                "-A",
+                "FORWARD",
+                "-o",
+                "wg_exit",
+                "-i",
+                external_interface,
+                "-m",
+                "state",
+                "--state",
+                "RELATED,ESTABLISHED",
+                "-j",
+                "ACCEPT",
             ],
         )?;
 
