@@ -42,5 +42,5 @@ futures = "0.1"
 mockito = "0.9"
 bytes = "0.4"
 tokio = "0.1"
-actix-web = {git="https://github.com/kingoflolz/actix-web"}
+actix-web = {git="https://github.com/kingoflolz/actix-web", default-features = false}
 
