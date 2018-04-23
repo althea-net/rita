@@ -1,7 +1,7 @@
 [[package]]
 name = "actix"
 version = "0.5.5"
-source = "git+https://github.com/kingoflolz/actix?branch=mocking#ad0e5edf982358f5ffff57f22dc215251bc60fa0"
+source = "git+https://github.com/kingoflolz/actix?branch=mocking#dfdafda274a4761aea40051141a820170e96de80"
 dependencies = [
  "actix_derive 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitflags 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
