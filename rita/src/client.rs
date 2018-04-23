@@ -45,7 +45,7 @@ use actix::registry::SystemService;
 use actix::*;
 use actix_web::*;
 
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 extern crate althea_kernel_interface;
 extern crate althea_types;
@@ -65,6 +65,22 @@ Options:
     --config   Name of config file
     --platform   Platform (linux or openwrt)
 ";
+
+use althea_kernel_interface::{KernelInterface, LinuxCommandRunner, TestCommandRunner};
+
+#[cfg(test)]
+lazy_static! {
+    pub static ref KI: Box<KernelInterface> = Box::new(TestCommandRunner {
+        run_command: Arc::new(Mutex::new(Box::new(|program, args| {
+            panic!("kernel interface used before initialized");
+        })))
+    });
+}
+
+#[cfg(not(test))]
+lazy_static! {
+    pub static ref KI: Box<KernelInterface> = Box::new(LinuxCommandRunner {});
+}
 
 #[cfg(not(test))]
 lazy_static! {
@@ -106,8 +122,8 @@ fn main() {
     assert!(rita_client::exit_manager::ExitManager::from_registry().connected());
 
     // rita
-    HttpServer::new(|| {
-        Application::new()
+    server::new(|| {
+        App::new()
             .resource("/make_payment", |r| r.h(make_payments))
             .resource("/hello", |r| r.h(hello_response))
     }).threads(1)
@@ -116,8 +132,8 @@ fn main() {
         .start();
 
     // dashboard
-    HttpServer::new(|| {
-        Application::new()
+    server::new(|| {
+        App::new()
             .resource("/wifisettings", |r| {
                 r.route().filter(pred::Get()).h(get_wifi_config)
             })

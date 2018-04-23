@@ -13,6 +13,7 @@ use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::ffi::OsStr;
 use std::io::Write;
+use std::path::Path;
 use std::process::{Command, Output};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -31,6 +32,8 @@ mod exit_server_tunnel;
 mod get_neighbors;
 mod get_wg_pubkey;
 mod interface_tools;
+mod ip_route;
+mod iptables;
 mod link_local_tools;
 mod manipulate_uci;
 mod open_tunnel;
@@ -50,29 +53,27 @@ pub enum KernelInterfaceError {
 }
 
 #[cfg(test)]
-pub struct KernelInterface {
-    run_command: Arc<Mutex<Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>>>,
-}
-
-#[cfg(not(test))]
 lazy_static! {
-    pub static ref KI: KernelInterface = KernelInterface {};
-}
-
-#[cfg(test)]
-lazy_static! {
-    pub static ref KI: KernelInterface = KernelInterface {
+    pub static ref KI: Box<KernelInterface> = Box::new(TestCommandRunner {
         run_command: Arc::new(Mutex::new(Box::new(|program, args| {
             panic!("kernel interface used before initialized");
         })))
-    };
+    });
 }
 
 #[cfg(not(test))]
-pub struct KernelInterface {}
+lazy_static! {
+    pub static ref KI: Box<KernelInterface> = Box::new(LinuxCommandRunner {});
+}
 
-impl KernelInterface {
-    #[cfg(not(test))]
+pub trait CommandRunner {
+    fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, Error>;
+    fn set_mock(&self, mock: Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>);
+}
+
+pub struct LinuxCommandRunner;
+
+impl CommandRunner for LinuxCommandRunner {
     fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, Error> {
         let start = Instant::now();
         let output = Command::new(program).args(args).output()?;
@@ -92,12 +93,16 @@ impl KernelInterface {
         return Ok(output);
     }
 
-    #[cfg(test)]
     fn set_mock(&self, mock: Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>) {
-        *self.run_command.lock().unwrap() = mock
+        unimplemented!()
     }
+}
 
-    #[cfg(test)]
+pub struct TestCommandRunner {
+    pub run_command: Arc<Mutex<Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>>>,
+}
+
+impl CommandRunner for TestCommandRunner {
     fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, Error> {
         let mut args_owned = Vec::new();
         for a in args {
@@ -106,4 +111,13 @@ impl KernelInterface {
 
         (&mut *self.run_command.lock().unwrap())(program.to_string(), args_owned)
     }
+
+    fn set_mock(&self, mock: Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>) {
+        *self.run_command.lock().unwrap() = mock
+    }
 }
+
+pub trait KernelInterface: CommandRunner + Sync {}
+
+impl KernelInterface for LinuxCommandRunner {}
+impl KernelInterface for TestCommandRunner {}

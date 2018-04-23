@@ -1,4 +1,4 @@
-use super::{KernelInterface, KernelInterfaceError, KI};
+use super::{KernelInterface, KernelInterfaceError};
 
 use std::fs::File;
 use std::io::{Read, Write};
@@ -90,26 +90,24 @@ impl KernelInterface {
             )
         }
     }
-
-    /// Gets the interface index for a named interface
+    /// Returns all existing interfaces
     pub fn get_iface_index(&self, name: &str) -> Result<u32, Error> {
-        let mut f = File::open(format!("/sys/class/net/{}/ifindex", name))?;
+        let links = String::from_utf8(self.run_command("ip", &["link"])?.stdout)?;
 
-        let mut contents = String::new();
-        f.read_to_string(&mut contents)?;
-
-        contents.pop(); //remove trailing newline
-
-        let index = contents.parse::<u32>()?;
-
-        trace!("Got index: {}", index);
-
-        Ok(index)
+        let re = Regex::new(r"([0-9]+): (.*?)(:|@)").unwrap();
+        for caps in re.captures_iter(&links) {
+            if name == &caps[2] {
+                return Ok(caps[1].parse()?);
+            }
+        }
+        return Err(KernelInterfaceError::RuntimeError("Interface not found".to_string()).into());
     }
 }
 
 #[test]
 fn test_get_device_name_linux() {
+    use KI;
+
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
@@ -141,6 +139,8 @@ fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE
 
 #[test]
 fn test_get_link_local_device_ip_linux() {
+    use KI;
+
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
@@ -168,6 +168,8 @@ fn test_get_link_local_device_ip_linux() {
 
 #[test]
 fn test_get_link_local_reply_ip_linux() {
+    use KI;
+
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;

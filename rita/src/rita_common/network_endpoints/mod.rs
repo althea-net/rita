@@ -30,7 +30,7 @@ pub fn make_payments(req: HttpRequest) -> Box<Future<Item = HttpResponse, Error 
             trace!("Received payment: {:?}", pmt,);
             PaymentController::from_registry()
                 .do_send(rita_common::payment_controller::PaymentReceived(pmt));
-            Ok(httpcodes::HTTPOk.into())
+            Ok(httpcodes::HttpOk.into())
         })
         .responder()
 }

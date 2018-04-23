@@ -1,7 +1,7 @@
 use actix::prelude::*;
 
 use althea_kernel_interface::FilterTarget;
-use althea_kernel_interface::KI;
+use KI;
 
 use althea_types::LocalIdentity;
 

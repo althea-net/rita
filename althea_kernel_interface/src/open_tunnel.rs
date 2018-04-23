@@ -1,18 +1,23 @@
-use super::{KernelInterface, KernelInterfaceError, KI};
+use super::{KernelInterface, KernelInterfaceError};
 
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::path::Path;
 
 use failure::Error;
 
+#[derive(Debug, Fail)]
+pub enum TunnelOpeningError {
+    #[fail(display = "Link local without interface")]
+    InvalidSocket,
+}
+
 fn to_wg_local(ip: &IpAddr) -> IpAddr {
     match ip {
         &IpAddr::V6(ip) => {
             let mut seg = ip.segments();
             assert_eq!((seg[0] & 0xfd00), 0xfd00);
-            seg[0] = 0xfe80;
             IpAddr::V6(Ipv6Addr::new(
-                seg[0], seg[1], seg[2], seg[3], seg[4], seg[5], seg[6], seg[7],
+                0xfe80, 0x0, 0x0, 0x0, seg[4], seg[5], seg[6], seg[7],
             ))
         }
         _ => unreachable!(),
@@ -35,11 +40,16 @@ fn is_link_local(ip: IpAddr) -> bool {
 }
 
 /// socket to string with interface id support
-fn socket_to_string(endpoint: &SocketAddr, interface_name: String) -> String {
+fn socket_to_string(endpoint: &SocketAddr, interface_name: Option<String>) -> String {
     match endpoint {
         &SocketAddr::V6(endpoint) => {
             if is_link_local(IpAddr::V6(endpoint.ip().clone())) {
-                format!("[{}%{}]:{}", endpoint.ip(), interface_name, endpoint.port())
+                format!(
+                    "[{}%{}]:{}",
+                    endpoint.ip(),
+                    interface_name.expect("Link local without interface"),
+                    endpoint.port()
+                )
             } else {
                 format!("[{}]:{}", endpoint.ip(), endpoint.port())
             }
@@ -58,11 +68,19 @@ impl KernelInterface {
         private_key_path: &Path,
         own_ip: &IpAddr,
         external_nic: Option<String>,
-        conf_link_local: bool,
+        settings_default_route: &mut Vec<String>,
     ) -> Result<(), Error> {
+        let external_peer;
+
         let phy_name = match self.get_device_name(endpoint.ip()) {
-            Ok(phy_name) => phy_name,
-            Err(err) => external_nic.unwrap_or("no_nic".to_string()),
+            Ok(phy_name) => {
+                external_peer = false;
+                Some(phy_name)
+            }
+            Err(_) => {
+                external_peer = true;
+                external_nic
+            }
         };
         let socket_connect_str = socket_to_string(endpoint, phy_name);
         trace!("socket conenct string: {}", socket_connect_str);
@@ -96,17 +114,19 @@ impl KernelInterface {
             &["address", "add", &format!("{}", own_ip), "dev", &interface],
         )?;
 
-        if conf_link_local {
-            let output = self.run_command(
-                "ip",
-                &[
-                    "address",
-                    "add",
-                    &format!("{}/64", to_wg_local(own_ip)),
-                    "dev",
-                    &interface,
-                ],
-            )?;
+        self.run_command(
+            "ip",
+            &[
+                "address",
+                "add",
+                &format!("{}/64", to_wg_local(own_ip)),
+                "dev",
+                &interface,
+            ],
+        )?;
+
+        if external_peer {
+            self.manual_peers_route(&endpoint.ip(), settings_default_route)?;
         }
 
         let output = self.run_command("ip", &["link", "set", "dev", &interface, "up"])?;
@@ -122,6 +142,8 @@ impl KernelInterface {
 
 #[test]
 fn test_open_tunnel_linux() {
+    use KI;
+
     use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
@@ -226,6 +248,6 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
         &private_key_path,
         &own_mesh_ip,
         None,
-        true,
+        &mut vec![],
     ).unwrap();
 }

@@ -70,7 +70,7 @@ impl KernelInterface {
                 "counters",
             ],
         );
-        self.run_command(
+        self.add_iptables_rule(
             "ip6tables",
             &[
                 "-w",
