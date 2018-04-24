@@ -29,6 +29,7 @@ mod exit_client_counter;
 mod exit_client_tunnel;
 mod exit_server_counter;
 mod exit_server_tunnel;
+mod stats;
 mod get_neighbors;
 mod get_wg_pubkey;
 mod interface_tools;

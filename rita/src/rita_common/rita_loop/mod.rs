@@ -11,10 +11,22 @@ use rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 
 use rita_common::payment_controller::{PaymentController, PaymentControllerUpdate};
 
+use rita_common::stat_collector::StatCollector;
+
 use failure::Error;
 use rita_common::tunnel_manager::OpenTunnel;
 
-pub struct RitaLoop;
+pub struct RitaLoop {
+    stat_collector: Addr<Syn, StatCollector>,
+}
+
+impl RitaLoop {
+    pub fn new() -> RitaLoop {
+        RitaLoop {
+            stat_collector: SyncArbiter::start(1, || StatCollector::new()),
+        }
+    }
+}
 
 impl Actor for RitaLoop {
     type Context = Context<Self>;
@@ -39,6 +51,8 @@ impl Handler<Tick> for RitaLoop {
         trace!("Common tick!");
 
         // let mut babel = Babel::new(&format!("[::1]:{}", SETTING.get_network().babel_port).parse().unwrap());
+
+        self.stat_collector.do_send(Tick {});
 
         let start = Instant::now();
         ctx.spawn(
