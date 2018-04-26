@@ -65,13 +65,11 @@ fn linux_generate_mesh_ip(config: &mut NetworkSettings) -> Result<(), Error> {
 }
 
 fn validate_wg_key(key: &str) -> bool {
-    key.len() == 44 && key.ends_with("=") 
-
+    key.len() == 44 && key.ends_with("=")
 }
 
 fn validate_mesh_ip(ip: &IpAddr) -> bool {
-    ip.is_ipv6() && !ip.is_unspecified() 
-
+    ip.is_ipv6() && !ip.is_unspecified()
 }
 
 fn linux_setup_exit_tunnel(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), Error> {
