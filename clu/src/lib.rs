@@ -34,7 +34,7 @@ pub enum CluError {
     RuntimeError(String),
 }
 
-fn linux_generate_wg_keys(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Result<(), Error> {
+fn generate_wg_keys_and_set_wg_keys(SETTINGS: Arc<RwLock<settings::RitaSettings>>, knd: bool) -> Result<(), Error> {
     let mut ki = KernelInterface {};
     let keys = ki.create_wg_keypair()?;
     let wg_public_key = &keys[0];
@@ -43,32 +43,32 @@ fn linux_generate_wg_keys(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Resu
     //Mutates settings, intentional side effect
     SETTINGS.write().unwrap().network.wg_private_key = wg_private_key.to_string();
     SETTINGS.write().unwrap().network.wg_public_key = wg_public_key.to_string();
+    
+    if knd {
+	    let ret = ki.set_uci_var("network.wgExit.private_key", &wg_private_key);
+	    ret.expect("Failed to set UCI var!");
+	    ki.uci_commit().expect("Failed to commit UCI changes!");
+    }
 
+    Ok(())
+}
+
+fn linux_generate_wg_keys(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Result<(), Error> {
+	
+    generate_wg_keys_and_set_wg_keys(SETTINGS.clone(), false)?;
     Ok(())
 }
 
 fn openwrt_generate_and_set_wg_keys(
     SETTINGS: Arc<RwLock<settings::RitaSettings>>,
 ) -> Result<(), Error> {
-    let mut ki = KernelInterface {};
-    let keys = ki.create_wg_keypair()?;
-    let wg_public_key = &keys[0];
-    let wg_private_key = &keys[1];
-
-    let ret = ki.set_uci_var("network.wgExit.private_key", &wg_private_key);
-    ret.expect("Failed to set UCI var! {:?}");
-    let ret = ki.uci_commit();
-    ret.expect("Failed to commit UCI changes!");
-
-    //Mutates settings, intentional side effect
-    SETTINGS.write().unwrap().network.wg_private_key = wg_private_key.to_string();
-    SETTINGS.write().unwrap().network.wg_public_key = wg_public_key.to_string();
+    
+    generate_wg_keys_and_set_wg_keys(SETTINGS.clone(), true)?;
 
     Ok(())
 }
 
 fn linux_generate_mesh_ip(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Result<(), Error> {
-    let ki = KernelInterface {};
     let seed: String = thread_rng().gen_ascii_chars().take(50).collect();
     let mesh_ip = ipgen::ip(&seed, "fd::/120").unwrap();
 
@@ -79,7 +79,7 @@ fn linux_generate_mesh_ip(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Resu
 
 fn openwrt_generate_mesh_ip(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Result<(), Error> {
     let ki = KernelInterface {};
-    let seed = rand::thread_rng().gen::<[u8; 10]>();
+    let seed = thread_rng().gen::<[u8; 10]>();
     let mesh_ip = ipgen::ip(std::str::from_utf8(&seed)?, "fd::/120").unwrap();
     let ifaces = SETTINGS.read().unwrap().network.babel_interfaces.clone();
     let ifaces = ifaces.split(" ");
@@ -98,15 +98,10 @@ fn openwrt_generate_mesh_ip(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Re
 
 fn validate_wg_key(key: &str) -> bool {
     key.len() == 44 && key.ends_with("=") 
-
 }
 
 fn validate_mesh_ip(ip: &IpAddr) -> bool {
-    if !ip.is_ipv6() || ip.is_unspecified() {
-        false
-    } else {
-        true
-    }
+    ip.is_ipv6() && !ip.is_unspecified() 
 }
 
 fn openwrt_validate_exit_setup() -> Result<(), Error> {
