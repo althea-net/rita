@@ -20,10 +20,10 @@ extern crate reqwest;
 
 extern crate althea_kernel_interface;
 use althea_kernel_interface::KernelInterface;
-use std::sync::{RwLock, Arc};
-use std::thread;
-use settings::ExitClientDetails;
 use althea_types::LocalIdentity;
+use settings::ExitClientDetails;
+use std::sync::{Arc, RwLock};
+use std::thread;
 use std::time::Duration;
 
 extern crate althea_types;
@@ -34,7 +34,10 @@ pub enum CluError {
     RuntimeError(String),
 }
 
-fn generate_wg_keys_and_set_wg_keys(SETTINGS: Arc<RwLock<settings::RitaSettings>>, knd: bool) -> Result<(), Error> {
+fn generate_wg_keys_and_set_wg_keys(
+    SETTINGS: Arc<RwLock<settings::RitaSettings>>,
+    knd: bool,
+) -> Result<(), Error> {
     let mut ki = KernelInterface {};
     let keys = ki.create_wg_keypair()?;
     let wg_public_key = &keys[0];
@@ -43,18 +46,17 @@ fn generate_wg_keys_and_set_wg_keys(SETTINGS: Arc<RwLock<settings::RitaSettings>
     //Mutates settings, intentional side effect
     SETTINGS.write().unwrap().network.wg_private_key = wg_private_key.to_string();
     SETTINGS.write().unwrap().network.wg_public_key = wg_public_key.to_string();
-    
+
     if knd {
-	    let ret = ki.set_uci_var("network.wgExit.private_key", &wg_private_key);
-	    ret.expect("Failed to set UCI var!");
-	    ki.uci_commit().expect("Failed to commit UCI changes!");
+        let ret = ki.set_uci_var("network.wgExit.private_key", &wg_private_key);
+        ret.expect("Failed to set UCI var!");
+        ki.uci_commit().expect("Failed to commit UCI changes!");
     }
 
     Ok(())
 }
 
 fn linux_generate_wg_keys(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Result<(), Error> {
-	
     generate_wg_keys_and_set_wg_keys(SETTINGS.clone(), false)?;
     Ok(())
 }
@@ -62,7 +64,6 @@ fn linux_generate_wg_keys(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Resu
 fn openwrt_generate_and_set_wg_keys(
     SETTINGS: Arc<RwLock<settings::RitaSettings>>,
 ) -> Result<(), Error> {
-    
     generate_wg_keys_and_set_wg_keys(SETTINGS.clone(), true)?;
 
     Ok(())
@@ -97,11 +98,11 @@ fn openwrt_generate_mesh_ip(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Re
 }
 
 fn validate_wg_key(key: &str) -> bool {
-    key.len() == 44 && key.ends_with("=") 
+    key.len() == 44 && key.ends_with("=")
 }
 
 fn validate_mesh_ip(ip: &IpAddr) -> bool {
-    ip.is_ipv6() && !ip.is_unspecified() 
+    ip.is_ipv6() && !ip.is_unspecified()
 }
 
 fn openwrt_validate_exit_setup() -> Result<(), Error> {
