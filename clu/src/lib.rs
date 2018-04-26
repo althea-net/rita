@@ -86,6 +86,11 @@ fn linux_setup_exit_tunnel(config: Arc<RwLock<settings::RitaSettingsStruct>>) ->
     )?;
     KI.set_route_to_tunnel(&details.server_internal_ip);
 
+    let lan_nics = &config.get_exit_tunnel_settings().lan_nics;
+    for nic in lan_nics {
+        KI.add_client_nat_rules(&nic);
+    }
+
     Ok(())
 }
 
