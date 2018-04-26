@@ -28,8 +28,7 @@ use settings::ExitClientDetails;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use std::sync::Arc;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 
@@ -66,19 +65,13 @@ fn linux_generate_mesh_ip(config: &mut NetworkSettings) -> Result<(), Error> {
 }
 
 fn validate_wg_key(key: &str) -> bool {
-    if key.len() != 44 || !key.ends_with("=") {
-        false
-    } else {
-        true
-    }
+    key.len() == 44 && key.ends_with("=") 
+
 }
 
 fn validate_mesh_ip(ip: &IpAddr) -> bool {
-    if !ip.is_ipv6() || ip.is_unspecified() {
-        false
-    } else {
-        true
-    }
+    ip.is_ipv6() && !ip.is_unspecified() 
+
 }
 
 fn linux_setup_exit_tunnel(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), Error> {
