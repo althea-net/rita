@@ -1,0 +1,17 @@
+[package]
+name = "stats_server"
+version = "0.1.0"
+authors = ["kingoflolz <wangben3@gmail.com>"]
+
+[dependencies]
+actix = {git="https://github.com/kingoflolz/actix", branch="mocking"}
+actix-web = {git="https://github.com/kingoflolz/actix-web", default-features = false}
+serde = "1.0.24"
+serde_derive = "1.0.24"
+serde_json = "1.0.8"
+failure = "0.1.1"
+log = "^0.4"
+env_logger = "^0.5.5"
+futures = "0.1"
+althea_types = { path = "../althea_types", features = ["actix"]}
+docopt = "0.8.3"

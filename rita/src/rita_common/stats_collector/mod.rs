@@ -1,33 +1,29 @@
 use actix::prelude::*;
 use rita_common::rita_loop::Tick;
 
-use rita_common::debt_keeper::Dump;
+use althea_types::interop::Stats;
 
 use failure::Error;
 
-use althea_kernel_interface::KernelInterface;
 use reqwest;
-use reqwest::StatusCode;
-
-use althea_types::Identity;
 
 use serde_json;
 
 use KI;
 
-use SETTING;
 use settings::RitaCommonSettings;
+use SETTING;
 
 use reqwest::Client;
 use std::time::Duration;
 
-pub struct StatCollector {
+pub struct StatsCollector {
     pub client: Client,
 }
 
-impl StatCollector {
-    pub fn new() -> StatCollector {
-        StatCollector {
+impl StatsCollector {
+    pub fn new() -> StatsCollector {
+        StatsCollector {
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(5))
                 .build()
@@ -36,29 +32,17 @@ impl StatCollector {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct Statistics {
-    proc_stat: String,
-    proc_load_avg: String,
-    devices: String,
-    netstat: String,
-    routes: String,
-    snmp: String,
-    wg: String,
-    from: Identity,
-}
-
-impl Actor for StatCollector {
+impl Actor for StatsCollector {
     type Context = SyncContext<Self>;
 }
 
-impl Handler<Tick> for StatCollector {
+impl Handler<Tick> for StatsCollector {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, ctx: &mut SyncContext<Self>) -> Self::Result {
-        if SETTING.stats_is_set() {
+        if SETTING.stats_server_settings_is_set() {
             trace!("preparing to send stats...");
 
-            let stats = Statistics {
+            let stats = Stats {
                 proc_stat: KI.get_proc_stat()?,
                 proc_load_avg: KI.get_proc_load_avg()?,
                 devices: KI.get_device_stats()?,
@@ -72,7 +56,8 @@ impl Handler<Tick> for StatCollector {
             info!("Sending stat server update: {:?}", stats);
             let stat_server_url = format!(
                 "http://{}:{}/stats/",
-                SETTING.get_stats().stat_address, SETTING.get_stats().stat_port,
+                SETTING.get_stats_server_settings().stats_address,
+                SETTING.get_stats_server_settings().stats_port,
             );
 
             trace!("stat server url: {}", stat_server_url);
@@ -82,8 +67,8 @@ impl Handler<Tick> for StatCollector {
             if r.status().is_success() {
                 trace!("Successfully in sending stats {:?}", r.text());
             } else {
-                trace!("Unsuccessfully in sending stats");
-                trace!(
+                error!("Unsuccessfully in sending stats");
+                info!(
                     "Received error from stats server: {:?}",
                     r.text().unwrap_or(String::from("No message received"))
                 );

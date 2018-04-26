@@ -1923,6 +1923,23 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
+name = "stats_server"
+version = "0.1.0"
+dependencies = [
+ "actix 0.5.5 (git+https://github.com/kingoflolz/actix?branch=mocking)",
+ "actix-web 0.5.1 (git+https://github.com/kingoflolz/actix-web)",
+ "althea_types 0.1.0",
+ "docopt 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "env_logger 0.5.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures 0.1.18 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.27 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_derive 1.0.27 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_json 1.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "string"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
