@@ -20,8 +20,7 @@ extern crate reqwest;
 
 extern crate althea_kernel_interface;
 use althea_kernel_interface::KernelInterface;
-use std::sync::Arc;
-use std::sync::RwLock;
+use std::sync::{RwLock, Arc};
 use std::thread;
 use settings::ExitClientDetails;
 use althea_types::LocalIdentity;
@@ -98,11 +97,8 @@ fn openwrt_generate_mesh_ip(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Re
 }
 
 fn validate_wg_key(key: &str) -> bool {
-    if key.len() != 44 || !key.ends_with("=") {
-        false
-    } else {
-        true
-    }
+    key.len() == 44 && key.ends_with("=") 
+
 }
 
 fn validate_mesh_ip(ip: &IpAddr) -> bool {
