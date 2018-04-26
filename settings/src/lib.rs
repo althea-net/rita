@@ -138,9 +138,9 @@ pub struct ExitClientDetails {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
-pub struct StatServerSettings {
-    pub stat_address: String,
-    pub stat_port: u16,
+pub struct StatsServerSettings {
+    pub stats_address: String,
+    pub stats_port: u16,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
@@ -156,7 +156,7 @@ pub struct RitaSettingsStruct {
     exit_client: Option<ExitClientSettings>,
     exit_tunnel_settings: ExitTunnelSettings,
     #[serde(skip_serializing_if = "Option::is_none")]
-    stat_server: Option<StatServerSettings>,
+    stats_server: Option<StatsServerSettings>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -189,7 +189,7 @@ pub struct RitaExitSettingsStruct {
     network: NetworkSettings,
     exit_network: ExitNetworkSettings,
     #[serde(skip_serializing_if = "Option::is_none")]
-    stat_server: Option<StatServerSettings>,
+    stats_server: Option<StatsServerSettings>,
 }
 
 pub trait RitaCommonSettings<T> {
@@ -199,14 +199,14 @@ pub trait RitaCommonSettings<T> {
     fn get_network<'ret, 'me: 'ret>(&'me self) -> RwLockReadGuardRef<'ret, T, NetworkSettings>;
     fn set_network<'ret, 'me: 'ret>(&'me self) -> RwLockWriteGuardRefMut<'ret, T, NetworkSettings>;
 
-    fn get_stats<'ret, 'me: 'ret>(
+    fn get_stats_server_settings<'ret, 'me: 'ret>(
         &'me self,
-    ) -> RwLockReadGuardRef<'ret, T, StatServerSettings>;
-    fn init_stats(&self, exit_client: StatServerSettings);
-    fn set_stats<'ret, 'me: 'ret>(
+    ) -> RwLockReadGuardRef<'ret, T, StatsServerSettings>;
+    fn init_stats_server_settings(&self, exit_client: StatsServerSettings);
+    fn set_stats_server_settings<'ret, 'me: 'ret>(
         &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, T, StatServerSettings>;
-    fn stats_is_set(&self) -> bool;
+    ) -> RwLockWriteGuardRefMut<'ret, T, StatsServerSettings>;
+    fn stats_server_settings_is_set(&self) -> bool;
 
     fn get_identity(&self) -> Identity;
 }
@@ -236,6 +236,32 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.network)
     }
 
+    fn get_stats_server_settings<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, StatsServerSettings> {
+        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| match g.stats_server {
+            Some(ref stat_server) => stat_server,
+            None => panic!("exit client not set but needed"),
+        })
+    }
+
+    fn init_stats_server_settings(&self, stat_server: StatsServerSettings) {
+        self.write().unwrap().stats_server = Some(stat_server)
+    }
+
+    fn set_stats_server_settings<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, StatsServerSettings> {
+        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| match g.stats_server {
+            Some(ref mut stat_server) => stat_server,
+            None => panic!("exit client not set but needed"),
+        })
+    }
+
+    fn stats_server_settings_is_set(&self) -> bool {
+        self.read().unwrap().stats_server.is_some()
+    }
+
     fn get_identity(&self) -> Identity {
         Identity::new(
             self.get_network().own_ip.clone(),
@@ -243,33 +269,6 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
             self.get_network().wg_public_key.clone(),
         )
     }
-
-    fn get_stats<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, StatServerSettings> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| match g.stat_server {
-            Some(ref stat_server) => stat_server,
-            None => panic!("exit client not set but needed"),
-        })
-    }
-
-    fn init_stats(&self, stat_server: StatServerSettings) {
-        self.write().unwrap().stat_server = Some(stat_server)
-    }
-
-    fn set_stats<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, StatServerSettings> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| match g.stat_server {
-            Some(ref mut stat_server) => stat_server,
-            None => panic!("exit client not set but needed"),
-        })
-    }
-
-    fn stats_is_set(&self) -> bool {
-        self.read().unwrap().stat_server.is_some()
-    }
-
 }
 
 impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsStruct>> {
@@ -297,38 +296,38 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.network)
     }
 
+    fn get_stats_server_settings<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, StatsServerSettings> {
+        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| match g.stats_server {
+            Some(ref stat_server) => stat_server,
+            None => panic!("exit client not set but needed"),
+        })
+    }
+
+    fn init_stats_server_settings(&self, stat_server: StatsServerSettings) {
+        self.write().unwrap().stats_server = Some(stat_server)
+    }
+
+    fn set_stats_server_settings<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, StatsServerSettings> {
+        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| match g.stats_server {
+            Some(ref mut stat_server) => stat_server,
+            None => panic!("exit client not set but needed"),
+        })
+    }
+
+    fn stats_server_settings_is_set(&self) -> bool {
+        self.read().unwrap().stats_server.is_some()
+    }
+
     fn get_identity(&self) -> Identity {
         Identity::new(
             self.get_network().own_ip.clone(),
             self.get_payment().eth_address.clone(),
             self.get_network().wg_public_key.clone(),
         )
-    }
-
-    fn get_stats<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, StatServerSettings> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| match g.stat_server {
-            Some(ref stat_server) => stat_server,
-            None => panic!("exit client not set but needed"),
-        })
-    }
-
-    fn init_stats(&self, stat_server: StatServerSettings) {
-        self.write().unwrap().stat_server = Some(stat_server)
-    }
-
-    fn set_stats<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, StatServerSettings> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| match g.stat_server {
-            Some(ref mut stat_server) => stat_server,
-            None => panic!("exit client not set but needed"),
-        })
-    }
-
-    fn stats_is_set(&self) -> bool {
-        self.read().unwrap().stat_server.is_some()
     }
 }
 

@@ -77,3 +77,16 @@ pub struct PaymentTx {
     pub from: Identity,
     pub amount: Uint256,
 }
+
+/// This contains all the info we need to send the the stats server
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Stats {
+    pub proc_stat: String,
+    pub proc_load_avg: String,
+    pub devices: String,
+    pub netstat: String,
+    pub routes: String,
+    pub snmp: String,
+    pub wg: String,
+    pub from: Identity,
+}

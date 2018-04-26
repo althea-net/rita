@@ -29,7 +29,6 @@ mod exit_client_counter;
 mod exit_client_tunnel;
 mod exit_server_counter;
 mod exit_server_tunnel;
-mod stats;
 mod get_neighbors;
 mod get_wg_pubkey;
 mod interface_tools;
@@ -40,6 +39,7 @@ mod manipulate_uci;
 mod open_tunnel;
 mod openwrt_ubus;
 mod setup_wg_if;
+mod stats;
 
 pub use counter::FilterTarget;
 pub use exit_server_counter::ExitFilterTarget;
