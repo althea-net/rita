@@ -89,4 +89,50 @@ impl KernelInterface {
 
         Ok(())
     }
+
+    pub fn add_client_nat_rules(&self, lan_nic: &str) -> Result<(), Error> {
+        self.add_iptables_rule(
+            "iptables",
+            &[
+                "-t",
+                "nat",
+                "-A",
+                "POSTROUTING",
+                "-o",
+                "wg_exit",
+                "-j",
+                "MASQUERADE",
+            ],
+        );
+        self.add_iptables_rule(
+            "iptables",
+            &[
+                "-A", "FORWARD", "-i", &lan_nic, "-o", "wg_exit", "-j", "ACCEPT",
+            ],
+        );
+        self.add_iptables_rule(
+            "iptables",
+            &[
+                "-A", "FORWARD", "-i", "wg_exit", "-o", &lan_nic, "-j", "ACCEPT",
+            ],
+        );
+        self.add_iptables_rule(
+            "iptables",
+            &[
+                "-A",
+                "FORWARD",
+                "-p",
+                "tcp",
+                "--tcp-flags",
+                "SYN,RST",
+                "SYN",
+                "-j",
+                "TCPMSS",
+                "--clamp-mss-to-pmtu", //should be the same as --set-mss 1300
+            ],
+        );
+        //TODO ipv6 support
+
+        Ok(())
+    }
 }
