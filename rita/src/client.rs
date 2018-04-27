@@ -44,6 +44,7 @@ use settings::{FileWrite, RitaCommonSettings, RitaSettingsStruct};
 use actix::registry::SystemService;
 use actix::*;
 use actix_web::*;
+use actix_web::http::Method;
 
 use std::sync::{Arc, Mutex, RwLock};
 
@@ -134,14 +135,10 @@ fn main() {
     // dashboard
     server::new(|| {
         App::new()
-            .resource("/wifisettings", |r| {
-                r.route().filter(pred::Get()).h(get_wifi_config)
-            })
-            .resource("/wifisettings", |r| {
-                r.route().filter(pred::Post()).h(set_wifi_config)
-            })
-            .resource("/neighbors", |r| r.h(get_node_info))
-            .resource("/exit_setup", |r| r.h(setup_exit))
+            .route("/wifisettings", Method::GET, get_wifi_config)
+            .route("/wifisettings", Method::POST, set_wifi_config)
+            .route("/neighbors", Method::GET, get_node_info)
+            .route("/exit_setup", Method::POST, setup_exit)
     }).threads(1)
         .bind(format!(
             "[::0]:{}",

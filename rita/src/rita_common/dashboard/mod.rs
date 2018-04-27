@@ -63,15 +63,15 @@ impl Handler<GetWifiConfig> for Dashboard {
                     let res = res.unwrap();
                     let mut interfaces = Vec::new();
 
-                    let config = KI.ubus_call("uci.get", "{ \"package\": \"wireless\"}")
+                    let config = KI.ubus_call("uci", "get", "{ \"config\": \"wireless\"}")
                         .unwrap();
 
                     let val: Value = serde_json::from_str(&config).unwrap();
 
-                    for (k, v) in val["package"].as_object().unwrap().iter() {
+                    for (k, v) in val["values"].as_object().unwrap().iter() {
                         if v[".type"] == "wifi-iface" {
                             let mut interface: WifiInterface =
-                                serde_json::from_value(v[".type"].clone()).unwrap();
+                                serde_json::from_value(v.clone()).unwrap();
                             interface.mesh = res.contains(&interface.device);
                             interface.section_name = k.clone();
                             interfaces.push(interface);
@@ -108,6 +108,7 @@ impl Handler<SetWifiConfig> for Dashboard {
                 &i.encryption,
             )?;
             KI.set_uci_var(&format!("wireless.{}.key", i.section_name), &i.key)?;
+            KI.uci_commit()?;
         }
 
         Ok(())
