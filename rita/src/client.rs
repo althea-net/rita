@@ -147,7 +147,7 @@ fn main() {
         .unwrap()
         .start();
 
-    let common = rita_common::rita_loop::RitaLoop {};
+    let common = rita_common::rita_loop::RitaLoop::new();
     let _: Addr<Unsync, _> = common.start();
 
     let client = rita_client::rita_loop::RitaLoop {};
