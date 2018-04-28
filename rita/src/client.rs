@@ -43,8 +43,8 @@ use settings::{FileWrite, RitaCommonSettings, RitaSettingsStruct};
 
 use actix::registry::SystemService;
 use actix::*;
-use actix_web::*;
 use actix_web::http::Method;
+use actix_web::*;
 
 use std::sync::{Arc, Mutex, RwLock};
 

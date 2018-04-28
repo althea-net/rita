@@ -39,6 +39,7 @@ mod manipulate_uci;
 mod open_tunnel;
 mod openwrt_ubus;
 mod setup_wg_if;
+mod wireless;
 mod stats;
 
 pub use counter::FilterTarget;

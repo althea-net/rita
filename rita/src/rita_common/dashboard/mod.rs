@@ -108,8 +108,10 @@ impl Handler<SetWifiConfig> for Dashboard {
                 &i.encryption,
             )?;
             KI.set_uci_var(&format!("wireless.{}.key", i.section_name), &i.key)?;
-            KI.uci_commit()?;
         }
+
+        KI.uci_commit()?;
+        KI.openwrt_reset_wireless()?;
 
         Ok(())
     }
