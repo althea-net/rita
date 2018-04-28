@@ -1,6 +1,5 @@
-use super::{KernelInterface, KernelInterfaceError};
+use super::KernelInterface;
 
-use std::net::IpAddr;
 
 use regex::Regex;
 

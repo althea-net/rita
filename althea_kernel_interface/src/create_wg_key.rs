@@ -1,9 +1,9 @@
-use super::{KernelInterface, KernelInterfaceError};
+use super::KernelInterface;
 
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+use std::io::Write;
 use std::path::Path;
-use std::process::{Command, Output, Stdio};
+use std::process::{Command, Stdio};
 
 use failure::Error;
 
@@ -21,13 +21,13 @@ impl KernelInterface {
     }
 
     pub fn create_wg_keypair(&self) -> Result<[String; 2], Error> {
-        let mut genkey = Command::new("wg")
+        let genkey = Command::new("wg")
             .args(&["genkey"])
             .stdout(Stdio::piped())
             .output()
             .unwrap();
 
-        let mut genstdout = genkey.stdout;
+        let genstdout = genkey.stdout;
         let mut pubkey = Command::new("wg")
             .args(&["pubkey"])
             .stdout(Stdio::piped())
@@ -35,7 +35,7 @@ impl KernelInterface {
             .spawn()
             .unwrap();
 
-        pubkey.stdin.as_mut().unwrap().write_all(&genstdout);
+        pubkey.stdin.as_mut().unwrap().write_all(&genstdout).expect("Failure generating wg keypair!");
         let output = pubkey.wait_with_output().unwrap();
 
         let mut privkey_str = String::from_utf8(genstdout)?;
@@ -47,4 +47,4 @@ impl KernelInterface {
     }
 }
 
-//TODO some tests
+//Tested in CLU

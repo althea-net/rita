@@ -28,7 +28,7 @@ impl KernelInterface {
 
     //Sets an arbitrary UCI list on OpenWRT
     pub fn set_uci_list(&self, key: &str, value: &[&str]) -> Result<bool, Error> {
-        self.del_uci_var(&key);
+        self.del_uci_var(&key)?;
         for v in value {
             self.run_uci("uci", &["add_list", &format!("{}={}", &key, &v)])?;
         }

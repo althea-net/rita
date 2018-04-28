@@ -1,9 +1,8 @@
-use super::{KernelInterface, KernelInterfaceError};
+use super::KernelInterface;
 
 use std::net::IpAddr;
 use std::str::FromStr;
 
-use eui48::MacAddress;
 use regex::Regex;
 
 use failure::Error;

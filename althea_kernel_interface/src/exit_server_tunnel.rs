@@ -2,9 +2,7 @@ use super::{KernelInterface, KernelInterfaceError};
 
 use failure::Error;
 
-use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr};
-use std::str::FromStr;
+use std::net::IpAddr;
 
 #[derive(Debug)]
 pub struct ExitClient {
@@ -48,7 +46,7 @@ impl KernelInterface {
 
         self.run_command(&command, &arg_str[..])?;
 
-        let output = self.run_command(
+        let _output = self.run_command(
             "ip",
             &[
                 "address",

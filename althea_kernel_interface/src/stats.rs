@@ -1,6 +1,4 @@
-use super::{KernelInterface, KernelInterfaceError};
-
-use std::collections::HashMap;
+use super::KernelInterface;
 
 use failure::Error;
 use std::fs::File;
