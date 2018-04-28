@@ -15,6 +15,10 @@ lto = true
 codegen-units = 1
 incremental = false
 
-[features]
-default = []
-system_alloc = []
+[profile.dev]
+opt-level = "z"
+lto = true
+debug = false
+codegen-units = 1
+incremental = false
+
