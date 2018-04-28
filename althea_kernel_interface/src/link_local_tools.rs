@@ -1,9 +1,6 @@
 use super::{KernelInterface, KernelInterfaceError};
 
-use std::fs::File;
-use std::io::{Read, Write};
 use std::net::IpAddr;
-use std::str::FromStr;
 
 use regex::Regex;
 

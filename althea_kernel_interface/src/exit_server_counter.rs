@@ -1,10 +1,9 @@
-use super::{KernelInterface, KernelInterfaceError};
+use super::KernelInterface;
 
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::str::FromStr;
 
-use eui48::MacAddress;
 use regex::Regex;
 
 use failure::Error;
@@ -71,7 +70,7 @@ impl KernelInterface {
                 "inet6",
                 "counters",
             ],
-        );
+        ).expect("ipset init failed");
         self.add_iptables_rule(
             "ip6tables",
             &[
@@ -90,7 +89,7 @@ impl KernelInterface {
                 target.set_name(),
                 target.direction(),
             ],
-        )?;
+        ).expect("ip6tables counter failed");
         Ok(())
     }
 
@@ -108,7 +107,7 @@ impl KernelInterface {
                 "inet6",
                 "counters",
             ],
-        );
+        ).expect("Failed to create new ipset to swap");
 
         self.run_command(
             "ipset",
@@ -117,7 +116,7 @@ impl KernelInterface {
                 &format!("tmp_{}", target.set_name()),
                 target.set_name(),
             ],
-        )?;
+        ).expect("failed to swap ipset rules");
 
         let output = self.run_command("ipset", &["save", &format!("tmp_{}", target.set_name())])?;
         let res = parse_exit_ipset(&String::from_utf8(output.stdout)?);

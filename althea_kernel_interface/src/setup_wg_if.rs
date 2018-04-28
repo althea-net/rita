@@ -1,7 +1,5 @@
 use super::{KernelInterface, KernelInterfaceError};
 
-use std::net::IpAddr;
-
 use failure::Error;
 
 impl KernelInterface {

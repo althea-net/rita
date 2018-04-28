@@ -1,12 +1,12 @@
 use super::{KernelInterface, KernelInterfaceError};
 
-use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::Path;
 
 use failure::Error;
 
 #[derive(Debug, Fail)]
-pub enum TunnelOpeningError {
+pub enum _TunnelOpeningError {
     #[fail(display = "Link local without interface")]
     InvalidSocket,
 }
@@ -109,7 +109,7 @@ impl KernelInterface {
                 String::from_utf8(output.stderr)?
             )).into());
         }
-        let output = self.run_command(
+        let _output = self.run_command(
             "ip",
             &["address", "add", &format!("{}", own_ip), "dev", &interface],
         )?;

@@ -9,18 +9,12 @@ extern crate eui48;
 extern crate itertools;
 extern crate regex;
 
-use std::borrow::BorrowMut;
-use std::cell::RefCell;
-use std::ffi::OsStr;
-use std::io::Write;
-use std::path::Path;
 use std::process::{Command, Output};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use std::str;
 
-use eui48::MacAddress;
 
 mod counter;
 mod create_wg_key;
@@ -30,7 +24,6 @@ mod exit_client_tunnel;
 mod exit_server_counter;
 mod exit_server_tunnel;
 mod get_neighbors;
-mod get_wg_pubkey;
 mod interface_tools;
 mod ip_route;
 mod iptables;
@@ -95,7 +88,7 @@ impl CommandRunner for LinuxCommandRunner {
         return Ok(output);
     }
 
-    fn set_mock(&self, mock: Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>) {
+    fn set_mock(&self, _mock: Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>) {
         unimplemented!()
     }
 }
