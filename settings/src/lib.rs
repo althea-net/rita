@@ -121,6 +121,7 @@ impl Default for ExitClientSettings {
             reg_details: ExitRegistrationDetails {
                 zip_code: Some("1234".into()),
                 email: Some("1234@gmail.com".into()),
+                country: Some("Althea".into()),
             },
         }
     }
@@ -207,6 +208,7 @@ pub trait RitaCommonSettings<T> {
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, T, StatsServerSettings>;
     fn stats_server_settings_is_set(&self) -> bool;
+    fn clear_stats_server_settings(&self);
 
     fn get_identity(&self) -> Identity;
 }
@@ -260,6 +262,9 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
 
     fn stats_server_settings_is_set(&self) -> bool {
         self.read().unwrap().stats_server.is_some()
+    }
+    fn clear_stats_server_settings(&self) {
+        self.write().unwrap().stats_server = None;
     }
 
     fn get_identity(&self) -> Identity {
@@ -328,6 +333,10 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
             self.get_payment().eth_address.clone(),
             self.get_network().wg_public_key.clone(),
         )
+    }
+
+    fn clear_stats_server_settings(&self) {
+        self.write().unwrap().stats_server = None;
     }
 }
 
