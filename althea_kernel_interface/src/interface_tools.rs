@@ -1,6 +1,5 @@
 use super::KernelInterface;
 
-
 use regex::Regex;
 
 use failure::Error;

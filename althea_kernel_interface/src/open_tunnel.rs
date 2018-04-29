@@ -1,6 +1,6 @@
 use super::{KernelInterface, KernelInterfaceError};
 
-use std::net::{IpAddr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::path::Path;
 
 use failure::Error;
