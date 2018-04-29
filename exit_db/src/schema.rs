@@ -7,5 +7,6 @@ table! {
         internal_ip -> Text,
         email -> Text,
         zip -> Text,
+        country -> Text,
     }
 }

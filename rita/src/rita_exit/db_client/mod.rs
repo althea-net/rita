@@ -94,6 +94,7 @@ impl Handler<SetupClient> for DbClient {
                     internal_ip: SETTING.get_exit_network().exit_start_ip.to_string(),
                     email: "".to_string(),
                     zip: "".to_string(),
+                    country: "".to_string(),
                 };
 
                 match diesel::insert_into(clients).values(&dummy).execute(&conn) {
@@ -163,8 +164,13 @@ impl Handler<SetupClient> for DbClient {
                         mesh_ip: client.global.mesh_ip.to_string(),
                         wg_pubkey: client.global.wg_public_key.clone(),
                         internal_ip: new_ip.to_string(),
-                        email: client.reg_details.email.clone().unwrap().to_string(),
-                        zip: client.reg_details.zip_code.clone().unwrap().to_string(),
+                        email: client.reg_details.email.clone().unwrap_or("".to_string()),
+                        zip: client
+                            .reg_details
+                            .zip_code
+                            .clone()
+                            .unwrap_or("".to_string()),
+                        country: client.reg_details.country.clone().unwrap_or("".to_string()),
                     };
 
                     diesel::insert_into(clients)

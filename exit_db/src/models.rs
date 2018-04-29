@@ -11,4 +11,5 @@ pub struct Client {
     pub internal_ip: String,
     pub email: String,
     pub zip: String,
+    pub country: String,
 }

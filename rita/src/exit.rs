@@ -46,6 +46,7 @@ use settings::{FileWrite, RitaCommonSettings, RitaExitSettings, RitaExitSettings
 
 use actix::registry::SystemService;
 use actix::*;
+use actix_web::http::Method;
 use actix_web::*;
 
 extern crate althea_kernel_interface;
@@ -58,7 +59,7 @@ mod rita_common;
 mod rita_exit;
 
 use clu::cleanup;
-use rita_common::dashboard::network_endpoints::get_node_info;
+use rita_common::dashboard::network_endpoints::*;
 use rita_common::network_endpoints::{hello_response, make_payments};
 use rita_exit::network_endpoints::{list_clients, setup_request};
 
@@ -155,7 +156,9 @@ fn main() {
             // assuming exit nodes dont need wifi
             //.resource("/wifisettings", |r| r.route().filter(pred::Get()).h(get_wifi_config))
             //.resource("/wifisettings", |r| r.route().filter(pred::Post()).h(set_wifi_config))
-            .resource("/neighbors", |r| r.route().filter(pred::Get()).h(get_node_info))
+            .route("/neighbors", Method::GET, get_node_info)
+            .route("/stats_server", Method::GET, get_stats_server_info)
+            .route("/stats_server", Method::POST, set_stats_server_info)
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_network().rita_dashboard_port

@@ -12,6 +12,10 @@ use rita_common::tunnel_manager::{GetListen, Listen, TunnelManager, UnListen};
 use futures;
 use futures::Future;
 
+use settings::{RitaCommonSettings, StatsServerSettings};
+
+use SETTING;
+
 pub mod network_endpoints;
 
 struct Dashboard;
@@ -156,5 +160,42 @@ impl Handler<GetNodeInfo> for Dashboard {
                 })
                 .from_err(),
         )
+    }
+}
+
+struct GetStatsServerInfo;
+
+impl Message for GetStatsServerInfo {
+    type Result = Result<Option<StatsServerSettings>, Error>;
+}
+
+impl Handler<GetStatsServerInfo> for Dashboard {
+    type Result = Result<Option<StatsServerSettings>, Error>;
+
+    fn handle(&mut self, _msg: GetStatsServerInfo, _ctx: &mut Self::Context) -> Self::Result {
+        if SETTING.stats_server_settings_is_set() {
+            Ok(Some(SETTING.get_stats_server_settings().clone()))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+struct SetStatsServerInfo(Option<StatsServerSettings>);
+
+impl Message for SetStatsServerInfo {
+    type Result = Result<(), Error>;
+}
+
+impl Handler<SetStatsServerInfo> for Dashboard {
+    type Result = Result<(), Error>;
+
+    fn handle(&mut self, msg: SetStatsServerInfo, _ctx: &mut Self::Context) -> Self::Result {
+        match msg.0 {
+            Some(setting) => *SETTING.set_stats_server_settings() = setting,
+            None => SETTING.clear_stats_server_settings(),
+        }
+
+        Ok(())
     }
 }
