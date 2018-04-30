@@ -70,7 +70,7 @@ impl KernelInterface {
                 "inet6",
                 "counters",
             ],
-        ).expect("ipset init failed");
+        )?;
         self.add_iptables_rule(
             "ip6tables",
             &[
@@ -89,7 +89,7 @@ impl KernelInterface {
                 target.set_name(),
                 target.direction(),
             ],
-        ).expect("ip6tables counter failed");
+        )?;
         Ok(())
     }
 
@@ -97,7 +97,7 @@ impl KernelInterface {
         &self,
         target: &ExitFilterTarget,
     ) -> Result<HashMap<IpAddr, u64>, Error> {
-        self.run_command(
+        let ipset_result = self.run_command(
             "ipset",
             &[
                 "create",
@@ -107,7 +107,11 @@ impl KernelInterface {
                 "inet6",
                 "counters",
             ],
-        ).expect("Failed to create new ipset to swap");
+        );
+        match ipset_result {
+            Err(e) => warn!("ipset tmp creation failed with {:?}", e),
+            _ => ()
+        };
 
         self.run_command(
             "ipset",
@@ -116,7 +120,7 @@ impl KernelInterface {
                 &format!("tmp_{}", target.set_name()),
                 target.set_name(),
             ],
-        ).expect("failed to swap ipset rules");
+        )?;
 
         let output = self.run_command("ipset", &["save", &format!("tmp_{}", target.set_name())])?;
         let res = parse_exit_ipset(&String::from_utf8(output.stdout)?);

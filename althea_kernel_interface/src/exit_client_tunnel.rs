@@ -65,7 +65,10 @@ impl KernelInterface {
     }
 
     pub fn set_route_to_tunnel(&self, gateway: &IpAddr) -> Result<(), Error> {
-        self.run_command("ip", &["route", "del", "default"]).expect("Failed to delete default route");
+        match self.run_command("ip", &["route", "del", "default"]) {
+            Err(e) => warn!("Failed to delete default route {:?}", e),
+            _ => ()
+        };
 
         let output = self.run_command(
             "ip",
@@ -102,19 +105,19 @@ impl KernelInterface {
                 "-j",
                 "MASQUERADE",
             ],
-        ).expect("Failure setting client tunnel MASQ");
+        )?;
         self.add_iptables_rule(
             "iptables",
             &[
                 "-A", "FORWARD", "-i", &lan_nic, "-o", "wg_exit", "-j", "ACCEPT",
             ],
-        ).expect("Failure adding lan to wg_exit forward");
+        )?;
         self.add_iptables_rule(
             "iptables",
             &[
                 "-A", "FORWARD", "-i", "wg_exit", "-o", &lan_nic, "-j", "ACCEPT",
             ],
-        ).expect("Failure adding wg_exit to lan forward");
+        )?;
         self.add_iptables_rule(
             "iptables",
             &[
@@ -129,7 +132,7 @@ impl KernelInterface {
                 "TCPMSS",
                 "--clamp-mss-to-pmtu", //should be the same as --set-mss 1300
             ],
-        ).expect("Failure to clamp mss");
+        )?;
         //TODO ipv6 support
 
         Ok(())

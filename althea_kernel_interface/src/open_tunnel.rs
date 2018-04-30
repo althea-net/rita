@@ -5,12 +5,6 @@ use std::path::Path;
 
 use failure::Error;
 
-#[derive(Debug, Fail)]
-pub enum _TunnelOpeningError {
-    #[fail(display = "Link local without interface")]
-    InvalidSocket,
-}
-
 fn to_wg_local(ip: &IpAddr) -> IpAddr {
     match ip {
         &IpAddr::V6(ip) => {
