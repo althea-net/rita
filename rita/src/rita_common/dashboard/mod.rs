@@ -1,16 +1,14 @@
 use actix::prelude::*;
-use KI;
 
 use failure::Error;
-
+use futures;
+use futures::Future;
 use serde_json;
 use serde_json::Value;
 
 use rita_common::debt_keeper::{DebtKeeper, Dump};
 use rita_common::tunnel_manager::{GetListen, Listen, TunnelManager, UnListen};
-
-use futures;
-use futures::Future;
+use KI;
 
 pub mod network_endpoints;
 
@@ -59,19 +57,36 @@ impl Handler<GetWifiConfig> for Dashboard {
         Box::new(
             TunnelManager::from_registry()
                 .send(GetListen {})
+                .from_err()
                 .and_then(|res| {
                     let res = res.unwrap();
                     let mut interfaces = Vec::new();
 
-                    let config = KI.ubus_call("uci", "get", "{ \"config\": \"wireless\"}")
-                        .unwrap();
+                    let config = match KI.ubus_call("uci", "get", "{ \"config\": \"wireless\"}") {
+                        Ok(cfg) => cfg,
+                        Err(e) => return futures::future::err(e),
+                    };
 
-                    let val: Value = serde_json::from_str(&config).unwrap();
+                    let val: Value = match serde_json::from_str(&config) {
+                        Ok(v) => v,
+                        Err(e) => return futures::future::err(e.into()),
+                    };
 
-                    for (k, v) in val["values"].as_object().unwrap().iter() {
+                    let items = match val["values"].as_object() {
+                        Some(i) => i,
+                        None => {
+                            error!("No \"values\" key in parsed wifi config!");
+                            return Err(format_err!("No \"values\" key parsed wifi config")).into();
+                        }
+                    };
+
+                    for (k, v) in items {
                         if v[".type"] == "wifi-iface" {
                             let mut interface: WifiInterface =
-                                serde_json::from_value(v.clone()).unwrap();
+                                match serde_json::from_value(v.clone()) {
+                                    Ok(i) => i,
+                                    Err(e) => return futures::future::err(e.into()),
+                                };
                             interface.mesh = res.contains(&interface.device);
                             interface.section_name = k.clone();
                             interfaces.push(interface);
@@ -79,8 +94,7 @@ impl Handler<GetWifiConfig> for Dashboard {
                     }
 
                     futures::future::ok(interfaces)
-                })
-                .from_err(),
+                }),
         )
     }
 }
