@@ -24,6 +24,7 @@ CONVERGENCE_DELAY = float(os.getenv('CONVERGENCE_DELAY', 50))
 INITIAL_POLL_INTERVAL = float(os.getenv('INITIAL_POLL_INTERVAL', 1))
 VERBOSE = os.getenv('VERBOSE', None)
 BACKOFF_FACTOR = float(os.getenv('BACKOFF_FACTOR', 1))
+DEBUG = os.getenv('DEBUG') is not None
 
 tests_passes = True
 
@@ -623,6 +624,13 @@ if __name__ == "__main__":
         ", quitting...") % CONVERGENCE_DELAY)
         sys.exit(1)
 
+    if DEBUG:
+        print("Debug mode active, examine the mesh and press y to continue " +
+              "with the tests anything else to exit")
+        choice = input()
+        if choice != 'y':
+            sys.exit(0)
+
     world.test_traffic(c3, f6, {
         1: 0,
         2: 0,
@@ -722,10 +730,12 @@ if __name__ == "__main__":
     assert_test(not check_log_contains("rita-n6.log", "debt is below close threshold"), "Suspension of 6 (F)")
     assert_test(not check_log_contains("rita-n7.log", "debt is below close threshold"), "Suspension of 7 (G)")
 
-    if len(sys.argv) > 1 and sys.argv[1] == "leave-running":
-        pass
-    else:
-        teardown()
+    if DEBUG:
+        print("Debug mode active, examine the mesh after tests and press " +
+              "Enter to exit")
+        input()
+
+    teardown()
 
     print("done... exiting")
 
