@@ -130,10 +130,10 @@ fn main() {
     server::new(|| {
         App::new()
             // Client stuff
-            .resource("/make_payment", |r| r.h(make_payments))
-            .resource("/hello", |r| r.h(hello_response))
+            .resource("/make_payment", |r| r.method(Method::POST).with2(make_payments))
+            .resource("/hello", |r| r.method(Method::POST).with2(hello_response))
             // Exit stuff
-            .resource("/setup", |r| r.h(setup_request))
+            .resource("/setup", |r| r.method(Method::POST).with(setup_request))
     }).bind(format!("[::0]:{}", SETTING.get_network().rita_hello_port))
         .unwrap()
         .start();
@@ -141,8 +141,8 @@ fn main() {
     // Exit stuff
     server::new(|| {
         App::new()
-            .resource("/setup", |r| r.h(setup_request))
-            .resource("/list", |r| r.h(list_clients))
+            .resource("/setup", |r| r.method(Method::POST).with(setup_request))
+            .resource("/list", |r| r.method(Method::POST).with(list_clients))
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_exit_network().exit_hello_port

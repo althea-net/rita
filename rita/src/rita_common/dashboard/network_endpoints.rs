@@ -18,63 +18,47 @@ use settings::StatsServerSettings;
 pub fn get_wifi_config(
     req: HttpRequest,
 ) -> Box<Future<Item = Json<Vec<WifiInterface>>, Error = Error>> {
-    req.body()
+    Dashboard::from_registry()
+        .send(GetWifiConfig {})
         .from_err()
-        .and_then(move |_: Bytes| {
-            Dashboard::from_registry()
-                .send(GetWifiConfig {})
-                .then(move |reply| Ok(Json(reply.unwrap().unwrap())))
-        })
+        .and_then(move |reply| Ok(Json(reply?)))
         .responder()
 }
 
-pub fn set_wifi_config(req: HttpRequest) -> Box<Future<Item = Json<()>, Error = Error>> {
-    req.body()
+pub fn set_wifi_config(
+    new_settings: Json<Vec<WifiInterface>>,
+) -> Box<Future<Item = Json<()>, Error = Error>> {
+    Dashboard::from_registry()
+        .send(SetWifiConfig(new_settings.into_inner()))
         .from_err()
-        .and_then(move |bytes: Bytes| {
-            let new_settings: Vec<WifiInterface> = serde_json::from_slice(&bytes[..]).unwrap();
-
-            Dashboard::from_registry()
-                .send(SetWifiConfig(new_settings))
-                .then(move |reply| Ok(Json(reply.unwrap().unwrap())))
-        })
+        .and_then(move |reply| Ok(Json(reply?)))
         .responder()
 }
 
 pub fn get_node_info(req: HttpRequest) -> Box<Future<Item = Json<Vec<NodeInfo>>, Error = Error>> {
-    req.body()
+    Dashboard::from_registry()
+        .send(GetNodeInfo {})
         .from_err()
-        .and_then(move |_: Bytes| {
-            Dashboard::from_registry()
-                .send(GetNodeInfo {})
-                .then(move |reply| Ok(Json(reply.unwrap().unwrap())))
-        })
+        .and_then(move |reply| Ok(Json(reply?)))
         .responder()
 }
 
 pub fn get_stats_server_info(
     req: HttpRequest,
 ) -> Box<Future<Item = Json<Option<StatsServerSettings>>, Error = Error>> {
-    req.body()
+    Dashboard::from_registry()
+        .send(GetStatsServerInfo {})
         .from_err()
-        .and_then(move |_: Bytes| {
-            Dashboard::from_registry()
-                .send(GetStatsServerInfo {})
-                .then(move |reply| Ok(Json(reply.unwrap().unwrap())))
-        })
+        .and_then(move |reply| Ok(Json(reply?)))
         .responder()
 }
 
-pub fn set_stats_server_info(req: HttpRequest) -> Box<Future<Item = Json<()>, Error = Error>> {
-    req.body()
+pub fn set_stats_server_info(
+    new_settings: Json<Option<StatsServerSettings>>,
+) -> Box<Future<Item = Json<()>, Error = Error>> {
+    Dashboard::from_registry()
+        .send(SetStatsServerInfo(new_settings.into_inner()))
         .from_err()
-        .and_then(move |bytes: Bytes| {
-            let new_settings: Option<StatsServerSettings> =
-                serde_json::from_slice(&bytes[..]).unwrap();
-
-            Dashboard::from_registry()
-                .send(SetStatsServerInfo(new_settings))
-                .then(move |reply| Ok(Json(reply.unwrap().unwrap())))
-        })
+        .and_then(move |reply| Ok(Json(reply?)))
         .responder()
 }

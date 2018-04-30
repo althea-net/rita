@@ -18,24 +18,25 @@ use serde_json;
 
 use bytes::Bytes;
 
-pub fn make_payments(req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Error>> {
+pub fn make_payments(
+    pmt: Json<PaymentTx>,
+    req: HttpRequest,
+) -> Box<Future<Item = HttpResponse, Error = Error>> {
     info!("Got Payment from {:?}", req.connection_info().remote());
-
-    req.body()
+    trace!("Received payment: {:?}", pmt,);
+    PaymentController::from_registry()
+        .send(rita_common::payment_controller::PaymentReceived(
+            pmt.into_inner(),
+        ))
         .from_err()
-        .and_then(move |bytes: Bytes| {
-            info!("Payment body: {:?}", bytes);
-            let pmt: PaymentTx = serde_json::from_slice(&bytes[..]).unwrap();
-
-            trace!("Received payment: {:?}", pmt,);
-            PaymentController::from_registry()
-                .do_send(rita_common::payment_controller::PaymentReceived(pmt));
-            Ok(httpcodes::HttpOk.into())
-        })
+        .and_then(|_| Ok(httpcodes::HttpOk.into()))
         .responder()
 }
 
-pub fn hello_response(req: HttpRequest) -> Box<Future<Item = Json<LocalIdentity>, Error = Error>> {
+pub fn hello_response(
+    their_id: Json<LocalIdentity>,
+    req: HttpRequest,
+) -> Box<Future<Item = Json<LocalIdentity>, Error = Error>> {
     info!("Got Hello from {:?}", req.connection_info().remote());
 
     let remote_ip = req.connection_info()
@@ -45,21 +46,15 @@ pub fn hello_response(req: HttpRequest) -> Box<Future<Item = Json<LocalIdentity>
         .unwrap()
         .ip();
 
-    req.body()
+    trace!("Received neighbour identity: {:?}", their_id);
+
+    TunnelManager::from_registry()
+        .send(GetLocalIdentity { from: remote_ip })
         .from_err()
-        .and_then(move |bytes: Bytes| {
-            info!("Hello body: {:?}", bytes,);
-            let their_id: LocalIdentity = serde_json::from_slice(&bytes[..]).unwrap();
-
-            trace!("Received neighbour identity: {:?}", their_id);
-
-            TunnelManager::from_registry()
-                .send(GetLocalIdentity { from: remote_ip })
-                .then(move |reply| {
-                    info!("opening tunnel in hello_response for {:?}", their_id);
-                    TunnelManager::from_registry().do_send(OpenTunnel(their_id, remote_ip));
-                    Ok(Json(reply.unwrap()))
-                })
+        .and_then(move |reply| {
+            info!("opening tunnel in hello_response for {:?}", their_id);
+            TunnelManager::from_registry().do_send(OpenTunnel(their_id.into_inner(), remote_ip));
+            Ok(Json(reply))
         })
         .responder()
 }

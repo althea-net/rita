@@ -125,8 +125,10 @@ fn main() {
     // rita
     server::new(|| {
         App::new()
-            .resource("/make_payment", |r| r.h(make_payments))
-            .resource("/hello", |r| r.h(hello_response))
+            .resource("/make_payment", |r| {
+                r.method(Method::POST).with2(make_payments)
+            })
+            .resource("/hello", |r| r.method(Method::POST).with2(hello_response))
     }).threads(1)
         .bind(format!("[::0]:{}", SETTING.get_network().rita_hello_port))
         .unwrap()
