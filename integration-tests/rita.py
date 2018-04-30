@@ -228,7 +228,7 @@ def start_rita(node):
                                                                               pwd=dname)
         )
     time.sleep(0.2)
-    os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/exit_setup -H 'Accept: application/json' -i -d '{data}'".format(id=id, data=json.dumps(exit_settings)))
+    os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/exit_setup -H 'Content-Type: application/json' -i -d '{data}'".format(id=id, data=json.dumps(exit_settings)))
 
 
 def start_rita_exit(node):

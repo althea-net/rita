@@ -15,16 +15,8 @@ use SETTING;
 
 use failure::Error;
 
-pub fn setup_exit(req: HttpRequest) -> Box<Future<Item = String, Error = Error>> {
-    req.body()
-        .from_err()
-        .and_then(move |bytes: Bytes| {
-            trace!("setup exit body: {:?}", bytes);
-            let setting: ExitClientSettings = serde_json::from_slice(&bytes[..]).unwrap();
+pub fn setup_exit(setting: Json<ExitClientSettings>) -> Result<String, Error> {
+    SETTING.init_exit_client(setting.into_inner());
 
-            SETTING.init_exit_client(setting);
-
-            Ok("Setup Ok\n".to_string())
-        })
-        .responder()
+    Ok("Setup Ok\n".to_string())
 }

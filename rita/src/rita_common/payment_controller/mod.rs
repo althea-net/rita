@@ -230,10 +230,7 @@ impl PaymentController {
 
         trace!("current balance: {:?}", self.balance);
 
-        let mut r = self.client
-            .post(&neighbor_url)
-            .body(serde_json::to_string(&pmt)?)
-            .send()?;
+        let mut r = self.client.post(&neighbor_url).json(&pmt).send()?;
 
         if r.status() == StatusCode::Ok {
             self.balance = self.balance.clone() - Int256::from(pmt.amount.clone());
