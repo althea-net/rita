@@ -157,8 +157,9 @@ fn main() {
             //.resource("/wifisettings", |r| r.route().filter(pred::Get()).h(get_wifi_config))
             //.resource("/wifisettings", |r| r.route().filter(pred::Post()).h(set_wifi_config))
             .route("/neighbors", Method::GET, get_node_info)
-            .route("/stats_server", Method::GET, get_stats_server_info)
-            .route("/stats_server", Method::POST, set_stats_server_info)
+            .route("/info", Method::GET, get_own_info)
+            .route("/settings", Method::GET, get_settings)
+            .route("/settings", Method::POST, set_settings)
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_network().rita_dashboard_port

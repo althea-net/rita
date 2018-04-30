@@ -12,6 +12,8 @@ use SETTING;
 use rita_common::payment_controller;
 use rita_common::payment_controller::PaymentController;
 
+use failure::Error;
+
 #[derive(Clone, Debug)]
 pub struct NodeDebtData {
     pub total_payment_recieved: Uint256,
@@ -60,11 +62,11 @@ impl SystemService for DebtKeeper {
 pub struct Dump;
 
 impl Message for Dump {
-    type Result = Result<HashMap<Identity, NodeDebtData>, ()>;
+    type Result = Result<HashMap<Identity, NodeDebtData>, Error>;
 }
 
 impl Handler<Dump> for DebtKeeper {
-    type Result = Result<HashMap<Identity, NodeDebtData>, ()>;
+    type Result = Result<HashMap<Identity, NodeDebtData>, Error>;
     fn handle(&mut self, msg: Dump, _: &mut Context<Self>) -> Self::Result {
         Ok(self.debt_data.clone())
     }
