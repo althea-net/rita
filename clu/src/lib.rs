@@ -82,11 +82,11 @@ fn linux_setup_exit_tunnel(config: Arc<RwLock<settings::RitaSettingsStruct>>) ->
         details.own_internal_ip,
         details.netmask,
     )?;
-    KI.set_route_to_tunnel(&details.server_internal_ip).expect("Failed to set default route");
+    KI.set_route_to_tunnel(&details.server_internal_ip)?;
 
     let lan_nics = &config.get_exit_tunnel_settings().lan_nics;
     for nic in lan_nics {
-        KI.add_client_nat_rules(&nic).expect("Failed to add LAN NAT");
+        KI.add_client_nat_rules(&nic)?;
     }
 
     Ok(())
@@ -135,11 +135,18 @@ pub fn cleanup() -> Result<(), Error> {
 
     for i in interfaces {
         if re.is_match(&i) {
-            KI.del_interface(&i).expect("failed to delete a w# interface");
+            match KI.del_interface(&i) {
+                Err(e) => trace!("Failed to delete wg# {:?}", e),
+                _ => ()
+    };
         }
     }
 
-    KI.del_interface("wg_exit").expect("failed to delete wg_exit");
+    match KI.del_interface("wg_exit") {
+        Err(e) => trace!("Failed to delete wg_exit {:?}", e),
+        _ => ()
+    };
+
     Ok(())
 }
 
@@ -201,10 +208,10 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
     let mesh_ip = config.get_network().own_ip.clone();
 
     if !validate_wg_key(&privkey) || !validate_wg_key(&pubkey) {
-        linux_generate_wg_keys(&mut config.set_network()).expect("failed to generate wg keys");
+        linux_generate_wg_keys(&mut config.set_network())?;
     }
     if !validate_mesh_ip(&mesh_ip) {
-        linux_generate_mesh_ip(&mut config.set_network()).expect("failed to generate ip");
+        linux_generate_mesh_ip(&mut config.set_network())?;
     }
 
     //Creates file on disk containing key
