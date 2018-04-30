@@ -87,6 +87,19 @@ impl Handler<PaymentControllerUpdate> for PaymentController {
     }
 }
 
+pub struct GetOwnBalance;
+
+impl Message for GetOwnBalance {
+    type Result = Result<i64, Error>;
+}
+
+impl Handler<GetOwnBalance> for PaymentController {
+    type Result = Result<i64, Error>;
+    fn handle(&mut self, msg: GetOwnBalance, _: &mut Context<Self>) -> Self::Result {
+        Ok(self.balance.clone().into())
+    }
+}
+
 /// This updates a "bounty hunter" with the current balance and the last `PaymentTx`.
 /// Bounty hunters are servers which store and possibly enforce the current state of
 /// a channel. Currently they are actually just showing a completely insecure

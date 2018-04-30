@@ -7,6 +7,7 @@ use serde_json;
 use serde_json::Value;
 
 use rita_common::debt_keeper::{DebtKeeper, Dump};
+use rita_common::payment_controller::{GetOwnBalance, PaymentController};
 use rita_common::tunnel_manager::{GetListen, Listen, TunnelManager, UnListen};
 
 use futures;
@@ -163,39 +164,26 @@ impl Handler<GetNodeInfo> for Dashboard {
     }
 }
 
-struct GetStatsServerInfo;
-
-impl Message for GetStatsServerInfo {
-    type Result = Result<Option<StatsServerSettings>, Error>;
+#[derive(Serialize)]
+pub struct OwnInfo {
+    pub balance: i64,
 }
 
-impl Handler<GetStatsServerInfo> for Dashboard {
-    type Result = Result<Option<StatsServerSettings>, Error>;
+struct GetOwnInfo;
 
-    fn handle(&mut self, _msg: GetStatsServerInfo, _ctx: &mut Self::Context) -> Self::Result {
-        if SETTING.stats_server_settings_is_set() {
-            Ok(Some(SETTING.get_stats_server_settings().clone()))
-        } else {
-            Ok(None)
-        }
-    }
+impl Message for GetOwnInfo {
+    type Result = Result<OwnInfo, Error>;
 }
 
-struct SetStatsServerInfo(Option<StatsServerSettings>);
+impl Handler<GetOwnInfo> for Dashboard {
+    type Result = ResponseFuture<OwnInfo, Error>;
 
-impl Message for SetStatsServerInfo {
-    type Result = Result<(), Error>;
-}
-
-impl Handler<SetStatsServerInfo> for Dashboard {
-    type Result = Result<(), Error>;
-
-    fn handle(&mut self, msg: SetStatsServerInfo, _ctx: &mut Self::Context) -> Self::Result {
-        match msg.0 {
-            Some(setting) => *SETTING.set_stats_server_settings() = setting,
-            None => SETTING.clear_stats_server_settings(),
-        }
-
-        Ok(())
+    fn handle(&mut self, _msg: GetOwnInfo, _ctx: &mut Self::Context) -> Self::Result {
+        Box::new(
+            PaymentController::from_registry()
+                .send(GetOwnBalance {})
+                .from_err()
+                .and_then(|res| Ok(OwnInfo { balance: res? })),
+        )
     }
 }
