@@ -5,12 +5,6 @@ use std::path::Path;
 
 use failure::Error;
 
-#[derive(Debug, Fail)]
-pub enum TunnelOpeningError {
-    #[fail(display = "Link local without interface")]
-    InvalidSocket,
-}
-
 fn to_wg_local(ip: &IpAddr) -> IpAddr {
     match ip {
         &IpAddr::V6(ip) => {
@@ -109,7 +103,7 @@ impl KernelInterface {
                 String::from_utf8(output.stderr)?
             )).into());
         }
-        let output = self.run_command(
+        let _output = self.run_command(
             "ip",
             &["address", "add", &format!("{}", own_ip), "dev", &interface],
         )?;

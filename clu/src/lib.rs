@@ -25,8 +25,6 @@ extern crate althea_kernel_interface;
 use althea_types::interop::ExitServerIdentity;
 use regex::Regex;
 use settings::ExitClientDetails;
-use std::fs::File;
-use std::io::Write;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -65,7 +63,7 @@ fn linux_generate_mesh_ip(config: &mut NetworkSettings) -> Result<(), Error> {
 }
 
 fn validate_wg_key(key: &str) -> bool {
-    key.len() == 44 && key.ends_with("=")
+    key.len() == 44 && key.ends_with("=") && !key.contains(" ")
 }
 
 fn validate_mesh_ip(ip: &IpAddr) -> bool {
@@ -84,11 +82,11 @@ fn linux_setup_exit_tunnel(config: Arc<RwLock<settings::RitaSettingsStruct>>) ->
         details.own_internal_ip,
         details.netmask,
     )?;
-    KI.set_route_to_tunnel(&details.server_internal_ip);
+    KI.set_route_to_tunnel(&details.server_internal_ip)?;
 
     let lan_nics = &config.get_exit_tunnel_settings().lan_nics;
     for nic in lan_nics {
-        KI.add_client_nat_rules(&nic);
+        KI.add_client_nat_rules(&nic)?;
     }
 
     Ok(())
@@ -137,17 +135,24 @@ pub fn cleanup() -> Result<(), Error> {
 
     for i in interfaces {
         if re.is_match(&i) {
-            KI.del_interface(&i)?;
+            match KI.del_interface(&i) {
+                Err(e) => trace!("Failed to delete wg# {:?}", e),
+                _ => ()
+    };
         }
     }
 
-    KI.del_interface("wg_exit");
+    match KI.del_interface("wg_exit") {
+        Err(e) => trace!("Failed to delete wg_exit {:?}", e),
+        _ => ()
+    };
+
     Ok(())
 }
 
 fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), Error> {
     cleanup()?;
-    KI.restore_default_route(&mut config.set_network().default_route);
+    KI.restore_default_route(&mut config.set_network().default_route)?;
 
     let privkey = config.get_network().wg_private_key.clone();
     let pubkey = config.get_network().wg_public_key.clone();
@@ -170,7 +175,7 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
         if config.exit_client_is_set() {
             let our_exit_ip = config.get_exit_client().exit_ip.clone();
 
-            assert!(!our_exit_ip.is_ipv4());
+            assert!(our_exit_ip.is_ipv6());
             assert!(!our_exit_ip.is_unspecified());
 
             let details = request_own_exit_ip(config.clone());
@@ -203,10 +208,10 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
     let mesh_ip = config.get_network().own_ip.clone();
 
     if !validate_wg_key(&privkey) || !validate_wg_key(&pubkey) {
-        linux_generate_wg_keys(&mut config.set_network()).expect("failed to generate wg keys");
+        linux_generate_wg_keys(&mut config.set_network())?;
     }
     if !validate_mesh_ip(&mesh_ip) {
-        linux_generate_mesh_ip(&mut config.set_network()).expect("failed to generate ip");
+        linux_generate_mesh_ip(&mut config.set_network())?;
     }
 
     //Creates file on disk containing key
@@ -241,9 +246,13 @@ mod tests {
         let good_key = "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk=";
         let bad_key1 = "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpXk=";
         let bad_key2 = "look at me, I'm the same length as a key but";
+        let bad_key3 = "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpXkk";
+        let bad_key4 = "8BeCExnthLe5ou0EYe 5jNqJ/PduZ1x2o7lpXJOpXkk";
         assert_eq!(validate_wg_key(&good_key), true);
         assert_eq!(validate_wg_key(&bad_key1), false);
         assert_eq!(validate_wg_key(&bad_key2), false);
+        assert_eq!(validate_wg_key(&bad_key3), false);
+        assert_eq!(validate_wg_key(&bad_key4), false);
     }
 
     #[test]

@@ -1,10 +1,9 @@
-use super::{KernelInterface, KernelInterfaceError};
+use super::KernelInterface;
 
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::str::FromStr;
 
-use eui48::MacAddress;
 use regex::Regex;
 
 use failure::Error;
@@ -71,7 +70,7 @@ impl KernelInterface {
                 "inet6",
                 "counters",
             ],
-        );
+        )?;
         self.add_iptables_rule(
             "ip6tables",
             &[
@@ -98,7 +97,7 @@ impl KernelInterface {
         &self,
         target: &ExitFilterTarget,
     ) -> Result<HashMap<IpAddr, u64>, Error> {
-        self.run_command(
+        let ipset_result = self.run_command(
             "ipset",
             &[
                 "create",
@@ -109,6 +108,10 @@ impl KernelInterface {
                 "counters",
             ],
         );
+        match ipset_result {
+            Err(e) => warn!("ipset tmp creation failed with {:?}", e),
+            _ => ()
+        };
 
         self.run_command(
             "ipset",

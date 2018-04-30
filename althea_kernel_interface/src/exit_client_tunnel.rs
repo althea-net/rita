@@ -3,7 +3,6 @@ use super::{KernelInterface, KernelInterfaceError};
 use failure::Error;
 
 use std::net::{IpAddr, SocketAddr};
-use std::str::FromStr;
 
 impl KernelInterface {
     pub fn set_client_exit_tunnel_config(
@@ -35,7 +34,7 @@ impl KernelInterface {
             ],
         )?;
 
-        let output = self.run_command(
+        let _output = self.run_command(
             "ip",
             &[
                 "address",
@@ -66,7 +65,10 @@ impl KernelInterface {
     }
 
     pub fn set_route_to_tunnel(&self, gateway: &IpAddr) -> Result<(), Error> {
-        self.run_command("ip", &["route", "del", "default"]);
+        match self.run_command("ip", &["route", "del", "default"]) {
+            Err(e) => warn!("Failed to delete default route {:?}", e),
+            _ => ()
+        };
 
         let output = self.run_command(
             "ip",
@@ -103,19 +105,19 @@ impl KernelInterface {
                 "-j",
                 "MASQUERADE",
             ],
-        );
+        )?;
         self.add_iptables_rule(
             "iptables",
             &[
                 "-A", "FORWARD", "-i", &lan_nic, "-o", "wg_exit", "-j", "ACCEPT",
             ],
-        );
+        )?;
         self.add_iptables_rule(
             "iptables",
             &[
                 "-A", "FORWARD", "-i", "wg_exit", "-o", &lan_nic, "-j", "ACCEPT",
             ],
-        );
+        )?;
         self.add_iptables_rule(
             "iptables",
             &[
@@ -130,7 +132,7 @@ impl KernelInterface {
                 "TCPMSS",
                 "--clamp-mss-to-pmtu", //should be the same as --set-mss 1300
             ],
-        );
+        )?;
         //TODO ipv6 support
 
         Ok(())

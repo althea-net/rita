@@ -11,6 +11,10 @@ path = "src/exit.rs"
 name = "rita"
 path = "src/client.rs"
 
+[features]
+default = []
+system_alloc = []
+
 [dependencies]
 clippy = { version = "*", optional = true }
 babel_monitor = { path = "../babel_monitor" }

@@ -14,7 +14,3 @@ opt-level = "z"
 lto = true
 codegen-units = 1
 incremental = false
-
-[features]
-default = []
-system_alloc = []

@@ -1,10 +1,9 @@
-use super::{KernelInterface, KernelInterfaceError};
+use super::KernelInterface;
 
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::str::FromStr;
 
-use eui48::MacAddress;
 use regex::Regex;
 
 use failure::Error;
@@ -69,7 +68,7 @@ impl KernelInterface {
                 "inet6",
                 "counters",
             ],
-        );
+        )?;
         self.add_iptables_rule(
             "ip6tables",
             &[
@@ -106,7 +105,7 @@ impl KernelInterface {
                 "inet6",
                 "counters",
             ],
-        );
+        )?;
 
         self.run_command(
             "ipset",
