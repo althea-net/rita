@@ -85,7 +85,7 @@ impl Handler<Hello> for HTTPSyncExecutor {
         let request = format!(
             "POST /hello HTTP/1.0\r\n\
 Host: {}\r\n\
-Content-Type:application/json\r\n\
+Content-Type: application/json\r\n\
 Content-Length: {}\r\n\r\n
 {}\r\n",
             msg.to,

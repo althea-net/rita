@@ -7,8 +7,13 @@ use serde_json;
 use serde_json::Value;
 
 use rita_common::debt_keeper::{DebtKeeper, Dump};
+use rita_common::payment_controller::{GetOwnBalance, PaymentController};
 use rita_common::tunnel_manager::{GetListen, Listen, TunnelManager, UnListen};
 use KI;
+
+use settings::{RitaCommonSettings, StatsServerSettings};
+
+use SETTING;
 
 pub mod network_endpoints;
 
@@ -169,6 +174,30 @@ impl Handler<GetNodeInfo> for Dashboard {
                     futures::future::ok(output)
                 })
                 .from_err(),
+        )
+    }
+}
+
+#[derive(Serialize)]
+pub struct OwnInfo {
+    pub balance: i64,
+}
+
+struct GetOwnInfo;
+
+impl Message for GetOwnInfo {
+    type Result = Result<OwnInfo, Error>;
+}
+
+impl Handler<GetOwnInfo> for Dashboard {
+    type Result = ResponseFuture<OwnInfo, Error>;
+
+    fn handle(&mut self, _msg: GetOwnInfo, _ctx: &mut Self::Context) -> Self::Result {
+        Box::new(
+            PaymentController::from_registry()
+                .send(GetOwnBalance {})
+                .from_err()
+                .and_then(|res| Ok(OwnInfo { balance: res? })),
         )
     }
 }

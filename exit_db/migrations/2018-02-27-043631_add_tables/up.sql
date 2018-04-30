@@ -6,5 +6,6 @@ CREATE TABLE clients (
   luci_pass VARCHAR NOT NULL,
   internal_ip VARCHAR NOT NULL,
   email VARCHAR NOT NULL,
-  zip VARCHAR NOT NULL
+  zip VARCHAR NOT NULL,
+  country VARCHAR NOT NULL
 )

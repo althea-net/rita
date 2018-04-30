@@ -5,6 +5,7 @@ extern crate num256;
 extern crate owning_ref;
 extern crate toml;
 
+#[macro_use]
 extern crate failure;
 
 #[macro_use]
@@ -37,6 +38,9 @@ use althea_types::{EthAddress, ExitRegistrationDetails, Identity};
 use num256::Int256;
 
 use althea_kernel_interface::{KernelInterface, KI};
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use failure::Error;
 
@@ -121,6 +125,7 @@ impl Default for ExitClientSettings {
             reg_details: ExitRegistrationDetails {
                 zip_code: Some("1234".into()),
                 email: Some("1234@gmail.com".into()),
+                country: Some("Althea".into()),
             },
         }
     }
@@ -192,7 +197,7 @@ pub struct RitaExitSettingsStruct {
     stats_server: Option<StatsServerSettings>,
 }
 
-pub trait RitaCommonSettings<T> {
+pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
     fn get_payment<'ret, 'me: 'ret>(&'me self) -> RwLockReadGuardRef<'ret, T, PaymentSettings>;
     fn set_payment<'ret, 'me: 'ret>(&'me self) -> RwLockWriteGuardRefMut<'ret, T, PaymentSettings>;
 
@@ -207,8 +212,25 @@ pub trait RitaCommonSettings<T> {
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, T, StatsServerSettings>;
     fn stats_server_settings_is_set(&self) -> bool;
+    fn clear_stats_server_settings(&self);
+
+    fn merge(&self, changed_settings: Value) -> Result<(), Error>;
+    fn get_all(&self) -> Result<serde_json::Value, Error>;
 
     fn get_identity(&self) -> Identity;
+}
+
+fn json_merge(a: &mut Value, b: &Value) {
+    match (a, b) {
+        (&mut Value::Object(ref mut a), &Value::Object(ref b)) => {
+            for (k, v) in b {
+                json_merge(a.entry(k.clone()).or_insert(Value::Null), v);
+            }
+        }
+        (a, b) => {
+            *a = b.clone();
+        }
+    }
 }
 
 impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> {
@@ -260,6 +282,27 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
 
     fn stats_server_settings_is_set(&self) -> bool {
         self.read().unwrap().stats_server.is_some()
+    }
+    fn clear_stats_server_settings(&self) {
+        self.write().unwrap().stats_server = None;
+    }
+
+    fn merge(&self, changed_settings: serde_json::Value) -> Result<(), Error> {
+        let mut settings_value = serde_json::to_value(self.read().unwrap().clone())?;
+
+        json_merge(&mut settings_value, &changed_settings);
+
+        match serde_json::from_value(settings_value) {
+            Ok(new_settings) => {
+                *self.write().unwrap() = new_settings;
+                Ok(())
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    fn get_all(&self) -> Result<serde_json::Value, Error> {
+        Ok(serde_json::to_value(self.read().unwrap().clone())?)
     }
 
     fn get_identity(&self) -> Identity {
@@ -328,6 +371,28 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
             self.get_payment().eth_address.clone(),
             self.get_network().wg_public_key.clone(),
         )
+    }
+
+    fn merge(&self, changed_settings: serde_json::Value) -> Result<(), Error> {
+        let mut settings_value = serde_json::to_value(self.read().unwrap().clone())?;
+
+        json_merge(&mut settings_value, &changed_settings);
+
+        match serde_json::from_value(settings_value) {
+            Ok(new_settings) => {
+                *self.write().unwrap() = new_settings;
+                Ok(())
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    fn get_all(&self) -> Result<serde_json::Value, Error> {
+        Ok(serde_json::to_value(self.read().unwrap().clone())?)
+    }
+
+    fn clear_stats_server_settings(&self) {
+        self.write().unwrap().stats_server = None;
     }
 }
 

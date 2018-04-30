@@ -46,6 +46,7 @@ use settings::{FileWrite, RitaCommonSettings, RitaExitSettings, RitaExitSettings
 
 use actix::registry::SystemService;
 use actix::*;
+use actix_web::http::Method;
 use actix_web::*;
 
 extern crate althea_kernel_interface;
@@ -58,7 +59,7 @@ mod rita_common;
 mod rita_exit;
 
 use clu::cleanup;
-use rita_common::dashboard::network_endpoints::get_node_info;
+use rita_common::dashboard::network_endpoints::*;
 use rita_common::network_endpoints::{hello_response, make_payments};
 use rita_exit::network_endpoints::{list_clients, setup_request};
 
@@ -129,10 +130,10 @@ fn main() {
     server::new(|| {
         App::new()
             // Client stuff
-            .resource("/make_payment", |r| r.h(make_payments))
-            .resource("/hello", |r| r.h(hello_response))
+            .resource("/make_payment", |r| r.method(Method::POST).with2(make_payments))
+            .resource("/hello", |r| r.method(Method::POST).with2(hello_response))
             // Exit stuff
-            .resource("/setup", |r| r.h(setup_request))
+            .resource("/setup", |r| r.method(Method::POST).with(setup_request))
     }).bind(format!("[::0]:{}", SETTING.get_network().rita_hello_port))
         .unwrap()
         .start();
@@ -140,8 +141,8 @@ fn main() {
     // Exit stuff
     server::new(|| {
         App::new()
-            .resource("/setup", |r| r.h(setup_request))
-            .resource("/list", |r| r.h(list_clients))
+            .resource("/setup", |r| r.method(Method::POST).with(setup_request))
+            .resource("/list", |r| r.method(Method::POST).with(list_clients))
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_exit_network().exit_hello_port
@@ -155,7 +156,10 @@ fn main() {
             // assuming exit nodes dont need wifi
             //.resource("/wifisettings", |r| r.route().filter(pred::Get()).h(get_wifi_config))
             //.resource("/wifisettings", |r| r.route().filter(pred::Post()).h(set_wifi_config))
-            .resource("/neighbors", |r| r.route().filter(pred::Get()).h(get_node_info))
+            .route("/neighbors", Method::GET, get_node_info)
+            .route("/info", Method::GET, get_own_info)
+            .route("/settings", Method::GET, get_settings)
+            .route("/settings", Method::POST, set_settings)
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_network().rita_dashboard_port

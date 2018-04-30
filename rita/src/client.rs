@@ -56,8 +56,7 @@ extern crate num256;
 mod rita_client;
 mod rita_common;
 
-use rita_client::network_endpoints::setup_exit;
-use rita_common::dashboard::network_endpoints::{get_node_info, get_wifi_config, set_wifi_config};
+use rita_common::dashboard::network_endpoints::*;
 use rita_common::network_endpoints::{hello_response, make_payments};
 
 const USAGE: &str = "
@@ -125,8 +124,10 @@ fn main() {
     // rita
     server::new(|| {
         App::new()
-            .resource("/make_payment", |r| r.h(make_payments))
-            .resource("/hello", |r| r.h(hello_response))
+            .resource("/make_payment", |r| {
+                r.method(Method::POST).with2(make_payments)
+            })
+            .resource("/hello", |r| r.method(Method::POST).with2(hello_response))
     }).threads(1)
         .bind(format!("[::0]:{}", SETTING.get_network().rita_hello_port))
         .unwrap()
@@ -135,10 +136,12 @@ fn main() {
     // dashboard
     server::new(|| {
         App::new()
-            .route("/wifisettings", Method::GET, get_wifi_config)
-            .route("/wifisettings", Method::POST, set_wifi_config)
+            .route("/wifi_settings", Method::GET, get_wifi_config)
+            .route("/wifi_settings", Method::POST, set_wifi_config)
+            .route("/settings", Method::GET, get_settings)
+            .route("/settings", Method::POST, set_settings)
             .route("/neighbors", Method::GET, get_node_info)
-            .route("/exit_setup", Method::POST, setup_exit)
+            .route("/info", Method::GET, get_own_info)
     }).threads(1)
         .bind(format!(
             "[::0]:{}",
