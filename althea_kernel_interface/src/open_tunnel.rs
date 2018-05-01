@@ -1,6 +1,6 @@
 use super::{KernelInterface, KernelInterfaceError};
 
-use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::Path;
 
 use failure::Error;
@@ -138,10 +138,10 @@ impl KernelInterface {
 fn test_open_tunnel_linux() {
     use KI;
 
-    use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
     use std::process::Output;
+    use std::net::SocketAddrV6;
 
     let interface = String::from("wg1");
     let endpoint_link_local_ip = Ipv6Addr::new(0xfe80, 0, 0, 0x12, 0x34, 0x56, 0x78, 0x90);

@@ -4,8 +4,6 @@ extern crate eui48;
 extern crate num256;
 extern crate owning_ref;
 extern crate toml;
-
-#[macro_use]
 extern crate failure;
 
 #[macro_use]
@@ -21,13 +19,11 @@ extern crate althea_kernel_interface;
 
 use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
 
-use std::clone;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::Write;
 use std::net::IpAddr;
-use std::path::Path;
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 
@@ -36,8 +32,6 @@ use config::Config;
 use althea_types::{EthAddress, ExitRegistrationDetails, Identity};
 
 use num256::Int256;
-
-use althea_kernel_interface::{KernelInterface, KI};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -521,7 +515,6 @@ pub trait FileWrite {
 
 fn spawn_watch_thread<'de, T: 'static>(
     settings: Arc<RwLock<T>>,
-    mut config: Config,
     file_path: &str,
 ) -> Result<(), Error>
 where
@@ -539,7 +532,10 @@ where
 
             if old_settings != new_settings {
                 info!("writing updated config: {:?}", new_settings);
-                settings.read().unwrap().write(&file_path);
+                match settings.read().unwrap().write(&file_path){
+                    Err(e) => warn!("writing updated config failed {:?}", e),
+                    _ => (),
+                }
             }
         }
     });
@@ -563,7 +559,7 @@ impl RitaSettingsStruct {
 
         let settings = Arc::new(RwLock::new(settings));
 
-        spawn_watch_thread(settings.clone(), s, file_name).unwrap();
+        spawn_watch_thread(settings.clone(), file_name).unwrap();
 
         Ok(settings)
     }
@@ -604,7 +600,7 @@ impl RitaExitSettingsStruct {
 
         let settings = Arc::new(RwLock::new(settings));
 
-        spawn_watch_thread(settings.clone(), s, file_name).unwrap();
+        spawn_watch_thread(settings.clone(), file_name).unwrap();
 
         Ok(settings)
     }

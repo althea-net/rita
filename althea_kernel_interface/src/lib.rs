@@ -49,7 +49,7 @@ pub enum KernelInterfaceError {
 #[cfg(test)]
 lazy_static! {
     pub static ref KI: Box<KernelInterface> = Box::new(TestCommandRunner {
-        run_command: Arc::new(Mutex::new(Box::new(|program, args| {
+        run_command: Arc::new(Mutex::new(Box::new(|_program, _args| {
             panic!("kernel interface used before initialized");
         })))
     });

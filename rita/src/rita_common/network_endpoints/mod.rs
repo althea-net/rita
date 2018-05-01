@@ -12,11 +12,8 @@ use rita_common::payment_controller::PaymentController;
 use rita_common::tunnel_manager::{GetLocalIdentity, OpenTunnel, TunnelManager};
 
 use std::boxed::Box;
+
 use std::net::SocketAddr;
-
-use serde_json;
-
-use bytes::Bytes;
 
 pub fn make_payments(
     pmt: Json<PaymentTx>,
@@ -29,7 +26,7 @@ pub fn make_payments(
             pmt.into_inner(),
         ))
         .from_err()
-        .and_then(|_| Ok(httpcodes::HttpOk.into()))
+        .and_then(|_| Ok(HttpResponse::Ok().into()))
         .responder()
 }
 

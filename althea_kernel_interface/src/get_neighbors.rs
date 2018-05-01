@@ -37,7 +37,6 @@ impl KernelInterface {
 fn test_get_neighbors_linux() {
     use KI;
 
-    use std::cell::RefCell;
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
     use std::process::Output;

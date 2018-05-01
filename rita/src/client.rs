@@ -38,15 +38,22 @@ extern crate serde_json;
 extern crate settings;
 extern crate tokio;
 
+#[cfg(not(test))]
 use docopt::Docopt;
-use settings::{FileWrite, RitaCommonSettings, RitaSettingsStruct};
+#[cfg(not(test))]
+use settings::FileWrite;
+
+use settings::{RitaCommonSettings, RitaSettingsStruct};
 
 use actix::registry::SystemService;
 use actix::*;
 use actix_web::http::Method;
 use actix_web::*;
 
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
+
+#[cfg(test)]
+use std::sync::Mutex;
 
 extern crate althea_kernel_interface;
 extern crate althea_types;
@@ -59,6 +66,7 @@ mod rita_common;
 use rita_common::dashboard::network_endpoints::*;
 use rita_common::network_endpoints::{hello_response, make_payments};
 
+#[cfg(not(test))]
 const USAGE: &str = "
 Usage: rita --config <settings> --platform <platform>
 Options:
@@ -66,12 +74,17 @@ Options:
     --platform   Platform (linux or openwrt)
 ";
 
-use althea_kernel_interface::{KernelInterface, LinuxCommandRunner, TestCommandRunner};
+use althea_kernel_interface::KernelInterface;
+
+#[cfg(not(test))]
+use althea_kernel_interface::LinuxCommandRunner;
+#[cfg(test)]
+use althea_kernel_interface::TestCommandRunner;
 
 #[cfg(test)]
 lazy_static! {
     pub static ref KI: Box<KernelInterface> = Box::new(TestCommandRunner {
-        run_command: Arc::new(Mutex::new(Box::new(|program, args| {
+        run_command: Arc::new(Mutex::new(Box::new(|_program, _args| {
             panic!("kernel interface used before initialized");
         })))
     });
