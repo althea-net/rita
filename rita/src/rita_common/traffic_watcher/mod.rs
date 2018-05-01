@@ -13,7 +13,7 @@ use rita_common::debt_keeper::DebtKeeper;
 use num256::Int256;
 
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr, TcpStream};
 
 use ip_network::IpNetwork;
 
@@ -27,7 +27,9 @@ pub struct TrafficWatcher;
 impl Actor for TrafficWatcher {
     type Context = Context<Self>;
 }
+
 impl Supervised for TrafficWatcher {}
+
 impl SystemService for TrafficWatcher {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         KI.init_counter(&FilterTarget::Input).unwrap();
@@ -38,20 +40,29 @@ impl SystemService for TrafficWatcher {
         info!("Traffic Watcher started");
     }
 }
+
 impl Default for TrafficWatcher {
     fn default() -> TrafficWatcher {
         TrafficWatcher {}
     }
 }
 
-#[derive(Message)]
 pub struct Watch(pub Vec<(LocalIdentity, String)>);
 
+impl Message for Watch {
+    type Result = Result<(), Error>;
+}
+
 impl Handler<Watch> for TrafficWatcher {
-    type Result = ();
+    type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        watch(&msg.0).unwrap();
+        let babel = TcpStream::connect::<SocketAddr>(format!(
+            "[::1]:{}",
+            SETTING.get_network().babel_port
+        ).parse()?)?;
+
+        watch(Box::new(babel), &msg.0)
     }
 }
 
@@ -62,10 +73,8 @@ impl Handler<Watch> for TrafficWatcher {
 ///
 /// This first time this is run, it will create the rules and then immediately read and zero them.
 /// (should return 0)
-pub fn watch(neighbors: &[(LocalIdentity, String)]) -> Result<(), Error> {
-    let mut babel = Babel::new(&format!("[::1]:{}", SETTING.get_network().babel_port)
-        .parse()
-        .unwrap());
+pub fn watch(mut babel: Box<Babel>, neighbors: &[(LocalIdentity, String)]) -> Result<(), Error> {
+    babel.start_connection()?;
 
     trace!("Getting routes");
     let routes = babel.parse_routes()?;

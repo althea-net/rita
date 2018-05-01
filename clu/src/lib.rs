@@ -137,14 +137,14 @@ pub fn cleanup() -> Result<(), Error> {
         if re.is_match(&i) {
             match KI.del_interface(&i) {
                 Err(e) => trace!("Failed to delete wg# {:?}", e),
-                _ => ()
-    };
+                _ => (),
+            };
         }
     }
 
     match KI.del_interface("wg_exit") {
         Err(e) => trace!("Failed to delete wg_exit {:?}", e),
-        _ => ()
+        _ => (),
     };
 
     Ok(())

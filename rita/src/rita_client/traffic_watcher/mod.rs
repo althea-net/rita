@@ -12,7 +12,7 @@ use rita_common::debt_keeper::DebtKeeper;
 use num256::Int256;
 
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr, TcpStream};
 
 use ip_network::IpNetwork;
 
@@ -40,23 +40,29 @@ impl Default for TrafficWatcher {
     }
 }
 
-#[derive(Message)]
 pub struct Watch(pub Identity, pub u64);
 
+impl Message for Watch {
+    type Result = Result<(), Error>;
+}
+
 impl Handler<Watch> for TrafficWatcher {
-    type Result = ();
+    type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        watch(msg.0, msg.1).unwrap();
+        let babel = TcpStream::connect::<SocketAddr>(format!(
+            "[::1]:{}",
+            SETTING.get_network().babel_port
+        ).parse()?)?;
+
+        watch(Box::new(babel), msg.0, msg.1)
     }
 }
 
 /// This traffic watcher watches how much traffic we send to the exit, and how much the exit sends
 /// back to us.
-pub fn watch(exit: Identity, exit_price: u64) -> Result<(), Error> {
-    let mut babel = Babel::new(&format!("[::1]:{}", SETTING.get_network().babel_port)
-        .parse()
-        .unwrap());
+pub fn watch(mut babel: Box<Babel>, exit: Identity, exit_price: u64) -> Result<(), Error> {
+    babel.start_connection()?;
 
     trace!("Getting routes");
     let routes = babel.parse_routes()?;

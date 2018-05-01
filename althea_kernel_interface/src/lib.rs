@@ -15,7 +15,6 @@ use std::time::Instant;
 
 use std::str;
 
-
 mod counter;
 mod create_wg_key;
 mod delete_tunnel;
