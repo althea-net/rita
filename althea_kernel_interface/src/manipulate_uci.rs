@@ -29,8 +29,8 @@ impl KernelInterface {
     //Sets an arbitrary UCI list on OpenWRT
     pub fn set_uci_list(&self, key: &str, value: &[&str]) -> Result<bool, Error> {
         match self.del_uci_var(&key) {
-            Err(e) => trace!("Delete uci var failed! {:?}",e),
-            _ => ()
+            Err(e) => trace!("Delete uci var failed! {:?}", e),
+            _ => (),
         };
 
         for v in value {

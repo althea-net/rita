@@ -82,8 +82,6 @@ impl Babel for TcpStream {}
 impl Babel for SharedMockStream {}
 
 pub trait Babel: Read + Write {
-    /// Apart from just retrieving latest babeld output, this method also checks that the output
-    /// was one connected to a successful operation.
     fn read_babel(&mut self) -> Result<String, Error> {
         let mut reader = BufReader::new(self);
         let mut ret = String::new();

@@ -34,7 +34,12 @@ impl KernelInterface {
             .spawn()
             .unwrap();
 
-        pubkey.stdin.as_mut().unwrap().write_all(&genkey.stdout).expect("Failure generating wg keypair!");
+        pubkey
+            .stdin
+            .as_mut()
+            .unwrap()
+            .write_all(&genkey.stdout)
+            .expect("Failure generating wg keypair!");
         let output = pubkey.wait_with_output().unwrap();
 
         let mut privkey_str = String::from_utf8(genkey.stdout)?;

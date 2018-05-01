@@ -110,7 +110,7 @@ impl KernelInterface {
         );
         match ipset_result {
             Err(e) => warn!("ipset tmp creation failed with {:?}", e),
-            _ => ()
+            _ => (),
         };
 
         self.run_command(
