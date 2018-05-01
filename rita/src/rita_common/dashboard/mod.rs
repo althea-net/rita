@@ -11,10 +11,6 @@ use rita_common::payment_controller::{GetOwnBalance, PaymentController};
 use rita_common::tunnel_manager::{GetListen, Listen, TunnelManager, UnListen};
 use KI;
 
-use settings::{RitaCommonSettings, StatsServerSettings};
-
-use SETTING;
-
 pub mod network_endpoints;
 
 struct Dashboard;

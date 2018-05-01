@@ -15,7 +15,7 @@ impl KernelInterface {
         } else {
             trace!("File does not exist, creating");
             let mut priv_key_file = File::create(path)?;
-            write!(priv_key_file, "{}", private_key);
+            write!(priv_key_file, "{}", private_key)?;
             Ok(())
         }
     }

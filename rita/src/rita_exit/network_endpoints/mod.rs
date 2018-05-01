@@ -9,10 +9,6 @@ use rita_exit::db_client::{DbClient, SetupClient};
 
 use std::boxed::Box;
 
-use serde_json;
-
-use bytes::Bytes;
-
 use settings::{RitaCommonSettings, RitaExitSettings};
 use SETTING;
 
@@ -41,7 +37,7 @@ pub fn setup_request(
         .responder()
 }
 
-pub fn list_clients(req: HttpRequest) -> Box<Future<Item = Json<Vec<Client>>, Error = Error>> {
+pub fn list_clients(_req: HttpRequest) -> Box<Future<Item = Json<Vec<Client>>, Error = Error>> {
     DbClient::from_registry()
         .send(ListClients {})
         .from_err()

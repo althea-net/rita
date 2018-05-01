@@ -1,5 +1,4 @@
 use schema::clients;
-use std::net::IpAddr;
 
 #[derive(Queryable, Serialize, Deserialize, Debug, Insertable, Clone, AsChangeset)]
 #[table_name = "clients"]

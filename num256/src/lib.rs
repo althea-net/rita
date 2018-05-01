@@ -2,12 +2,6 @@ extern crate num;
 extern crate serde;
 extern crate serde_json;
 
-#[macro_use]
-extern crate serde_derive;
-
-#[macro_use]
-extern crate lazy_static;
-
 use num::bigint::{BigInt, BigUint, ToBigInt};
 use num::traits::ops::checked::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
 use num::traits::Signed;
@@ -17,6 +11,15 @@ use serde::{Deserialize, Deserializer, Serializer};
 use std::fmt;
 use std::ops::{Add, AddAssign, Deref, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use std::str::FromStr;
+
+
+#[cfg(test)]
+#[macro_use]
+extern crate serde_derive;
+
+#[cfg(test)]
+#[macro_use]
+extern crate lazy_static;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Uint256(BigUint);
@@ -664,12 +667,12 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_uint_add_panic() {
-        BIGGEST_UINT.clone() + Uint256::from(1 as u32);
+        let _val = BIGGEST_UINT.clone() + Uint256::from(1 as u32);
     }
 
     #[test]
     fn test_uint_add_no_panic() {
-        BIGGEST_UINT.clone() + Uint256::from(0 as u32);
+        let _val = BIGGEST_UINT.clone() + Uint256::from(0 as u32);
     }
 
     #[test]
@@ -688,12 +691,12 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_uint_from_add_panic() {
-        BIGGEST_UINT.clone() + 1;
+        let _val = BIGGEST_UINT.clone() + 1;
     }
 
     #[test]
     fn test_uint_from_add_no_panic() {
-        BIGGEST_UINT.clone() + 0;
+        let _val = BIGGEST_UINT.clone() + 0;
     }
 
     #[test]
@@ -712,7 +715,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_uint_sub_panic() {
-        Uint256::from(1 as u32) - Uint256::from(2 as u32);
+        let _val = Uint256::from(1 as u32) - Uint256::from(2 as u32);
     }
 
     #[test]
@@ -754,7 +757,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_uint_from_sub_panic() {
-        Uint256::from(1 as u32) - 2;
+        let _val = Uint256::from(1 as u32) - 2;
     }
 
     #[test]
@@ -765,7 +768,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_uint_mul_panic() {
-        BIGGEST_UINT.clone() * Int256::from(2);
+        let _val = BIGGEST_UINT.clone() * Int256::from(2);
     }
 
     #[test]
@@ -790,7 +793,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_uint_from_mul_panic() {
-        BIGGEST_UINT.clone() * 2;
+        let _val = BIGGEST_UINT.clone() * 2;
     }
 
     #[test]
@@ -815,7 +818,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_uint_div_panic() {
-        BIGGEST_UINT.clone() / Uint256::from(0);
+        let _val = BIGGEST_UINT.clone() / Uint256::from(0);
     }
 
     #[test]
@@ -838,7 +841,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_uint_from_div_panic() {
-        BIGGEST_UINT.clone() / 0;
+        let _val = BIGGEST_UINT.clone() / 0;
     }
 
     #[test]
@@ -899,18 +902,18 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_int_add_panic() {
-        BIGGEST_INT.clone() + Int256::from(1);
+        let _val = BIGGEST_INT.clone() + Int256::from(1);
     }
 
     #[test]
     fn test_int_add_no_panic() {
-        BIGGEST_INT.clone() + Int256::from(0);
+        let _val = BIGGEST_INT.clone() + Int256::from(0);
     }
 
     #[test]
     #[should_panic]
     fn test_int_sub_panic() {
-        SMALLEST_INT.clone() - Int256::from(1);
+        let _val = SMALLEST_INT.clone() - Int256::from(1);
     }
 
     #[test]
@@ -921,7 +924,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_int_mul_panic() {
-        SMALLEST_INT.clone() * Int256::from(2);
+        let _val = SMALLEST_INT.clone() * Int256::from(2);
     }
 
     #[test]
@@ -932,7 +935,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_int_div_panic() {
-        SMALLEST_INT.clone() / Int256::from(0);
+        let _val = SMALLEST_INT.clone() / Int256::from(0);
     }
 
     #[test]
@@ -943,18 +946,18 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_int_from_add_panic() {
-        BIGGEST_INT.clone() + 1;
+        let _val = BIGGEST_INT.clone() + 1;
     }
 
     #[test]
     fn test_int_from_add_no_panic() {
-        BIGGEST_INT.clone() + 0;
+        let _val = BIGGEST_INT.clone() + 0;
     }
 
     #[test]
     #[should_panic]
     fn test_int_from_sub_panic() {
-        SMALLEST_INT.clone() - 1;
+        let _val = SMALLEST_INT.clone() - 1;
     }
 
     #[test]
@@ -965,7 +968,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_int_from_mul_panic() {
-        SMALLEST_INT.clone() * 2;
+        let _val = SMALLEST_INT.clone() * 2;
     }
 
     #[test]
@@ -976,7 +979,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_int_from_div_panic() {
-        SMALLEST_INT.clone() / 0;
+        let _val = SMALLEST_INT.clone() / 0;
     }
 
     #[test]

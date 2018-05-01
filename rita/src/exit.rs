@@ -12,7 +12,6 @@ use alloc_system::System;
 #[global_allocator]
 static A: System = System;
 
-#[macro_use]
 extern crate diesel;
 #[macro_use]
 extern crate failure;
@@ -27,8 +26,8 @@ extern crate actix;
 extern crate actix_web;
 extern crate bytes;
 extern crate clu;
-extern crate docopt;
 extern crate dotenv;
+extern crate docopt;
 extern crate env_logger;
 extern crate eui48;
 extern crate futures;
@@ -41,8 +40,13 @@ extern crate serde_json;
 extern crate settings;
 extern crate tokio;
 
+use settings::{RitaCommonSettings, RitaExitSettings, RitaExitSettingsStruct};
+
+
+#[cfg(not(test))]
+use settings::FileWrite;
+#[cfg(not(test))]
 use docopt::Docopt;
-use settings::{FileWrite, RitaCommonSettings, RitaExitSettings, RitaExitSettingsStruct};
 
 use actix::registry::SystemService;
 use actix::*;
@@ -58,25 +62,33 @@ extern crate num256;
 mod rita_common;
 mod rita_exit;
 
-use clu::cleanup;
 use rita_common::dashboard::network_endpoints::*;
 use rita_common::network_endpoints::{hello_response, make_payments};
 use rita_exit::network_endpoints::{list_clients, setup_request};
 
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
+#[cfg(test)]
+use std::sync::Mutex;
+
+#[cfg(not(test))]
 const USAGE: &str = "
 Usage: rita_exit --config <settings>
 Options:
     --config   Name of config file
 ";
 
-use althea_kernel_interface::{KernelInterface, LinuxCommandRunner, TestCommandRunner};
+use althea_kernel_interface::KernelInterface;
+
+#[cfg(not(test))]
+use althea_kernel_interface::LinuxCommandRunner;
+#[cfg(test)]
+use althea_kernel_interface::TestCommandRunner;
 
 #[cfg(test)]
 lazy_static! {
     pub static ref KI: Box<KernelInterface> = Box::new(TestCommandRunner {
-        run_command: Arc::new(Mutex::new(Box::new(|program, args| {
+        run_command: Arc::new(Mutex::new(Box::new(|_program, _args| {
             panic!("kernel interface used before initialized");
         })))
     });
