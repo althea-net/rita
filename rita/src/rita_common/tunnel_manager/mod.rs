@@ -351,10 +351,12 @@ impl TunnelManager {
             &mut SETTING.set_network().default_route,
         )?;
 
-        let mut babel: Box<Babel> = Box::new(TcpStream::connect::<SocketAddr>(format!(
+        let mut stream = TcpStream::connect::<SocketAddr>(format!(
             "[::1]:{}",
             SETTING.get_network().babel_port
-        ).parse()?)?);
+        ).parse()?)?;
+
+        let mut babel = Babel::new(stream);
 
         babel.start_connection()?;
         babel.monitor(&tunnel.iface_name)?;
