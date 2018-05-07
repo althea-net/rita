@@ -7,14 +7,12 @@ use std::boxed::Box;
 
 use serde_json;
 
-use settings::RitaCommonSettings;
 use SETTING;
 
 use super::{Dashboard, GetOwnInfo, GetWifiConfig, NodeInfo, OwnInfo, SetWifiConfig};
 
-use rita_common::dashboard::GetNodeInfo;
-use rita_common::dashboard::WifiInterface;
-use settings::StatsServerSettings;
+use rita_common::dashboard::{GetNodeInfo, WifiInterface};
+use settings::{RitaCommonSettings, StatsServerSettings};
 
 pub fn get_wifi_config(
     req: HttpRequest,

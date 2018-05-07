@@ -6,8 +6,8 @@ use althea_types::{Identity, PaymentTx};
 
 use num256::{Int256, Uint256};
 
-use settings::RitaCommonSettings;
 use SETTING;
+use settings::RitaCommonSettings;
 
 use rita_common::payment_controller;
 use rita_common::payment_controller::PaymentController;
@@ -122,16 +122,13 @@ impl Handler<SendUpdate> for DebtKeeper {
         for (k, _) in self.debt_data.clone() {
             trace!("sending update for {:?}", k);
             match self.send_update(&k) {
-                |DebtAction::SuspendTunnel
-		|DebtAction::None
-                |DebtAction::OpenTunnel => {}
-                |DebtAction::MakePayment { to, amount } => PaymentController::from_registry()
+                | DebtAction::SuspendTunnel | DebtAction::None | DebtAction::OpenTunnel => {}
+                | DebtAction::MakePayment { to, amount } => PaymentController::from_registry()
                     .do_send(payment_controller::MakePayment(PaymentTx {
                         to,
                         from: SETTING.get_identity(),
                         amount,
                     })),
-                
             }
         }
     }
