@@ -354,7 +354,7 @@ impl TunnelManager {
             SETTING.get_network().conf_link_local,
         )?;
 
-        let mut stream = TcpStream::connect::<SocketAddr>(format!(
+        let stream = TcpStream::connect::<SocketAddr>(format!(
             "[::1]:{}",
             SETTING.get_network().babel_port
         ).parse()?)?;
