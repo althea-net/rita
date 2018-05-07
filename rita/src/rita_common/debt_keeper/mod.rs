@@ -122,15 +122,16 @@ impl Handler<SendUpdate> for DebtKeeper {
         for (k, _) in self.debt_data.clone() {
             trace!("sending update for {:?}", k);
             match self.send_update(&k) {
-                DebtAction::SuspendTunnel => {}
-                DebtAction::OpenTunnel => {}
-                DebtAction::MakePayment { to, amount } => PaymentController::from_registry()
+                |DebtAction::SuspendTunnel
+		|DebtAction::None
+                |DebtAction::OpenTunnel => {}
+                |DebtAction::MakePayment { to, amount } => PaymentController::from_registry()
                     .do_send(payment_controller::MakePayment(PaymentTx {
                         to,
                         from: SETTING.get_identity(),
                         amount,
                     })),
-                DebtAction::None => {}
+                
             }
         }
     }
