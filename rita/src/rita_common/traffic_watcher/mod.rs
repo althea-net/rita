@@ -7,8 +7,7 @@ use althea_types::LocalIdentity;
 
 use babel_monitor::Babel;
 
-use rita_common::debt_keeper;
-use rita_common::debt_keeper::DebtKeeper;
+use rita_common::{debt_keeper::DebtKeeper, debt_keeper};
 
 use num256::Int256;
 
@@ -84,19 +83,12 @@ pub fn watch<T: Read + Write>(
     let routes = babel.parse_routes()?;
     info!("Got routes: {:?}", routes);
 
+    let mut if_to_ip: HashMap<String, IpAddr> = HashMap::new();
     let mut identities: HashMap<IpAddr, LocalIdentity> = HashMap::new();
+    
     for ident in neighbors {
         identities.insert(ident.0.global.mesh_ip, ident.0.clone());
-    }
-
-    let mut if_to_ip: HashMap<String, IpAddr> = HashMap::new();
-    for ident in neighbors {
         if_to_ip.insert(ident.clone().1, ident.0.global.mesh_ip);
-    }
-
-    let mut ip_to_if: HashMap<IpAddr, String> = HashMap::new();
-    for ident in neighbors {
-        ip_to_if.insert(ident.0.global.mesh_ip, ident.clone().1);
     }
 
     let mut destinations = HashMap::new();
@@ -161,17 +153,12 @@ pub fn watch<T: Read + Write>(
 
     let mut debts = HashMap::new();
 
-    // Setup the debts table
-    for (_, ident) in identities.clone() {
-        debts.insert(ident, Int256::from(0));
-    }
-
     for ((ip, interface), bytes) in total_input_counters {
         if destinations.contains_key(&ip) && if_to_ip.contains_key(&interface)
             && identities.contains_key(&if_to_ip[&interface])
         {
             let id = identities[&if_to_ip[&interface]].clone();
-            *debts.get_mut(&id).unwrap() -= (destinations[&ip].clone()) * bytes;
+            *debts.entry(id.clone()).or_insert_with(||Int256::from(0))  -= (destinations[&ip].clone()) * bytes;
         } else {
             warn!("flow destination not found {}, {}", ip, bytes);
         }
@@ -184,7 +171,7 @@ pub fn watch<T: Read + Write>(
             && identities.contains_key(&if_to_ip[&interface])
         {
             let id = identities[&if_to_ip[&interface]].clone();
-            *debts.get_mut(&id).unwrap() += (destinations[&ip].clone() - local_price) * bytes;
+            *debts.entry(id.clone()).or_insert_with(||Int256::from(0)) += (destinations[&ip].clone() - local_price) * bytes;
         } else {
             warn!("destination not found {}, {}", ip, bytes);
         }
@@ -192,8 +179,8 @@ pub fn watch<T: Read + Write>(
 
     trace!("Collated total debts: {:?}", debts);
 
-    for (k, v) in &debts {
-        trace!("collated debt for {} is {}", k.global.mesh_ip, v);
+    for (from, amount) in &debts {
+        trace!("collated debt for {} is {}", from.global.mesh_ip, amount);
     }
 
     for (from, amount) in debts {
