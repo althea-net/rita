@@ -10,33 +10,9 @@ use serde_json;
 use settings::RitaCommonSettings;
 use SETTING;
 
-use super::{Dashboard, GetOwnInfo, GetWifiConfig, NodeInfo, OwnInfo, SetWifiConfig};
+use super::{Dashboard, GetOwnInfo, NodeInfo, OwnInfo};
 
 use rita_common::dashboard::GetNodeInfo;
-use rita_common::dashboard::WifiInterface;
-
-
-#[allow(unused)] //Called in library in client.rs, not identified as such
-pub fn get_wifi_config(
-    _req: HttpRequest,
-) -> Box<Future<Item = Json<Vec<WifiInterface>>, Error = Error>> {
-    Dashboard::from_registry()
-        .send(GetWifiConfig {})
-        .from_err()
-        .and_then(move |reply| Ok(Json(reply?)))
-        .responder()
-}
-
-#[allow(unused)] //Called in library in client.rs, not identified as such
-pub fn set_wifi_config(
-    new_settings: Json<Vec<WifiInterface>>,
-) -> Box<Future<Item = Json<()>, Error = Error>> {
-    Dashboard::from_registry()
-        .send(SetWifiConfig(new_settings.into_inner()))
-        .from_err()
-        .and_then(move |reply| Ok(Json(reply?)))
-        .responder()
-}
 
 pub fn get_node_info(_req: HttpRequest) -> Box<Future<Item = Json<Vec<NodeInfo>>, Error = Error>> {
     Dashboard::from_registry()
