@@ -1,13 +1,13 @@
 use actix::prelude::*;
 
-use althea_kernel_interface::FilterTarget;
 use KI;
+use althea_kernel_interface::FilterTarget;
 
 use althea_types::LocalIdentity;
 
 use babel_monitor::Babel;
 
-use rita_common::{debt_keeper::DebtKeeper, debt_keeper};
+use rita_common::{debt_keeper, debt_keeper::DebtKeeper};
 
 use num256::Int256;
 
@@ -17,8 +17,8 @@ use std::net::{IpAddr, SocketAddr, TcpStream};
 
 use ip_network::IpNetwork;
 
-use settings::RitaCommonSettings;
 use SETTING;
+use settings::RitaCommonSettings;
 
 use failure::Error;
 
@@ -85,7 +85,7 @@ pub fn watch<T: Read + Write>(
 
     let mut if_to_ip: HashMap<String, IpAddr> = HashMap::new();
     let mut identities: HashMap<IpAddr, LocalIdentity> = HashMap::new();
-    
+
     for ident in neighbors {
         identities.insert(ident.0.global.mesh_ip, ident.0.clone());
         if_to_ip.insert(ident.clone().1, ident.0.global.mesh_ip);
@@ -158,7 +158,8 @@ pub fn watch<T: Read + Write>(
             && identities.contains_key(&if_to_ip[&interface])
         {
             let id = identities[&if_to_ip[&interface]].clone();
-            *debts.entry(id.clone()).or_insert_with(||Int256::from(0))  -= (destinations[&ip].clone()) * bytes;
+            *debts.entry(id.clone()).or_insert_with(|| Int256::from(0)) -=
+                (destinations[&ip].clone()) * bytes;
         } else {
             warn!("flow destination not found {}, {}", ip, bytes);
         }
@@ -171,7 +172,8 @@ pub fn watch<T: Read + Write>(
             && identities.contains_key(&if_to_ip[&interface])
         {
             let id = identities[&if_to_ip[&interface]].clone();
-            *debts.entry(id.clone()).or_insert_with(||Int256::from(0)) += (destinations[&ip].clone() - local_price) * bytes;
+            *debts.entry(id.clone()).or_insert_with(|| Int256::from(0)) +=
+                (destinations[&ip].clone() - local_price) * bytes;
         } else {
             warn!("destination not found {}, {}", ip, bytes);
         }
