@@ -3,7 +3,6 @@ use std::net::{IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream};
 use std::path::Path;
 
 use actix::actors;
-use actix::actors::mocker::Mocker;
 use actix::prelude::*;
 
 use futures;
@@ -24,6 +23,9 @@ use SETTING;
 use failure::Error;
 
 #[cfg(test)]
+use actix::actors::mocker::Mocker;
+
+#[cfg(test)]
 type HTTPClient = Mocker<rita_common::http_client::HTTPClient>;
 
 #[cfg(not(test))]
@@ -34,6 +36,7 @@ type Connector = Mocker<actors::Connector>;
 
 #[cfg(not(test))]
 type Connector = actors::Connector;
+
 
 #[derive(Debug, Fail)]
 pub enum TunnelManagerError {
@@ -351,7 +354,7 @@ impl TunnelManager {
             &mut SETTING.set_network().default_route,
         )?;
 
-        let mut stream = TcpStream::connect::<SocketAddr>(format!(
+        let stream = TcpStream::connect::<SocketAddr>(format!(
             "[::1]:{}",
             SETTING.get_network().babel_port
         ).parse()?)?;
@@ -378,7 +381,7 @@ mod tests {
     use super::*;
 
     use actix::actors::ConnectorError;
-    use std::collections::{HashSet, VecDeque};
+    use std::collections::VecDeque;
     use std::net::Ipv4Addr;
 
     #[test]
@@ -415,7 +418,7 @@ mod tests {
         let sys = System::new("test");
 
         let _: Addr<Syn, _> = HTTPClient::init_actor(|_| {
-            HTTPClient::mock(Box::new(|msg, ctx| {
+            HTTPClient::mock(Box::new(|msg, _ctx| {
                 assert_eq!(
                     msg.downcast_ref::<Hello>(),
                     Some(&Hello {
@@ -496,7 +499,7 @@ mod tests {
         let sys = System::new("test");
 
         let _: Addr<Syn, _> = HTTPClient::init_actor(|_| {
-            HTTPClient::mock(Box::new(|msg, ctx| {
+            HTTPClient::mock(Box::new(|msg, _ctx| {
                 assert_eq!(
                     msg.downcast_ref::<Hello>(),
                     Some(&Hello {
@@ -517,7 +520,7 @@ mod tests {
         });
 
         let _: Addr<Unsync, _> = Connector::init_actor(|_| {
-            Connector::mock(Box::new(|msg, ctx| {
+            Connector::mock(Box::new(|msg, _ctx| {
                 assert_eq!(
                     msg.downcast_ref::<actors::Resolve>(),
                     Some(&actors::Resolve::host("test.altheamesh.com"))
@@ -590,7 +593,7 @@ mod tests {
         let sys = System::new("test");
 
         let _: Addr<Syn, _> = HTTPClient::init_actor(|_| {
-            HTTPClient::mock(Box::new(|msg, ctx| {
+            HTTPClient::mock(Box::new(|msg, _ctx| {
                 assert_eq!(
                     msg.downcast_ref::<Hello>(),
                     Some(&Hello {
@@ -611,7 +614,7 @@ mod tests {
         });
 
         let _: Addr<Unsync, _> = Connector::init_actor(|_| {
-            Connector::mock(Box::new(|msg, ctx| {
+            Connector::mock(Box::new(|msg, _ctx| {
                 assert_eq!(
                     msg.downcast_ref::<actors::Resolve>(),
                     Some(&actors::Resolve::host("1.1.1.1"))
@@ -752,7 +755,7 @@ mod tests {
             .insert("eth0".to_string());
 
         let _: Addr<Syn, _> = HTTPClient::init_actor(|_| {
-            HTTPClient::mock(Box::new(|msg, ctx| {
+            HTTPClient::mock(Box::new(|msg, _ctx| {
                 trace!("{:?}", msg.downcast_ref::<Hello>());
                 let ret: Result<LocalIdentity, Error> = match msg.downcast_ref::<Hello>() {
                     Some(&Hello {
@@ -778,7 +781,7 @@ mod tests {
         });
 
         let _: Addr<Unsync, _> = Connector::init_actor(|_| {
-            Connector::mock(Box::new(|msg, ctx| {
+            Connector::mock(Box::new(|msg, _ctx| {
                 let msg = msg.downcast_ref::<actors::Resolve>().unwrap();
                 let ret: Result<VecDeque<SocketAddr>, ConnectorError> = if msg
                     == &actors::Resolve::host("fe80::1234")

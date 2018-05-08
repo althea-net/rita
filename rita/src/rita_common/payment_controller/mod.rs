@@ -95,7 +95,7 @@ impl Message for GetOwnBalance {
 
 impl Handler<GetOwnBalance> for PaymentController {
     type Result = Result<i64, Error>;
-    fn handle(&mut self, msg: GetOwnBalance, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _msg: GetOwnBalance, _: &mut Context<Self>) -> Self::Result {
         Ok(self.balance.clone().into())
     }
 }
@@ -278,13 +278,9 @@ mod tests {
 
     use super::*;
 
-    use std::time;
-
     use num256::Uint256;
-    use std::collections::hash_map::DefaultHasher;
     use std::net::IpAddr;
     use std::net::Ipv6Addr;
-    use std::sync::mpsc;
 
     use althea_types::{EthAddress, Identity, PaymentTx};
 
@@ -328,7 +324,7 @@ mod tests {
 
         let mut pc = PaymentController::new(&new_identity(1));
 
-        pc.make_payment(new_payment(1));
+        let _ = pc.make_payment(new_payment(1));
 
         assert_eq!(pc.balance, Int256::from(-1));
 

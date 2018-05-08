@@ -10,33 +10,11 @@ use serde_json;
 use settings::RitaCommonSettings;
 use SETTING;
 
-use super::{Dashboard, GetOwnInfo, GetWifiConfig, NodeInfo, OwnInfo, SetWifiConfig};
+use super::{Dashboard, GetOwnInfo, NodeInfo, OwnInfo};
 
 use rita_common::dashboard::GetNodeInfo;
-use rita_common::dashboard::WifiInterface;
-use settings::StatsServerSettings;
 
-pub fn get_wifi_config(
-    req: HttpRequest,
-) -> Box<Future<Item = Json<Vec<WifiInterface>>, Error = Error>> {
-    Dashboard::from_registry()
-        .send(GetWifiConfig {})
-        .from_err()
-        .and_then(move |reply| Ok(Json(reply?)))
-        .responder()
-}
-
-pub fn set_wifi_config(
-    new_settings: Json<Vec<WifiInterface>>,
-) -> Box<Future<Item = Json<()>, Error = Error>> {
-    Dashboard::from_registry()
-        .send(SetWifiConfig(new_settings.into_inner()))
-        .from_err()
-        .and_then(move |reply| Ok(Json(reply?)))
-        .responder()
-}
-
-pub fn get_node_info(req: HttpRequest) -> Box<Future<Item = Json<Vec<NodeInfo>>, Error = Error>> {
+pub fn get_node_info(_req: HttpRequest) -> Box<Future<Item = Json<Vec<NodeInfo>>, Error = Error>> {
     Dashboard::from_registry()
         .send(GetNodeInfo {})
         .from_err()
@@ -44,7 +22,7 @@ pub fn get_node_info(req: HttpRequest) -> Box<Future<Item = Json<Vec<NodeInfo>>,
         .responder()
 }
 
-pub fn get_own_info(req: HttpRequest) -> Box<Future<Item = Json<OwnInfo>, Error = Error>> {
+pub fn get_own_info(_req: HttpRequest) -> Box<Future<Item = Json<OwnInfo>, Error = Error>> {
     Dashboard::from_registry()
         .send(GetOwnInfo {})
         .from_err()
@@ -52,7 +30,7 @@ pub fn get_own_info(req: HttpRequest) -> Box<Future<Item = Json<OwnInfo>, Error 
         .responder()
 }
 
-pub fn get_settings(req: HttpRequest) -> Result<Json<serde_json::Value>, Error> {
+pub fn get_settings(_req: HttpRequest) -> Result<Json<serde_json::Value>, Error> {
     Ok(Json(SETTING.get_all()?))
 }
 

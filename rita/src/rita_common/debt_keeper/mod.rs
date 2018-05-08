@@ -67,7 +67,7 @@ impl Message for Dump {
 
 impl Handler<Dump> for DebtKeeper {
     type Result = Result<HashMap<Identity, NodeDebtData>, Error>;
-    fn handle(&mut self, msg: Dump, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _msg: Dump, _: &mut Context<Self>) -> Self::Result {
         Ok(self.debt_data.clone())
     }
 }
@@ -186,7 +186,6 @@ impl DebtKeeper {
                 if debt_data.incoming_payments > -amount.clone() {
                     // can pay off debt fully
                     debt_data.incoming_payments += amount;
-                    amount = Int256::from(0);
                 } else {
                     // pay off part of it
                     amount += debt_data.incoming_payments.clone();
@@ -567,7 +566,7 @@ mod tests {
         };
 
         // send lots of payments
-        for i in 0..100 {
+        for _ in 0..100 {
             d.traffic_update(&ident, Int256::from(100))
         }
 
@@ -598,7 +597,7 @@ mod tests {
         };
 
         // send lots of payments
-        for i in 0..100 {
+        for _ in 0..100 {
             d.payment_received(&ident, Uint256::from(100))
         }
 
@@ -624,7 +623,7 @@ mod tests {
             wg_public_key: String::from("AAAAAAAAAAA"),
         };
 
-        for i in 0..100 {
+        for _ in 0..100 {
             d.payment_received(&ident, Uint256::from(100))
         }
 

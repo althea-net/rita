@@ -7,8 +7,6 @@ use failure::Error;
 
 use reqwest;
 
-use serde_json;
-
 use KI;
 
 use settings::RitaCommonSettings;
@@ -38,7 +36,7 @@ impl Actor for StatsCollector {
 
 impl Handler<Tick> for StatsCollector {
     type Result = Result<(), Error>;
-    fn handle(&mut self, _: Tick, ctx: &mut SyncContext<Self>) -> Self::Result {
+    fn handle(&mut self, _: Tick, _ctx: &mut SyncContext<Self>) -> Self::Result {
         if SETTING.stats_server_settings_is_set() {
             trace!("preparing to send stats...");
 

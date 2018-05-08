@@ -11,7 +11,7 @@ use exit_db::models::Client;
 
 use failure::Error;
 
-use settings::{RitaClientSettings, RitaCommonSettings, RitaExitSettings};
+use settings::{RitaCommonSettings, RitaExitSettings};
 use SETTING;
 
 use althea_kernel_interface::{ExitClient, KI};
@@ -80,13 +80,18 @@ impl Handler<Tick> for RitaLoop {
 
                     trace!("converted clients {:?}", wg_clients);
 
-                    KI.set_exit_wg_config(
+                    let exit_status = KI.set_exit_wg_config(
                         wg_clients,
                         SETTING.get_exit_network().wg_tunnel_port,
                         &SETTING.get_network().wg_private_key_path,
                         &SETTING.get_exit_network().own_internal_ip,
                         SETTING.get_exit_network().netmask,
                     );
+
+                    match exit_status {
+                        Ok(_) => (),
+                        Err(e) => warn!("Error in Exit WG setup {:?}", e)
+                    }
 
                     ctx.notify_later(Tick {}, Duration::from_secs(5));
                     actix::fut::ok(())
