@@ -5,6 +5,8 @@ use diesel::dsl::*;
 use diesel::prelude::*;
 use diesel::select;
 
+use reqwest;
+
 use std::net::IpAddr;
 
 use exit_db::{models, schema};
@@ -64,15 +66,58 @@ fn increment(address: IpAddr) -> Option<IpAddr> {
     None
 }
 
-pub struct SetupClient(pub ExitClientIdentity);
+pub struct SetupClient(pub ExitClientIdentity, pub IpAddr);
 
 impl Message for SetupClient {
     type Result = Result<IpAddr, Error>;
 }
 
-fn verify_identity(details: &ExitRegistrationDetails) -> Result<bool, Error> {
-    //TODO: verify source ip and stuff
-    return Ok(details.email.is_some() && details.email.is_some());
+#[derive(Deserialize)]
+struct GeoIPRet {
+    country: GeoIPRetCountry
+}
+
+#[derive(Deserialize)]
+struct GeoIPRetCountry {
+    code: String
+}
+
+// get ISO country code from ip
+fn get_country(ip: &IpAddr) -> Result<String, Error> {
+    let client = reqwest::Client::new();
+
+    let geo_ip_url = format!("http://geoip.nekudo.com/api/{}", ip);
+    trace!("making geoip request to {}", geo_ip_url);
+
+    let res: GeoIPRet = client.get(&geo_ip_url).send()?.json()?;
+
+    return Ok(res.country.code)
+}
+
+#[test]
+fn test_get_country() {
+    get_country(&"8.8.8.8".parse().unwrap()).unwrap();
+}
+
+fn verify_identity(details: &ExitRegistrationDetails, request_ip: &IpAddr) -> Result<(), Error> {
+    if details.email.is_none() || details.zip_code.is_none() {
+        bail!("email and zip must be set");
+    }
+
+    if SETTING.get_allowed_country().is_empty() {
+        Ok(())
+    } else {
+        let country = get_country(request_ip)?;
+
+        if !SETTING.get_allowed_country().is_empty() && !SETTING.get_allowed_country().contains(&country) {
+            bail!("country not allowed")
+        }
+
+        if details.country != Some(country) {
+            bail!("country does not match")
+        }
+        Ok(())
+    }
 }
 
 impl Handler<SetupClient> for DbClient {
@@ -82,7 +127,7 @@ impl Handler<SetupClient> for DbClient {
         use self::schema::clients::dsl::*;
         let conn = SqliteConnection::establish(&SETTING.get_db_file()).unwrap();
 
-        if verify_identity(&msg.0.reg_details)? {
+        if let Ok(_) = verify_identity(&msg.0.reg_details, &msg.1) {
             let client = msg.0;
 
             conn.transaction::<_, Error, _>(|| {

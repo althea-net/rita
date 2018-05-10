@@ -19,10 +19,11 @@ use rita_exit::db_client::ListClients;
 
 pub fn setup_request(
     their_id: Json<ExitClientIdentity>,
+    req: HttpRequest,
 ) -> Box<Future<Item = Json<ExitServerIdentity>, Error = Error>> {
     trace!("Received requester identity, {:?}", their_id);
     DbClient::from_registry()
-        .send(SetupClient(their_id.into_inner()))
+        .send(SetupClient(their_id.into_inner(), req.connection_info().remote().unwrap().parse().unwrap()))
         .from_err()
         .and_then(move |reply| {
             Ok(Json(ExitServerIdentity {
