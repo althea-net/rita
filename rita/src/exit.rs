@@ -26,8 +26,8 @@ extern crate actix;
 extern crate actix_web;
 extern crate bytes;
 extern crate clu;
-extern crate dotenv;
 extern crate docopt;
+extern crate dotenv;
 extern crate env_logger;
 extern crate eui48;
 extern crate futures;
@@ -42,11 +42,10 @@ extern crate tokio;
 
 use settings::{RitaCommonSettings, RitaExitSettings, RitaExitSettingsStruct};
 
-
-#[cfg(not(test))]
-use settings::FileWrite;
 #[cfg(not(test))]
 use docopt::Docopt;
+#[cfg(not(test))]
+use settings::FileWrite;
 
 use actix::registry::SystemService;
 use actix::*;

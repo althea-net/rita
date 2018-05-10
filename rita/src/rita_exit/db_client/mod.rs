@@ -74,12 +74,12 @@ impl Message for SetupClient {
 
 #[derive(Deserialize)]
 struct GeoIPRet {
-    country: GeoIPRetCountry
+    country: GeoIPRetCountry,
 }
 
 #[derive(Deserialize)]
 struct GeoIPRetCountry {
-    code: String
+    code: String,
 }
 
 // get ISO country code from ip
@@ -91,7 +91,7 @@ fn get_country(ip: &IpAddr) -> Result<String, Error> {
 
     let res: GeoIPRet = client.get(&geo_ip_url).send()?.json()?;
 
-    return Ok(res.country.code)
+    return Ok(res.country.code);
 }
 
 #[test]
@@ -109,7 +109,9 @@ fn verify_identity(details: &ExitRegistrationDetails, request_ip: &IpAddr) -> Re
     } else {
         let country = get_country(request_ip)?;
 
-        if !SETTING.get_allowed_country().is_empty() && !SETTING.get_allowed_country().contains(&country) {
+        if !SETTING.get_allowed_country().is_empty()
+            && !SETTING.get_allowed_country().contains(&country)
+        {
             bail!("country not allowed")
         }
 

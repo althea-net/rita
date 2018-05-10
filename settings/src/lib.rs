@@ -1,10 +1,10 @@
 extern crate althea_types;
 extern crate config;
 extern crate eui48;
+extern crate failure;
 extern crate num256;
 extern crate owning_ref;
 extern crate toml;
-extern crate failure;
 
 #[macro_use]
 extern crate serde_derive;
@@ -542,7 +542,7 @@ where
 
             if old_settings != new_settings {
                 info!("writing updated config: {:?}", new_settings);
-                match settings.read().unwrap().write(&file_path){
+                match settings.read().unwrap().write(&file_path) {
                     Err(e) => warn!("writing updated config failed {:?}", e),
                     _ => (),
                 }

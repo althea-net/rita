@@ -12,7 +12,6 @@ use std::fmt;
 use std::ops::{Add, AddAssign, Deref, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use std::str::FromStr;
 
-
 #[cfg(test)]
 #[macro_use]
 extern crate serde_derive;

@@ -63,8 +63,8 @@ extern crate num256;
 mod rita_client;
 mod rita_common;
 
-use rita_common::dashboard::network_endpoints::*;
 use rita_client::dashboard::network_endpoints::*;
+use rita_common::dashboard::network_endpoints::*;
 use rita_common::network_endpoints::{hello_response, make_payments};
 
 #[cfg(not(test))]
