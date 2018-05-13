@@ -26,8 +26,8 @@ extern crate actix;
 extern crate actix_web;
 extern crate bytes;
 extern crate clu;
-extern crate dotenv;
 extern crate docopt;
+extern crate dotenv;
 extern crate env_logger;
 extern crate eui48;
 extern crate futures;
@@ -42,11 +42,10 @@ extern crate tokio;
 
 use settings::{RitaCommonSettings, RitaExitSettings, RitaExitSettingsStruct};
 
-
-#[cfg(not(test))]
-use settings::FileWrite;
 #[cfg(not(test))]
 use docopt::Docopt;
+#[cfg(not(test))]
+use settings::FileWrite;
 
 use actix::registry::SystemService;
 use actix::*;
@@ -71,11 +70,16 @@ use std::sync::{Arc, RwLock};
 #[cfg(test)]
 use std::sync::Mutex;
 
+#[derive(Debug, Deserialize)]
+struct Args {
+    flag_config: String,
+}
+
 #[cfg(not(test))]
 const USAGE: &str = "
-Usage: rita_exit --config <settings>
+Usage: rita_exit --config=<settings>
 Options:
-    --config   Name of config file
+    -c, --config=<settings>   Name of config file
 ";
 
 use althea_kernel_interface::KernelInterface;
@@ -102,14 +106,14 @@ lazy_static! {
 #[cfg(not(test))]
 lazy_static! {
     pub static ref SETTING: Arc<RwLock<RitaExitSettingsStruct>> = {
-        let args = Docopt::new(USAGE)
-            .and_then(|d| d.parse())
+        let args: Args = Docopt::new(USAGE)
+            .and_then(|d| d.deserialize())
             .unwrap_or_else(|e| e.exit());
 
-        let settings_file = args.get_str("<settings>");
+        let settings_file = args.flag_config;
 
-        let s = RitaExitSettingsStruct::new_watched(settings_file).unwrap();
-        s.read().unwrap().write(settings_file).unwrap();
+        let s = RitaExitSettingsStruct::new_watched(&settings_file).unwrap();
+        s.read().unwrap().write(&settings_file).unwrap();
 
         clu::exit_init("linux", s.clone());
 
