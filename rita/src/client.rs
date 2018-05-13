@@ -63,16 +63,22 @@ extern crate num256;
 mod rita_client;
 mod rita_common;
 
-use rita_common::dashboard::network_endpoints::*;
 use rita_client::dashboard::network_endpoints::*;
+use rita_common::dashboard::network_endpoints::*;
 use rita_common::network_endpoints::{hello_response, make_payments};
+
+#[derive(Debug, Deserialize)]
+struct Args {
+    flag_config: String,
+    flag_platform: String,
+}
 
 #[cfg(not(test))]
 const USAGE: &str = "
-Usage: rita --config <settings> --platform <platform>
+Usage: rita --config=<settings> --platform=<platform>
 Options:
-    --config   Name of config file
-    --platform   Platform (linux or openwrt)
+    -c, --config=<settings>   Name of config file
+    -p, --platform=<platform>   Platform (linux or openwrt)
 ";
 
 use althea_kernel_interface::KernelInterface;
@@ -99,18 +105,18 @@ lazy_static! {
 #[cfg(not(test))]
 lazy_static! {
     pub static ref SETTING: Arc<RwLock<RitaSettingsStruct>> = {
-        let args = Docopt::new(USAGE)
-            .and_then(|d| d.parse())
+        let args: Args = Docopt::new(USAGE)
+            .and_then(|d| d.deserialize())
             .unwrap_or_else(|e| e.exit());
 
-        let settings_file = args.get_str("<settings>");
-        let platform = args.get_str("<platform>");
+        let settings_file = args.flag_config;
+        let platform = args.flag_platform;
 
-        let s = RitaSettingsStruct::new_watched(settings_file).unwrap();
+        let s = RitaSettingsStruct::new_watched(&settings_file).unwrap();
 
-        clu::init(platform, s.clone());
+        clu::init(&platform, s.clone());
 
-        s.read().unwrap().write(settings_file).unwrap();
+        s.read().unwrap().write(&settings_file).unwrap();
         s
     };
 }
