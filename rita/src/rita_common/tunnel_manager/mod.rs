@@ -37,7 +37,6 @@ type Connector = Mocker<actors::Connector>;
 #[cfg(not(test))]
 type Connector = actors::Connector;
 
-
 #[derive(Debug, Fail)]
 pub enum TunnelManagerError {
     #[fail(display = "DNS lookup error")]

@@ -1,4 +1,3 @@
-
 use actix::prelude::*;
 
 use failure::Error;
@@ -7,8 +6,8 @@ use futures::Future;
 use serde_json;
 use serde_json::Value;
 
-use rita_common::tunnel_manager::{GetListen, Listen, TunnelManager, UnListen};
 use rita_common::dashboard::Dashboard;
+use rita_common::tunnel_manager::{GetListen, Listen, TunnelManager, UnListen};
 use KI;
 
 pub mod network_endpoints;
