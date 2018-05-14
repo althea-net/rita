@@ -190,7 +190,7 @@ pub struct RitaExitSettingsStruct {
     #[serde(skip_serializing_if = "Option::is_none")]
     stats_server: Option<StatsServerSettings>,
     #[serde(skip_serializing_if = "HashSet::is_empty", default)]
-    allowed_country: HashSet<String>,
+    allowed_countries: HashSet<String>,
 }
 
 pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
@@ -491,7 +491,7 @@ pub trait RitaExitSettings {
     ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, ExitNetworkSettings>;
 
     fn get_db_file(&self) -> String;
-    fn get_allowed_country<'ret, 'me: 'ret>(
+    fn get_allowed_countries<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, HashSet<String>>;
 }
@@ -512,10 +512,10 @@ impl RitaExitSettings for Arc<RwLock<RitaExitSettingsStruct>> {
     fn get_db_file(&self) -> String {
         self.read().unwrap().db_file.clone()
     }
-    fn get_allowed_country<'ret, 'me: 'ret>(
+    fn get_allowed_countries<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, HashSet<String>> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.allowed_country)
+        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.allowed_countries)
     }
 }
 

@@ -104,13 +104,13 @@ fn verify_identity(details: &ExitRegistrationDetails, request_ip: &IpAddr) -> Re
         bail!("email and zip must be set");
     }
 
-    if SETTING.get_allowed_country().is_empty() {
+    if SETTING.get_allowed_countries().is_empty() {
         Ok(())
     } else {
         let country = get_country(request_ip)?;
 
-        if !SETTING.get_allowed_country().is_empty()
-            && !SETTING.get_allowed_country().contains(&country)
+        if !SETTING.get_allowed_countries().is_empty()
+            && !SETTING.get_allowed_countries().contains(&country)
         {
             bail!("country not allowed")
         }
