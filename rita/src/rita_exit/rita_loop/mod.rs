@@ -90,7 +90,7 @@ impl Handler<Tick> for RitaLoop {
 
                     match exit_status {
                         Ok(_) => (),
-                        Err(e) => warn!("Error in Exit WG setup {:?}", e)
+                        Err(e) => warn!("Error in Exit WG setup {:?}", e),
                     }
 
                     ctx.notify_later(Tick {}, Duration::from_secs(5));
