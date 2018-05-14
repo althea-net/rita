@@ -222,7 +222,7 @@ def start_rita(node):
     save_rita_settings(id, settings)
     time.sleep(0.1)
     os.system(
-        '(RUST_BACKTRACE=full RUST_LOG=TRACE ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml --platform linux'
+        '(RUST_BACKTRACE=full RUST_LOG=TRACE ip netns exec netlab-{id} {rita} --config=rita-settings-n{id}.toml --platform=linux'
         ' 2>&1 & echo $! > rita-n{id}.pid) | '
         'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA,
                                                                               pwd=dname)
@@ -240,7 +240,7 @@ def start_rita_exit(node):
     save_rita_settings(id, settings)
     time.sleep(0.1)
     os.system(
-        '(RUST_BACKTRACE=full RUST_LOG=TRACE ip netns exec netlab-{id} {rita} --config rita-settings-n{id}.toml'
+        '(RUST_BACKTRACE=full RUST_LOG=TRACE ip netns exec netlab-{id} {rita} --config=rita-settings-n{id}.toml'
         ' 2>&1 & echo $! > rita-n{id}.pid) | '
         'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA_EXIT,
                                                                               pwd=dname)
