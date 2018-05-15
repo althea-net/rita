@@ -32,6 +32,7 @@ extern crate futures;
 extern crate ip_network;
 extern crate minihttpse;
 extern crate rand;
+extern crate regex;
 extern crate reqwest;
 extern crate serde;
 extern crate serde_json;
@@ -60,6 +61,7 @@ extern crate althea_types;
 extern crate babel_monitor;
 extern crate num256;
 
+mod middleware;
 mod rita_client;
 mod rita_common;
 
@@ -156,6 +158,7 @@ fn main() {
     // dashboard
     server::new(|| {
         App::new()
+            .middleware(middleware::Headers)
             .route("/wifi_settings", Method::GET, get_wifi_config)
             .route("/wifi_settings", Method::POST, set_wifi_config)
             .route("/settings", Method::GET, get_settings)
