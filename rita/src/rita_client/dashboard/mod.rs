@@ -5,6 +5,7 @@ use futures;
 use futures::Future;
 use serde_json;
 use serde_json::Value;
+use std::collections::HashMap;
 
 use rita_common::dashboard::Dashboard;
 use rita_common::tunnel_manager::{GetListen, Listen, TunnelManager, UnListen};
@@ -12,17 +13,33 @@ use KI;
 
 pub mod network_endpoints;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct WifiInterface {
     #[serde(default)]
     pub section_name: String,
-    pub device: String,
     pub network: String,
     #[serde(default)]
     pub mesh: bool,
     pub ssid: String,
     pub encryption: String,
     pub key: String,
+    #[serde(default, skip_deserializing)]
+    pub device: WifiDevice,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone)]
+pub struct WifiDevice {
+    #[serde(default)]
+    pub section_name: String,
+    #[serde(rename = "type")]
+    pub i_type: String,
+    pub channel: String,
+    pub path: String,
+    pub htmode: String,
+    pub hwmode: String,
+    pub disabled: String,
+    #[serde(default)]
+    pub radio_type: String,
 }
 
 struct GetWifiConfig;
@@ -42,6 +59,7 @@ impl Handler<GetWifiConfig> for Dashboard {
                 .and_then(|res| {
                     let res = res.unwrap();
                     let mut interfaces = Vec::new();
+                    let mut devices = HashMap::new();
 
                     let config = match KI.ubus_call("uci", "get", "{ \"config\": \"wireless\"}") {
                         Ok(cfg) => cfg,
@@ -62,14 +80,38 @@ impl Handler<GetWifiConfig> for Dashboard {
                     };
 
                     for (k, v) in items {
+                        if v[".type"] == "wifi-device" {
+                            let mut device: WifiDevice = match serde_json::from_value(v.clone()) {
+                                Ok(i) => i,
+                                Err(e) => return futures::future::err(e.into()),
+                            };
+                            device.section_name = k.clone();
+
+                            let channel: String =
+                                serde_json::from_value(v["channel"].clone()).unwrap();
+                            let channel: u8 = channel.parse().unwrap();
+                            if channel < 20 {
+                                device.radio_type = "5ghz".to_string();
+                            } else {
+                                device.radio_type = "2ghz".to_string();
+                            }
+
+                            devices.insert(device.section_name.to_string(), device);
+                        }
+                    }
+                    for (k, v) in items {
                         if v[".type"] == "wifi-iface" {
                             let mut interface: WifiInterface =
                                 match serde_json::from_value(v.clone()) {
                                     Ok(i) => i,
                                     Err(e) => return futures::future::err(e.into()),
                                 };
-                            interface.mesh = res.contains(&interface.device);
+                            interface.mesh = res.contains(&interface.device.section_name);
                             interface.section_name = k.clone();
+
+                            let device_name: String =
+                                serde_json::from_value(v["device"].clone()).unwrap();
+                            interface.device = devices[&device_name].clone();
                             interfaces.push(interface);
                         }
                     }
@@ -92,9 +134,9 @@ impl Handler<SetWifiConfig> for Dashboard {
     fn handle(&mut self, msg: SetWifiConfig, _ctx: &mut Self::Context) -> Self::Result {
         for i in msg.0 {
             if i.mesh {
-                TunnelManager::from_registry().do_send(Listen(i.device.clone()))
+                TunnelManager::from_registry().do_send(Listen(i.device.section_name.clone()))
             } else {
-                TunnelManager::from_registry().do_send(UnListen(i.device.clone()))
+                TunnelManager::from_registry().do_send(UnListen(i.device.section_name.clone()))
             }
 
             KI.set_uci_var(&format!("wireless.{}.ssid", i.section_name), &i.ssid)?;
