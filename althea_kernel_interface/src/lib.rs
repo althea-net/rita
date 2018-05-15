@@ -9,6 +9,8 @@ extern crate eui48;
 extern crate itertools;
 extern crate regex;
 
+use std::env;
+use std::io::ErrorKind;
 use std::process::{Command, Output};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -70,7 +72,15 @@ pub struct LinuxCommandRunner;
 impl CommandRunner for LinuxCommandRunner {
     fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, Error> {
         let start = Instant::now();
-        let output = Command::new(program).args(args).output()?;
+        let output = match Command::new(program).args(args).output() {
+            Ok(o) => o,
+            Err(e) => {
+                if e.kind() == ErrorKind::NotFound {
+                    error!("The {:?} binary was not found. Please install a package that provides it. PATH={:?}", program, env::var("PATH"));
+                }
+                return Err(e.into());
+            }
+        };
 
         trace!("Command {:?} {:?} returned: {:?}", program, args, output);
         if !output.status.success() {
