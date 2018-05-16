@@ -287,7 +287,10 @@ ok\n";
     fn mock_dump() {
         let mut s = SharedMockStream::new();
         s.push_bytes_to_read(TABLE.as_bytes());
-        s.write(b"dump\n").unwrap();
+
+        let mut b = Babel::new(s);
+        let dump = b.command("dump").unwrap();
+        assert_eq!(&dump, TABLE);
     }
 
     #[test]
