@@ -33,8 +33,13 @@ dname = os.path.dirname(abspath)
 os.chdir(dname)
 
 exit_settings = {
-    "exit_ip": "fd00::5",
-    "exit_registration_port": 4875,
+    "exits": {
+        "exit_a": {
+            "ip": "fd00::5",
+            "registration_port": 4875,
+        }
+    },
+    "current_exit": "exit_a",
     "wg_listen_port": 59999,
     "reg_details": {
         "zip_code": "1234",

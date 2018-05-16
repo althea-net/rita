@@ -18,4 +18,10 @@ wg_public_key = ""
 wg_start_port = 60000
 peer_interfaces = []
 manual_peers = []
-conf_link_local = true
+default_route = []
+
+[exit_tunnel_settings]
+lan_nics = ["lo"]
+
+[exit_client]
+wg_listen_port = 59999
