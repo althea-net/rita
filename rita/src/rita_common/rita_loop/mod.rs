@@ -71,7 +71,8 @@ impl Handler<Tick> for RitaLoop {
                             .do_send(OpenTunnel(their_id.clone(), ip.clone()));
                     }
 
-                    let res = res.iter()
+                    let res = res
+                        .iter()
                         .map(|input| (input.0.clone(), input.1.clone()))
                         .collect();
 

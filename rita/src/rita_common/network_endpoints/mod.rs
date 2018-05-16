@@ -36,7 +36,8 @@ pub fn hello_response(
 ) -> Box<Future<Item = Json<LocalIdentity>, Error = Error>> {
     info!("Got Hello from {:?}", req.connection_info().remote());
 
-    let remote_ip = req.connection_info()
+    let remote_ip = req
+        .connection_info()
         .remote()
         .unwrap()
         .parse::<SocketAddr>()

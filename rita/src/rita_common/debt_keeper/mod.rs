@@ -154,7 +154,8 @@ impl DebtKeeper {
 
     fn payment_received(&mut self, ident: &Identity, amount: Uint256) {
         let buffer = SETTING.get_payment().buffer_period;
-        let debt_data = self.debt_data
+        let debt_data = self
+            .debt_data
             .entry(ident.clone())
             .or_insert_with(|| NodeDebtData::new(buffer));
 
@@ -178,7 +179,8 @@ impl DebtKeeper {
         {
             trace!("traffic update for {} is {}", ident.mesh_ip, amount);
             let buffer = SETTING.get_payment().buffer_period;
-            let debt_data = self.debt_data
+            let debt_data = self
+                .debt_data
                 .entry(ident.clone())
                 .or_insert_with(|| NodeDebtData::new(buffer));
 
@@ -213,7 +215,8 @@ impl DebtKeeper {
     fn send_update(&mut self, ident: &Identity) -> DebtAction {
         trace!("debt data: {:?}", self.debt_data);
         let buffer = SETTING.get_payment().buffer_period;
-        let debt_data = self.debt_data
+        let debt_data = self
+            .debt_data
             .entry(ident.clone())
             .or_insert_with(|| NodeDebtData::new(buffer));
         let debt = debt_data.debt.clone();

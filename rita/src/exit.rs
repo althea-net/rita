@@ -34,6 +34,7 @@ extern crate futures;
 extern crate ip_network;
 extern crate minihttpse;
 extern crate rand;
+extern crate regex;
 extern crate reqwest;
 extern crate serde;
 extern crate serde_json;
@@ -58,6 +59,7 @@ extern crate babel_monitor;
 extern crate exit_db;
 extern crate num256;
 
+mod middleware;
 mod rita_common;
 mod rita_exit;
 
@@ -169,6 +171,7 @@ fn main() {
     // Dashboard
     server::new(|| {
         App::new()
+            .middleware(middleware::Headers)
             // assuming exit nodes dont need wifi
             //.resource("/wifisettings", |r| r.route().filter(pred::Get()).h(get_wifi_config))
             //.resource("/wifisettings", |r| r.route().filter(pred::Post()).h(set_wifi_config))
