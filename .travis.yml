@@ -10,7 +10,7 @@ before_install:
   - rustup update
   - sudo cp /usr/include/x86_64-linux-gnu/openssl/* /usr/include/openssl/
 env:
-  - TEST_COMMAND="cargo install rustfmt-nightly --force && cargo fmt --all -- --write-mode=check"
+  - TEST_COMMAND="cargo install rustfmt-nightly --force && cargo fmt --all -- --check"
   - TEST_COMMAND="cargo build --verbose --all"
   - TEST_COMMAND="./integration-tests/cross-build.sh" 
   - TEST_COMMAND="cargo test --verbose --all" RUST_TEST_THREADS=1
@@ -24,9 +24,9 @@ script:
 matrix:
   exclude:
   - rust: stable
-    env: TEST_COMMAND="cargo install rustfmt-nightly --force && cargo fmt --all -- --write-mode=check"
+    env: TEST_COMMAND="cargo install rustfmt-nightly --force && cargo fmt --all -- --check"
   - rust: beta
-    env: TEST_COMMAND="cargo install rustfmt-nightly --force && cargo fmt --all -- --write-mode=check"
+    env: TEST_COMMAND="cargo install rustfmt-nightly --force && cargo fmt --all -- --check"
   - rust: stable
     env: TEST_COMMAND="./integration-tests/cross-build.sh"
   - rust: beta
