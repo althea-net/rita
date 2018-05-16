@@ -61,6 +61,7 @@ pub struct Route {
     pub prefix: IpNetwork,
     pub metric: u16,
     pub refmetric: u16,
+    pub full_path_rtt: f32,
     pub price: u32,
     pub fee: u32,
 }
@@ -220,6 +221,7 @@ impl<T: Read + Write> Babel<T> {
                     prefix: find_babel_val("prefix", entry)?.parse()?,
                     metric: find_babel_val("metric", entry)?.parse()?,
                     refmetric: find_babel_val("refmetric", entry)?.parse()?,
+                    full_path_rtt: find_babel_val("full-path-rtt", entry)?.parse()?,
                     price: find_babel_val("price", entry)?.parse()?,
                     fee: find_babel_val("fee", entry)?.parse()?,
                 });
