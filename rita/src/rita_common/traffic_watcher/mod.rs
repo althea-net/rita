@@ -167,7 +167,8 @@ pub fn watch<T: Read + Write>(
     }
 
     for ((ip, interface), bytes) in total_input_counters {
-        if destinations.contains_key(&ip) && if_to_ip.contains_key(&interface)
+        if destinations.contains_key(&ip)
+            && if_to_ip.contains_key(&interface)
             && identities.contains_key(&if_to_ip[&interface])
         {
             let id = identities[&if_to_ip[&interface]].clone();
@@ -180,7 +181,8 @@ pub fn watch<T: Read + Write>(
     trace!("Collated flow debts: {:?}", debts);
 
     for ((ip, interface), bytes) in total_output_counters {
-        if destinations.contains_key(&ip) && if_to_ip.contains_key(&interface)
+        if destinations.contains_key(&ip)
+            && if_to_ip.contains_key(&interface)
             && identities.contains_key(&if_to_ip[&interface])
         {
             let id = identities[&if_to_ip[&interface]].clone();

@@ -206,7 +206,8 @@ impl TunnelManager {
         KI.trigger_neighbor_disc().unwrap();
         let neighs: Vec<
             Box<Future<Item = Option<(LocalIdentity, String, IpAddr)>, Error = ()>>,
-        > = KI.get_neighbors()
+        > = KI
+            .get_neighbors()
             .unwrap()
             .iter()
             .map(|&(ip_address, ref dev)| (ip_address.to_string(), Some(dev.clone())))
