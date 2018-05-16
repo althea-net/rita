@@ -19,7 +19,7 @@ extern crate althea_kernel_interface;
 
 use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::Write;
 use std::net::IpAddr;
@@ -100,28 +100,73 @@ impl Default for PaymentSettings {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
-pub struct ExitClientSettings {
-    pub exit_ip: IpAddr,
-    pub exit_registration_port: u16,
-    pub wg_listen_port: u16,
+pub struct ExitServer {
+    pub ip: IpAddr,
+    pub registration_port: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<ExitClientDetails>,
-    pub reg_details: ExitRegistrationDetails,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub struct ExitClientSettings {
+    #[serde(default)]
+    pub exits: HashMap<String, ExitServer>,
+    pub current_exit: Option<String>,
+    pub wg_listen_port: u16,
+    pub reg_details: Option<ExitRegistrationDetails>,
 }
 
 impl Default for ExitClientSettings {
     fn default() -> Self {
         ExitClientSettings {
-            exit_ip: "fd00::8".parse().unwrap(),
-            exit_registration_port: 4875,
+            exits: HashMap::new(),
+            current_exit: None,
             wg_listen_port: 59999,
-            details: None,
-            reg_details: ExitRegistrationDetails {
+            reg_details: Some(ExitRegistrationDetails {
                 zip_code: Some("1234".into()),
                 email: Some("1234@gmail.com".into()),
                 country: Some("Althea".into()),
-            },
+            }),
         }
+    }
+}
+
+impl ExitClientSettings {
+    pub fn get_current_exit(&self) -> Option<&ExitServer> {
+        Some(&self.exits[self.current_exit.as_ref()?])
+    }
+    pub fn get_current_exit_details(&self) -> Option<&ExitClientDetails> {
+        match self.get_current_exit() {
+            Some(ref exit) => match exit.details {
+                Some(ref details) => return Some(details),
+                _ => (),
+            },
+            _ => (),
+        }
+        None
+    }
+    pub fn set_current_exit(&mut self) -> Option<&mut ExitServer> {
+        self.exits.get_mut(self.current_exit.as_ref()?)
+    }
+    pub fn current_exit_exists(&self) -> bool {
+        if self.current_exit == None {
+            return false;
+        }
+        return self.exits.contains_key(self.current_exit.as_ref().unwrap());
+    }
+    pub fn current_exit_details_exists(&self) -> bool {
+        if self.current_exit == None {
+            return false;
+        }
+        if self.exits.contains_key(self.current_exit.as_ref().unwrap()) == false {
+            return false;
+        }
+        return self.exits[self.current_exit.as_ref().unwrap()]
+            .details
+            .is_some();
+    }
+    pub fn reg_details_set(&self) -> bool {
+        self.reg_details.is_some()
     }
 }
 
@@ -151,8 +196,7 @@ pub struct ExitTunnelSettings {
 pub struct RitaSettingsStruct {
     payment: PaymentSettings,
     network: NetworkSettings,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    exit_client: Option<ExitClientSettings>,
+    exit_client: ExitClientSettings,
     exit_tunnel_settings: ExitTunnelSettings,
     #[serde(skip_serializing_if = "Option::is_none")]
     stats_server: Option<StatsServerSettings>,
@@ -361,12 +405,8 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
         self.read().unwrap().stats_server.is_some()
     }
 
-    fn get_identity(&self) -> Identity {
-        Identity::new(
-            self.get_network().own_ip.clone(),
-            self.get_payment().eth_address.clone(),
-            self.get_network().wg_public_key.clone(),
-        )
+    fn clear_stats_server_settings(&self) {
+        self.write().unwrap().stats_server = None;
     }
 
     fn merge(&self, changed_settings: serde_json::Value) -> Result<(), Error> {
@@ -387,8 +427,12 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
         Ok(serde_json::to_value(self.read().unwrap().clone())?)
     }
 
-    fn clear_stats_server_settings(&self) {
-        self.write().unwrap().stats_server = None;
+    fn get_identity(&self) -> Identity {
+        Identity::new(
+            self.get_network().own_ip.clone(),
+            self.get_payment().eth_address.clone(),
+            self.get_network().wg_public_key.clone(),
+        )
     }
 }
 
@@ -396,21 +440,15 @@ pub trait RitaClientSettings {
     fn get_exit_client<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, ExitClientSettings>;
-    fn init_exit_client(&self, exit_client: ExitClientSettings);
     fn set_exit_client<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, ExitClientSettings>;
-    fn exit_client_is_set(&self) -> bool;
-
-    fn get_exit_client_details<'ret, 'me: 'ret>(
+    fn get_exits<'ret, 'me: 'ret>(
         &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, ExitClientDetails>;
-    fn init_exit_client_details(&self, details: ExitClientDetails);
-    fn set_exit_client_details<'ret, 'me: 'ret>(
+    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, HashMap<String, ExitServer>>;
+    fn set_exits<'ret, 'me: 'ret>(
         &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, ExitClientDetails>;
-    fn exit_client_details_is_set(&self) -> bool;
-
+    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, HashMap<String, ExitServer>>;
     fn get_exit_tunnel_settings<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, ExitTunnelSettings>;
@@ -420,59 +458,24 @@ impl RitaClientSettings for Arc<RwLock<RitaSettingsStruct>> {
     fn get_exit_client<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, ExitClientSettings> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| match g.exit_client {
-            Some(ref exit_client) => exit_client,
-            None => panic!("exit client not set but needed"),
-        })
+        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.exit_client)
     }
-
-    fn init_exit_client(&self, exit_client: ExitClientSettings) {
-        self.write().unwrap().exit_client = Some(exit_client)
-    }
-
     fn set_exit_client<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, ExitClientSettings> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| match g.exit_client {
-            Some(ref mut exit_client) => exit_client,
-            None => panic!("exit client not set but needed"),
-        })
+        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.exit_client)
     }
 
-    fn exit_client_is_set(&self) -> bool {
-        self.read().unwrap().exit_client.is_some()
-    }
-
-    fn get_exit_client_details<'ret, 'me: 'ret>(
+    fn get_exits<'ret, 'me: 'ret>(
         &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, ExitClientDetails> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| match g.exit_client {
-            Some(ref exit_client) => match exit_client.details {
-                Some(ref details) => details,
-                None => panic!("exit client details not set but needed"),
-            },
-            None => panic!("exit client not set but needed"),
-        })
+    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, HashMap<String, ExitServer>> {
+        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.exit_client.exits)
     }
 
-    fn init_exit_client_details(&self, details: ExitClientDetails) {
-        self.set_exit_client().details = Some(details)
-    }
-
-    fn set_exit_client_details<'ret, 'me: 'ret>(
+    fn set_exits<'ret, 'me: 'ret>(
         &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, ExitClientDetails> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| match g.exit_client {
-            Some(ref mut exit_client) => match exit_client.details {
-                Some(ref mut details) => details,
-                None => panic!("exit client details not set but needed"),
-            },
-            None => panic!("exit client not set but needed"),
-        })
-    }
-
-    fn exit_client_details_is_set(&self) -> bool {
-        self.get_exit_client().details.is_some()
+    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, HashMap<String, ExitServer>> {
+        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.exit_client.exits)
     }
 
     fn get_exit_tunnel_settings<'ret, 'me: 'ret>(
@@ -575,10 +578,14 @@ impl RitaSettingsStruct {
     }
 
     pub fn get_exit_id(&self) -> Option<Identity> {
-        let details = self.exit_client.clone()?.details?;
+        let details = self.exit_client
+            .get_current_exit()
+            .as_ref()?
+            .details
+            .as_ref()?;
 
         Some(Identity::new(
-            self.exit_client.clone()?.exit_ip,
+            self.exit_client.clone().get_current_exit()?.ip,
             details.eth_address.clone(),
             details.wg_public_key.clone(),
         ))
@@ -587,7 +594,8 @@ impl RitaSettingsStruct {
 
 impl FileWrite for RitaSettingsStruct {
     fn write(&self, file_name: &str) -> Result<(), Error> {
-        let ser = toml::to_string(&self).unwrap();
+        let ser = toml::Value::try_from(self.clone()).unwrap();
+        let ser = toml::to_string(&ser).unwrap();
         let mut file = File::create(file_name)?;
         file.write_all(ser.as_bytes())?;
         file.flush().unwrap();
@@ -618,7 +626,8 @@ impl RitaExitSettingsStruct {
 
 impl FileWrite for RitaExitSettingsStruct {
     fn write(&self, file_name: &str) -> Result<(), Error> {
-        let ser = toml::to_string(&self).unwrap();
+        let ser = toml::Value::try_from(self.clone()).unwrap();
+        let ser = toml::to_string(&ser).unwrap();
         let mut file = File::create(file_name)?;
         file.write_all(ser.as_bytes())?;
         file.flush().unwrap();

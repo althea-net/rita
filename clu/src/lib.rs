@@ -4,10 +4,10 @@ extern crate log;
 #[macro_use]
 extern crate failure;
 
-use std::net::{IpAddr, SocketAddr};
+use std::net::IpAddr;
 
 extern crate settings;
-use settings::{NetworkSettings, RitaClientSettings, RitaCommonSettings};
+use settings::{NetworkSettings, RitaCommonSettings};
 
 extern crate ipgen;
 extern crate rand;
@@ -22,13 +22,9 @@ extern crate reqwest;
 use althea_kernel_interface::KI;
 
 extern crate althea_kernel_interface;
-use althea_types::interop::ExitServerIdentity;
 use regex::Regex;
-use settings::ExitClientDetails;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
-use std::thread;
-use std::time::Duration;
 
 extern crate althea_types;
 extern crate regex;
@@ -68,63 +64,6 @@ fn validate_wg_key(key: &str) -> bool {
 
 fn validate_mesh_ip(ip: &IpAddr) -> bool {
     ip.is_ipv6() && !ip.is_unspecified()
-}
-
-fn linux_setup_exit_tunnel(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), Error> {
-    let details = config.get_exit_client_details().clone();
-
-    KI.setup_wg_if_named("wg_exit").unwrap();
-    KI.set_client_exit_tunnel_config(
-        SocketAddr::new(config.get_exit_client().exit_ip, details.wg_exit_port),
-        details.wg_public_key,
-        config.get_network().wg_private_key_path.clone(),
-        config.get_exit_client().wg_listen_port,
-        details.own_internal_ip,
-        details.netmask,
-    )?;
-    KI.set_route_to_tunnel(&details.server_internal_ip)?;
-
-    let lan_nics = &config.get_exit_tunnel_settings().lan_nics;
-    for nic in lan_nics {
-        KI.add_client_nat_rules(&nic)?;
-    }
-
-    Ok(())
-}
-
-fn request_own_exit_ip(
-    config: Arc<RwLock<settings::RitaSettingsStruct>>,
-) -> Result<ExitClientDetails, Error> {
-    let exit_server = config.get_exit_client().exit_ip;
-    let ident = althea_types::ExitClientIdentity {
-        global: config.get_identity(),
-        wg_port: config.get_exit_client().wg_listen_port.clone(),
-        reg_details: config.get_exit_client().reg_details.clone(),
-    };
-
-    let endpoint = format!(
-        "http://[{}]:{}/setup",
-        exit_server,
-        config.get_exit_client().exit_registration_port
-    );
-
-    trace!("Sending exit setup request to {:?}", endpoint);
-    let client = reqwest::Client::new();
-    let response = client.post(&endpoint).json(&ident).send();
-
-    let exit_id: ExitServerIdentity = response?.json()?;
-
-    trace!("Got exit setup response {:?}", exit_id);
-
-    Ok(ExitClientDetails {
-        own_internal_ip: exit_id.own_local_ip,
-        eth_address: exit_id.global.eth_address,
-        wg_public_key: exit_id.global.wg_public_key,
-        wg_exit_port: exit_id.wg_port,
-        server_internal_ip: exit_id.server_local_ip,
-        exit_price: exit_id.price,
-        netmask: exit_id.netmask,
-    })
 }
 
 /// called before anything is started to delete existing wireguard per hop tunnels
@@ -170,32 +109,6 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
         &Path::new(&config.get_network().wg_private_key_path),
         &config.get_network().wg_private_key,
     )?;
-
-    thread::spawn(move || loop {
-        if config.exit_client_is_set() {
-            let our_exit_ip = config.get_exit_client().exit_ip.clone();
-
-            assert!(our_exit_ip.is_ipv6());
-            assert!(!our_exit_ip.is_unspecified());
-
-            let details = request_own_exit_ip(config.clone());
-
-            match details {
-                Ok(details) => {
-                    config.init_exit_client_details(details);
-
-                    linux_setup_exit_tunnel(config.clone()).expect("can't set exit tunnel up!");
-
-                    info!("got exit details, exiting");
-                    break;
-                }
-                Err(err) => {
-                    warn!("got error back from requesting details, {:?}", err);
-                }
-            }
-        }
-        thread::sleep(Duration::from_secs(5));
-    });
 
     Ok(())
 }

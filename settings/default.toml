@@ -22,3 +22,6 @@ default_route = []
 
 [exit_tunnel_settings]
 lan_nics = ["lo"]
+
+[exit_client]
+wg_listen_port = 59999
