@@ -16,13 +16,16 @@ use althea_types::interop::ExitServerIdentity;
 use exit_db::models::Client;
 use failure::Error;
 use rita_exit::db_client::ListClients;
+use std::net::SocketAddr;
 
 pub fn setup_request(
     their_id: Json<ExitClientIdentity>,
+    req: HttpRequest,
 ) -> Box<Future<Item = Json<ExitServerIdentity>, Error = Error>> {
     trace!("Received requester identity, {:?}", their_id);
+    let remote_socket: SocketAddr = req.connection_info().remote().unwrap().parse().unwrap();
     DbClient::from_registry()
-        .send(SetupClient(their_id.into_inner()))
+        .send(SetupClient(their_id.into_inner(), remote_socket.ip()))
         .from_err()
         .and_then(move |reply| {
             Ok(Json(ExitServerIdentity {
