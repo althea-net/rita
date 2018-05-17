@@ -21,11 +21,16 @@ impl KernelInterface {
     /// calls iproute2 to set up a new interface with a given name.
     pub fn setup_wg_if_named(&self, name: &str) -> Result<(), Error> {
         let output = self.run_command("ip", &["link", "add", &name, "type", "wireguard"])?;
-        if !output.stderr.is_empty() {
-            return Err(KernelInterfaceError::RuntimeError(format!(
-                "received error adding wg link: {}",
-                String::from_utf8(output.stderr)?
-            )).into());
+        let stderr = String::from_utf8(output.stderr)?;
+        if !stderr.is_empty() {
+            if stderr.contains("exists") {
+                return Ok(());
+            } else {
+                return Err(KernelInterfaceError::RuntimeError(format!(
+                    "received error adding wg link: {}",
+                    stderr
+                )).into());
+            }
         }
         Ok(())
     }

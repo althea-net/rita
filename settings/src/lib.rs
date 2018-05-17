@@ -29,7 +29,7 @@ use std::time::Duration;
 
 use config::Config;
 
-use althea_types::{EthAddress, ExitRegistrationDetails, Identity};
+use althea_types::{EthAddress, ExitRegistrationDetails, ExitState, Identity};
 
 use num256::Int256;
 
@@ -105,6 +105,10 @@ pub struct ExitServer {
     pub registration_port: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<ExitClientDetails>,
+    #[serde(default)]
+    pub state: ExitState,
+    #[serde(default)]
+    pub message: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -133,6 +137,9 @@ impl Default for ExitClientSettings {
 
 impl ExitClientSettings {
     pub fn get_current_exit(&self) -> Option<&ExitServer> {
+        Some(&self.exits[self.current_exit.as_ref()?])
+    }
+    pub fn get_current_exit_name(&self) -> Option<&ExitServer> {
         Some(&self.exits[self.current_exit.as_ref()?])
     }
     pub fn get_current_exit_details(&self) -> Option<&ExitClientDetails> {

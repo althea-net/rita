@@ -36,6 +36,22 @@ pub struct ExitRegistrationDetails {
     pub email: Option<String>,
 }
 
+/// This is the state an exit can be in
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+pub enum ExitState {
+    Registered,
+    Denied,
+    Pending,
+    New,
+    Disabled,
+}
+
+impl Default for ExitState {
+    fn default() -> Self {
+        ExitState::New
+    }
+}
+
 /// This is all the data we need to send to an exit
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct ExitClientIdentity {
@@ -53,6 +69,13 @@ pub struct ExitServerIdentity {
     pub wg_port: u16,
     pub global: Identity,
     pub price: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct ExitServerReply {
+    pub identity: Option<ExitServerIdentity>,
+    pub state: ExitState,
+    pub message: String,
 }
 
 #[cfg(feature = "actix")]
