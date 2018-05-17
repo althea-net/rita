@@ -585,7 +585,8 @@ impl RitaSettingsStruct {
     }
 
     pub fn get_exit_id(&self) -> Option<Identity> {
-        let details = self.exit_client
+        let details = self
+            .exit_client
             .get_current_exit()
             .as_ref()?
             .details
