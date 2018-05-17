@@ -10,7 +10,7 @@ use SETTING;
 use rita_client::rita_loop::Tick;
 use rita_client::traffic_watcher::{TrafficWatcher, Watch};
 
-use althea_types::interop::ExitServerIdentity;
+use althea_types::{ExitServerReply, ExitState};
 use failure::Error;
 use settings::ExitClientDetails;
 use std::net::SocketAddr;
@@ -21,7 +21,7 @@ fn linux_setup_exit_tunnel() -> Result<(), Error> {
     let current_exit = exit_client.get_current_exit().unwrap();
     let details = current_exit.details.as_ref().unwrap();
 
-    KI.setup_wg_if_named("wg_exit").unwrap();
+    KI.setup_wg_if_named("wg_exit")?;
     KI.set_client_exit_tunnel_config(
         SocketAddr::new(current_exit.ip, details.wg_exit_port),
         details.wg_public_key.clone(),
@@ -40,39 +40,41 @@ fn linux_setup_exit_tunnel() -> Result<(), Error> {
     Ok(())
 }
 
-fn exit_setup_request() -> Result<ExitClientDetails, Error> {
-    let exit_server = SETTING
-        .get_exit_client()
-        .get_current_exit()
-        .as_ref()
-        .unwrap()
-        .ip;
-    let ident = ExitClientIdentity {
-        global: SETTING.get_identity(),
-        wg_port: SETTING.get_exit_client().wg_listen_port.clone(),
-        reg_details: SETTING.get_exit_client().reg_details.clone().unwrap(),
+fn exit_setup_request(exit: &String) -> Result<(), Error> {
+    let exit_response: ExitServerReply = {
+        let exits = SETTING.get_exits();
+        let current_exit = &exits[exit];
+        let exit_server = current_exit.ip;
+        let ident = ExitClientIdentity {
+            global: SETTING.get_identity(),
+            wg_port: SETTING.get_exit_client().wg_listen_port.clone(),
+            reg_details: SETTING.get_exit_client().reg_details.clone().unwrap(),
+        };
+
+        let endpoint = format!(
+            "http://[{}]:{}/setup",
+            exit_server, current_exit.registration_port
+        );
+
+        trace!("Sending exit setup request to {:?}", endpoint);
+        let client = reqwest::Client::new();
+        let response = client.post(&endpoint).json(&ident).send();
+
+        response?.json()?
     };
 
-    let endpoint = format!(
-        "http://[{}]:{}/setup",
-        exit_server,
-        SETTING
-            .get_exit_client()
-            .get_current_exit()
-            .as_ref()
-            .unwrap()
-            .registration_port
-    );
+    let mut exits = SETTING.set_exits();
 
-    trace!("Sending exit setup request to {:?}", endpoint);
-    let client = reqwest::Client::new();
-    let response = client.post(&endpoint).json(&ident).send();
+    let current_exit = exits.get_mut(exit).unwrap();
 
-    let exit_id: ExitServerIdentity = response?.json()?;
+    current_exit.message = exit_response.message.clone();
+    current_exit.state = exit_response.state.clone();
 
-    trace!("Got exit setup response {:?}", exit_id);
+    let exit_id = exit_response.identity.clone().unwrap();
 
-    Ok(ExitClientDetails {
+    trace!("Got exit setup response {:?}", exit_response.clone());
+
+    current_exit.details = Some(ExitClientDetails {
         own_internal_ip: exit_id.own_local_ip,
         eth_address: exit_id.global.eth_address,
         wg_public_key: exit_id.global.wg_public_key,
@@ -80,7 +82,9 @@ fn exit_setup_request() -> Result<ExitClientDetails, Error> {
         server_internal_ip: exit_id.server_local_ip,
         exit_price: exit_id.price,
         netmask: exit_id.netmask,
-    })
+    });
+
+    Ok(())
 }
 
 /// An actor which pays the exit
@@ -109,8 +113,10 @@ impl Handler<Tick> for ExitManager {
                 .map(|c| c.clone())
         };
 
+        // code that connects to the current exit server
         if let Some(exit) = exit_server {
             if let Some(ref details) = exit.details {
+                linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
                 TrafficWatcher::from_registry().do_send(Watch(
                     Identity {
                         mesh_ip: exit.ip,
@@ -119,23 +125,23 @@ impl Handler<Tick> for ExitManager {
                     },
                     details.exit_price,
                 ));
-            } else {
-                let details = exit_setup_request();
+            }
+        }
 
-                match details {
-                    Ok(details) => {
-                        SETTING
-                            .set_exit_client()
-                            .set_current_exit()
-                            .unwrap()
-                            .details = Some(details);
+        // code that manages requesting details to exits
+        let servers = { SETTING.get_exits().clone() };
 
-                        linux_setup_exit_tunnel().expect("can't set exit tunnel up!");
+        for (k, s) in servers {
+            match s.state {
+                ExitState::Denied | ExitState::Disabled | ExitState::Registered => {}
+                ExitState::New | ExitState::Pending => match exit_setup_request(&k) {
+                    Ok(_) => {
+                        info!("exit request to {} was successful", k);
                     }
-                    Err(err) => {
-                        warn!("got error back from requesting details, {:?}", err);
+                    Err(e) => {
+                        info!("exit request to {} failed with {:?}", k, e);
                     }
-                }
+                },
             }
         }
 
