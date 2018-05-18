@@ -39,10 +39,11 @@ pub struct ExitRegistrationDetails {
 /// This is the state an exit can be in
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub enum ExitState {
+    New,
+    GotInfo,
+    Pending,
     Registered,
     Denied,
-    Pending,
-    New,
     Disabled,
 }
 
@@ -60,20 +61,23 @@ pub struct ExitClientIdentity {
     pub reg_details: ExitRegistrationDetails,
 }
 
-/// This is all the data we need from an exit
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
-pub struct ExitServerIdentity {
-    pub own_local_ip: IpAddr,
-    pub server_local_ip: IpAddr,
+pub struct ExitDetails {
+    pub server_internal_ip: IpAddr,
     pub netmask: u8,
-    pub wg_port: u16,
-    pub global: Identity,
-    pub price: u64,
+    pub wg_exit_port: u16,
+    pub exit_price: u64,
+    pub description: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct ExitClientDetails {
+    pub client_internal_ip: IpAddr,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct ExitServerReply {
-    pub identity: Option<ExitServerIdentity>,
+    pub details: Option<ExitClientDetails>,
     pub state: ExitState,
     pub message: String,
 }
