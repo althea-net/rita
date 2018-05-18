@@ -2,7 +2,9 @@ use actix::prelude::*;
 
 use reqwest;
 
-use althea_types::{ExitClientIdentity, Identity};
+use althea_types::{
+    ExitClientDetails, ExitClientIdentity, ExitDetails, ExitServerReply, ExitState,
+};
 
 use settings::{RitaClientSettings, RitaCommonSettings};
 use SETTING;
@@ -10,27 +12,26 @@ use SETTING;
 use rita_client::rita_loop::Tick;
 use rita_client::traffic_watcher::{TrafficWatcher, Watch};
 
-use althea_types::{ExitServerReply, ExitState};
 use failure::Error;
-use settings::ExitClientDetails;
 use std::net::SocketAddr;
 use KI;
 
 fn linux_setup_exit_tunnel() -> Result<(), Error> {
     let exit_client = SETTING.get_exit_client();
     let current_exit = exit_client.get_current_exit().unwrap();
-    let details = current_exit.details.as_ref().unwrap();
+    let general_details = current_exit.general_details.as_ref().unwrap();
+    let our_details = current_exit.our_details.as_ref().unwrap();
 
     KI.setup_wg_if_named("wg_exit")?;
     KI.set_client_exit_tunnel_config(
-        SocketAddr::new(current_exit.ip, details.wg_exit_port),
-        details.wg_public_key.clone(),
+        SocketAddr::new(current_exit.id.mesh_ip, general_details.wg_exit_port),
+        current_exit.id.wg_public_key.clone(),
         SETTING.get_network().wg_private_key_path.clone(),
         SETTING.get_exit_client().wg_listen_port,
-        details.own_internal_ip,
-        details.netmask,
+        our_details.client_internal_ip,
+        general_details.netmask,
     )?;
-    KI.set_route_to_tunnel(&details.server_internal_ip)?;
+    KI.set_route_to_tunnel(&general_details.server_internal_ip)?;
 
     let lan_nics = &SETTING.get_exit_tunnel_settings().lan_nics;
     for nic in lan_nics {
@@ -40,11 +41,40 @@ fn linux_setup_exit_tunnel() -> Result<(), Error> {
     Ok(())
 }
 
+fn exit_general_details_request(exit: &String) -> Result<(), Error> {
+    let exit_details: ExitDetails = {
+        let exits = SETTING.get_exits();
+        let current_exit = &exits[exit];
+        let endpoint = format!(
+            "http://[{}]:{}/exit_info",
+            current_exit.id.mesh_ip, current_exit.registration_port
+        );
+
+        trace!("Sending exit info request to {:?}", endpoint);
+        let client = reqwest::Client::new();
+        let response = client.get(&endpoint).send();
+
+        response?.json()?
+    };
+
+    let mut exits = SETTING.set_exits();
+
+    let current_exit = exits.get_mut(exit).unwrap();
+
+    current_exit.state = ExitState::GotInfo;
+
+    trace!("Got exit info response {:?}", exit_details.clone());
+
+    current_exit.general_details = Some(exit_details);
+
+    Ok(())
+}
+
 fn exit_setup_request(exit: &String) -> Result<(), Error> {
     let exit_response: ExitServerReply = {
         let exits = SETTING.get_exits();
         let current_exit = &exits[exit];
-        let exit_server = current_exit.ip;
+        let exit_server = current_exit.id.mesh_ip;
         let ident = ExitClientIdentity {
             global: SETTING.get_identity(),
             wg_port: SETTING.get_exit_client().wg_listen_port.clone(),
@@ -70,18 +100,10 @@ fn exit_setup_request(exit: &String) -> Result<(), Error> {
     current_exit.message = exit_response.message.clone();
     current_exit.state = exit_response.state.clone();
 
-    let exit_id = exit_response.identity.clone().unwrap();
-
     trace!("Got exit setup response {:?}", exit_response.clone());
 
-    current_exit.details = Some(ExitClientDetails {
-        own_internal_ip: exit_id.own_local_ip,
-        eth_address: exit_id.global.eth_address,
-        wg_public_key: exit_id.global.wg_public_key,
-        wg_exit_port: exit_id.wg_port,
-        server_internal_ip: exit_id.server_local_ip,
-        exit_price: exit_id.price,
-        netmask: exit_id.netmask,
+    current_exit.our_details = Some(ExitClientDetails {
+        client_internal_ip: exit_response.details.unwrap().client_internal_ip,
     });
 
     Ok(())
@@ -115,16 +137,12 @@ impl Handler<Tick> for ExitManager {
 
         // code that connects to the current exit server
         if let Some(exit) = exit_server {
-            if let Some(ref details) = exit.details {
-                linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
-                TrafficWatcher::from_registry().do_send(Watch(
-                    Identity {
-                        mesh_ip: exit.ip,
-                        wg_public_key: details.wg_public_key.clone(),
-                        eth_address: details.eth_address,
-                    },
-                    details.exit_price,
-                ));
+            if let Some(ref general_details) = exit.general_details {
+                if let Some(_) = exit.our_details {
+                    linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
+                    TrafficWatcher::from_registry()
+                        .do_send(Watch(exit.id.clone(), general_details.exit_price));
+                }
             }
         }
 
@@ -134,7 +152,15 @@ impl Handler<Tick> for ExitManager {
         for (k, s) in servers {
             match s.state {
                 ExitState::Denied | ExitState::Disabled | ExitState::Registered => {}
-                ExitState::New | ExitState::Pending => match exit_setup_request(&k) {
+                ExitState::New => match exit_general_details_request(&k) {
+                    Ok(_) => {
+                        info!("exit request to {} was successful", k);
+                    }
+                    Err(e) => {
+                        info!("exit request to {} failed with {:?}", k, e);
+                    }
+                },
+                ExitState::GotInfo | ExitState::Pending => match exit_setup_request(&k) {
                     Ok(_) => {
                         info!("exit request to {} was successful", k);
                     }

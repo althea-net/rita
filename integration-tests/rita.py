@@ -35,7 +35,11 @@ os.chdir(dname)
 exit_settings = {
     "exits": {
         "exit_a": {
-            "ip": "fd00::5",
+            "id": {
+                "mesh_ip": "fd00::5",
+                "eth_address": "0x0101010101010101010101010101010101010101",
+                "wg_public_key": "fd00::5",
+            },
             "registration_port": 4875,
         }
     },
@@ -83,12 +87,12 @@ def exec_or_exit(command, blocking=True, delay=0.01):
 
 
 def cleanup():
-    os.system("rm -rf *.log *.pid *.toml private-key*")
+    os.system("sudo rm -rf *.log *.pid *.toml private-key*")
     os.system("killall babeld rita bounty_hunter iperf")  # TODO: This is very inconsiderate
 
 
 def teardown():
-    os.system("rm -rf *.pid *.toml private-key*")
+    os.system("sudo rm -rf *.pid *.toml private-key*")
     os.system("killall babeld rita bounty_hunter iperf")  # TODO: This is very inconsiderate
 
 
@@ -113,6 +117,9 @@ class Node:
         for i in self.neighbors:
             interfaces.append("veth-{}-{}".format(self.id, i))
         return interfaces
+
+    def get_pubkey(self):
+        return get_rita_settings(self.id)["network"]["wg_public_key"]
 
     def has_route(self, dest, price, next_hop, backlog=5000, verbose=False):
         """
@@ -216,6 +223,10 @@ def get_rita_exit_defaults():
 
 def save_rita_settings(id, x):
     toml.dump(x, open("rita-settings-n{}.toml".format(id), "w"))
+
+
+def get_rita_settings(id):
+    return toml.load(open("rita-settings-n{}.toml".format(id)))
 
 
 def start_rita(node):
@@ -350,12 +361,16 @@ class World:
         start_bounty(self.bounty)
         print("bounty hunter started")
 
+        start_rita_exit(self.nodes[self.exit])
+
         time.sleep(1)
+
+        exit_settings["exits"]["exit_a"]["id"]["wg_public_key"] = self.nodes[self.exit].get_pubkey()
 
         print("starting rita")
         for id, node in self.nodes.items():
             if id == self.exit:
-                start_rita_exit(node)
+                pass
             elif id == self.external:
                 pass
             else:

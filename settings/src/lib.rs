@@ -29,7 +29,9 @@ use std::time::Duration;
 
 use config::Config;
 
-use althea_types::{EthAddress, ExitRegistrationDetails, ExitState, Identity};
+use althea_types::{
+    EthAddress, ExitClientDetails, ExitDetails, ExitRegistrationDetails, ExitState, Identity,
+};
 
 use num256::Int256;
 
@@ -101,10 +103,12 @@ impl Default for PaymentSettings {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitServer {
-    pub ip: IpAddr,
+    pub id: Identity,
     pub registration_port: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<ExitClientDetails>,
+    pub our_details: Option<ExitClientDetails>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub general_details: Option<ExitDetails>,
     #[serde(default)]
     pub state: ExitState,
     #[serde(default)]
@@ -144,7 +148,7 @@ impl ExitClientSettings {
     }
     pub fn get_current_exit_details(&self) -> Option<&ExitClientDetails> {
         match self.get_current_exit() {
-            Some(ref exit) => match exit.details {
+            Some(ref exit) => match exit.our_details {
                 Some(ref details) => return Some(details),
                 _ => (),
             },
@@ -169,23 +173,12 @@ impl ExitClientSettings {
             return false;
         }
         return self.exits[self.current_exit.as_ref().unwrap()]
-            .details
+            .our_details
             .is_some();
     }
     pub fn reg_details_set(&self) -> bool {
         self.reg_details.is_some()
     }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
-pub struct ExitClientDetails {
-    pub own_internal_ip: IpAddr,
-    pub server_internal_ip: IpAddr,
-    pub netmask: u8,
-    pub eth_address: EthAddress,
-    pub wg_public_key: String,
-    pub wg_exit_port: u16,
-    pub exit_price: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
@@ -235,6 +228,7 @@ impl Default for ExitNetworkSettings {
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct RitaExitSettingsStruct {
     db_file: String,
+    description: String,
     payment: PaymentSettings,
     network: NetworkSettings,
     exit_network: ExitNetworkSettings,
@@ -501,6 +495,7 @@ pub trait RitaExitSettings {
     ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, ExitNetworkSettings>;
 
     fn get_db_file(&self) -> String;
+    fn get_description(&self) -> String;
     fn get_allowed_countries<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, HashSet<String>>;
@@ -521,6 +516,9 @@ impl RitaExitSettings for Arc<RwLock<RitaExitSettingsStruct>> {
 
     fn get_db_file(&self) -> String {
         self.read().unwrap().db_file.clone()
+    }
+    fn get_description(&self) -> String {
+        self.read().unwrap().description.clone()
     }
     fn get_allowed_countries<'ret, 'me: 'ret>(
         &'me self,
@@ -544,10 +542,9 @@ where
 
     thread::spawn(move || {
         let old_settings = settings.read().unwrap().clone();
+        thread::sleep(Duration::from_millis(200));
 
         loop {
-            thread::sleep(Duration::from_secs(5));
-
             let new_settings = settings.read().unwrap().clone();
 
             if old_settings != new_settings {
@@ -557,6 +554,8 @@ where
                     _ => (),
                 }
             }
+
+            thread::sleep(Duration::from_secs(5));
         }
     });
 
@@ -585,18 +584,7 @@ impl RitaSettingsStruct {
     }
 
     pub fn get_exit_id(&self) -> Option<Identity> {
-        let details = self
-            .exit_client
-            .get_current_exit()
-            .as_ref()?
-            .details
-            .as_ref()?;
-
-        Some(Identity::new(
-            self.exit_client.clone().get_current_exit()?.ip,
-            details.eth_address.clone(),
-            details.wg_public_key.clone(),
-        ))
+        Some(self.exit_client.get_current_exit().as_ref()?.id.clone())
     }
 }
 
