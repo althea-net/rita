@@ -87,12 +87,12 @@ def exec_or_exit(command, blocking=True, delay=0.01):
 
 
 def cleanup():
-    os.system("sudo rm -rf *.log *.pid *.toml private-key*")
+    os.system("rm -rf *.log *.pid *.toml private-key*")
     os.system("killall babeld rita bounty_hunter iperf")  # TODO: This is very inconsiderate
 
 
 def teardown():
-    os.system("sudo rm -rf *.pid *.toml private-key*")
+    os.system("rm -rf *.pid *.toml private-key*")
     os.system("killall babeld rita bounty_hunter iperf")  # TODO: This is very inconsiderate
 
 
@@ -117,9 +117,6 @@ class Node:
         for i in self.neighbors:
             interfaces.append("veth-{}-{}".format(self.id, i))
         return interfaces
-
-    def get_pubkey(self):
-        return get_rita_settings(self.id)["network"]["wg_public_key"]
 
     def has_route(self, dest, price, next_hop, backlog=5000, verbose=False):
         """
@@ -365,15 +362,11 @@ class World:
 
         time.sleep(1)
 
-        exit_settings["exits"]["exit_a"]["id"]["wg_public_key"] = self.nodes[self.exit].get_pubkey()
+        exit_settings["exits"]["exit_a"]["id"]["wg_public_key"] = get_rita_settings(self.exit)["network"]["wg_public_key"]
 
         print("starting rita")
         for id, node in self.nodes.items():
-            if id == self.exit:
-                pass
-            elif id == self.external:
-                pass
-            else:
+            if id != self.exit and id != self.external:
                 start_rita(node)
             time.sleep(0.5 + random.random() / 2) # wait 0.5s - 1s
             print()
