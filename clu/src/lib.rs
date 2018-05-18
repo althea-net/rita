@@ -91,17 +91,17 @@ pub fn cleanup() -> Result<(), Error> {
 
 fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), Error> {
     cleanup()?;
-    KI.restore_default_route(&mut config.set_network().default_route)?;
+    KI.restore_default_route(&mut config.get_network_mut().default_route)?;
 
     let privkey = config.get_network().wg_private_key.clone();
     let pubkey = config.get_network().wg_public_key.clone();
     let mesh_ip = config.get_network().own_ip.clone();
 
     if !validate_wg_key(&privkey) || !validate_wg_key(&pubkey) {
-        linux_generate_wg_keys(&mut config.set_network()).expect("failed to generate wg keys");
+        linux_generate_wg_keys(&mut config.get_network_mut()).expect("failed to generate wg keys");
     }
     if !validate_mesh_ip(&mesh_ip) {
-        linux_generate_mesh_ip(&mut config.set_network()).expect("failed to generate ip");
+        linux_generate_mesh_ip(&mut config.get_network_mut()).expect("failed to generate ip");
     }
 
     //Creates file on disk containing key
@@ -121,10 +121,10 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
     let mesh_ip = config.get_network().own_ip.clone();
 
     if !validate_wg_key(&privkey) || !validate_wg_key(&pubkey) {
-        linux_generate_wg_keys(&mut config.set_network())?;
+        linux_generate_wg_keys(&mut config.get_network_mut())?;
     }
     if !validate_mesh_ip(&mesh_ip) {
-        linux_generate_mesh_ip(&mut config.set_network())?;
+        linux_generate_mesh_ip(&mut config.get_network_mut())?;
     }
 
     //Creates file on disk containing key

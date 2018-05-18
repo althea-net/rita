@@ -37,7 +37,7 @@ impl Actor for StatsCollector {
 impl Handler<Tick> for StatsCollector {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, _ctx: &mut SyncContext<Self>) -> Self::Result {
-        if SETTING.stats_server_settings_is_set() {
+        if let Some(stats_server) = SETTING.get_stats_server_settings() {
             trace!("preparing to send stats...");
 
             let stats = Stats {
@@ -54,8 +54,7 @@ impl Handler<Tick> for StatsCollector {
             info!("Sending stat server update: {:?}", stats);
             let stat_server_url = format!(
                 "http://{}:{}/stats/",
-                SETTING.get_stats_server_settings().stats_address,
-                SETTING.get_stats_server_settings().stats_port,
+                stats_server.stats_address, stats_server.stats_port,
             );
 
             trace!("stat server url: {}", stat_server_url);

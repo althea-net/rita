@@ -143,42 +143,6 @@ impl ExitClientSettings {
     pub fn get_current_exit(&self) -> Option<&ExitServer> {
         Some(&self.exits[self.current_exit.as_ref()?])
     }
-    pub fn get_current_exit_name(&self) -> Option<&ExitServer> {
-        Some(&self.exits[self.current_exit.as_ref()?])
-    }
-    pub fn get_current_exit_details(&self) -> Option<&ExitClientDetails> {
-        match self.get_current_exit() {
-            Some(ref exit) => match exit.our_details {
-                Some(ref details) => return Some(details),
-                _ => (),
-            },
-            _ => (),
-        }
-        None
-    }
-    pub fn set_current_exit(&mut self) -> Option<&mut ExitServer> {
-        self.exits.get_mut(self.current_exit.as_ref()?)
-    }
-    pub fn current_exit_exists(&self) -> bool {
-        if self.current_exit == None {
-            return false;
-        }
-        return self.exits.contains_key(self.current_exit.as_ref().unwrap());
-    }
-    pub fn current_exit_details_exists(&self) -> bool {
-        if self.current_exit == None {
-            return false;
-        }
-        if self.exits.contains_key(self.current_exit.as_ref().unwrap()) == false {
-            return false;
-        }
-        return self.exits[self.current_exit.as_ref().unwrap()]
-            .our_details
-            .is_some();
-    }
-    pub fn reg_details_set(&self) -> bool {
-        self.reg_details.is_some()
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
@@ -240,20 +204,18 @@ pub struct RitaExitSettingsStruct {
 
 pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
     fn get_payment<'ret, 'me: 'ret>(&'me self) -> RwLockReadGuardRef<'ret, T, PaymentSettings>;
-    fn set_payment<'ret, 'me: 'ret>(&'me self) -> RwLockWriteGuardRefMut<'ret, T, PaymentSettings>;
+    fn get_payment_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, T, PaymentSettings>;
 
     fn get_network<'ret, 'me: 'ret>(&'me self) -> RwLockReadGuardRef<'ret, T, NetworkSettings>;
-    fn set_network<'ret, 'me: 'ret>(&'me self) -> RwLockWriteGuardRefMut<'ret, T, NetworkSettings>;
+    fn get_network_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, T, NetworkSettings>;
 
     fn get_stats_server_settings<'ret, 'me: 'ret>(
         &'me self,
-    ) -> RwLockReadGuardRef<'ret, T, StatsServerSettings>;
-    fn init_stats_server_settings(&self, exit_client: StatsServerSettings);
-    fn set_stats_server_settings<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, T, StatsServerSettings>;
-    fn stats_server_settings_is_set(&self) -> bool;
-    fn clear_stats_server_settings(&self);
+    ) -> Option<RwLockReadGuardRef<'ret, T, StatsServerSettings>>;
 
     fn merge(&self, changed_settings: Value) -> Result<(), Error>;
     fn get_all(&self) -> Result<serde_json::Value, Error>;
@@ -281,7 +243,7 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
         RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.payment)
     }
 
-    fn set_payment<'ret, 'me: 'ret>(
+    fn get_payment_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, PaymentSettings> {
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.payment)
@@ -293,7 +255,7 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
         RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.network)
     }
 
-    fn set_network<'ret, 'me: 'ret>(
+    fn get_network_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, NetworkSettings> {
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.network)
@@ -301,31 +263,17 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
 
     fn get_stats_server_settings<'ret, 'me: 'ret>(
         &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, StatsServerSettings> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| match g.stats_server {
-            Some(ref stat_server) => stat_server,
-            None => panic!("exit client not set but needed"),
-        })
-    }
-
-    fn init_stats_server_settings(&self, stat_server: StatsServerSettings) {
-        self.write().unwrap().stats_server = Some(stat_server)
-    }
-
-    fn set_stats_server_settings<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, StatsServerSettings> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| match g.stats_server {
-            Some(ref mut stat_server) => stat_server,
-            None => panic!("exit client not set but needed"),
-        })
-    }
-
-    fn stats_server_settings_is_set(&self) -> bool {
-        self.read().unwrap().stats_server.is_some()
-    }
-    fn clear_stats_server_settings(&self) {
-        self.write().unwrap().stats_server = None;
+    ) -> Option<RwLockReadGuardRef<'ret, RitaSettingsStruct, StatsServerSettings>> {
+        if self.read().unwrap().stats_server.is_some() {
+            Some(
+                RwLockReadGuardRef::new(self.read().unwrap()).map(|g| match g.stats_server {
+                    Some(ref stat_server) => stat_server,
+                    None => panic!("exit client not set but needed"),
+                }),
+            )
+        } else {
+            None
+        }
     }
 
     fn merge(&self, changed_settings: serde_json::Value) -> Result<(), Error> {
@@ -362,7 +310,7 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
         RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.payment)
     }
 
-    fn set_payment<'ret, 'me: 'ret>(
+    fn get_payment_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, PaymentSettings> {
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.payment)
@@ -374,7 +322,7 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
         RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.network)
     }
 
-    fn set_network<'ret, 'me: 'ret>(
+    fn get_network_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, NetworkSettings> {
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.network)
@@ -382,32 +330,17 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
 
     fn get_stats_server_settings<'ret, 'me: 'ret>(
         &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, StatsServerSettings> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| match g.stats_server {
-            Some(ref stat_server) => stat_server,
-            None => panic!("exit client not set but needed"),
-        })
-    }
-
-    fn init_stats_server_settings(&self, stat_server: StatsServerSettings) {
-        self.write().unwrap().stats_server = Some(stat_server)
-    }
-
-    fn set_stats_server_settings<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, StatsServerSettings> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| match g.stats_server {
-            Some(ref mut stat_server) => stat_server,
-            None => panic!("exit client not set but needed"),
-        })
-    }
-
-    fn stats_server_settings_is_set(&self) -> bool {
-        self.read().unwrap().stats_server.is_some()
-    }
-
-    fn clear_stats_server_settings(&self) {
-        self.write().unwrap().stats_server = None;
+    ) -> Option<RwLockReadGuardRef<'ret, RitaExitSettingsStruct, StatsServerSettings>> {
+        if self.read().unwrap().stats_server.is_some() {
+            Some(
+                RwLockReadGuardRef::new(self.read().unwrap()).map(|g| match g.stats_server {
+                    Some(ref stat_server) => stat_server,
+                    None => panic!("exit client not set but needed"),
+                }),
+            )
+        } else {
+            None
+        }
     }
 
     fn merge(&self, changed_settings: serde_json::Value) -> Result<(), Error> {
@@ -542,9 +475,9 @@ where
 
     thread::spawn(move || {
         let old_settings = settings.read().unwrap().clone();
-        thread::sleep(Duration::from_millis(200));
-
         loop {
+            thread::sleep(Duration::from_secs(5));
+
             let new_settings = settings.read().unwrap().clone();
 
             if old_settings != new_settings {
@@ -554,8 +487,6 @@ where
                     _ => (),
                 }
             }
-
-            thread::sleep(Duration::from_secs(5));
         }
     });
 
@@ -590,8 +521,8 @@ impl RitaSettingsStruct {
 
 impl FileWrite for RitaSettingsStruct {
     fn write(&self, file_name: &str) -> Result<(), Error> {
-        let ser = toml::Value::try_from(self.clone()).unwrap();
-        let ser = toml::to_string(&ser).unwrap();
+        let ser = toml::Value::try_from(self.clone())?;
+        let ser = toml::to_string(&ser)?;
         let mut file = File::create(file_name)?;
         file.write_all(ser.as_bytes())?;
         file.flush().unwrap();
@@ -622,8 +553,8 @@ impl RitaExitSettingsStruct {
 
 impl FileWrite for RitaExitSettingsStruct {
     fn write(&self, file_name: &str) -> Result<(), Error> {
-        let ser = toml::Value::try_from(self.clone()).unwrap();
-        let ser = toml::to_string(&ser).unwrap();
+        let ser = toml::Value::try_from(self.clone())?;
+        let ser = toml::to_string(&ser)?;
         let mut file = File::create(file_name)?;
         file.write_all(ser.as_bytes())?;
         file.flush().unwrap();
