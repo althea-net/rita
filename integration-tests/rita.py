@@ -33,8 +33,17 @@ dname = os.path.dirname(abspath)
 os.chdir(dname)
 
 exit_settings = {
-    "exit_ip": "fd00::5",
-    "exit_registration_port": 4875,
+    "exits": {
+        "exit_a": {
+            "id": {
+                "mesh_ip": "fd00::5",
+                "eth_address": "0x0101010101010101010101010101010101010101",
+                "wg_public_key": "fd00::5",
+            },
+            "registration_port": 4875,
+        }
+    },
+    "current_exit": "exit_a",
     "wg_listen_port": 59999,
     "reg_details": {
         "zip_code": "1234",
@@ -213,6 +222,10 @@ def save_rita_settings(id, x):
     toml.dump(x, open("rita-settings-n{}.toml".format(id), "w"))
 
 
+def get_rita_settings(id):
+    return toml.load(open("rita-settings-n{}.toml".format(id)))
+
+
 def start_rita(node):
     id = node.id
     settings = get_rita_defaults()
@@ -345,15 +358,15 @@ class World:
         start_bounty(self.bounty)
         print("bounty hunter started")
 
+        start_rita_exit(self.nodes[self.exit])
+
         time.sleep(1)
+
+        exit_settings["exits"]["exit_a"]["id"]["wg_public_key"] = get_rita_settings(self.exit)["network"]["wg_public_key"]
 
         print("starting rita")
         for id, node in self.nodes.items():
-            if id == self.exit:
-                start_rita_exit(node)
-            elif id == self.external:
-                pass
-            else:
+            if id != self.exit and id != self.external:
                 start_rita(node)
             time.sleep(0.5 + random.random() / 2) # wait 0.5s - 1s
             print()

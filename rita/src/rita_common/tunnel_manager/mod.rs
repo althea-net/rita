@@ -97,7 +97,7 @@ impl Handler<Listen> for TunnelManager {
 
     fn handle(&mut self, listen: Listen, _: &mut Context<Self>) -> Self::Result {
         self.listen_interfaces.insert(listen.0);
-        SETTING.set_network().peer_interfaces = self.listen_interfaces.clone();
+        SETTING.get_network_mut().peer_interfaces = self.listen_interfaces.clone();
     }
 }
 
@@ -111,7 +111,7 @@ impl Handler<UnListen> for TunnelManager {
 
     fn handle(&mut self, un_listen: UnListen, _: &mut Context<Self>) -> Self::Result {
         self.listen_interfaces.remove(&un_listen.0);
-        SETTING.set_network().peer_interfaces = self.listen_interfaces.clone();
+        SETTING.get_network_mut().peer_interfaces = self.listen_interfaces.clone();
     }
 }
 
@@ -351,7 +351,7 @@ impl TunnelManager {
             Path::new(&network.wg_private_key_path),
             &network.own_ip,
             network.external_nic.clone(),
-            &mut SETTING.set_network().default_route,
+            &mut SETTING.get_network_mut().default_route,
         )?;
 
         let stream = TcpStream::connect::<SocketAddr>(format!(
@@ -747,10 +747,10 @@ mod tests {
 
         let sys = System::new("test");
 
-        SETTING.set_network().manual_peers =
+        SETTING.get_network_mut().manual_peers =
             vec!["test.altheamesh.com".to_string(), "2.2.2.2".to_string()];
         SETTING
-            .set_network()
+            .get_network_mut()
             .peer_interfaces
             .insert("eth0".to_string());
 

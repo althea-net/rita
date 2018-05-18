@@ -65,7 +65,7 @@ mod rita_exit;
 
 use rita_common::dashboard::network_endpoints::*;
 use rita_common::network_endpoints::{hello_response, make_payments};
-use rita_exit::network_endpoints::{list_clients, setup_request};
+use rita_exit::network_endpoints::{get_exit_info, list_clients, setup_request};
 
 use std::sync::{Arc, RwLock};
 
@@ -115,9 +115,10 @@ lazy_static! {
         let settings_file = args.flag_config;
 
         let s = RitaExitSettingsStruct::new_watched(&settings_file).unwrap();
-        s.read().unwrap().write(&settings_file).unwrap();
 
         clu::exit_init("linux", s.clone());
+
+        s.read().unwrap().write(&settings_file).unwrap();
 
         s
     };
@@ -161,6 +162,7 @@ fn main() {
         App::new()
             .resource("/setup", |r| r.method(Method::POST).with2(setup_request))
             .resource("/list", |r| r.method(Method::POST).with(list_clients))
+            .resource("/exit_info", |r| r.method(Method::GET).with(get_exit_info))
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_exit_network().exit_hello_port

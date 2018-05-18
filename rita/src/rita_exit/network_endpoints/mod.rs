@@ -1,5 +1,3 @@
-use althea_types::ExitClientIdentity;
-
 use actix::registry::SystemService;
 use actix_web::*;
 
@@ -9,10 +7,12 @@ use rita_exit::db_client::{DbClient, SetupClient};
 
 use std::boxed::Box;
 
-use settings::{RitaCommonSettings, RitaExitSettings};
+use settings::RitaExitSettings;
 use SETTING;
 
-use althea_types::interop::ExitServerIdentity;
+use althea_types::{
+    ExitClientDetails, ExitClientIdentity, ExitDetails, ExitServerReply, ExitState,
+};
 use exit_db::models::Client;
 use failure::Error;
 use rita_exit::db_client::ListClients;
@@ -21,23 +21,45 @@ use std::net::SocketAddr;
 pub fn setup_request(
     their_id: Json<ExitClientIdentity>,
     req: HttpRequest,
-) -> Box<Future<Item = Json<ExitServerIdentity>, Error = Error>> {
+) -> Box<Future<Item = Json<ExitServerReply>, Error = Error>> {
     trace!("Received requester identity, {:?}", their_id);
     let remote_socket: SocketAddr = req.connection_info().remote().unwrap().parse().unwrap();
     DbClient::from_registry()
         .send(SetupClient(their_id.into_inner(), remote_socket.ip()))
         .from_err()
         .and_then(move |reply| {
-            Ok(Json(ExitServerIdentity {
-                own_local_ip: reply.unwrap(),
-                server_local_ip: SETTING.get_exit_network().own_internal_ip,
-                wg_port: SETTING.get_exit_network().wg_tunnel_port,
-                global: SETTING.get_identity(),
-                price: SETTING.get_exit_network().exit_price,
-                netmask: SETTING.get_exit_network().netmask,
+            let details;
+            let message;
+            let state;
+            if let Ok(ip) = reply {
+                details = Some(ExitClientDetails {
+                    client_internal_ip: ip,
+                });
+                message = "Registration OK".to_string();
+                state = ExitState::Registered;
+            } else {
+                details = None;
+                message = format!("{:?}", reply);
+                state = ExitState::Denied;
+            }
+
+            Ok(Json(ExitServerReply {
+                details,
+                state,
+                message,
             }))
         })
         .responder()
+}
+
+pub fn get_exit_info(_req: HttpRequest) -> Result<Json<ExitDetails>, Error> {
+    Ok(Json(ExitDetails {
+        server_internal_ip: SETTING.get_exit_network().own_internal_ip,
+        wg_exit_port: SETTING.get_exit_network().wg_tunnel_port,
+        exit_price: SETTING.get_exit_network().exit_price,
+        netmask: SETTING.get_exit_network().netmask,
+        description: SETTING.get_description(),
+    }))
 }
 
 pub fn list_clients(_req: HttpRequest) -> Box<Future<Item = Json<Vec<Client>>, Error = Error>> {

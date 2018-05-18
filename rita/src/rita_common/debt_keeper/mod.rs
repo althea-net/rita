@@ -292,10 +292,10 @@ mod tests {
 
     #[test]
     fn test_single_suspend() {
-        SETTING.set_payment().pay_threshold = Int256::from(5);
-        SETTING.set_payment().close_threshold = Int256::from(-10);
-        SETTING.set_payment().close_fraction = Int256::from(100);
-        SETTING.set_payment().buffer_period = 1;
+        SETTING.get_payment_mut().pay_threshold = Int256::from(5);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().close_fraction = Int256::from(100);
+        SETTING.get_payment_mut().buffer_period = 1;
 
         let mut d = DebtKeeper::new();
 
@@ -314,10 +314,10 @@ mod tests {
 
     #[test]
     fn test_single_overpay() {
-        SETTING.set_payment().pay_threshold = Int256::from(5);
-        SETTING.set_payment().close_threshold = Int256::from(-10);
-        SETTING.set_payment().close_fraction = Int256::from(100);
-        SETTING.set_payment().buffer_period = 1;
+        SETTING.get_payment_mut().pay_threshold = Int256::from(5);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().close_fraction = Int256::from(100);
+        SETTING.get_payment_mut().buffer_period = 1;
 
         let mut d = DebtKeeper::new();
 
@@ -337,10 +337,10 @@ mod tests {
 
     #[test]
     fn test_buffer_suspend() {
-        SETTING.set_payment().pay_threshold = Int256::from(5);
-        SETTING.set_payment().close_threshold = Int256::from(-10);
-        SETTING.set_payment().close_fraction = Int256::from(100);
-        SETTING.set_payment().buffer_period = 2;
+        SETTING.get_payment_mut().pay_threshold = Int256::from(5);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().close_fraction = Int256::from(100);
+        SETTING.get_payment_mut().buffer_period = 2;
 
         let mut d = DebtKeeper::new();
 
@@ -361,10 +361,10 @@ mod tests {
 
     #[test]
     fn test_buffer_average() {
-        SETTING.set_payment().pay_threshold = Int256::from(5);
-        SETTING.set_payment().close_threshold = Int256::from(-10);
-        SETTING.set_payment().close_fraction = Int256::from(100);
-        SETTING.set_payment().buffer_period = 2;
+        SETTING.get_payment_mut().pay_threshold = Int256::from(5);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().close_fraction = Int256::from(100);
+        SETTING.get_payment_mut().buffer_period = 2;
 
         let mut d = DebtKeeper::new();
 
@@ -387,10 +387,10 @@ mod tests {
 
     #[test]
     fn test_buffer_repay() {
-        SETTING.set_payment().pay_threshold = Int256::from(5);
-        SETTING.set_payment().close_threshold = Int256::from(-10);
-        SETTING.set_payment().close_fraction = Int256::from(100);
-        SETTING.set_payment().buffer_period = 2;
+        SETTING.get_payment_mut().pay_threshold = Int256::from(5);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().close_fraction = Int256::from(100);
+        SETTING.get_payment_mut().buffer_period = 2;
 
         let mut d = DebtKeeper::new();
 
@@ -413,10 +413,10 @@ mod tests {
 
     #[test]
     fn test_buffer_overpay() {
-        SETTING.set_payment().pay_threshold = Int256::from(5);
-        SETTING.set_payment().close_threshold = Int256::from(-10);
-        SETTING.set_payment().close_fraction = Int256::from(100);
-        SETTING.set_payment().buffer_period = 2;
+        SETTING.get_payment_mut().pay_threshold = Int256::from(5);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().close_fraction = Int256::from(100);
+        SETTING.get_payment_mut().buffer_period = 2;
 
         let mut d = DebtKeeper::new();
 
@@ -440,10 +440,10 @@ mod tests {
 
     #[test]
     fn test_buffer_debt() {
-        SETTING.set_payment().pay_threshold = Int256::from(5);
-        SETTING.set_payment().close_threshold = Int256::from(-100);
-        SETTING.set_payment().close_fraction = Int256::from(100);
-        SETTING.set_payment().buffer_period = 2;
+        SETTING.get_payment_mut().pay_threshold = Int256::from(5);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-100);
+        SETTING.get_payment_mut().close_fraction = Int256::from(100);
+        SETTING.get_payment_mut().buffer_period = 2;
 
         let mut d = DebtKeeper::new();
 
@@ -476,10 +476,10 @@ mod tests {
 
     #[test]
     fn test_single_pay() {
-        SETTING.set_payment().pay_threshold = Int256::from(5);
-        SETTING.set_payment().close_threshold = Int256::from(-10);
-        SETTING.set_payment().close_fraction = Int256::from(100);
-        SETTING.set_payment().buffer_period = 2;
+        SETTING.get_payment_mut().pay_threshold = Int256::from(5);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().close_fraction = Int256::from(100);
+        SETTING.get_payment_mut().buffer_period = 2;
 
         let mut d = DebtKeeper::new();
 
@@ -504,10 +504,10 @@ mod tests {
 
     #[test]
     fn test_fudge() {
-        SETTING.set_payment().pay_threshold = Int256::from(5);
-        SETTING.set_payment().close_threshold = Int256::from(-10);
-        SETTING.set_payment().close_fraction = Int256::from(100);
-        SETTING.set_payment().buffer_period = 1;
+        SETTING.get_payment_mut().pay_threshold = Int256::from(5);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().close_fraction = Int256::from(100);
+        SETTING.get_payment_mut().buffer_period = 1;
 
         let mut d = DebtKeeper::new();
 
@@ -527,10 +527,10 @@ mod tests {
 
     #[test]
     fn test_single_reopen() {
-        SETTING.set_payment().pay_threshold = Int256::from(5);
-        SETTING.set_payment().close_threshold = Int256::from(-10);
-        SETTING.set_payment().close_fraction = Int256::from(100);
-        SETTING.set_payment().buffer_period = 1;
+        SETTING.get_payment_mut().pay_threshold = Int256::from(5);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().close_fraction = Int256::from(100);
+        SETTING.get_payment_mut().buffer_period = 1;
 
         let mut d = DebtKeeper::new();
 
@@ -553,10 +553,10 @@ mod tests {
 
     #[test]
     fn test_multi_pay() {
-        SETTING.set_payment().pay_threshold = Int256::from(5);
-        SETTING.set_payment().close_threshold = Int256::from(-10);
-        SETTING.set_payment().close_fraction = Int256::from(100);
-        SETTING.set_payment().buffer_period = 1;
+        SETTING.get_payment_mut().pay_threshold = Int256::from(5);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().close_fraction = Int256::from(100);
+        SETTING.get_payment_mut().buffer_period = 1;
 
         let mut d = DebtKeeper::new();
 
@@ -584,10 +584,10 @@ mod tests {
 
     #[test]
     fn test_multi_fail() {
-        SETTING.set_payment().pay_threshold = Int256::from(5);
-        SETTING.set_payment().close_threshold = Int256::from(-10);
-        SETTING.set_payment().close_fraction = Int256::from(100000);
-        SETTING.set_payment().buffer_period = 1;
+        SETTING.get_payment_mut().pay_threshold = Int256::from(5);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().close_fraction = Int256::from(100000);
+        SETTING.get_payment_mut().buffer_period = 1;
 
         let mut d = DebtKeeper::new();
 
@@ -611,10 +611,10 @@ mod tests {
 
     #[test]
     fn test_multi_reopen() {
-        SETTING.set_payment().pay_threshold = Int256::from(5);
-        SETTING.set_payment().close_threshold = Int256::from(-10);
-        SETTING.set_payment().close_fraction = Int256::from(1000000000);
-        SETTING.set_payment().buffer_period = 1;
+        SETTING.get_payment_mut().pay_threshold = Int256::from(5);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().close_fraction = Int256::from(1000000000);
+        SETTING.get_payment_mut().buffer_period = 1;
 
         let mut d = DebtKeeper::new();
 

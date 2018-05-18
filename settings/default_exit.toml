@@ -1,4 +1,5 @@
 db_file = "../exit_db/test.db"
+description = "just a normal althea exit"
 
 [payment]
 pay_threshold = "0"
