@@ -5,7 +5,7 @@ authors = ["kingoflolz <wangben3@gmail.com>"]
 
 [dependencies]
 actix = "0.5.7"
-actix-web = {version = "0.5.7" , default-features = false}
+actix-web = {version = "0.6.7" , default-features = false}
 serde = "1.0.24"
 serde_derive = "1.0.24"
 serde_json = "1.0.8"
