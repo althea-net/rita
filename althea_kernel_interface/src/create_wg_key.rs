@@ -9,15 +9,10 @@ use failure::Error;
 
 impl KernelInterface {
     pub fn create_wg_key(&self, path: &Path, private_key: &String) -> Result<(), Error> {
-        if path.exists() {
-            warn!("System private key exists in {:?}", path);
-            Ok(())
-        } else {
-            trace!("File does not exist, creating");
-            let mut priv_key_file = File::create(path)?;
-            write!(priv_key_file, "{}", private_key)?;
-            Ok(())
-        }
+        trace!("Overwriting old private key file");
+        let mut priv_key_file = File::create(path)?;
+        write!(priv_key_file, "{}", private_key)?;
+        Ok(())
     }
 
     pub fn create_wg_keypair(&self) -> Result<[String; 2], Error> {
