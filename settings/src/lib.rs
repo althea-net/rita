@@ -7,10 +7,15 @@ extern crate owning_ref;
 extern crate toml;
 
 #[macro_use]
+extern crate lazy_static;
+#[macro_use]
 extern crate serde_derive;
 
 #[macro_use]
 extern crate log;
+
+#[cfg(test)]
+use std::sync::Mutex;
 
 extern crate serde;
 extern crate serde_json;
@@ -26,6 +31,13 @@ use std::net::IpAddr;
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
+
+use althea_kernel_interface::KernelInterface;
+
+#[cfg(not(test))]
+use althea_kernel_interface::LinuxCommandRunner;
+#[cfg(test)]
+use althea_kernel_interface::TestCommandRunner;
 
 use config::Config;
 
@@ -43,6 +55,20 @@ use failure::Error;
 
 /// This is the network settings for rita and rita_exit which generally only applies to networking
 /// _within_ the mesh or setting up pre hop tunnels (so nothing on exits)
+#[cfg(test)]
+lazy_static! {
+    static ref KI: Box<KernelInterface> = Box::new(TestCommandRunner {
+        run_command: Arc::new(Mutex::new(Box::new(|_program, _args| {
+            panic!("kernel interface used before initialized");
+        })))
+    });
+}
+
+#[cfg(not(test))]
+lazy_static! {
+    static ref KI: Box<KernelInterface> = Box::new(LinuxCommandRunner {});
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
     /// Our own mesh IP (in fd00::/8)
@@ -566,6 +592,9 @@ impl FileWrite for RitaSettingsStruct {
         let mut file = File::create(file_name)?;
         file.write_all(ser.as_bytes())?;
         file.flush().unwrap();
+
+        // We edited disk contents, force global sync
+        KI.fs_sync()?;
         Ok(())
     }
 }
