@@ -1,5 +1,8 @@
 use eth_address::EthAddress;
 use num256::Uint256;
+use serde;
+use serde::Deserialize;
+use serde::Deserializer;
 use std::net::IpAddr;
 
 #[cfg(feature = "actix")]
@@ -45,6 +48,33 @@ pub enum ExitState {
     Registered,
     Denied,
     Disabled,
+}
+
+pub trait DeserializeWith: Sized {
+    fn deserialize_with<'de, D>(de: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>;
+}
+
+impl DeserializeWith for ExitState {
+    fn deserialize_with<'de, D>(de: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(de)?;
+
+        match s.as_ref() {
+            "New" => Ok(ExitState::New),
+            "GotInto" => Ok(ExitState::GotInfo),
+            "Pending" => Ok(ExitState::Pending),
+            "Registered" => Ok(ExitState::Registered),
+            "Denied" => Ok(ExitState::Denied),
+            "Disabled" => Ok(ExitState::Disabled),
+            _ => Err(serde::de::Error::custom(
+                "error trying to deserialize rotation policy config",
+            )),
+        }
+    }
 }
 
 impl Default for ExitState {
