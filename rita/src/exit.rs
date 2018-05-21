@@ -64,8 +64,8 @@ mod rita_common;
 mod rita_exit;
 
 use rita_common::dashboard::network_endpoints::*;
-use rita_common::network_endpoints::{hello_response, make_payments};
-use rita_exit::network_endpoints::{get_exit_info, list_clients, setup_request};
+use rita_common::network_endpoints::*;
+use rita_exit::network_endpoints::*;
 
 use std::sync::{Arc, RwLock};
 
@@ -78,11 +78,18 @@ struct Args {
 }
 
 #[cfg(not(test))]
-const USAGE: &str = "
-Usage: rita_exit --config=<settings>
+lazy_static! {
+    static ref USAGE: String = format!(
+        "Usage: rita_exit --config=<settings>
 Options:
     -c, --config=<settings>   Name of config file
-";
+About:
+    Version {}
+    git hash {}",
+        env!("CARGO_PKG_VERSION"),
+        env!("GIT_HASH")
+    );
+}
 
 use althea_kernel_interface::KernelInterface;
 
@@ -108,7 +115,7 @@ lazy_static! {
 #[cfg(not(test))]
 lazy_static! {
     pub static ref SETTING: Arc<RwLock<RitaExitSettingsStruct>> = {
-        let args: Args = Docopt::new(USAGE)
+        let args: Args = Docopt::new((*USAGE).as_str())
             .and_then(|d| d.deserialize())
             .unwrap_or_else(|e| e.exit());
 
@@ -133,6 +140,11 @@ lazy_static! {
 fn main() {
     env_logger::init();
     trace!("Starting");
+    info!(
+        "crate ver {}, git hash {}",
+        env!("CARGO_PKG_VERSION"),
+        env!("GIT_HASH")
+    );
     trace!("Starting with Identity: {:?}", SETTING.get_identity());
 
     let system = actix::System::new(format!("main {}", SETTING.get_network().own_ip));
@@ -181,6 +193,7 @@ fn main() {
             .route("/info", Method::GET, get_own_info)
             .route("/settings", Method::GET, get_settings)
             .route("/settings", Method::POST, set_settings)
+            .route("/version", Method::GET, version)
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_network().rita_dashboard_port
