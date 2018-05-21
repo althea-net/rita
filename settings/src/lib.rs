@@ -30,7 +30,8 @@ use std::time::Duration;
 use config::Config;
 
 use althea_types::{
-    EthAddress, ExitClientDetails, ExitDetails, ExitRegistrationDetails, ExitState, Identity,
+    DeserializeWith, EthAddress, ExitClientDetails, ExitDetails, ExitRegistrationDetails,
+    ExitState, Identity,
 };
 
 use num256::Int256;
@@ -109,7 +110,7 @@ pub struct ExitServer {
     pub our_details: Option<ExitClientDetails>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub general_details: Option<ExitDetails>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "ExitState::deserialize_with")]
     pub state: ExitState,
     #[serde(default)]
     pub message: String,
