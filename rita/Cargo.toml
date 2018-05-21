@@ -24,8 +24,8 @@ exit_db = { path = "../exit_db" }
 num256 = { path = "../num256" }
 settings = { path = "../settings" }
 
-actix = {git="https://github.com/kingoflolz/actix", branch="mocking"}
-actix-web = {git="https://github.com/kingoflolz/actix-web", default-features = false}
+actix = "0.5.7"
+actix-web = { version = "0.6.7", default-features = false}
 actix_derive = "0.2.0"
 bytes = "0.4"
 clippy = { version = "*", optional = true }
@@ -37,7 +37,7 @@ env_logger = "^0.5.5"
 eui48 = {git="https://github.com/althea-mesh/eui48.git"}
 failure = "0.1.1"
 futures = "0.1"
-ip_network = "0.1"
+ip_network = "0.2"
 lazy_static = "1.0"
 log = "^0.4"
 minihttpse = "0.1.6"

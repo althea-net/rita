@@ -1,6 +1,7 @@
 .DS_Store
 *.bak
 /target/
+/rls/
 target-mac
 **/*.rs.bk
 .idea
