@@ -2,6 +2,7 @@
 name = "rita"
 version = "0.1.0"
 authors = ["Jehan <jehan.tremback@gmail.com>", "Ben <wangben3@gmail.com>"]
+build = "build.rs"
 
 [[bin]]
 name = "rita_exit"

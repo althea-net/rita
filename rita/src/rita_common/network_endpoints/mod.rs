@@ -56,3 +56,11 @@ pub fn hello_response(
         })
         .responder()
 }
+
+pub fn version(_req: HttpRequest) -> String {
+    format!(
+        "crate ver {}\ngit hash {}",
+        env!("CARGO_PKG_VERSION"),
+        env!("GIT_HASH")
+    )
+}
