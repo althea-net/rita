@@ -21,4 +21,4 @@ export LD_LIBRARY_PATH=$OPENWRT_DIR/staging_dir/$TARGET_NAME/usr/lib/
 export SQLITE3_LIB_DIR=$LIBRARY_PATH
 export SQLITE3_LIB_DIR=$LIBRARY_PATH
 export RUSTFLAGS="-C linker=$TARGET_CC -C ar=$TARGET_AR"
-cargo build --all --target $RUST_TRIPLE
+cargo build --release --all --target $RUST_TRIPLE
