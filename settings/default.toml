@@ -20,8 +20,6 @@ peer_interfaces = []
 manual_peers = []
 default_route = []
 
-[exit_tunnel_settings]
-lan_nics = ["lo"]
-
 [exit_client]
 wg_listen_port = 59999
+lan_nics = ["lo"]

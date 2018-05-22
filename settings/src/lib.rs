@@ -41,21 +41,45 @@ use serde_json::Value;
 
 use failure::Error;
 
+/// This is the network settings for rita and rita_exit which generally only applies to networking
+/// _within_ the mesh or setting up pre hop tunnels (so nothing on exits)
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
+    /// Our own mesh IP (in fd00::/8)
     pub own_ip: IpAddr,
+    /// Mesh IP of bounty hunter (in fd00::/8)
     pub bounty_ip: IpAddr,
+    /// Port on which we connect to a local babel instance (read-write connection required)
     pub babel_port: u16,
+    /// Port on which rita starts the per hop tunnel handshake on (needs to be constant across an
+    /// entire althea deployment)
     pub rita_hello_port: u16,
+    /// Port over which the dashboard will be accessible upon
     pub rita_dashboard_port: u16,
+    /// Port over which the bounty hunter will be contacted
     pub bounty_port: u16,
+    /// Our private key, encoded with Base64 (what the `wg` command outputs and takes by default)
+    /// Note this is the canonical private key for the node
     pub wg_private_key: String,
+    /// Where our private key is saved (written to the path on every start) because wireguard does
+    /// not accept private keys via stdin or command line args
     pub wg_private_key_path: String,
+    /// The our public key, Base64 encoded
     pub wg_public_key: String,
+    /// The starting port for per hop tunnels, is a range as we need a different wg interface for
+    /// each neighbor to enable billing, and each wg interface needs an unique port.
     pub wg_start_port: u16,
+    /// Interfaces on which we accept rita hellos
     pub peer_interfaces: HashSet<String>,
+    /// List of URLs/IPs which we will manually send hellos to, used when neighbor detection fails,
+    /// such as for connecting to external peers from gateways or to peer 2 althea nodes with a
+    /// complex network in between
     pub manual_peers: Vec<String>,
-    pub conf_link_local: bool,
+    /// This is a route in the format of `ip route` which is set by default (assuming it will reach
+    /// the internet), used to tunnel manual peers over a specific route
+    pub default_route: Vec<String>,
+    /// This is the NIC which connects to the internet, used by gateways/exits to find its
+    /// globally routable ip
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_nic: Option<String>,
 }
@@ -81,12 +105,20 @@ impl Default for NetworkSettings {
     }
 }
 
+/// This struct is used by both rita and rita_exit to configure the dummy payment controller and
+/// debt keeper
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct PaymentSettings {
+    /// The threshold above which we will kick off a payment
     pub pay_threshold: Int256,
+    /// The threshold below which we will kick another node off (not implemented yet)
     pub close_threshold: Int256,
+    /// This is used to control the amount of grace, as `total_payment/close_fraction` which we will
+    /// give to a node
     pub close_fraction: Int256,
+    /// The amount of billing cycles a node can fall behind without being subjected to the threshold
     pub buffer_period: u32,
+    /// Our own eth address
     pub eth_address: EthAddress,
 }
 
@@ -102,27 +134,45 @@ impl Default for PaymentSettings {
     }
 }
 
+/// This struct is used by rita to store exit specific information
+/// There is one instance per exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitServer {
     pub id: Identity,
+    /// The port over which we will reach the exit apis on over the mesh
     pub registration_port: u16,
+    /// This stores information which the exit gives us from registration, and is specific to this
+    /// particular node (such as local ip on the exit tunnel)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub our_details: Option<ExitClientDetails>,
+    /// This stores information on the exit which is consistent across all nodes which the exit
+    /// serves (for example the exit's own ip/gateway ip within the exit tunnel)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub general_details: Option<ExitDetails>,
+    /// The state the exit is in, used to control if/when/how to poll the exit
     #[serde(default, deserialize_with = "ExitState::deserialize_with")]
     pub state: ExitState,
+    /// The message returned from the exit from registration
     #[serde(default)]
     pub message: String,
 }
 
+/// This struct is used by rita to encapsulate all the state/information needed to connect/register
+/// to a exit and to setup the exit tunnel
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitClientSettings {
+    /// This stores a mapping between an identifier (any string) to exits
     #[serde(default)]
     pub exits: HashMap<String, ExitServer>,
+    /// This stores the current exit identifier
     pub current_exit: Option<String>,
+    /// This is the port which the exit wireguard tunnel will listen on
+    /// NOTE: must be under `wg_start_port` in `NetworkSettings`
     pub wg_listen_port: u16,
+    /// Details for exit registration
     pub reg_details: Option<ExitRegistrationDetails>,
+    /// This controls which interfaces will be proxied over the exit tunnel
+    pub lan_nics: HashSet<String>,
 }
 
 impl Default for ExitClientSettings {
@@ -136,6 +186,7 @@ impl Default for ExitClientSettings {
                 email: Some("1234@gmail.com".into()),
                 country: Some("Althea".into()),
             }),
+            lan_nics: HashSet::new(),
         }
     }
 }
@@ -152,28 +203,32 @@ pub struct StatsServerSettings {
     pub stats_port: u16,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
-pub struct ExitTunnelSettings {
-    pub lan_nics: Vec<String>,
-}
-
+/// This is the main struct for rita
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct RitaSettingsStruct {
     payment: PaymentSettings,
     network: NetworkSettings,
     exit_client: ExitClientSettings,
-    exit_tunnel_settings: ExitTunnelSettings,
     #[serde(skip_serializing_if = "Option::is_none")]
     stats_server: Option<StatsServerSettings>,
 }
 
+/// This is the network settings specific to rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitNetworkSettings {
+    /// This is the port which the exit registration happens over, and should only be accessable
+    /// over the mesh
     pub exit_hello_port: u16,
+    /// This is the port which the exit tunnel listens on
     pub wg_tunnel_port: u16,
+    /// Price in wei per byte which is charged to traffic both coming in and out over the internet
     pub exit_price: u64,
+    /// This is the exit's own ip/gateway ip in the exit wireguard tunnel
     pub own_internal_ip: IpAddr,
+    /// This is the start of the exit tunnel's internal address allocation to clients, incremented
+    /// by 1 every time a new client is added
     pub exit_start_ip: IpAddr,
+    /// The netmask, in bits to mask out, for the exit tunnel
     pub netmask: u8,
 }
 
@@ -190,6 +245,7 @@ impl Default for ExitNetworkSettings {
     }
 }
 
+/// This is the main settings struct for rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct RitaExitSettingsStruct {
     db_file: String,
@@ -199,6 +255,8 @@ pub struct RitaExitSettingsStruct {
     exit_network: ExitNetworkSettings,
     #[serde(skip_serializing_if = "Option::is_none")]
     stats_server: Option<StatsServerSettings>,
+    /// Countries which the clients to the exit are allowed from, blank for no geoip validation.
+    /// (ISO country code)
     #[serde(skip_serializing_if = "HashSet::is_empty", default)]
     allowed_countries: HashSet<String>,
 }
@@ -224,6 +282,7 @@ pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
     fn get_identity(&self) -> Identity;
 }
 
+/// This merges 2 json objects, overwriting conflicting values in `a`
 fn json_merge(a: &mut Value, b: &Value) {
     match (a, b) {
         (&mut Value::Object(ref mut a), &Value::Object(ref b)) => {
@@ -375,18 +434,15 @@ pub trait RitaClientSettings {
     fn get_exit_client<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, ExitClientSettings>;
-    fn set_exit_client<'ret, 'me: 'ret>(
+    fn get_exit_client_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, ExitClientSettings>;
     fn get_exits<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, HashMap<String, ExitServer>>;
-    fn set_exits<'ret, 'me: 'ret>(
+    fn get_exits_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, HashMap<String, ExitServer>>;
-    fn get_exit_tunnel_settings<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, ExitTunnelSettings>;
 }
 
 impl RitaClientSettings for Arc<RwLock<RitaSettingsStruct>> {
@@ -395,7 +451,7 @@ impl RitaClientSettings for Arc<RwLock<RitaSettingsStruct>> {
     ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, ExitClientSettings> {
         RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.exit_client)
     }
-    fn set_exit_client<'ret, 'me: 'ret>(
+    fn get_exit_client_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, ExitClientSettings> {
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.exit_client)
@@ -407,16 +463,10 @@ impl RitaClientSettings for Arc<RwLock<RitaSettingsStruct>> {
         RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.exit_client.exits)
     }
 
-    fn set_exits<'ret, 'me: 'ret>(
+    fn get_exits_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, HashMap<String, ExitServer>> {
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.exit_client.exits)
-    }
-
-    fn get_exit_tunnel_settings<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, ExitTunnelSettings> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.exit_tunnel_settings)
     }
 }
 
@@ -424,10 +474,6 @@ pub trait RitaExitSettings {
     fn get_exit_network<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, ExitNetworkSettings>;
-    fn set_exit_network<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, ExitNetworkSettings>;
-
     fn get_db_file(&self) -> String;
     fn get_description(&self) -> String;
     fn get_allowed_countries<'ret, 'me: 'ret>(
@@ -441,13 +487,6 @@ impl RitaExitSettings for Arc<RwLock<RitaExitSettingsStruct>> {
     ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, ExitNetworkSettings> {
         RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.exit_network)
     }
-
-    fn set_exit_network<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, ExitNetworkSettings> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.exit_network)
-    }
-
     fn get_db_file(&self) -> String {
         self.read().unwrap().db_file.clone()
     }
