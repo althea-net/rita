@@ -8,6 +8,7 @@ target-mac
 **/test.db
 test.db-journal
 *.log
+/scripts/staging_dir/
 integration-tests/private-key*
 integration-tests/rita-settings*
 integration-tests/staging*
