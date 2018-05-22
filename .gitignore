@@ -11,3 +11,4 @@ test.db-journal
 integration-tests/private-key*
 integration-tests/rita-settings*
 integration-tests/staging*
+scripts/myscript.sh
