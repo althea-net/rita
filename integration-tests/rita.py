@@ -87,12 +87,14 @@ def exec_or_exit(command, blocking=True, delay=0.01):
 
 
 def cleanup():
-    os.system("rm -rf *.log *.pid *.toml private-key*")
+    os.system("rm -rf *.log *.pid private-key*")
+    os.system("sync")
     os.system("killall babeld rita bounty_hunter iperf")  # TODO: This is very inconsiderate
 
 
 def teardown():
-    os.system("rm -rf *.pid *.toml private-key*")
+    os.system("rm -rf *.pid private-key*")
+    os.system("sync")
     os.system("killall babeld rita bounty_hunter iperf")  # TODO: This is very inconsiderate
 
 
@@ -219,7 +221,13 @@ def get_rita_exit_defaults():
 
 
 def save_rita_settings(id, x):
-    toml.dump(x, open("rita-settings-n{}.toml".format(id), "w"))
+    file = open("rita-settings-n{}.toml".format(id), "w")
+    toml.dump(x, file)
+    file.flush()
+    os.fsync(file)
+    file.close()
+    os.system("sync")
+    pass
 
 
 def get_rita_settings(id):
@@ -233,14 +241,14 @@ def start_rita(node):
     settings["network"]["wg_private_key_path"] = "{pwd}/private-key-{id}".format(id=id, pwd=dname)
     settings["network"]["peer_interfaces"] = node.get_veth_interfaces()
     save_rita_settings(id, settings)
-    time.sleep(0.1)
+    time.sleep(0.2)
     os.system(
         '(RUST_BACKTRACE=full RUST_LOG=TRACE ip netns exec netlab-{id} {rita} --config=rita-settings-n{id}.toml --platform=linux'
         ' 2>&1 & echo $! > rita-n{id}.pid) | '
         'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA,
                                                                               pwd=dname)
         )
-    time.sleep(0.2)
+    time.sleep(1)
     os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
               .format(id=id, data=json.dumps({"exit_client": exit_settings})))
 
@@ -251,7 +259,7 @@ def start_rita_exit(node):
     settings["network"]["wg_private_key_path"] = "{pwd}/private-key-{id}".format(id=id, pwd=dname)
     settings["network"]["peer_interfaces"] = node.get_veth_interfaces()
     save_rita_settings(id, settings)
-    time.sleep(0.1)
+    time.sleep(0.2)
     os.system(
         '(RUST_BACKTRACE=full RUST_LOG=TRACE ip netns exec netlab-{id} {rita} --config=rita-settings-n{id}.toml'
         ' 2>&1 & echo $! > rita-n{id}.pid) | '
