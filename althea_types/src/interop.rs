@@ -71,7 +71,7 @@ impl DeserializeWith for ExitState {
             "Denied" => Ok(ExitState::Denied),
             "Disabled" => Ok(ExitState::Disabled),
             _ => Err(serde::de::Error::custom(
-                "error trying to deserialize rotation policy config",
+                "error trying to deserialize ExitState config",
             )),
         }
     }
