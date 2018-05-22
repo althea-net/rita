@@ -162,7 +162,7 @@ fn main() {
                 r.method(Method::POST).with2(make_payments)
             })
             .resource("/hello", |r| r.method(Method::POST).with2(hello_response))
-    }).threads(1)
+    }).workers(1)
         .bind(format!("[::0]:{}", SETTING.get_network().rita_hello_port))
         .unwrap()
         .start();
@@ -178,7 +178,7 @@ fn main() {
             .route("/neighbors", Method::GET, get_node_info)
             .route("/info", Method::GET, get_own_info)
             .route("/version", Method::GET, version)
-    }).threads(1)
+    }).workers(1)
         .bind(format!(
             "[::0]:{}",
             SETTING.get_network().rita_dashboard_port
