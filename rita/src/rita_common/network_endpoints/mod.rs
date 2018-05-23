@@ -15,6 +15,24 @@ use std::boxed::Box;
 
 use std::net::SocketAddr;
 
+#[derive(Serialize)]
+pub struct JsonStatusResponse {
+    response: String,
+}
+
+impl JsonStatusResponse {
+    pub fn new(ret_val: Result<String, Error>) -> Result<Json<JsonStatusResponse>, Error> {
+        let res_string = match ret_val {
+            Ok(msg) => msg.clone(),
+            Err(e) => format!("{}", e),
+        };
+
+        Ok(Json(JsonStatusResponse {
+            response: res_string,
+        }))
+    }
+}
+
 pub fn make_payments(
     pmt: Json<PaymentTx>,
     req: HttpRequest,
