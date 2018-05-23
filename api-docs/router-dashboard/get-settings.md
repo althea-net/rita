@@ -2,7 +2,7 @@
 
 ## URL
 
-`192.168.1.1:4877/settings`
+`<rita ip>:4877/settings`
 
 ## Method
 
@@ -126,4 +126,4 @@ None?
 
 ## Sample Call
 
-`curl 192.168.2.1:4877/settings`
+`curl 127.0.0.1:4877/settings`

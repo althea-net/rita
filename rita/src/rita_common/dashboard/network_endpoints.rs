@@ -13,6 +13,7 @@ use SETTING;
 use super::{Dashboard, GetOwnInfo, NodeInfo, OwnInfo};
 
 use rita_common::dashboard::GetNodeInfo;
+use rita_common::network_endpoints::JsonStatusResponse;
 
 pub fn get_node_info(_req: HttpRequest) -> Box<Future<Item = Json<Vec<NodeInfo>>, Error = Error>> {
     Dashboard::from_registry()
@@ -34,7 +35,10 @@ pub fn get_settings(_req: HttpRequest) -> Result<Json<serde_json::Value>, Error>
     Ok(Json(SETTING.get_all()?))
 }
 
-pub fn set_settings(new_settings: Json<serde_json::Value>) -> Result<String, Error> {
+pub fn set_settings(
+    new_settings: Json<serde_json::Value>,
+) -> Result<Json<JsonStatusResponse>, Error> {
     SETTING.merge(new_settings.into_inner())?;
-    Ok("New settings applied".to_string())
+
+    JsonStatusResponse::new(Ok("New settings applied".to_string()))
 }
