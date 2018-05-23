@@ -23,7 +23,6 @@ dependencies = [
 [[package]]
 name = "actix-web"
 version = "0.6.10"
-version = "0.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "actix 0.5.7 (git+https://github.com/kingoflolz/actix?branch=custom-resolver)",
