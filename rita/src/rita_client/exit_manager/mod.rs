@@ -33,7 +33,7 @@ fn linux_setup_exit_tunnel() -> Result<(), Error> {
     )?;
     KI.set_route_to_tunnel(&general_details.server_internal_ip)?;
 
-    let lan_nics = &SETTING.get_exit_tunnel_settings().lan_nics;
+    let lan_nics = &SETTING.get_exit_client().lan_nics;
     for nic in lan_nics {
         KI.add_client_nat_rules(&nic)?;
     }
@@ -57,7 +57,7 @@ fn exit_general_details_request(exit: &String) -> Result<(), Error> {
         response?.json()?
     };
 
-    let mut exits = SETTING.set_exits();
+    let mut exits = SETTING.get_exits_mut();
 
     let current_exit = exits.get_mut(exit).unwrap();
 
@@ -93,7 +93,7 @@ fn exit_setup_request(exit: &String) -> Result<(), Error> {
         response?.json()?
     };
 
-    let mut exits = SETTING.set_exits();
+    let mut exits = SETTING.get_exits_mut();
 
     let current_exit = exits.get_mut(exit).unwrap();
 

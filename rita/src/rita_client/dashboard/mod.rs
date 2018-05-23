@@ -90,7 +90,7 @@ impl Handler<GetWifiConfig> for Dashboard {
                             let channel: String =
                                 serde_json::from_value(v["channel"].clone()).unwrap();
                             let channel: u8 = channel.parse().unwrap();
-                            if channel < 20 {
+                            if channel > 20 {
                                 device.radio_type = "5ghz".to_string();
                             } else {
                                 device.radio_type = "2ghz".to_string();

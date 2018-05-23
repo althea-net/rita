@@ -3,15 +3,13 @@ use actix_web::{HttpRequest, HttpResponse, Result};
 use http::{header, HttpTryFrom, Method, StatusCode};
 use regex::Regex;
 
-pub struct Headers; // <- Our middleware
+pub struct Headers;
 
 impl<S> Middleware<S> for Headers {
     fn start(&self, _req: &mut HttpRequest<S>) -> Result<Started> {
         Ok(Started::Done)
     }
 
-    //Used to control the headers to OPTIONS requests and set the Access-Control
-    //property to only pages hosted on this machine.
     fn response(&self, req: &mut HttpRequest<S>, mut resp: HttpResponse) -> Result<Response> {
         let url = req.connection_info().host();
         let re = Regex::new(r"^(.*):").unwrap();
