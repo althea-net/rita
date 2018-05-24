@@ -62,6 +62,6 @@ First download the latest [nightly firmware](https://github.com/althea-mesh/alth
 
 Once you have a device running edit the `scripts/openwrt_upload.sh` script to match your device ip and target. If you have an n600 or n750 then the default settings are correct. Review the nightly firmware download table to determine the correct target name for other devices.
 
-The router ip address is by default `192.168.1.1`, if your home network is on that same ip range (probable) you may have trouble reaching the router, plug into the device directly and disable wifi or connect to the Althea-Home wifi network to make sure there's no confusion about which device you are talking to. 
+The router ip address is by default `192.168.10.1`, if your home network is on that same ip range (probable) you may have trouble reaching the router, plug into the device directly and disable wifi or connect to the Althea-Home wifi network to make sure there's no confusion about which device you are talking to. 
 
 Finally run `bash scripts/openwrt_upload.sh` Rust should take a few minutes to build and then Rita should start scrolling logs on your screen. The build will take longer than your normal debugging builds because the binary needs to be much smaller to fit on most embedded devices. If you have any problems refer to the [firmware debugging instructions](https://github.com/althea-mesh/althea-firmware#so-i-flashed-the-firmware-what-do-i-do-now). If that also proves unhelpful drop by our [matrix chat](https://riot.im/app/#/room/#althea:matrix.org) and ask. 
