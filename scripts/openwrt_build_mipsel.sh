@@ -13,6 +13,7 @@ export CARGO_TARGET_MIPSEL_UNKNOWN_LINUX_MUSL_LINKER=$TARGET_CC
 export CARGO_TARGET_MIPSEL_UNKNOWN_LINUX_MUSL_AR=$TARGET_AR
 export SQLITE3_LIB_DIR=$DIR/staging_dir/target-mipsel_24kc_musl/usr/lib/
 export MIPSEL_UNKNOWN_LINUX_MUSL_OPENSSL_DIR=$DIR/staging_dir/target-mipsel_24kc_musl/usr/
+export OPENSSL_STATIC=1
 
 rustup target add mipsel-unknown-linux-musl
 

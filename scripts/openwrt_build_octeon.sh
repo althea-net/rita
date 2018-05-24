@@ -13,6 +13,7 @@ export CARGO_TARGET_MIPS64_UNKNOWN_LINUX_GNUABI64_LINKER=$TARGET_CC
 export CARGO_TARGET_MIPS64_UNKNOWN_LINUX_GNUABI64_AR=$TARGET_AR
 export SQLITE3_LIB_DIR=$DIR/staging_dir/target-mips64_octeon_64_glibc/usr/lib/
 export MIPS64_UNKNOWN_LINUX_GNUABI64_OPENSSL_DIR=$DIR/staging_dir/target-mips64_octeon_64_glibc/usr/
+export OPENSSL_STATIC=1
 
 rustup target add mips64-unknown-linux-gnuabi64
 

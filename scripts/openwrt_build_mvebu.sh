@@ -13,6 +13,7 @@ export CARGO_TARGET_ARM_UNKNOWN_LINUX_MUSLEABIHF_LINKER=$TARGET_CC
 export CARGO_TARGET_ARM_UNKNOWN_LINUX_MUSLEABIHF_AR=$TARGET_AR
 export SQLITE3_LIB_DIR=$DIR/staging_dir/target-arm_cortex-a9+vfpv3_musl_eabi/usr/lib/
 export ARM_UNKNOWN_LINUX_MUSLEABIHF_OPENSSL_DIR=$DIR/staging_dir/target-arm_cortex-a9+vfpv3_musl_eabi/usr/
+export OPENSSL_STATIC=1
 
 rustup target add arm-unknown-linux-musleabihf
 
