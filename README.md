@@ -53,3 +53,15 @@ Status: Feature complete
 Manages the settings file, including loading/saving and updating the file. 
 
 Status: Feature complete
+
+## Cross building
+Rita is designed to run on OpenWRT and other embedded devices, if you need to test your code on a router you can use the build scripts in the `scripts/` folder. These will download a pre-built cross-compiler toolchain from updates.altheamesh.com and then use that to build your local althea_rs repository for the specified architecture. If you wish to build the cross-compilation toolchain yourself see the [Althea firmware builder](https://github.com/althea-mesh/althea-firmware). Either way you need to be on Linux, or running Windows Linux compatiblity layer.
+
+### Setting up the router
+First download the latest [nightly firmware](https://github.com/althea-mesh/althea-firmware#is-this-where-i-get-althea) for your device. Follow the OpenWRT wiki link in the table for flashing instructions. If you have a pretty recent version of the firmware you should be fine, but upgrade if see strange behavior.
+
+Once you have a device running edit the `scripts/openwrt_upload.sh` script to match your device ip and target. If you have an n600 or n750 then the default settings are correct. Review the nightly firmware download table to determine the correct target name for other devices.
+
+The router ip address is by default `192.168.1.1`, if your home network is on that same ip range (probable) you may have trouble reaching the router, plug into the device directly and disable wifi or connect to the Althea-Home wifi network to make sure there's no confusion about which device you are talking to. 
+
+Finally run `bash scripts/openwrt_upload.sh` Rust should take a few minutes to build and then Rita should start scrolling logs on your screen. The build will take longer than your normal debugging builds because the binary needs to be much smaller to fit on most embedded devices. If you have any problems refer to the [firmware debugging instructions](https://github.com/althea-mesh/althea-firmware#so-i-flashed-the-firmware-what-do-i-do-now). If that also proves unhelpful drop by our [matrix chat](https://riot.im/app/#/room/#althea:matrix.org) and ask. 
