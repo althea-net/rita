@@ -150,6 +150,9 @@ impl Handler<SetWifiConfig> for Dashboard {
         KI.uci_commit()?;
         KI.openwrt_reset_wireless()?;
 
+        // We edited disk contents, force global sync
+        KI.fs_sync()?;
+
         Ok(())
     }
 }

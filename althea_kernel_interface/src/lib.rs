@@ -24,6 +24,7 @@ mod exit_client_counter;
 mod exit_client_tunnel;
 mod exit_server_counter;
 mod exit_server_tunnel;
+mod fs_sync;
 mod get_neighbors;
 mod interface_tools;
 mod ip_route;
