@@ -22,6 +22,9 @@ use SETTING;
 
 use failure::Error;
 
+#[cfg(not(test))]
+use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
+
 #[cfg(test)]
 use actix::actors::mocker::Mocker;
 
@@ -78,6 +81,21 @@ impl SystemService for TunnelManager {
             self.listen_interfaces.insert(i);
         }
         trace!("Loaded listen interfaces {:?}", self.listen_interfaces);
+
+        if !cfg!(test) {
+            Arbiter::registry().init_actor(|_| {
+                //TODO: make the configurable when trust-dns-resolver serde issue is solved
+                //default is 8.8.8.8
+                Connector::new(ResolverConfig::default(), ResolverOpts::default())
+            });
+        }
+
+        for i in ResolverConfig::default().name_servers() {
+            KI.manual_peers_route(
+                &i.socket_addr.ip(),
+                &mut SETTING.get_network_mut().default_route,
+            ).unwrap();
+        }
     }
 }
 
