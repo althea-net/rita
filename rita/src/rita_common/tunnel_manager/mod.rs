@@ -93,6 +93,8 @@ impl SystemService for TunnelManager {
             });
         }
 
+        // Resolves the gateway client corner case
+        // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
         for i in ResolverConfig::default().name_servers() {
             KI.manual_peers_route(
                 &i.socket_addr.ip(),
@@ -191,6 +193,15 @@ impl Handler<OpenTunnel> for TunnelManager {
     }
 }
 
+fn is_gateway() -> Result<bool, Error> {
+    if let Some(ref wan_iface) = SETTING.get_network().external_nic {
+        let wan_status = KI.iface_status(wan_iface)?.to_lowercase() == "up".to_string();
+        return Ok(wan_status);
+    }
+
+    return Ok(false);
+}
+
 impl TunnelManager {
     pub fn new() -> Self {
         TunnelManager {
@@ -287,34 +298,41 @@ impl TunnelManager {
             0
         };
 
-        Box::new(
-            Connector::from_registry()
-                .send(actors::Resolve::host(their_ip.clone()))
-                .from_err()
-                .and_then(move |res| {
-                    let url = format!("http://[{}%{:?}]:4876/hello", their_ip, dev);
-                    info!("Saying hello to: {:?} at ip {:?}", url, res);
+        if is_gateway().unwrap() {
+            Box::new(
+                Connector::from_registry()
+                    .send(actors::Resolve::host(their_ip.clone()))
+                    .from_err()
+                    .and_then(move |res| {
+                        let url = format!("http://[{}%{:?}]:4876/hello", their_ip, dev);
+                        info!("Saying hello to: {:?} at ip {:?}", url, res);
 
-                    if let Ok(res) = res {
-                        if res.len() > 0 {
-                            let their_ip = res[0].ip();
+                        if let Ok(res) = res {
+                            if res.len() > 0 {
+                                let their_ip = res[0].ip();
 
-                            TunnelManager::contact_neighbor(tunnel, iface_index, their_ip)
-                        } else {
-                            Box::new(futures::future::err(
-                                TunnelManagerError::DNSLookupError.into(),
-                            ))
-                        }
-                    } else {
-                        match their_ip.parse() {
-                            Ok(their_ip) => {
                                 TunnelManager::contact_neighbor(tunnel, iface_index, their_ip)
+                            } else {
+                                Box::new(futures::future::err(
+                                    TunnelManagerError::DNSLookupError.into(),
+                                ))
                             }
-                            Err(err) => Box::new(futures::future::err(err.into())),
+                        } else {
+                            match their_ip.parse() {
+                                Ok(their_ip) => {
+                                    TunnelManager::contact_neighbor(tunnel, iface_index, their_ip)
+                                }
+                                Err(err) => Box::new(futures::future::err(err.into())),
+                            }
                         }
-                    }
-                }),
-        )
+                    }),
+            )
+        } else {
+            match their_ip.parse() {
+                Ok(their_ip) => TunnelManager::contact_neighbor(tunnel, iface_index, their_ip),
+                Err(err) => Box::new(futures::future::err(err.into())),
+            }
+        }
     }
 
     fn contact_neighbor(
@@ -493,11 +511,12 @@ mod tests {
 
         let mut counter = 0;
         KI.set_mock(Box::new(move |program, args| {
-            assert_eq!(program, "ip");
             counter += 1;
+            trace!("program {:?}, args {:?}, ctr {}", program, args, counter);
 
             match counter {
                 1 => {
+                    assert_eq!(program, "ip");
                     assert_eq!(args, link_args);
                     Ok(Output {
                         stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
@@ -506,9 +525,19 @@ mod tests {
                     })
                 }
                 2 => {
+                    assert_eq!(program, "ip");
                     assert_eq!(args, link_add);
                     Ok(Output {
                         stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                3 => {
+                    assert_eq!(program, "cat");
+                    assert_eq!(args, &["/sys/class/net/eth0/operstate"]);
+                    Ok(Output {
+                        stdout: b"UP\n".to_vec(),
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
                     })
@@ -586,12 +615,12 @@ mod tests {
 
         let mut counter = 0;
         KI.set_mock(Box::new(move |program, args| {
-            assert_eq!(program, "ip");
-
             counter += 1;
+            trace!("program {:?}, args {:?}, ctr {}", program, args, counter);
 
             match counter {
                 1 => {
+                    assert_eq!(program, "ip");
                     assert_eq!(args, link_args);
                     Ok(Output {
                         stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
@@ -600,9 +629,19 @@ mod tests {
                     })
                 }
                 2 => {
+                    assert_eq!(program, "ip");
                     assert_eq!(args, link_add);
                     Ok(Output {
                         stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                3 => {
+                    assert_eq!(program, "cat");
+                    assert_eq!(args, &["/sys/class/net/eth0/operstate"]);
+                    Ok(Output {
+                        stdout: b"UP\n".to_vec(),
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
                     })
@@ -675,7 +714,6 @@ mod tests {
         env_logger::init();
         let mut counter = 0;
         KI.set_mock(Box::new(move |program, args| {
-            trace!("program {:?}, args {:?}", program, args);
             if program == "ping6" {
                 return Ok(Output {
                     stdout: b"".to_vec(),
@@ -685,6 +723,7 @@ mod tests {
             }
 
             counter += 1;
+            trace!("program {:?}, args {:?}, ctr {}", program, args, counter);
 
             match counter {
                 1 => {
@@ -723,7 +762,7 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                5 | 6 => {
+                5 => {
                     assert_eq!(program, "ip");
                     assert_eq!(args, &["link"]);
                     Ok(Output {
@@ -733,7 +772,26 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
+                6 => {
+                    assert_eq!(program, "cat");
+                    assert_eq!(args, &["/sys/class/net/eth0/operstate"]);
+                    Ok(Output {
+                        stdout: b"UP\n".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
                 7 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, &["link"]);
+                    Ok(Output {
+                        stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
+83: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                8 => {
                     assert_eq!(program, "ip");
                     assert_eq!(args, &["link", "add", "wg1", "type", "wireguard"]);
                     Ok(Output {
@@ -742,7 +800,16 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                8 => {
+                9 => {
+                    assert_eq!(program, "cat");
+                    assert_eq!(args, &["/sys/class/net/eth0/operstate"]);
+                    Ok(Output {
+                        stdout: b"UP\n".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                10 => {
                     assert_eq!(program, "ip");
                     assert_eq!(args, &["link"]);
                     Ok(Output {
@@ -753,11 +820,20 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                9 => {
+                11 => {
                     assert_eq!(program, "ip");
                     assert_eq!(args, &["link", "add", "wg2", "type", "wireguard"]);
                     Ok(Output {
                         stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                12 => {
+                    assert_eq!(program, "cat");
+                    assert_eq!(args, &["/sys/class/net/eth0/operstate"]);
+                    Ok(Output {
+                        stdout: b"UP\n".to_vec(),
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
                     })
@@ -774,6 +850,7 @@ mod tests {
             .get_network_mut()
             .peer_interfaces
             .insert("eth0".to_string());
+        SETTING.get_network_mut().external_nic = Some("eth0".to_string());
 
         let _: Addr<Syn, _> = HTTPClient::init_actor(|_| {
             HTTPClient::mock(Box::new(|msg, _ctx| {

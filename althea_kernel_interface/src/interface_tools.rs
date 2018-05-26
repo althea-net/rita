@@ -3,6 +3,7 @@ use super::KernelInterface;
 use regex::Regex;
 
 use failure::Error;
+use std::str::from_utf8;
 
 impl KernelInterface {
     /// Returns all existing interfaces
@@ -23,6 +24,15 @@ impl KernelInterface {
     pub fn del_interface(&self, name: &str) -> Result<(), Error> {
         self.run_command("ip", &["link", "del", "dev", name])?;
         Ok(())
+    }
+
+    pub fn iface_status(&self, iface: &str) -> Result<String, Error> {
+        // cat so we can mock
+        let output = self.run_command("cat", &[&format!("/sys/class/net/{}/operstate", iface)])?;
+
+        let output = from_utf8(&output.stdout)?;
+
+        return Ok(output.trim_right().to_string());
     }
 }
 
