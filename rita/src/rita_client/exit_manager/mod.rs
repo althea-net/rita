@@ -18,7 +18,7 @@ use KI;
 
 fn linux_setup_exit_tunnel() -> Result<(), Error> {
     {
-        KI.update_settings_route(&mut SETTING.get_network_mut().default_route);
+        KI.update_settings_route(&mut SETTING.get_network_mut().default_route)?;
     }
 
     let exit_client = SETTING.get_exit_client();

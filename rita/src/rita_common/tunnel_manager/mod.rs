@@ -22,8 +22,10 @@ use SETTING;
 
 use failure::Error;
 
+use trust_dns_resolver::config::ResolverConfig;
+
 #[cfg(not(test))]
-use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
+use trust_dns_resolver::config::ResolverOpts;
 
 #[cfg(test)]
 use actix::actors::mocker::Mocker;
@@ -82,7 +84,8 @@ impl SystemService for TunnelManager {
         }
         trace!("Loaded listen interfaces {:?}", self.listen_interfaces);
 
-        if !cfg!(test) {
+        #[cfg(not(test))]
+        {
             Arbiter::registry().init_actor(|_| {
                 //TODO: make the configurable when trust-dns-resolver serde issue is solved
                 //default is 8.8.8.8

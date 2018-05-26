@@ -65,7 +65,10 @@ impl KernelInterface {
         Ok(())
     }
 
-    pub fn update_settings_route(&self, settings_default_route: &mut Vec<String>) -> Result<(), Error> {
+    pub fn update_settings_route(
+        &self,
+        settings_default_route: &mut Vec<String>,
+    ) -> Result<(), Error> {
         let def_route = match self.get_default_route() {
             Some(route) => route,
             None => return Ok(()),

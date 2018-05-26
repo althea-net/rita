@@ -34,6 +34,12 @@ impl KernelInterface {
             ],
         )?;
 
+        for i in self.get_peers("wg_exit")? {
+            if i != pubkey {
+                self.run_command("wg", &["set", "wg_exit", "peer", &i, "remove"])?;
+            }
+        }
+
         let _output = self.run_command(
             "ip",
             &[
