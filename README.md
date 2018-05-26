@@ -1,6 +1,34 @@
 # Althea_rs
 
-This contains many (although confusingly not all) of the Rust components for the Althea firmware. The only separated component is [guac_rs](https://github.com/althea-mesh/guac_rs) which we want to be easily used externally as a Rust Ethereum light client. 
+This contains many (although confusingly not all) of the Rust components for the Althea firmware. The only separated component is [guac_rs](https://github.com/althea-mesh/guac_rs) which we want to be easily used externally as a Rust Ethereum light client.
+
+## Building
+
+Debian:
+
+    sudo apt-get install build-essential libssl-dev libsqlite3-dev pkg-config
+
+Ubuntu:
+
+    sudo apt-get install build-essential libssl-dev libsqlite3-dev pkg-config
+
+Centos:
+
+    sudo yum install gcc gcc-c++ openssl-devel sqlite-devel make
+
+Fedora:
+
+    sudo dnf install gcc gcc-c++ openssl-devel sqlite-devel make
+
+Arch:
+
+    sudo pacman -S gcc gcc-libs openssl sqlite
+
+Finally install [Rust](https://www.rustup.rs/) and add Rustup to your PATH
+
+You are not ready to build code from this Rust repository by running
+
+	cargo build --all
 
 ## Components
 
