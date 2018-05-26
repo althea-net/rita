@@ -1,5 +1,7 @@
 use super::{KernelInterface, KernelInterfaceError};
 
+use std::collections::HashSet;
+
 use failure::Error;
 
 use std::net::IpAddr;
@@ -31,6 +33,8 @@ impl KernelInterface {
         args.push("private-key".into());
         args.push(private_key_path.to_string());
 
+        let mut client_pubkeys = HashSet::new();
+
         for c in clients {
             args.push("peer".into());
             args.push(format!("{}", c.public_key));
@@ -40,11 +44,19 @@ impl KernelInterface {
             args.push(format!("{}", c.internal_ip));
             args.push("persistent-keepalive".into());
             args.push("5".into());
+
+            client_pubkeys.insert(c.public_key.clone());
         }
 
         let arg_str: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
 
         self.run_command(&command, &arg_str[..])?;
+
+        for i in self.get_peers("wg_exit")? {
+            if !client_pubkeys.contains(&i.to_string()) {
+                self.run_command("wg", &["set", "wg_exit", "peer", &i, "remove"])?;
+            }
+        }
 
         let _output = self.run_command(
             "ip",
