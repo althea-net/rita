@@ -30,6 +30,8 @@ pub enum BabelMonitorError {
     ReadFailed(String),
     #[fail(display = "No terminator after Babel output:\n{}", _0)]
     NoTerminator(String),
+    #[fail(display = "No Neighbor was found matching address:\n{}", _0)]
+    NoNeighbor(String),
 }
 
 use BabelMonitorError::*;
@@ -49,7 +51,7 @@ fn find_babel_val(val: &str, line: &str) -> Result<String, Error> {
     return Err(VariableNotFound(String::from(val), String::from(line)).into());
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Route {
     pub id: String,
     pub iface: String,
@@ -63,9 +65,10 @@ pub struct Route {
     pub fee: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Neighbor {
     pub id: String,
+    pub address: IpAddr,
     pub iface: String,
     pub reach: u16,
     pub txcost: u16,
@@ -186,12 +189,13 @@ impl<T: Read + Write> Babel<T> {
             if entry.contains("add neighbour") {
                 vector.push_back(Neighbor {
                     id: find_babel_val("neighbour", entry)?,
+                    address: find_babel_val("address", entry)?.parse()?,
                     iface: find_babel_val("if", entry)?,
                     reach: u16::from_str_radix(&find_babel_val("reach", entry)?, 16)?,
                     txcost: find_babel_val("txcost", entry)?.parse()?,
                     rxcost: find_babel_val("rxcost", entry)?.parse()?,
-                    rtt: find_babel_val("rtt", entry)?.parse()?,
-                    rttcost: find_babel_val("rttcost", entry)?.parse()?,
+                    rtt: 0.0,
+                    rttcost: 0,
                     cost: find_babel_val("cost", entry)?.parse()?,
                 });
             }
@@ -222,6 +226,38 @@ impl<T: Read + Write> Babel<T> {
             }
         }
         Ok(vector)
+    }
+
+    /// In this function we take a route snapshot then loop over the routes list twice
+    /// to find the neighbor local address and then the route to the destination
+    /// via that neighbor. This could be dramatically more efficient if we had the neighbors
+    /// local ip lying around somewhere.
+    pub fn get_route_via_neigh(
+        &mut self,
+        neigh_mesh_ip: IpAddr,
+        dest_mesh_ip: IpAddr,
+    ) -> Result<Route, Error> {
+        let routes = self.parse_routes()?;
+        // First find the neighbors route to itself to get the local address
+        for neigh_route in routes.iter() {
+            // This will fail on v4 babel routes etc
+            if let IpNetwork::V6(ref ip) = neigh_route.prefix {
+                if ip.get_network_address() == neigh_mesh_ip {
+                    let neigh_local_ip = neigh_route.neigh_ip;
+                    // Now we take the neigh_local_ip and search for a route via that
+                    for route in routes.iter() {
+                        if let IpNetwork::V6(ref ip) = route.prefix {
+                            if ip.get_network_address() == dest_mesh_ip
+                                && route.neigh_ip == neigh_local_ip
+                            {
+                                return Ok(route.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Err(NoNeighbor(neigh_mesh_ip.to_string()).into())
     }
 }
 
