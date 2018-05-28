@@ -193,15 +193,6 @@ impl Handler<OpenTunnel> for TunnelManager {
     }
 }
 
-fn is_gateway() -> Result<bool, Error> {
-    if let Some(ref wan_iface) = SETTING.get_network().external_nic {
-        let wan_status = KI.iface_status(wan_iface)?.to_lowercase() == "up".to_string();
-        return Ok(wan_status);
-    }
-
-    return Ok(false);
-}
-
 impl TunnelManager {
     pub fn new() -> Self {
         TunnelManager {
@@ -298,41 +289,34 @@ impl TunnelManager {
             0
         };
 
-        if is_gateway().unwrap() {
-            Box::new(
-                Connector::from_registry()
-                    .send(actors::Resolve::host(their_ip.clone()))
-                    .from_err()
-                    .and_then(move |res| {
-                        let url = format!("http://[{}%{:?}]:4876/hello", their_ip, dev);
-                        info!("Saying hello to: {:?} at ip {:?}", url, res);
+        Box::new(
+            Connector::from_registry()
+                .send(actors::Resolve::host(their_ip.clone()))
+                .from_err()
+                .and_then(move |res| {
+                    let url = format!("http://[{}%{:?}]:4876/hello", their_ip, dev);
+                    info!("Saying hello to: {:?} at ip {:?}", url, res);
 
-                        if let Ok(res) = res {
-                            if res.len() > 0 {
-                                let their_ip = res[0].ip();
+                    if let Ok(res) = res {
+                        if res.len() > 0 {
+                            let their_ip = res[0].ip();
 
-                                TunnelManager::contact_neighbor(tunnel, iface_index, their_ip)
-                            } else {
-                                Box::new(futures::future::err(
-                                    TunnelManagerError::DNSLookupError.into(),
-                                ))
-                            }
+                            TunnelManager::contact_neighbor(tunnel, iface_index, their_ip)
                         } else {
-                            match their_ip.parse() {
-                                Ok(their_ip) => {
-                                    TunnelManager::contact_neighbor(tunnel, iface_index, their_ip)
-                                }
-                                Err(err) => Box::new(futures::future::err(err.into())),
-                            }
+                            Box::new(futures::future::err(
+                                TunnelManagerError::DNSLookupError.into(),
+                            ))
                         }
-                    }),
-            )
-        } else {
-            match their_ip.parse() {
-                Ok(their_ip) => TunnelManager::contact_neighbor(tunnel, iface_index, their_ip),
-                Err(err) => Box::new(futures::future::err(err.into())),
-            }
-        }
+                    } else {
+                        match their_ip.parse() {
+                            Ok(their_ip) => {
+                                TunnelManager::contact_neighbor(tunnel, iface_index, their_ip)
+                            }
+                            Err(err) => Box::new(futures::future::err(err.into())),
+                        }
+                    }
+                }),
+        )
     }
 
     fn contact_neighbor(
@@ -340,6 +324,11 @@ impl TunnelManager {
         iface_index: u32,
         their_ip: IpAddr,
     ) -> Box<Future<Item = (LocalIdentity, String, IpAddr), Error = Error>> {
+        KI.manual_peers_route(
+            &their_ip,
+            &mut SETTING.get_network_mut().default_route,
+        ).unwrap();
+
         let socket = match their_ip {
             IpAddr::V6(ip_v6) => SocketAddr::V6(SocketAddrV6::new(
                 ip_v6,
