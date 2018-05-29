@@ -199,6 +199,7 @@ def start_babel(node):
                 "-F {price} " +
                 "-a 0 " +
                 "-G 6872 " +
+                '-C "default enable-timestamps true" ' +
                 '-C "default update-interval 1" ' +
                 "-w lo"
             ).format(babeld_path=BABELD, ifaces=node.get_interfaces(), id=node.id, price=node.fwd_price),

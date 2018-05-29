@@ -1,26 +1,20 @@
 use actix::prelude::*;
-
-use KI;
-
-use althea_types::Identity;
-
-use babel_monitor::Babel;
-
-use rita_common::debt_keeper;
-use rita_common::debt_keeper::DebtKeeper;
-
-use num256::Int256;
+use failure::Error;
+use ip_network::IpNetwork;
+use reqwest;
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
+use std::time::{Duration, SystemTime};
 
-use ip_network::IpNetwork;
-
-use settings::RitaCommonSettings;
+use althea_types::{Identity, RTTimestamps};
+use babel_monitor::Babel;
+use num256::Int256;
+use rita_common::debt_keeper::{DebtKeeper, TrafficUpdate};
+use settings::{RitaClientSettings, RitaCommonSettings};
+use KI;
 use SETTING;
-
-use failure::Error;
 
 pub struct TrafficWatcher;
 
@@ -79,10 +73,7 @@ pub fn watch<T: Read + Write>(
         if let IpNetwork::V6(ref ip) = route.prefix {
             // Only host addresses and installed routes
             if ip.get_netmask() == 128 && route.installed {
-                destinations.insert(
-                    IpAddr::V6(ip.get_network_address()),
-                    Int256::from(route.price),
-                );
+                destinations.insert(IpAddr::V6(ip.get_network_address()), route);
             }
         }
     }
@@ -100,16 +91,51 @@ pub fn watch<T: Read + Write>(
     trace!("exit price {}", exit_price);
 
     if destinations.contains_key(&exit.mesh_ip) {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()?;
+
+        let client_tx = SystemTime::now();
+        let RTTimestamps { exit_rx, exit_tx } = client
+            .get(&format!(
+                "http://[{}]:{}/rtt",
+                exit.mesh_ip,
+                match SETTING.get_exit_client().get_current_exit() {
+                    Some(current_exit) => current_exit.registration_port,
+                    None => {
+                        return Err(format_err!(
+                            "No current exit even though an exit route is present"
+                        ));
+                    }
+                }
+            ))
+            .send()?
+            .json()?;
+        let client_rx = SystemTime::now();
+
+        let inner_rtt = client_rx.duration_since(client_tx)? - exit_tx.duration_since(exit_rx)?;
+        let inner_rtt_millis =
+            inner_rtt.as_secs() as f32 * 1000.0 + inner_rtt.subsec_micros() as f32 / 1000.0;
+        //                        secs -> millis                            micros -> millis
+
+        trace!(
+            "RTTs: per-hop {}ms, inner {}ms",
+            destinations[&exit.mesh_ip].full_path_rtt,
+            inner_rtt_millis
+        );
+
         trace!(
             "exit destination price {}",
-            destinations[&exit.mesh_ip].clone() + exit_price
+            Int256::from(destinations[&exit.mesh_ip].price) + exit_price
         );
+        trace!("Exit ip: {:?}", exit.mesh_ip);
+        trace!("Exit destination:\n{:#?}", destinations[&exit.mesh_ip]);
 
         owes += Int256::from(exit_price * output);
 
-        owes += (destinations[&exit.mesh_ip].clone() + exit_price) * input;
+        owes += (Int256::from(destinations[&exit.mesh_ip].price) + exit_price) * input;
 
-        let update = debt_keeper::TrafficUpdate {
+        let update = TrafficUpdate {
             from: exit.clone(),
             amount: owes,
         };

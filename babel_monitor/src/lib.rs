@@ -159,7 +159,7 @@ impl<T: Read + Write> Babel<T> {
     }
 
     pub fn monitor(&mut self, iface: &str) -> Result<(), Error> {
-        let _ = self.command(&format!("interface {}", iface))?;
+        let _ = self.command(&format!("interface {} enable-timestamps true", iface))?;
         info!("Babel started monitoring: {}", iface);
         Ok(())
     }
@@ -217,7 +217,7 @@ impl<T: Read + Write> Babel<T> {
                     prefix: find_babel_val("prefix", entry)?.parse()?,
                     metric: find_babel_val("metric", entry)?.parse()?,
                     refmetric: find_babel_val("refmetric", entry)?.parse()?,
-                    full_path_rtt: find_babel_val("full-path-rtt", entry)?.parse()?,
+                    full_path_rtt: { find_babel_val("full-path-rtt", entry)?.parse()? },
                     price: find_babel_val("price", entry)?.parse()?,
                     fee: find_babel_val("fee", entry)?.parse()?,
                 });
@@ -365,6 +365,7 @@ ok\n";
 
         let route = routes.get(0).unwrap();
         assert_eq!(route.price, 3072);
+        assert_eq!(route.full_path_rtt, 22.805);
 
         b.command("interface wg0").unwrap();
     }
