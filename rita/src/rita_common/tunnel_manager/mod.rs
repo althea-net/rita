@@ -324,10 +324,8 @@ impl TunnelManager {
         iface_index: u32,
         their_ip: IpAddr,
     ) -> Box<Future<Item = (LocalIdentity, String, IpAddr), Error = Error>> {
-        KI.manual_peers_route(
-            &their_ip,
-            &mut SETTING.get_network_mut().default_route,
-        ).unwrap();
+        KI.manual_peers_route(&their_ip, &mut SETTING.get_network_mut().default_route)
+            .unwrap();
 
         let socket = match their_ip {
             IpAddr::V6(ip_v6) => SocketAddr::V6(SocketAddrV6::new(
@@ -382,10 +380,9 @@ impl TunnelManager {
             &mut SETTING.get_network_mut().default_route,
         )?;
 
-        let stream = TcpStream::connect::<SocketAddr>(format!(
-            "[::1]:{}",
-            SETTING.get_network().babel_port
-        ).parse()?)?;
+        let stream = TcpStream::connect::<SocketAddr>(
+            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
+        )?;
 
         let mut babel = Babel::new(stream);
 
@@ -414,16 +411,25 @@ mod tests {
 
     #[test]
     fn test_contact_neighbor_ipv4() {
+        env_logger::init();
+
         let link_args = &["link"];
         let link_add = &["link", "add", "wg1", "type", "wireguard"];
 
         let mut counter = 0;
         KI.set_mock(Box::new(move |program, args| {
-            assert_eq!(program, "ip");
             counter += 1;
+
+            trace!(
+                "program {:?}, args {:?}, counter {}",
+                program,
+                args,
+                counter
+            );
 
             match counter {
                 1 => {
+                    assert_eq!(program, "ip");
                     assert_eq!(args, link_args);
                     Ok(Output {
                         stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
@@ -432,9 +438,44 @@ mod tests {
                     })
                 }
                 2 => {
+                    assert_eq!(program, "ip");
                     assert_eq!(args, link_add);
                     Ok(Output {
                         stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                3 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, ["route", "list", "default"]);
+                    Ok(Output {
+                        stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
+                            .to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                4 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(
+                        args,
+                        [
+                            "route",
+                            "add",
+                            "1.1.1.1",
+                            "via",
+                            "192.168.1.1",
+                            "dev",
+                            "eth0",
+                            "proto",
+                            "static",
+                            "metric",
+                            "600"
+                        ]
+                    );
+                    Ok(Output {
+                        stdout: b"ok".to_vec(),
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
                     })
@@ -501,7 +542,12 @@ mod tests {
         let mut counter = 0;
         KI.set_mock(Box::new(move |program, args| {
             counter += 1;
-            trace!("program {:?}, args {:?}, ctr {}", program, args, counter);
+            trace!(
+                "program {:?}, args {:?}, counter {}",
+                program,
+                args,
+                counter
+            );
 
             match counter {
                 1 => {
@@ -523,10 +569,35 @@ mod tests {
                     })
                 }
                 3 => {
-                    assert_eq!(program, "cat");
-                    assert_eq!(args, &["/sys/class/net/eth0/operstate"]);
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, ["route", "list", "default"]);
                     Ok(Output {
-                        stdout: b"UP\n".to_vec(),
+                        stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
+                            .to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                4 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(
+                        args,
+                        [
+                            "route",
+                            "add",
+                            "1.1.1.1",
+                            "via",
+                            "192.168.1.1",
+                            "dev",
+                            "eth0",
+                            "proto",
+                            "static",
+                            "metric",
+                            "600"
+                        ]
+                    );
+                    Ok(Output {
+                        stdout: b"ok".to_vec(),
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
                     })
@@ -605,7 +676,12 @@ mod tests {
         let mut counter = 0;
         KI.set_mock(Box::new(move |program, args| {
             counter += 1;
-            trace!("program {:?}, args {:?}, ctr {}", program, args, counter);
+            trace!(
+                "program {:?}, args {:?}, counter {}",
+                program,
+                args,
+                counter
+            );
 
             match counter {
                 1 => {
@@ -627,10 +703,35 @@ mod tests {
                     })
                 }
                 3 => {
-                    assert_eq!(program, "cat");
-                    assert_eq!(args, &["/sys/class/net/eth0/operstate"]);
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, ["route", "list", "default"]);
                     Ok(Output {
-                        stdout: b"UP\n".to_vec(),
+                        stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
+                            .to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                4 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(
+                        args,
+                        [
+                            "route",
+                            "add",
+                            "1.1.1.1",
+                            "via",
+                            "192.168.1.1",
+                            "dev",
+                            "eth0",
+                            "proto",
+                            "static",
+                            "metric",
+                            "600"
+                        ]
+                    );
+                    Ok(Output {
+                        stdout: b"ok".to_vec(),
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
                     })
@@ -700,7 +801,6 @@ mod tests {
 
     #[test]
     fn test_get_neighbors() {
-        env_logger::init();
         let mut counter = 0;
         KI.set_mock(Box::new(move |program, args| {
             if program == "ping6" {
@@ -712,7 +812,12 @@ mod tests {
             }
 
             counter += 1;
-            trace!("program {:?}, args {:?}, ctr {}", program, args, counter);
+            trace!(
+                "program {:?}, args {:?}, counter {}",
+                program,
+                args,
+                counter
+            );
 
             match counter {
                 1 => {
@@ -751,36 +856,17 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                5 => {
+                5 | 6 => {
                     assert_eq!(program, "ip");
                     assert_eq!(args, &["link"]);
                     Ok(Output {
                         stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
 83: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                6 => {
-                    assert_eq!(program, "cat");
-                    assert_eq!(args, &["/sys/class/net/eth0/operstate"]);
-                    Ok(Output {
-                        stdout: b"UP\n".to_vec(),
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
                     })
                 }
                 7 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, &["link"]);
-                    Ok(Output {
-                        stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
-83: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                8 => {
                     assert_eq!(program, "ip");
                     assert_eq!(args, &["link", "add", "wg1", "type", "wireguard"]);
                     Ok(Output {
@@ -789,16 +875,7 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                9 => {
-                    assert_eq!(program, "cat");
-                    assert_eq!(args, &["/sys/class/net/eth0/operstate"]);
-                    Ok(Output {
-                        stdout: b"UP\n".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                10 => {
+                8 => {
                     assert_eq!(program, "ip");
                     assert_eq!(args, &["link"]);
                     Ok(Output {
@@ -809,7 +886,7 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                11 => {
+                9 => {
                     assert_eq!(program, "ip");
                     assert_eq!(args, &["link", "add", "wg2", "type", "wireguard"]);
                     Ok(Output {
@@ -818,11 +895,104 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                12 => {
-                    assert_eq!(program, "cat");
-                    assert_eq!(args, &["/sys/class/net/eth0/operstate"]);
+                10 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, ["route", "list", "default"]);
                     Ok(Output {
-                        stdout: b"UP\n".to_vec(),
+                        stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
+                            .to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                11 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(
+                        args,
+                        [
+                            "route",
+                            "add",
+                            "fe80::1234",
+                            "via",
+                            "192.168.1.1",
+                            "dev",
+                            "eth0",
+                            "proto",
+                            "static",
+                            "metric",
+                            "600"
+                        ]
+                    );
+                    Ok(Output {
+                        stdout: b"ok".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                12 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, ["route", "list", "default"]);
+                    Ok(Output {
+                        stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
+                            .to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                13 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(
+                        args,
+                        [
+                            "route",
+                            "add",
+                            "1.1.1.1",
+                            "via",
+                            "192.168.1.1",
+                            "dev",
+                            "eth0",
+                            "proto",
+                            "static",
+                            "metric",
+                            "600"
+                        ]
+                    );
+                    Ok(Output {
+                        stdout: b"ok".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                14 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, ["route", "list", "default"]);
+                    Ok(Output {
+                        stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
+                            .to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                15 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(
+                        args,
+                        [
+                            "route",
+                            "add",
+                            "2.2.2.2",
+                            "via",
+                            "192.168.1.1",
+                            "dev",
+                            "eth0",
+                            "proto",
+                            "static",
+                            "metric",
+                            "600"
+                        ]
+                    );
+                    Ok(Output {
+                        stdout: b"ok".to_vec(),
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
                     })
