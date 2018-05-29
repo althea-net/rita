@@ -16,12 +16,14 @@ pub mod eth_address;
 pub mod eth_private_key;
 pub mod eth_signature;
 pub mod interop;
+pub mod rtt;
 
 pub use bytes_32::Bytes32;
 pub use eth_address::EthAddress;
 pub use eth_private_key::EthPrivateKey;
 pub use eth_signature::EthSignature;
 pub use interop::*;
+pub use rtt::RTTimestamps;
 
 #[cfg(test)]
 mod tests {
