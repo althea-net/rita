@@ -17,6 +17,8 @@ use std::net::SocketAddr;
 use KI;
 
 fn linux_setup_exit_tunnel() -> Result<(), Error> {
+    KI.update_settings_route(&mut SETTING.get_network_mut().default_route)?;
+
     let exit_client = SETTING.get_exit_client();
     let current_exit = exit_client.get_current_exit().unwrap();
     let general_details = current_exit.general_details.as_ref().unwrap();

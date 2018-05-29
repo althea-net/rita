@@ -1,8 +1,23 @@
 use super::{KernelInterface, KernelInterfaceError};
+use std::str::from_utf8;
 
 use failure::Error;
 
 impl KernelInterface {
+    pub fn get_peers(&self, iface_name: &str) -> Result<Vec<String>, Error> {
+        let output = self.run_command("wg", &["show", iface_name, "peers"])?;
+
+        let output = from_utf8(&output.stdout)?;
+
+        let mut peers = Vec::new();
+
+        for l in output.lines() {
+            peers.push(l.to_string());
+        }
+
+        Ok(peers)
+    }
+
     /// checks the existing interfaces to find an interface name that isn't in use.
     /// then calls iproute2 to set up a new interface.
     pub fn setup_wg_if(&self) -> Result<String, Error> {

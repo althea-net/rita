@@ -22,6 +22,11 @@ use SETTING;
 
 use failure::Error;
 
+use trust_dns_resolver::config::ResolverConfig;
+
+#[cfg(not(test))]
+use trust_dns_resolver::config::ResolverOpts;
+
 #[cfg(test)]
 use actix::actors::mocker::Mocker;
 
@@ -78,6 +83,24 @@ impl SystemService for TunnelManager {
             self.listen_interfaces.insert(i);
         }
         trace!("Loaded listen interfaces {:?}", self.listen_interfaces);
+
+        #[cfg(not(test))]
+        {
+            Arbiter::registry().init_actor(|_| {
+                //TODO: make the configurable when trust-dns-resolver serde issue is solved
+                //default is 8.8.8.8
+                Connector::new(ResolverConfig::default(), ResolverOpts::default())
+            });
+        }
+
+        // Resolves the gateway client corner case
+        // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
+        for i in ResolverConfig::default().name_servers() {
+            KI.manual_peers_route(
+                &i.socket_addr.ip(),
+                &mut SETTING.get_network_mut().default_route,
+            ).unwrap();
+        }
     }
 }
 
@@ -301,6 +324,9 @@ impl TunnelManager {
         iface_index: u32,
         their_ip: IpAddr,
     ) -> Box<Future<Item = (LocalIdentity, String, IpAddr), Error = Error>> {
+        KI.manual_peers_route(&their_ip, &mut SETTING.get_network_mut().default_route)
+            .unwrap();
+
         let socket = match their_ip {
             IpAddr::V6(ip_v6) => SocketAddr::V6(SocketAddrV6::new(
                 ip_v6,
@@ -354,10 +380,9 @@ impl TunnelManager {
             &mut SETTING.get_network_mut().default_route,
         )?;
 
-        let stream = TcpStream::connect::<SocketAddr>(format!(
-            "[::1]:{}",
-            SETTING.get_network().babel_port
-        ).parse()?)?;
+        let stream = TcpStream::connect::<SocketAddr>(
+            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
+        )?;
 
         let mut babel = Babel::new(stream);
 
@@ -386,16 +411,25 @@ mod tests {
 
     #[test]
     fn test_contact_neighbor_ipv4() {
+        env_logger::init();
+
         let link_args = &["link"];
         let link_add = &["link", "add", "wg1", "type", "wireguard"];
 
         let mut counter = 0;
         KI.set_mock(Box::new(move |program, args| {
-            assert_eq!(program, "ip");
             counter += 1;
+
+            trace!(
+                "program {:?}, args {:?}, counter {}",
+                program,
+                args,
+                counter
+            );
 
             match counter {
                 1 => {
+                    assert_eq!(program, "ip");
                     assert_eq!(args, link_args);
                     Ok(Output {
                         stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
@@ -404,9 +438,44 @@ mod tests {
                     })
                 }
                 2 => {
+                    assert_eq!(program, "ip");
                     assert_eq!(args, link_add);
                     Ok(Output {
                         stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                3 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, ["route", "list", "default"]);
+                    Ok(Output {
+                        stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
+                            .to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                4 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(
+                        args,
+                        [
+                            "route",
+                            "add",
+                            "1.1.1.1",
+                            "via",
+                            "192.168.1.1",
+                            "dev",
+                            "eth0",
+                            "proto",
+                            "static",
+                            "metric",
+                            "600"
+                        ]
+                    );
+                    Ok(Output {
+                        stdout: b"ok".to_vec(),
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
                     })
@@ -472,11 +541,17 @@ mod tests {
 
         let mut counter = 0;
         KI.set_mock(Box::new(move |program, args| {
-            assert_eq!(program, "ip");
             counter += 1;
+            trace!(
+                "program {:?}, args {:?}, counter {}",
+                program,
+                args,
+                counter
+            );
 
             match counter {
                 1 => {
+                    assert_eq!(program, "ip");
                     assert_eq!(args, link_args);
                     Ok(Output {
                         stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
@@ -485,9 +560,44 @@ mod tests {
                     })
                 }
                 2 => {
+                    assert_eq!(program, "ip");
                     assert_eq!(args, link_add);
                     Ok(Output {
                         stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                3 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, ["route", "list", "default"]);
+                    Ok(Output {
+                        stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
+                            .to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                4 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(
+                        args,
+                        [
+                            "route",
+                            "add",
+                            "1.1.1.1",
+                            "via",
+                            "192.168.1.1",
+                            "dev",
+                            "eth0",
+                            "proto",
+                            "static",
+                            "metric",
+                            "600"
+                        ]
+                    );
+                    Ok(Output {
+                        stdout: b"ok".to_vec(),
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
                     })
@@ -565,12 +675,17 @@ mod tests {
 
         let mut counter = 0;
         KI.set_mock(Box::new(move |program, args| {
-            assert_eq!(program, "ip");
-
             counter += 1;
+            trace!(
+                "program {:?}, args {:?}, counter {}",
+                program,
+                args,
+                counter
+            );
 
             match counter {
                 1 => {
+                    assert_eq!(program, "ip");
                     assert_eq!(args, link_args);
                     Ok(Output {
                         stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
@@ -579,9 +694,44 @@ mod tests {
                     })
                 }
                 2 => {
+                    assert_eq!(program, "ip");
                     assert_eq!(args, link_add);
                     Ok(Output {
                         stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                3 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, ["route", "list", "default"]);
+                    Ok(Output {
+                        stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
+                            .to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                4 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(
+                        args,
+                        [
+                            "route",
+                            "add",
+                            "1.1.1.1",
+                            "via",
+                            "192.168.1.1",
+                            "dev",
+                            "eth0",
+                            "proto",
+                            "static",
+                            "metric",
+                            "600"
+                        ]
+                    );
+                    Ok(Output {
+                        stdout: b"ok".to_vec(),
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
                     })
@@ -651,10 +801,8 @@ mod tests {
 
     #[test]
     fn test_get_neighbors() {
-        env_logger::init();
         let mut counter = 0;
         KI.set_mock(Box::new(move |program, args| {
-            trace!("program {:?}, args {:?}", program, args);
             if program == "ping6" {
                 return Ok(Output {
                     stdout: b"".to_vec(),
@@ -664,6 +812,12 @@ mod tests {
             }
 
             counter += 1;
+            trace!(
+                "program {:?}, args {:?}, counter {}",
+                program,
+                args,
+                counter
+            );
 
             match counter {
                 1 => {
@@ -741,6 +895,108 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
+                10 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, ["route", "list", "default"]);
+                    Ok(Output {
+                        stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
+                            .to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                11 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(
+                        args,
+                        [
+                            "route",
+                            "add",
+                            "fe80::1234",
+                            "via",
+                            "192.168.1.1",
+                            "dev",
+                            "eth0",
+                            "proto",
+                            "static",
+                            "metric",
+                            "600"
+                        ]
+                    );
+                    Ok(Output {
+                        stdout: b"ok".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                12 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, ["route", "list", "default"]);
+                    Ok(Output {
+                        stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
+                            .to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                13 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(
+                        args,
+                        [
+                            "route",
+                            "add",
+                            "1.1.1.1",
+                            "via",
+                            "192.168.1.1",
+                            "dev",
+                            "eth0",
+                            "proto",
+                            "static",
+                            "metric",
+                            "600"
+                        ]
+                    );
+                    Ok(Output {
+                        stdout: b"ok".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                14 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, ["route", "list", "default"]);
+                    Ok(Output {
+                        stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
+                            .to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                15 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(
+                        args,
+                        [
+                            "route",
+                            "add",
+                            "2.2.2.2",
+                            "via",
+                            "192.168.1.1",
+                            "dev",
+                            "eth0",
+                            "proto",
+                            "static",
+                            "metric",
+                            "600"
+                        ]
+                    );
+                    Ok(Output {
+                        stdout: b"ok".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
                 _ => panic!("command called too many times"),
             }
         }));
@@ -753,6 +1009,7 @@ mod tests {
             .get_network_mut()
             .peer_interfaces
             .insert("eth0".to_string());
+        SETTING.get_network_mut().external_nic = Some("eth0".to_string());
 
         let _: Addr<Syn, _> = HTTPClient::init_actor(|_| {
             HTTPClient::mock(Box::new(|msg, _ctx| {

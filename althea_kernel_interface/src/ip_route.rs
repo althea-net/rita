@@ -65,9 +65,8 @@ impl KernelInterface {
         Ok(())
     }
 
-    pub fn manual_peers_route(
+    pub fn update_settings_route(
         &self,
-        endpoint_ip: &IpAddr,
         settings_default_route: &mut Vec<String>,
     ) -> Result<(), Error> {
         let def_route = match self.get_default_route() {
@@ -78,7 +77,16 @@ impl KernelInterface {
         if !def_route.contains(&String::from("wg_exit")) {
             // update the default route if default route is not wg exit
             *settings_default_route = def_route.clone();
-        }
+        };
+        Ok(())
+    }
+
+    pub fn manual_peers_route(
+        &self,
+        endpoint_ip: &IpAddr,
+        settings_default_route: &mut Vec<String>,
+    ) -> Result<(), Error> {
+        self.update_settings_route(settings_default_route)?;
 
         self.set_route(&endpoint_ip, settings_default_route)?;
         Ok(())
