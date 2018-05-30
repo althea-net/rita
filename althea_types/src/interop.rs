@@ -65,7 +65,7 @@ impl DeserializeWith for ExitState {
 
         match s.as_ref() {
             "New" => Ok(ExitState::New),
-            "GotInto" => Ok(ExitState::GotInfo),
+            "GotInfo" => Ok(ExitState::GotInfo),
             "Pending" => Ok(ExitState::Pending),
             "Registered" => Ok(ExitState::Registered),
             "Denied" => Ok(ExitState::Denied),
