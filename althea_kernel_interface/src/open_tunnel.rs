@@ -134,6 +134,63 @@ impl KernelInterface {
         }
         Ok(())
     }
+
+    pub fn open_tunnel_listener(
+        &self,
+        interface: &String,
+        port: u16,
+        remote_pub_key: &String,
+        private_key_path: &Path,
+        own_ip: &IpAddr,
+    ) -> Result<(), Error> {
+        let output = self.run_command(
+            "wg",
+            &[
+                "set",
+                &interface,
+                "listen-port",
+                &format!("{}", port),
+                "private-key",
+                &format!("{}", private_key_path.to_str().unwrap()),
+                "peer",
+                &format!("{}", remote_pub_key),
+                "allowed-ips",
+                "::/0",
+                "persistent-keepalive",
+                "5",
+            ],
+        )?;
+        if !output.stderr.is_empty() {
+            return Err(KernelInterfaceError::RuntimeError(format!(
+                "received error from wg command: {}",
+                String::from_utf8(output.stderr)?
+            )).into());
+        }
+        let _output = self.run_command(
+            "ip",
+            &["address", "add", &format!("{}", own_ip), "dev", &interface],
+        )?;
+
+        self.run_command(
+            "ip",
+            &[
+                "address",
+                "add",
+                &format!("{}/64", to_wg_local(own_ip)),
+                "dev",
+                &interface,
+            ],
+        )?;
+
+        let output = self.run_command("ip", &["link", "set", "dev", &interface, "up"])?;
+        if !output.stderr.is_empty() {
+            return Err(KernelInterfaceError::RuntimeError(format!(
+                "received error setting wg interface up: {}",
+                String::from_utf8(output.stderr)?
+            )).into());
+        }
+        Ok(())
+    }
 }
 
 #[test]
