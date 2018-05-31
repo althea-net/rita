@@ -66,7 +66,7 @@ impl Handler<Tick> for RitaLoop {
 
                     let neigh = Instant::now();
 
-                    for &(ref their_id, ref _interface, ref ip) in &res {
+                    for &(ref their_id, _, ref ip) in &res {
                         TunnelManager::from_registry()
                             .do_send(OpenTunnel(their_id.clone(), ip.clone()));
                     }

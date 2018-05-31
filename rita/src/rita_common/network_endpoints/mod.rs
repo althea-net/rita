@@ -1,19 +1,18 @@
-use althea_types::{LocalIdentity, PaymentTx};
+use althea_types::{Identity, LocalIdentity, PaymentTx};
 
 use actix::registry::SystemService;
 use actix_web::*;
 
 use futures::Future;
 
+use settings::RitaCommonSettings;
+use SETTING;
+
 use rita_common;
-
 use rita_common::payment_controller::PaymentController;
-
-use rita_common::tunnel_manager::{GetLocalIdentity, OpenTunnel, TunnelManager};
+use rita_common::tunnel_manager::{GetWgInterface, OpenTunnelListener, TunnelManager};
 
 use std::boxed::Box;
-
-use std::net::SocketAddr;
 
 #[derive(Serialize)]
 pub struct JsonStatusResponse {
@@ -49,28 +48,27 @@ pub fn make_payments(
 }
 
 pub fn hello_response(
-    their_id: Json<LocalIdentity>,
+    their_id: Json<Identity>,
     req: HttpRequest,
 ) -> Box<Future<Item = Json<LocalIdentity>, Error = Error>> {
     info!("Got Hello from {:?}", req.connection_info().remote());
 
-    let remote_ip = req
-        .connection_info()
-        .remote()
-        .unwrap()
-        .parse::<SocketAddr>()
-        .unwrap()
-        .ip();
-
     trace!("Received neighbour identity: {:?}", their_id);
 
     TunnelManager::from_registry()
-        .send(GetLocalIdentity { from: remote_ip })
+        .send(OpenTunnelListener(their_id.clone()))
         .from_err()
-        .and_then(move |reply| {
+        .and_then(move |_| {
             info!("opening tunnel in hello_response for {:?}", their_id);
-            TunnelManager::from_registry().do_send(OpenTunnel(their_id.into_inner(), remote_ip));
-            Ok(Json(reply))
+            TunnelManager::from_registry()
+                .send(GetWgInterface(their_id.into_inner().mesh_ip))
+                .from_err()
+                .and_then(|wg_iface| {
+                    Ok(Json(LocalIdentity {
+                        global: SETTING.get_identity(),
+                        wg_port: wg_iface?.listen_port,
+                    }))
+                })
         })
         .responder()
 }

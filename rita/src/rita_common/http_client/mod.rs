@@ -13,7 +13,7 @@ use actix::registry::SystemService;
 
 use serde_json;
 
-use althea_types::LocalIdentity;
+use althea_types::{Identity, LocalIdentity};
 
 use failure::Error;
 
@@ -53,7 +53,7 @@ impl Actor for HTTPSyncExecutor {
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Hello {
-    pub my_id: LocalIdentity,
+    pub my_id: Identity,
     pub to: SocketAddr,
 }
 
