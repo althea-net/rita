@@ -2,6 +2,8 @@
 
 This contains many (although confusingly not all) of the Rust components for the Althea firmware. The only separated component is [guac_rs](https://github.com/althea-mesh/guac_rs) which we want to be easily used externally as a Rust Ethereum light client.
 
+This is primarily an infrastructure repo, to get a working version of Althea you should look at [installer](https://github.com/althea-mesh/installer) for desktop linux and [althea-firmware](https://github.com/althea-mesh/althea-firmware) for OpenWRT.
+
 ## Building
 
 Debian:
@@ -26,7 +28,7 @@ Arch:
 
 Finally install [Rust](https://www.rustup.rs/) and add Rustup to your PATH
 
-You are not ready to build code from this Rust repository by running
+You are now ready to build code from this Rust repository by running
 
 	cargo build --all
 
@@ -45,7 +47,7 @@ Status:
  - Sends load stats to external stats server (if opted in): Untested
  - Accounts for bandwidth used and required payments: Needs more testing
  - Communicates with Babeld to get mesh info: done
- - Communicates with Babeld to detect fraud: not started
+ - Communicates with Babeld to detect fraud: in progress
  - Makes payments: in progress
 
 ### althea_kernel_interface
