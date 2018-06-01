@@ -163,9 +163,8 @@ fn main() {
         App::new()
             // Client stuff
             .resource("/make_payment", |r| r.method(Method::POST).with2(make_payments))
-            .resource("/hello", |r| r.method(Method::POST).with2(hello_response))
-            // Exit stuff
-            .resource("/setup", |r| r.method(Method::POST).with2(setup_request))
+            .resource("/hello", |r| r.method(Method::POST).with2(hello_response_new))
+            .resource("/hello", |r| r.method(Method::POST).with2(hello_response_old))
     }).bind(format!("[::0]:{}", SETTING.get_network().rita_hello_port))
         .unwrap()
         .start();

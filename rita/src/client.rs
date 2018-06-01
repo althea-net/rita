@@ -162,7 +162,12 @@ fn main() {
             .resource("/make_payment", |r| {
                 r.method(Method::POST).with2(make_payments)
             })
-            .resource("/hello", |r| r.method(Method::POST).with2(hello_response))
+            .resource("/hello", |r| {
+                r.method(Method::POST).with2(hello_response_old)
+            })
+            .resource("/hello", |r| {
+                r.method(Method::POST).with2(hello_response_new)
+            })
     }).workers(1)
         .bind(format!("[::0]:{}", SETTING.get_network().rita_hello_port))
         .unwrap()
