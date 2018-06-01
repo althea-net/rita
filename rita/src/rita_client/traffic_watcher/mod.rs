@@ -115,8 +115,8 @@ pub fn watch<T: Read + Write>(
 
         let inner_rtt = client_rx.duration_since(client_tx)? - exit_tx.duration_since(exit_rx)?;
         let inner_rtt_millis =
-            inner_rtt.as_secs() as f32 * 1000.0 + inner_rtt.subsec_micros() as f32 / 1000.0;
-        //                        secs -> millis                            micros -> millis
+            inner_rtt.as_secs() as f32 * 1000.0 + inner_rtt.subsec_nanos() as f32 / 1_000_000.0;
+        //                        secs -> millis                            nanos -> millis
 
         trace!(
             "RTTs: per-hop {}ms, inner {}ms",
