@@ -1,7 +1,6 @@
 use actix::prelude::*;
 
 use failure::Error;
-use futures;
 use futures::Future;
 use serde_json;
 use serde_json::Value;
@@ -67,15 +66,9 @@ impl Handler<GetWifiConfig> for Dashboard {
                     let mut interfaces = Vec::new();
                     let mut devices = HashMap::new();
 
-                    let config = match KI.ubus_call("uci", "get", "{ \"config\": \"wireless\"}") {
-                        Ok(cfg) => cfg,
-                        Err(e) => return futures::future::err(e),
-                    };
+                    let config = KI.ubus_call("uci", "get", "{ \"config\": \"wireless\"}")?;
 
-                    let val: Value = match serde_json::from_str(&config) {
-                        Ok(v) => v,
-                        Err(e) => return futures::future::err(e.into()),
-                    };
+                    let val: Value = serde_json::from_str(&config)?;
 
                     let items = match val["values"].as_object() {
                         Some(i) => i,
@@ -87,10 +80,7 @@ impl Handler<GetWifiConfig> for Dashboard {
 
                     for (k, v) in items {
                         if v[".type"] == "wifi-device" {
-                            let mut device: WifiDevice = match serde_json::from_value(v.clone()) {
-                                Ok(i) => i,
-                                Err(e) => return futures::future::err(e.into()),
-                            };
+                            let mut device: WifiDevice = serde_json::from_value(v.clone())?;
                             device.section_name = k.clone();
 
                             let channel: String =
@@ -107,11 +97,7 @@ impl Handler<GetWifiConfig> for Dashboard {
                     }
                     for (k, v) in items {
                         if v[".type"] == "wifi-iface" {
-                            let mut interface: WifiInterface =
-                                match serde_json::from_value(v.clone()) {
-                                    Ok(i) => i,
-                                    Err(e) => return futures::future::err(e.into()),
-                                };
+                            let mut interface: WifiInterface = serde_json::from_value(v.clone())?;
                             interface.mesh = res.contains(&interface.device.section_name);
                             interface.section_name = k.clone();
 
@@ -122,7 +108,7 @@ impl Handler<GetWifiConfig> for Dashboard {
                         }
                     }
 
-                    futures::future::ok(interfaces)
+                    Ok(interfaces)
                 }),
         )
     }
@@ -186,16 +172,15 @@ impl Handler<GetNodeInfo> for Dashboard {
         Box::new(
             DebtKeeper::from_registry()
                 .send(Dump {})
+                .from_err()
                 .and_then(|res| {
                     let stream = TcpStream::connect::<SocketAddr>(
-                        format!("[::1]:{}", SETTING.get_network().babel_port)
-                            .parse()
-                            .unwrap(),
-                    ).expect("Failed to connect to Babel!");
+                        format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
+                    )?;
                     let mut babel = Babel::new(stream);
-                    babel.start_connection().expect("Bad copy of Babel!");
+                    babel.start_connection()?;
 
-                    let res = res.unwrap();
+                    let res = res?;
 
                     let mut output = Vec::new();
 
@@ -205,9 +190,7 @@ impl Handler<GetNodeInfo> for Dashboard {
                     for (identity, debt_info) in res.iter() {
                         if current_exit.is_some() {
                             let exit_ip = current_exit.unwrap().id.mesh_ip;
-                            let route = babel
-                                .get_route_via_neigh(identity.mesh_ip, exit_ip)
-                                .expect("Failed to find route for Neighbor!");
+                            let route = babel.get_route_via_neigh(identity.mesh_ip, exit_ip)?;
                             output.push(NodeInfo {
                                 nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
                                 route_metric_to_exit: route.metric,
@@ -228,9 +211,8 @@ impl Handler<GetNodeInfo> for Dashboard {
                         }
                     }
 
-                    futures::future::ok(output)
-                })
-                .from_err(),
+                    Ok(output)
+                }),
         )
     }
 }
