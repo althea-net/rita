@@ -190,7 +190,6 @@ fn main() {
             // assuming exit nodes dont need wifi
             //.resource("/wifisettings", |r| r.route().filter(pred::Get()).h(get_wifi_config))
             //.resource("/wifisettings", |r| r.route().filter(pred::Post()).h(set_wifi_config))
-            .route("/neighbors", Method::GET, get_node_info)
             .route("/info", Method::GET, get_own_info)
             .route("/settings", Method::GET, get_settings)
             .route("/settings", Method::POST, set_settings)
