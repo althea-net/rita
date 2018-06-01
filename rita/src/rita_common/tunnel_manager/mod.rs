@@ -419,7 +419,7 @@ impl TunnelManager {
         Ok(())
     }
 
-    /// Given a LocalIdentity, connect to the neighbor over wireguard
+    /// Given a LocalIdentity, listens for a neighbor over wireguard
     pub fn open_tunnel_listener(&mut self, their_id: Identity) -> Result<(), Error> {
         trace!("Getting tunnel, open tunnel");
         let tunnel = self.get_if(their_id.mesh_ip);
