@@ -176,6 +176,7 @@ fn main() {
             .resource("/setup", |r| r.method(Method::POST).with2(setup_request))
             .resource("/list", |r| r.method(Method::POST).with(list_clients))
             .resource("/exit_info", |r| r.method(Method::GET).with(get_exit_info))
+            .resource("/rtt", |r| r.method(Method::GET).with(rtt))
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_exit_network().exit_hello_port
