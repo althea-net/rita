@@ -73,7 +73,12 @@ impl Handler<Hello> for HTTPSyncExecutor {
 
     fn handle(&mut self, msg: Hello, _: &mut Self::Context) -> Self::Result {
         info!("sending {:?}", msg);
-        let my_id = serde_json::to_string(&msg.my_id)?;
+
+        // TODO: REMOVE IN ALPHA 5
+        let my_id = serde_json::to_string(&LocalIdentity {
+            global: msg.my_id,
+            wg_port: 12345,
+        })?;
 
         let stream = TcpStream::connect_timeout(&msg.to, Duration::from_secs(1));
 
