@@ -8,6 +8,8 @@ use futures::Future;
 use settings::RitaCommonSettings;
 use SETTING;
 
+use serde_json;
+
 use rita_common;
 use rita_common::payment_controller::PaymentController;
 use rita_common::tunnel_manager::{GetWgInterface, OpenTunnelListener, TunnelManager};
@@ -47,8 +49,30 @@ pub fn make_payments(
         .responder()
 }
 
+pub fn hello_response(
+    their_id: Json<serde_json::Value>,
+    req: HttpRequest,
+) -> Box<Future<Item = Json<LocalIdentity>, Error = Error>> {
+    let new_id: Result<Identity, serde_json::Error> = serde_json::from_value(their_id.clone());
+    let old_id: Result<LocalIdentity, serde_json::Error> = serde_json::from_value(their_id.clone());
+
+    match new_id {
+        Ok(new_id) => {
+            info!("sending to new hello handler");
+            hello_response_new(new_id, req)
+        }
+        Err(_) => match old_id {
+            Ok(old_id) => {
+                info!("sending to old hello handler");
+                hello_response_old(old_id, req)
+            }
+            _ => panic!("did not match either"),
+        },
+    }
+}
+
 pub fn hello_response_new(
-    their_id: Json<Identity>,
+    their_id: Identity,
     req: HttpRequest,
 ) -> Box<Future<Item = Json<LocalIdentity>, Error = Error>> {
     info!("Got Hello from {:?}", req.connection_info().remote());
@@ -61,7 +85,7 @@ pub fn hello_response_new(
         .and_then(move |_| {
             info!("opening tunnel in hello_response for {:?}", their_id);
             TunnelManager::from_registry()
-                .send(GetWgInterface(their_id.into_inner().mesh_ip))
+                .send(GetWgInterface(their_id.mesh_ip))
                 .from_err()
                 .and_then(|wg_iface| {
                     Ok(Json(LocalIdentity {
@@ -75,7 +99,7 @@ pub fn hello_response_new(
 
 // TODO: REMOVE IN ALPHA 5
 pub fn hello_response_old(
-    their_id: Json<LocalIdentity>,
+    their_id: LocalIdentity,
     req: HttpRequest,
 ) -> Box<Future<Item = Json<LocalIdentity>, Error = Error>> {
     info!("Got Hello from {:?}", req.connection_info().remote());
@@ -88,7 +112,7 @@ pub fn hello_response_old(
         .and_then(move |_| {
             info!("opening tunnel in hello_response for {:?}", their_id);
             TunnelManager::from_registry()
-                .send(GetWgInterface(their_id.into_inner().global.mesh_ip))
+                .send(GetWgInterface(their_id.global.mesh_ip))
                 .from_err()
                 .and_then(|wg_iface| {
                     Ok(Json(LocalIdentity {
