@@ -80,7 +80,7 @@ struct Args {
 #[cfg(not(test))]
 lazy_static! {
     static ref USAGE: String = format!(
-        "Usage: rita_exit --config=<settings> --platform=<platform> [--future]
+        "Usage: rita --config=<settings> --platform=<platform>
 Options:
     -c, --config=<settings>     Name of config file
     -p, --platform=<platform>   Platform (linux or openwrt)
