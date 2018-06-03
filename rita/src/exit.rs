@@ -76,6 +76,7 @@ use std::sync::Mutex;
 #[derive(Debug, Deserialize)]
 struct Args {
     flag_config: String,
+    flag_future: bool,
 }
 
 #[cfg(not(test))]
@@ -84,6 +85,7 @@ lazy_static! {
         "Usage: rita_exit --config=<settings>
 Options:
     -c, --config=<settings>   Name of config file
+    --future                    Enable B side of A/B releases
 About:
     Version {}
     git hash {}",
@@ -123,6 +125,8 @@ lazy_static! {
         let settings_file = args.flag_config;
 
         let s = RitaExitSettingsStruct::new_watched(&settings_file).unwrap();
+
+        s.set_future(args.flag_future);
 
         clu::exit_init("linux", s.clone());
 
