@@ -15,6 +15,9 @@ use serde_json;
 
 use althea_types::{Identity, LocalIdentity};
 
+use settings::RitaCommonSettings;
+use SETTING;
+
 use failure::Error;
 
 #[derive(Debug, Fail)]
@@ -74,11 +77,15 @@ impl Handler<Hello> for HTTPSyncExecutor {
     fn handle(&mut self, msg: Hello, _: &mut Self::Context) -> Self::Result {
         info!("sending {:?}", msg);
 
-        // TODO: REMOVE IN ALPHA 5
-        let my_id = serde_json::to_string(&LocalIdentity {
-            global: msg.my_id,
-            wg_port: 12345,
-        })?;
+        let my_id = if SETTING.get_future() {
+            serde_json::to_string(&msg.my_id)?
+        } else {
+            // TODO: REMOVE IN ALPHA 5
+            serde_json::to_string(&LocalIdentity {
+                global: msg.my_id,
+                wg_port: 12345,
+            })?
+        };
 
         let stream = TcpStream::connect_timeout(&msg.to, Duration::from_secs(1));
 

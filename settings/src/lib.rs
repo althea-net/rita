@@ -237,6 +237,8 @@ pub struct RitaSettingsStruct {
     exit_client: ExitClientSettings,
     #[serde(skip_serializing_if = "Option::is_none")]
     stats_server: Option<StatsServerSettings>,
+    #[serde(skip)]
+    future: bool,
 }
 
 /// This is the network settings specific to rita_exit
@@ -285,6 +287,8 @@ pub struct RitaExitSettingsStruct {
     /// (ISO country code)
     #[serde(skip_serializing_if = "HashSet::is_empty", default)]
     allowed_countries: HashSet<String>,
+    #[serde(skip)]
+    future: bool,
 }
 
 pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
@@ -306,6 +310,9 @@ pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
     fn get_all(&self) -> Result<serde_json::Value, Error>;
 
     fn get_identity(&self) -> Identity;
+
+    fn get_future(&self) -> bool;
+    fn set_future(&self, future: bool);
 }
 
 /// This merges 2 json objects, overwriting conflicting values in `a`
@@ -387,6 +394,14 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
             self.get_network().wg_public_key.clone(),
         )
     }
+
+    fn get_future(&self) -> bool {
+        self.read().unwrap().future
+    }
+
+    fn set_future(&self, future: bool) {
+        self.write().unwrap().future = future
+    }
 }
 
 impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsStruct>> {
@@ -453,6 +468,14 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
             self.get_payment().eth_address.clone(),
             self.get_network().wg_public_key.clone(),
         )
+    }
+
+    fn get_future(&self) -> bool {
+        self.read().unwrap().future
+    }
+
+    fn set_future(&self, future: bool) {
+        self.write().unwrap().future = future
     }
 }
 
