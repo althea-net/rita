@@ -6,12 +6,13 @@ use futures::Future;
 use rita_exit::db_client::{DbClient, SetupClient};
 
 use std::boxed::Box;
+use std::time::SystemTime;
 
 use settings::RitaExitSettings;
 use SETTING;
 
 use althea_types::{
-    ExitClientDetails, ExitClientIdentity, ExitDetails, ExitServerReply, ExitState,
+    ExitClientDetails, ExitClientIdentity, ExitDetails, ExitServerReply, ExitState, RTTimestamps,
 };
 use exit_db::models::Client;
 use failure::Error;
@@ -68,4 +69,14 @@ pub fn list_clients(_req: HttpRequest) -> Box<Future<Item = Json<Vec<Client>>, E
         .from_err()
         .and_then(move |reply| Ok(Json(reply?)))
         .responder()
+}
+
+/// An endpoint handler for the inner tunnel RTT. It responds with the request arrival and
+/// transmission time timestamps; presently the two values are very close because no exit-side
+/// processing happens yet.
+pub fn rtt(_req: HttpRequest) -> Result<Json<RTTimestamps>> {
+    Ok(Json(RTTimestamps {
+        exit_rx: SystemTime::now(),
+        exit_tx: SystemTime::now(),
+    }))
 }

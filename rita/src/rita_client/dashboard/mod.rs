@@ -1,15 +1,20 @@
 use actix::prelude::*;
 
 use failure::Error;
-use futures;
 use futures::Future;
 use serde_json;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::net::{SocketAddr, TcpStream};
 
+use babel_monitor::Babel;
 use rita_common::dashboard::Dashboard;
+use rita_common::debt_keeper::{DebtKeeper, Dump};
 use rita_common::tunnel_manager::{GetListen, Listen, TunnelManager, UnListen};
+use settings::RitaClientSettings;
+use settings::RitaCommonSettings;
 use KI;
+use SETTING;
 
 pub mod network_endpoints;
 
@@ -61,15 +66,9 @@ impl Handler<GetWifiConfig> for Dashboard {
                     let mut interfaces = Vec::new();
                     let mut devices = HashMap::new();
 
-                    let config = match KI.ubus_call("uci", "get", "{ \"config\": \"wireless\"}") {
-                        Ok(cfg) => cfg,
-                        Err(e) => return futures::future::err(e),
-                    };
+                    let config = KI.ubus_call("uci", "get", "{ \"config\": \"wireless\"}")?;
 
-                    let val: Value = match serde_json::from_str(&config) {
-                        Ok(v) => v,
-                        Err(e) => return futures::future::err(e.into()),
-                    };
+                    let val: Value = serde_json::from_str(&config)?;
 
                     let items = match val["values"].as_object() {
                         Some(i) => i,
@@ -81,10 +80,7 @@ impl Handler<GetWifiConfig> for Dashboard {
 
                     for (k, v) in items {
                         if v[".type"] == "wifi-device" {
-                            let mut device: WifiDevice = match serde_json::from_value(v.clone()) {
-                                Ok(i) => i,
-                                Err(e) => return futures::future::err(e.into()),
-                            };
+                            let mut device: WifiDevice = serde_json::from_value(v.clone())?;
                             device.section_name = k.clone();
 
                             let channel: String =
@@ -101,11 +97,7 @@ impl Handler<GetWifiConfig> for Dashboard {
                     }
                     for (k, v) in items {
                         if v[".type"] == "wifi-iface" {
-                            let mut interface: WifiInterface =
-                                match serde_json::from_value(v.clone()) {
-                                    Ok(i) => i,
-                                    Err(e) => return futures::future::err(e.into()),
-                                };
+                            let mut interface: WifiInterface = serde_json::from_value(v.clone())?;
                             interface.mesh = res.contains(&interface.device.section_name);
                             interface.section_name = k.clone();
 
@@ -116,7 +108,7 @@ impl Handler<GetWifiConfig> for Dashboard {
                         }
                     }
 
-                    futures::future::ok(interfaces)
+                    Ok(interfaces)
                 }),
         )
     }
@@ -154,5 +146,73 @@ impl Handler<SetWifiConfig> for Dashboard {
         KI.fs_sync()?;
 
         Ok(())
+    }
+}
+
+#[derive(Serialize)]
+pub struct NodeInfo {
+    pub nickname: String,
+    pub route_metric_to_exit: u16,
+    pub total_payments: i64,
+    pub debt: i64,
+    pub link_cost: u16,
+    pub price_to_exit: u32,
+}
+
+pub struct GetNodeInfo;
+
+impl Message for GetNodeInfo {
+    type Result = Result<Vec<NodeInfo>, Error>;
+}
+
+impl Handler<GetNodeInfo> for Dashboard {
+    type Result = ResponseFuture<Vec<NodeInfo>, Error>;
+
+    fn handle(&mut self, _msg: GetNodeInfo, _ctx: &mut Self::Context) -> Self::Result {
+        Box::new(
+            DebtKeeper::from_registry()
+                .send(Dump {})
+                .from_err()
+                .and_then(|res| {
+                    let stream = TcpStream::connect::<SocketAddr>(
+                        format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
+                    )?;
+                    let mut babel = Babel::new(stream);
+                    babel.start_connection()?;
+
+                    let res = res?;
+
+                    let mut output = Vec::new();
+
+                    let exit_client = SETTING.get_exit_client();
+                    let current_exit = exit_client.get_current_exit();
+
+                    for (identity, debt_info) in res.iter() {
+                        if current_exit.is_some() {
+                            let exit_ip = current_exit.unwrap().id.mesh_ip;
+                            let route = babel.get_route_via_neigh(identity.mesh_ip, exit_ip)?;
+                            output.push(NodeInfo {
+                                nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
+                                route_metric_to_exit: route.metric,
+                                total_payments: debt_info.total_payment_recieved.clone().into(),
+                                debt: debt_info.debt.clone().into(),
+                                link_cost: route.refmetric,
+                                price_to_exit: route.price,
+                            })
+                        } else {
+                            output.push(NodeInfo {
+                                nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
+                                route_metric_to_exit: 0,
+                                total_payments: debt_info.total_payment_recieved.clone().into(),
+                                debt: debt_info.debt.clone().into(),
+                                link_cost: 0,
+                                price_to_exit: 0,
+                            })
+                        }
+                    }
+
+                    Ok(output)
+                }),
+        )
     }
 }

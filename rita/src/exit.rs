@@ -178,6 +178,7 @@ fn main() {
             .resource("/setup", |r| r.method(Method::POST).with2(setup_request))
             .resource("/list", |r| r.method(Method::POST).with(list_clients))
             .resource("/exit_info", |r| r.method(Method::GET).with(get_exit_info))
+            .resource("/rtt", |r| r.method(Method::GET).with(rtt))
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_exit_network().exit_hello_port
@@ -192,7 +193,6 @@ fn main() {
             // assuming exit nodes dont need wifi
             //.resource("/wifisettings", |r| r.route().filter(pred::Get()).h(get_wifi_config))
             //.resource("/wifisettings", |r| r.route().filter(pred::Post()).h(set_wifi_config))
-            .route("/neighbors", Method::GET, get_node_info)
             .route("/info", Method::GET, get_own_info)
             .route("/settings", Method::GET, get_settings)
             .route("/settings", Method::POST, set_settings)
