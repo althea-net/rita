@@ -2,7 +2,7 @@
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 if [[ ! -d $DIR/staging_dir ]]; then
     pushd $DIR
-    wget -N https://updates.altheamesh.com/staging.tar.gz -O staging.tar.gz > /dev/null; tar -xf staging.tar.gz
+    wget -N https://updates.altheamesh.com/staging.tar.xz -O staging.tar.xz > /dev/null; tar -xf staging.tar.xz
 fi
 
 export TOOLCHAIN=toolchain-mips_24kc_gcc-7.3.0_musl
