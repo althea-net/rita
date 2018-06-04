@@ -13,7 +13,10 @@ use actix::registry::SystemService;
 
 use serde_json;
 
-use althea_types::LocalIdentity;
+use althea_types::{Identity, LocalIdentity};
+
+use settings::RitaCommonSettings;
+use SETTING;
 
 use failure::Error;
 
@@ -53,7 +56,7 @@ impl Actor for HTTPSyncExecutor {
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Hello {
-    pub my_id: LocalIdentity,
+    pub my_id: Identity,
     pub to: SocketAddr,
 }
 
@@ -73,7 +76,16 @@ impl Handler<Hello> for HTTPSyncExecutor {
 
     fn handle(&mut self, msg: Hello, _: &mut Self::Context) -> Self::Result {
         info!("sending {:?}", msg);
-        let my_id = serde_json::to_string(&msg.my_id)?;
+
+        let my_id = if SETTING.get_future() {
+            serde_json::to_string(&msg.my_id)?
+        } else {
+            // TODO: REMOVE IN ALPHA 5
+            serde_json::to_string(&LocalIdentity {
+                global: msg.my_id,
+                wg_port: 12345,
+            })?
+        };
 
         let stream = TcpStream::connect_timeout(&msg.to, Duration::from_secs(1));
 

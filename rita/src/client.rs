@@ -74,15 +74,17 @@ use rita_common::network_endpoints::*;
 struct Args {
     flag_config: String,
     flag_platform: String,
+    flag_future: bool,
 }
 
 #[cfg(not(test))]
 lazy_static! {
     static ref USAGE: String = format!(
-        "Usage: rita --config=<settings> --platform=<platform>
+        "Usage: rita --config=<settings> --platform=<platform> [--future]
 Options:
-    -c, --config=<settings>   Name of config file
+    -c, --config=<settings>     Name of config file
     -p, --platform=<platform>   Platform (linux or openwrt)
+    --future                    Enable B side of A/B releases
 About:
     Version {}
     git hash {}",
@@ -123,6 +125,8 @@ lazy_static! {
         let platform = args.flag_platform;
 
         let s = RitaSettingsStruct::new_watched(&settings_file).unwrap();
+
+        s.set_future(args.flag_future);
 
         clu::init(&platform, s.clone());
 

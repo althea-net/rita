@@ -8,7 +8,7 @@ use actix::prelude::*;
 use futures;
 use futures::Future;
 
-use althea_types::LocalIdentity;
+use althea_types::{Identity, LocalIdentity};
 
 use KI;
 
@@ -22,10 +22,8 @@ use SETTING;
 
 use failure::Error;
 
-use trust_dns_resolver::config::ResolverConfig;
-
 #[cfg(not(test))]
-use trust_dns_resolver::config::ResolverOpts;
+use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 
 #[cfg(test)]
 use actix::actors::mocker::Mocker;
@@ -49,9 +47,9 @@ pub enum TunnelManagerError {
 }
 
 #[derive(Debug, Clone)]
-struct TunnelData {
-    iface_name: String,
-    listen_port: u16,
+pub struct TunnelData {
+    pub iface_name: String,
+    pub listen_port: u16,
 }
 
 impl TunnelData {
@@ -67,7 +65,7 @@ impl TunnelData {
 pub struct TunnelManager {
     pub port: u16,
 
-    tunnel_map: HashMap<String, TunnelData>,
+    tunnel_map: HashMap<IpAddr, TunnelData>,
     listen_interfaces: HashSet<String>,
 }
 
@@ -91,15 +89,14 @@ impl SystemService for TunnelManager {
                 //default is 8.8.8.8
                 Connector::new(ResolverConfig::default(), ResolverOpts::default())
             });
-        }
-
-        // Resolves the gateway client corner case
-        // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
-        for i in ResolverConfig::default().name_servers() {
-            KI.manual_peers_route(
-                &i.socket_addr.ip(),
-                &mut SETTING.get_network_mut().default_route,
-            ).unwrap();
+            // Resolves the gateway client corner case
+            // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
+            for i in ResolverConfig::default().name_servers() {
+                KI.manual_peers_route(
+                    &i.socket_addr.ip(),
+                    &mut SETTING.get_network_mut().default_route,
+                ).unwrap();
+            }
         }
     }
 }
@@ -107,6 +104,19 @@ impl SystemService for TunnelManager {
 impl Default for TunnelManager {
     fn default() -> TunnelManager {
         TunnelManager::new()
+    }
+}
+
+pub struct GetWgInterface(pub IpAddr);
+impl Message for GetWgInterface {
+    type Result = Result<TunnelData, Error>;
+}
+
+impl Handler<GetWgInterface> for TunnelManager {
+    type Result = Result<TunnelData, Error>;
+
+    fn handle(&mut self, msg: GetWgInterface, _: &mut Context<Self>) -> Self::Result {
+        Ok(self.get_if(msg.0))
     }
 }
 
@@ -193,6 +203,21 @@ impl Handler<OpenTunnel> for TunnelManager {
     }
 }
 
+pub struct OpenTunnelListener(pub Identity);
+
+impl Message for OpenTunnelListener {
+    type Result = ();
+}
+
+impl Handler<OpenTunnelListener> for TunnelManager {
+    type Result = ();
+
+    fn handle(&mut self, their_id: OpenTunnelListener, _: &mut Context<Self>) -> Self::Result {
+        self.open_tunnel_listener(their_id.0).unwrap();
+        ()
+    }
+}
+
 impl TunnelManager {
     pub fn new() -> Self {
         TunnelManager {
@@ -211,7 +236,7 @@ impl TunnelManager {
         r
     }
 
-    fn get_if(&mut self, ip: String) -> TunnelData {
+    fn get_if(&mut self, ip: IpAddr) -> TunnelData {
         if self.tunnel_map.contains_key(&ip) {
             trace!("found existing wg interface for {}", ip);
             self.tunnel_map[&ip].clone()
@@ -278,11 +303,10 @@ impl TunnelManager {
     /// interface name.
     pub fn neighbor_inquiry(
         &mut self,
-        their_ip: String,
+        their_hostname: String,
         dev: Option<String>,
     ) -> Box<Future<Item = (LocalIdentity, String, IpAddr), Error = Error>> {
         trace!("Getting tunnel, inq");
-        let tunnel = self.get_if(their_ip.clone());
         let iface_index = if let Some(dev) = dev.clone() {
             KI.get_iface_index(&dev).unwrap()
         } else {
@@ -291,27 +315,25 @@ impl TunnelManager {
 
         Box::new(
             Connector::from_registry()
-                .send(actors::Resolve::host(their_ip.clone()))
+                .send(actors::Resolve::host(their_hostname.clone()))
                 .from_err()
                 .and_then(move |res| {
-                    let url = format!("http://[{}%{:?}]:4876/hello", their_ip, dev);
+                    let url = format!("http://[{}%{:?}]:4876/hello", their_hostname, dev);
                     info!("Saying hello to: {:?} at ip {:?}", url, res);
 
                     if let Ok(res) = res {
                         if res.len() > 0 {
                             let their_ip = res[0].ip();
 
-                            TunnelManager::contact_neighbor(tunnel, iface_index, their_ip)
+                            TunnelManager::contact_neighbor(iface_index, their_ip)
                         } else {
                             Box::new(futures::future::err(
                                 TunnelManagerError::DNSLookupError.into(),
                             ))
                         }
                     } else {
-                        match their_ip.parse() {
-                            Ok(their_ip) => {
-                                TunnelManager::contact_neighbor(tunnel, iface_index, their_ip)
-                            }
+                        match their_hostname.parse() {
+                            Ok(their_ip) => TunnelManager::contact_neighbor(iface_index, their_ip),
                             Err(err) => Box::new(futures::future::err(err.into())),
                         }
                     }
@@ -320,7 +342,6 @@ impl TunnelManager {
     }
 
     fn contact_neighbor(
-        tunnel: TunnelData,
         iface_index: u32,
         their_ip: IpAddr,
     ) -> Box<Future<Item = (LocalIdentity, String, IpAddr), Error = Error>> {
@@ -339,23 +360,30 @@ impl TunnelManager {
                 SETTING.get_network().rita_hello_port,
             )),
         };
-        let my_id = LocalIdentity {
-            global: SETTING.get_identity(),
-            wg_port: tunnel.listen_port,
-        };
         Box::new(
             HTTPClient::from_registry()
-                .send(Hello { my_id, to: socket })
-                .then(move |res| {
-                    let r = res??;
-                    Ok((r, tunnel.iface_name, socket.ip()))
+                .send(Hello {
+                    my_id: SETTING.get_identity(),
+                    to: socket,
+                })
+                .from_err()
+                .and_then(move |res| match res {
+                    Ok(res) => Box::new(
+                        TunnelManager::from_registry()
+                            .send(GetWgInterface(res.global.mesh_ip))
+                            .from_err()
+                            .and_then(move |interface| Ok((res, interface?.iface_name, their_ip))),
+                    )
+                        as Box<Future<Item = (LocalIdentity, String, IpAddr), Error = Error>>,
+                    Err(e) => Box::new(futures::future::err(e))
+                        as Box<Future<Item = (LocalIdentity, String, IpAddr), Error = Error>>,
                 }),
-        ) as ResponseFuture<(LocalIdentity, String, IpAddr), Error>
+        )
     }
 
-    pub fn get_local_identity(&mut self, local_ip: IpAddr) -> LocalIdentity {
+    pub fn get_local_identity(&mut self, mesh_ip: IpAddr) -> LocalIdentity {
         trace!("Getting tunnel, local id");
-        let tunnel = self.get_if(local_ip.to_string());
+        let tunnel = self.get_if(mesh_ip);
 
         LocalIdentity {
             global: SETTING.get_identity(),
@@ -366,7 +394,7 @@ impl TunnelManager {
     /// Given a LocalIdentity, connect to the neighbor over wireguard
     pub fn open_tunnel(&mut self, their_id: LocalIdentity, ip: IpAddr) -> Result<(), Error> {
         trace!("Getting tunnel, open tunnel");
-        let tunnel = self.get_if(ip.to_string());
+        let tunnel = self.get_if(their_id.global.mesh_ip);
         let network = SETTING.get_network().clone();
 
         KI.open_tunnel(
@@ -378,6 +406,31 @@ impl TunnelManager {
             &network.own_ip,
             network.external_nic.clone(),
             &mut SETTING.get_network_mut().default_route,
+        )?;
+
+        let stream = TcpStream::connect::<SocketAddr>(
+            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
+        )?;
+
+        let mut babel = Babel::new(stream);
+
+        babel.start_connection()?;
+        babel.monitor(&tunnel.iface_name)?;
+        Ok(())
+    }
+
+    /// Given a LocalIdentity, listens for a neighbor over wireguard
+    pub fn open_tunnel_listener(&mut self, their_id: Identity) -> Result<(), Error> {
+        trace!("Getting tunnel, open tunnel");
+        let tunnel = self.get_if(their_id.mesh_ip);
+        let network = SETTING.get_network().clone();
+
+        KI.open_tunnel_listener(
+            &tunnel.iface_name,
+            tunnel.listen_port,
+            &their_id.wg_public_key,
+            Path::new(&network.wg_private_key_path),
+            &network.own_ip,
         )?;
 
         let stream = TcpStream::connect::<SocketAddr>(
@@ -430,24 +483,6 @@ mod tests {
             match counter {
                 1 => {
                     assert_eq!(program, "ip");
-                    assert_eq!(args, link_args);
-                    Ok(Output {
-                        stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                2 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, link_add);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                3 => {
-                    assert_eq!(program, "ip");
                     assert_eq!(args, ["route", "list", "default"]);
                     Ok(Output {
                         stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
@@ -456,7 +491,7 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                4 => {
+                2 => {
                     assert_eq!(program, "ip");
                     assert_eq!(
                         args,
@@ -480,6 +515,24 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
+                3 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, link_args);
+                    Ok(Output {
+                        stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                4 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, link_add);
+                    Ok(Output {
+                        stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
                 _ => panic!("command called too many times"),
             }
         }));
@@ -491,10 +544,7 @@ mod tests {
                 assert_eq!(
                     msg.downcast_ref::<Hello>(),
                     Some(&Hello {
-                        my_id: LocalIdentity {
-                            wg_port: 60000,
-                            global: SETTING.get_identity()
-                        },
+                        my_id: SETTING.get_identity(),
                         to: SocketAddr::V4(SocketAddrV4::new("1.1.1.1".parse().unwrap(), 4876))
                     })
                 );
@@ -507,12 +557,7 @@ mod tests {
             }))
         });
 
-        let mut tm = TunnelManager::new();
-        let res = TunnelManager::contact_neighbor(
-            tm.get_if(String::from("aa")),
-            0,
-            "1.1.1.1".parse().unwrap(),
-        );
+        let res = TunnelManager::contact_neighbor(0, "1.1.1.1".parse().unwrap());
 
         sys.handle().spawn(res.then(|res| {
             assert_eq!(
@@ -552,24 +597,6 @@ mod tests {
             match counter {
                 1 => {
                     assert_eq!(program, "ip");
-                    assert_eq!(args, link_args);
-                    Ok(Output {
-                        stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                2 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, link_add);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                3 => {
-                    assert_eq!(program, "ip");
                     assert_eq!(args, ["route", "list", "default"]);
                     Ok(Output {
                         stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
@@ -578,7 +605,7 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                4 => {
+                2 => {
                     assert_eq!(program, "ip");
                     assert_eq!(
                         args,
@@ -602,6 +629,24 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
+                3 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, link_args);
+                    Ok(Output {
+                        stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                4 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, link_add);
+                    Ok(Output {
+                        stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
                 _ => panic!("command called too many times"),
             }
         }));
@@ -613,10 +658,7 @@ mod tests {
                 assert_eq!(
                     msg.downcast_ref::<Hello>(),
                     Some(&Hello {
-                        my_id: LocalIdentity {
-                            wg_port: 60000,
-                            global: SETTING.get_identity()
-                        },
+                        my_id: SETTING.get_identity(),
                         to: SocketAddr::V4(SocketAddrV4::new("1.1.1.1".parse().unwrap(), 4876))
                     })
                 );
@@ -686,24 +728,6 @@ mod tests {
             match counter {
                 1 => {
                     assert_eq!(program, "ip");
-                    assert_eq!(args, link_args);
-                    Ok(Output {
-                        stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                2 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, link_add);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                3 => {
-                    assert_eq!(program, "ip");
                     assert_eq!(args, ["route", "list", "default"]);
                     Ok(Output {
                         stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
@@ -712,7 +736,7 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                4 => {
+                2 => {
                     assert_eq!(program, "ip");
                     assert_eq!(
                         args,
@@ -736,6 +760,24 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
+                3 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, link_args);
+                    Ok(Output {
+                        stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                4 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, link_add);
+                    Ok(Output {
+                        stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
                 _ => panic!("command called too many times"),
             }
         }));
@@ -747,10 +789,7 @@ mod tests {
                 assert_eq!(
                     msg.downcast_ref::<Hello>(),
                     Some(&Hello {
-                        my_id: LocalIdentity {
-                            wg_port: 60000,
-                            global: SETTING.get_identity()
-                        },
+                        my_id: SETTING.get_identity(),
                         to: SocketAddr::V4(SocketAddrV4::new("1.1.1.1".parse().unwrap(), 4876))
                     })
                 );
@@ -797,6 +836,19 @@ mod tests {
         }));
 
         sys.run();
+    }
+
+    fn get_inc_id(ctr: u16) -> Identity {
+        let mut their_id = SETTING.get_identity();
+        match their_id.mesh_ip {
+            IpAddr::V6(address) => {
+                let mut segments = address.segments();
+                segments[7] = ctr;
+                their_id.mesh_ip = segments.into();
+            }
+            _ => panic!("Mesh IP must be ipv6"),
+        }
+        their_id
     }
 
     #[test]
@@ -849,54 +901,6 @@ mod tests {
                 }
                 4 => {
                     assert_eq!(program, "ip");
-                    assert_eq!(args, &["link", "add", "wg0", "type", "wireguard"]);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                5 | 6 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, &["link"]);
-                    Ok(Output {
-                        stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
-83: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                7 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, &["link", "add", "wg1", "type", "wireguard"]);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                8 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, &["link"]);
-                    Ok(Output {
-                        stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
-83: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
-84: wg1: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                9 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, &["link", "add", "wg2", "type", "wireguard"]);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                10 => {
-                    assert_eq!(program, "ip");
                     assert_eq!(args, ["route", "list", "default"]);
                     Ok(Output {
                         stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
@@ -905,7 +909,7 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                11 => {
+                5 => {
                     assert_eq!(program, "ip");
                     assert_eq!(
                         args,
@@ -929,7 +933,8 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                12 => {
+
+                6 => {
                     assert_eq!(program, "ip");
                     assert_eq!(args, ["route", "list", "default"]);
                     Ok(Output {
@@ -939,7 +944,7 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                13 => {
+                7 => {
                     assert_eq!(program, "ip");
                     assert_eq!(
                         args,
@@ -963,7 +968,7 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                14 => {
+                8 => {
                     assert_eq!(program, "ip");
                     assert_eq!(args, ["route", "list", "default"]);
                     Ok(Output {
@@ -973,7 +978,7 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                15 => {
+                9 => {
                     assert_eq!(program, "ip");
                     assert_eq!(
                         args,
@@ -997,6 +1002,63 @@ mod tests {
                         status: ExitStatus::from_raw(0),
                     })
                 }
+                10 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, &["link"]);
+                    Ok(Output {
+                        stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                11 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, &["link", "add", "wg0", "type", "wireguard"]);
+                    Ok(Output {
+                        stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                12 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, &["link"]);
+                    Ok(Output {
+                        stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
+83: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                13 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, &["link", "add", "wg1", "type", "wireguard"]);
+                    Ok(Output {
+                        stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                14 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, &["link"]);
+                    Ok(Output {
+                        stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
+83: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
+84: wg1: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                15 => {
+                    assert_eq!(program, "ip");
+                    assert_eq!(args, &["link", "add", "wg2", "type", "wireguard"]);
+                    Ok(Output {
+                        stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
                 _ => panic!("command called too many times"),
             }
         }));
@@ -1011,28 +1073,27 @@ mod tests {
             .insert("eth0".to_string());
         SETTING.get_network_mut().external_nic = Some("eth0".to_string());
 
-        let _: Addr<Syn, _> = HTTPClient::init_actor(|_| {
-            HTTPClient::mock(Box::new(|msg, _ctx| {
+        let mut ctr = 1;
+
+        let _: Addr<Syn, _> = HTTPClient::init_actor(move |_| {
+            HTTPClient::mock(Box::new(move |msg, _ctx| {
                 trace!("{:?}", msg.downcast_ref::<Hello>());
                 let ret: Result<LocalIdentity, Error> = match msg.downcast_ref::<Hello>() {
                     Some(&Hello {
-                        my_id:
-                            LocalIdentity {
-                                wg_port: port,
-                                global: ref id,
-                            },
+                        my_id: ref id,
                         to: _,
                     }) => {
                         assert_eq!(id, &SETTING.get_identity());
                         Ok(LocalIdentity {
-                            wg_port: port,
-                            global: SETTING.get_identity(),
+                            wg_port: 60000 + ctr,
+                            global: get_inc_id(ctr),
                         })
                     }
                     _ => {
                         panic!("Wrong message sent to HTTPClient");
                     }
                 };
+                ctr += 1;
                 Box::new(Some(ret))
             }))
         });
@@ -1068,24 +1129,24 @@ mod tests {
                 vec![
                     (
                         LocalIdentity {
-                            wg_port: 60000,
-                            global: SETTING.get_identity(),
+                            wg_port: 60001,
+                            global: get_inc_id(1),
                         },
                         "wg0".to_string(),
                         "fe80::1234".parse().unwrap(),
                     ),
                     (
                         LocalIdentity {
-                            wg_port: 60001,
-                            global: SETTING.get_identity(),
+                            wg_port: 60002,
+                            global: get_inc_id(2),
                         },
                         "wg1".to_string(),
                         "1.1.1.1".parse().unwrap(),
                     ),
                     (
                         LocalIdentity {
-                            wg_port: 60002,
-                            global: SETTING.get_identity(),
+                            wg_port: 60003,
+                            global: get_inc_id(3),
                         },
                         "wg2".to_string(),
                         "2.2.2.2".parse().unwrap(),
