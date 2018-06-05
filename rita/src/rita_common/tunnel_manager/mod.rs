@@ -44,6 +44,8 @@ type Connector = actors::Connector;
 pub enum TunnelManagerError {
     #[fail(display = "DNS lookup error")]
     DNSLookupError,
+    #[fail(display = "No Dev for peer!")]
+    NoDevError,
 }
 
 #[derive(Debug, Clone)]
@@ -251,7 +253,7 @@ impl TunnelManager {
     /// This gets the list of link-local neighbors, and then contacts them to get their
     /// Identity using `neighbor_inquiry` as well as their wireguard tunnel name
     pub fn get_neighbors(&mut self) -> ResponseFuture<Vec<(LocalIdentity, String, IpAddr)>, Error> {
-        KI.trigger_neighbor_disc().unwrap();
+        KI.trigger_neighbor_disc(&self.listen_interfaces).unwrap(); // Pings broadcast address to populate ip neigh
         let neighs: Vec<
             Box<Future<Item = Option<(LocalIdentity, String, IpAddr)>, Error = ()>>,
         > = KI
@@ -261,18 +263,24 @@ impl TunnelManager {
             .map(|&(ip_address, ref dev)| (ip_address.to_string(), Some(dev.clone())))
             .chain({
                 let mut out = Vec::new();
-                for i in SETTING.get_network().manual_peers.clone() {
-                    out.push((i, None))
+                let settings = SETTING.get_network();
+                let mut iface = None;
+                if settings.default_route.len() > 0 {
+                    let idx = settings
+                        .default_route
+                        .iter()
+                        .position(|s| s == "dev")
+                        .unwrap();
+                    iface = Some(settings.default_route[idx + 1].clone());
+                }
+
+                for i in settings.manual_peers.clone() {
+                    out.push((i, iface.clone()))
                 }
                 out
             })
             .filter_map(|(ip_address, dev)| {
                 info!("neighbor at interface {:?}, ip {}", dev, ip_address,);
-                if let Some(dev) = dev.clone() {
-                    if !self.listen_interfaces.contains(&dev) {
-                        return None;
-                    }
-                }
                 Some(
                     Box::new(
                         self.neighbor_inquiry(ip_address, dev.clone())
@@ -310,15 +318,17 @@ impl TunnelManager {
         let iface_index = if let Some(dev) = dev.clone() {
             KI.get_iface_index(&dev).unwrap()
         } else {
-            0
+            return Box::new(futures::future::err(TunnelManagerError::NoDevError.into()));
         };
+
+        let dev = dev.unwrap();
 
         Box::new(
             Connector::from_registry()
                 .send(actors::Resolve::host(their_hostname.clone()))
                 .from_err()
                 .and_then(move |res| {
-                    let url = format!("http://[{}%{:?}]:4876/hello", their_hostname, dev);
+                    let url = format!("http://[{}%{}]:4876/hello", their_hostname, dev);
                     info!("Saying hello to: {:?} at ip {:?}", url, res);
 
                     if let Ok(res) = res {
