@@ -40,6 +40,8 @@ impl KernelInterface {
             }
         }
 
+        let prev_ip = self.get_global_device_ip("wg_exit");
+
         self.run_command(
             "ip",
             &[
@@ -51,7 +53,7 @@ impl KernelInterface {
             ],
         )?;
 
-        match self.get_global_device_ip("wg_exit") {
+        match prev_ip {
             Ok(prev_ip) => {
                 if prev_ip != local_ip {
                     self.run_command(
