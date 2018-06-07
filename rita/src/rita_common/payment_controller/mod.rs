@@ -59,7 +59,7 @@ pub struct MakePayment(pub PaymentTx);
 impl Handler<MakePayment> for PaymentController {
     type Result = ();
 
-    fn handle(&mut self, msg: MakePayment, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: MakePayment, _ctx: &mut Context<Self>) -> Self::Result {
         match self.make_payment(msg.clone().0) {
             Ok(()) => {}
             Err(err) => {
@@ -76,7 +76,7 @@ pub struct PaymentControllerUpdate;
 impl Handler<PaymentControllerUpdate> for PaymentController {
     type Result = ();
 
-    fn handle(&mut self, msg: PaymentControllerUpdate, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _msg: PaymentControllerUpdate, _ctx: &mut Context<Self>) -> Self::Result {
         match self.update() {
             Ok(()) => {}
             Err(err) => {
@@ -236,7 +236,7 @@ impl PaymentController {
             format!(
                 "http://[{}]:{}/make_payment",
                 pmt.to.mesh_ip,
-                SETTING.get_network().rita_hello_port
+                SETTING.get_network().rita_contact_port
             )
         } else {
             String::from("http://127.0.0.1:1234/make_payment")

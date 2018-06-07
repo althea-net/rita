@@ -163,12 +163,16 @@ fn main() {
     assert!(rita_exit::traffic_watcher::TrafficWatcher::from_registry().connected());
     assert!(rita_exit::db_client::DbClient::from_registry().connected());
 
+    server::new(|| App::new().resource("/hello", |r| r.method(Method::POST).with2(hello_response)))
+        .bind(format!("[::0]:{}", SETTING.get_network().rita_hello_port))
+        .unwrap()
+        .start();
     server::new(|| {
-        App::new()
-            // Client stuff
-            .resource("/make_payment", |r| r.method(Method::POST).with2(make_payments))
-            .resource("/hello", |r| r.method(Method::POST).with2(hello_response))
-    }).bind(format!("[::0]:{}", SETTING.get_network().rita_hello_port))
+        App::new().resource("/make_payment", |r| {
+            r.method(Method::POST).with2(make_payments)
+        })
+    }).workers(1)
+        .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
         .unwrap()
         .start();
 
