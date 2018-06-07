@@ -64,7 +64,7 @@ impl Handler<MakePayment> for PaymentController {
             Ok(()) => {}
             Err(err) => {
                 warn!("got error from make payment {:?}, retrying", err);
-                ctx.notify_later(msg, Duration::from_secs(5));
+                // ctx.notify_later(msg, Duration::from_secs(5));
             }
         }
     }
@@ -81,7 +81,7 @@ impl Handler<PaymentControllerUpdate> for PaymentController {
             Ok(()) => {}
             Err(err) => {
                 warn!("got error from update {:?}, retrying", err);
-                ctx.notify_later(msg, Duration::from_secs(5));
+                // ctx.notify_later(msg, Duration::from_secs(5));
             }
         }
     }
