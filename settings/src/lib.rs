@@ -71,14 +71,7 @@ lazy_static! {
 
 // TODO: remove in alpha 5
 fn default_rita_contact_port() -> u16 {
-    warn!("Add rita_contact_port to [network], default will be removed in next version");
     4874
-}
-
-// TODO: remove in alpha 5
-fn default_rita_tick_interval() -> u64 {
-    warn!("Add rita_tick_interval to [network], default will be removed in next version");
-    5
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]

@@ -161,14 +161,17 @@ fn main() {
     assert!(rita_client::exit_manager::ExitManager::from_registry().connected());
 
     // rita
-    server::new(|| {
-        App::new()
-            .resource("/make_payment", |r| {
-                r.method(Method::POST).with2(make_payments)
-            })
-            .resource("/hello", |r| r.method(Method::POST).with2(hello_response))
-    }).workers(1)
+    server::new(|| App::new().resource("/hello", |r| r.method(Method::POST).with2(hello_response)))
+        .workers(1)
         .bind(format!("[::0]:{}", SETTING.get_network().rita_hello_port))
+        .unwrap()
+        .start();
+    server::new(|| {
+        App::new().resource("/make_payment", |r| {
+            r.method(Method::POST).with2(make_payments)
+        })
+    }).workers(1)
+        .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
         .unwrap()
         .start();
 
