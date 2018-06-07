@@ -69,6 +69,11 @@ lazy_static! {
     static ref KI: Box<KernelInterface> = Box::new(LinuxCommandRunner {});
 }
 
+// TODO: remove in alpha 5
+fn default_rita_contact_port() -> u16 {
+    4874
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
     /// Our own mesh IP (in fd00::/8)
@@ -80,6 +85,10 @@ pub struct NetworkSettings {
     /// Port on which rita starts the per hop tunnel handshake on (needs to be constant across an
     /// entire althea deployment)
     pub rita_hello_port: u16,
+    /// Port on which rita contacts other althea nodes over the mesh (needs to be constant across an
+    /// entire althea deployment)
+    #[serde(default = "default_rita_contact_port")] // TODO: remove in alpha 5
+    pub rita_contact_port: u16,
     /// Port over which the dashboard will be accessible upon
     pub rita_dashboard_port: u16,
     /// Port over which the bounty hunter will be contacted
@@ -118,6 +127,7 @@ impl Default for NetworkSettings {
             babel_port: 6872,
             rita_hello_port: 4876,
             rita_dashboard_port: 4877,
+            rita_contact_port: 4875,
             bounty_port: 8888,
             wg_private_key: String::new(),
             wg_private_key_path: String::new(),
