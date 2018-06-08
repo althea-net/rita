@@ -14,25 +14,44 @@ import sys
 import time
 import toml
 
-NETWORK_LAB = os.path.join(os.path.dirname(__file__), "deps/network-lab/network-lab.sh")
-BABELD = os.path.join(os.path.dirname(__file__), "deps/babeld/babeld")
-RITA = os.path.join(os.path.dirname(__file__), "../target/debug/rita")
-RITA_EXIT = os.path.join(os.path.dirname(__file__), "../target/debug/rita_exit")
-BOUNTY_HUNTER = os.path.join(os.path.dirname(__file__), "../target/debug/bounty_hunter")
-PING6 = os.getenv('PING6', "ping6")
-CONVERGENCE_DELAY = float(os.getenv('CONVERGENCE_DELAY', 50))
-INITIAL_POLL_INTERVAL = float(os.getenv('INITIAL_POLL_INTERVAL', 1))
-VERBOSE = os.getenv('VERBOSE', None)
-BACKOFF_FACTOR = float(os.getenv('BACKOFF_FACTOR', 1))
-DEBUG = os.getenv('DEBUG') is not None
+NETWORK_LAB = os.path.join(os.path.dirname(__file__), 'deps/network-lab/network-lab.sh')
+BABELD = os.path.join(os.path.dirname(__file__), 'deps/babeld/babeld')
 
-tests_passes = True
+RITA_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/debug/rita')
+RITA_EXIT_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/debug/rita_exit')
+BOUNTY_HUNTER_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/debug/bounty_hunter')
+
+# Envs for controlling compat testing
+RITA_A = os.getenv('RITA_A', RITA_DEFAULT)
+RITA_EXIT_A = os.getenv('RITA_EXIT_A', RITA_EXIT_DEFAULT)
+BOUNTY_HUNTER_A = os.getenv('BOUNTY_HUNTER_A', BOUNTY_HUNTER_DEFAULT)
+RITA_B = os.getenv('RITA_B', RITA_DEFAULT)
+RITA_EXIT_B = os.getenv('RITA_EXIT_B', RITA_EXIT_DEFAULT)
+BOUNTY_HUNTER_B = os.getenv('BOUNTY_HUNTER_B', BOUNTY_HUNTER_DEFAULT)
+
+# Current binary paths (They change to *_A or *_B depending on which node is
+# going to be run at a given moment, according to the layout)
+RITA = RITA_DEFAULT
+RITA_EXIT = RITA_EXIT_DEFAULT
+BOUNTY_HUNTER = BOUNTY_HUNTER_DEFAULT
+
+# COMPAT_LAYOUTS[None] sets everything to *_A
+COMPAT_LAYOUT = os.getenv('COMPAT_LAYOUT', None)
+
+BACKOFF_FACTOR = float(os.getenv('BACKOFF_FACTOR', 1))
+CONVERGENCE_DELAY = float(os.getenv('CONVERGENCE_DELAY', 50))
+DEBUG = os.getenv('DEBUG') is not None
+INITIAL_POLL_INTERVAL = float(os.getenv('INITIAL_POLL_INTERVAL', 1))
+PING6 = os.getenv('PING6', 'ping6')
+VERBOSE = os.getenv('VERBOSE', None)
+
+TEST_PASSES = True
 
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
 
-exit_settings = {
+EXIT_SETTINGS = {
     "exits": {
         "exit_a": {
             "id": {
@@ -50,6 +69,15 @@ exit_settings = {
         "email": "1234@gmail.com"
     }
 }
+
+COMPAT_LAYOUTS = {
+        None: ['a'] * 7,  # Use *_A binaries for every node
+        'old_exit': ['a'] * 4 + ['b'] + ['a'] * 2,  # The exit sports Rita B
+        'new_exit': ['b'] * 4 + ['a'] + ['b'] * 2,  # Like above but opposite
+        'inner_ring_old': ['a', 'b', 'b', 'a', 'a', 'b', 'b'],
+        'inner_ring_new': ['b', 'a', 'a', 'b', 'b', 'a', 'a'],
+        'random':   None,  # Randomize revisions used (filled at runtime)
+        }
 
 def exec_or_exit(command, blocking=True, delay=0.01):
     """
@@ -103,6 +131,7 @@ class Node:
         self.id = id
         self.fwd_price = fwd_price
         self.neighbors = []
+        self.revision = COMPAT_LAYOUTS[COMPAT_LAYOUT][self.id - 1]
 
     def add_neighbor(self, id):
         if id not in self.neighbors:
@@ -234,6 +263,39 @@ def save_rita_settings(id, x):
 def get_rita_settings(id):
     return toml.load(open("rita-settings-n{}.toml".format(id)))
 
+def switch_binaries(node_id):
+    """
+    Switch the Rita, exit Rita and bounty hunter binaries assigned to node with ID
+    :data:`node_id`.
+
+    :param int node_id: Node ID for which we're changing binaries
+    """
+    global RITA, RITA_EXIT, BOUNTY_HUNTER
+    if VERBOSE:
+        print(("Previous binary paths:\nRITA:\t\t{}\nRITA_EXIT:\t{}\n" +
+            "BOUNTY_HUNTER:\t{}").format(RITA, RITA_EXIT, BOUNTY_HUNTER))
+
+    release = COMPAT_LAYOUTS[COMPAT_LAYOUT][node_id - 1]
+
+    if release == 'a':
+        if VERBOSE:
+            print("Using A for node {}...".format(node_id))
+        RITA = RITA_A
+        RITA_EXIT = RITA_EXIT_A
+        BOUNTY_HUNTER = BOUNTY_HUNTER_A
+    elif release == 'b':
+        if VERBOSE:
+            print("Using B for node {}...".format(node_id))
+        RITA = RITA_B
+        RITA_EXIT = RITA_EXIT_B
+        BOUNTY_HUNTER = BOUNTY_HUNTER_B
+    else:
+        print("Unknown revision kind \"{}\" for node {}".format(release, node_id))
+        sys.exit(1)
+
+    if VERBOSE:
+        print(("New binary paths:\nRITA:\t\t{}\nRITA_EXIT:\t{}\n" +
+            "BOUNTY_HUNTER:\t{}").format(RITA, RITA_EXIT, BOUNTY_HUNTER))
 
 def start_rita(node):
     id = node.id
@@ -251,7 +313,7 @@ def start_rita(node):
         )
     time.sleep(1)
     os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
-              .format(id=id, data=json.dumps({"exit_client": exit_settings})))
+              .format(id=id, data=json.dumps({"exit_client": EXIT_SETTINGS})))
 
 def start_rita_exit(node):
     id = node.id
@@ -277,8 +339,8 @@ def assert_test(x, description, verbose=True, global_fail=True):
             sys.stderr.write(colored(" + ", "red") + "{} Failed\n".format(description))
 
     if global_fail and not x:
-        global tests_passes
-        tests_passes = False
+        global TEST_PASSES
+        TEST_PASSES = False
     return x
 
 
@@ -286,8 +348,8 @@ class World:
     def __init__(self):
         self.nodes = {}
         self.connections = {}
-        self.bounty = None
-        self.exit = None
+        self.bounty_id = None
+        self.exit_id = None
         self.external = None
 
     def add_node(self, node):
@@ -297,7 +359,7 @@ class World:
     def add_exit_node(self, node):
         assert node.id not in self.nodes
         self.nodes[node.id] = node
-        self.exit = node.id
+        self.exit_id = node.id
 
     def add_external_node(self, node):
         assert node.id not in self.nodes
@@ -311,10 +373,10 @@ class World:
         connection.b.add_neighbor(connection.a.id)
 
     def set_bounty(self, bounty_id):
-        self.bounty = bounty_id
+        self.bounty_id = bounty_id
 
     def to_ip(self, node):
-        if self.exit == node.id:
+        if self.exit_id == node.id:
             return "172.168.1.254"
         else:
             return "fd00::{}".format(node.id)
@@ -322,7 +384,7 @@ class World:
     def create(self):
         cleanup()
 
-        assert self.bounty
+        assert self.bounty_id
         nodes = {}
         for id in self.nodes:
             nodes[str(id)] = {"ip": "fd00::{}".format(id)}
@@ -364,18 +426,21 @@ class World:
         print("babel started")
 
         print("starting bounty hunter")
-        start_bounty(self.bounty)
+        switch_binaries(self.bounty_id)
+        start_bounty(self.bounty_id)
         print("bounty hunter started")
 
-        start_rita_exit(self.nodes[self.exit])
+        switch_binaries(self.exit_id)
+        start_rita_exit(self.nodes[self.exit_id])
 
         time.sleep(1)
 
-        exit_settings["exits"]["exit_a"]["id"]["wg_public_key"] = get_rita_settings(self.exit)["network"]["wg_public_key"]
+        EXIT_SETTINGS["exits"]["exit_a"]["id"]["wg_public_key"] = get_rita_settings(self.exit_id)["network"]["wg_public_key"]
 
         print("starting rita")
         for id, node in self.nodes.items():
-            if id != self.exit and id != self.external:
+            if id != self.exit_id and id != self.external:
+                switch_binaries(id)
                 start_rita(node)
             time.sleep(0.5 + random.random() / 2) # wait 0.5s - 1s
             print()
@@ -393,7 +458,8 @@ class World:
         for i in self.nodes.values():
             for j in self.nodes.values():
                 if not assert_test(self.test_reach(i, j), "Reachability " +
-                                   "from node {} to {}".format(i.id, j.id),
+                                   "from node {} ({}) to {} ({})".format(i.id,
+                                       i.revision, j.id, j.revision),
                                    verbose=verbose, global_fail=global_fail):
                     return False
         return True
@@ -478,11 +544,15 @@ class World:
 
         for node, routes in all_routes.items():
             for route in routes:
-                desc = ("Optimal route from node {} " +
-                        "to {} with next-hop {} and price {}").format(node.id,
-                                                                      route[0].id,
-                                                                      route[2].id,
-                                                                      route[1])
+                desc = ("Optimal route from node {} ({}) " +
+                        "to {} ({}) with next-hop {} ({}) and price {}").format(
+                                node.id,
+                                node.revision,
+                                route[0].id,
+                                route[0].revision,
+                                route[2].id,
+                                route[2].revision,
+                                route[1])
                 result = result and assert_test(node.has_route(*route,
                                                                verbose=verbose
                                                 ),
@@ -492,7 +562,7 @@ class World:
 
     def get_balances(self):
         status = subprocess.Popen(
-                 ["ip", "netns", "exec", "netlab-{}".format(self.bounty), "curl", "-s", "-g", "-6",
+                 ["ip", "netns", "exec", "netlab-{}".format(self.bounty_id), "curl", "-s", "-g", "-6",
                   "[::1]:8888/list"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         status.wait()
         output = status.stdout.read().decode("utf-8")
@@ -507,7 +577,7 @@ class World:
 
         # while s != 0 and n < 1:
         #     status = subprocess.Popen(
-        #         ["ip", "netns", "exec", "netlab-{}".format(self.bounty), "curl", "-s", "-g", "-6",
+        #         ["ip", "netns", "exec", "netlab-{}".format(self.bounty_id), "curl", "-s", "-g", "-6",
         #          "[::1]:8888/list"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         #     status.wait()
         #     output = status.stdout.read().decode("utf-8")
@@ -528,7 +598,7 @@ class World:
         # assert_test(s == 0 and m != 0, "Conservation of balance")
 
     def gen_traffic(self, from_node, to_node, bytes):
-        if from_node.id == self.exit:
+        if from_node.id == self.exit_id:
             server = subprocess.Popen(
                 ["ip", "netns", "exec", "netlab-{}".format(from_node.id), "iperf3", "-s", "-V"])
             time.sleep(0.1)
@@ -562,7 +632,8 @@ class World:
 
         for node_id, balance in results.items():
             assert_test(fuzzy_traffic(diff[node_id], balance * 1e8),
-                        "Balance of {}".format(node_id))
+                        "Balance of {} ({})".format(node_id,
+                            self.nodes[node_id].revision))
 
 
 def traffic_diff(a, b):
@@ -589,6 +660,11 @@ def check_log_contains(f, x):
 
 
 if __name__ == "__main__":
+    COMPAT_LAYOUTS["random"] = ['a' if random.randint(0, 1) else 'b' for _ in range(7)]
+
+    if VERBOSE:
+        print("Random compat test layout: {}".format(COMPAT_LAYOUTS["random"]))
+
     a1 = Node(1, 10)
     b2 = Node(2, 25)
     c3 = Node(3, 60)
@@ -656,7 +732,7 @@ if __name__ == "__main__":
 
     if DEBUG:
         print("Debug mode active, examine the mesh and press y to continue " +
-              "with the tests anything else to exit")
+              "with the tests or anything else to exit")
         choice = input()
         if choice != 'y':
             sys.exit(0)
@@ -769,7 +845,7 @@ if __name__ == "__main__":
 
     print("done... exiting")
 
-    if tests_passes:
+    if TEST_PASSES:
         print("All Rita tests passed!!")
         exit(0)
     else:

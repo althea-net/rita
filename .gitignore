@@ -12,3 +12,4 @@ test.db-journal
 integration-tests/private-key*
 integration-tests/rita-settings*
 integration-tests/staging*
+integration-tests/althea_rs_*
