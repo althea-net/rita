@@ -42,17 +42,6 @@ impl KernelInterface {
 
         let prev_ip = self.get_global_device_ip("wg_exit");
 
-        self.run_command(
-            "ip",
-            &[
-                "address",
-                "add",
-                &format!("{}/{}", local_ip, netmask),
-                "dev",
-                "wg_exit",
-            ],
-        )?;
-
         match prev_ip {
             Ok(prev_ip) => {
                 if prev_ip != local_ip {
@@ -66,10 +55,31 @@ impl KernelInterface {
                             "wg_exit",
                         ],
                     )?;
+
+                    self.run_command(
+                        "ip",
+                        &[
+                            "address",
+                            "add",
+                            &format!("{}/{}", local_ip, netmask),
+                            "dev",
+                            "wg_exit",
+                        ],
+                    )?;
                 }
             }
             Err(e) => {
                 warn!("Finding wg exit's current IP returned {}", e);
+                self.run_command(
+                    "ip",
+                    &[
+                        "address",
+                        "add",
+                        &format!("{}/{}", local_ip, netmask),
+                        "dev",
+                        "wg_exit",
+                    ],
+                )?;
             }
         }
 
