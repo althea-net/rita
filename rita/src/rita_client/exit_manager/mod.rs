@@ -32,6 +32,7 @@ fn linux_setup_exit_tunnel() -> Result<(), Error> {
         SETTING.get_exit_client().wg_listen_port,
         our_details.client_internal_ip,
         general_details.netmask,
+        SETTING.get_network().rita_hello_port,
     )?;
     KI.set_route_to_tunnel(&general_details.server_internal_ip)?;
 
