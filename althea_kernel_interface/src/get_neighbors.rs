@@ -1,5 +1,6 @@
 use super::KernelInterface;
 
+use std::collections::HashSet;
 use std::net::IpAddr;
 use std::str::FromStr;
 
@@ -25,8 +26,8 @@ impl KernelInterface {
         Ok(vec)
     }
 
-    pub fn trigger_neighbor_disc(&self) -> Result<(), Error> {
-        for interface in self.get_interfaces()? {
+    pub fn trigger_neighbor_disc(&self, interfaces: &HashSet<String>) -> Result<(), Error> {
+        for interface in interfaces.iter() {
             self.run_command("ping6", &["-c1", "-I", &interface, "ff02::1"])?;
         }
         Ok(())

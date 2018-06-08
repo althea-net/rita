@@ -251,7 +251,8 @@ impl TunnelManager {
     /// This gets the list of link-local neighbors, and then contacts them to get their
     /// Identity using `neighbor_inquiry` as well as their wireguard tunnel name
     pub fn get_neighbors(&mut self) -> ResponseFuture<Vec<(LocalIdentity, String, IpAddr)>, Error> {
-        KI.trigger_neighbor_disc().unwrap();
+        KI.trigger_neighbor_disc(&SETTING.get_network().peer_interfaces)
+            .unwrap();
         let neighs: Vec<
             Box<Future<Item = Option<(LocalIdentity, String, IpAddr)>, Error = ()>>,
         > = KI
@@ -268,11 +269,6 @@ impl TunnelManager {
             })
             .filter_map(|(ip_address, dev)| {
                 info!("neighbor at interface {:?}, ip {}", dev, ip_address,);
-                if let Some(dev) = dev.clone() {
-                    if !self.listen_interfaces.contains(&dev) {
-                        return None;
-                    }
-                }
                 Some(
                     Box::new(
                         self.neighbor_inquiry(ip_address, dev.clone())
@@ -461,6 +457,14 @@ mod tests {
     use actix::actors::ConnectorError;
     use std::collections::VecDeque;
     use std::net::Ipv4Addr;
+
+    fn vec_string_to_str<'a>(vstr: &'a Vec<String>) -> Vec<&'a str> {
+        let mut arr = Vec::new();
+        for i in 0..vstr.len() {
+            arr.push(vstr[i].as_str());
+        }
+        arr
+    }
 
     #[test]
     fn test_contact_neighbor_ipv4() {
@@ -855,13 +859,23 @@ mod tests {
     fn test_get_neighbors() {
         let mut counter = 0;
         KI.set_mock(Box::new(move |program, args| {
-            if program == "ping6" {
-                return Ok(Output {
-                    stdout: b"".to_vec(),
-                    stderr: b"".to_vec(),
-                    status: ExitStatus::from_raw(0),
-                });
-            }
+            match (program.as_str(), &vec_string_to_str(&args)[..]) {
+                ("ping6", _) => {
+                    return Ok(Output {
+                        stdout: b"".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                ("ip", ["neighbor"]) => {
+                    return Ok(Output {
+                        stdout: b"fe80::1234 dev eth0 lladdr dc:6d:cd:ae:bd:a6 REACHABLE".to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+                }
+                (_, _) => (),
+            };
 
             counter += 1;
             trace!(
