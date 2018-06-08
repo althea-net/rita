@@ -16,6 +16,9 @@ use rita_common::stats_collector::StatsCollector;
 use failure::Error;
 use rita_common::tunnel_manager::OpenTunnel;
 
+use settings::RitaCommonSettings;
+use SETTING;
+
 pub struct RitaLoop {
     stats_collector: Addr<Syn, StatsCollector>,
 }
@@ -84,7 +87,10 @@ impl Handler<Tick> for RitaLoop {
                             info!("traffic watcher completed in {:?}", neigh.elapsed());
                             DebtKeeper::from_registry().do_send(SendUpdate {});
                             PaymentController::from_registry().do_send(PaymentControllerUpdate {});
-                            ctx.notify_later(Tick {}, Duration::from_secs(5));
+                            ctx.notify_later(
+                                Tick {},
+                                Duration::from_secs(SETTING.get_network().rita_tick_interval),
+                            );
                             actix::fut::ok(())
                         })
                 }),

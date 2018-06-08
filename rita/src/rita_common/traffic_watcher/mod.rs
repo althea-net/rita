@@ -38,6 +38,13 @@ impl SystemService for TrafficWatcher {
         KI.init_counter(&FilterTarget::ForwardInput).unwrap();
         KI.init_counter(&FilterTarget::ForwardOutput).unwrap();
 
+        match SETTING.get_network().external_nic {
+            Some(ref external_nic) => {
+                KI.init_iface_counters(external_nic).unwrap();
+            }
+            _ => {}
+        }
+
         info!("Traffic Watcher started");
     }
 }
@@ -205,6 +212,17 @@ pub fn watch<T: Read + Write>(
 
         DebtKeeper::from_registry().do_send(update);
     }
+
+    // check if we are a gateway
+    let gateway = match SETTING.get_network().external_nic {
+        Some(ref external_nic) => {
+            let wan_input_packets = (KI.read_iface_counters(external_nic)?.0).1;
+            wan_input_packets > 0
+        }
+        _ => false,
+    };
+
+    SETTING.get_network_mut().is_gateway = gateway;
 
     Ok(())
 }

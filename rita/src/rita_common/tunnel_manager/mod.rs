@@ -322,7 +322,7 @@ impl TunnelManager {
                     info!("Saying hello to: {:?} at ip {:?}", url, res);
 
                     if let Ok(res) = res {
-                        if res.len() > 0 {
+                        if res.len() > 0 && SETTING.get_network().is_gateway {
                             let their_ip = res[0].ip();
 
                             TunnelManager::contact_neighbor(iface_index, their_ip)
@@ -1067,6 +1067,7 @@ mod tests {
 
         SETTING.get_network_mut().manual_peers =
             vec!["test.altheamesh.com".to_string(), "2.2.2.2".to_string()];
+        SETTING.get_network_mut().is_gateway = true;
         SETTING
             .get_network_mut()
             .peer_interfaces

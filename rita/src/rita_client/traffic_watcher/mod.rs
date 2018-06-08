@@ -26,7 +26,7 @@ impl SystemService for TrafficWatcher {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("Client traffic watcher started");
 
-        KI.init_exit_client_counters().unwrap();
+        KI.init_iface_counters("wg_exit").unwrap();
     }
 }
 impl Default for TrafficWatcher {
@@ -78,13 +78,13 @@ pub fn watch<T: Read + Write>(
         }
     }
 
-    let input = KI.read_exit_client_counters_input();
-    let output = KI.read_exit_client_counters_output();
+    let (input, output) = KI.read_iface_counters("wg_exit")?;
+
+    // account for wg packet overhead
+    let input = input.0 + input.1 * 80;
+    let output = output.0 + output.1 * 80;
 
     trace!("got {:?} from client exit counters", (&input, &output));
-
-    let input = input?;
-    let output = output?;
 
     let mut owes: Int256 = Int256::from(0);
 

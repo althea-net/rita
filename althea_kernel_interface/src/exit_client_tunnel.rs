@@ -13,6 +13,7 @@ impl KernelInterface {
         listen_port: u16,
         local_ip: IpAddr,
         netmask: u8,
+        rita_hello_port: u16,
     ) -> Result<(), Error> {
         self.run_command(
             "wg",
@@ -39,6 +40,23 @@ impl KernelInterface {
                 self.run_command("wg", &["set", "wg_exit", "peer", &i, "remove"])?;
             }
         }
+
+        // block rita hello port on the exit tunnel
+        self.add_iptables_rule(
+            "iptables",
+            &[
+                "-I",
+                "OUTPUT",
+                "-o",
+                "wg_exit",
+                "-p",
+                "tcp",
+                "--dport",
+                &format!("{}", rita_hello_port),
+                "-j",
+                "DROP",
+            ],
+        )?;
 
         let prev_ip = self.get_global_device_ip("wg_exit");
 
