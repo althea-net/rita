@@ -105,9 +105,14 @@ fn exit_setup_request(exit: &String) -> Result<(), Error> {
 
     trace!("Got exit setup response {:?}", exit_response.clone());
 
-    current_exit.our_details = Some(ExitClientDetails {
-        client_internal_ip: exit_response.details.unwrap().client_internal_ip,
-    });
+    match exit_response.details {
+        Some(details) => {
+            current_exit.our_details = Some(ExitClientDetails {
+                client_internal_ip: details.client_internal_ip,
+            });
+        }
+        None => bail!("Got no details from exit"),
+    }
 
     Ok(())
 }
