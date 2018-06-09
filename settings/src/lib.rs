@@ -71,7 +71,14 @@ lazy_static! {
 
 // TODO: remove in alpha 5
 fn default_rita_contact_port() -> u16 {
+    warn!("Add rita_contact_port to [network], default will be removed in next version");
     4874
+}
+
+// TODO: remove in alpha 5
+fn default_rita_tick_interval() -> u64 {
+    warn!("Add rita_tick_interval to [network], default will be removed in next version");
+    5
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -93,6 +100,9 @@ pub struct NetworkSettings {
     pub rita_dashboard_port: u16,
     /// Port over which the bounty hunter will be contacted
     pub bounty_port: u16,
+    /// The tick interval in seconds between rita hellos, traffic watcher measurements and payments
+    #[serde(default = "default_rita_tick_interval")] // TODO: remove in alpha 5
+    pub rita_tick_interval: u64,
     /// Our private key, encoded with Base64 (what the `wg` command outputs and takes by default)
     /// Note this is the canonical private key for the node
     pub wg_private_key: String,
@@ -117,6 +127,9 @@ pub struct NetworkSettings {
     /// globally routable ip
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_nic: Option<String>,
+    /// This in memory variable specifies if we are a gateway or not
+    #[serde(skip_deserializing, default)]
+    pub is_gateway: bool,
 }
 
 impl Default for NetworkSettings {
@@ -129,6 +142,7 @@ impl Default for NetworkSettings {
             rita_dashboard_port: 4877,
             rita_contact_port: 4875,
             bounty_port: 8888,
+            rita_tick_interval: 5,
             wg_private_key: String::new(),
             wg_private_key_path: String::new(),
             wg_public_key: String::new(),
@@ -137,6 +151,7 @@ impl Default for NetworkSettings {
             manual_peers: Vec::new(),
             external_nic: None,
             default_route: Vec::new(),
+            is_gateway: false,
         }
     }
 }

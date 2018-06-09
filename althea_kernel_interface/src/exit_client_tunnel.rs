@@ -13,6 +13,7 @@ impl KernelInterface {
         listen_port: u16,
         local_ip: IpAddr,
         netmask: u8,
+        rita_hello_port: u16,
     ) -> Result<(), Error> {
         self.run_command(
             "wg",
@@ -40,18 +41,24 @@ impl KernelInterface {
             }
         }
 
-        let prev_ip = self.get_global_device_ip("wg_exit");
-
-        self.run_command(
-            "ip",
+        // block rita hello port on the exit tunnel
+        self.add_iptables_rule(
+            "iptables",
             &[
-                "address",
-                "add",
-                &format!("{}/{}", local_ip, netmask),
-                "dev",
+                "-I",
+                "OUTPUT",
+                "-o",
                 "wg_exit",
+                "-p",
+                "tcp",
+                "--dport",
+                &format!("{}", rita_hello_port),
+                "-j",
+                "DROP",
             ],
         )?;
+
+        let prev_ip = self.get_global_device_ip("wg_exit");
 
         match prev_ip {
             Ok(prev_ip) => {
@@ -66,10 +73,31 @@ impl KernelInterface {
                             "wg_exit",
                         ],
                     )?;
+
+                    self.run_command(
+                        "ip",
+                        &[
+                            "address",
+                            "add",
+                            &format!("{}/{}", local_ip, netmask),
+                            "dev",
+                            "wg_exit",
+                        ],
+                    )?;
                 }
             }
             Err(e) => {
                 warn!("Finding wg exit's current IP returned {}", e);
+                self.run_command(
+                    "ip",
+                    &[
+                        "address",
+                        "add",
+                        &format!("{}/{}", local_ip, netmask),
+                        "dev",
+                        "wg_exit",
+                    ],
+                )?;
             }
         }
 
