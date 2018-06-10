@@ -1,7 +1,7 @@
 [[package]]
 name = "actix"
-version = "0.5.7"
-source = "git+https://github.com/kingoflolz/actix?branch=custom-resolver#869f52dadf43082bd34bae1a6ed06e85eaecf8fb"
+version = "0.5.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "actix_derive 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitflags 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -22,10 +22,10 @@ dependencies = [
 
 [[package]]
 name = "actix-web"
-version = "0.6.10"
+version = "0.6.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "actix 0.5.7 (git+https://github.com/kingoflolz/actix?branch=custom-resolver)",
+ "actix 0.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitflags 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -119,7 +119,7 @@ dependencies = [
 name = "althea_types"
 version = "0.1.0"
 dependencies = [
- "actix 0.5.7 (git+https://github.com/kingoflolz/actix?branch=custom-resolver)",
+ "actix 0.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "eui48 0.4.0 (git+https://github.com/althea-mesh/eui48)",
  "hex 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1639,8 +1639,8 @@ dependencies = [
 name = "rita"
 version = "0.1.0"
 dependencies = [
- "actix 0.5.7 (git+https://github.com/kingoflolz/actix?branch=custom-resolver)",
- "actix-web 0.6.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "actix 0.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "actix-web 0.6.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix_derive 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "althea_kernel_interface 0.1.0",
  "althea_types 0.1.0",
@@ -1672,6 +1672,7 @@ dependencies = [
  "serde_json 1.0.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "settings 0.1.0",
  "tokio 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tokio-core 0.1.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "trust-dns-resolver 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -1942,8 +1943,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "stats_server"
 version = "0.1.0"
 dependencies = [
- "actix 0.5.7 (git+https://github.com/kingoflolz/actix?branch=custom-resolver)",
- "actix-web 0.6.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "actix 0.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "actix-web 0.6.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "althea_types 0.1.0",
  "docopt 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.5.10 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2556,9 +2557,14 @@ dependencies = [
  "linked-hash-map 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
+[[patch.unused]]
+name = "actix"
+version = "0.5.7"
+source = "git+https://github.com/kingoflolz/actix?branch=custom-resolver#869f52dadf43082bd34bae1a6ed06e85eaecf8fb"
+
 [metadata]
-"checksum actix 0.5.7 (git+https://github.com/kingoflolz/actix?branch=custom-resolver)" = "<none>"
-"checksum actix-web 0.6.10 (registry+https://github.com/rust-lang/crates.io-index)" = "f3e8ee6c135276906d4af0a9a900ea7c230995e9328b44cd1a6d306918db47e4"
+"checksum actix 0.5.8 (registry+https://github.com/rust-lang/crates.io-index)" = "7f0b2daad36916ccd2b162dbc5a04a74df642a29391b1a341c8ee3e82026cb16"
+"checksum actix-web 0.6.12 (registry+https://github.com/rust-lang/crates.io-index)" = "39511e3e552addb839a2db972f5a8096d43c1c4699cd1fa83e39f664c969a033"
 "checksum actix_derive 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "c4b1dc922654b9aca7a8a31eab875fde804fa9fbd67f220f2e457787b23590f2"
 "checksum adler32 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6cbd0b9af8587c72beadc9f72d35b9fbb070982c9e6203e46e93f10df25f8f45"
 "checksum aho-corasick 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)" = "ca972c2ea5f742bfce5687b9aef75506a764f61d37f8f649047846a9686ddb66"
