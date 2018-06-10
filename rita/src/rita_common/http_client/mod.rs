@@ -1,34 +1,23 @@
-use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpStream};
-use std::time::Duration;
+use std::net::SocketAddr;
 
-use minihttpse::Response;
+use tokio_core::net::TcpStream as TokioTcpStream;
 
 use actix::prelude::*;
+use actix::registry::SystemService;
 use actix_web::*;
 
 use futures::Future;
 
-use actix::registry::SystemService;
-
-use serde_json;
-
-use althea_types::{Identity, LocalIdentity};
+use althea_types::{ExitClientIdentity, ExitDetails, ExitServerReply, Identity, LocalIdentity};
 
 use settings::RitaCommonSettings;
 use SETTING;
 
+use actix_web::client::Connection;
 use failure::Error;
 
-#[derive(Debug, Fail)]
-pub enum HTTPClientError {
-    #[fail(display = "HTTP Parse Error")]
-    HTTPParseError,
-}
-
-pub struct HTTPClient {
-    executors: Addr<Syn, HTTPSyncExecutor>,
-}
+#[derive(Default)]
+pub struct HTTPClient;
 
 impl Actor for HTTPClient {
     type Context = Context<Self>;
@@ -39,19 +28,6 @@ impl SystemService for HTTPClient {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("HTTP Client started");
     }
-}
-impl Default for HTTPClient {
-    fn default() -> HTTPClient {
-        HTTPClient {
-            executors: SyncArbiter::start(10, || HTTPSyncExecutor {}),
-        }
-    }
-}
-
-pub struct HTTPSyncExecutor;
-
-impl Actor for HTTPSyncExecutor {
-    type Context = SyncContext<Self>;
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -67,66 +43,101 @@ impl Message for Hello {
 impl Handler<Hello> for HTTPClient {
     type Result = ResponseFuture<LocalIdentity, Error>;
     fn handle(&mut self, msg: Hello, _: &mut Self::Context) -> Self::Result {
-        Box::new(self.executors.send(msg).then(|r| r.unwrap()))
+        info!("sending {:?}", msg);
+
+        let stream = TokioTcpStream::connect2(&msg.to);
+
+        let endpoint = format!("http://[{}]:{}/hello", msg.to.ip(), msg.to.port());
+
+        Box::new(stream.from_err().and_then(move |stream| {
+            trace!("stream status {:?}, to: {:?}", stream, &msg.to);
+            let mut req = client::post(&endpoint);
+
+            let req = req.with_connection(Connection::from_stream(stream));
+
+            let req = if SETTING.get_future() {
+                req.json(&msg.my_id)
+            } else {
+                // TODO: REMOVE IN ALPHA 5
+                req.json(LocalIdentity {
+                    global: msg.my_id.clone(),
+                    wg_port: 12345,
+                })
+            };
+
+            req.unwrap().send().from_err().and_then(|response| {
+                response
+                    .json()
+                    .from_err()
+                    .and_then(|val: LocalIdentity| Ok(val))
+            })
+        }))
     }
 }
 
-impl Handler<Hello> for HTTPSyncExecutor {
-    type Result = Result<LocalIdentity, Error>;
+#[derive(Debug, Eq, PartialEq)]
+pub struct GetExitInfo {
+    pub to: SocketAddr,
+}
 
-    fn handle(&mut self, msg: Hello, _: &mut Self::Context) -> Self::Result {
-        info!("sending {:?}", msg);
+impl Message for GetExitInfo {
+    type Result = Result<ExitDetails, Error>;
+}
 
-        let my_id = if SETTING.get_future() {
-            serde_json::to_string(&msg.my_id)?
-        } else {
-            // TODO: REMOVE IN ALPHA 5
-            serde_json::to_string(&LocalIdentity {
-                global: msg.my_id,
-                wg_port: 12345,
-            })?
-        };
+impl Handler<GetExitInfo> for HTTPClient {
+    type Result = ResponseFuture<ExitDetails, Error>;
+    fn handle(&mut self, msg: GetExitInfo, _: &mut Self::Context) -> Self::Result {
+        let endpoint = format!("http://[{}]:{}/exit_info", msg.to.ip(), msg.to.port());
 
-        let stream = TcpStream::connect_timeout(&msg.to, Duration::from_secs(1));
+        let stream = TokioTcpStream::connect2(&msg.to);
 
-        trace!("stream status {:?}, to: {:?}", stream, &msg.to);
+        Box::new(stream.from_err().and_then(move |stream| {
+            client::get(&endpoint)
+                .with_connection(Connection::from_stream(stream))
+                .finish()
+                .unwrap()
+                .send()
+                .from_err()
+                .and_then(|response| {
+                    response
+                        .json()
+                        .from_err()
+                        .and_then(|val: ExitDetails| Ok(val))
+                })
+        }))
+    }
+}
 
-        let mut stream = stream?;
+#[derive(Debug, Eq, PartialEq)]
+pub struct ExitSetupRequest {
+    pub to: SocketAddr,
+    pub ident: ExitClientIdentity,
+}
 
-        // Format HTTP request
-        let request = format!(
-            "POST /hello HTTP/1.0\r\n\
-Host: {}\r\n\
-Content-Type: application/json\r\n\
-Content-Length: {}\r\n\r\n
-{}\r\n",
-            msg.to,
-            my_id.len() + 1,
-            my_id
-        ); //TODO: make this a lot less ugly
+impl Message for ExitSetupRequest {
+    type Result = Result<ExitServerReply, Error>;
+}
 
-        trace!(
-            "Sending http request:\
-             {}\nEND",
-            request
-        );
-        stream.write_all(request.as_bytes())?;
+impl Handler<ExitSetupRequest> for HTTPClient {
+    type Result = ResponseFuture<ExitServerReply, Error>;
+    fn handle(&mut self, msg: ExitSetupRequest, _: &mut Self::Context) -> Self::Result {
+        let endpoint = format!("http://[{}]:{}/setup", msg.to.ip(), msg.to.port());
 
-        // Make request and return response as string
-        let mut resp = String::new();
-        stream.read_to_string(&mut resp)?;
+        let stream = TokioTcpStream::connect2(&msg.to);
 
-        trace!("{:?} replied {} END", msg.to, &resp);
-
-        if resp.is_empty() {
-            panic!("{:?} replied with empty", &resp);
-        }
-
-        if let Ok(response) = Response::new(resp.into_bytes()) {
-            let mut identity: LocalIdentity = serde_json::from_str(&response.text())?;
-            Ok(identity)
-        } else {
-            Err(HTTPClientError::HTTPParseError.into())
-        }
+        Box::new(stream.from_err().and_then(move |stream| {
+            client::post(&endpoint)
+                .with_connection(Connection::from_stream(stream))
+                .json(msg.ident)
+                .unwrap()
+                .send()
+                .from_err()
+                .and_then(|response| {
+                    response
+                        .json()
+                        .from_err()
+                        .and_then(|val: ExitServerReply| Ok(val))
+                })
+        }))
     }
 }

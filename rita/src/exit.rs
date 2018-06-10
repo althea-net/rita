@@ -40,6 +40,7 @@ extern crate serde;
 extern crate serde_json;
 extern crate settings;
 extern crate tokio;
+extern crate tokio_core;
 extern crate trust_dns_resolver;
 
 use settings::{RitaCommonSettings, RitaExitSettings, RitaExitSettingsStruct};
