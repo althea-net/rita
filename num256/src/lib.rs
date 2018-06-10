@@ -1,3 +1,4 @@
+extern crate ethereum_types;
 extern crate num;
 extern crate serde;
 extern crate serde_json;
@@ -19,210 +20,6 @@ extern crate serde_derive;
 #[cfg(test)]
 #[macro_use]
 extern crate lazy_static;
-
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Uint256(BigUint);
-
-impl Deref for Uint256 {
-    type Target = BigUint;
-
-    fn deref(&self) -> &BigUint {
-        &self.0
-    }
-}
-
-impl fmt::Display for Uint256 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", &self.to_str_radix(10))
-    }
-}
-
-impl fmt::Debug for Uint256 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Uint256({})", self.to_string())
-    }
-}
-
-impl Serialize for Uint256 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&self.to_str_radix(10))
-    }
-}
-
-impl<'de> Deserialize<'de> for Uint256 {
-    fn deserialize<D>(deserializer: D) -> Result<Uint256, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?.clone();
-
-        BigUint::from_str(&s)
-            .map(|v| Uint256(v))
-            .map_err(serde::de::Error::custom)
-    }
-}
-
-impl Neg for Uint256 where {
-    type Output = Int256;
-    fn neg(self) -> Self::Output {
-        let out = self.clone();
-        Int256(out.0.to_bigint().unwrap() * -1)
-    }
-}
-
-impl<T> Add<T> for Uint256
-where
-    T: Into<Int256>,
-{
-    type Output = Uint256;
-    fn add(self, v: T) -> Uint256 {
-        let num = (self.0.to_bigint().unwrap() + v.into().0)
-            .to_biguint()
-            .unwrap();
-        if num.bits() > 256 {
-            panic!("overflow");
-        }
-        Uint256(num)
-    }
-}
-
-impl<T> AddAssign<T> for Uint256
-where
-    T: Into<Int256>,
-{
-    fn add_assign(&mut self, v: T) {
-        self.0 = (self.0.clone().to_bigint().unwrap() + v.into().0)
-            .to_biguint()
-            .unwrap();
-        if self.0.bits() > 256 {
-            panic!("overflow");
-        }
-    }
-}
-
-impl CheckedAdd for Uint256 {
-    fn checked_add(&self, v: &Uint256) -> Option<Uint256> {
-        let num = self.0.clone() + v.0.clone();
-        if num.bits() > 256 {
-            return None;
-        }
-        Some(Uint256(num))
-    }
-}
-
-impl<T> Sub<T> for Uint256
-where
-    T: Into<Int256>,
-{
-    type Output = Uint256;
-    fn sub(self, v: T) -> Uint256 {
-        let num = (self.0.to_bigint().unwrap() - v.into().0)
-            .to_biguint()
-            .unwrap();
-        Uint256(num)
-    }
-}
-
-impl<T> SubAssign<T> for Uint256
-where
-    T: Into<Int256>,
-{
-    fn sub_assign(&mut self, v: T) {
-        self.0 = (self.0.clone().to_bigint().unwrap() - v.into().0)
-            .to_biguint()
-            .unwrap();
-        if self.0.bits() > 256 {
-            panic!("overflow");
-        }
-    }
-}
-
-impl CheckedSub for Uint256 {
-    fn checked_sub(&self, v: &Uint256) -> Option<Uint256> {
-        if self.0 < v.0 {
-            return None;
-        }
-        let num = self.clone() - v.clone();
-        Some(num)
-    }
-}
-
-impl<T> Mul<T> for Uint256
-where
-    T: Into<Uint256>,
-{
-    type Output = Uint256;
-    fn mul(self, v: T) -> Uint256 {
-        let num = self.0 * v.into().0;
-        if num.bits() > 255 {
-            panic!("overflow");
-        }
-        Uint256(num)
-    }
-}
-
-impl<T> MulAssign<T> for Uint256
-where
-    T: Into<Uint256>,
-{
-    fn mul_assign(&mut self, v: T) {
-        self.0 = self.0.clone() * v.into().0;
-        if self.0.bits() > 256 {
-            panic!("overflow");
-        }
-    }
-}
-
-impl CheckedMul for Uint256 {
-    fn checked_mul(&self, v: &Uint256) -> Option<Uint256> {
-        // drop down to wrapped bigint to stop from panicing in fn above
-        let num = self.0.clone() * v.0.clone();
-        if num.bits() > 255 {
-            return None;
-        }
-        Some(Uint256(num))
-    }
-}
-
-impl<T> Div<T> for Uint256
-where
-    T: Into<Uint256>,
-{
-    type Output = Uint256;
-    fn div(self, v: T) -> Uint256 {
-        let num = self.0 / v.into().0;
-        if num.bits() > 255 {
-            panic!("overflow");
-        }
-        Uint256(num)
-    }
-}
-
-impl<T> DivAssign<T> for Uint256
-where
-    T: Into<Uint256>,
-{
-    fn div_assign(&mut self, v: T) {
-        self.0 = self.0.clone() / v.into().0;
-        if self.0.bits() > 256 {
-            panic!("overflow");
-        }
-    }
-}
-
-impl CheckedDiv for Uint256 {
-    fn checked_div(&self, v: &Uint256) -> Option<Uint256> {
-        if *v == Uint256::from(0) {
-            return None;
-        }
-        // drop down to wrapped bigint to stop from panicing in fn above
-        let num = self.0.clone() / v.0.clone();
-        Some(Uint256(num))
-    }
-}
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Int256(BigInt);
@@ -249,59 +46,29 @@ impl Neg for Int256 where {
     }
 }
 
+pub type Uint256 = ethereum_types::U256;
+
 impl From<Uint256> for Int256 {
     fn from(n: Uint256) -> Self {
-        let num = n.to_bigint().unwrap();
-        if num.bits() > 255 {
-            panic!("overflow");
+        let mut bytes = [0u8; 32];
+        n.to_big_endian(&mut bytes);
+        let n = BigUint::from_bytes_be(&bytes);
+        if n.bits() > 255 {
+            panic!("Overflow")
         }
-        Int256(num)
+        Int256(BigInt::from(n))
     }
 }
 
 impl From<Int256> for Uint256 {
     fn from(n: Int256) -> Self {
-        let num = n.to_bigint().unwrap();
-        if num.bits() > 256 {
-            panic!("overflow");
+        let mut bytes = n.0.to_biguint().unwrap().to_bytes_le();
+        assert!(bytes.len() <= 32);
+        let push_amount = 32 - bytes.len();
+        for _ in 0..push_amount {
+            bytes.push(0);
         }
-        Uint256(num.to_biguint().unwrap())
-    }
-}
-
-impl From<BigUint> for Uint256 {
-    fn from(n: BigUint) -> Self {
-        if n.bits() > 256 {
-            panic!("Overflow")
-        }
-        Uint256(n)
-    }
-}
-
-impl From<BigInt> for Uint256 {
-    fn from(n: BigInt) -> Self {
-        if n.bits() > 256 {
-            panic!("Overflow")
-        }
-        Uint256::from(Int256(n.abs()))
-    }
-}
-
-impl From<BigUint> for Int256 {
-    fn from(n: BigUint) -> Self {
-        if n.bits() > 256 {
-            panic!("Overflow")
-        }
-        Int256(n.to_bigint().unwrap())
-    }
-}
-
-impl From<BigInt> for Int256 {
-    fn from(n: BigInt) -> Self {
-        if n.bits() > 256 {
-            panic!("Overflow")
-        }
-        Int256(n)
+        Uint256::from_little_endian(&bytes)
     }
 }
 
@@ -313,16 +80,6 @@ macro_rules! impl_from_int {
                 Int256(BigInt::from(n))
             }
         }
-
-        impl From<$T> for Uint256 {
-            #[inline]
-            fn from(n: $T) -> Self {
-                if n.is_negative() {
-                    panic!("negative")
-                }
-                Uint256(BigUint::from(n as u64))
-            }
-        }
     };
 }
 
@@ -332,13 +89,6 @@ macro_rules! impl_from_uint {
             #[inline]
             fn from(n: $T) -> Self {
                 Int256(BigInt::from(n))
-            }
-        }
-
-        impl From<$T> for Uint256 {
-            #[inline]
-            fn from(n: $T) -> Self {
-                Uint256(BigUint::from(n as u64))
             }
         }
     };
@@ -363,13 +113,6 @@ macro_rules! impl_to {
                 (self.0).$F().unwrap()
             }
         }
-
-        impl Into<$T> for Uint256 {
-            #[inline]
-            fn into(self) -> $T {
-                (self.0).$F().unwrap()
-            }
-        }
     };
 }
 
@@ -386,12 +129,6 @@ impl_to!(usize, to_usize);
 
 impl<'a> From<&'a Int256> for Int256 {
     fn from(n: &Int256) -> Int256 {
-        n.clone()
-    }
-}
-
-impl<'a> From<&'a Uint256> for Uint256 {
-    fn from(n: &Uint256) -> Uint256 {
         n.clone()
     }
 }
@@ -599,12 +336,14 @@ mod tests {
     use serde_json;
 
     lazy_static! {
-        static ref BIGGEST_UINT: Uint256 =
-            Uint256(pow(BigUint::from(2 as u32), 256) - BigUint::from(1 as u32));
+        static ref BIGGEST_UINT: Uint256 = Uint256::from_little_endian(&[255u8; 32]);
         static ref BIGGEST_INT: Int256 = Int256(pow(BigInt::from(2), 255) - BigInt::from(1));
         static ref SMALLEST_INT: Int256 = Int256(pow(BigInt::from(-2), 255) + BigInt::from(1));
-        static ref BIGGEST_INT_AS_UINT: Uint256 =
-            Uint256(pow(BigUint::from(2 as u32), 255) - BigUint::from(1 as u32));
+        static ref BIGGEST_INT_AS_UINT: Uint256 = {
+            let mut biggest_int_le = [255u8; 32];
+            biggest_int_le[31] = 127;
+            Uint256::from_little_endian(&biggest_int_le)
+        };
     }
 
     #[derive(Serialize, Deserialize, Debug)]
@@ -620,7 +359,7 @@ mod tests {
             int: SMALLEST_INT.clone(),
         };
 
-        let expected = "{\"uint\":\"115792089237316195423570985008687907853269984665640564039457584007913129639935\",\"int\":\"-57896044618658097711785492504343953926634992332820282019728792003956564819967\"}";
+        let expected = "{\"uint\":\"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"int\":\"-57896044618658097711785492504343953926634992332820282019728792003956564819967\"}";
 
         let j = serde_json::to_string(&struc).unwrap();
 
@@ -742,7 +481,7 @@ mod tests {
     #[test]
     fn test_uint_from_sub_assign_no_panic() {
         let mut small = Uint256::from(1 as u32);
-        small -= 1;
+        small -= 1.into();
         assert_eq!(small, Uint256::from(0 as u32));
     }
 
@@ -750,7 +489,7 @@ mod tests {
     #[should_panic]
     fn test_uint_from_sub_assign_panic() {
         let mut small = Uint256::from(1 as u32);
-        small -= 2;
+        small -= 2.into();
     }
 
     #[test]
@@ -767,7 +506,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_uint_mul_panic() {
-        let _val = BIGGEST_UINT.clone() * Int256::from(2);
+        let _val: Uint256 = BIGGEST_UINT.clone() * Uint256::from(2);
     }
 
     #[test]
@@ -779,7 +518,7 @@ mod tests {
     #[should_panic]
     fn test_uint_mul_assign_panic() {
         let mut big = BIGGEST_UINT.clone();
-        big *= Int256::from(2);
+        big *= Uint256::from(2);
     }
 
     #[test]
@@ -792,25 +531,25 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_uint_from_mul_panic() {
-        let _val = BIGGEST_UINT.clone() * 2;
+        let _val = BIGGEST_UINT.clone() * Uint256::from(2);
     }
 
     #[test]
     fn test_uint_from_mul_no_panic() {
-        assert_eq!(Uint256::from(3) * 2, Uint256::from(6));
+        assert_eq!(Uint256::from(3) * Uint256::from(2), Uint256::from(6));
     }
 
     #[test]
     #[should_panic]
     fn test_uint_from_mul_assign_panic() {
         let mut big = BIGGEST_UINT.clone();
-        big *= 2;
+        big *= Uint256::from(2);
     }
 
     #[test]
     fn test_uint_from_mul_assign_no_panic() {
         let mut num = Uint256::from(3);
-        num *= 2;
+        num *= Uint256::from(2);
         assert_eq!(num, Uint256::from(6));
     }
 
@@ -858,42 +597,39 @@ mod tests {
     #[test]
     fn test_uint256() {
         assert!(
-            BIGGEST_UINT.checked_add(&Uint256::from(1 as u32)).is_none(),
+            BIGGEST_UINT.checked_add(Uint256::from(1 as u32)).is_none(),
             "should return None adding 1 to biggest"
         );
 
         assert!(
-            BIGGEST_UINT.checked_add(&Uint256::from(0 as u32)).is_some(),
+            BIGGEST_UINT.checked_add(Uint256::from(0 as u32)).is_some(),
             "should return Some adding 0 to biggest"
         );
 
         assert!(
             &Uint256::from(1 as u32)
-                .checked_sub(&Uint256::from(2 as u32))
+                .checked_sub(Uint256::from(2 as u32))
                 .is_none(),
             "should return None if RHS is larger than LHS"
         );
 
         assert!(
             &Uint256::from(1 as u32)
-                .checked_sub(&Uint256::from(1 as u32))
+                .checked_sub(Uint256::from(1 as u32))
                 .is_some(),
             "should return Some if RHS is not larger than LHS"
         );
 
         let num = &Uint256::from(1 as u32)
-            .checked_sub(&Uint256::from(1 as u32))
+            .checked_sub(Uint256::from(1 as u32))
             .unwrap()
-            .to_u32()
-            .unwrap();
-
+            .as_u32();
         assert_eq!(*num, 0, "1 - 1 should = 0");
 
         let num2 = &Uint256::from(346 as u32)
-            .checked_sub(&Uint256::from(23 as u32))
+            .checked_sub(Uint256::from(23 as u32))
             .unwrap()
-            .to_u32()
-            .unwrap();
+            .as_u32();
 
         assert_eq!(*num2, 323, "346 - 23 should = 323");
     }

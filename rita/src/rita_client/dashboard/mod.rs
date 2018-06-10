@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::net::{SocketAddr, TcpStream};
 
 use babel_monitor::Babel;
+use num256::Int256;
 use rita_common::dashboard::Dashboard;
 use rita_common::debt_keeper::{DebtKeeper, Dump};
 use rita_common::tunnel_manager::{GetListen, Listen, TunnelManager, UnListen};
@@ -153,7 +154,7 @@ impl Handler<SetWifiConfig> for Dashboard {
 pub struct NodeInfo {
     pub nickname: String,
     pub route_metric_to_exit: u16,
-    pub total_payments: i64,
+    pub total_payments: Int256,
     pub debt: i64,
     pub link_cost: u16,
     pub price_to_exit: u32,
@@ -194,7 +195,7 @@ impl Handler<GetNodeInfo> for Dashboard {
                             output.push(NodeInfo {
                                 nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
                                 route_metric_to_exit: route.metric,
-                                total_payments: debt_info.total_payment_recieved.clone().into(),
+                                total_payments: debt_info.total_payment_recieved.into(),
                                 debt: debt_info.debt.clone().into(),
                                 link_cost: route.refmetric,
                                 price_to_exit: route.price,
@@ -203,7 +204,7 @@ impl Handler<GetNodeInfo> for Dashboard {
                             output.push(NodeInfo {
                                 nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
                                 route_metric_to_exit: 0,
-                                total_payments: debt_info.total_payment_recieved.clone().into(),
+                                total_payments: debt_info.total_payment_recieved.into(),
                                 debt: debt_info.debt.clone().into(),
                                 link_cost: 0,
                                 price_to_exit: 0,
