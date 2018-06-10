@@ -274,7 +274,7 @@ impl DebtKeeper {
                 ident.mesh_ip,
                 d
             );
-            debt_data.total_payment_sent += d.clone();
+            debt_data.total_payment_sent += d.clone().into();
             debt_data.debt = Int256::from(0);
             DebtAction::MakePayment {
                 to: ident.clone(),
