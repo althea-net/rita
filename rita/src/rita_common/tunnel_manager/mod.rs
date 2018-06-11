@@ -251,7 +251,8 @@ impl TunnelManager {
     /// This gets the list of link-local neighbors, and then contacts them to get their
     /// Identity using `neighbor_inquiry` as well as their wireguard tunnel name
     pub fn get_neighbors(&mut self) -> ResponseFuture<Vec<(LocalIdentity, String, IpAddr)>, Error> {
-        KI.trigger_neighbor_disc().unwrap();
+        KI.trigger_neighbor_disc(&SETTING.get_network().peer_interfaces)
+            .unwrap();
         let neighs: Vec<
             Box<Future<Item = Option<(LocalIdentity, String, IpAddr)>, Error = ()>>,
         > = KI
@@ -461,6 +462,14 @@ mod tests {
     use actix::actors::ConnectorError;
     use std::collections::VecDeque;
     use std::net::Ipv4Addr;
+
+    fn vec_string_to_str<'a>(vstr: &'a Vec<String>) -> Vec<&'a str> {
+        let mut arr = Vec::new();
+        for i in 0..vstr.len() {
+            arr.push(vstr[i].as_str());
+        }
+        arr
+    }
 
     #[test]
     fn test_contact_neighbor_ipv4() {
@@ -853,213 +862,91 @@ mod tests {
 
     #[test]
     fn test_get_neighbors() {
-        let mut counter = 0;
+        let mut ip_route_add_counter = 0;
+        let mut iface_counter = 0;
+
+        let external_ips = ["fe80::1234", "1.1.1.1", "2.2.2.2"];
+        let wg_ifaces = ["wg0", "wg1", "wg2"];
+
         KI.set_mock(Box::new(move |program, args| {
-            if program == "ping6" {
-                return Ok(Output {
-                    stdout: b"".to_vec(),
-                    stderr: b"".to_vec(),
-                    status: ExitStatus::from_raw(0),
-                });
-            }
-
-            counter += 1;
-            trace!(
-                "program {:?}, args {:?}, counter {}",
-                program,
-                args,
-                counter
-            );
-
-            match counter {
-                1 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, &["link"]);
-                    Ok(Output {
-                        stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
+            match (program.as_str(), &vec_string_to_str(&args)[..]) {
+                ("ping6", _) => {
+                    return Ok(Output {
+                        stdout: b"".to_vec(),
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                2 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, &["neighbor"]);
-                    Ok(Output {
+                ("ip", ["neighbor"]) => {
+                    return Ok(Output {
                         stdout: b"fe80::1234 dev eth0 lladdr dc:6d:cd:ae:bd:a6 REACHABLE".to_vec(),
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                3 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, &["link"]);
-                    Ok(Output {
-                        stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                4 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, ["route", "list", "default"]);
-                    Ok(Output {
+                ("ip", ["route", "list", "default"]) => {
+                    return Ok(Output {
                         stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
                             .to_vec(),
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                5 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(
-                        args,
-                        [
-                            "route",
-                            "add",
-                            "fe80::1234",
-                            "via",
-                            "192.168.1.1",
-                            "dev",
-                            "eth0",
-                            "proto",
-                            "static",
-                            "metric",
-                            "600"
-                        ]
-                    );
-                    Ok(Output {
+                (
+                    "ip",
+                    ["route", "add", external_ip, "via", "192.168.1.1", "dev", "eth0", "proto", "static", "metric", "600"],
+                ) => {
+                    assert_eq!(external_ip, &external_ips[ip_route_add_counter]);
+                    ip_route_add_counter += 1;
+                    return Ok(Output {
                         stdout: b"ok".to_vec(),
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
-                    })
+                    });
                 }
-
-                6 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, ["route", "list", "default"]);
-                    Ok(Output {
-                        stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
-                            .to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                7 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(
-                        args,
-                        [
-                            "route",
-                            "add",
-                            "1.1.1.1",
-                            "via",
-                            "192.168.1.1",
-                            "dev",
-                            "eth0",
-                            "proto",
-                            "static",
-                            "metric",
-                            "600"
-                        ]
-                    );
-                    Ok(Output {
-                        stdout: b"ok".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                8 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, ["route", "list", "default"]);
-                    Ok(Output {
-                        stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
-                            .to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                9 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(
-                        args,
-                        [
-                            "route",
-                            "add",
-                            "2.2.2.2",
-                            "via",
-                            "192.168.1.1",
-                            "dev",
-                            "eth0",
-                            "proto",
-                            "static",
-                            "metric",
-                            "600"
-                        ]
-                    );
-                    Ok(Output {
-                        stdout: b"ok".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                10 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, &["link"]);
-                    Ok(Output {
-                        stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                11 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, &["link", "add", "wg0", "type", "wireguard"]);
-                    Ok(Output {
+                ("ip", ["link", "add", iface_name, "type", "wireguard"]) => {
+                    assert_eq!(iface_name, &wg_ifaces[iface_counter]);
+                    iface_counter += 1;
+                    return Ok(Output {
                         stdout: b"".to_vec(),
                         stderr: b"".to_vec(),
                         status: ExitStatus::from_raw(0),
                     })
                 }
-                12 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, &["link"]);
-                    Ok(Output {
-                        stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
+                ("ip", ["link"]) => {
+                    match iface_counter {
+                        0 => {
+                            return Ok(Output {
+                                stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
+                                stderr: b"".to_vec(),
+                                status: ExitStatus::from_raw(0),
+                            })
+                        }
+                        1 => {
+                            return Ok(Output {
+                                stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
 83: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                13 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, &["link", "add", "wg1", "type", "wireguard"]);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                14 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, &["link"]);
-                    Ok(Output {
-                        stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
+                                stderr: b"".to_vec(),
+                                status: ExitStatus::from_raw(0),
+                            })
+                        }
+                        2 => {
+                            return Ok(Output {
+                                stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
 83: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
 84: wg1: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
+                                stderr: b"".to_vec(),
+                                status: ExitStatus::from_raw(0),
+                            })
+                        }
+                        _ => {
+                            panic!("ip link called too many times")
+                        }
+                    }
                 }
-                15 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, &["link", "add", "wg2", "type", "wireguard"]);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                _ => panic!("command called too many times"),
+                (program, args) => (
+                    panic!("unimplemented program: {} {:?}", program, args)
+                    ),
             }
         }));
 
