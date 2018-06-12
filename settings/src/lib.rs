@@ -221,7 +221,6 @@ impl Default for ExitClientSettings {
             reg_details: Some(ExitRegistrationDetails {
                 zip_code: Some("1234".into()),
                 email: Some("1234@gmail.com".into()),
-                country: Some("Althea".into()),
             }),
             lan_nics: HashSet::new(),
         }
