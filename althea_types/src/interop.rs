@@ -31,10 +31,6 @@ pub struct ExitRegistrationDetails {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub zip_code: Option<String>,
 
-    // ISO country code
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub country: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
 }
