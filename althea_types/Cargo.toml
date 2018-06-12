@@ -12,3 +12,4 @@ serde_json = "1.0.8"
 hex = "0.3.1"
 eui48 = { git = "https://github.com/althea-mesh/eui48", features = ["serde"] }
 actix = {version="0.5.7" , optional=true}
+ethereum-types = {git="https://github.com/paritytech/primitives.git"}

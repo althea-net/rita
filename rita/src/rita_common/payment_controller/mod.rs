@@ -285,11 +285,11 @@ mod tests {
 
     use althea_types::{EthAddress, Identity, PaymentTx};
 
-    fn new_addr(x: u8) -> EthAddress {
-        EthAddress([x; 20])
+    fn new_addr(x: u64) -> EthAddress {
+        x.into()
     }
 
-    fn new_payment(x: u8) -> PaymentTx {
+    fn new_payment(x: u64) -> PaymentTx {
         PaymentTx {
             to: new_identity(x),
             from: new_identity(x),
@@ -297,7 +297,7 @@ mod tests {
         }
     }
 
-    fn new_identity(x: u8) -> Identity {
+    fn new_identity(x: u64) -> Identity {
         let y = x as u16;
         Identity {
             mesh_ip: IpAddr::V6(Ipv6Addr::new(y, y, y, y, y, y, y, y)),
@@ -312,7 +312,7 @@ mod tests {
         let _m = mock("POST", "/make_payment")
             .with_status(200)
             .with_body("payment OK")
-            .match_body("{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"0x1\"}")
+            .match_body("{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"0x1\"}")
             .create();
 
         // mock bounty hunter
@@ -320,7 +320,7 @@ mod tests {
             .with_status(200)
             .with_body("bounty OK")
             .match_body("{\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\
-            \"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"balance\":\"-1\",\"tx\":{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"0x1\"}}")
+            \"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"balance\":\"-1\",\"tx\":{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"0x1\"}}")
             .create();
 
         let mut pc = PaymentController::new(&new_identity(1));
@@ -339,7 +339,7 @@ mod tests {
         let _m = mock("POST", "/make_payment")
             .with_status(200)
             .with_body("payment OK")
-            .match_body("{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"0x1\"}")
+            .match_body("{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"0x1\"}")
             .expect(100)
             .create();
 
@@ -368,7 +368,7 @@ mod tests {
         let _m = mock("POST", "/update")
             .with_status(200)
             .with_body("bounty OK")
-            .match_body("{\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"balance\":\"1\",\"tx\":{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"0x1\"}}")
+            .match_body("{\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"balance\":\"1\",\"tx\":{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"0x1\"}}")
             .create();
 
         let mut pc = PaymentController::new(&new_identity(1));

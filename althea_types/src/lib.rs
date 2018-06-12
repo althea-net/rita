@@ -1,4 +1,5 @@
 extern crate base64;
+extern crate ethereum_types;
 extern crate eui48;
 extern crate hex;
 extern crate num256;
@@ -11,19 +12,19 @@ extern crate serde_derive;
 #[cfg(feature = "actix")]
 extern crate actix;
 
-pub mod bytes_32;
-pub mod eth_address;
-pub mod eth_private_key;
-pub mod eth_signature;
 pub mod interop;
 pub mod rtt;
 
-pub use bytes_32::Bytes32;
-pub use eth_address::EthAddress;
-pub use eth_private_key::EthPrivateKey;
-pub use eth_signature::EthSignature;
+use ethereum_types::{Address, Public, Secret, Signature, U256};
+
 pub use interop::*;
 pub use rtt::RTTimestamps;
+
+pub type Bytes32 = U256;
+pub type EthAddress = Address;
+pub type EthPubKey = Public;
+pub type EthPrivateKey = Secret;
+pub type EthSignature = Signature;
 
 #[cfg(test)]
 mod tests {
@@ -46,19 +47,19 @@ mod tests {
         identity: Identity,
     }
 
-    fn new_addr(x: u8) -> EthAddress {
-        EthAddress([x; 20])
+    fn new_addr(x: u64) -> EthAddress {
+        x.into()
     }
 
-    fn new_sig(x: u8) -> EthSignature {
-        EthSignature([x; 65])
+    fn new_sig(x: u64) -> EthSignature {
+        x.into()
     }
 
-    fn new_key(x: u8) -> EthPrivateKey {
-        EthPrivateKey([x; 64])
+    fn new_key(x: u64) -> EthPrivateKey {
+        x.into()
     }
 
-    fn new_payment(x: u8) -> PaymentTx {
+    fn new_payment(x: u64) -> PaymentTx {
         PaymentTx {
             to: new_identity(x),
             from: new_identity(x),
@@ -66,7 +67,7 @@ mod tests {
         }
     }
 
-    fn new_identity(x: u8) -> Identity {
+    fn new_identity(x: u64) -> Identity {
         let y = x as u16;
         Identity {
             mesh_ip: IpAddr::V6(Ipv6Addr::new(y, y, y, y, y, y, y, y)),
@@ -75,7 +76,7 @@ mod tests {
         }
     }
 
-    fn new_struct(x: u8) -> MyStruct {
+    fn new_struct(x: u64) -> MyStruct {
         MyStruct {
             addr: new_addr(x),
             sig: new_sig(x),
@@ -159,7 +160,7 @@ mod tests {
 
         // Serialize it to a JSON string.
         let j = serde_json::to_string(&my_struct).unwrap();
-        let s = "{\"addr\":\"0x0101010101010101010101010101010101010101\",\"sig\":\"0x0101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101\",\"key\":\"0x01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101\",\"payment\":{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"0x1\"},\"identity\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0101010101010101010101010101010101010101\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"}}";
+        let s = "{\"addr\":\"0x0000000000000000000000000000000000000001\",\"sig\":\"0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001\",\"key\":\"0x0000000000000000000000000000000000000000000000000000000000000001\",\"payment\":{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"0x1\"},\"identity\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"}}";
         // Print, write to a file, or send to an HTTP server.
         assert_eq!(s, j);
 
