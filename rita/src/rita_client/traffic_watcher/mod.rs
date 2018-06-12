@@ -156,7 +156,7 @@ mod tests {
     extern crate env_logger;
 
     use super::*;
-    use althea_types::eth_address::EthAddress;
+    use althea_types::EthAddress;
     use std::str::FromStr;
 
     #[test]

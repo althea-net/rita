@@ -89,6 +89,7 @@ fn get_country(ip: &IpAddr) -> Result<String, Error> {
 }
 
 #[test]
+#[ignore]
 fn test_get_country() {
     get_country(&"8.8.8.8".parse().unwrap()).unwrap();
 }
