@@ -209,7 +209,12 @@ impl Handler<SetupClient> for DbClient {
                                 .zip_code
                                 .clone()
                                 .unwrap_or("".to_string()),
-                            country: get_country(&msg.1)?,
+                            country: if SETTING.get_allowed_countries().is_empty() {
+                                String::new()
+                                } else {
+                                get_country(&msg.1)?
+
+                            }
                         };
 
                         diesel::insert_into(clients)
