@@ -1,6 +1,7 @@
 use actix::registry::SystemService;
 use actix_web::*;
 
+use futures;
 use futures::Future;
 
 use rita_exit::db_client::{DbClient, SetupClient};
@@ -14,6 +15,9 @@ use SETTING;
 use althea_types::{
     ExitClientDetails, ExitClientIdentity, ExitDetails, ExitServerReply, ExitState, RTTimestamps,
 };
+
+use rita_common::tunnel_manager::{GetPhyIpFromMeshIp, TunnelManager};
+
 use exit_db::models::Client;
 use failure::Error;
 use rita_exit::db_client::ListClients;
@@ -24,33 +28,42 @@ pub fn setup_request(
     req: HttpRequest,
 ) -> Box<Future<Item = Json<ExitServerReply>, Error = Error>> {
     trace!("Received requester identity, {:?}", their_id);
-    let remote_socket: SocketAddr = req.connection_info().remote().unwrap().parse().unwrap();
-    DbClient::from_registry()
-        .send(SetupClient(their_id.into_inner(), remote_socket.ip()))
-        .from_err()
-        .and_then(move |reply| {
-            let details;
-            let message;
-            let state;
-            if let Ok(ip) = reply {
-                details = Some(ExitClientDetails {
-                    client_internal_ip: ip,
-                });
-                message = "Registration OK".to_string();
-                state = ExitState::Registered;
-            } else {
-                details = None;
-                message = format!("{:?}", reply);
-                state = ExitState::Denied;
-            }
+    let remote_mesh_socket: SocketAddr = req.connection_info().remote().unwrap().parse().unwrap();
+    let remote_mesh_ip = remote_mesh_socket.ip();
+    Box::new(TunnelManager::from_registry().send(GetPhyIpFromMeshIp(remote_mesh_ip)).from_err().and_then(|phy_ip|{
+        match phy_ip {
+            Ok(phy_ip) => {
+                Box::new(DbClient::from_registry()
+                    .send(SetupClient(their_id.into_inner(), phy_ip))
+                    .from_err()
+                    .and_then(move |reply| {
+                        let details;
+                        let message;
+                        let state;
+                        if let Ok(ip) = reply {
+                            details = Some(ExitClientDetails {
+                                client_internal_ip: ip,
+                            });
+                            message = "Registration OK".to_string();
+                            state = ExitState::Registered;
+                        } else {
+                            details = None;
+                            message = format!("{:?}", reply);
+                            state = ExitState::Denied;
+                        }
 
-            Ok(Json(ExitServerReply {
-                details,
-                state,
-                message,
-            }))
-        })
-        .responder()
+                        Ok(Json(ExitServerReply {
+                            details,
+                            state,
+                            message,
+                        }))
+                    })) as FutureResponse<Json<ExitServerReply>, Error>
+            },
+            Err(e) => {
+                Box::new(futures::future::err(e)) as FutureResponse<Json<ExitServerReply>, Error>
+            }
+        }
+    }))
 }
 
 pub fn get_exit_info(_req: HttpRequest) -> Result<Json<ExitDetails>, Error> {
