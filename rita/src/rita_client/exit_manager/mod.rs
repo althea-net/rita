@@ -1,14 +1,16 @@
 use actix::prelude::*;
 use actix::registry::SystemService;
 
-use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState};
+use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState, ExitServerReply};
 
 use settings::{RitaClientSettings, RitaCommonSettings};
 use SETTING;
 
 use rita_client::rita_loop::Tick;
 use rita_client::traffic_watcher::{TrafficWatcher, Watch};
-use rita_common::http_client::{ExitSetupRequest, GetExitInfo, HTTPClient};
+use rita_common::http_client::{
+    get_exit_info, send_exit_setup_request, ExitSetupRequest, GetExitInfo,
+};
 
 use futures::Future;
 
@@ -44,36 +46,54 @@ fn linux_setup_exit_tunnel() -> Result<(), Error> {
     Ok(())
 }
 
-fn exit_general_details_request(exit: String) -> ResponseFuture<(), Error> {
+fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = Error> {
     let exits = SETTING.get_exits();
     let current_exit = &exits[&exit];
     let exit_server = current_exit.id.mesh_ip;
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
 
-    Box::new(
-        HTTPClient::from_registry()
-            .send(GetExitInfo { to: endpoint })
-            .from_err()
-            .and_then(move |exit_details| {
-                let exit_details = exit_details?;
+    get_exit_info(GetExitInfo { to: endpoint }).and_then(move |exit_details| {
+        let mut exits = SETTING.get_exits_mut();
 
-                let mut exits = SETTING.get_exits_mut();
+        let current_exit = exits.get_mut(&exit).unwrap();
 
-                let current_exit = exits.get_mut(&exit).unwrap();
+        current_exit.state = ExitState::GotInfo;
 
-                current_exit.state = ExitState::GotInfo;
+        trace!("Got exit info response {:?}", exit_details.clone());
 
-                trace!("Got exit info response {:?}", exit_details.clone());
+        current_exit.general_details = Some(exit_details);
 
-                current_exit.general_details = Some(exit_details);
-
-                Ok(())
-            }),
-    )
+        Ok(())
+    })
 }
 
-fn exit_setup_request(exit: String) -> ResponseFuture<(), Error> {
+fn exit_setup_stuff(exit_response: Result<ExitServerReply, Error>, exit: String) -> Result<(), Error> {
+
+    let exit_response = exit_response.unwrap();
+
+    let mut exits = SETTING.get_exits_mut();
+
+    let current_exit = exits.get_mut(&exit).unwrap();
+
+    current_exit.message = exit_response.message.clone();
+    current_exit.state = exit_response.state.clone();
+
+    trace!("Got exit setup response {:?}", exit_response.clone());
+
+    match exit_response.details {
+        Some(details) => {
+            current_exit.our_details = Some(ExitClientDetails {
+                client_internal_ip: details.client_internal_ip,
+            });
+        }
+        None => bail!("Got no details from exit {:?}", exit_response.clone()),
+    }
+
+    Ok(())
+}
+
+fn exit_setup_request(exit: String) -> impl Future<Item = (), Error = Error> {
     let exits = SETTING.get_exits();
     let current_exit = &exits[&exit];
     let exit_server = current_exit.id.mesh_ip;
@@ -85,37 +105,13 @@ fn exit_setup_request(exit: String) -> ResponseFuture<(), Error> {
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
 
-    Box::new(
-        HTTPClient::from_registry()
-            .send(ExitSetupRequest {
-                to: endpoint,
-                ident,
-            })
-            .from_err()
-            .and_then(move |exit_response| {
-                let exit_response = exit_response?;
-
-                let mut exits = SETTING.get_exits_mut();
-
-                let current_exit = exits.get_mut(&exit).unwrap();
-
-                current_exit.message = exit_response.message.clone();
-                current_exit.state = exit_response.state.clone();
-
-                trace!("Got exit setup response {:?}", exit_response.clone());
-
-                match exit_response.details {
-                    Some(details) => {
-                        current_exit.our_details = Some(ExitClientDetails {
-                            client_internal_ip: details.client_internal_ip,
-                        });
-                    }
-                    None => bail!("Got no details from exit"),
-                }
-
-                Ok(())
-            }),
-    )
+    send_exit_setup_request(ExitSetupRequest {
+        to: endpoint,
+        ident,
+    }).from_err()
+        .then(move |exit_response| {
+            exit_setup_stuff(exit_response, exit)
+        })
 }
 
 /// An actor which pays the exit
