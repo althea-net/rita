@@ -109,9 +109,6 @@ fn verify_identity(details: &ExitRegistrationDetails, request_ip: &IpAddr) -> Re
             bail!("country not allowed")
         }
 
-        if details.country != Some(country) {
-            bail!("country does not match")
-        }
         Ok(())
     }
 }
@@ -125,7 +122,7 @@ impl Handler<SetupClient> for DbClient {
 
         match verify_identity(&msg.0.reg_details, &msg.1) {
             Ok(_) => {
-                let client = msg.0;
+                let client = msg.0.clone();
 
                 conn.transaction::<_, Error, _>(|| {
                     let dummy = models::Client {
@@ -212,7 +209,12 @@ impl Handler<SetupClient> for DbClient {
                                 .zip_code
                                 .clone()
                                 .unwrap_or("".to_string()),
-                            country: client.reg_details.country.clone().unwrap_or("".to_string()),
+                            country: if SETTING.get_allowed_countries().is_empty() {
+                                String::new()
+                                } else {
+                                get_country(&msg.1)?
+
+                            }
                         };
 
                         diesel::insert_into(clients)
