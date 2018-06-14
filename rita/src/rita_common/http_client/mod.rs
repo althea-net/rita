@@ -69,32 +69,25 @@ pub struct GetExitInfo {
     pub to: SocketAddr,
 }
 
-impl Message for GetExitInfo {
-    type Result = Result<ExitDetails, Error>;
-}
+pub fn get_exit_info(msg: GetExitInfo) -> impl Future<Item = ExitDetails, Error = Error> {
+    let endpoint = format!("http://[{}]:{}/exit_info", msg.to.ip(), msg.to.port());
 
-impl Handler<GetExitInfo> for HTTPClient {
-    type Result = ResponseFuture<ExitDetails, Error>;
-    fn handle(&mut self, msg: GetExitInfo, _: &mut Self::Context) -> Self::Result {
-        let endpoint = format!("http://[{}]:{}/exit_info", msg.to.ip(), msg.to.port());
+    let stream = TokioTcpStream::connect2(&msg.to);
 
-        let stream = TokioTcpStream::connect2(&msg.to);
-
-        Box::new(stream.from_err().and_then(move |stream| {
-            client::get(&endpoint)
-                .with_connection(Connection::from_stream(stream))
-                .finish()
-                .unwrap()
-                .send()
-                .from_err()
-                .and_then(|response| {
-                    response
-                        .json()
-                        .from_err()
-                        .and_then(|val: ExitDetails| Ok(val))
-                })
-        }))
-    }
+    stream.from_err().and_then(move |stream| {
+        client::get(&endpoint)
+            .with_connection(Connection::from_stream(stream))
+            .finish()
+            .unwrap()
+            .send()
+            .from_err()
+            .and_then(|response| {
+                response
+                    .json()
+                    .from_err()
+                    .and_then(|val: ExitDetails| Ok(val))
+            })
+    })
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -103,30 +96,25 @@ pub struct ExitSetupRequest {
     pub ident: ExitClientIdentity,
 }
 
-impl Message for ExitSetupRequest {
-    type Result = Result<ExitServerReply, Error>;
-}
+pub fn send_exit_setup_request(
+    msg: ExitSetupRequest,
+) -> impl Future<Item = ExitServerReply, Error = Error> {
+    let endpoint = format!("http://[{}]:{}/setup", msg.to.ip(), msg.to.port());
 
-impl Handler<ExitSetupRequest> for HTTPClient {
-    type Result = ResponseFuture<ExitServerReply, Error>;
-    fn handle(&mut self, msg: ExitSetupRequest, _: &mut Self::Context) -> Self::Result {
-        let endpoint = format!("http://[{}]:{}/setup", msg.to.ip(), msg.to.port());
+    let stream = TokioTcpStream::connect2(&msg.to);
 
-        let stream = TokioTcpStream::connect2(&msg.to);
-
-        Box::new(stream.from_err().and_then(move |stream| {
-            client::post(&endpoint)
-                .with_connection(Connection::from_stream(stream))
-                .json(msg.ident)
-                .unwrap()
-                .send()
-                .from_err()
-                .and_then(|response| {
-                    response
-                        .json()
-                        .from_err()
-                        .and_then(|val: ExitServerReply| Ok(val))
-                })
-        }))
-    }
+    stream.from_err().and_then(move |stream| {
+        client::post(&endpoint)
+            .with_connection(Connection::from_stream(stream))
+            .json(msg.ident)
+            .unwrap()
+            .send()
+            .from_err()
+            .and_then(|response| {
+                response
+                    .json()
+                    .from_err()
+                    .and_then(|val: ExitServerReply| Ok(val))
+            })
+    })
 }
