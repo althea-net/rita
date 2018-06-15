@@ -37,12 +37,28 @@ pub struct ExitRegistrationDetails {
 
 /// This is the state an exit can be in
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+#[serde(tag = "state")]
 pub enum ExitState {
     New,
-    GotInfo,
-    Pending,
-    Registered,
-    Denied,
+    GotInfo{
+        details: ExitClientDetails,
+        message: String
+    },
+    Registering{
+        details: ExitClientDetails,
+        message: String
+    },
+    Pending{
+        details: ExitClientDetails,
+        message: String
+    },
+    Registered{
+        details: ExitClientDetails,
+        message: String
+    },
+    Denied{
+        message: String
+    },
     Disabled,
 }
 
