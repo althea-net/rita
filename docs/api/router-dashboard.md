@@ -15,6 +15,7 @@ This file documents the dashboard API found in Rita client.
 ```
 {
     "balance":-1029470595
+    "version": "v0.1.1"
 }
 ```
 
