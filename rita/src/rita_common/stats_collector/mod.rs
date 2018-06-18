@@ -37,18 +37,21 @@ impl Actor for StatsCollector {
 impl Handler<Tick> for StatsCollector {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, _ctx: &mut SyncContext<Self>) -> Self::Result {
-        if let Some(stats_server) = SETTING.get_stats_server_settings() {
+        let stats_server = SETTING.get_stats_server_settings();
+
+        if stats_server.is_some() && stats_server.unwrap().stats_enabled {
             trace!("preparing to send stats...");
 
+            let stats_server = SETTING.get_stats_server_settings().unwrap();
+
+            trace!("building stats struct...");
             let stats = Stats {
                 proc_stat: KI.get_proc_stat()?,
                 proc_load_avg: KI.get_proc_load_avg()?,
                 devices: KI.get_device_stats()?,
-                netstat: KI.get_netstat()?,
                 routes: KI.get_route_stats()?,
-                snmp: KI.get_snmp_stats()?,
-                wg: KI.get_wg_stats()?,
-                from: SETTING.get_identity(),
+                meminfo: KI.get_meminfo_stats()?,
+                cpuinfo: KI.get_cpuinfo_stats()?,
             };
 
             info!("Sending stat server update: {:?}", stats);
@@ -62,9 +65,9 @@ impl Handler<Tick> for StatsCollector {
             let mut r = self.client.post(&stat_server_url).json(&stats).send()?;
 
             if r.status().is_success() {
-                trace!("Successfully in sending stats {:?}", r.text());
+                trace!("Successful at sending stats {:?}", r.text());
             } else {
-                error!("Unsuccessfully in sending stats");
+                error!("Unsuccessful at sending stats");
                 info!(
                     "Received error from stats server: {:?}",
                     r.text().unwrap_or(String::from("No message received"))
