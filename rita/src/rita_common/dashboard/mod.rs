@@ -29,6 +29,7 @@ impl Default for Dashboard {
 #[derive(Serialize)]
 pub struct OwnInfo {
     pub balance: i64,
+    pub version: String,
 }
 
 pub struct GetOwnInfo;
@@ -45,7 +46,12 @@ impl Handler<GetOwnInfo> for Dashboard {
             PaymentController::from_registry()
                 .send(GetOwnBalance {})
                 .from_err()
-                .and_then(|res| Ok(OwnInfo { balance: res? })),
+                .and_then(|res| {
+                    Ok(OwnInfo {
+                        balance: res?,
+                        version: env!("CARGO_PKG_VERSION").to_string(),
+                    })
+                }),
         )
     }
 }
