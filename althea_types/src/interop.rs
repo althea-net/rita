@@ -144,9 +144,7 @@ pub struct Stats {
     pub proc_stat: String,
     pub proc_load_avg: String,
     pub devices: String,
-    pub netstat: String,
     pub routes: String,
-    pub snmp: String,
-    pub wg: String,
-    pub from: Identity,
+    pub meminfo: String,
+    pub cpuinfo: String,
 }
