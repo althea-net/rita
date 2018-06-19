@@ -616,6 +616,8 @@ impl RitaSettingsStruct {
 
         let settings = Arc::new(RwLock::new(settings));
 
+        trace!("starting with settings: {:?}", settings.read().unwrap());
+
         spawn_watch_thread(settings.clone(), file_name).unwrap();
 
         Ok(settings)
@@ -623,20 +625,6 @@ impl RitaSettingsStruct {
 
     pub fn get_exit_id(&self) -> Option<Identity> {
         Some(self.exit_client.get_current_exit().as_ref()?.id.clone())
-    }
-}
-
-impl FileWrite for RitaSettingsStruct {
-    fn write(&self, file_name: &str) -> Result<(), Error> {
-        let ser = toml::Value::try_from(self.clone())?;
-        let ser = toml::to_string(&ser)?;
-        let mut file = File::create(file_name)?;
-        file.write_all(ser.as_bytes())?;
-        file.flush().unwrap();
-
-        // We edited disk contents, force global sync
-        KI.fs_sync()?;
-        Ok(())
     }
 }
 
@@ -655,19 +643,27 @@ impl RitaExitSettingsStruct {
 
         let settings = Arc::new(RwLock::new(settings));
 
+        trace!("starting with settings: {:?}", settings.read().unwrap());
+
         spawn_watch_thread(settings.clone(), file_name).unwrap();
 
         Ok(settings)
     }
 }
 
-impl FileWrite for RitaExitSettingsStruct {
+impl<T> FileWrite for T
+where
+    T: Serialize,
+{
     fn write(&self, file_name: &str) -> Result<(), Error> {
         let ser = toml::Value::try_from(self.clone())?;
         let ser = toml::to_string(&ser)?;
         let mut file = File::create(file_name)?;
         file.write_all(ser.as_bytes())?;
         file.flush().unwrap();
+        file.sync_all().unwrap();
+        drop(file);
+        KI.fs_sync()?;
         Ok(())
     }
 }
