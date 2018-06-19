@@ -252,6 +252,7 @@ impl ExitClientSettings {
 pub struct StatsServerSettings {
     pub stats_address: String,
     pub stats_port: u16,
+    pub stats_enabled: bool,
 }
 
 /// This is the main struct for rita
