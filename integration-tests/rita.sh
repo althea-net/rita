@@ -5,10 +5,12 @@ NETLAB_PATH="deps/network-lab/network-lab.sh"
 REMOTE_A=${REMOTE_A:=https://github.com/althea-mesh/althea_rs.git}
 REVISION_A=${REVISION_A:=master}
 DIR_A=${DIR_A:=althea_rs_a} # Don't override without good reason, this one and $DIR_B are git ignored
+TARGET_DIR_A=${TARGET_DIR_A:=target_a} # Don't override without good reason, this one and $TARGET_DIR_B are git ignored
 
 REMOTE_B=${REMOTE_B:=$REMOTE_A}
 REVISION_B=${REVISION_B:=release}
 DIR_B=${DIR_B:=althea_rs_b}
+TARGET_DIR_B=${TARGET_DIR_B:=target_b}
 
 set -euxo pipefail
 
@@ -18,6 +20,9 @@ build_rev() {
   remote=$1
   revision=$2
   dir=$3
+  target_dir=$4
+
+  mkdir -p $target_dir
 
   if [ -z "${NO_PULL-}" ] ; then
     rm -rf $dir
@@ -28,7 +33,7 @@ build_rev() {
 
     git checkout $revision
 
-    cargo build --all
+    CARGO_TARGET_DIR="../$target_dir" cargo build --all
 
     # Exit database
     pushd exit_db
@@ -65,16 +70,16 @@ fi
 
 # Only care about revisions if a compat layout was picked
 if [ ! -z "${COMPAT_LAYOUT-}" ] ; then
-  build_rev $REMOTE_A $REVISION_A $DIR_A
-  export RITA_A="$DIR_A/target/debug/rita"
-  export RITA_EXIT_A="$DIR_A/target/debug/rita_exit"
-  export BOUNTY_HUNTER_A="$DIR_A/target/debug/bounty_hunter"
+  build_rev $REMOTE_A $REVISION_A $DIR_A $TARGET_DIR_A
+  export RITA_A="$target_dir/debug/rita"
+  export RITA_EXIT_A="$target_dir/debug/rita_exit"
+  export BOUNTY_HUNTER_A="$target_dir/debug/bounty_hunter"
 
 
-  build_rev $REMOTE_B $REVISION_B $DIR_B
-  export RITA_B="$DIR_B/target/debug/rita"
-  export RITA_EXIT_B="$DIR_B/target/debug/rita_exit"
-  export BOUNTY_HUNTER_B="$DIR_B/target/debug/bounty_hunter"
+  build_rev $REMOTE_B $REVISION_B $DIR_B $TARGET_DIR_B
+  export RITA_B="$target_dir/debug/rita"
+  export RITA_EXIT_B="$target_dir/debug/rita_exit"
+  export BOUNTY_HUNTER_B="$target_dir/debug/bounty_hunter"
 else
   pushd ..
     cargo build --all
