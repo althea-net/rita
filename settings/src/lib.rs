@@ -285,9 +285,9 @@ impl Default for ExitNetworkSettings {
             exit_hello_port: 4875,
             wg_tunnel_port: 59999,
             exit_price: 10,
-            own_internal_ip: "172.168.1.254".parse().unwrap(),
-            exit_start_ip: "172.168.1.100".parse().unwrap(),
-            netmask: 24,
+            own_internal_ip: "172.16.255.254".parse().unwrap(),
+            exit_start_ip: "172.16.0.0".parse().unwrap(),
+            netmask: 12,
         }
     }
 }
