@@ -12,6 +12,7 @@ use num256::Int256;
 use rita_common::dashboard::Dashboard;
 use rita_common::debt_keeper::{DebtKeeper, Dump};
 use rita_common::tunnel_manager::{GetListen, Listen, TunnelManager, UnListen};
+use settings::ExitServer;
 use settings::RitaClientSettings;
 use settings::RitaCommonSettings;
 use KI;
@@ -180,6 +181,7 @@ impl Handler<GetNodeInfo> for Dashboard {
                     )?;
                     let mut babel = Babel::new(stream);
                     babel.start_connection()?;
+                    let route_table_sample = babel.parse_routes()?;
 
                     let res = res?;
 
@@ -191,7 +193,11 @@ impl Handler<GetNodeInfo> for Dashboard {
                     for (identity, debt_info) in res.iter() {
                         if current_exit.is_some() {
                             let exit_ip = current_exit.unwrap().id.mesh_ip;
-                            let route = babel.get_route_via_neigh(identity.mesh_ip, exit_ip)?;
+                            let route = babel.get_route_via_neigh(
+                                identity.mesh_ip,
+                                exit_ip,
+                                &route_table_sample,
+                            )?;
                             output.push(NodeInfo {
                                 nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
                                 route_metric_to_exit: route.metric,
@@ -215,5 +221,80 @@ impl Handler<GetNodeInfo> for Dashboard {
                     Ok(output)
                 }),
         )
+    }
+}
+
+#[derive(Serialize)]
+pub struct ExitInfo {
+    nickname: String,
+    exit_settings: ExitServer,
+    is_selected: bool,
+    have_route: bool,
+    is_reachable: bool,
+    is_tunnel_working: bool,
+}
+
+pub struct GetExitInfo;
+
+impl Message for GetExitInfo {
+    type Result = Result<Vec<ExitInfo>, Error>;
+}
+
+/// Checks if the provided exit is selected
+fn is_selected(exit: &ExitServer, current_exit: Option<&ExitServer>) -> Result<bool, Error> {
+    match current_exit {
+        None => Ok(false),
+        Some(i) => Ok(i == exit),
+    }
+}
+
+/// Determines if the provide exit is currently selected, if it's setup, and then if it can be reached over
+/// the exit tunnel via a ping
+fn is_tunnel_working(exit: &ExitServer, current_exit: Option<&ExitServer>) -> Result<bool, Error> {
+    if current_exit.is_some() && is_selected(exit, current_exit)? {
+        if current_exit.unwrap().general_details.is_some() {
+            let internal_ip = current_exit
+                .unwrap()
+                .clone()
+                .general_details
+                .unwrap()
+                .server_internal_ip;
+            KI.ping_check_v4(&internal_ip)
+        } else {
+            return Ok(false);
+        }
+    } else {
+        return Ok(false);
+    }
+}
+
+impl Handler<GetExitInfo> for Dashboard {
+    type Result = Result<Vec<ExitInfo>, Error>;
+
+    fn handle(&mut self, _msg: GetExitInfo, _ctx: &mut Self::Context) -> Self::Result {
+        let stream = TcpStream::connect::<SocketAddr>(
+            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
+        )?;
+        let mut babel = Babel::new(stream);
+        babel.start_connection()?;
+        let route_table_sample = babel.parse_routes()?;
+
+        let mut output = Vec::new();
+
+        let exit_client = SETTING.get_exit_client();
+        let current_exit = exit_client.get_current_exit();
+
+        for exit in exit_client.exits.clone().into_iter() {
+            output.push(ExitInfo {
+                nickname: exit.0,
+                exit_settings: exit.1.clone(),
+                is_selected: is_selected(&exit.1, current_exit)?,
+                have_route: babel.do_we_have_route(&exit.1.id.mesh_ip, &route_table_sample)?,
+                is_reachable: KI.ping_check_v6(&exit.1.id.mesh_ip)?,
+                is_tunnel_working: is_tunnel_working(&exit.1, current_exit)?,
+            })
+        }
+
+        Ok(output)
     }
 }
