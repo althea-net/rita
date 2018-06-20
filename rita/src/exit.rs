@@ -182,7 +182,9 @@ fn main() {
         App::new()
             .resource("/setup", |r| r.method(Method::POST).with2(setup_request))
             .resource("/list", |r| r.method(Method::POST).with(list_clients))
-            .resource("/exit_info", |r| r.method(Method::GET).with(get_exit_info))
+            .resource("/exit_info", |r| {
+                r.method(Method::GET).with(get_exit_info_http)
+            })
             .resource("/rtt", |r| r.method(Method::GET).with(rtt))
     }).bind(format!(
         "[::0]:{}",

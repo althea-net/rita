@@ -70,6 +70,17 @@ EXIT_SETTINGS = {
     }
 }
 
+EXIT_SELECT = {
+    "exits": {
+        "exit_a": {
+            "info": {
+                "state": "Registering",
+            },
+            "registration_port": 4875,
+        }
+    },
+}
+
 COMPAT_LAYOUTS = {
         None: ['a'] * 7,  # Use *_A binaries for every node
         'old_exit': ['a'] * 4 + ['b'] + ['a'] * 2,  # The exit sports Rita B
@@ -297,6 +308,11 @@ def switch_binaries(node_id):
         print(("New binary paths:\nRITA:\t\t{}\nRITA_EXIT:\t{}\n" +
             "BOUNTY_HUNTER:\t{}").format(RITA, RITA_EXIT, BOUNTY_HUNTER))
 
+def register_to_exit(node):
+    id = node.id
+    os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
+              .format(id=id, data=json.dumps({"exit_client": EXIT_SELECT})))
+
 def start_rita(node):
     id = node.id
     settings = get_rita_defaults()
@@ -311,7 +327,7 @@ def start_rita(node):
         'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA,
                                                                               pwd=dname)
         )
-    time.sleep(1)
+    time.sleep(1.5)
     os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
               .format(id=id, data=json.dumps({"exit_client": EXIT_SETTINGS})))
 
@@ -729,6 +745,13 @@ if __name__ == "__main__":
         colored("%d seconds", "red") +
         ", quitting...") % CONVERGENCE_DELAY)
         sys.exit(1)
+
+    print("Waiting for clients to get info from exits")
+    time.sleep(5)
+
+    for k, v in world.nodes.items():
+        register_to_exit(v)
+
 
     if DEBUG:
         print("Debug mode active, examine the mesh and press y to continue " +
