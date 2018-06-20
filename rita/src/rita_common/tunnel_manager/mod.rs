@@ -160,7 +160,7 @@ impl Handler<GetPhyIpFromMeshIp> for TunnelManager {
             if let IpNetwork::V6(ref ip) = route.prefix {
                 // Only host addresses and installed routes
                 if ip.get_netmask() == 128 && route.installed {
-                    if IpAddr::V6(ip.get_network_address()) == mesh_ip.0{
+                    if IpAddr::V6(ip.get_network_address()) == mesh_ip.0 {
                         route_to_des = Some(route.clone());
                     }
                 }
@@ -168,12 +168,8 @@ impl Handler<GetPhyIpFromMeshIp> for TunnelManager {
         }
 
         match route_to_des {
-            Some(route) => {
-                Ok(KI.get_wg_remote_ip(&route.iface)?)
-            },
-            None => {
-                bail!("No route found for mesh ip: {:?}", mesh_ip)
-            }
+            Some(route) => Ok(KI.get_wg_remote_ip(&route.iface)?),
+            None => bail!("No route found for mesh ip: {:?}", mesh_ip),
         }
     }
 }

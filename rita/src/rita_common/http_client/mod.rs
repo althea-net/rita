@@ -8,7 +8,7 @@ use actix_web::*;
 
 use futures::Future;
 
-use althea_types::{ExitClientIdentity, ExitDetails, ExitServerReply, Identity, LocalIdentity};
+use althea_types::{Identity, LocalIdentity};
 
 use settings::RitaCommonSettings;
 use SETTING;
@@ -73,59 +73,4 @@ impl Handler<Hello> for HTTPClient {
             })
         }))
     }
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub struct GetExitInfo {
-    pub to: SocketAddr,
-}
-
-pub fn get_exit_info(msg: GetExitInfo) -> impl Future<Item = ExitDetails, Error = Error> {
-    let endpoint = format!("http://[{}]:{}/exit_info", msg.to.ip(), msg.to.port());
-
-    let stream = TokioTcpStream::connect2(&msg.to);
-
-    stream.from_err().and_then(move |stream| {
-        client::get(&endpoint)
-            .with_connection(Connection::from_stream(stream))
-            .finish()
-            .unwrap()
-            .send()
-            .from_err()
-            .and_then(|response| {
-                response
-                    .json()
-                    .from_err()
-                    .and_then(|val: ExitDetails| Ok(val))
-            })
-    })
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub struct ExitSetupRequest {
-    pub to: SocketAddr,
-    pub ident: ExitClientIdentity,
-}
-
-pub fn send_exit_setup_request(
-    msg: ExitSetupRequest,
-) -> impl Future<Item = ExitServerReply, Error = Error> {
-    let endpoint = format!("http://[{}]:{}/setup", msg.to.ip(), msg.to.port());
-
-    let stream = TokioTcpStream::connect2(&msg.to);
-
-    stream.from_err().and_then(move |stream| {
-        client::post(&endpoint)
-            .with_connection(Connection::from_stream(stream))
-            .json(msg.ident)
-            .unwrap()
-            .send()
-            .from_err()
-            .and_then(|response| {
-                response
-                    .json()
-                    .from_err()
-                    .and_then(|val: ExitServerReply| Ok(val))
-            })
-    })
 }

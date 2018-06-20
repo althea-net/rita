@@ -41,10 +41,7 @@ use althea_kernel_interface::TestCommandRunner;
 
 use config::Config;
 
-use althea_types::{
-    DeserializeWith, EthAddress, ExitClientDetails, ExitDetails, ExitRegistrationDetails,
-    ExitState, Identity,
-};
+use althea_types::{EthAddress, ExitRegistrationDetails, ExitState, Identity};
 
 use num256::Int256;
 
@@ -192,20 +189,9 @@ pub struct ExitServer {
     pub id: Identity,
     /// The port over which we will reach the exit apis on over the mesh
     pub registration_port: u16,
-    /// This stores information which the exit gives us from registration, and is specific to this
-    /// particular node (such as local ip on the exit tunnel)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub our_details: Option<ExitClientDetails>,
-    /// This stores information on the exit which is consistent across all nodes which the exit
-    /// serves (for example the exit's own ip/gateway ip within the exit tunnel)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub general_details: Option<ExitDetails>,
-    /// The state the exit is in, used to control if/when/how to poll the exit
-    #[serde(default, deserialize_with = "ExitState::deserialize_with")]
-    pub state: ExitState,
-    /// The message returned from the exit from registration
+    /// The state and data about the exit
     #[serde(default)]
-    pub message: String,
+    pub info: ExitState,
 }
 
 /// This struct is used by rita to encapsulate all the state/information needed to connect/register

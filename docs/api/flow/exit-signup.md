@@ -37,5 +37,10 @@ msc {
 
   frontend->rita [ label = "GET /settings" ] ;
   frontend<-rita [ label = "Exit list (state registered)" ] ;
+
+  ---  [ label = "every 5 seconds" ];
+
+    rita->exit [ label = "POST /status" ] ;
+    rita<-exit [ label = "state: Registered/New/GotInfo" ] ;
 }
 ```
