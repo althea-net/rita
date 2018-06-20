@@ -1,18 +1,19 @@
 use actix::prelude::*;
 use actix::registry::SystemService;
+use actix_web::client::Connection;
+use actix_web::*;
 
-use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState, ExitServerReply};
+use althea_types::{ExitClientIdentity, ExitState};
 
 use settings::{RitaClientSettings, RitaCommonSettings};
 use SETTING;
 
 use rita_client::rita_loop::Tick;
 use rita_client::traffic_watcher::{TrafficWatcher, Watch};
-use rita_common::http_client::{
-    get_exit_info, send_exit_setup_request, ExitSetupRequest, GetExitInfo,
-};
 
 use futures::Future;
+
+use tokio_core::net::TcpStream as TokioTcpStream;
 
 use failure::Error;
 use std::net::SocketAddr;
@@ -23,8 +24,8 @@ fn linux_setup_exit_tunnel() -> Result<(), Error> {
 
     let exit_client = SETTING.get_exit_client();
     let current_exit = exit_client.get_current_exit().unwrap();
-    let general_details = current_exit.general_details.as_ref().unwrap();
-    let our_details = current_exit.our_details.as_ref().unwrap();
+    let general_details = current_exit.info.general_details().unwrap();
+    let our_details = current_exit.info.our_details().unwrap();
 
     KI.setup_wg_if_named("wg_exit")?;
     KI.set_client_exit_tunnel_config(
@@ -46,6 +47,51 @@ fn linux_setup_exit_tunnel() -> Result<(), Error> {
     Ok(())
 }
 
+pub fn get_exit_info(to: &SocketAddr) -> impl Future<Item = ExitState, Error = Error> {
+    let endpoint = format!("http://[{}]:{}/exit_info", to.ip(), to.port());
+
+    let stream = TokioTcpStream::connect2(to);
+
+    stream.from_err().and_then(move |stream| {
+        client::get(&endpoint)
+            .with_connection(Connection::from_stream(stream))
+            .finish()
+            .unwrap()
+            .send()
+            .from_err()
+            .and_then(|response| {
+                response
+                    .json()
+                    .from_err()
+                    .and_then(|val: ExitState| Ok(val))
+            })
+    })
+}
+
+pub fn send_exit_setup_request(
+    to: &SocketAddr,
+    ident: ExitClientIdentity,
+) -> impl Future<Item = ExitState, Error = Error> {
+    let endpoint = format!("http://[{}]:{}/setup", to.ip(), to.port());
+
+    let stream = TokioTcpStream::connect2(to);
+
+    stream.from_err().and_then(move |stream| {
+        client::post(&endpoint)
+            .with_connection(Connection::from_stream(stream))
+            .json(ident)
+            .unwrap()
+            .send()
+            .from_err()
+            .and_then(|response| {
+                response
+                    .json()
+                    .from_err()
+                    .and_then(|val: ExitState| Ok(val))
+            })
+    })
+}
+
 fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = Error> {
     let exits = SETTING.get_exits();
     let current_exit = &exits[&exit];
@@ -53,42 +99,34 @@ fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = 
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
 
-    get_exit_info(GetExitInfo { to: endpoint }).and_then(move |exit_details| {
+    get_exit_info(&endpoint).and_then(move |exit_details| {
         let mut exits = SETTING.get_exits_mut();
 
         let current_exit = exits.get_mut(&exit).unwrap();
 
-        current_exit.state = ExitState::GotInfo;
+        match exit_details {
+            ExitState::GotInfo { .. } => {
+                trace!("Got exit info response {:?}", exit_details);
+            }
+            _ => bail!("got incorrect state from exit details request"),
+        }
 
-        trace!("Got exit info response {:?}", exit_details.clone());
-
-        current_exit.general_details = Some(exit_details);
+        current_exit.info = exit_details;
 
         Ok(())
     })
 }
 
-fn exit_setup_stuff(exit_response: Result<ExitServerReply, Error>, exit: String) -> Result<(), Error> {
-
-    let exit_response = exit_response.unwrap();
+fn exit_setup_stuff(exit_response: Result<ExitState, Error>, exit: String) -> Result<(), Error> {
+    let exit_response = exit_response?;
 
     let mut exits = SETTING.get_exits_mut();
 
     let current_exit = exits.get_mut(&exit).unwrap();
 
-    current_exit.message = exit_response.message.clone();
-    current_exit.state = exit_response.state.clone();
+    current_exit.info = exit_response.clone();
 
     trace!("Got exit setup response {:?}", exit_response.clone());
-
-    match exit_response.details {
-        Some(details) => {
-            current_exit.our_details = Some(ExitClientDetails {
-                client_internal_ip: details.client_internal_ip,
-            });
-        }
-        None => bail!("Got no details from exit {:?}", exit_response.clone()),
-    }
 
     Ok(())
 }
@@ -105,13 +143,9 @@ fn exit_setup_request(exit: String) -> impl Future<Item = (), Error = Error> {
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
 
-    send_exit_setup_request(ExitSetupRequest {
-        to: endpoint,
-        ident,
-    }).from_err()
-        .then(move |exit_response| {
-            exit_setup_stuff(exit_response, exit)
-        })
+    send_exit_setup_request(&endpoint, ident)
+        .from_err()
+        .then(move |exit_response| exit_setup_stuff(exit_response, exit))
 }
 
 /// An actor which pays the exit
@@ -142,8 +176,8 @@ impl Handler<Tick> for ExitManager {
 
         // code that connects to the current exit server
         if let Some(exit) = exit_server {
-            if let Some(ref general_details) = exit.general_details {
-                if let Some(_) = exit.our_details {
+            if let Some(ref general_details) = exit.info.general_details() {
+                if let Some(_) = exit.info.our_details() {
                     linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
                     TrafficWatcher::from_registry()
                         .do_send(Watch(exit.id.clone(), general_details.exit_price));
@@ -155,9 +189,12 @@ impl Handler<Tick> for ExitManager {
         let servers = { SETTING.get_exits().clone() };
 
         for (k, s) in servers {
-            match s.state {
-                ExitState::Denied | ExitState::Disabled | ExitState::Registered => {}
-                ExitState::New => {
+            match s.info {
+                ExitState::Denied { .. }
+                | ExitState::Disabled
+                | ExitState::Registered { .. }
+                | ExitState::GotInfo { .. } => {}
+                ExitState::New { .. } => {
                     Arbiter::handle().spawn(exit_general_details_request(k.clone()).then(
                         move |res| {
                             match res {
@@ -172,7 +209,7 @@ impl Handler<Tick> for ExitManager {
                         },
                     ));
                 }
-                ExitState::GotInfo | ExitState::Pending => {
+                ExitState::Registering { .. } | ExitState::Pending { .. } => {
                     Arbiter::handle().spawn(exit_setup_request(k.clone()).then(move |res| {
                         match res {
                             Ok(_) => {

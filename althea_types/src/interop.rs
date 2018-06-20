@@ -1,7 +1,4 @@
 use num256::Uint256;
-use serde;
-use serde::Deserialize;
-use serde::Deserializer;
 use std::net::IpAddr;
 use EthAddress;
 
@@ -28,10 +25,10 @@ impl Identity {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct ExitRegistrationDetails {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub zip_code: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub email: Option<String>,
 }
 
@@ -40,58 +37,77 @@ pub struct ExitRegistrationDetails {
 #[serde(tag = "state")]
 pub enum ExitState {
     New,
-    GotInfo{
-        details: ExitClientDetails,
-        message: String
+    GotInfo {
+        general_details: ExitDetails,
+        message: String,
     },
-    Registering{
-        details: ExitClientDetails,
-        message: String
+    Registering {
+        general_details: ExitDetails,
+        message: String,
     },
-    Pending{
-        details: ExitClientDetails,
-        message: String
+    Pending {
+        general_details: ExitDetails,
+        message: String,
     },
-    Registered{
-        details: ExitClientDetails,
-        message: String
+    Registered {
+        general_details: ExitDetails,
+        our_details: ExitClientDetails,
+        message: String,
     },
-    Denied{
-        message: String
+    Denied {
+        message: String,
     },
     Disabled,
-}
-
-pub trait DeserializeWith: Sized {
-    fn deserialize_with<'de, D>(de: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>;
-}
-
-impl DeserializeWith for ExitState {
-    fn deserialize_with<'de, D>(de: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(de)?;
-
-        match s.as_ref() {
-            "New" => Ok(ExitState::New),
-            "GotInfo" => Ok(ExitState::GotInfo),
-            "Pending" => Ok(ExitState::Pending),
-            "Registered" => Ok(ExitState::Registered),
-            "Denied" => Ok(ExitState::Denied),
-            "Disabled" => Ok(ExitState::Disabled),
-            _ => Err(serde::de::Error::custom(
-                "error trying to deserialize ExitState config",
-            )),
-        }
-    }
 }
 
 impl Default for ExitState {
     fn default() -> Self {
         ExitState::New
+    }
+}
+
+impl ExitState {
+    pub fn general_details(&self) -> Option<&ExitDetails> {
+        match self {
+            &ExitState::GotInfo {
+                ref general_details,
+                ..
+            } => Some(general_details),
+            &ExitState::Registering {
+                ref general_details,
+                ..
+            } => Some(general_details),
+            &ExitState::Pending {
+                ref general_details,
+                ..
+            } => Some(general_details),
+            &ExitState::Registered {
+                ref general_details,
+                ..
+            } => Some(general_details),
+            _ => None,
+        }
+    }
+
+    pub fn our_details(&self) -> Option<&ExitClientDetails> {
+        match self {
+            &ExitState::Registered {
+                ref our_details, ..
+            } => Some(our_details),
+            _ => None,
+        }
+    }
+
+    pub fn message(&self) -> String {
+        match self {
+            &ExitState::New => "New exit".to_string(),
+            &ExitState::GotInfo { ref message, .. } => message.clone(),
+            &ExitState::Registering { ref message, .. } => message.clone(),
+            &ExitState::Pending { ref message, .. } => message.clone(),
+            &ExitState::Registered { ref message, .. } => message.clone(),
+            &ExitState::Denied { ref message, .. } => message.clone(),
+            &ExitState::Disabled => "Exit disabled".to_string(),
+        }
     }
 }
 
@@ -115,13 +131,6 @@ pub struct ExitDetails {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct ExitClientDetails {
     pub client_internal_ip: IpAddr,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
-pub struct ExitServerReply {
-    pub details: Option<ExitClientDetails>,
-    pub state: ExitState,
-    pub message: String,
 }
 
 #[cfg(feature = "actix")]
