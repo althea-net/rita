@@ -238,8 +238,8 @@ impl<T: Read + Write> Babel<T> {
         &mut self,
         neigh_mesh_ip: IpAddr,
         dest_mesh_ip: IpAddr,
+        routes: &VecDeque<Route>,
     ) -> Result<Route, Error> {
-        let routes = self.parse_routes()?;
         // First find the neighbors route to itself to get the local address
         for neigh_route in routes.iter() {
             // This will fail on v4 babel routes etc
@@ -261,8 +261,23 @@ impl<T: Read + Write> Babel<T> {
         }
         Err(NoNeighbor(neigh_mesh_ip.to_string()).into())
     }
-}
 
+    /// Checks if Babel has an installed route to the given destination
+    pub fn do_we_have_route(
+        &mut self,
+        mesh_ip: &IpAddr,
+        routes: &VecDeque<Route>,
+    ) -> Result<bool, Error> {
+        for route in routes.iter() {
+            if let IpNetwork::V6(ref ip) = route.prefix {
+                if ip.get_network_address() == *mesh_ip && route.installed {
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(false)
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

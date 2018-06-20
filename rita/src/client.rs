@@ -185,6 +185,7 @@ fn main() {
             .route("/settings", Method::GET, get_settings)
             .route("/settings", Method::POST, set_settings)
             .route("/neighbors", Method::GET, get_node_info)
+            .route("/exits", Method::GET, get_exit_info)
             .route("/info", Method::GET, get_own_info)
             .route("/version", Method::GET, version)
     }).workers(1)

@@ -5,7 +5,9 @@ use futures::Future;
 
 use std::boxed::Box;
 
-use super::{Dashboard, GetNodeInfo, GetWifiConfig, NodeInfo, SetWifiConfig};
+use super::{
+    Dashboard, ExitInfo, GetExitInfo, GetNodeInfo, GetWifiConfig, NodeInfo, SetWifiConfig,
+};
 use rita_client::dashboard::WifiInterface;
 
 pub fn get_wifi_config(
@@ -36,6 +38,14 @@ pub fn set_wifi_config(
 pub fn get_node_info(_req: HttpRequest) -> Box<Future<Item = Json<Vec<NodeInfo>>, Error = Error>> {
     Dashboard::from_registry()
         .send(GetNodeInfo {})
+        .from_err()
+        .and_then(move |reply| Ok(Json(reply?)))
+        .responder()
+}
+
+pub fn get_exit_info(_req: HttpRequest) -> Box<Future<Item = Json<Vec<ExitInfo>>, Error = Error>> {
+    Dashboard::from_registry()
+        .send(GetExitInfo {})
         .from_err()
         .and_then(move |reply| Ok(Json(reply?)))
         .responder()
