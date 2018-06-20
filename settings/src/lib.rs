@@ -69,18 +69,6 @@ lazy_static! {
     static ref KI: Box<KernelInterface> = Box::new(LinuxCommandRunner {});
 }
 
-// TODO: remove in alpha 5
-fn default_rita_contact_port() -> u16 {
-    warn!("Add rita_contact_port to [network], default will be removed in next version");
-    4874
-}
-
-// TODO: remove in alpha 5
-fn default_rita_tick_interval() -> u64 {
-    warn!("Add rita_tick_interval to [network], default will be removed in next version");
-    5
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
     /// Our own mesh IP (in fd00::/8)
@@ -94,14 +82,12 @@ pub struct NetworkSettings {
     pub rita_hello_port: u16,
     /// Port on which rita contacts other althea nodes over the mesh (needs to be constant across an
     /// entire althea deployment)
-    #[serde(default = "default_rita_contact_port")] // TODO: remove in alpha 5
     pub rita_contact_port: u16,
     /// Port over which the dashboard will be accessible upon
     pub rita_dashboard_port: u16,
     /// Port over which the bounty hunter will be contacted
     pub bounty_port: u16,
     /// The tick interval in seconds between rita hellos, traffic watcher measurements and payments
-    #[serde(default = "default_rita_tick_interval")] // TODO: remove in alpha 5
     pub rita_tick_interval: u64,
     /// Our private key, encoded with Base64 (what the `wg` command outputs and takes by default)
     /// Note this is the canonical private key for the node
