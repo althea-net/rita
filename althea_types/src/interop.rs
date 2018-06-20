@@ -1,9 +1,9 @@
-use eth_address::EthAddress;
 use num256::Uint256;
 use serde;
 use serde::Deserialize;
 use serde::Deserializer;
 use std::net::IpAddr;
+use EthAddress;
 
 #[cfg(feature = "actix")]
 use actix::*;

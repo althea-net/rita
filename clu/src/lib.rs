@@ -138,16 +138,24 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
 
 pub fn init(platform: &str, settings: Arc<RwLock<settings::RitaSettingsStruct>>) {
     match platform {
-        "linux" => linux_init(settings).unwrap(),
+        "linux" => linux_init(settings.clone()).unwrap(),
         _ => unimplemented!(),
     }
+    trace!(
+        "Starting with settings (after clu) : {:?}",
+        settings.read().unwrap()
+    );
 }
 
 pub fn exit_init(platform: &str, settings: Arc<RwLock<settings::RitaExitSettingsStruct>>) {
     match platform {
-        "linux" => linux_exit_init(settings).unwrap(),
+        "linux" => linux_exit_init(settings.clone()).unwrap(),
         _ => unimplemented!(),
     }
+    trace!(
+        "Starting with settings (after clu) : {:?}",
+        settings.read().unwrap()
+    );
 }
 
 #[cfg(test)]
