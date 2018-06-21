@@ -7,7 +7,7 @@ authors = ["jkilpatr <jkilpatr@redhat.com>"]
 mockstream = { git = "https://github.com/lazy-bitfield/rust-mockstream.git" }
 ascii = "0.8.6"
 bufstream = "0.1"
-ip_network = "0.2"
+ipnetwork = "0.13.0"
 failure = "0.1.1"
 log = "^0.4"
 env_logger = "0.5"

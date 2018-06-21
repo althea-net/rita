@@ -176,7 +176,7 @@ pub struct ExitServer {
     /// The port over which we will reach the exit apis on over the mesh
     pub registration_port: u16,
     /// The state and data about the exit
-    #[serde(default)]
+    #[serde(default, flatten)]
     pub info: ExitState,
 }
 
