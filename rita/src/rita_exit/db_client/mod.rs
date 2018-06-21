@@ -14,6 +14,8 @@ use exit_db::{models, schema};
 use settings::RitaExitSettings;
 use SETTING;
 
+use ipnetwork::IpNetwork;
+
 use failure::Error;
 
 use althea_types::{
@@ -120,12 +122,6 @@ pub fn get_exit_info() -> ExitDetails {
     }
 }
 
-pub struct SetupClient(pub ExitClientIdentity, pub IpAddr);
-
-impl Message for SetupClient {
-    type Result = Result<ExitState, Error>;
-}
-
 fn add_dummy(conn: &SqliteConnection) -> Result<(), Error> {
     use self::schema::clients::dsl::*;
 
@@ -168,6 +164,32 @@ fn incr_dummy(conn: &SqliteConnection) -> Result<IpAddr, Error> {
     Ok(new_ip)
 }
 
+fn update_client(client: &ExitClientIdentity, conn: &SqliteConnection) -> Result<(), Error> {
+    use self::schema::clients::dsl::*;
+    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
+        .set(wg_port.eq(&client.wg_port.to_string()))
+        .execute(&*conn)?;
+
+    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
+        .set(wg_pubkey.eq(&client.global.wg_public_key.clone()))
+        .execute(&*conn)?;
+
+    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
+        .set(email.eq(&client.reg_details.email.clone().unwrap()))
+        .execute(&*conn)?;
+
+    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
+        .set(zip.eq(&client.reg_details.zip_code.clone().unwrap()))
+        .execute(&*conn)?;
+
+    Ok(())
+}
+
+fn client_exists(ip: &IpAddr, conn: &SqliteConnection) -> Result<bool, Error> {
+    use self::schema::clients::dsl::*;
+    Ok(select(exists(clients.filter(mesh_ip.eq(ip.to_string())))).get_result(&*conn)?)
+}
+
 fn client_to_db_client(
     client: ExitClientIdentity,
     new_ip: IpAddr,
@@ -189,6 +211,17 @@ fn client_to_db_client(
     }
 }
 
+fn email_ver_done(_mesh_ip: &IpAddr, _conn: &SqliteConnection) -> Result<bool, Error> {
+    //TODO actually check db
+    Ok(true)
+}
+
+pub struct SetupClient(pub ExitClientIdentity, pub IpAddr);
+
+impl Message for SetupClient {
+    type Result = Result<ExitState, Error>;
+}
+
 impl Handler<SetupClient> for DbClient {
     type Result = Result<ExitState, Error>;
 
@@ -205,74 +238,113 @@ impl Handler<SetupClient> for DbClient {
 
                     trace!("Checking if record exists for {:?}", client.global.mesh_ip);
 
-                    let exists = select(exists(
-                        clients.filter(mesh_ip.eq(&client.global.mesh_ip.to_string())),
-                    )).get_result(&conn)
-                        .expect("Error loading statuses");
-
-                    if exists {
-                        trace!("record exists, updating");
-                        // updating
-                        diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-                            .set(wg_port.eq(&client.wg_port.to_string()))
-                            .execute(&conn)
-                            .expect("Error saving");
-
-                        diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-                            .set(wg_pubkey.eq(&client.global.wg_public_key.clone()))
-                            .execute(&conn)
-                            .expect("Error saving");
-
-                        diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-                            .set(email.eq(&client.reg_details.email.clone().unwrap()))
-                            .execute(&conn)
-                            .expect("Error saving");
-
-                        diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-                            .set(zip.eq(&client.reg_details.zip_code.clone().unwrap()))
-                            .execute(&conn)
-                            .expect("Error saving");
-
+                    if client_exists(&client.global.mesh_ip, &conn)? {
                         let their_record: models::Client = clients
                             .filter(mesh_ip.eq(&client.global.mesh_ip.to_string()))
                             .load::<models::Client>(&conn)
                             .expect("failed loading record")[0]
                             .clone();
 
-                        Ok(their_record.internal_ip.parse()?)
+                        if email_ver_done(&client.global.mesh_ip, &conn)? {
+                            Ok(ExitState::Registered {
+                                our_details: ExitClientDetails {
+                                    client_internal_ip: their_record.internal_ip.parse()?,
+                                },
+                                general_details: get_exit_info(),
+                                message: "Registration OK".to_string(),
+                            })
+                        } else {
+                            Ok(ExitState::Pending {
+                                general_details: get_exit_info(),
+                                message: "awaiting email verification".to_string(),
+                            })
+                        }
                     } else {
                         trace!("record does not exist, creating");
                         // first time seeing
 
                         let new_ip = incr_dummy(&conn)?;
 
-                        let c = client_to_db_client(
-                            client,
-                            new_ip,
-                            if SETTING.get_allowed_countries().is_empty() {
-                                String::new()
-                            } else {
-                                get_country(&msg.1)?
-                            },
-                        );
+                        //TODO: Send email
 
-                        diesel::insert_into(clients)
-                            .values(&c)
-                            .execute(&conn)
-                            .expect("Error saving");
-                        Ok(new_ip)
+                        let user_country = if SETTING.get_allowed_countries().is_empty() {
+                            String::new()
+                        } else {
+                            get_country(&msg.1)?
+                        };
+
+                        let c = client_to_db_client(client, new_ip, user_country);
+
+                        diesel::insert_into(clients).values(&c).execute(&conn)?;
+                        Ok(ExitState::Registered {
+                            our_details: ExitClientDetails {
+                                client_internal_ip: new_ip,
+                            },
+                            general_details: get_exit_info(),
+                            message: "Registration OK".to_string(),
+                        })
                     }
                 })
             }
             Err(e) => return Err(e),
-        }.and_then(|ip| {
-            Ok(ExitState::Registered {
-                our_details: ExitClientDetails {
-                    client_internal_ip: ip,
-                },
-                general_details: get_exit_info(),
-                message: "Registration OK".to_string(),
-            })
+        }
+    }
+}
+
+pub struct ClientStatus(pub ExitClientIdentity);
+
+impl Message for ClientStatus {
+    type Result = Result<ExitState, Error>;
+}
+
+impl Handler<ClientStatus> for DbClient {
+    type Result = Result<ExitState, Error>;
+
+    fn handle(&mut self, msg: ClientStatus, _: &mut Self::Context) -> Self::Result {
+        use self::schema::clients::dsl::*;
+        let conn = SqliteConnection::establish(&SETTING.get_db_file()).unwrap();
+        conn.transaction::<_, Error, _>(|| {
+            let client = msg.0;
+
+            add_dummy(&conn)?;
+
+            trace!("Checking if record exists for {:?}", client.global.mesh_ip);
+
+            if client_exists(&client.global.mesh_ip, &conn)? {
+                trace!("record exists, updating");
+
+                update_client(&client, &conn)?;
+
+                let their_record: models::Client = clients
+                    .filter(mesh_ip.eq(&client.global.mesh_ip.to_string()))
+                    .load::<models::Client>(&conn)
+                    .expect("failed loading record")[0]
+                    .clone();
+
+                let current_ip = their_record.internal_ip.parse()?;
+
+                let current_subnet = IpNetwork::new(
+                    SETTING.get_exit_network().own_internal_ip,
+                    SETTING.get_exit_network().netmask,
+                )?;
+
+                if current_subnet.contains(current_ip) {
+                    Ok(ExitState::Registered {
+                        our_details: ExitClientDetails {
+                            client_internal_ip: current_ip,
+                        },
+                        general_details: get_exit_info(),
+                        message: "Registration OK".to_string(),
+                    })
+                } else {
+                    Ok(ExitState::Registering {
+                        general_details: get_exit_info(),
+                        message: "Registration reset because of IP range change".to_string(),
+                    })
+                }
+            } else {
+                Ok(ExitState::New)
+            }
         })
     }
 }

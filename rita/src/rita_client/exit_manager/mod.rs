@@ -92,6 +92,30 @@ pub fn send_exit_setup_request(
     })
 }
 
+pub fn send_exit_status_request(
+    to: &SocketAddr,
+    ident: ExitClientIdentity,
+) -> impl Future<Item = ExitState, Error = Error> {
+    let endpoint = format!("http://[{}]:{}/status", to.ip(), to.port());
+
+    let stream = TokioTcpStream::connect2(to);
+
+    stream.from_err().and_then(move |stream| {
+        client::post(&endpoint)
+            .with_connection(Connection::from_stream(stream))
+            .json(ident)
+            .unwrap()
+            .send()
+            .from_err()
+            .and_then(|response| {
+                response
+                    .json()
+                    .from_err()
+                    .and_then(|val: ExitState| Ok(val))
+            })
+    })
+}
+
 fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = Error> {
     let exits = SETTING.get_exits();
     let current_exit = &exits[&exit];
@@ -117,20 +141,6 @@ fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = 
     })
 }
 
-fn exit_setup_stuff(exit_response: Result<ExitState, Error>, exit: String) -> Result<(), Error> {
-    let exit_response = exit_response?;
-
-    let mut exits = SETTING.get_exits_mut();
-
-    let current_exit = exits.get_mut(&exit).unwrap();
-
-    current_exit.info = exit_response.clone();
-
-    trace!("Got exit setup response {:?}", exit_response.clone());
-
-    Ok(())
-}
-
 fn exit_setup_request(exit: String) -> impl Future<Item = (), Error = Error> {
     let exits = SETTING.get_exits();
     let current_exit = &exits[&exit];
@@ -145,7 +155,44 @@ fn exit_setup_request(exit: String) -> impl Future<Item = (), Error = Error> {
 
     send_exit_setup_request(&endpoint, ident)
         .from_err()
-        .then(move |exit_response| exit_setup_stuff(exit_response, exit))
+        .and_then(move |exit_response| {
+            let mut exits = SETTING.get_exits_mut();
+
+            let current_exit = exits.get_mut(&exit).unwrap();
+
+            current_exit.info = exit_response.clone();
+
+            trace!("Got exit setup response {:?}", exit_response.clone());
+
+            Ok(())
+        })
+}
+
+fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
+    let exits = SETTING.get_exits();
+    let current_exit = &exits[&exit];
+    let exit_server = current_exit.id.mesh_ip;
+    let ident = ExitClientIdentity {
+        global: SETTING.get_identity(),
+        wg_port: SETTING.get_exit_client().wg_listen_port.clone(),
+        reg_details: SETTING.get_exit_client().reg_details.clone().unwrap(),
+    };
+
+    let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
+
+    send_exit_status_request(&endpoint, ident)
+        .from_err()
+        .and_then(move |exit_response| {
+            let mut exits = SETTING.get_exits_mut();
+
+            let current_exit = exits.get_mut(&exit).unwrap();
+
+            current_exit.info = exit_response.clone();
+
+            trace!("Got exit setup response {:?}", exit_response.clone());
+
+            Ok(())
+        })
 }
 
 /// An actor which pays the exit
@@ -190,10 +237,7 @@ impl Handler<Tick> for ExitManager {
 
         for (k, s) in servers {
             match s.info {
-                ExitState::Denied { .. }
-                | ExitState::Disabled
-                | ExitState::Registered { .. }
-                | ExitState::GotInfo { .. } => {}
+                ExitState::Denied { .. } | ExitState::Disabled | ExitState::GotInfo { .. } => {}
                 ExitState::New { .. } => {
                     Arbiter::handle().spawn(exit_general_details_request(k.clone()).then(
                         move |res| {
@@ -217,6 +261,19 @@ impl Handler<Tick> for ExitManager {
                             }
                             Err(e) => {
                                 info!("exit setup request to {} failed with {:?}", k, e);
+                            }
+                        };
+                        Ok(())
+                    }));
+                }
+                ExitState::Registered { .. } => {
+                    Arbiter::handle().spawn(exit_status_request(k.clone()).then(move |res| {
+                        match res {
+                            Ok(_) => {
+                                info!("exit status request to {} was successful", k);
+                            }
+                            Err(e) => {
+                                info!("exit status request to {} failed with {:?}", k, e);
                             }
                         };
                         Ok(())

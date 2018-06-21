@@ -27,7 +27,7 @@ use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 
 #[cfg(test)]
 use actix::actors::mocker::Mocker;
-use ip_network::IpNetwork;
+use ipnetwork::IpNetwork;
 
 #[cfg(test)]
 type HTTPClient = Mocker<rita_common::http_client::HTTPClient>;
@@ -159,8 +159,8 @@ impl Handler<GetPhyIpFromMeshIp> for TunnelManager {
             // Only ip6
             if let IpNetwork::V6(ref ip) = route.prefix {
                 // Only host addresses and installed routes
-                if ip.get_netmask() == 128 && route.installed {
-                    if IpAddr::V6(ip.get_network_address()) == mesh_ip.0 {
+                if ip.prefix() == 128 && route.installed {
+                    if IpAddr::V6(ip.ip()) == mesh_ip.0 {
                         route_to_des = Some(route.clone());
                     }
                 }
