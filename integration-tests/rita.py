@@ -60,6 +60,7 @@ EXIT_SETTINGS = {
                 "wg_public_key": "fd00::5",
             },
             "registration_port": 4875,
+            "state": "New"
         }
     },
     "current_exit": "exit_a",
@@ -73,10 +74,7 @@ EXIT_SETTINGS = {
 EXIT_SELECT = {
     "exits": {
         "exit_a": {
-            "info": {
-                "state": "Registering",
-            },
-            "registration_port": 4875,
+            "state": "Registering",
         }
     },
 }

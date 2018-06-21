@@ -20,17 +20,19 @@ msc {
   rita->exit [ label = "POST /setup" ] ;
   rita<-exit [ label = "Pending" ] ;
 
+  exit->useremail [ label = "one time code" ] ;
+
   frontend->rita [ label = "GET /settings" ] ;
   frontend<-rita [ label = "Exit list (state pending)" ] ;
 
   rita->exit [ label = "POST /setup" ] ;
   rita<-exit [ label = "Pending" ] ;
 
-  exit->useremail [ label = "one time code" ] ;
-
   ---  [ label = "repeat until user checks email" ];
 
-  rita<-useremail [ label = "one time code" ] ;
+  frontend<-useremail [ label = "one time code" ] ;
+
+  frontend->rita [ label = "POST /settings(Add one time code)" ] ;
 
   rita->exit [ label = "POST /setup" ] ;
   rita<-exit [ label = "Registered" ] ;

@@ -4,7 +4,7 @@ use actix_web::*;
 use futures;
 use futures::Future;
 
-use rita_exit::db_client::{get_exit_info, DbClient, SetupClient};
+use rita_exit::db_client::{get_exit_info, ClientStatus, DbClient, SetupClient};
 
 use std::boxed::Box;
 use std::time::SystemTime;
@@ -41,6 +41,17 @@ pub fn setup_request(
                 }
             }),
     )
+}
+
+pub fn status_request(
+    their_id: Json<ExitClientIdentity>,
+) -> impl Future<Item = Json<ExitState>, Error = Error> {
+    trace!("Received requester identity, {:?}", their_id);
+    DbClient::from_registry()
+        .send(ClientStatus(their_id.into_inner()))
+        .from_err()
+        .and_then(move |reply| Ok(Json(reply?)))
+        .responder()
 }
 
 pub fn get_exit_info_http(_req: HttpRequest) -> Result<Json<ExitState>, Error> {

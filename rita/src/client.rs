@@ -29,7 +29,7 @@ extern crate docopt;
 extern crate env_logger;
 extern crate eui48;
 extern crate futures;
-extern crate ip_network;
+extern crate ipnetwork;
 extern crate minihttpse;
 extern crate rand;
 extern crate regex;
