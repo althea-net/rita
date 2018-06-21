@@ -193,11 +193,28 @@ impl Handler<GetNodeInfo> for Dashboard {
                     for (identity, debt_info) in res.iter() {
                         if current_exit.is_some() {
                             let exit_ip = current_exit.unwrap().id.mesh_ip;
-                            let route = babel.get_route_via_neigh(
+                            let maybe_route = babel.get_route_via_neigh(
                                 identity.mesh_ip,
                                 exit_ip,
                                 &route_table_sample,
-                            )?;
+                            );
+
+                            // We have a peer that is an exit, so we can't find a route
+                            // from them to our selected exit. Other errors can also get
+                            // caught here
+                            if maybe_route.is_err() {
+                                output.push(NodeInfo {
+                                    nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
+                                    route_metric_to_exit: 0,
+                                    total_payments: debt_info.total_payment_recieved.into(),
+                                    debt: debt_info.debt.clone().into(),
+                                    link_cost: 0,
+                                    price_to_exit: 0,
+                                });
+                                continue;
+                            }
+                            let route = maybe_route?;
+
                             output.push(NodeInfo {
                                 nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
                                 route_metric_to_exit: route.metric,
