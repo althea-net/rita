@@ -175,6 +175,8 @@ pub struct ExitServer {
     pub id: Identity,
     /// The port over which we will reach the exit apis on over the mesh
     pub registration_port: u16,
+    #[serde(default)]
+    pub description: String,
     /// The state and data about the exit
     #[serde(default, flatten)]
     pub info: ExitState,
