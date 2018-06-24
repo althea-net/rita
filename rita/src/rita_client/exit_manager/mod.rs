@@ -237,7 +237,12 @@ impl Handler<Tick> for ExitManager {
 
         for (k, s) in servers {
             match s.info {
-                ExitState::Denied { .. } | ExitState::Disabled | ExitState::GotInfo { .. } => {}
+                ExitState::Denied { .. }
+                | ExitState::Disabled
+                | ExitState::GotInfo {
+                    auto_register: false,
+                    ..
+                } => {}
                 ExitState::New { .. } => {
                     Arbiter::handle().spawn(exit_general_details_request(k.clone()).then(
                         move |res| {
@@ -253,7 +258,12 @@ impl Handler<Tick> for ExitManager {
                         },
                     ));
                 }
-                ExitState::Registering { .. } | ExitState::Pending { .. } => {
+                ExitState::Registering { .. }
+                | ExitState::Pending { .. }
+                | ExitState::GotInfo {
+                    auto_register: true,
+                    ..
+                } => {
                     Arbiter::handle().spawn(exit_setup_request(k.clone()).then(move |res| {
                         match res {
                             Ok(_) => {
