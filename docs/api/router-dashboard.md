@@ -66,6 +66,47 @@ This file documents the dashboard API found in Rita client.
 
 ---
 
+## /exits
+
+- URL: `<rita ip>:<rita_dashboard_port>/exits'
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+[
+   {
+      "nickname": "apac",
+      "exit_settings": {
+        "id": {
+          "eth_address": "0x0101010101010101010101010101010101010101",
+          "mesh_ip": "fd96::1337:e4f",
+          "wg_public_key": "1kKSpzdhI4kfqeMqch9I1bXqOUXeKN7EQBecVzW60ys="
+        },
+        "message": "In Singapore",
+        "registration_port": 4875,
+        "state": "New"
+      }
+      "is_selected": true,
+      "have_route": true,
+      "is_reachable": true,
+      "is_tunnel_working": true,
+   },
+]
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl 127.0.0.1:4877/exits`
+
+---
+
+
 ## /settings
 
 - URL: `<rita ip>:<rita_dashboard_port>/settings`

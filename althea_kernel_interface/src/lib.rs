@@ -33,6 +33,7 @@ mod link_local_tools;
 mod manipulate_uci;
 mod open_tunnel;
 mod openwrt_ubus;
+mod ping_check;
 mod setup_wg_if;
 mod stats;
 mod wireless;
