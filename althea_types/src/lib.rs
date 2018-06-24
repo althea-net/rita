@@ -174,4 +174,48 @@ mod tests {
         t.hash(&mut s);
         s.finish()
     }
+
+    #[test]
+    fn exit_state_deserialize() {
+        let s = "{\"state\": \"New\"}";
+
+        assert_eq!(
+            serde_json::from_str::<ExitState>(s).unwrap(),
+            ExitState::New
+        );
+
+        let s = "{\"state\":\"GotInfo\",\"general_details\":{\"server_internal_ip\":\"1.1.1.1\",\"netmask\":16,\"wg_exit_port\":50000,\"exit_price\":50,\"description\":\"An exit\"},\"message\":\"got info ok\",\"auto_register\":false}";
+
+        assert_eq!(
+            serde_json::from_str::<ExitState>(s).unwrap(),
+            ExitState::GotInfo {
+                general_details: ExitDetails {
+                    server_internal_ip: "1.1.1.1".parse().unwrap(),
+                    netmask: 16,
+                    wg_exit_port: 50000,
+                    exit_price: 50,
+                    description: "An exit".to_string(),
+                },
+                auto_register: false,
+                message: "got info ok".to_string()
+            }
+        );
+
+        let s = "{\"state\":\"GotInfo\",\"general_details\":{\"server_internal_ip\":\"1.1.1.1\",\"netmask\":16,\"wg_exit_port\":50000,\"exit_price\":50,\"description\":\"An exit\"},\"message\":\"got info ok\",\"aa\":\"aa\"}";
+
+        assert_eq!(
+            serde_json::from_str::<ExitState>(s).unwrap(),
+            ExitState::GotInfo {
+                general_details: ExitDetails {
+                    server_internal_ip: "1.1.1.1".parse().unwrap(),
+                    netmask: 16,
+                    wg_exit_port: 50000,
+                    exit_price: 50,
+                    description: "An exit".to_string(),
+                },
+                auto_register: false,
+                message: "got info ok".to_string()
+            }
+        );
+    }
 }
