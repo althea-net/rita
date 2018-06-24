@@ -192,19 +192,46 @@ mod tests {
     }
 
     #[test]
-    fn check_struct_hash_eq() {
-        // Some data structure.
-        let my_struct = new_struct(1);
+    fn exit_state_deserialize() {
+        let s = "{\"state\": \"New\"}";
 
-        assert_eq!(calculate_hash(&my_struct), calculate_hash(&my_struct));
-    }
+        assert_eq!(
+            serde_json::from_str::<ExitState>(s).unwrap(),
+            ExitState::New
+        );
 
-    #[test]
-    fn check_struct_hash_ne() {
-        let my_struct = new_struct(1);
+        let s = "{\"state\":\"GotInfo\",\"general_details\":{\"server_internal_ip\":\"1.1.1.1\",\"netmask\":16,\"wg_exit_port\":50000,\"exit_price\":50,\"description\":\"An exit\"},\"message\":\"got info ok\",\"auto_register\":false}";
 
-        let my_struct1 = new_struct(2);
+        assert_eq!(
+            serde_json::from_str::<ExitState>(s).unwrap(),
+            ExitState::GotInfo {
+                general_details: ExitDetails {
+                    server_internal_ip: "1.1.1.1".parse().unwrap(),
+                    netmask: 16,
+                    wg_exit_port: 50000,
+                    exit_price: 50,
+                    description: "An exit".to_string(),
+                },
+                auto_register: false,
+                message: "got info ok".to_string()
+            }
+        );
 
-        assert_ne!(calculate_hash(&my_struct), calculate_hash(&my_struct1));
+        let s = "{\"state\":\"GotInfo\",\"general_details\":{\"server_internal_ip\":\"1.1.1.1\",\"netmask\":16,\"wg_exit_port\":50000,\"exit_price\":50,\"description\":\"An exit\"},\"message\":\"got info ok\",\"aa\":\"aa\"}";
+
+        assert_eq!(
+            serde_json::from_str::<ExitState>(s).unwrap(),
+            ExitState::GotInfo {
+                general_details: ExitDetails {
+                    server_internal_ip: "1.1.1.1".parse().unwrap(),
+                    netmask: 16,
+                    wg_exit_port: 50000,
+                    exit_price: 50,
+                    description: "An exit".to_string(),
+                },
+                auto_register: false,
+                message: "got info ok".to_string()
+            }
+        );
     }
 }
