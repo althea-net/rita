@@ -1,16 +1,19 @@
 use actix::prelude::*;
 use actix::registry::SystemService;
+use actix_web::client::Connection;
+use actix_web::*;
 
-use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState};
+use althea_types::{ExitClientIdentity, ExitState};
 
 use settings::{RitaClientSettings, RitaCommonSettings};
 use SETTING;
 
 use rita_client::rita_loop::Tick;
 use rita_client::traffic_watcher::{TrafficWatcher, Watch};
-use rita_common::http_client::{ExitSetupRequest, GetExitInfo, HTTPClient};
 
 use futures::Future;
+
+use tokio_core::net::TcpStream as TokioTcpStream;
 
 use failure::Error;
 use std::net::SocketAddr;
@@ -21,8 +24,8 @@ fn linux_setup_exit_tunnel() -> Result<(), Error> {
 
     let exit_client = SETTING.get_exit_client();
     let current_exit = exit_client.get_current_exit().unwrap();
-    let general_details = current_exit.general_details.as_ref().unwrap();
-    let our_details = current_exit.our_details.as_ref().unwrap();
+    let general_details = current_exit.info.general_details().unwrap();
+    let our_details = current_exit.info.our_details().unwrap();
 
     KI.setup_wg_if_named("wg_exit")?;
     KI.set_client_exit_tunnel_config(
@@ -44,36 +47,101 @@ fn linux_setup_exit_tunnel() -> Result<(), Error> {
     Ok(())
 }
 
-fn exit_general_details_request(exit: String) -> ResponseFuture<(), Error> {
+pub fn get_exit_info(to: &SocketAddr) -> impl Future<Item = ExitState, Error = Error> {
+    let endpoint = format!("http://[{}]:{}/exit_info", to.ip(), to.port());
+
+    let stream = TokioTcpStream::connect2(to);
+
+    stream.from_err().and_then(move |stream| {
+        client::get(&endpoint)
+            .with_connection(Connection::from_stream(stream))
+            .finish()
+            .unwrap()
+            .send()
+            .from_err()
+            .and_then(|response| {
+                response
+                    .json()
+                    .from_err()
+                    .and_then(|val: ExitState| Ok(val))
+            })
+    })
+}
+
+pub fn send_exit_setup_request(
+    to: &SocketAddr,
+    ident: ExitClientIdentity,
+) -> impl Future<Item = ExitState, Error = Error> {
+    let endpoint = format!("http://[{}]:{}/setup", to.ip(), to.port());
+
+    let stream = TokioTcpStream::connect2(to);
+
+    stream.from_err().and_then(move |stream| {
+        client::post(&endpoint)
+            .with_connection(Connection::from_stream(stream))
+            .json(ident)
+            .unwrap()
+            .send()
+            .from_err()
+            .and_then(|response| {
+                response
+                    .json()
+                    .from_err()
+                    .and_then(|val: ExitState| Ok(val))
+            })
+    })
+}
+
+pub fn send_exit_status_request(
+    to: &SocketAddr,
+    ident: ExitClientIdentity,
+) -> impl Future<Item = ExitState, Error = Error> {
+    let endpoint = format!("http://[{}]:{}/status", to.ip(), to.port());
+
+    let stream = TokioTcpStream::connect2(to);
+
+    stream.from_err().and_then(move |stream| {
+        client::post(&endpoint)
+            .with_connection(Connection::from_stream(stream))
+            .json(ident)
+            .unwrap()
+            .send()
+            .from_err()
+            .and_then(|response| {
+                response
+                    .json()
+                    .from_err()
+                    .and_then(|val: ExitState| Ok(val))
+            })
+    })
+}
+
+fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = Error> {
     let exits = SETTING.get_exits();
     let current_exit = &exits[&exit];
     let exit_server = current_exit.id.mesh_ip;
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
 
-    Box::new(
-        HTTPClient::from_registry()
-            .send(GetExitInfo { to: endpoint })
-            .from_err()
-            .and_then(move |exit_details| {
-                let exit_details = exit_details?;
+    get_exit_info(&endpoint).and_then(move |exit_details| {
+        let mut exits = SETTING.get_exits_mut();
 
-                let mut exits = SETTING.get_exits_mut();
+        let current_exit = exits.get_mut(&exit).unwrap();
 
-                let current_exit = exits.get_mut(&exit).unwrap();
+        match exit_details {
+            ExitState::GotInfo { .. } => {
+                trace!("Got exit info response {:?}", exit_details);
+            }
+            _ => bail!("got incorrect state from exit details request"),
+        }
 
-                current_exit.state = ExitState::GotInfo;
+        current_exit.info = exit_details;
 
-                trace!("Got exit info response {:?}", exit_details.clone());
-
-                current_exit.general_details = Some(exit_details);
-
-                Ok(())
-            }),
-    )
+        Ok(())
+    })
 }
 
-fn exit_setup_request(exit: String) -> ResponseFuture<(), Error> {
+fn exit_setup_request(exit: String) -> impl Future<Item = (), Error = Error> {
     let exits = SETTING.get_exits();
     let current_exit = &exits[&exit];
     let exit_server = current_exit.id.mesh_ip;
@@ -85,37 +153,46 @@ fn exit_setup_request(exit: String) -> ResponseFuture<(), Error> {
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
 
-    Box::new(
-        HTTPClient::from_registry()
-            .send(ExitSetupRequest {
-                to: endpoint,
-                ident,
-            })
-            .from_err()
-            .and_then(move |exit_response| {
-                let exit_response = exit_response?;
+    send_exit_setup_request(&endpoint, ident)
+        .from_err()
+        .and_then(move |exit_response| {
+            let mut exits = SETTING.get_exits_mut();
 
-                let mut exits = SETTING.get_exits_mut();
+            let current_exit = exits.get_mut(&exit).unwrap();
 
-                let current_exit = exits.get_mut(&exit).unwrap();
+            current_exit.info = exit_response.clone();
 
-                current_exit.message = exit_response.message.clone();
-                current_exit.state = exit_response.state.clone();
+            trace!("Got exit setup response {:?}", exit_response.clone());
 
-                trace!("Got exit setup response {:?}", exit_response.clone());
+            Ok(())
+        })
+}
 
-                match exit_response.details {
-                    Some(details) => {
-                        current_exit.our_details = Some(ExitClientDetails {
-                            client_internal_ip: details.client_internal_ip,
-                        });
-                    }
-                    None => bail!("Got no details from exit"),
-                }
+fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
+    let exits = SETTING.get_exits();
+    let current_exit = &exits[&exit];
+    let exit_server = current_exit.id.mesh_ip;
+    let ident = ExitClientIdentity {
+        global: SETTING.get_identity(),
+        wg_port: SETTING.get_exit_client().wg_listen_port.clone(),
+        reg_details: SETTING.get_exit_client().reg_details.clone().unwrap(),
+    };
 
-                Ok(())
-            }),
-    )
+    let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
+
+    send_exit_status_request(&endpoint, ident)
+        .from_err()
+        .and_then(move |exit_response| {
+            let mut exits = SETTING.get_exits_mut();
+
+            let current_exit = exits.get_mut(&exit).unwrap();
+
+            current_exit.info = exit_response.clone();
+
+            trace!("Got exit setup response {:?}", exit_response.clone());
+
+            Ok(())
+        })
 }
 
 /// An actor which pays the exit
@@ -146,8 +223,8 @@ impl Handler<Tick> for ExitManager {
 
         // code that connects to the current exit server
         if let Some(exit) = exit_server {
-            if let Some(ref general_details) = exit.general_details {
-                if let Some(_) = exit.our_details {
+            if let Some(ref general_details) = exit.info.general_details() {
+                if let Some(_) = exit.info.our_details() {
                     linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
                     TrafficWatcher::from_registry()
                         .do_send(Watch(exit.id.clone(), general_details.exit_price));
@@ -159,9 +236,14 @@ impl Handler<Tick> for ExitManager {
         let servers = { SETTING.get_exits().clone() };
 
         for (k, s) in servers {
-            match s.state {
-                ExitState::Denied | ExitState::Disabled | ExitState::Registered => {}
-                ExitState::New => {
+            match s.info {
+                ExitState::Denied { .. }
+                | ExitState::Disabled
+                | ExitState::GotInfo {
+                    auto_register: false,
+                    ..
+                } => {}
+                ExitState::New { .. } => {
                     Arbiter::handle().spawn(exit_general_details_request(k.clone()).then(
                         move |res| {
                             match res {
@@ -176,7 +258,12 @@ impl Handler<Tick> for ExitManager {
                         },
                     ));
                 }
-                ExitState::GotInfo | ExitState::Pending => {
+                ExitState::Registering { .. }
+                | ExitState::Pending { .. }
+                | ExitState::GotInfo {
+                    auto_register: true,
+                    ..
+                } => {
                     Arbiter::handle().spawn(exit_setup_request(k.clone()).then(move |res| {
                         match res {
                             Ok(_) => {
@@ -184,6 +271,19 @@ impl Handler<Tick> for ExitManager {
                             }
                             Err(e) => {
                                 info!("exit setup request to {} failed with {:?}", k, e);
+                            }
+                        };
+                        Ok(())
+                    }));
+                }
+                ExitState::Registered { .. } => {
+                    Arbiter::handle().spawn(exit_status_request(k.clone()).then(move |res| {
+                        match res {
+                            Ok(_) => {
+                                info!("exit status request to {} was successful", k);
+                            }
+                            Err(e) => {
+                                info!("exit status request to {} failed with {:?}", k, e);
                             }
                         };
                         Ok(())

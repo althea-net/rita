@@ -1,6 +1,6 @@
 use actix::prelude::*;
 use failure::Error;
-use ip_network::IpNetwork;
+use ipnetwork::IpNetwork;
 use reqwest;
 
 use std::collections::HashMap;
@@ -72,8 +72,8 @@ pub fn watch<T: Read + Write>(
         // Only ip6
         if let IpNetwork::V6(ref ip) = route.prefix {
             // Only host addresses and installed routes
-            if ip.get_netmask() == 128 && route.installed {
-                destinations.insert(IpAddr::V6(ip.get_network_address()), route);
+            if ip.prefix() == 128 && route.installed {
+                destinations.insert(IpAddr::V6(ip.ip()), route);
             }
         }
     }

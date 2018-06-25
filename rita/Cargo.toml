@@ -39,7 +39,7 @@ env_logger = "^0.5.5"
 eui48 = {git="https://github.com/althea-mesh/eui48.git"}
 failure = "0.1.1"
 futures = "0.1"
-ip_network = "0.2"
+ipnetwork = "0.13.0"
 lazy_static = "1.0"
 log = "^0.4"
 minihttpse = "0.1.6"

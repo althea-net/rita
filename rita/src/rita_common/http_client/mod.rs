@@ -8,7 +8,7 @@ use actix_web::*;
 
 use futures::Future;
 
-use althea_types::{ExitClientIdentity, ExitDetails, ExitServerReply, Identity, LocalIdentity};
+use althea_types::{Identity, LocalIdentity};
 
 use settings::RitaCommonSettings;
 use SETTING;
@@ -71,73 +71,6 @@ impl Handler<Hello> for HTTPClient {
                     .from_err()
                     .and_then(|val: LocalIdentity| Ok(val))
             })
-        }))
-    }
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub struct GetExitInfo {
-    pub to: SocketAddr,
-}
-
-impl Message for GetExitInfo {
-    type Result = Result<ExitDetails, Error>;
-}
-
-impl Handler<GetExitInfo> for HTTPClient {
-    type Result = ResponseFuture<ExitDetails, Error>;
-    fn handle(&mut self, msg: GetExitInfo, _: &mut Self::Context) -> Self::Result {
-        let endpoint = format!("http://[{}]:{}/exit_info", msg.to.ip(), msg.to.port());
-
-        let stream = TokioTcpStream::connect2(&msg.to);
-
-        Box::new(stream.from_err().and_then(move |stream| {
-            client::get(&endpoint)
-                .with_connection(Connection::from_stream(stream))
-                .finish()
-                .unwrap()
-                .send()
-                .from_err()
-                .and_then(|response| {
-                    response
-                        .json()
-                        .from_err()
-                        .and_then(|val: ExitDetails| Ok(val))
-                })
-        }))
-    }
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub struct ExitSetupRequest {
-    pub to: SocketAddr,
-    pub ident: ExitClientIdentity,
-}
-
-impl Message for ExitSetupRequest {
-    type Result = Result<ExitServerReply, Error>;
-}
-
-impl Handler<ExitSetupRequest> for HTTPClient {
-    type Result = ResponseFuture<ExitServerReply, Error>;
-    fn handle(&mut self, msg: ExitSetupRequest, _: &mut Self::Context) -> Self::Result {
-        let endpoint = format!("http://[{}]:{}/setup", msg.to.ip(), msg.to.port());
-
-        let stream = TokioTcpStream::connect2(&msg.to);
-
-        Box::new(stream.from_err().and_then(move |stream| {
-            client::post(&endpoint)
-                .with_connection(Connection::from_stream(stream))
-                .json(msg.ident)
-                .unwrap()
-                .send()
-                .from_err()
-                .and_then(|response| {
-                    response
-                        .json()
-                        .from_err()
-                        .and_then(|val: ExitServerReply| Ok(val))
-                })
         }))
     }
 }

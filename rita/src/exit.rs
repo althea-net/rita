@@ -31,7 +31,7 @@ extern crate dotenv;
 extern crate env_logger;
 extern crate eui48;
 extern crate futures;
-extern crate ip_network;
+extern crate ipnetwork;
 extern crate minihttpse;
 extern crate rand;
 extern crate regex;
@@ -181,8 +181,13 @@ fn main() {
     server::new(|| {
         App::new()
             .resource("/setup", |r| r.method(Method::POST).with2(setup_request))
+            .resource("/status", |r| {
+                r.method(Method::POST).with_async(status_request)
+            })
             .resource("/list", |r| r.method(Method::POST).with(list_clients))
-            .resource("/exit_info", |r| r.method(Method::GET).with(get_exit_info))
+            .resource("/exit_info", |r| {
+                r.method(Method::GET).with(get_exit_info_http)
+            })
             .resource("/rtt", |r| r.method(Method::GET).with(rtt))
     }).bind(format!(
         "[::0]:{}",

@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
 
-use ip_network::IpNetwork;
+use ipnetwork::IpNetwork;
 
 use settings::RitaCommonSettings;
 use SETTING;
@@ -112,11 +112,8 @@ pub fn watch<T: Read + Write>(
         // Only ip6
         if let IpNetwork::V6(ref ip) = route.prefix {
             // Only host addresses and installed routes
-            if ip.get_netmask() == 128 && route.installed {
-                destinations.insert(
-                    IpAddr::V6(ip.get_network_address()),
-                    Int256::from(route.price + local_price),
-                );
+            if ip.prefix() == 128 && route.installed {
+                destinations.insert(IpAddr::V6(ip.ip()), Int256::from(route.price + local_price));
             }
         }
     }
