@@ -10,9 +10,6 @@ use futures::Future;
 
 use althea_types::{ExitClientIdentity, ExitDetails, ExitServerReply, Identity, LocalIdentity};
 
-use settings::RitaCommonSettings;
-use SETTING;
-
 use actix_web::client::Connection;
 use failure::Error;
 
@@ -55,15 +52,7 @@ impl Handler<Hello> for HTTPClient {
 
             let req = req.with_connection(Connection::from_stream(stream));
 
-            let req = if SETTING.get_future() {
-                req.json(&msg.my_id)
-            } else {
-                // TODO: REMOVE IN ALPHA 5
-                req.json(LocalIdentity {
-                    global: msg.my_id.clone(),
-                    wg_port: 12345,
-                })
-            };
+            let req = req.json(&msg.my_id);
 
             req.unwrap().send().from_err().and_then(|response| {
                 response
