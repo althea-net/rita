@@ -5,7 +5,7 @@
 target-mac
 **/*.rs.bk
 .idea
-**/test.db
+**/*.db
 test.db-journal
 *.log
 /scripts/staging_dir/
@@ -14,3 +14,4 @@ integration-tests/rita-settings*
 integration-tests/staging*
 integration-tests/althea_rs_*
 integration-tests/target*
+integration-tests/mail/*

@@ -1,4 +1,4 @@
-db_file = "../exit_db/test.db"
+db_file = "exit.db"
 description = "just a normal althea exit"
 
 [payment]
