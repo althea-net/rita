@@ -26,9 +26,11 @@ BOUNTY_HUNTER_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/debug
 RITA_A = os.getenv('RITA_A', RITA_DEFAULT)
 RITA_EXIT_A = os.getenv('RITA_EXIT_A', RITA_EXIT_DEFAULT)
 BOUNTY_HUNTER_A = os.getenv('BOUNTY_HUNTER_A', BOUNTY_HUNTER_DEFAULT)
+DIR_A = os.getenv('DIR_A', 'althea_rs_a')
 RITA_B = os.getenv('RITA_B', RITA_DEFAULT)
 RITA_EXIT_B = os.getenv('RITA_EXIT_B', RITA_EXIT_DEFAULT)
 BOUNTY_HUNTER_B = os.getenv('BOUNTY_HUNTER_B', BOUNTY_HUNTER_DEFAULT)
+DIR_B = os.getenv('DIR_B', 'althea_rs_b')
 
 # Current binary paths (They change to *_A or *_B depending on which node is
 # going to be run at a given moment, according to the layout)
@@ -125,16 +127,16 @@ def exec_or_exit(command, blocking=True, delay=0.01):
 
 
 def cleanup():
-    os.system("rm -rf *.log *.pid private-key* mail")
+    os.system("rm -rf *.db *.log *.pid private-key* mail")
     os.system("mkdir mail")
     os.system("sync")
-    os.system("killall babeld rita bounty_hunter iperf")  # TODO: This is very inconsiderate
+    os.system("killall babeld rita rita_exit bounty_hunter iperf")  # TODO: This is very inconsiderate
 
 
 def teardown():
     os.system("rm -rf *.pid private-key*")
     os.system("sync")
-    os.system("killall babeld rita bounty_hunter iperf")  # TODO: This is very inconsiderate
+    os.system("killall babeld rita rita_exit bounty_hunter iperf")  # TODO: This is very inconsiderate
 
 
 class Node:
@@ -225,6 +227,7 @@ def prep_netns(id):
     exec_or_exit("ip netns exec netlab-{} sysctl -w net.ipv4.ip_forward=1".format(id))
     exec_or_exit("ip netns exec netlab-{} sysctl -w net.ipv6.conf.all.forwarding=1".format(id))
     exec_or_exit("ip netns exec netlab-{} ip link set up lo".format(id))
+
 
 
 def start_babel(node):
@@ -427,6 +430,63 @@ class World:
         else:
             return "fd00::{}".format(node.id)
 
+    def setup_dbs(self):
+        os.system("rm -rf bounty.db exit.db")
+
+        bounty_repo_dir = ".."
+        exit_repo_dir = ".."
+
+        bounty_index = self.bounty_id - 1
+        exit_index = self.exit_id - 1
+
+        if VERBOSE:
+            print("DB setup: bounty_hunter index: {}, exit index: {}".format(bounty_index, exit_index))
+
+        if COMPAT_LAYOUT:
+            # Figure out whether release A or B was
+            # assigned to the exit and
+            # bounty
+            layout = COMPAT_LAYOUTS[COMPAT_LAYOUT]
+            if layout[bounty_index] == 'a':
+                bounty_repo_dir = DIR_A
+            elif layout[bounty_index] == 'b':
+                bounty_repo_dir = DIR_B
+            else:
+                print("DB setup: Unknown release {} assigned to bounty".format(layout[bounty_index]))
+                sys.exit(1)
+
+            if layout[exit_index] == 'a':
+                exit_repo_dir = DIR_A
+            elif layout[exit_index] == 'b':
+                exit_repo_dir = DIR_B
+            else:
+                print("DB setup: Unknown release {} assigned to exit".format(layout[exit_index]))
+                sys.exit(1)
+
+        # Save the current dir
+        cwd = os.getcwd()
+
+        # Go to bounty_hunter/ in the bounty's release
+        os.chdir(os.path.join(cwd, bounty_repo_dir, "bounty_hunter"))
+        if VERBOSE:
+            print("DB setup: Entering {}/bounty_hunter".format(bounty_repo_dir))
+
+        os.system(("rm -rf test.db " +
+            "&& diesel migration run" +
+            "&& cp test.db {dest}").format(dest=os.path.join(cwd, "bounty.db")))
+
+        # Go to exit_db/ in the exit's release
+        os.chdir(os.path.join(cwd, exit_repo_dir, "exit_db"))
+        if VERBOSE:
+            print("DB setup: Entering {}/exit_db".format(exit_repo_dir))
+
+        os.system(("rm -rf test.db " +
+            "&& diesel migration run" +
+            "&& cp test.db {dest}").format(dest=os.path.join(cwd, "exit.db")))
+
+        # Go back to where we started
+        os.chdir(cwd)
+
     def create(self):
         cleanup()
 
@@ -470,6 +530,10 @@ class World:
             start_babel(node)
 
         print("babel started")
+
+        print("Setting up rita_exit and bounty_hunter databases")
+        self.setup_dbs()
+        print("DB setup OK")
 
         print("starting bounty hunter")
         switch_binaries(self.bounty_id)
@@ -788,7 +852,7 @@ def check_log_contains(f, x):
         return False
 
 
-if __name__ == "__main__":
+def main():
     COMPAT_LAYOUTS["random"] = ['a' if random.randint(0, 1) else 'b' for _ in range(7)]
 
     if VERBOSE:
@@ -996,3 +1060,11 @@ if __name__ == "__main__":
     else:
         print("Rita tests have failed :(")
         exit(1)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt as e:
+        print("Received interrupt, exitting")
+        teardown()
