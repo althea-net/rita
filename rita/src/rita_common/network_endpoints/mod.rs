@@ -8,6 +8,8 @@ use futures::Future;
 use settings::RitaCommonSettings;
 use SETTING;
 
+use serde_json;
+
 use rita_common;
 use rita_common::payment_controller::PaymentController;
 use rita_common::tunnel_manager::{GetWgInterface, OpenTunnelListener, TunnelManager};
@@ -48,9 +50,27 @@ pub fn make_payments(
 }
 
 pub fn hello_response(
-    their_id: Json<Identity>,
+    their_id: Json<serde_json::Value>,
     req: HttpRequest,
 ) -> Box<Future<Item = Json<LocalIdentity>, Error = Error>> {
+    let new_id: Result<Identity, serde_json::Error> = serde_json::from_value(their_id.clone());
+    let old_id: Result<LocalIdentity, serde_json::Error> = serde_json::from_value(their_id.clone());
+
+    // remove in Alpha 6
+    let their_id = match new_id {
+        Ok(new_id) => {
+            info!("got new id sending new response");
+            new_id
+        }
+        Err(_) => match old_id {
+            Ok(old_id) => {
+                info!("got old_id sending new response");
+                old_id.global
+            }
+            _ => panic!("did not match either"),
+        },
+    };
+
     info!("Got Hello from {:?}", req.connection_info().remote());
 
     trace!("Received neighbour identity: {:?}", their_id);
