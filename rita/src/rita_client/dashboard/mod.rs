@@ -11,7 +11,7 @@ use babel_monitor::Babel;
 use num256::Int256;
 use rita_common::dashboard::Dashboard;
 use rita_common::debt_keeper::{DebtKeeper, Dump};
-use rita_common::tunnel_manager::{GetListen, Listen, TunnelManager, UnListen};
+use rita_common::tunnel_manager::{Listen, TunnelManager, UnListen};
 use settings::ExitServer;
 use settings::RitaClientSettings;
 use settings::RitaCommonSettings;
@@ -20,13 +20,14 @@ use SETTING;
 
 pub mod network_endpoints;
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct WifiInterface {
     #[serde(default)]
     pub section_name: String,
     pub network: String,
     #[serde(default)]
     pub mesh: bool,
+    pub mode: String,
     pub ssid: String,
     pub encryption: String,
     pub key: String,
@@ -34,7 +35,7 @@ pub struct WifiInterface {
     pub device: WifiDevice,
 }
 
-#[derive(Serialize, Deserialize, Default, Clone)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct WifiDevice {
     #[serde(default)]
     pub section_name: String,
@@ -56,63 +57,53 @@ impl Message for GetWifiConfig {
 }
 
 impl Handler<GetWifiConfig> for Dashboard {
-    type Result = ResponseFuture<Vec<WifiInterface>, Error>;
+    type Result = Result<Vec<WifiInterface>, Error>;
 
     fn handle(&mut self, _msg: GetWifiConfig, _ctx: &mut Self::Context) -> Self::Result {
-        Box::new(
-            TunnelManager::from_registry()
-                .send(GetListen {})
-                .from_err()
-                .and_then(|res| {
-                    let res = res.unwrap();
-                    let mut interfaces = Vec::new();
-                    let mut devices = HashMap::new();
+        let mut interfaces = Vec::new();
+        let mut devices = HashMap::new();
 
-                    let config = KI.ubus_call("uci", "get", "{ \"config\": \"wireless\"}")?;
+        let config = KI.ubus_call("uci", "get", "{ \"config\": \"wireless\"}")?;
 
-                    let val: Value = serde_json::from_str(&config)?;
+        let val: Value = serde_json::from_str(&config)?;
 
-                    let items = match val["values"].as_object() {
-                        Some(i) => i,
-                        None => {
-                            error!("No \"values\" key in parsed wifi config!");
-                            return Err(format_err!("No \"values\" key parsed wifi config")).into();
-                        }
-                    };
+        let items = match val["values"].as_object() {
+            Some(i) => i,
+            None => {
+                error!("No \"values\" key in parsed wifi config!");
+                return Err(format_err!("No \"values\" key parsed wifi config")).into();
+            }
+        };
 
-                    for (k, v) in items {
-                        if v[".type"] == "wifi-device" {
-                            let mut device: WifiDevice = serde_json::from_value(v.clone())?;
-                            device.section_name = k.clone();
+        for (k, v) in items {
+            if v[".type"] == "wifi-device" {
+                let mut device: WifiDevice = serde_json::from_value(v.clone())?;
+                device.section_name = k.clone();
 
-                            let channel: String =
-                                serde_json::from_value(v["channel"].clone()).unwrap();
-                            let channel: u8 = channel.parse().unwrap();
-                            if channel > 20 {
-                                device.radio_type = "5ghz".to_string();
-                            } else {
-                                device.radio_type = "2ghz".to_string();
-                            }
+                let channel: String = serde_json::from_value(v["channel"].clone())?;
+                let channel: u8 = channel.parse()?;
+                if channel > 20 {
+                    device.radio_type = "5ghz".to_string();
+                } else {
+                    device.radio_type = "2ghz".to_string();
+                }
 
-                            devices.insert(device.section_name.to_string(), device);
-                        }
-                    }
-                    for (k, v) in items {
-                        if v[".type"] == "wifi-iface" {
-                            let mut interface: WifiInterface = serde_json::from_value(v.clone())?;
-                            interface.mesh = res.contains(&interface.device.section_name);
-                            interface.section_name = k.clone();
+                devices.insert(device.section_name.to_string(), device);
+            }
+        }
+        for (k, v) in items {
+            if v[".type"] == "wifi-iface" {
+                let mut interface: WifiInterface = serde_json::from_value(v.clone())?;
+                interface.mesh = interface.mode.contains("adhoc");
+                interface.section_name = k.clone();
 
-                            let device_name: String =
-                                serde_json::from_value(v["device"].clone()).unwrap();
-                            interface.device = devices[&device_name].clone();
-                            interfaces.push(interface);
-                        }
-                    }
+                let device_name: String = serde_json::from_value(v["device"].clone())?;
+                interface.device = devices[&device_name].clone();
+                interfaces.push(interface);
+            }
+        }
 
-                    Ok(interfaces)
-                }),
-        )
+        Ok(interfaces)
     }
 }
 
@@ -127,18 +118,41 @@ impl Handler<SetWifiConfig> for Dashboard {
 
     fn handle(&mut self, msg: SetWifiConfig, _ctx: &mut Self::Context) -> Self::Result {
         for i in msg.0 {
-            if i.mesh {
-                TunnelManager::from_registry().do_send(Listen(i.device.section_name.clone()))
-            } else {
-                TunnelManager::from_registry().do_send(UnListen(i.device.section_name.clone()))
-            }
+            //TODO parse ifname from the WifiDevice instead of this hack,
+            // probably easy to add when we add the ability to change the default wireless channel
+            let iface_number = i.section_name.clone().chars().last();
 
-            KI.set_uci_var(&format!("wireless.{}.ssid", i.section_name), &i.ssid)?;
-            KI.set_uci_var(
-                &format!("wireless.{}.encryption", i.section_name),
-                &i.encryption,
-            )?;
-            KI.set_uci_var(&format!("wireless.{}.key", i.section_name), &i.key)?;
+            if i.mesh && iface_number.is_some() {
+                let iface_name = format!("rita_wlan{:?}", iface_number);
+
+                TunnelManager::from_registry().do_send(Listen(iface_name.clone()));
+                KI.set_uci_var(&format!("wireless.{}.ssid", i.section_name), "AltheaMesh")?;
+                KI.set_uci_var(&format!("wireless.{}.encryption", i.section_name), "none")?;
+                KI.set_uci_var(&format!("wireless.{}.mode", i.section_name), "adhoc")?;
+                KI.set_uci_var(&format!("wireless.{}.network", i.section_name), &iface_name)?;
+                KI.set_uci_var(&format!("network.{}", iface_name.clone()), "interface")?;
+                KI.set_uci_var(
+                    &format!("network.{}.ifname", iface_name.clone()),
+                    &iface_name,
+                )?;
+                KI.set_uci_var(&format!("network.{}.proto", iface_name.clone()), "static")?;
+            } else if iface_number.is_some() {
+                let iface_name = format!("rita_wlan{:?}", iface_number);
+
+                TunnelManager::from_registry().do_send(UnListen(iface_name));
+                KI.set_uci_var(&format!("wireless.{}.ssid", i.section_name), &i.ssid)?;
+                KI.set_uci_var(
+                    &format!("wireless.{}.encryption", i.section_name),
+                    &i.encryption,
+                )?;
+                KI.set_uci_var(&format!("wireless.{}.key", i.section_name), &i.key)?;
+                KI.set_uci_var(&format!("wireless.{}.mode", i.section_name), "ap")?;
+                KI.set_uci_var(
+                    &format!("wireless.{}.encryption", i.section_name),
+                    "psk2+tkip+aes",
+                )?;
+                KI.set_uci_var(&format!("wireless.{}.network", i.section_name), "lan")?;
+            }
         }
 
         KI.uci_commit()?;
