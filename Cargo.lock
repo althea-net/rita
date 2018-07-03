@@ -112,7 +112,7 @@ dependencies = [
 name = "althea_rs"
 version = "0.1.0"
 dependencies = [
- "rita 0.1.0",
+ "rita 0.1.1",
 ]
 
 [[package]]
@@ -122,7 +122,6 @@ dependencies = [
  "actix 0.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "ethereum-types 0.3.2 (git+https://github.com/paritytech/primitives.git)",
- "base64 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "eui48 0.4.0 (git+https://github.com/althea-mesh/eui48)",
  "hex 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "num256 0.1.0",
@@ -175,7 +174,7 @@ dependencies = [
  "bufstream 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.5.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "ip_network 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ipnetwork 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "mockstream 0.0.3 (git+https://github.com/lazy-bitfield/rust-mockstream.git)",
 ]
@@ -374,14 +373,6 @@ dependencies = [
  "toml 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-normalization 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "url 1.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "cloudabi"
-version = "0.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "bitflags 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -961,11 +952,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ip_network"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
 name = "ipconfig"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -990,6 +976,15 @@ dependencies = [
 name = "ipnetwork"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "ipnetwork"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "serde 1.0.66 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_derive 1.0.66 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "itertools"
@@ -1562,23 +1557,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rand"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "cloudabi 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "fuchsia-zircon 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "libc 0.2.42 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand_core 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "winapi 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "rand_core"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
 name = "redox_syscall"
 version = "0.1.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1699,7 +1677,7 @@ dependencies = [
 
 [[package]]
 name = "rita"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "actix 0.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-web 0.6.13 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1719,7 +1697,7 @@ dependencies = [
  "exit_db 0.1.0",
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.21 (registry+https://github.com/rust-lang/crates.io-index)",
- "ip_network 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ipnetwork 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "libsqlite3-sys 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1727,7 +1705,7 @@ dependencies = [
  "mockito 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "mockstream 0.0.3 (git+https://github.com/lazy-bitfield/rust-mockstream.git)",
  "num256 0.1.0",
- "rand 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "reqwest 0.8.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2686,7 +2664,6 @@ source = "git+https://github.com/kingoflolz/actix?branch=custom-resolver#869f52d
 "checksum chunked_transfer 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "498d20a7aaf62625b9bf26e637cf7736417cde1d0c99f1d04d1170229a85cf87"
 "checksum clippy 0.0.208 (registry+https://github.com/rust-lang/crates.io-index)" = "35420153f510ee10d0ac061c0c53b97ad83e238742c6479b9e35bc432a5e381f"
 "checksum clippy_lints 0.0.208 (registry+https://github.com/rust-lang/crates.io-index)" = "3c930a2f2bb5849897e389de6ee9eb2294a1c3adee5b07090c5cb04839de23e5"
-"checksum cloudabi 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)" = "ddfc5b9aa5d4507acaf872de71051dfd0e309860e88966e1051e462a077aac4f"
 "checksum config 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)" = "e595d1735d8ab6b04906bbdcfc671cce2a5e609b6f8e92865e67331cc2f41ba4"
 "checksum cookie 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)" = "746858cae4eae40fff37e1998320068df317bc247dc91a67c6cfa053afdc2abb"
 "checksum core-foundation 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "25bfd746d203017f7d5cbd31ee5d8e17f94b6521c7af77ece6c9e4b2d4b16c67"
@@ -2749,10 +2726,10 @@ source = "git+https://github.com/kingoflolz/actix?branch=custom-resolver#869f52d
 "checksum if_chain 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "61bb90bdd39e3af69b0172dfc6130f6cd6332bf040fbb9bdd4401d37adbd48b8"
 "checksum indexmap 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "08173ba1e906efb6538785a8844dd496f5d34f0a2d88038e95195172fc667220"
 "checksum iovec 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "dbe6e417e7d0975db6512b90796e8ce223145ac4e33c377e4a42882a0e88bb08"
-"checksum ip_network 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "387b23ff632e96bc9f732e77bbe26722172330164f795ff7a7b3dce90f02e0e1"
 "checksum ipconfig 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "9ec4e18c0a0d4340870c14284293632d8421f419008371422dd327892b88877c"
 "checksum ipgen 0.0.4 (registry+https://github.com/rust-lang/crates.io-index)" = "f6b74dfbc511e305536157ec0e13144fe130c36c0e179e0a1c3cfaeb01cc2017"
 "checksum ipnetwork 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)" = "3a3ba16e970f08bbafa7d53808e5871721836912341509ee693f330a539dd666"
+"checksum ipnetwork 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7b750b2f5cc97f86d0280a173e64fee0cbb4cb73077ee201208ff4f063668b89"
 "checksum itertools 0.7.8 (registry+https://github.com/rust-lang/crates.io-index)" = "f58856976b776fedd95533137617a02fb25719f40e7d9b01c7043cd65474f450"
 "checksum itoa 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "c069bbec61e1ca5a596166e55dfe4773ff745c3d16b700013bcaff9a6df2c682"
 "checksum kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7507624b29483431c0ba2d82aece8ca6cdba9382bff4ddd0f7490560c056098d"
@@ -2820,8 +2797,6 @@ source = "git+https://github.com/kingoflolz/actix?branch=custom-resolver#869f52d
 "checksum quote 0.6.3 (registry+https://github.com/rust-lang/crates.io-index)" = "e44651a0dc4cdd99f71c83b561e221f714912d11af1a4dff0631f923d53af035"
 "checksum rand 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)" = "15a732abf9d20f0ad8eeb6f909bf6868722d9a06e1e50802b6a70351f40b4eb1"
 "checksum rand 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)" = "eba5f8cb59cc50ed56be8880a5c7b496bfd9bd26394e176bc67884094145c2c5"
-"checksum rand 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)" = "482c45f965103f2433002a0c4d908599f38d1b8c1375e66e801a24c1c6cadc03"
-"checksum rand_core 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "edecf0f94da5551fc9b492093e30b041a891657db7940ee221f9d2f66e82eef2"
 "checksum redox_syscall 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)" = "c214e91d3ecf43e9a4e41e578973adeb14b474f2bee858742d127af75a0112b1"
 "checksum redox_termios 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "7e891cfe48e9100a70a3b6eb652fef28920c117d366339687bd5576160db0f76"
 "checksum regex 0.1.80 (registry+https://github.com/rust-lang/crates.io-index)" = "4fd4ace6a8cf7860714a2c2280d6c1f7e6a413486c13298bbc86fd3da019402f"

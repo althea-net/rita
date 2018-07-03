@@ -41,10 +41,7 @@ use althea_kernel_interface::TestCommandRunner;
 
 use config::Config;
 
-use althea_types::{
-    DeserializeWith, EthAddress, ExitClientDetails, ExitDetails, ExitRegistrationDetails,
-    ExitState, Identity,
-};
+use althea_types::{EthAddress, ExitRegistrationDetails, ExitState, Identity};
 
 use num256::Int256;
 
@@ -178,20 +175,11 @@ pub struct ExitServer {
     pub id: Identity,
     /// The port over which we will reach the exit apis on over the mesh
     pub registration_port: u16,
-    /// This stores information which the exit gives us from registration, and is specific to this
-    /// particular node (such as local ip on the exit tunnel)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub our_details: Option<ExitClientDetails>,
-    /// This stores information on the exit which is consistent across all nodes which the exit
-    /// serves (for example the exit's own ip/gateway ip within the exit tunnel)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub general_details: Option<ExitDetails>,
-    /// The state the exit is in, used to control if/when/how to poll the exit
-    #[serde(default, deserialize_with = "ExitState::deserialize_with")]
-    pub state: ExitState,
-    /// The message returned from the exit from registration
     #[serde(default)]
-    pub message: String,
+    pub description: String,
+    /// The state and data about the exit
+    #[serde(default, flatten)]
+    pub info: ExitState,
 }
 
 /// This struct is used by rita to encapsulate all the state/information needed to connect/register
@@ -221,7 +209,6 @@ impl Default for ExitClientSettings {
             reg_details: Some(ExitRegistrationDetails {
                 zip_code: Some("1234".into()),
                 email: Some("1234@gmail.com".into()),
-                country: Some("Althea".into()),
             }),
             lan_nics: HashSet::new(),
         }
@@ -660,4 +647,25 @@ where
         KI.fs_sync()?;
         Ok(())
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_settings_example() {
+        RitaSettingsStruct::new("example.toml").unwrap();
+    }
+
+    #[test]
+    fn test_settings_default() {
+        RitaSettingsStruct::new("default.toml").unwrap();
+    }
+
+    #[test]
+    fn test_exit_settings_default() {
+        RitaExitSettingsStruct::new("default_exit.toml").unwrap();
+    }
+
 }

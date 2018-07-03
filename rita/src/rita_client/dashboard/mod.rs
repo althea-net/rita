@@ -269,11 +269,12 @@ fn is_selected(exit: &ExitServer, current_exit: Option<&ExitServer>) -> Result<b
 /// the exit tunnel via a ping
 fn is_tunnel_working(exit: &ExitServer, current_exit: Option<&ExitServer>) -> Result<bool, Error> {
     if current_exit.is_some() && is_selected(exit, current_exit)? {
-        if current_exit.unwrap().general_details.is_some() {
+        if current_exit.unwrap().info.general_details().is_some() {
             let internal_ip = current_exit
                 .unwrap()
                 .clone()
-                .general_details
+                .info
+                .general_details()
                 .unwrap()
                 .server_internal_ip;
             KI.ping_check_v4(&internal_ip)

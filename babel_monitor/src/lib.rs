@@ -1,7 +1,7 @@
 extern crate bufstream;
 #[macro_use]
 extern crate failure;
-extern crate ip_network;
+extern crate ipnetwork;
 #[macro_use]
 extern crate log;
 extern crate mockstream;
@@ -14,7 +14,7 @@ use std::str;
 
 use bufstream::BufStream;
 use failure::Error;
-use ip_network::IpNetwork;
+use ipnetwork::IpNetwork;
 
 #[derive(Debug, Fail)]
 pub enum BabelMonitorError {
@@ -244,14 +244,12 @@ impl<T: Read + Write> Babel<T> {
         for neigh_route in routes.iter() {
             // This will fail on v4 babel routes etc
             if let IpNetwork::V6(ref ip) = neigh_route.prefix {
-                if ip.get_network_address() == neigh_mesh_ip {
+                if ip.ip() == neigh_mesh_ip {
                     let neigh_local_ip = neigh_route.neigh_ip;
                     // Now we take the neigh_local_ip and search for a route via that
                     for route in routes.iter() {
                         if let IpNetwork::V6(ref ip) = route.prefix {
-                            if ip.get_network_address() == dest_mesh_ip
-                                && route.neigh_ip == neigh_local_ip
-                            {
+                            if ip.ip() == dest_mesh_ip && route.neigh_ip == neigh_local_ip {
                                 return Ok(route.clone());
                             }
                         }
@@ -270,7 +268,7 @@ impl<T: Read + Write> Babel<T> {
     ) -> Result<bool, Error> {
         for route in routes.iter() {
             if let IpNetwork::V6(ref ip) = route.prefix {
-                if ip.get_network_address() == *mesh_ip && route.installed {
+                if ip.ip() == *mesh_ip && route.installed {
                     return Ok(true);
                 }
             }

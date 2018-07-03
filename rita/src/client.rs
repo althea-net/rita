@@ -29,7 +29,7 @@ extern crate docopt;
 extern crate env_logger;
 extern crate eui48;
 extern crate futures;
-extern crate ip_network;
+extern crate ipnetwork;
 extern crate minihttpse;
 extern crate rand;
 extern crate regex;
@@ -41,7 +41,6 @@ extern crate tokio;
 extern crate tokio_core;
 extern crate trust_dns_resolver;
 
-#[cfg(not(test))]
 use docopt::Docopt;
 #[cfg(not(test))]
 use settings::FileWrite;
@@ -78,7 +77,6 @@ struct Args {
     flag_future: bool,
 }
 
-#[cfg(not(test))]
 lazy_static! {
     static ref USAGE: String = format!(
         "Usage: rita --config=<settings> --platform=<platform> [--future]
@@ -144,6 +142,16 @@ lazy_static! {
 
 fn main() {
     env_logger::init();
+
+    let args: Args = Docopt::new((*USAGE).as_str())
+        .and_then(|d| d.deserialize())
+        .unwrap_or_else(|e| e.exit());
+
+    let settings_file = args.flag_config;
+
+    // to get errors before lazy static
+    RitaSettingsStruct::new(&settings_file).expect("Settings parse failure");
+
     trace!("Starting");
     info!(
         "crate ver {}, git hash {}",
