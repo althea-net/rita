@@ -45,7 +45,6 @@ extern crate trust_dns_resolver;
 
 use settings::{RitaCommonSettings, RitaExitSettings, RitaExitSettingsStruct};
 
-#[cfg(not(test))]
 use docopt::Docopt;
 #[cfg(not(test))]
 use settings::FileWrite;
@@ -80,7 +79,6 @@ struct Args {
     flag_future: bool,
 }
 
-#[cfg(not(test))]
 lazy_static! {
     static ref USAGE: String = format!(
         "Usage: rita_exit --config=<settings>
@@ -145,6 +143,16 @@ lazy_static! {
 
 fn main() {
     env_logger::init();
+
+    let args: Args = Docopt::new((*USAGE).as_str())
+        .and_then(|d| d.deserialize())
+        .unwrap_or_else(|e| e.exit());
+
+    let settings_file = args.flag_config;
+
+    // to get errors before lazy static
+    RitaExitSettingsStruct::new(&settings_file).expect("Settings parse failure");
+
     trace!("Starting");
     info!(
         "crate ver {}, git hash {}",
