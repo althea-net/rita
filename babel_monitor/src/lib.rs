@@ -268,7 +268,7 @@ impl<T: Read + Write> Babel<T> {
     ) -> Result<bool, Error> {
         for route in routes.iter() {
             if let IpNetwork::V6(ref ip) = route.prefix {
-                if ip.get_network_address() == *mesh_ip && route.installed {
+                if ip.ip() == *mesh_ip && route.installed {
                     return Ok(true);
                 }
             }

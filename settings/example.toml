@@ -12,6 +12,7 @@ babel_port = 6872
 rita_hello_port = 4876
 rita_contact_port = 4874
 rita_dashboard_port = 4877
+rita_tick_interval = 5
 bounty_port = 8888
 wg_private_key = ""
 wg_private_key_path = "/tmp/priv"
