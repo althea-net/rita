@@ -648,3 +648,24 @@ where
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_settings_example() {
+        RitaSettingsStruct::new("example.toml").unwrap();
+    }
+
+    #[test]
+    fn test_settings_default() {
+        RitaSettingsStruct::new("default.toml").unwrap();
+    }
+
+    #[test]
+    fn test_exit_settings_default() {
+        RitaExitSettingsStruct::new("default_exit.toml").unwrap();
+    }
+
+}
