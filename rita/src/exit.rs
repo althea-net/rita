@@ -35,6 +35,8 @@ extern crate env_logger;
 extern crate eui48;
 extern crate futures;
 extern crate ipnetwork;
+extern crate lettre;
+extern crate lettre_email;
 extern crate minihttpse;
 extern crate rand;
 extern crate regex;

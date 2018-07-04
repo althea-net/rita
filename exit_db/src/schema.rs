@@ -8,5 +8,7 @@ table! {
         email -> Text,
         zip -> Text,
         country -> Text,
+        email_code -> Text,
+        verified -> Bool,
     }
 }
