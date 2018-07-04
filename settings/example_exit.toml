@@ -35,5 +35,8 @@ exit_start_ip = "172.168.1.100"
 netmask = 24
 
 [mailer]
-test = true
-test_dir = "mail"
+from_address = "verification@altheamesh.com"
+smtp_url = "smtp.fastmail.com"
+smtp_domain = "mail.altheamesh.com"
+smtp_username = "changeme"
+smtp_password = "changeme"

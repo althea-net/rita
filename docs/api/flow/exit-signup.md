@@ -25,10 +25,7 @@ msc {
   frontend->rita [ label = "GET /settings" ] ;
   frontend<-rita [ label = "Exit list (state pending)" ] ;
 
-  rita->exit [ label = "POST /setup" ] ;
-  rita<-exit [ label = "Pending" ] ;
-
-  ---  [ label = "repeat until user checks email" ];
+  ---  [ label = "when user checks email" ];
 
   frontend<-useremail [ label = "one time code" ] ;
 
