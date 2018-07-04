@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+from pprint import pprint
 from termcolor import colored
 
 import errno
@@ -574,6 +575,89 @@ class World:
                                                 global_fail=global_fail)
         return result
 
+    def test_endpoints_all(self):
+        for node in self.nodes.values():
+
+            # We don't expect the exit to work the same as others
+            if node.id == self.exit_id:
+                # Exit-specific stuff
+                continue
+
+            print(colored("====== Endpoints for node {} ======".format(node.id), "green"))
+
+            # /neighbors
+            if VERBOSE:
+                print(colored("Hitting /neighbors:", "green"))
+
+            result = subprocess.Popen(shlex.split("ip netns exec "
+                + "netlab-{} curl -sfg6 [::1]:4877/neighbors".format(node.id)),
+                stdout=subprocess.PIPE)
+            assert_test(not result.wait(), "curl-ing /neighbors")
+            try:
+                print("Received neighbors:")
+                if VERBOSE:
+                    neighbors = json.loads(result.stdout.read().decode('utf-8'))
+                    pprint(neighbors)
+                else:
+                    print(result.stdout.read().decode('utf-8'))
+            except json.JSONDecodeError as e:
+                assert_test(False, "Decoding the neighbors JSON")
+
+            # /exits
+            if VERBOSE:
+                print(colored("Hitting /exits:", "green"))
+
+            result = subprocess.Popen(shlex.split("ip netns exec "
+                + "netlab-{} curl -sfg6 [::1]:4877/exits".format(node.id)),
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            assert_test(not result.wait(), "curl-ing /exits")
+            try:
+                print("Received exits:")
+                if VERBOSE:
+                    exits = json.loads(result.stdout.read().decode('utf-8'))
+                    pprint(exits)
+                else:
+                    print(result.stdout.read().decode('utf-8'))
+            except json.JSONDecodeError as e:
+                assert_test(False, "Decoding the exits JSON")
+
+            # /info
+            if VERBOSE:
+                print(colored("Hitting /info:", "green"))
+
+            result = subprocess.Popen(shlex.split("ip netns exec "
+                + "netlab-{} curl -sfg6 [::1]:4877/info".format(node.id)),
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            assert_test(not result.wait(), "curl-ing /info")
+            try:
+                print("Received info:")
+                if VERBOSE:
+                    info = json.loads(result.stdout.read().decode('utf-8'))
+                    pprint(info)
+                else:
+                    print(result.stdout.read().decode('utf-8'))
+            except json.JSONDecodeError as e:
+                assert_test(False, "Decoding the info JSON")
+
+            # /settings
+            if VERBOSE:
+                print(colored("Hitting /settings:", "green"))
+
+            result = subprocess.Popen(shlex.split("ip netns exec "
+                + "netlab-{} curl -sfg6 [::1]:4877/settings".format(node.id)),
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            assert_test(not result.wait(), "curl-ing /settings")
+            try:
+                print("Received settings:")
+                if VERBOSE:
+                    settings = json.loads(result.stdout.read().decode('utf-8'))
+                    pprint(settings)
+                else:
+                    print(result.stdout.read().decode('utf-8'))
+            except json.JSONDecodeError as e:
+                assert_test(False, "Decoding the settings JSON")
+
+
     def get_balances(self):
         status = subprocess.Popen(
                  ["ip", "netns", "exec", "netlab-{}".format(self.bounty_id), "curl", "-s", "-g", "-6",
@@ -750,6 +834,7 @@ if __name__ == "__main__":
     for k, v in world.nodes.items():
         register_to_exit(v)
 
+    world.test_endpoints_all()
 
     if DEBUG:
         print("Debug mode active, examine the mesh and press y to continue " +
