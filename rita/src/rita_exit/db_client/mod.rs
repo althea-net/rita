@@ -8,6 +8,7 @@ use diesel::select;
 use reqwest;
 
 use std::net::IpAddr;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use lettre::file::FileEmailTransport;
 use lettre::smtp::authentication::{Credentials, Mechanism};
@@ -203,6 +204,27 @@ fn verify_client(
     Ok(())
 }
 
+fn secs_since_unix_epoch() -> i32 {
+    let start = SystemTime::now();
+    let since_the_epoch = start
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards");
+    since_the_epoch.as_secs() as i32
+}
+
+fn update_mail_sent_time(
+    client: &ExitClientIdentity,
+    conn: &SqliteConnection,
+) -> Result<(), Error> {
+    use self::schema::clients::dsl::*;
+
+    diesel::update(clients.filter(email.eq(client.reg_details.email.clone().unwrap())))
+        .set(email_sent_time.eq(secs_since_unix_epoch() as i32))
+        .execute(&*conn)?;
+
+    Ok(())
+}
+
 fn client_exists(ip: &IpAddr, conn: &SqliteConnection) -> Result<bool, Error> {
     use self::schema::clients::dsl::*;
     Ok(select(exists(clients.filter(mesh_ip.eq(ip.to_string())))).get_result(&*conn)?)
@@ -230,6 +252,7 @@ fn client_to_new_db_client(
         country,
         email_code: format!("{:06}", rand_code),
         verified: false,
+        email_sent_time: 0,
     }
 }
 
@@ -323,14 +346,28 @@ impl Handler<SetupClient> for DbClient {
                                 message: "Registration OK".to_string(),
                             })
                         } else {
-                            // TODO: somehow prevent spam here
-                            send_mail(&their_record)?;
+                            let cooldown = SETTING.get_mailer().unwrap().email_cooldown as i32;
+                            let time_since_last_email =
+                                secs_since_unix_epoch() - their_record.email_sent_time;
 
-                            Ok(ExitState::Pending {
-                                general_details: get_exit_info(),
-                                message: "awaiting email verification".to_string(),
-                                email_code: None,
-                            })
+                            if time_since_last_email < cooldown {
+                                Ok(ExitState::GotInfo {
+                                    general_details: get_exit_info(),
+                                    message: format!(
+                                        "Wait {} more seconds for email verification cooldown",
+                                        cooldown - time_since_last_email
+                                    ),
+                                    auto_register: true,
+                                })
+                            } else {
+                                update_mail_sent_time(&client, &conn)?;
+                                send_mail(&their_record)?;
+                                Ok(ExitState::Pending {
+                                    general_details: get_exit_info(),
+                                    message: "awaiting email verification".to_string(),
+                                    email_code: None,
+                                })
+                            }
                         }
                     } else {
                         trace!("record does not exist, creating");

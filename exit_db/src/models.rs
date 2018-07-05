@@ -13,4 +13,6 @@ pub struct Client {
     pub country: String,
     pub email_code: String,
     pub verified: bool,
+    // TODO change before 2038
+    pub email_sent_time: i32,
 }

@@ -7,7 +7,5 @@ CREATE TABLE clients (
   internal_ip VARCHAR NOT NULL,
   email VARCHAR NOT NULL,
   zip VARCHAR NOT NULL,
-  country VARCHAR NOT NULL,
-  email_code VARCHAR NOT NULL,
-  verified bool NOT NULL
+  country VARCHAR NOT NULL
 )

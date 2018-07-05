@@ -277,13 +277,15 @@ impl Default for ExitNetworkSettings {
 /// This is the settings for email verification
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct ExitMailerSettings {
+    /// The email address of the from field of the email sent
+    pub from_address: String,
+    /// Min amount of time for emails going to the same address
+    pub email_cooldown: u64,
+
     #[serde(default)]
     pub test: bool,
     #[serde(default)]
     pub test_dir: String,
-    /// The email address of the from field of the email sent
-    #[serde(default)]
-    pub from_address: String,
     /// SMTP server url e.g. smtp.fastmail.com
     #[serde(default)]
     pub smtp_url: String,
