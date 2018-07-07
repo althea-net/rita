@@ -24,10 +24,8 @@ impl Actor for RitaLoop {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        ctx.run_later(Duration::from_secs(5), |_act, ctx| {
-            let addr: Addr<Unsync, Self> = ctx.address();
-            addr.do_send(Tick);
-        });
+        info!("exit loop started");
+        ctx.notify_later(Tick {}, Duration::from_secs(5));
     }
 }
 
@@ -65,7 +63,12 @@ impl Handler<Tick> for RitaLoop {
                 .into_actor(self)
                 .then(|res, _act, ctx| {
                     let clients = res.unwrap().unwrap();
-                    let ids = clients.clone().into_iter().map(to_identity).collect();
+                    let ids = clients
+                        .clone()
+                        .into_iter()
+                        .filter(|c| c.verified)
+                        .map(to_identity)
+                        .collect();
                     TrafficWatcher::from_registry().do_send(Watch(ids));
 
                     let mut wg_clients = Vec::new();

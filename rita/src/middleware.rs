@@ -6,14 +6,14 @@ use regex::Regex;
 pub struct Headers;
 
 impl<S> Middleware<S> for Headers {
-    fn start(&self, _req: &mut HttpRequest<S>) -> Result<Started> {
+    fn start(&self, _req: &HttpRequest<S>) -> Result<Started> {
         Ok(Started::Done)
     }
 
-    fn response(&self, req: &mut HttpRequest<S>, mut resp: HttpResponse) -> Result<Response> {
-        let url = req.connection_info().host();
+    fn response(&self, req: &HttpRequest<S>, mut resp: HttpResponse) -> Result<Response> {
+        let url = req.connection_info().host().to_owned();
         let re = Regex::new(r"^(.*):").unwrap();
-        let url_no_port = re.captures(url).unwrap()[1].to_string();
+        let url_no_port = re.captures(&url).unwrap()[1].to_string();
         if req.method() == &Method::OPTIONS {
             *resp.status_mut() = StatusCode::OK;
         }

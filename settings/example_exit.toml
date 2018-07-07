@@ -36,8 +36,8 @@ netmask = 24
 
 [mailer]
 email_cooldown=60
-from_address = "verification@altheamesh.com"
+from_address = "verification@example.com"
 smtp_url = "smtp.fastmail.com"
-smtp_domain = "mail.altheamesh.com"
+smtp_domain = "mail.example.com"
 smtp_username = "changeme"
 smtp_password = "changeme"

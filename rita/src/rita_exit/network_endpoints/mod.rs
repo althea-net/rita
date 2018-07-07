@@ -19,11 +19,16 @@ use rita_exit::db_client::ListClients;
 use std::net::SocketAddr;
 
 pub fn setup_request(
-    their_id: Json<ExitClientIdentity>,
-    req: HttpRequest,
+    their_id: (Json<ExitClientIdentity>, HttpRequest),
 ) -> Box<Future<Item = Json<ExitState>, Error = Error>> {
-    trace!("Received requester identity, {:?}", their_id);
-    let remote_mesh_socket: SocketAddr = req.connection_info().remote().unwrap().parse().unwrap();
+    trace!("Received requester identity, {:?}", their_id.0);
+    let remote_mesh_socket: SocketAddr = their_id
+        .1
+        .connection_info()
+        .remote()
+        .unwrap()
+        .parse()
+        .unwrap();
     let remote_mesh_ip = remote_mesh_socket.ip();
     Box::new(
         TunnelManager::from_registry()
@@ -32,7 +37,7 @@ pub fn setup_request(
             .and_then(|phy_ip| match phy_ip {
                 Ok(phy_ip) => Box::new(
                     DbClient::from_registry()
-                        .send(SetupClient(their_id.into_inner(), phy_ip))
+                        .send(SetupClient(their_id.0.into_inner(), phy_ip))
                         .from_err()
                         .and_then(move |reply| Ok(Json(reply?))),
                 ) as FutureResponse<Json<ExitState>, Error>,

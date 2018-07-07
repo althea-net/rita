@@ -38,4 +38,4 @@ netmask = 24
 test = true
 email_cooldown=60
 test_dir = "mail"
-from_address = "email-verif@altheamesh.com"
+from_address = "email-verif@example.com"
