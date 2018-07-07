@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use tokio_core::net::TcpStream as TokioTcpStream;
+use tokio::net::TcpStream as TokioTcpStream;
 
 use actix::prelude::*;
 use actix::registry::SystemService;
@@ -42,7 +42,7 @@ impl Handler<Hello> for HTTPClient {
     fn handle(&mut self, msg: Hello, _: &mut Self::Context) -> Self::Result {
         info!("sending {:?}", msg);
 
-        let stream = TokioTcpStream::connect2(&msg.to);
+        let stream = TokioTcpStream::connect(&msg.to);
 
         let endpoint = format!("http://[{}]:{}/hello", msg.to.ip(), msg.to.port());
 
@@ -54,7 +54,10 @@ impl Handler<Hello> for HTTPClient {
 
             let req = req.json(&msg.my_id);
 
+            trace!("sending hello request {:?}", req);
+
             req.unwrap().send().from_err().and_then(|response| {
+                trace!("got response from Hello {:?}", response);
                 response
                     .json()
                     .from_err()

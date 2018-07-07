@@ -5,6 +5,8 @@ use actix_web::*;
 
 use futures::Future;
 
+use failure::Error;
+
 use settings::RitaCommonSettings;
 use SETTING;
 
@@ -35,14 +37,13 @@ impl JsonStatusResponse {
 }
 
 pub fn make_payments(
-    pmt: Json<PaymentTx>,
-    req: HttpRequest,
+    pmt: (Json<PaymentTx>, HttpRequest),
 ) -> Box<Future<Item = HttpResponse, Error = Error>> {
-    info!("Got Payment from {:?}", req.connection_info().remote());
-    trace!("Received payment: {:?}", pmt,);
+    info!("Got Payment from {:?}", pmt.1.connection_info().remote());
+    trace!("Received payment: {:?}", pmt.0);
     PaymentController::from_registry()
         .send(rita_common::payment_controller::PaymentReceived(
-            pmt.into_inner(),
+            pmt.0.clone(),
         ))
         .from_err()
         .and_then(|_| Ok(HttpResponse::Ok().into()))
@@ -50,11 +51,10 @@ pub fn make_payments(
 }
 
 pub fn hello_response(
-    their_id: Json<serde_json::Value>,
-    req: HttpRequest,
+    req: (Json<serde_json::Value>, HttpRequest),
 ) -> Box<Future<Item = Json<LocalIdentity>, Error = Error>> {
-    let new_id: Result<Identity, serde_json::Error> = serde_json::from_value(their_id.clone());
-    let old_id: Result<LocalIdentity, serde_json::Error> = serde_json::from_value(their_id.clone());
+    let new_id: Result<Identity, serde_json::Error> = serde_json::from_value(req.0.clone());
+    let old_id: Result<LocalIdentity, serde_json::Error> = serde_json::from_value(req.0.clone());
 
     // remove in Alpha 6
     let their_id = match new_id {
@@ -71,7 +71,7 @@ pub fn hello_response(
         },
     };
 
-    info!("Got Hello from {:?}", req.connection_info().remote());
+    info!("Got Hello from {:?}", req.1.connection_info().remote());
 
     trace!("Received neighbour identity: {:?}", their_id);
 

@@ -289,7 +289,7 @@ pub struct ExitMailerSettings {
     /// SMTP server url e.g. smtp.fastmail.com
     #[serde(default)]
     pub smtp_url: String,
-    /// SMTP domain url e.g. mail.altheamesh.com
+    /// SMTP domain url e.g. mail.example.com
     #[serde(default)]
     pub smtp_domain: String,
     #[serde(default)]

@@ -334,9 +334,9 @@ def read_email(node):
     id = node.id
     # TODO: this is O(n^2)
     for mail in os.listdir("mail"):
-        with open(os.path.join("mail", mail)) as mail_text:
-            mail = json.load(mail_text)
-            if mail["envelope"]["forward_path"][0] == "{}@althea.com".format(id):
+        with open(os.path.join("mail", mail)) as mail_file_handle:
+            mail = json.load(mail_file_handle)
+            if mail["envelope"]["forward_path"][0] == "{}@example.com".format(id):
                 return ''.join(chr(i) for i in mail["message"])
     print("cannot find email for node {}".format(id))
 
@@ -356,7 +356,7 @@ def start_rita(node):
         )
     time.sleep(1.5)
 
-    EXIT_SETTINGS["reg_details"]["email"] = "{}@althea.com".format(id)
+    EXIT_SETTINGS["reg_details"]["email"] = "{}@example.com".format(id)
 
     os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
               .format(id=id, data=json.dumps({"exit_client": EXIT_SETTINGS})))

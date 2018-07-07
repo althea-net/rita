@@ -17,8 +17,6 @@ use std::str;
 
 use failure::Error;
 
-extern crate reqwest;
-
 use althea_kernel_interface::KI;
 
 extern crate althea_kernel_interface;

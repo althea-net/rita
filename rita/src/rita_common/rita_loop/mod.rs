@@ -4,13 +4,13 @@ use actix::prelude::*;
 use actix::registry::SystemService;
 
 #[cfg(not(test))]
-use actix::actors;
+use actix_web::actix::resolver::Resolver;
 
 #[cfg(not(test))]
 use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 
 #[cfg(not(test))]
-type Connector = actors::Connector;
+type Connector = Resolver;
 
 #[cfg(not(test))]
 use KI;
@@ -32,7 +32,7 @@ use settings::RitaCommonSettings;
 use SETTING;
 
 pub struct RitaLoop {
-    stats_collector: Addr<Syn, StatsCollector>,
+    stats_collector: Addr<StatsCollector>,
 }
 
 impl RitaLoop {
@@ -47,8 +47,10 @@ impl Actor for RitaLoop {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        ctx.run_later(Duration::from_secs(5), |_act, ctx| {
-            let addr: Addr<Unsync, Self> = ctx.address();
+        trace!("Common rita loop started!");
+
+        ctx.run_interval(Duration::from_secs(5), |_act, ctx| {
+            let addr: Addr<Self> = ctx.address();
             addr.do_send(Tick);
         });
     }
@@ -73,11 +75,11 @@ impl Handler<Tick> for RitaLoop {
         // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
         if SETTING.get_network().is_gateway {
             #[cfg(not(test))]
-            Arbiter::registry().init_actor(|_| {
+            System::current().registry().set(
                 //TODO: make the configurable when trust-dns-resolver serde issue is solved
                 //default is 8.8.8.8
-                Connector::new(ResolverConfig::default(), ResolverOpts::default())
-            });
+                Connector::new(ResolverConfig::default(), ResolverOpts::default()).start(),
+            );
             trace!("Adding default routes for TrustDNS");
             #[cfg(not(test))]
             for i in ResolverConfig::default().name_servers() {
@@ -114,15 +116,11 @@ impl Handler<Tick> for RitaLoop {
                     TrafficWatcher::from_registry()
                         .send(Watch(res))
                         .into_actor(act)
-                        .then(move |_res, _act, ctx| {
+                        .then(move |_res, _act, _ctx| {
                             info!("loop completed in {:?}", start.elapsed());
                             info!("traffic watcher completed in {:?}", neigh.elapsed());
                             DebtKeeper::from_registry().do_send(SendUpdate {});
                             PaymentController::from_registry().do_send(PaymentControllerUpdate {});
-                            ctx.notify_later(
-                                Tick {},
-                                Duration::from_secs(SETTING.get_network().rita_tick_interval),
-                            );
                             actix::fut::ok(())
                         })
                 }),

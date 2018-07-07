@@ -13,7 +13,7 @@ use rita_client::traffic_watcher::{TrafficWatcher, Watch};
 
 use futures::Future;
 
-use tokio_core::net::TcpStream as TokioTcpStream;
+use tokio::net::TcpStream as TokioTcpStream;
 
 use failure::Error;
 use std::net::SocketAddr;
@@ -50,7 +50,7 @@ fn linux_setup_exit_tunnel() -> Result<(), Error> {
 pub fn get_exit_info(to: &SocketAddr) -> impl Future<Item = ExitState, Error = Error> {
     let endpoint = format!("http://[{}]:{}/exit_info", to.ip(), to.port());
 
-    let stream = TokioTcpStream::connect2(to);
+    let stream = TokioTcpStream::connect(to);
 
     stream.from_err().and_then(move |stream| {
         client::get(&endpoint)
@@ -74,7 +74,7 @@ pub fn send_exit_setup_request(
 ) -> impl Future<Item = ExitState, Error = Error> {
     let endpoint = format!("http://[{}]:{}/setup", to.ip(), to.port());
 
-    let stream = TokioTcpStream::connect2(to);
+    let stream = TokioTcpStream::connect(to);
 
     stream.from_err().and_then(move |stream| {
         client::post(&endpoint)
@@ -98,7 +98,7 @@ pub fn send_exit_status_request(
 ) -> impl Future<Item = ExitState, Error = Error> {
     let endpoint = format!("http://[{}]:{}/status", to.ip(), to.port());
 
-    let stream = TokioTcpStream::connect2(to);
+    let stream = TokioTcpStream::connect(to);
 
     stream.from_err().and_then(move |stream| {
         client::post(&endpoint)
@@ -247,26 +247,24 @@ impl Handler<Tick> for ExitManager {
                     ..
                 } => {}
                 ExitState::New { .. } => {
-                    Arbiter::handle().spawn(exit_general_details_request(k.clone()).then(
-                        move |res| {
-                            match res {
-                                Ok(_) => {
-                                    info!("exit details request to {} was successful", k);
-                                }
-                                Err(e) => {
-                                    info!("exit details request to {} failed with {:?}", k, e);
-                                }
-                            };
-                            Ok(())
-                        },
-                    ));
+                    Arbiter::spawn(exit_general_details_request(k.clone()).then(move |res| {
+                        match res {
+                            Ok(_) => {
+                                info!("exit details request to {} was successful", k);
+                            }
+                            Err(e) => {
+                                info!("exit details request to {} failed with {:?}", k, e);
+                            }
+                        };
+                        Ok(())
+                    }));
                 }
                 ExitState::Registering { .. }
                 | ExitState::GotInfo {
                     auto_register: true,
                     ..
                 } => {
-                    Arbiter::handle().spawn(exit_setup_request(k.clone(), None).then(move |res| {
+                    Arbiter::spawn(exit_setup_request(k.clone(), None).then(move |res| {
                         match res {
                             Ok(_) => {
                                 info!("exit setup request (no code) to {} was successful", k);
@@ -282,7 +280,7 @@ impl Handler<Tick> for ExitManager {
                     email_code: Some(email_code),
                     ..
                 } => {
-                    Arbiter::handle().spawn(
+                    Arbiter::spawn(
                         exit_setup_request(k.clone(), Some(email_code.clone())).then(move |res| {
                             match res {
                                 Ok(_) => {
@@ -297,7 +295,7 @@ impl Handler<Tick> for ExitManager {
                     );
                 }
                 ExitState::Registered { .. } => {
-                    Arbiter::handle().spawn(exit_status_request(k.clone()).then(move |res| {
+                    Arbiter::spawn(exit_status_request(k.clone()).then(move |res| {
                         match res {
                             Ok(_) => {
                                 info!("exit status request to {} was successful", k);
