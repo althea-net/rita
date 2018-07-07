@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::net::{IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream};
 use std::path::Path;
 
 use actix::actors;
@@ -16,6 +16,8 @@ use babel_monitor::{Babel, Route};
 
 use rita_common;
 use rita_common::http_client::Hello;
+
+use subnet_dao::is_on_registry;
 
 use settings::RitaCommonSettings;
 use SETTING;
@@ -42,6 +44,8 @@ type Connector = actors::Connector;
 pub enum TunnelManagerError {
     #[fail(display = "DNS lookup error")]
     DNSLookupError,
+    #[fail(display = "Peer not on Subnet DAO")]
+    DAOMembershipError,
 }
 
 #[derive(Debug, Clone)]
@@ -61,7 +65,7 @@ impl TunnelData {
 }
 
 pub struct TunnelManager {
-    pub port: u16,
+    pub ports: Vec<u16>,
 
     tunnel_map: HashMap<IpAddr, TunnelData>,
     listen_interfaces: HashSet<String>,
@@ -240,20 +244,32 @@ impl Handler<OpenTunnelListener> for TunnelManager {
 
 impl TunnelManager {
     pub fn new() -> Self {
+        let mut ports = Vec::<u16>::new();
+        for i in SETTING.get_network().wg_start_port..65534 {
+            ports.push(i);
+        }
+
         TunnelManager {
             tunnel_map: HashMap::new(),
-            port: SETTING.get_network().wg_start_port,
+            ports: ports,
             listen_interfaces: SETTING.get_network().peer_interfaces.clone(),
         }
     }
 
     fn new_if(&mut self) -> TunnelData {
         trace!("creating new interface");
-        let r = TunnelData::new(self.port);
+        let r = TunnelData::new(self.ports.pop().expect("Ran out of tunnel ports!"));
         info!("creating new wg interface {:?}", r);
 
-        self.port += 1;
         r
+    }
+
+    fn if_exists(&mut self, ip: IpAddr) -> bool {
+        if self.tunnel_map.contains_key(&ip) {
+            true
+        } else {
+            false
+        }
     }
 
     fn get_if(&mut self, ip: IpAddr) -> TunnelData {
@@ -296,7 +312,7 @@ impl TunnelManager {
                     // Demorgans equal to "if a neighbor is on the listen interfaces and has a valid
                     // ip or if it's a manual peer and from the right nic don't filter it"
                     if !(self.listen_interfaces.contains(&dev)
-                        && ip_address.parse::<IpAddr>().is_ok())
+                        && ip_address.parse::<Ipv6Addr>().is_ok())
                         && !(SETTING.get_network().external_nic.is_some()
                             && SETTING
                                 .get_network()
@@ -359,7 +375,7 @@ impl TunnelManager {
                 let url = format!("http://[{}%{:?}]:4876/hello", their_hostname, dev);
                 info!("Saying hello to: {:?}", url);
 
-                TunnelManager::contact_neighbor(iface_index, ip)
+                TunnelManager::contact_neighbor(iface_index, ip, false)
             }),
             _ => Box::new(
                 Connector::from_registry()
@@ -373,7 +389,7 @@ impl TunnelManager {
                             if res.len() > 0 && SETTING.get_network().is_gateway {
                                 let their_ip = res[0].ip();
 
-                                TunnelManager::contact_neighbor(iface_index, their_ip)
+                                TunnelManager::contact_neighbor(iface_index, their_ip, true)
                             } else {
                                 trace!(
                                     "We're not a gateway or we got a zero length dns response: {:?}",
@@ -397,9 +413,23 @@ impl TunnelManager {
     fn contact_neighbor(
         iface_index: u32,
         their_ip: IpAddr,
+        manual_peer: bool,
     ) -> Box<Future<Item = (LocalIdentity, String, IpAddr), Error = Error>> {
-        KI.manual_peers_route(&their_ip, &mut SETTING.get_network_mut().default_route)
-            .unwrap();
+        // Check registry memebership for peers, but not manual peers
+        if manual_peer {
+            KI.manual_peers_route(&their_ip, &mut SETTING.get_network_mut().default_route)
+                .unwrap();
+        } else if SETTING.get_subnet_dao_settings().is_some() {
+            if their_ip.is_ipv6() && !is_on_registry(their_ip).unwrap() {
+                // If we opened a tunnel with this peer before we need to kick them off
+                // TODO check if they are providing our only upstream route
+                let _ = KI.delete_wg_if_by_address(their_ip);
+                return Box::new(futures::future::err(
+                    TunnelManagerError::DAOMembershipError.into(),
+                ))
+                    as Box<Future<Item = (LocalIdentity, String, IpAddr), Error = Error>>;
+            }
+        }
 
         let socket = match their_ip {
             IpAddr::V6(ip_v6) => SocketAddr::V6(SocketAddrV6::new(
@@ -447,6 +477,11 @@ impl TunnelManager {
     /// Given a LocalIdentity, connect to the neighbor over wireguard
     pub fn open_tunnel(&mut self, their_id: LocalIdentity, ip: IpAddr) -> Result<(), Error> {
         trace!("Getting tunnel, open tunnel");
+        if self.if_exists(their_id.global.mesh_ip) {
+            trace!("Tunnel exists no need to open");
+            return Ok(());
+        }
+
         let tunnel = self.get_if(their_id.global.mesh_ip);
         let network = SETTING.get_network().clone();
 

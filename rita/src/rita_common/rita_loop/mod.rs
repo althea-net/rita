@@ -65,8 +65,6 @@ impl Handler<Tick> for RitaLoop {
     fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
         trace!("Common tick!");
 
-        // let mut babel = Babel::new(&format!("[::1]:{}", SETTING.get_network().babel_port).parse().unwrap());
-
         self.stats_collector.do_send(Tick {});
 
         // Resolves the gateway client corner case
@@ -102,6 +100,7 @@ impl Handler<Tick> for RitaLoop {
                     let neigh = Instant::now();
 
                     for &(ref their_id, _, ref ip) in &res {
+                        //subnet registry check goes here
                         TunnelManager::from_registry()
                             .do_send(OpenTunnel(their_id.clone(), ip.clone()));
                     }

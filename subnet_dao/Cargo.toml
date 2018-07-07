@@ -1,0 +1,8 @@
+[package]
+name = "subnet_dao"
+version = "0.1.0"
+authors = ["Justin Kilpatrick <kilpatrickjustin@protonmail.ch>"]
+
+[dependencies]
+web3 = { git = "https://github.com/tomusdrw/rust-web3" }
+failure = "0.1.1"

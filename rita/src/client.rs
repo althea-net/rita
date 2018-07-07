@@ -64,6 +64,7 @@ extern crate althea_kernel_interface;
 extern crate althea_types;
 extern crate babel_monitor;
 extern crate num256;
+extern crate subnet_dao;
 
 mod middleware;
 mod rita_client;
