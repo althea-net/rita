@@ -22,9 +22,6 @@ use SETTING;
 
 use failure::Error;
 
-#[cfg(not(test))]
-use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
-
 #[cfg(test)]
 use actix::actors::mocker::Mocker;
 use ipnetwork::IpNetwork;
@@ -82,23 +79,6 @@ impl SystemService for TunnelManager {
             self.listen_interfaces.insert(i);
         }
         trace!("Loaded listen interfaces {:?}", self.listen_interfaces);
-
-        #[cfg(not(test))]
-        {
-            Arbiter::registry().init_actor(|_| {
-                //TODO: make the configurable when trust-dns-resolver serde issue is solved
-                //default is 8.8.8.8
-                Connector::new(ResolverConfig::default(), ResolverOpts::default())
-            });
-            // Resolves the gateway client corner case
-            // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
-            for i in ResolverConfig::default().name_servers() {
-                KI.manual_peers_route(
-                    &i.socket_addr.ip(),
-                    &mut SETTING.get_network_mut().default_route,
-                ).unwrap();
-            }
-        }
     }
 }
 
@@ -302,15 +282,34 @@ impl TunnelManager {
             .map(|&(ip_address, ref dev)| (ip_address.to_string(), Some(dev.clone())))
             .chain({
                 let mut out = Vec::new();
-                for i in SETTING.get_network().manual_peers.clone() {
-                    out.push((i, None))
+                if SETTING.get_network().is_gateway && SETTING.get_network().external_nic.is_some()
+                {
+                    for i in SETTING.get_network().manual_peers.clone() {
+                        out.push((i, SETTING.get_network().external_nic.clone()))
+                    }
                 }
                 out
             })
             .filter_map(|(ip_address, dev)| {
                 info!("neighbor at interface {:?}, ip {}", dev, ip_address,);
                 if let Some(dev) = dev.clone() {
-                    if !self.listen_interfaces.contains(&dev) {
+                    // Demorgans equal to "if a neighbor is on the listen interfaces and has a valid
+                    // ip or if it's a manual peer and from the right nic don't filter it"
+                    if !(self.listen_interfaces.contains(&dev)
+                        && ip_address.parse::<IpAddr>().is_ok())
+                        && !(SETTING.get_network().external_nic.is_some()
+                            && SETTING
+                                .get_network()
+                                .external_nic
+                                .clone()
+                                .unwrap()
+                                .contains(&dev)
+                            && SETTING.get_network().manual_peers.contains(&ip_address))
+                    {
+                        info!(
+                            "Filtering neighbor at interface {:?}, ip {}",
+                            dev, ip_address,
+                        );
                         return None;
                     }
                 }
@@ -354,32 +353,45 @@ impl TunnelManager {
             0
         };
 
-        Box::new(
-            Connector::from_registry()
-                .send(actors::Resolve::host(their_hostname.clone()))
-                .from_err()
-                .and_then(move |res| {
-                    let url = format!("http://[{}%{:?}]:4876/hello", their_hostname, dev);
-                    info!("Saying hello to: {:?} at ip {:?}", url, res);
+        trace!("Checking if {} is a url", their_hostname);
+        match their_hostname.parse::<IpAddr>() {
+            Ok(ip) => Box::new({
+                let url = format!("http://[{}%{:?}]:4876/hello", their_hostname, dev);
+                info!("Saying hello to: {:?}", url);
 
-                    if let Ok(res) = res {
-                        if res.len() > 0 && SETTING.get_network().is_gateway {
-                            let their_ip = res[0].ip();
+                TunnelManager::contact_neighbor(iface_index, ip)
+            }),
+            _ => Box::new(
+                Connector::from_registry()
+                    .send(actors::Resolve::host(their_hostname.clone()))
+                    .from_err()
+                    .and_then(move |res| {
+                        let url = format!("http://[{}%{:?}]:4876/hello", their_hostname, dev);
+                        info!("Saying hello to: {:?} at ip {:?}", url, res);
 
-                            TunnelManager::contact_neighbor(iface_index, their_ip)
+                        if let Ok(res) = res {
+                            if res.len() > 0 && SETTING.get_network().is_gateway {
+                                let their_ip = res[0].ip();
+
+                                TunnelManager::contact_neighbor(iface_index, their_ip)
+                            } else {
+                                trace!(
+                                    "We're not a gateway or we got a zero length dns response: {:?}",
+                                    res
+                                );
+                                Box::new(futures::future::err(
+                                    TunnelManagerError::DNSLookupError.into(),
+                                ))
+                            }
                         } else {
+                            trace!("Error during dns request!");
                             Box::new(futures::future::err(
                                 TunnelManagerError::DNSLookupError.into(),
                             ))
                         }
-                    } else {
-                        match their_hostname.parse() {
-                            Ok(their_ip) => TunnelManager::contact_neighbor(iface_index, their_ip),
-                            Err(err) => Box::new(futures::future::err(err.into())),
-                        }
-                    }
-                }),
-        )
+                    }),
+            ),
+        }
     }
 
     fn contact_neighbor(
@@ -905,7 +917,7 @@ mod tests {
         let mut ip_route_add_counter = 0;
         let mut iface_counter = 0;
 
-        let external_ips = ["fe80::1234", "1.1.1.1", "2.2.2.2"];
+        let external_ips = ["fe80::1234", "2.2.2.2", "1.1.1.1"];
         let wg_ifaces = ["wg0", "wg1", "wg2"];
 
         KI.set_mock(Box::new(move |program, args| {
@@ -1065,16 +1077,16 @@ mod tests {
                     ),
                     (
                         LocalIdentity {
-                            wg_port: 60002,
-                            global: get_inc_id(2),
+                            wg_port: 60003,
+                            global: get_inc_id(3),
                         },
                         "wg1".to_string(),
                         "1.1.1.1".parse().unwrap(),
                     ),
                     (
                         LocalIdentity {
-                            wg_port: 60003,
-                            global: get_inc_id(3),
+                            wg_port: 60002,
+                            global: get_inc_id(2),
                         },
                         "wg2".to_string(),
                         "2.2.2.2".parse().unwrap(),

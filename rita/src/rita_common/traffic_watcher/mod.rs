@@ -219,6 +219,7 @@ pub fn watch<T: Read + Write>(
         _ => false,
     };
 
+    trace!("We are a Gateway: {}", gateway);
     SETTING.get_network_mut().is_gateway = gateway;
 
     Ok(())

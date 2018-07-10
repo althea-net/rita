@@ -3,6 +3,18 @@ use std::time::{Duration, Instant};
 use actix::prelude::*;
 use actix::registry::SystemService;
 
+#[cfg(not(test))]
+use actix::actors;
+
+#[cfg(not(test))]
+use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
+
+#[cfg(not(test))]
+type Connector = actors::Connector;
+
+#[cfg(not(test))]
+use KI;
+
 use rita_common::tunnel_manager::{GetNeighbors, TunnelManager};
 
 use rita_common::traffic_watcher::{TrafficWatcher, Watch};
@@ -56,6 +68,26 @@ impl Handler<Tick> for RitaLoop {
         // let mut babel = Babel::new(&format!("[::1]:{}", SETTING.get_network().babel_port).parse().unwrap());
 
         self.stats_collector.do_send(Tick {});
+
+        // Resolves the gateway client corner case
+        // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
+        if SETTING.get_network().is_gateway {
+            #[cfg(not(test))]
+            Arbiter::registry().init_actor(|_| {
+                //TODO: make the configurable when trust-dns-resolver serde issue is solved
+                //default is 8.8.8.8
+                Connector::new(ResolverConfig::default(), ResolverOpts::default())
+            });
+            trace!("Adding default routes for TrustDNS");
+            #[cfg(not(test))]
+            for i in ResolverConfig::default().name_servers() {
+                trace!("TrustDNS default {:?}", i);
+                KI.manual_peers_route(
+                    &i.socket_addr.ip(),
+                    &mut SETTING.get_network_mut().default_route,
+                ).unwrap();
+            }
+        }
 
         let start = Instant::now();
         ctx.spawn(
