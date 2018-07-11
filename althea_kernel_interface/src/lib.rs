@@ -19,7 +19,6 @@ use std::str;
 
 mod counter;
 mod create_wg_key;
-mod delete_tunnel;
 mod exit_client_tunnel;
 mod exit_server_counter;
 mod exit_server_tunnel;
@@ -30,11 +29,11 @@ mod interface_tools;
 mod ip_route;
 mod iptables;
 mod link_local_tools;
+mod manage_wg_if;
 mod manipulate_uci;
 mod open_tunnel;
 mod openwrt_ubus;
 mod ping_check;
-mod setup_wg_if;
 mod stats;
 mod wireless;
 

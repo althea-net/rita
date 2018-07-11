@@ -235,6 +235,8 @@ pub struct RitaSettingsStruct {
     network: NetworkSettings,
     exit_client: ExitClientSettings,
     #[serde(skip_serializing_if = "Option::is_none")]
+    subnet_dao: Option<SubnetDaoSettings>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     stats_server: Option<StatsServerSettings>,
     #[serde(skip)]
     future: bool,
@@ -281,6 +283,8 @@ pub struct RitaExitSettingsStruct {
     network: NetworkSettings,
     exit_network: ExitNetworkSettings,
     #[serde(skip_serializing_if = "Option::is_none")]
+    subnet_dao: Option<SubnetDaoSettings>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     stats_server: Option<StatsServerSettings>,
     /// Countries which the clients to the exit are allowed from, blank for no geoip validation.
     /// (ISO country code)
@@ -288,6 +292,12 @@ pub struct RitaExitSettingsStruct {
     allowed_countries: HashSet<String>,
     #[serde(skip)]
     future: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
+pub struct SubnetDaoSettings {
+    eth_nodes: Vec<String>,
+    dao_addresses: Vec<EthAddress>,
 }
 
 pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
@@ -304,6 +314,10 @@ pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
     fn get_stats_server_settings<'ret, 'me: 'ret>(
         &'me self,
     ) -> Option<RwLockReadGuardRef<'ret, T, StatsServerSettings>>;
+
+    fn get_subnet_dao_settings<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> Option<RwLockReadGuardRef<'ret, T, SubnetDaoSettings>>;
 
     fn merge(&self, changed_settings: Value) -> Result<(), Error>;
     fn get_all(&self) -> Result<serde_json::Value, Error>;
@@ -360,7 +374,22 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
             Some(
                 RwLockReadGuardRef::new(self.read().unwrap()).map(|g| match g.stats_server {
                     Some(ref stat_server) => stat_server,
-                    None => panic!("exit client not set but needed"),
+                    None => panic!("stats server not set but needed"),
+                }),
+            )
+        } else {
+            None
+        }
+    }
+
+    fn get_subnet_dao_settings<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> Option<RwLockReadGuardRef<'ret, RitaSettingsStruct, SubnetDaoSettings>> {
+        if self.read().unwrap().subnet_dao.is_some() {
+            Some(
+                RwLockReadGuardRef::new(self.read().unwrap()).map(|g| match g.subnet_dao {
+                    Some(ref subnet_dao) => subnet_dao,
+                    None => panic!("stats server not set but needed"),
                 }),
             )
         } else {
@@ -436,6 +465,21 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
                 RwLockReadGuardRef::new(self.read().unwrap()).map(|g| match g.stats_server {
                     Some(ref stat_server) => stat_server,
                     None => panic!("exit client not set but needed"),
+                }),
+            )
+        } else {
+            None
+        }
+    }
+
+    fn get_subnet_dao_settings<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> Option<RwLockReadGuardRef<'ret, RitaExitSettingsStruct, SubnetDaoSettings>> {
+        if self.read().unwrap().subnet_dao.is_some() {
+            Some(
+                RwLockReadGuardRef::new(self.read().unwrap()).map(|g| match g.subnet_dao {
+                    Some(ref subnet_dao) => subnet_dao,
+                    None => panic!("stats server not set but needed"),
                 }),
             )
         } else {

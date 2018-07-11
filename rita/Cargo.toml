@@ -24,6 +24,7 @@ clu = { path = "../clu" }
 exit_db = { path = "../exit_db" }
 num256 = { path = "../num256" }
 settings = { path = "../settings" }
+subnet_dao = { path = "../subnet_dao" }
 
 actix = "0.5.8"
 actix-web = { version = "0.6.12", default-features = false}
