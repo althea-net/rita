@@ -17,11 +17,11 @@ impl KernelInterface {
         let cap = re.captures(&str);
         if let Some(cap) = cap {
             trace!("got link local IP of {} from device {}", &cap[1], &dev);
-            return Ok(cap[1].parse()?);
+            Ok(cap[1].parse()?)
         } else {
-            return Err(KernelInterfaceError::RuntimeError(
+            Err(KernelInterfaceError::RuntimeError(
                 "No link local addresses found or no interface found".to_string(),
-            ).into());
+            ).into())
         }
     }
 
@@ -35,11 +35,11 @@ impl KernelInterface {
         let cap = re.captures(&str);
         if let Some(cap) = cap {
             trace!("got global IP of {} from device {}", &cap[1], &dev);
-            return Ok(cap[1].parse()?);
+            Ok(cap[1].parse()?)
         } else {
-            return Err(KernelInterfaceError::RuntimeError(
+            Err(KernelInterfaceError::RuntimeError(
                 "No global found or no interface found".to_string(),
-            ).into());
+            ).into())
         }
     }
 
@@ -97,7 +97,7 @@ impl KernelInterface {
                 return Ok(caps[1].parse()?);
             }
         }
-        return Err(KernelInterfaceError::RuntimeError("Interface not found".to_string()).into());
+        Err(KernelInterfaceError::RuntimeError("Interface not found".to_string()).into())
     }
 }
 
@@ -127,8 +127,7 @@ fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE
         })
     }));
 
-    let dev = KI
-        .get_device_name("fe80::433:25ff:fe8c:e1ea".parse().unwrap())
+    let dev = KI.get_device_name("fe80::433:25ff:fe8c:e1ea".parse().unwrap())
         .unwrap();
 
     assert_eq!(dev, "eth2")
@@ -206,8 +205,7 @@ fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE"
         }
     }));
 
-    let dev = KI
-        .get_reply_ip("fe80::7459:8eff:fe98:81".parse().unwrap(), None)
+    let dev = KI.get_reply_ip("fe80::7459:8eff:fe98:81".parse().unwrap(), None)
         .unwrap();
 
     assert_eq!(dev, "fe80::96:3add:69d9:906a".parse::<IpAddr>().unwrap())
