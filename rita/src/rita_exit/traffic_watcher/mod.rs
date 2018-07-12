@@ -60,9 +60,10 @@ impl Handler<Watch> for TrafficWatcher {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        let stream = TcpStream::connect::<SocketAddr>(
-            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
-        )?;
+        let stream = TcpStream::connect::<SocketAddr>(format!(
+            "[::1]:{}",
+            SETTING.get_network().babel_port
+        ).parse()?)?;
 
         watch(Babel::new(stream), msg.0)
     }

@@ -6,15 +6,12 @@ use failure::Error;
 
 impl KernelInterface {
     fn get_default_route(&self) -> Option<Vec<String>> {
-        let output = self
-            .run_command("ip", &["route", "list", "default"])
+        let output = self.run_command("ip", &["route", "list", "default"])
             .unwrap();
 
         let stdout = String::from_utf8(output.stdout).unwrap();
 
         let mut def_route = Vec::new();
-
-        let mut found = false;
 
         // find all lines
         for i in stdout.lines() {
@@ -25,16 +22,11 @@ impl KernelInterface {
                         def_route.push(String::from(j));
                     }
                 }
-                found = true;
-                break;
+                return Some(def_route);
             }
         }
 
-        if found {
-            Some(def_route)
-        } else {
-            None
-        }
+        None
     }
 
     fn set_route(&self, to: &IpAddr, route: &Vec<String>) -> Result<(), Error> {
@@ -53,9 +45,7 @@ impl KernelInterface {
     }
 
     fn set_default_route(&self, route: &Vec<String>) -> Result<(), Error> {
-        let mut def_route_ref: Vec<&str> = vec!["route", "add"];
-
-        def_route_ref.push("default");
+        let mut def_route_ref: Vec<&str> = vec!["route", "add", "default"];
 
         for i in 1..route.len() {
             def_route_ref.push(route[i].as_str())
@@ -77,7 +67,7 @@ impl KernelInterface {
         if !def_route.contains(&String::from("wg_exit")) {
             // update the default route if default route is not wg exit
             *settings_default_route = def_route.clone();
-        };
+        }
         Ok(())
     }
 

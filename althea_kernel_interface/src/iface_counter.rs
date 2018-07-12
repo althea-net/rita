@@ -45,6 +45,6 @@ impl KernelInterface {
         let caps = re.captures(&stdout).unwrap();
         let input_traffic = (caps[2].parse::<u64>()?, caps[1].parse::<u64>()?);
 
-        return Ok((input_traffic, output_traffic));
+        Ok((input_traffic, output_traffic))
     }
 }

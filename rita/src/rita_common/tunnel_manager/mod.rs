@@ -125,9 +125,10 @@ impl Handler<GetPhyIpFromMeshIp> for TunnelManager {
     type Result = Result<IpAddr, Error>;
 
     fn handle(&mut self, mesh_ip: GetPhyIpFromMeshIp, _: &mut Context<Self>) -> Self::Result {
-        let stream = TcpStream::connect::<SocketAddr>(
-            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
-        )?;
+        let stream = TcpStream::connect::<SocketAddr>(format!(
+            "[::1]:{}",
+            SETTING.get_network().babel_port
+        ).parse()?)?;
 
         let mut babel = Babel::new(stream);
         babel.start_connection()?;
@@ -275,8 +276,7 @@ impl TunnelManager {
             .unwrap();
         let neighs: Vec<
             Box<Future<Item = Option<(LocalIdentity, String, IpAddr)>, Error = ()>>,
-        > = KI
-            .get_neighbors()
+        > = KI.get_neighbors()
             .unwrap()
             .iter()
             .map(|&(ip_address, ref dev)| (ip_address.to_string(), Some(dev.clone())))
@@ -461,9 +461,10 @@ impl TunnelManager {
             &mut SETTING.get_network_mut().default_route,
         )?;
 
-        let stream = TcpStream::connect::<SocketAddr>(
-            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
-        )?;
+        let stream = TcpStream::connect::<SocketAddr>(format!(
+            "[::1]:{}",
+            SETTING.get_network().babel_port
+        ).parse()?)?;
 
         let mut babel = Babel::new(stream);
 
@@ -486,9 +487,10 @@ impl TunnelManager {
             &network.own_ip,
         )?;
 
-        let stream = TcpStream::connect::<SocketAddr>(
-            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
-        )?;
+        let stream = TcpStream::connect::<SocketAddr>(format!(
+            "[::1]:{}",
+            SETTING.get_network().babel_port
+        ).parse()?)?;
 
         let mut babel = Babel::new(stream);
 
