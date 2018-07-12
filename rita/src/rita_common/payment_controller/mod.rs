@@ -144,8 +144,7 @@ impl PaymentController {
             String::from("http://127.0.0.1:1234/update") //TODO: This is mockito::SERVER_URL, but don't want to include the crate in a non-test build just for that string
         };
 
-        let mut r = self
-            .client
+        let mut r = self.client
             .post(&bounty_url)
             .body(serde_json::to_string(&update)?)
             .send()?;
