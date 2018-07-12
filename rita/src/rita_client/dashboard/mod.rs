@@ -123,7 +123,7 @@ impl Handler<SetWifiConfig> for Dashboard {
             let iface_number = i.section_name.clone().chars().last();
 
             if i.mesh && iface_number.is_some() {
-                let iface_name = format!("rita_wlan{:?}", iface_number);
+                let iface_name = format!("rita_wlan{}", iface_number.unwrap());
 
                 TunnelManager::from_registry().do_send(Listen(iface_name.clone()));
                 KI.set_uci_var(&format!("wireless.{}.ssid", i.section_name), "AltheaMesh")?;
