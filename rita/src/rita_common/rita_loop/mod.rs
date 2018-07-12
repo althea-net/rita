@@ -2,15 +2,12 @@ use std::time::{Duration, Instant};
 
 use actix::prelude::*;
 use actix::registry::SystemService;
+use actix_utils::KillActor;
 
 #[cfg(not(test))]
-use actix_web::actix::resolver::Resolver;
+use trust_dns_resolver::config::ResolverConfig;
 
-#[cfg(not(test))]
-use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
-
-#[cfg(not(test))]
-type Connector = Resolver;
+use actix_utils::ResolverWrapper;
 
 #[cfg(not(test))]
 use KI;
@@ -33,12 +30,14 @@ use SETTING;
 
 pub struct RitaLoop {
     stats_collector: Addr<StatsCollector>,
+    was_gateway: bool,
 }
 
 impl RitaLoop {
     pub fn new() -> RitaLoop {
         RitaLoop {
             stats_collector: SyncArbiter::start(1, || StatsCollector::new()),
+            was_gateway: false,
         }
     }
 }
@@ -74,12 +73,12 @@ impl Handler<Tick> for RitaLoop {
         // Resolves the gateway client corner case
         // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
         if SETTING.get_network().is_gateway {
-            #[cfg(not(test))]
-            System::current().registry().set(
-                //TODO: make the configurable when trust-dns-resolver serde issue is solved
-                //default is 8.8.8.8
-                Connector::new(ResolverConfig::default(), ResolverOpts::default()).start(),
-            );
+            if !self.was_gateway {
+                let resolver_addr: Addr<ResolverWrapper> = System::current().registry().get();
+                resolver_addr.do_send(KillActor);
+
+                self.was_gateway = true
+            }
             trace!("Adding default routes for TrustDNS");
             #[cfg(not(test))]
             for i in ResolverConfig::default().name_servers() {
@@ -89,6 +88,8 @@ impl Handler<Tick> for RitaLoop {
                     &mut SETTING.get_network_mut().default_route,
                 ).unwrap();
             }
+        } else {
+            self.was_gateway = false
         }
 
         let start = Instant::now();

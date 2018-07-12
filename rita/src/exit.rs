@@ -65,6 +65,7 @@ extern crate babel_monitor;
 extern crate exit_db;
 extern crate num256;
 
+pub mod actix_utils;
 mod middleware;
 mod rita_common;
 mod rita_exit;

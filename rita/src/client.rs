@@ -67,6 +67,7 @@ extern crate althea_types;
 extern crate babel_monitor;
 extern crate num256;
 
+pub mod actix_utils;
 mod middleware;
 mod rita_client;
 mod rita_common;
