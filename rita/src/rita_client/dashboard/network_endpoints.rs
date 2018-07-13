@@ -3,6 +3,8 @@ use actix_web::*;
 
 use futures::Future;
 
+use failure::Error;
+
 use std::boxed::Box;
 
 use super::{

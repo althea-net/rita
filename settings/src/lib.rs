@@ -209,6 +209,7 @@ impl Default for ExitClientSettings {
             reg_details: Some(ExitRegistrationDetails {
                 zip_code: Some("1234".into()),
                 email: Some("1234@gmail.com".into()),
+                email_code: Some("000000".into()),
             }),
             lan_nics: HashSet::new(),
         }
@@ -272,6 +273,31 @@ impl Default for ExitNetworkSettings {
     }
 }
 
+// TODO: make this cleaner/use enums
+/// This is the settings for email verification
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
+pub struct ExitMailerSettings {
+    /// The email address of the from field of the email sent
+    pub from_address: String,
+    /// Min amount of time for emails going to the same address
+    pub email_cooldown: u64,
+
+    #[serde(default)]
+    pub test: bool,
+    #[serde(default)]
+    pub test_dir: String,
+    /// SMTP server url e.g. smtp.fastmail.com
+    #[serde(default)]
+    pub smtp_url: String,
+    /// SMTP domain url e.g. mail.example.com
+    #[serde(default)]
+    pub smtp_domain: String,
+    #[serde(default)]
+    pub smtp_username: String,
+    #[serde(default)]
+    pub smtp_password: String,
+}
+
 /// This is the main settings struct for rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct RitaExitSettingsStruct {
@@ -286,6 +312,8 @@ pub struct RitaExitSettingsStruct {
     /// (ISO country code)
     #[serde(skip_serializing_if = "HashSet::is_empty", default)]
     allowed_countries: HashSet<String>,
+    #[serde(default)]
+    mailer: Option<ExitMailerSettings>,
     #[serde(skip)]
     future: bool,
 }
@@ -522,6 +550,7 @@ pub trait RitaExitSettings {
     fn get_exit_network<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, ExitNetworkSettings>;
+    fn get_mailer(&self) -> Option<ExitMailerSettings>;
     fn get_db_file(&self) -> String;
     fn get_description(&self) -> String;
     fn get_allowed_countries<'ret, 'me: 'ret>(
@@ -545,6 +574,9 @@ impl RitaExitSettings for Arc<RwLock<RitaExitSettingsStruct>> {
         &'me self,
     ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, HashSet<String>> {
         RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.allowed_countries)
+    }
+    fn get_mailer(&self) -> Option<ExitMailerSettings> {
+        self.read().unwrap().mailer.clone()
     }
 }
 
@@ -666,6 +698,11 @@ mod tests {
     #[test]
     fn test_exit_settings_default() {
         RitaExitSettingsStruct::new("default_exit.toml").unwrap();
+    }
+
+    #[test]
+    fn test_exit_settings_example() {
+        RitaExitSettingsStruct::new("example_exit.toml").unwrap();
     }
 
 }

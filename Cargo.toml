@@ -11,9 +11,12 @@ members = ["althea_kernel_interface", "bounty_hunter", "settings", "clu", "exit_
 
 [profile.release]
 opt-level = "z"
+debug=true
 lto = true
 codegen-units = 1
 incremental = false
 
 [patch.crates-io]
-actix = { git = "https://github.com/kingoflolz/actix", branch = "custom-resolver" }
+actix = { git = "https://github.com/kingoflolz/actix.git", branch = "althea-mesh" }
+actix-web = { git = "https://github.com/actix/actix-web.git", branch = "fix-missing-content-length" }
+trust-dns-resolver = { git = "https://github.com/kingoflolz/trust-dns.git", branch = "lower-max-ttl" }

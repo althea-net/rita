@@ -125,7 +125,8 @@ def exec_or_exit(command, blocking=True, delay=0.01):
 
 
 def cleanup():
-    os.system("rm -rf *.log *.pid private-key*")
+    os.system("rm -rf *.log *.pid private-key* mail")
+    os.system("mkdir mail")
     os.system("sync")
     os.system("killall babeld rita bounty_hunter iperf")  # TODO: This is very inconsiderate
 
@@ -312,6 +313,33 @@ def register_to_exit(node):
     os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
               .format(id=id, data=json.dumps({"exit_client": EXIT_SELECT})))
 
+def email_verif(node):
+    id = node.id
+
+    email_text = read_email(node)
+
+    code = re.search(r"\[([0-9]+)\]", email_text).group(1)
+
+    print(code)
+
+    os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
+              .format(id=id, data=json.dumps({"exit_client": {"exits": {"exit_a": {"email_code": code}}}})))
+
+    os.system("ip netns exec netlab-{id} curl 127.0.0.1:4877/settings"
+              .format(id=id))
+
+
+
+def read_email(node):
+    id = node.id
+    # TODO: this is O(n^2)
+    for mail in os.listdir("mail"):
+        with open(os.path.join("mail", mail)) as mail_file_handle:
+            mail = json.load(mail_file_handle)
+            if mail["envelope"]["forward_path"][0] == "{}@example.com".format(id):
+                return ''.join(chr(i) for i in mail["message"])
+    print("cannot find email for node {}".format(id))
+
 def start_rita(node):
     id = node.id
     settings = get_rita_defaults()
@@ -327,6 +355,9 @@ def start_rita(node):
                                                                               pwd=dname)
         )
     time.sleep(1.5)
+
+    EXIT_SETTINGS["reg_details"]["email"] = "{}@example.com".format(id)
+
     os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
               .format(id=id, data=json.dumps({"exit_client": EXIT_SETTINGS})))
 
@@ -832,7 +863,15 @@ if __name__ == "__main__":
     time.sleep(5)
 
     for k, v in world.nodes.items():
-        register_to_exit(v)
+        if k != world.exit_id:
+            register_to_exit(v)
+
+    print("waiting for emails to be sent")
+    time.sleep(16)
+
+    for k, v in world.nodes.items():
+        if k != world.exit_id:
+            email_verif(v)
 
     world.test_endpoints_all()
 

@@ -1,4 +1,7 @@
-#![cfg_attr(feature = "system_alloc", feature(alloc_system, global_allocator, allocator_api))]
+#![cfg_attr(
+    feature = "system_alloc",
+    feature(alloc_system, global_allocator, allocator_api)
+)]
 
 #[cfg(feature = "system_alloc")]
 extern crate alloc_system;

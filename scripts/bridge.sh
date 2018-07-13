@@ -4,7 +4,7 @@
 # ip link set enx000ec6a0b495 netns netlab-1
 # ip netns exec netlab-1 ifconfig enx000ec6a0b495 up
 
-ifconfig enx001cc2330150 down
-dhclient enx001cc2330150
-ip route delete default dev enx001cc2330150
-ifconfig enx001cc2330150 up
+ifconfig enp7s0f3u3u2u1 down
+dhclient enp7s0f3u3u2u1
+ip route delete default dev enp7s0f3u3u2u1
+ifconfig enp7s0f3u3u2u1 up

@@ -35,6 +35,8 @@ extern crate env_logger;
 extern crate eui48;
 extern crate futures;
 extern crate ipnetwork;
+extern crate lettre;
+extern crate lettre_email;
 extern crate minihttpse;
 extern crate rand;
 extern crate regex;
@@ -63,6 +65,7 @@ extern crate babel_monitor;
 extern crate exit_db;
 extern crate num256;
 
+pub mod actix_utils;
 mod middleware;
 mod rita_common;
 mod rita_exit;
@@ -175,23 +178,25 @@ fn main() {
     assert!(rita_exit::traffic_watcher::TrafficWatcher::from_registry().connected());
     assert!(rita_exit::db_client::DbClient::from_registry().connected());
 
-    server::new(|| App::new().resource("/hello", |r| r.method(Method::POST).with2(hello_response)))
+    server::new(|| App::new().resource("/hello", |r| r.method(Method::POST).with(hello_response)))
         .bind(format!("[::0]:{}", SETTING.get_network().rita_hello_port))
         .unwrap()
+        .shutdown_timeout(0)
         .start();
     server::new(|| {
         App::new().resource("/make_payment", |r| {
-            r.method(Method::POST).with2(make_payments)
+            r.method(Method::POST).with(make_payments)
         })
     }).workers(1)
         .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
         .unwrap()
+        .shutdown_timeout(0)
         .start();
 
     // Exit stuff
     server::new(|| {
         App::new()
-            .resource("/setup", |r| r.method(Method::POST).with2(setup_request))
+            .resource("/setup", |r| r.method(Method::POST).with(setup_request))
             .resource("/status", |r| {
                 r.method(Method::POST).with_async(status_request)
             })
@@ -205,6 +210,7 @@ fn main() {
         SETTING.get_exit_network().exit_hello_port
     ))
         .unwrap()
+        .shutdown_timeout(0)
         .start();
 
     // Dashboard
@@ -223,13 +229,14 @@ fn main() {
         SETTING.get_network().rita_dashboard_port
     ))
         .unwrap()
+        .shutdown_timeout(0)
         .start();
 
     let common = rita_common::rita_loop::RitaLoop::new();
-    let _: Addr<Unsync, _> = common.start();
+    let _: Addr<_> = common.start();
 
     let exit = rita_exit::rita_loop::RitaLoop {};
-    let _: Addr<Unsync, _> = exit.start();
+    let _: Addr<_> = exit.start();
 
     system.run();
 }

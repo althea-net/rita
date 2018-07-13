@@ -30,6 +30,9 @@ pub struct ExitRegistrationDetails {
 
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub email: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub email_code: Option<String>,
 }
 
 /// This is the state an exit can be in
@@ -50,6 +53,8 @@ pub enum ExitState {
     Pending {
         general_details: ExitDetails,
         message: String,
+        #[serde(default)]
+        email_code: Option<String>,
     },
     Registered {
         general_details: ExitDetails,

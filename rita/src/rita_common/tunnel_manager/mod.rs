@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream};
 use std::path::Path;
 
-use actix::actors;
+use actix::actors::resolver;
 use actix::prelude::*;
 
 use futures;
@@ -33,10 +33,10 @@ type HTTPClient = Mocker<rita_common::http_client::HTTPClient>;
 type HTTPClient = rita_common::http_client::HTTPClient;
 
 #[cfg(test)]
-type Connector = Mocker<actors::Connector>;
+type Resolver = Mocker<resolver::Resolver>;
 
 #[cfg(not(test))]
-type Connector = actors::Connector;
+type Resolver = resolver::Resolver;
 
 #[derive(Debug, Fail)]
 pub enum TunnelManagerError {
@@ -362,8 +362,8 @@ impl TunnelManager {
                 TunnelManager::contact_neighbor(iface_index, ip)
             }),
             _ => Box::new(
-                Connector::from_registry()
-                    .send(actors::Resolve::host(their_hostname.clone()))
+                Resolver::from_registry()
+                    .send(resolver::Resolve::host(their_hostname.clone()))
                     .from_err()
                     .and_then(move |res| {
                         let url = format!("http://[{}%{:?}]:4876/hello", their_hostname, dev);
@@ -511,7 +511,7 @@ mod tests {
 
     use super::*;
 
-    use actix::actors::ConnectorError;
+    use actix::actors::resolver::ResolverError;
     use std::collections::VecDeque;
     use std::net::Ipv4Addr;
 
@@ -600,7 +600,7 @@ mod tests {
 
         let sys = System::new("test");
 
-        let _: Addr<Syn, _> = HTTPClient::init_actor(|_| {
+        System::current().registry().set(
             HTTPClient::mock(Box::new(|msg, _ctx| {
                 assert_eq!(
                     msg.downcast_ref::<Hello>(),
@@ -615,12 +615,12 @@ mod tests {
                     global: SETTING.get_identity(),
                 });
                 Box::new(Some(ret))
-            }))
-        });
+            })).start(),
+        );
 
         let res = TunnelManager::contact_neighbor(0, "1.1.1.1".parse().unwrap());
 
-        sys.handle().spawn(res.then(|res| {
+        Arbiter::spawn(res.then(|res| {
             assert_eq!(
                 res.unwrap(),
                 (
@@ -633,7 +633,7 @@ mod tests {
                 )
             );
 
-            Arbiter::system().do_send(msgs::SystemExit(0));
+            System::current().stop();
             future::result(Ok(()))
         }));
 
@@ -714,7 +714,7 @@ mod tests {
 
         let sys = System::new("test");
 
-        let _: Addr<Syn, _> = HTTPClient::init_actor(|_| {
+        System::current().registry().set(
             HTTPClient::mock(Box::new(|msg, _ctx| {
                 assert_eq!(
                     msg.downcast_ref::<Hello>(),
@@ -729,29 +729,29 @@ mod tests {
                     global: SETTING.get_identity(),
                 });
                 Box::new(Some(ret))
-            }))
-        });
+            })).start(),
+        );
 
-        let _: Addr<Unsync, _> = Connector::init_actor(|_| {
-            Connector::mock(Box::new(|msg, _ctx| {
+        System::current().registry().set(
+            Resolver::mock(Box::new(|msg, _ctx| {
                 assert_eq!(
-                    msg.downcast_ref::<actors::Resolve>(),
-                    Some(&actors::Resolve::host("test.altheamesh.com"))
+                    msg.downcast_ref::<actors::resolver::Resolve>(),
+                    Some(&actors::resolver::Resolve::host("test.altheamesh.com"))
                 );
 
-                let ret: Result<VecDeque<SocketAddr>, ConnectorError> = Ok({
+                let ret: Result<VecDeque<SocketAddr>, ResolverError> = Ok({
                     let mut ips = VecDeque::new();
                     ips.push_back(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 0));
                     ips
                 });
                 Box::new(Some(ret))
-            }))
-        });
+            })).start(),
+        );
 
         let mut tm = TunnelManager::new();
         let res = tm.neighbor_inquiry("test.altheamesh.com".to_string(), None);
 
-        sys.handle().spawn(res.then(|res| {
+        Arbiter::spawn(res.then(|res| {
             assert_eq!(
                 res.unwrap(),
                 (
@@ -764,7 +764,7 @@ mod tests {
                 )
             );
 
-            Arbiter::system().do_send(msgs::SystemExit(0));
+            System::current().stop();
             future::result(Ok(()))
         }));
 
@@ -845,7 +845,7 @@ mod tests {
 
         let sys = System::new("test");
 
-        let _: Addr<Syn, _> = HTTPClient::init_actor(|_| {
+        System::current().registry().set(
             HTTPClient::mock(Box::new(|msg, _ctx| {
                 assert_eq!(
                     msg.downcast_ref::<Hello>(),
@@ -860,26 +860,26 @@ mod tests {
                     global: SETTING.get_identity(),
                 });
                 Box::new(Some(ret))
-            }))
-        });
+            })).start(),
+        );
 
-        let _: Addr<Unsync, _> = Connector::init_actor(|_| {
-            Connector::mock(Box::new(|msg, _ctx| {
+        System::current().registry().set(
+            Resolver::mock(Box::new(|msg, _ctx| {
                 assert_eq!(
-                    msg.downcast_ref::<actors::Resolve>(),
-                    Some(&actors::Resolve::host("1.1.1.1"))
+                    msg.downcast_ref::<actors::resolver::Resolve>(),
+                    Some(&actors::resolver::Resolve::host("1.1.1.1"))
                 );
 
-                let ret: Result<VecDeque<SocketAddr>, ConnectorError> =
-                    Err(ConnectorError::Resolver("Thats an IP address!".to_string()));
+                let ret: Result<VecDeque<SocketAddr>, ResolverError> =
+                    Err(ResolverError::Resolver("Thats an IP address!".to_string()));
                 Box::new(Some(ret))
-            }))
-        });
+            })).start(),
+        );
 
         let mut tm = TunnelManager::new();
         let res = tm.neighbor_inquiry("1.1.1.1".to_string(), None);
 
-        sys.handle().spawn(res.then(|res| {
+        Arbiter::spawn(res.then(|res| {
             assert_eq!(
                 res.unwrap(),
                 (
@@ -892,7 +892,7 @@ mod tests {
                 )
             );
 
-            Arbiter::system().do_send(msgs::SystemExit(0));
+            System::current().stop();
             future::result(Ok(()))
         }));
 
@@ -1015,7 +1015,7 @@ mod tests {
 
         let mut ctr = 1;
 
-        let _: Addr<Syn, _> = HTTPClient::init_actor(move |_| {
+        System::current().registry().set(
             HTTPClient::mock(Box::new(move |msg, _ctx| {
                 trace!("{:?}", msg.downcast_ref::<Hello>());
                 let ret: Result<LocalIdentity, Error> = match msg.downcast_ref::<Hello>() {
@@ -1035,19 +1035,19 @@ mod tests {
                 };
                 ctr += 1;
                 Box::new(Some(ret))
-            }))
-        });
+            })).start(),
+        );
 
-        let _: Addr<Unsync, _> = Connector::init_actor(|_| {
-            Connector::mock(Box::new(|msg, _ctx| {
-                let msg = msg.downcast_ref::<actors::Resolve>().unwrap();
-                let ret: Result<VecDeque<SocketAddr>, ConnectorError> = if msg
-                    == &actors::Resolve::host("fe80::1234")
+        System::current().registry().set(
+            Resolver::mock(Box::new(|msg, _ctx| {
+                let msg = msg.downcast_ref::<actors::resolver::Resolve>().unwrap();
+                let ret: Result<VecDeque<SocketAddr>, ResolverError> = if msg
+                    == &actors::resolver::Resolve::host("fe80::1234")
                 {
-                    Err(ConnectorError::Resolver("Thats an IP address!".to_string()))
-                } else if msg == &actors::Resolve::host("2.2.2.2") {
-                    Err(ConnectorError::Resolver("Thats an IP address!".to_string()))
-                } else if msg == &actors::Resolve::host("test.altheamesh.com") {
+                    Err(ResolverError::Resolver("Thats an IP address!".to_string()))
+                } else if msg == &actors::resolver::Resolve::host("2.2.2.2") {
+                    Err(ResolverError::Resolver("Thats an IP address!".to_string()))
+                } else if msg == &actors::resolver::Resolve::host("test.altheamesh.com") {
                     Ok({
                         let mut ips = VecDeque::new();
                         ips.push_back(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 0));
@@ -1057,13 +1057,13 @@ mod tests {
                     panic!("unexpected host found")
                 };
                 Box::new(Some(ret))
-            }))
-        });
+            })).start(),
+        );
 
         let mut tm = TunnelManager::new();
         let res = tm.get_neighbors();
 
-        sys.handle().spawn(res.then(|res| {
+        Arbiter::spawn(res.then(|res| {
             assert_eq!(
                 res.unwrap(),
                 vec![
@@ -1080,7 +1080,7 @@ mod tests {
                             wg_port: 60003,
                             global: get_inc_id(3),
                         },
-                        "wg1".to_string(),
+                        "wg2".to_string(),
                         "1.1.1.1".parse().unwrap(),
                     ),
                     (
@@ -1088,13 +1088,13 @@ mod tests {
                             wg_port: 60002,
                             global: get_inc_id(2),
                         },
-                        "wg2".to_string(),
+                        "wg1".to_string(),
                         "2.2.2.2".parse().unwrap(),
                     ),
                 ]
             );
 
-            Arbiter::system().do_send(msgs::SystemExit(0));
+            System::current().stop();
             future::result(Ok(()))
         }));
 

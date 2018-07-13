@@ -13,10 +13,11 @@ use rita_client::traffic_watcher::{TrafficWatcher, Watch};
 
 use futures::Future;
 
-use tokio_core::net::TcpStream as TokioTcpStream;
+use tokio::net::TcpStream as TokioTcpStream;
 
 use failure::Error;
 use std::net::SocketAddr;
+use std::time::Duration;
 use KI;
 
 fn linux_setup_exit_tunnel() -> Result<(), Error> {
@@ -50,7 +51,7 @@ fn linux_setup_exit_tunnel() -> Result<(), Error> {
 pub fn get_exit_info(to: &SocketAddr) -> impl Future<Item = ExitState, Error = Error> {
     let endpoint = format!("http://[{}]:{}/exit_info", to.ip(), to.port());
 
-    let stream = TokioTcpStream::connect2(to);
+    let stream = TokioTcpStream::connect(to);
 
     stream.from_err().and_then(move |stream| {
         client::get(&endpoint)
@@ -74,10 +75,11 @@ pub fn send_exit_setup_request(
 ) -> impl Future<Item = ExitState, Error = Error> {
     let endpoint = format!("http://[{}]:{}/setup", to.ip(), to.port());
 
-    let stream = TokioTcpStream::connect2(to);
+    let stream = TokioTcpStream::connect(to);
 
     stream.from_err().and_then(move |stream| {
         client::post(&endpoint)
+            .timeout(Duration::from_secs(2))
             .with_connection(Connection::from_stream(stream))
             .json(ident)
             .unwrap()
@@ -98,7 +100,7 @@ pub fn send_exit_status_request(
 ) -> impl Future<Item = ExitState, Error = Error> {
     let endpoint = format!("http://[{}]:{}/status", to.ip(), to.port());
 
-    let stream = TokioTcpStream::connect2(to);
+    let stream = TokioTcpStream::connect(to);
 
     stream.from_err().and_then(move |stream| {
         client::post(&endpoint)
@@ -123,6 +125,8 @@ fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = 
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
 
+    trace!("sending exit general details request to {}", exit);
+
     get_exit_info(&endpoint).and_then(move |exit_details| {
         let mut exits = SETTING.get_exits_mut();
 
@@ -141,15 +145,20 @@ fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = 
     })
 }
 
-fn exit_setup_request(exit: String) -> impl Future<Item = (), Error = Error> {
+fn exit_setup_request(exit: String, code: Option<String>) -> impl Future<Item = (), Error = Error> {
     let exits = SETTING.get_exits();
     let current_exit = &exits[&exit];
     let exit_server = current_exit.id.mesh_ip;
+    let mut reg_details = SETTING.get_exit_client().reg_details.clone().unwrap();
+    reg_details.email_code = code;
+
     let ident = ExitClientIdentity {
         global: SETTING.get_identity(),
         wg_port: SETTING.get_exit_client().wg_listen_port.clone(),
-        reg_details: SETTING.get_exit_client().reg_details.clone().unwrap(),
+        reg_details,
     };
+
+    trace!("sending exit setup request {:?} to {}", ident, exit);
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
 
@@ -179,6 +188,8 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
     };
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
+
+    trace!("sending exit status request to {}", exit);
 
     send_exit_status_request(&endpoint, ident)
         .from_err()
@@ -244,30 +255,27 @@ impl Handler<Tick> for ExitManager {
                     ..
                 } => {}
                 ExitState::New { .. } => {
-                    Arbiter::handle().spawn(exit_general_details_request(k.clone()).then(
-                        move |res| {
-                            match res {
-                                Ok(_) => {
-                                    info!("exit details request to {} was successful", k);
-                                }
-                                Err(e) => {
-                                    info!("exit details request to {} failed with {:?}", k, e);
-                                }
-                            };
-                            Ok(())
-                        },
-                    ));
+                    Arbiter::spawn(exit_general_details_request(k.clone()).then(move |res| {
+                        match res {
+                            Ok(_) => {
+                                info!("exit details request to {} was successful", k);
+                            }
+                            Err(e) => {
+                                info!("exit details request to {} failed with {:?}", k, e);
+                            }
+                        };
+                        Ok(())
+                    }));
                 }
                 ExitState::Registering { .. }
-                | ExitState::Pending { .. }
                 | ExitState::GotInfo {
                     auto_register: true,
                     ..
                 } => {
-                    Arbiter::handle().spawn(exit_setup_request(k.clone()).then(move |res| {
+                    Arbiter::spawn(exit_setup_request(k.clone(), None).then(move |res| {
                         match res {
                             Ok(_) => {
-                                info!("exit setup request to {} was successful", k);
+                                info!("exit setup request (no code) to {} was successful", k);
                             }
                             Err(e) => {
                                 info!("exit setup request to {} failed with {:?}", k, e);
@@ -276,8 +284,26 @@ impl Handler<Tick> for ExitManager {
                         Ok(())
                     }));
                 }
+                ExitState::Pending {
+                    email_code: Some(email_code),
+                    ..
+                } => {
+                    Arbiter::spawn(
+                        exit_setup_request(k.clone(), Some(email_code.clone())).then(move |res| {
+                            match res {
+                                Ok(_) => {
+                                    info!("exit setup request (with code) to {} was successful", k);
+                                }
+                                Err(e) => {
+                                    info!("exit setup request to {} failed with {:?}", k, e);
+                                }
+                            };
+                            Ok(())
+                        }),
+                    );
+                }
                 ExitState::Registered { .. } => {
-                    Arbiter::handle().spawn(exit_status_request(k.clone()).then(move |res| {
+                    Arbiter::spawn(exit_status_request(k.clone()).then(move |res| {
                         match res {
                             Ok(_) => {
                                 info!("exit status request to {} was successful", k);
@@ -288,6 +314,9 @@ impl Handler<Tick> for ExitManager {
                         };
                         Ok(())
                     }));
+                }
+                _ => {
+                    info!("waiting on one time code for {}", k);
                 }
             }
         }

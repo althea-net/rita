@@ -25,8 +25,8 @@ exit_db = { path = "../exit_db" }
 num256 = { path = "../num256" }
 settings = { path = "../settings" }
 
-actix = "0.5.8"
-actix-web = { version = "0.6.12", default-features = false}
+actix = { git = "https://github.com/kingoflolz/actix", branch = "althea-mesh"}
+actix-web = { git = "https://github.com/actix/actix-web.git", branch = "fix-missing-content-length", default-features = false}
 actix_derive = "0.2.0"
 bytes = "0.4"
 clippy = { version = "*", optional = true }
@@ -41,6 +41,8 @@ failure = "0.1.1"
 futures = "0.1"
 ipnetwork = "0.13.0"
 lazy_static = "1.0"
+lettre = "0.8"
+lettre_email = "0.8"
 log = "^0.4"
 minihttpse = "0.1.6"
 mockito = "0.9"
@@ -53,4 +55,4 @@ serde_json = "1.0"
 tokio = "0.1"
 tokio-core = "0.1"
 regex = "1.0"
-trust-dns-resolver = "0.8"
+trust-dns-resolver = "0.9"
