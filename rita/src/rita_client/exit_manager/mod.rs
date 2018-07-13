@@ -18,6 +18,7 @@ use tokio::net::TcpStream as TokioTcpStream;
 use failure::Error;
 use std::net::SocketAddr;
 use KI;
+use std::time::Duration;
 
 fn linux_setup_exit_tunnel() -> Result<(), Error> {
     KI.update_settings_route(&mut SETTING.get_network_mut().default_route)?;
@@ -78,6 +79,7 @@ pub fn send_exit_setup_request(
 
     stream.from_err().and_then(move |stream| {
         client::post(&endpoint)
+            .timeout(Duration::from_secs(2))
             .with_connection(Connection::from_stream(stream))
             .json(ident)
             .unwrap()
@@ -123,6 +125,8 @@ fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = 
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
 
+    trace!("sending exit general details request to {}", exit);
+
     get_exit_info(&endpoint).and_then(move |exit_details| {
         let mut exits = SETTING.get_exits_mut();
 
@@ -154,6 +158,8 @@ fn exit_setup_request(exit: String, code: Option<String>) -> impl Future<Item = 
         reg_details,
     };
 
+    trace!("sending exit setup request {:?} to {}", ident, exit);
+
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
 
     send_exit_setup_request(&endpoint, ident)
@@ -182,6 +188,8 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
     };
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
+
+    trace!("sending exit status request to {}", exit);
 
     send_exit_status_request(&endpoint, ident)
         .from_err()
