@@ -17,8 +17,8 @@ use tokio::net::TcpStream as TokioTcpStream;
 
 use failure::Error;
 use std::net::SocketAddr;
-use KI;
 use std::time::Duration;
+use KI;
 
 fn linux_setup_exit_tunnel() -> Result<(), Error> {
     KI.update_settings_route(&mut SETTING.get_network_mut().default_route)?;
