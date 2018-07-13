@@ -29,9 +29,7 @@ use ipnetwork::IpNetwork;
 
 use failure::Error;
 
-use althea_types::{
-    ExitClientDetails, ExitClientIdentity, ExitDetails, ExitRegistrationDetails, ExitState,
-};
+use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState};
 
 #[derive(Default)]
 pub struct DbClient;
@@ -103,11 +101,7 @@ fn test_get_country() {
     get_country(&"8.8.8.8".parse().unwrap()).unwrap();
 }
 
-fn verify_identity(details: &ExitRegistrationDetails, request_ip: &IpAddr) -> Result<(), Error> {
-    if details.email.is_none() || details.zip_code.is_none() {
-        bail!("email and zip must be set");
-    }
-
+fn verify_ip(request_ip: &IpAddr) -> Result<(), Error> {
     if SETTING.get_allowed_countries().is_empty() {
         Ok(())
     } else {
@@ -311,7 +305,7 @@ impl Handler<SetupClient> for DbClient {
 
         trace!("got setup request {:?}", client);
 
-        match verify_identity(&msg.0.reg_details, &msg.1) {
+        match verify_ip(&msg.1) {
             Ok(_) => {
                 conn.transaction::<_, Error, _>(|| {
                     add_dummy(&conn)?;
@@ -395,7 +389,13 @@ impl Handler<SetupClient> for DbClient {
                     }
                 })
             }
-            Err(e) => return Err(e),
+            Err(e) => Ok(ExitState::Denied {
+                message: format!(
+                    "This exit only accepts connections from {:?}\n verbose error: {}",
+                    *SETTING.get_allowed_countries(),
+                    e
+                ),
+            }),
         }
     }
 }
