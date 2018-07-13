@@ -17,4 +17,4 @@ export OPENSSL_STATIC=1
 
 rustup target add mipsel-unknown-linux-musl
 
-cargo build --target mipsel-unknown-linux-musl --release --all
+cargo build --target mipsel-unknown-linux-musl --release -p rita --bin rita
