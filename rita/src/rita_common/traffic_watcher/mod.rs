@@ -65,9 +65,10 @@ impl Handler<Watch> for TrafficWatcher {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        let stream = TcpStream::connect::<SocketAddr>(
-            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
-        )?;
+        let stream = TcpStream::connect::<SocketAddr>(format!(
+            "[::1]:{}",
+            SETTING.get_network().babel_port
+        ).parse()?)?;
 
         watch(Babel::new(stream), &msg.0)
     }
@@ -170,8 +171,7 @@ pub fn watch<T: Read + Write>(
     }
 
     for ((ip, interface), bytes) in total_input_counters {
-        if destinations.contains_key(&ip)
-            && if_to_ip.contains_key(&interface)
+        if destinations.contains_key(&ip) && if_to_ip.contains_key(&interface)
             && identities.contains_key(&if_to_ip[&interface])
         {
             let id = identities[&if_to_ip[&interface]].clone();
@@ -184,8 +184,7 @@ pub fn watch<T: Read + Write>(
     trace!("Collated flow debts: {:?}", debts);
 
     for ((ip, interface), bytes) in total_output_counters {
-        if destinations.contains_key(&ip)
-            && if_to_ip.contains_key(&interface)
+        if destinations.contains_key(&ip) && if_to_ip.contains_key(&interface)
             && identities.contains_key(&if_to_ip[&interface])
         {
             let id = identities[&if_to_ip[&interface]].clone();
