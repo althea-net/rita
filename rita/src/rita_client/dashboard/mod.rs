@@ -190,10 +190,9 @@ impl Handler<GetNodeInfo> for Dashboard {
                 .send(Dump {})
                 .from_err()
                 .and_then(|res| {
-                    let stream = TcpStream::connect::<SocketAddr>(format!(
-                        "[::1]:{}",
-                        SETTING.get_network().babel_port
-                    ).parse()?)?;
+                    let stream = TcpStream::connect::<SocketAddr>(
+                        format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
+                    )?;
                     let mut babel = Babel::new(stream);
                     babel.start_connection()?;
                     let route_table_sample = babel.parse_routes()?;
@@ -305,10 +304,9 @@ impl Handler<GetExitInfo> for Dashboard {
     type Result = Result<Vec<ExitInfo>, Error>;
 
     fn handle(&mut self, _msg: GetExitInfo, _ctx: &mut Self::Context) -> Self::Result {
-        let stream = TcpStream::connect::<SocketAddr>(format!(
-            "[::1]:{}",
-            SETTING.get_network().babel_port
-        ).parse()?)?;
+        let stream = TcpStream::connect::<SocketAddr>(
+            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
+        )?;
         let mut babel = Babel::new(stream);
         babel.start_connection()?;
         let route_table_sample = babel.parse_routes()?;
