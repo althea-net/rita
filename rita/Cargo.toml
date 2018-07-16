@@ -26,6 +26,7 @@ clu = { path = "../clu" }
 exit_db = { path = "../exit_db" }
 num256 = { path = "../num256" }
 settings = { path = "../settings" }
+guac_actix = { git = "https://github.com/kingoflolz/guac_rs"}
 
 actix = "0.7.4"
 actix-web = { version = "0.7.4", default_features = false }
