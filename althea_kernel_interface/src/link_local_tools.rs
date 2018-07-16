@@ -17,11 +17,11 @@ impl KernelInterface {
         let cap = re.captures(&str);
         if let Some(cap) = cap {
             trace!("got link local IP of {} from device {}", &cap[1], &dev);
-            return Ok(cap[1].parse()?);
+            Ok(cap[1].parse()?)
         } else {
-            return Err(KernelInterfaceError::RuntimeError(
+            Err(KernelInterfaceError::RuntimeError(
                 "No link local addresses found or no interface found".to_string(),
-            ).into());
+            ).into())
         }
     }
 
@@ -35,11 +35,11 @@ impl KernelInterface {
         let cap = re.captures(&str);
         if let Some(cap) = cap {
             trace!("got global IP of {} from device {}", &cap[1], &dev);
-            return Ok(cap[1].parse()?);
+            Ok(cap[1].parse()?)
         } else {
-            return Err(KernelInterfaceError::RuntimeError(
+            Err(KernelInterfaceError::RuntimeError(
                 "No global found or no interface found".to_string(),
-            ).into());
+            ).into())
         }
     }
 
@@ -97,7 +97,7 @@ impl KernelInterface {
                 return Ok(caps[1].parse()?);
             }
         }
-        return Err(KernelInterfaceError::RuntimeError("Interface not found".to_string()).into());
+        Err(KernelInterfaceError::RuntimeError("Interface not found".to_string()).into())
     }
 }
 
