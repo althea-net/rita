@@ -24,6 +24,7 @@ clu = { path = "../clu" }
 exit_db = { path = "../exit_db" }
 num256 = { path = "../num256" }
 settings = { path = "../settings" }
+guac_actix = { git = "https://github.com/kingoflolz/guac_rs"}
 
 actix = { git = "https://github.com/kingoflolz/actix", branch = "althea-mesh"}
 actix-web = { git = "https://github.com/actix/actix-web.git", branch = "fix-missing-content-length", default-features = false}
