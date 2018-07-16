@@ -6,7 +6,8 @@ use failure::Error;
 
 impl KernelInterface {
     fn get_default_route(&self) -> Option<Vec<String>> {
-        let output = self.run_command("ip", &["route", "list", "default"])
+        let output = self
+            .run_command("ip", &["route", "list", "default"])
             .unwrap();
 
         let stdout = String::from_utf8(output.stdout).unwrap();
