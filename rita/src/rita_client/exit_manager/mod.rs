@@ -79,7 +79,7 @@ pub fn send_exit_setup_request(
 
     stream.from_err().and_then(move |stream| {
         client::post(&endpoint)
-            .timeout(Duration::from_secs(2))
+            .timeout(Duration::from_secs(8))
             .with_connection(Connection::from_stream(stream))
             .json(ident)
             .unwrap()

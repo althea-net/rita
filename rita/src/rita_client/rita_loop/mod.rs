@@ -38,7 +38,7 @@ impl Handler<Tick> for RitaLoop {
                 }),
         );
 
-        ctx.notify_later(Tick {}, Duration::from_secs(5));
+        ctx.notify_later(Tick {}, Duration::from_secs(10));
 
         Ok(())
     }
