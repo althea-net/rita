@@ -152,12 +152,15 @@ impl DebtKeeper {
         }
     }
 
-    fn payment_received(&mut self, ident: &Identity, amount: Uint256) {
+    fn get_debt_data(&mut self, ident: &Identity) -> &mut NodeDebtData {
         let buffer = SETTING.get_payment().buffer_period;
-        let debt_data = self
-            .debt_data
+        self.debt_data
             .entry(ident.clone())
-            .or_insert_with(|| NodeDebtData::new(buffer));
+            .or_insert_with(|| NodeDebtData::new(buffer))
+    }
+
+    fn payment_received(&mut self, ident: &Identity, amount: Uint256) {
+        let debt_data = self.get_debt_data(ident);
 
         let old_balance = debt_data.incoming_payments.clone();
         trace!(
@@ -178,11 +181,7 @@ impl DebtKeeper {
     fn traffic_update(&mut self, ident: &Identity, mut amount: Int256) {
         {
             trace!("traffic update for {} is {}", ident.mesh_ip, amount);
-            let buffer = SETTING.get_payment().buffer_period;
-            let debt_data = self
-                .debt_data
-                .entry(ident.clone())
-                .or_insert_with(|| NodeDebtData::new(buffer));
+            let debt_data = self.get_debt_data(ident);
 
             if amount < Int256::from(0) {
                 if debt_data.incoming_payments > -amount.clone() {
@@ -214,11 +213,7 @@ impl DebtKeeper {
     /// This updates a neighbor's debt and outputs a DebtAction if one is necessary.
     fn send_update(&mut self, ident: &Identity) -> DebtAction {
         trace!("debt data: {:?}", self.debt_data);
-        let buffer = SETTING.get_payment().buffer_period;
-        let debt_data = self
-            .debt_data
-            .entry(ident.clone())
-            .or_insert_with(|| NodeDebtData::new(buffer));
+        let debt_data = self.get_debt_data(ident);
         let debt = debt_data.debt.clone();
 
         let traffic = debt_data.debt_buffer.pop_front().unwrap();
