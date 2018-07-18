@@ -313,6 +313,7 @@ impl Handler<SetupClient> for DbClient {
                     trace!("Checking if record exists for {:?}", client.global.mesh_ip);
 
                     if client_exists(&client.global.mesh_ip, &conn)? {
+                        update_client(&msg.0, &conn)?;
                         let mut their_record: models::Client = clients
                             .filter(mesh_ip.eq(&client.global.mesh_ip.to_string()))
                             .load::<models::Client>(&conn)
