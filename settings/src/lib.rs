@@ -207,7 +207,6 @@ impl Default for ExitClientSettings {
             current_exit: None,
             wg_listen_port: 59999,
             reg_details: Some(ExitRegistrationDetails {
-                zip_code: Some("1234".into()),
                 email: Some("1234@gmail.com".into()),
                 email_code: Some("000000".into()),
             }),
@@ -273,6 +272,16 @@ impl Default for ExitNetworkSettings {
     }
 }
 
+fn default_email_subject() -> String {
+    String::from("Althea Exit verification code")
+}
+
+fn default_email_body() -> String {
+    // templated using the handlebars language
+    // the code will be placed in the {{email_code}}, the [] is for integration testing
+    String::from("Your althea verification code is [{{email_code}}]")
+}
+
 // TODO: make this cleaner/use enums
 /// This is the settings for email verification
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
@@ -281,6 +290,13 @@ pub struct ExitMailerSettings {
     pub from_address: String,
     /// Min amount of time for emails going to the same address
     pub email_cooldown: u64,
+
+    // templating stuff
+    #[serde(default = "default_email_subject")]
+    pub subject: String,
+
+    #[serde(default = "default_email_body")]
+    pub body: String,
 
     #[serde(default)]
     pub test: bool,

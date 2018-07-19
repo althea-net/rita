@@ -26,9 +26,6 @@ impl Identity {
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct ExitRegistrationDetails {
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub zip_code: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub email: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none", default)]

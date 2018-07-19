@@ -234,5 +234,22 @@ mod tests {
                 message: "got info ok".to_string()
             }
         );
+
+        let s = "{\"state\":\"Pending\",\"general_details\":{\"server_internal_ip\":\"1.1.1.1\",\"netmask\":16,\"wg_exit_port\":50000,\"exit_price\":50,\"description\":\"An exit\"},\"message\":\"got info ok\",\"aa\":\"aa\"}";
+
+        assert_eq!(
+            serde_json::from_str::<ExitState>(s).unwrap(),
+            ExitState::Pending {
+                general_details: ExitDetails {
+                    server_internal_ip: "1.1.1.1".parse().unwrap(),
+                    netmask: 16,
+                    wg_exit_port: 50000,
+                    exit_price: 50,
+                    description: "An exit".to_string(),
+                },
+                email_code: None,
+                message: "got info ok".to_string()
+            }
+        );
     }
 }
