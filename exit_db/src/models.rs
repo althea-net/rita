@@ -9,7 +9,6 @@ pub struct Client {
     pub luci_pass: String,
     pub internal_ip: String,
     pub email: String,
-    pub zip: String,
     pub country: String,
     pub email_code: String,
     pub verified: bool,

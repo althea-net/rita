@@ -6,7 +6,6 @@ table! {
         luci_pass -> Text,
         internal_ip -> Text,
         email -> Text,
-        zip -> Text,
         country -> Text,
         email_code -> Text,
         verified -> Bool,
