@@ -30,26 +30,10 @@ build_rev() {
   fi
 
   pushd $dir
-
     git checkout $revision
 
     CARGO_TARGET_DIR="../$target_dir" cargo build --all
-
-    # Exit database
-    pushd exit_db
-      rm -rf test.db
-      diesel migration run
-    popd
-
-    # Bounty hunter database
-    pushd bounty_hunter
-      rm -rf test.db
-      diesel migration run
-    popd
-
   popd
-
-  cp $dir/bounty_hunter/test.db .
 }
 
 sudo pip3 install -r requirements.txt
@@ -74,28 +58,20 @@ if [ ! -z "${COMPAT_LAYOUT-}" ] ; then
   export RITA_A="$target_dir/debug/rita"
   export RITA_EXIT_A="$target_dir/debug/rita_exit"
   export BOUNTY_HUNTER_A="$target_dir/debug/bounty_hunter"
+  export DIR_A=$DIR_A
 
+  # Save on common dep artifacts between A and B
+  cp -r $TARGET_DIR_A $TARGET_DIR_B
 
   build_rev $REMOTE_B $REVISION_B $DIR_B $TARGET_DIR_B
   export RITA_B="$target_dir/debug/rita"
   export RITA_EXIT_B="$target_dir/debug/rita_exit"
   export BOUNTY_HUNTER_B="$target_dir/debug/bounty_hunter"
+  export DIR_B=$DIR_B
 else
   pushd ..
     cargo build --all
-
-    pushd exit_db
-      rm -rf test.db
-      diesel migration run
-    popd
-
-    pushd bounty_hunter
-      rm -rf test.db
-      diesel migration run
-    popd
   popd
-
-  cp ../bounty_hunter/test.db .
 fi
 
 sudo -E python3 rita.py $@
