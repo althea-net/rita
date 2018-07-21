@@ -1,6 +1,0 @@
--- Your SQL goes here
-CREATE TABLE status (
-  ip VARCHAR NOT NULL PRIMARY KEY,
-  mac VARCHAR NOT NULL,
-  balance VARCHAR NOT NULL
-)

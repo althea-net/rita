@@ -23,7 +23,10 @@ use rita_common::peer_listener::PeerListener;
 
 use rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 
-use rita_common::payment_controller::{PaymentController, PaymentControllerUpdate};
+#[cfg(feature = "guac")]
+use guac_actix::{PaymentController, Tick as GuacTick};
+
+use rita_common::debt_keeper::Tick as DebtTick;
 
 use rita_common::peer_listener::GetPeers;
 
@@ -96,8 +99,11 @@ impl Handler<Tick> for RitaLoop {
         } else {
             self.was_gateway = false
         }
-
         let start = Instant::now();
+
+        DebtKeeper::from_registry().do_send(DebtTick);
+        DebtKeeper::from_registry().do_send(SendUpdate {});
+
         ctx.spawn(
             TunnelManager::from_registry()
                 .send(GetNeighbors)
@@ -117,14 +123,24 @@ impl Handler<Tick> for RitaLoop {
                     TrafficWatcher::from_registry()
                         .send(Watch::new(res))
                         .into_actor(act)
-                        .then(move |_res, _act, _ctx| {
+                        .then(move |_res, act, _ctx| {
                             info!(
                                 "TrafficWatcher completed in {}s {}ms",
                                 neigh.elapsed().as_secs(),
                                 neigh.elapsed().subsec_nanos() / 1000000
                             );
                             DebtKeeper::from_registry().do_send(SendUpdate {});
-                            PaymentController::from_registry().do_send(PaymentControllerUpdate {});
+                            #[cfg(feature = "guac")]
+                            {
+                                PaymentController::from_registry()
+                                    .send(GuacTick {})
+                                    .into_actor(act)
+                                    .then(move |x, _, _| {
+                                        trace!("PaymentController returned {:?}", x);
+                                        actix::fut::ok(())
+                                    })
+                            }
+                            #[cfg(not(feature = "guac"))]
                             actix::fut::ok(())
                         })
                 }),

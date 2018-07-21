@@ -39,20 +39,6 @@ impl JsonStatusResponse {
     }
 }
 
-pub fn make_payments(
-    pmt: (Json<PaymentTx>, HttpRequest),
-) -> Box<Future<Item = HttpResponse, Error = Error>> {
-    info!("Got Payment from {:?}", pmt.1.connection_info().remote());
-    trace!("Received payment: {:?}", pmt.0);
-    PaymentController::from_registry()
-        .send(rita_common::payment_controller::PaymentReceived(
-            pmt.0.clone(),
-        ))
-        .from_err()
-        .and_then(|_| Ok(HttpResponse::Ok().into()))
-        .responder()
-}
-
 pub fn hello_response(
     req: (Json<LocalIdentity>, HttpRequest),
 ) -> Box<Future<Item = Json<LocalIdentity>, Error = Error>> {

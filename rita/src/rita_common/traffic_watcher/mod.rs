@@ -205,12 +205,14 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
     for (from, amount) in debts {
         trace!("collated debt for {} is {}", from.global.mesh_ip, amount);
 
-        let update = debt_keeper::TrafficUpdate {
-            from: from.global.clone(),
-            amount,
-        };
+        if from.global.mesh_ip != SETTING.get_network().own_ip {
+            let update = debt_keeper::TrafficUpdate {
+                from: from.global.clone(),
+                amount,
+            };
 
-        DebtKeeper::from_registry().do_send(update);
+            DebtKeeper::from_registry().do_send(update);
+        }
     }
 
     // check if we are a gateway
