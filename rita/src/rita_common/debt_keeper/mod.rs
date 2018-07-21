@@ -9,8 +9,10 @@ use num256::{Int256, Uint256};
 use settings::RitaCommonSettings;
 use SETTING;
 
-use rita_common::payment_controller;
-use rita_common::payment_controller::PaymentController;
+#[cfg(feature = "guac")]
+use guac_actix::{Counterparty, MakePayment, PaymentController, Register, Withdraw};
+
+use actix;
 
 use failure::Error;
 
@@ -87,6 +89,45 @@ impl Handler<PaymentReceived> for DebtKeeper {
 }
 
 #[derive(Message)]
+pub struct Tick;
+
+impl Handler<Tick> for DebtKeeper {
+    type Result = ();
+
+    fn handle(&mut self, _msg: Tick, ctx: &mut Context<Self>) -> Self::Result {
+        #[cfg(feature = "guac")]
+        {
+            for (id, _) in self.debt_data.clone() {
+                PaymentController::from_registry().do_send(Register(Counterparty {
+                    address: id.eth_address,
+                    url: format!(
+                        "[{}]:{}",
+                        id.mesh_ip,
+                        SETTING.get_network().guac_contact_port
+                    ),
+                }));
+
+                ctx.spawn(
+                    PaymentController::from_registry()
+                        .send(Withdraw(id.eth_address))
+                        .into_actor(self)
+                        .then(move |x, act, _ctx| match x.unwrap() {
+                            Ok(x) => {
+                                act.payment_received(&id, x);
+                                actix::fut::ok(())
+                            }
+                            Err(e) => {
+                                trace!("withdraw from {:?} returned error {:?}", id, e);
+                                actix::fut::ok(())
+                            }
+                        }),
+                );
+            }
+        }
+    }
+}
+
+#[derive(Message, Debug)]
 pub struct TrafficUpdate {
     pub from: Identity,
     pub amount: Int256,
@@ -124,12 +165,19 @@ impl Handler<SendUpdate> for DebtKeeper {
             match self.send_update(&k) {
                 DebtAction::SuspendTunnel => {}
                 DebtAction::OpenTunnel => {}
-                DebtAction::MakePayment { to, amount } => PaymentController::from_registry()
-                    .do_send(payment_controller::MakePayment(PaymentTx {
+                #[cfg(feature = "guac")]
+                DebtAction::MakePayment { to, amount } => {
+                    PaymentController::from_registry().do_send(MakePayment(PaymentTx {
                         to,
                         from: SETTING.get_identity(),
                         amount,
-                    })),
+                    }));
+                }
+                #[cfg(not(feature = "guac"))]
+                DebtAction::MakePayment { to, amount } => warn!(
+                    "dropping payment to {:?} for {} as guac is disabled",
+                    to, amount
+                ),
                 DebtAction::None => {}
             }
         }
@@ -153,6 +201,7 @@ impl DebtKeeper {
     }
 
     fn get_debt_data(&mut self, ident: &Identity) -> &mut NodeDebtData {
+        assert!(ident.eth_address != SETTING.get_payment().eth_address);
         let buffer = SETTING.get_payment().buffer_period;
         self.debt_data
             .entry(ident.clone())
@@ -160,6 +209,7 @@ impl DebtKeeper {
     }
 
     fn payment_received(&mut self, ident: &Identity, amount: Uint256) {
+        assert!(ident.eth_address != SETTING.get_payment().eth_address);
         let debt_data = self.get_debt_data(ident);
 
         let old_balance = debt_data.incoming_payments.clone();
@@ -179,6 +229,8 @@ impl DebtKeeper {
     }
 
     fn traffic_update(&mut self, ident: &Identity, mut amount: Int256) {
+        trace!("traffic update for {:?} is {}", ident, amount);
+        assert!(ident.eth_address != SETTING.get_payment().eth_address);
         {
             trace!("traffic update for {} is {}", ident.mesh_ip, amount);
             let debt_data = self.get_debt_data(ident);
@@ -212,6 +264,7 @@ impl DebtKeeper {
 
     /// This updates a neighbor's debt and outputs a DebtAction if one is necessary.
     fn send_update(&mut self, ident: &Identity) -> DebtAction {
+        assert!(ident.eth_address != SETTING.get_payment().eth_address);
         trace!("debt data: {:?}", self.debt_data);
         let debt_data = self.get_debt_data(ident);
         let debt = debt_data.debt.clone();

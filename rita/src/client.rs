@@ -2,8 +2,6 @@
     feature = "system_alloc",
     feature(alloc_system, allocator_api)
 )]
-#![cfg_attr(feature = "clippy", feature(plugin))]
-#![cfg_attr(feature = "clippy", plugin(clippy))]
 
 #[cfg(feature = "system_alloc")]
 extern crate alloc_system;
@@ -14,6 +12,9 @@ use alloc_system::System;
 #[cfg(feature = "system_alloc")]
 #[global_allocator]
 static A: System = System;
+
+#[cfg(feature = "guac")]
+extern crate guac_actix;
 
 #[macro_use]
 extern crate failure;
@@ -73,6 +74,9 @@ pub mod actix_utils;
 mod middleware;
 mod rita_client;
 mod rita_common;
+
+#[cfg(feature = "guac")]
+use guac_actix::CryptoService;
 
 use rita_client::dashboard::network_endpoints::*;
 use rita_common::dashboard::network_endpoints::*;
@@ -166,30 +170,30 @@ fn main() {
         env!("CARGO_PKG_VERSION"),
         env!("GIT_HASH")
     );
+
+    #[cfg(feature = "guac")]
+    {
+        SETTING.get_payment_mut().eth_address = guac_actix::CRYPTO.own_eth_addr();
+    }
+
     trace!("Starting with Identity: {:?}", SETTING.get_identity());
 
     let system = actix::System::new(format!("main {}", SETTING.get_network().own_ip));
 
     assert!(rita_common::debt_keeper::DebtKeeper::from_registry().connected());
-    assert!(rita_common::payment_controller::PaymentController::from_registry().connected());
     assert!(rita_common::tunnel_manager::TunnelManager::from_registry().connected());
     assert!(rita_common::http_client::HTTPClient::from_registry().connected());
     assert!(rita_common::traffic_watcher::TrafficWatcher::from_registry().connected());
+
     assert!(rita_client::exit_manager::ExitManager::from_registry().connected());
+
+    #[cfg(feature = "guac")]
+    assert!(guac_actix::PaymentController::from_registry().connected());
 
     // rita
     server::new(|| App::new().resource("/hello", |r| r.method(Method::POST).with(hello_response)))
         .workers(1)
         .bind(format!("[::0]:{}", SETTING.get_network().rita_hello_port))
-        .unwrap()
-        .shutdown_timeout(0)
-        .start();
-    server::new(|| {
-        App::new().resource("/make_payment", |r| {
-            r.method(Method::POST).with(make_payments)
-        })
-    }).workers(1)
-        .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
         .unwrap()
         .shutdown_timeout(0)
         .start();
@@ -222,6 +226,9 @@ fn main() {
 
     let client = rita_client::rita_loop::RitaLoop {};
     let _: Addr<_> = client.start();
+
+    #[cfg(feature = "guac")]
+    guac_actix::init_server(SETTING.get_network().guac_contact_port);
 
     system.run();
 }

@@ -1,9 +1,15 @@
 use actix::prelude::*;
+use actix::registry::SystemService;
 
 use failure::Error;
+#[cfg(not(feature = "guac"))]
+use futures;
+
+#[cfg(feature = "guac")]
 use futures::Future;
 
-use rita_common::payment_controller::{GetOwnBalance, PaymentController};
+#[cfg(feature = "guac")]
+use guac_actix::{GetOwnBalance, PaymentController};
 
 pub mod network_endpoints;
 
@@ -42,16 +48,22 @@ impl Handler<GetOwnInfo> for Dashboard {
     type Result = ResponseFuture<OwnInfo, Error>;
 
     fn handle(&mut self, _msg: GetOwnInfo, _ctx: &mut Self::Context) -> Self::Result {
-        Box::new(
-            PaymentController::from_registry()
-                .send(GetOwnBalance {})
-                .from_err()
-                .and_then(|res| {
-                    Ok(OwnInfo {
-                        balance: res?,
-                        version: env!("CARGO_PKG_VERSION").to_string(),
-                    })
-                }),
-        )
+        #[cfg(feature = "guac")]
+        let ret = PaymentController::from_registry()
+            .send(GetOwnBalance {})
+            .from_err()
+            .and_then(|res| {
+                Ok(OwnInfo {
+                    balance: res?.as_u64() as i64,
+                    version: env!("CARGO_PKG_VERSION").to_string(),
+                })
+            });
+        #[cfg(not(feature = "guac"))]
+        let ret = futures::future::ok(OwnInfo {
+            balance: 0.into(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+        });
+
+        Box::new(ret)
     }
 }

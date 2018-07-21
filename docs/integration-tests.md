@@ -69,10 +69,10 @@ Here's what they are and what they do:
     backwards-compatibility test mode which will download Both A/B releases. If
     not set, it builds and tests the current `althea_rs` repo
 - `rita.py`
-  - `RITA_A`, `RITA_EXIT_A`, `BOUNTY_HUNTER_A` - Release A binaries (`rita`,
-    `rita_exit` and `bounty_hunter`), falls back to defaults, which are our
+  - `RITA_A`, `RITA_EXIT_A` - Release A binaries (`rita` and
+    `rita_exit`), falls back to defaults, which are our
 `althea_rs`'s binaries
-  - `RITA_B`, `RITA_EXIT_B`, `BOUNTY_HUNTER_B` - Same but for release B
+  - `RITA_B`, `RITA_EXIT_B` - Same but for release B
   - `COMPAT_LAYOUT` - The node -> release map to apply on the test mesh
   - `BACKOFF_FACTOR` - The factor by which the next convergence poll delay is
     multiplied; this is to decrease the interference of accessing the Babel

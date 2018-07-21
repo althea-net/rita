@@ -18,7 +18,10 @@ use rita_common::traffic_watcher::{TrafficWatcher, Watch};
 
 use rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 
-use rita_common::payment_controller::{PaymentController, PaymentControllerUpdate};
+#[cfg(feature = "guac")]
+use guac_actix::{PaymentController, Tick as GuacTick};
+
+use rita_common::debt_keeper::Tick as DebtTick;
 
 use rita_common::stats_collector::StatsCollector;
 
@@ -91,8 +94,11 @@ impl Handler<Tick> for RitaLoop {
         } else {
             self.was_gateway = false
         }
-
         let start = Instant::now();
+
+        DebtKeeper::from_registry().do_send(DebtTick);
+        DebtKeeper::from_registry().do_send(SendUpdate {});
+
         ctx.spawn(
             TunnelManager::from_registry()
                 .send(GetNeighbors)
@@ -117,11 +123,20 @@ impl Handler<Tick> for RitaLoop {
                     TrafficWatcher::from_registry()
                         .send(Watch(res))
                         .into_actor(act)
-                        .then(move |_res, _act, _ctx| {
+                        .then(move |_res, act, _ctx| {
                             info!("loop completed in {:?}", start.elapsed());
                             info!("traffic watcher completed in {:?}", neigh.elapsed());
-                            DebtKeeper::from_registry().do_send(SendUpdate {});
-                            PaymentController::from_registry().do_send(PaymentControllerUpdate {});
+                            #[cfg(feature = "guac")]
+                            {
+                                PaymentController::from_registry()
+                                    .send(GuacTick {})
+                                    .into_actor(act)
+                                    .then(move |x, _, _| {
+                                        trace!("PaymentController returned {:?}", x);
+                                        actix::fut::ok(())
+                                    })
+                            }
+                            #[cfg(not(feature = "guac"))]
                             actix::fut::ok(())
                         })
                 }),

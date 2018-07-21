@@ -1,4 +1,4 @@
-use althea_types::{Identity, LocalIdentity, PaymentTx};
+use althea_types::{Identity, LocalIdentity};
 
 use actix::registry::SystemService;
 use actix_web::*;
@@ -12,8 +12,6 @@ use SETTING;
 
 use serde_json;
 
-use rita_common;
-use rita_common::payment_controller::PaymentController;
 use rita_common::tunnel_manager::{GetWgInterface, OpenTunnelListener, TunnelManager};
 
 use std::boxed::Box;
@@ -34,20 +32,6 @@ impl JsonStatusResponse {
             response: res_string,
         }))
     }
-}
-
-pub fn make_payments(
-    pmt: (Json<PaymentTx>, HttpRequest),
-) -> Box<Future<Item = HttpResponse, Error = Error>> {
-    info!("Got Payment from {:?}", pmt.1.connection_info().remote());
-    trace!("Received payment: {:?}", pmt.0);
-    PaymentController::from_registry()
-        .send(rita_common::payment_controller::PaymentReceived(
-            pmt.0.clone(),
-        ))
-        .from_err()
-        .and_then(|_| Ok(HttpResponse::Ok().into()))
-        .responder()
 }
 
 pub fn hello_response(
