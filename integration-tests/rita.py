@@ -20,23 +20,19 @@ BABELD = os.path.join(os.path.dirname(__file__), 'deps/babeld/babeld')
 
 RITA_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/debug/rita')
 RITA_EXIT_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/debug/rita_exit')
-BOUNTY_HUNTER_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/debug/bounty_hunter')
 
 # Envs for controlling compat testing
 RITA_A = os.getenv('RITA_A', RITA_DEFAULT)
 RITA_EXIT_A = os.getenv('RITA_EXIT_A', RITA_EXIT_DEFAULT)
-BOUNTY_HUNTER_A = os.getenv('BOUNTY_HUNTER_A', BOUNTY_HUNTER_DEFAULT)
 DIR_A = os.getenv('DIR_A', 'althea_rs_a')
 RITA_B = os.getenv('RITA_B', RITA_DEFAULT)
 RITA_EXIT_B = os.getenv('RITA_EXIT_B', RITA_EXIT_DEFAULT)
-BOUNTY_HUNTER_B = os.getenv('BOUNTY_HUNTER_B', BOUNTY_HUNTER_DEFAULT)
 DIR_B = os.getenv('DIR_B', 'althea_rs_b')
 
 # Current binary paths (They change to *_A or *_B depending on which node is
 # going to be run at a given moment, according to the layout)
 RITA = RITA_DEFAULT
 RITA_EXIT = RITA_EXIT_DEFAULT
-BOUNTY_HUNTER = BOUNTY_HUNTER_DEFAULT
 
 # COMPAT_LAYOUTS[None] sets everything to *_A
 COMPAT_LAYOUT = os.getenv('COMPAT_LAYOUT', None)
@@ -59,7 +55,7 @@ EXIT_SETTINGS = {
         "exit_a": {
             "id": {
                 "mesh_ip": "fd00::5",
-                "eth_address": "0x0101010101010101010101010101010101010101",
+                "eth_address": "fd00::5",
                 "wg_public_key": "fd00::5",
             },
             "registration_port": 4875,
@@ -130,13 +126,13 @@ def cleanup():
     os.system("rm -rf *.db *.log *.pid private-key* mail")
     os.system("mkdir mail")
     os.system("sync")
-    os.system("killall babeld rita rita_exit bounty_hunter iperf")  # TODO: This is very inconsiderate
+    os.system("killall babeld rita rita_exit iperf")  # TODO: This is very inconsiderate
 
 
 def teardown():
     os.system("rm -rf *.pid private-key*")
     os.system("sync")
-    os.system("killall babeld rita rita_exit bounty_hunter iperf")  # TODO: This is very inconsiderate
+    os.system("killall babeld rita rita_exit iperf")  # TODO: This is very inconsiderate
 
 
 class Node:
@@ -249,13 +245,6 @@ def start_babel(node):
             blocking=False
         )
 
-
-def start_bounty(id):
-    os.system(
-        '(RUST_BACKTRACE=full ip netns exec netlab-{id} {bounty} & echo $! > bounty-n{id}.pid) | grep -Ev "<unknown>|mio" > bounty-n{id}.log &'.format(
-            id=id, bounty=BOUNTY_HUNTER))
-
-
 def get_rita_defaults():
     return toml.load(open("../settings/default.toml"))
 
@@ -279,15 +268,14 @@ def get_rita_settings(id):
 
 def switch_binaries(node_id):
     """
-    Switch the Rita, exit Rita and bounty hunter binaries assigned to node with ID
+    Switch the Rita and exit Rita binaries assigned to node with ID
     :data:`node_id`.
 
     :param int node_id: Node ID for which we're changing binaries
     """
-    global RITA, RITA_EXIT, BOUNTY_HUNTER
+    global RITA, RITA_EXIT
     if VERBOSE:
-        print(("Previous binary paths:\nRITA:\t\t{}\nRITA_EXIT:\t{}\n" +
-            "BOUNTY_HUNTER:\t{}").format(RITA, RITA_EXIT, BOUNTY_HUNTER))
+        print(("Previous binary paths:\nRITA:\t\t{}\nRITA_EXIT:\t{}\n").format(RITA, RITA_EXIT))
 
     release = COMPAT_LAYOUTS[COMPAT_LAYOUT][node_id - 1]
 
@@ -296,20 +284,17 @@ def switch_binaries(node_id):
             print("Using A for node {}...".format(node_id))
         RITA = RITA_A
         RITA_EXIT = RITA_EXIT_A
-        BOUNTY_HUNTER = BOUNTY_HUNTER_A
     elif release == 'b':
         if VERBOSE:
             print("Using B for node {}...".format(node_id))
         RITA = RITA_B
         RITA_EXIT = RITA_EXIT_B
-        BOUNTY_HUNTER = BOUNTY_HUNTER_B
     else:
         print("Unknown revision kind \"{}\" for node {}".format(release, node_id))
         sys.exit(1)
 
     if VERBOSE:
-        print(("New binary paths:\nRITA:\t\t{}\nRITA_EXIT:\t{}\n" +
-            "BOUNTY_HUNTER:\t{}").format(RITA, RITA_EXIT, BOUNTY_HUNTER))
+        print(("New binary paths:\nRITA:\t\t{}\nRITA_EXIT:\t{}\n").format(RITA, RITA_EXIT))
 
 def register_to_exit(node):
     os.system(("ip netns exec netlab-{} curl -XPOST " +
@@ -407,7 +392,6 @@ class World:
     def __init__(self):
         self.nodes = {}
         self.connections = {}
-        self.bounty_id = None
         self.exit_id = None
         self.external = None
 
@@ -431,9 +415,6 @@ class World:
         connection.a.add_neighbor(connection.b.id)
         connection.b.add_neighbor(connection.a.id)
 
-    def set_bounty(self, bounty_id):
-        self.bounty_id = bounty_id
-
     def to_ip(self, node):
         if self.exit_id == node.id:
             return "172.168.1.254"
@@ -441,29 +422,19 @@ class World:
             return "fd00::{}".format(node.id)
 
     def setup_dbs(self):
-        os.system("rm -rf bounty.db exit.db")
+        os.system("rm -rf exit.db")
 
-        bounty_repo_dir = ".."
         exit_repo_dir = ".."
 
-        bounty_index = self.bounty_id - 1
         exit_index = self.exit_id - 1
 
         if VERBOSE:
-            print("DB setup: bounty_hunter index: {}, exit index: {}".format(bounty_index, exit_index))
+            print("DB setup: exit index: {}".format(exit_index))
 
         if COMPAT_LAYOUT:
             # Figure out whether release A or B was
-            # assigned to the exit and
-            # bounty
+            # assigned to the exit
             layout = COMPAT_LAYOUTS[COMPAT_LAYOUT]
-            if layout[bounty_index] == 'a':
-                bounty_repo_dir = DIR_A
-            elif layout[bounty_index] == 'b':
-                bounty_repo_dir = DIR_B
-            else:
-                print("DB setup: Unknown release {} assigned to bounty".format(layout[bounty_index]))
-                sys.exit(1)
 
             if layout[exit_index] == 'a':
                 exit_repo_dir = DIR_A
@@ -475,15 +446,6 @@ class World:
 
         # Save the current dir
         cwd = os.getcwd()
-
-        # Go to bounty_hunter/ in the bounty's release
-        os.chdir(os.path.join(cwd, bounty_repo_dir, "bounty_hunter"))
-        if VERBOSE:
-            print("DB setup: Entering {}/bounty_hunter".format(bounty_repo_dir))
-
-        os.system(("rm -rf test.db " +
-            "&& diesel migration run" +
-            "&& cp test.db {dest}").format(dest=os.path.join(cwd, "bounty.db")))
 
         # Go to exit_db/ in the exit's release
         os.chdir(os.path.join(cwd, exit_repo_dir, "exit_db"))
@@ -500,7 +462,6 @@ class World:
     def create(self):
         cleanup()
 
-        assert self.bounty_id
         nodes = {}
         for id in self.nodes:
             nodes[str(id)] = {"ip": "fd00::{}".format(id)}
@@ -542,21 +503,18 @@ class World:
 
         print("babel started")
 
-        print("Setting up rita_exit and bounty_hunter databases")
+        print("Setting up rita_exit database")
         self.setup_dbs()
         print("DB setup OK")
 
-        print("starting bounty hunter")
-        switch_binaries(self.bounty_id)
-        start_bounty(self.bounty_id)
-        print("bounty hunter started")
-
+        print("starting rita_exit")
         switch_binaries(self.exit_id)
         start_rita_exit(self.nodes[self.exit_id])
 
-        time.sleep(1)
+        time.sleep(6)
 
         EXIT_SETTINGS["exits"]["exit_a"]["id"]["wg_public_key"] = get_rita_settings(self.exit_id)["network"]["wg_public_key"]
+        EXIT_SETTINGS["exits"]["exit_a"]["id"]["eth_address"] = get_rita_settings(self.exit_id)["payment"]["eth_address"]
 
         print("starting rita")
         for id, node in self.nodes.items():
@@ -773,15 +731,15 @@ class World:
 
 
     def get_balances(self):
-        status = subprocess.Popen(
-                 ["ip", "netns", "exec", "netlab-{}".format(self.bounty_id), "curl", "-s", "-g", "-6",
-                  "[::1]:8888/list"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        status.wait()
-        output = status.stdout.read().decode("utf-8")
-        status = json.loads(output)
         balances = {}
-        for i in status:
-            balances[int(i["ip"].replace("fd00::", ""))] = int(i["balance"])
+        for i in self.nodes:
+            info = subprocess.Popen(
+                 ["ip", "netns", "exec", "netlab-{}".format(i), "curl", "-s", "-g", "-6",
+                  "[::1]:4877/info"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            info.wait()
+            output = info.stdout.read().decode("utf-8")
+            info = json.loads(output)
+            balances[i] = info["balance"]
 
         return balances
 
@@ -908,9 +866,10 @@ def main():
     world.add_connection(Connection(e5, g7))
     # world.add_connection(Connection(e5, h8))
 
-    world.set_bounty(3)  # TODO: Who should be the bounty hunter?
-
     world.create()
+
+    # fail fast if something made rita crash
+    world.get_balances()
 
     print("Waiting for network to stabilize")
     start_time = time.time()
@@ -972,6 +931,8 @@ def main():
         if choice != 'y':
             sys.exit(0)
 
+    time.sleep(10)
+
     world.test_traffic(c3, f6, {
         1: 0,
         2: 0,
@@ -981,7 +942,6 @@ def main():
         6: 0 * 1.05,
         7: 10 * 1.05
     })
-
     world.test_traffic(d4, a1, {
         1: 0 * 1.05,
         2: 25 * 1.05,
@@ -991,7 +951,6 @@ def main():
         6: 50 * 1.05,
         7: 0
     })
-
     world.test_traffic(a1, c3, {
         1: -60 * 1.05,
         2: 0,
@@ -1001,7 +960,6 @@ def main():
         6: 50 * 1.05,
         7: 10 * 1.05
     })
-
     world.test_traffic(d4, e5, {
         1: 0,
         2: 25 * 1.1,
@@ -1021,7 +979,6 @@ def main():
         6: 50 * 1.1,
         7: 10 * 1.1
     })
-
     world.test_traffic(c3, e5, {
         1: 0,
         2: 0,
@@ -1031,7 +988,6 @@ def main():
         6: 0,
         7: 10 * 1.1
     })
-
     world.test_traffic(e5, c3, {
         1: 0,
         2: 0,
@@ -1041,7 +997,6 @@ def main():
         6: 0,
         7: 10 * 1.1
     })
-
     world.test_traffic(g7, e5, {
         1: 0,
         2: 0,
@@ -1051,7 +1006,6 @@ def main():
         6: 0,
         7: -50 * 1.1
     })
-
     world.test_traffic(e5, g7, {
         1: 0,
         2: 0,

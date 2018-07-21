@@ -47,7 +47,8 @@ impl Message for Tick {
 fn to_identity(client: Client) -> Identity {
     Identity {
         mesh_ip: client.mesh_ip.parse().unwrap(),
-        eth_address: SETTING.get_payment().eth_address, // we should never be paying them, but if somehow we do, it goes back to us
+        // [2..] to remove the 0x
+        eth_address: client.eth_address[2..].parse().unwrap(),
         wg_public_key: client.wg_pubkey,
     }
 }

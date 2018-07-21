@@ -87,6 +87,12 @@ fn default_tunnel_timeout() -> u64 {
     900 // 15 minutes
 }
 
+/// This is the network settings for rita and rita_exit which generally only applies to networking
+/// _within_ the mesh or setting up pre hop tunnels (so nothing on exits)
+fn default_guac_contact_port() -> u16 {
+    4874
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
     /// The static IP used on mesh interfaces
@@ -105,9 +111,10 @@ pub struct NetworkSettings {
     /// Port on which rita starts the per hop tunnel handshake on (needs to be constant across an
     /// entire althea deployment)
     pub rita_hello_port: u16,
-    /// Port on which rita contacts other althea nodes over the mesh (needs to be constant across an
+    /// Port on which guac contacts other althea nodes over the mesh (needs to be constant across an
     /// entire althea deployment)
-    pub rita_contact_port: u16,
+    #[serde(default = "default_guac_contact_port")]
+    pub guac_contact_port: u16,
     /// Port over which the dashboard will be accessible upon
     pub rita_dashboard_port: u16,
     /// Port over which the bounty hunter will be contacted
@@ -156,7 +163,7 @@ impl Default for NetworkSettings {
             babel_port: 6872,
             rita_hello_port: 4876,
             rita_dashboard_port: 4877,
-            rita_contact_port: 4875,
+            guac_contact_port: 4874,
             bounty_port: 8888,
             rita_tick_interval: 5,
             wg_private_key: String::new(),

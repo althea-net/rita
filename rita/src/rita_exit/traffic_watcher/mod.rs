@@ -209,12 +209,14 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, clients: Vec<Identity>) -> Re
     }
 
     for (from, amount) in debts {
-        let update = debt_keeper::TrafficUpdate {
-            from: from.clone(),
-            amount,
-        };
+        if from.eth_address != SETTING.get_payment().eth_address {
+            let update = debt_keeper::TrafficUpdate {
+                from: from.clone(),
+                amount,
+            };
 
-        DebtKeeper::from_registry().do_send(update);
+            DebtKeeper::from_registry().do_send(update);
+        }
     }
 
     Ok(())

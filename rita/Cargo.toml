@@ -16,7 +16,7 @@ path = "src/client.rs"
 default = []
 system_alloc = []
 development = []
-
+guac = ["guac_actix"]
 
 [dependencies]
 althea_kernel_interface = { path = "../althea_kernel_interface" }
@@ -26,7 +26,7 @@ clu = { path = "../clu" }
 exit_db = { path = "../exit_db" }
 num256 = { path = "../num256" }
 settings = { path = "../settings" }
-guac_actix = { git = "https://github.com/kingoflolz/guac_rs"}
+guac_actix = { git = "https://github.com/kingoflolz/guac_rs", optional = true}
 
 syslog = "^4.0"
 actix = "0.7.4"

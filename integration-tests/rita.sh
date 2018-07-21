@@ -41,7 +41,7 @@ build_rev() {
   pushd $dir
     git checkout $revision
 
-    CARGO_TARGET_DIR="../$target_dir" cargo build --all
+    CARGO_TARGET_DIR="../$target_dir" cargo build --all --all-features
   popd
 }
 
@@ -79,7 +79,7 @@ if [ ! -z "${COMPAT_LAYOUT-}" ] ; then
   export DIR_B=$DIR_B
 else
   pushd ..
-    cargo build --all
+    cargo build --all --all-features
   popd
 fi
 

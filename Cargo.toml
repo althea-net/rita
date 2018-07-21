@@ -10,7 +10,7 @@ development = ["rita/development"]
 rita = { path = "./rita" }
 
 [workspace]
-members = ["althea_kernel_interface", "bounty_hunter", "settings", "clu", "exit_db"]
+members = ["althea_kernel_interface", "settings", "clu", "exit_db", "num256", "babel_monitor"]
 
 [profile.release]
 opt-level = "z"
@@ -18,4 +18,6 @@ lto = true
 codegen-units = 1
 incremental = false
 
-[patch.crates-io]
+[patch.'https://github.com/althea-mesh/althea_rs.git']
+num256 = {path = "./num256"}
+althea_types = {path = "./althea_types"}

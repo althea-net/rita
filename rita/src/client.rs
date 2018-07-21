@@ -7,10 +7,7 @@
 //! This file initilizes the dashboard endpoints for the client as well as the common and client
 //! specific actors.
 
-#![cfg_attr(
-    feature = "system_alloc",
-    feature(alloc_system, allocator_api)
-)]
+#![cfg_attr(feature = "system_alloc", feature(alloc_system, allocator_api))]
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
@@ -23,6 +20,9 @@ use alloc_system::System;
 #[cfg(feature = "system_alloc")]
 #[global_allocator]
 static A: System = System;
+
+#[cfg(feature = "guac")]
+extern crate guac_actix;
 
 #[macro_use]
 extern crate failure;
@@ -86,6 +86,9 @@ pub mod actix_utils;
 mod middleware;
 mod rita_client;
 mod rita_common;
+
+#[cfg(feature = "guac")]
+use guac_actix::CryptoService;
 
 use rita_client::dashboard::network_endpoints::*;
 use rita_common::dashboard::network_endpoints::*;
@@ -191,17 +194,24 @@ fn main() {
         env!("CARGO_PKG_VERSION"),
         env!("GIT_HASH")
     );
+
+    #[cfg(feature = "guac")]
+    {
+        SETTING.get_payment_mut().eth_address = guac_actix::CRYPTO.own_eth_addr();
+    }
+
     trace!("Starting with Identity: {:?}", SETTING.get_identity());
 
     let system = actix::System::new(format!("main {:?}", SETTING.get_network().mesh_ip));
 
     assert!(rita_common::debt_keeper::DebtKeeper::from_registry().connected());
-    assert!(rita_common::payment_controller::PaymentController::from_registry().connected());
     assert!(rita_common::tunnel_manager::TunnelManager::from_registry().connected());
     assert!(rita_common::http_client::HTTPClient::from_registry().connected());
     assert!(rita_common::traffic_watcher::TrafficWatcher::from_registry().connected());
-    assert!(rita_common::peer_listener::PeerListener::from_registry().connected());
     assert!(rita_client::exit_manager::ExitManager::from_registry().connected());
+
+    #[cfg(feature = "guac")]
+    assert!(guac_actix::PaymentController::from_registry().connected());
 
     // rita
     server::new(|| App::new().resource("/hello", |r| r.method(Method::POST).with(hello_response)))
@@ -210,15 +220,6 @@ fn main() {
         .unwrap()
         .shutdown_timeout(0)
         .start();
-    server::new(|| {
-        App::new().resource("/make_payment", |r| {
-            r.method(Method::POST).with(make_payments)
-        })
-    }).workers(1)
-    .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
-    .unwrap()
-    .shutdown_timeout(0)
-    .start();
 
     // dashboard
     server::new(|| {
@@ -230,7 +231,8 @@ fn main() {
                 "/dao_list/remove/{address}",
                 Method::POST,
                 remove_from_dao_list,
-            ).route("/debts", Method::GET, get_debts)
+            )
+            .route("/debts", Method::GET, get_debts)
             .route("/exits", Method::GET, get_exit_info)
             .route("/exits/{name}/register", Method::POST, register_to_exit)
             .route("/exits/{name}/reset", Method::POST, reset_exit)
@@ -239,15 +241,18 @@ fn main() {
                 "/exits/{name}/verify/{code}",
                 Method::POST,
                 verify_on_exit_with_code,
-            ).route(
+            )
+            .route(
                 "/remote_logging/enabled/{enabled}",
                 Method::POST,
                 remote_logging,
-            ).route(
+            )
+            .route(
                 "/remote_logging/level/{level}",
                 Method::POST,
                 remote_logging_level,
-            ).route("/info", Method::GET, get_own_info)
+            )
+            .route("/info", Method::GET, get_own_info)
             .route("/interfaces", Method::GET, get_interfaces)
             .route("/interfaces", Method::POST, set_interfaces)
             .route("/mesh_ip", Method::GET, get_mesh_ip)
@@ -261,18 +266,22 @@ fn main() {
             .route("/wifi_settings", Method::GET, get_wifi_config)
             .route("/wipe", Method::POST, wipe)
     }).workers(1)
-    .bind(format!(
-        "[::0]:{}",
-        SETTING.get_network().rita_dashboard_port
-    )).unwrap()
-    .shutdown_timeout(0)
-    .start();
+        .bind(format!(
+            "[::0]:{}",
+            SETTING.get_network().rita_dashboard_port
+        ))
+        .unwrap()
+        .shutdown_timeout(0)
+        .start();
 
     let common = rita_common::rita_loop::RitaLoop::new();
     let _: Addr<_> = common.start();
 
     let client = rita_client::rita_loop::RitaLoop {};
     let _: Addr<_> = client.start();
+
+    #[cfg(feature = "guac")]
+    guac_actix::init_server(SETTING.get_network().guac_contact_port);
 
     system.run();
 }

@@ -9,10 +9,7 @@
 //! This file initilizes the dashboard endpoints for the exit as well as the common and exit
 //! specific actors.
 
-#![cfg_attr(
-    feature = "system_alloc",
-    feature(alloc_system, allocator_api)
-)]
+#![cfg_attr(feature = "system_alloc", feature(alloc_system, allocator_api))]
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
@@ -25,6 +22,9 @@ use alloc_system::System;
 #[cfg(feature = "system_alloc")]
 #[global_allocator]
 static A: System = System;
+
+#[cfg(feature = "guac")]
+extern crate guac_actix;
 
 extern crate diesel;
 #[macro_use]
@@ -84,6 +84,9 @@ pub mod actix_utils;
 mod middleware;
 mod rita_common;
 mod rita_exit;
+
+#[cfg(feature = "guac")]
+use guac_actix::CryptoService;
 
 use rita_common::dashboard::network_endpoints::*;
 use rita_common::network_endpoints::*;
@@ -183,6 +186,11 @@ fn main() {
     // to get errors before lazy static
     RitaExitSettingsStruct::new(&settings_file).expect("Settings parse failure");
 
+    #[cfg(feature = "guac")]
+    {
+        SETTING.get_payment_mut().eth_address = guac_actix::CRYPTO.own_eth_addr();
+    }
+
     trace!("Starting");
     info!(
         "crate ver {}, git hash {}",
@@ -194,7 +202,6 @@ fn main() {
     let system = actix::System::new(format!("main {:?}", SETTING.get_network().mesh_ip));
 
     assert!(rita_common::debt_keeper::DebtKeeper::from_registry().connected());
-    assert!(rita_common::payment_controller::PaymentController::from_registry().connected());
     assert!(rita_common::tunnel_manager::TunnelManager::from_registry().connected());
     assert!(rita_common::http_client::HTTPClient::from_registry().connected());
     assert!(rita_common::traffic_watcher::TrafficWatcher::from_registry().connected());
@@ -203,20 +210,14 @@ fn main() {
     assert!(rita_exit::traffic_watcher::TrafficWatcher::from_registry().connected());
     assert!(rita_exit::db_client::DbClient::from_registry().connected());
 
+    #[cfg(feature = "guac")]
+    assert!(guac_actix::PaymentController::from_registry().connected());
+
     server::new(|| App::new().resource("/hello", |r| r.method(Method::POST).with(hello_response)))
         .bind(format!("[::0]:{}", SETTING.get_network().rita_hello_port))
         .unwrap()
         .shutdown_timeout(0)
         .start();
-    server::new(|| {
-        App::new().resource("/make_payment", |r| {
-            r.method(Method::POST).with(make_payments)
-        })
-    }).workers(1)
-    .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
-    .unwrap()
-    .shutdown_timeout(0)
-    .start();
 
     // Exit stuff
     server::new(|| {
@@ -224,16 +225,19 @@ fn main() {
             .resource("/setup", |r| r.method(Method::POST).with(setup_request))
             .resource("/status", |r| {
                 r.method(Method::POST).with_async(status_request)
-            }).resource("/list", |r| r.method(Method::POST).with(list_clients))
+            })
+            .resource("/list", |r| r.method(Method::POST).with(list_clients))
             .resource("/exit_info", |r| {
                 r.method(Method::GET).with(get_exit_info_http)
-            }).resource("/rtt", |r| r.method(Method::GET).with(rtt))
+            })
+            .resource("/rtt", |r| r.method(Method::GET).with(rtt))
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_exit_network().exit_hello_port
-    )).unwrap()
-    .shutdown_timeout(0)
-    .start();
+    ))
+        .unwrap()
+        .shutdown_timeout(0)
+        .start();
 
     // Dashboard
     server::new(|| {
@@ -259,15 +263,19 @@ fn main() {
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_network().rita_dashboard_port
-    )).unwrap()
-    .shutdown_timeout(0)
-    .start();
+    ))
+        .unwrap()
+        .shutdown_timeout(0)
+        .start();
 
     let common = rita_common::rita_loop::RitaLoop::new();
     let _: Addr<_> = common.start();
 
     let exit = rita_exit::rita_loop::RitaLoop {};
     let _: Addr<_> = exit.start();
+
+    #[cfg(feature = "guac")]
+    guac_actix::init_server(SETTING.get_network().guac_contact_port);
 
     system.run();
 }

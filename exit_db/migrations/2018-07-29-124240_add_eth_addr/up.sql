@@ -1,0 +1,2 @@
+ALTER TABLE clients
+  ADD eth_address VARCHAR DEFAULT "0x0" NOT NULL;
