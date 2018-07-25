@@ -24,6 +24,8 @@ extern crate lazy_static;
 extern crate log;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate serde_json;
 
 extern crate actix;
 extern crate actix_web;
@@ -34,6 +36,7 @@ extern crate dotenv;
 extern crate env_logger;
 extern crate eui48;
 extern crate futures;
+extern crate handlebars;
 extern crate ipnetwork;
 extern crate lettre;
 extern crate lettre_email;
@@ -42,7 +45,6 @@ extern crate rand;
 extern crate regex;
 extern crate reqwest;
 extern crate serde;
-extern crate serde_json;
 extern crate settings;
 extern crate tokio;
 extern crate tokio_core;

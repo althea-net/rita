@@ -32,13 +32,12 @@ impl Handler<Tick> for RitaLoop {
             ExitManager::from_registry()
                 .send(Tick {})
                 .into_actor(self)
-                .then(|res, _act, _ctx| {
+                .then(|res, _act, ctx| {
                     trace!("exit manager said {:?}", res);
+                    ctx.notify_later(Tick {}, Duration::from_secs(10));
                     actix::fut::ok(())
                 }),
         );
-
-        ctx.notify_later(Tick {}, Duration::from_secs(5));
 
         Ok(())
     }

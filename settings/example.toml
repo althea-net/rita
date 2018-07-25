@@ -28,7 +28,6 @@ lan_nics = ["lo"]
 
 [exit_client.reg_details]
 email = "1234@gmail.com"
-zip_code = "1234"
 
 [exit_client.exits.exit_a]
 message = "Registration OK"

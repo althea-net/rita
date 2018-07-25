@@ -17,6 +17,8 @@ use lettre::smtp::ConnectionReuseParameters;
 use lettre::{EmailTransport, SmtpTransport};
 use lettre_email::EmailBuilder;
 
+use handlebars::Handlebars;
+
 use rand;
 use rand::Rng;
 
@@ -177,10 +179,6 @@ fn update_client(client: &ExitClientIdentity, conn: &SqliteConnection) -> Result
         .set(email.eq(&client.reg_details.email.clone().unwrap()))
         .execute(&*conn)?;
 
-    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-        .set(zip.eq(&client.reg_details.zip_code.clone().unwrap()))
-        .execute(&*conn)?;
-
     Ok(())
 }
 
@@ -238,11 +236,6 @@ fn client_to_new_db_client(
         wg_pubkey: client.global.wg_public_key.clone(),
         internal_ip: new_ip.to_string(),
         email: client.reg_details.email.clone().unwrap_or("".to_string()),
-        zip: client
-            .reg_details
-            .zip_code
-            .clone()
-            .unwrap_or("".to_string()),
         country,
         email_code: format!("{:06}", rand_code),
         verified: false,
@@ -258,12 +251,15 @@ fn send_mail(client: &models::Client) -> Result<(), Error> {
     if SETTING.get_mailer().is_none() {
         return Ok(());
     };
+
+    let reg = Handlebars::new();
+
     let email = EmailBuilder::new()
         .to(client.email.clone())
         .from(SETTING.get_mailer().unwrap().from_address)
-        .subject("Althea Exit verification code")
+        .subject(SETTING.get_mailer().unwrap().subject)
         // TODO: maybe have a proper templating engine
-        .text(format!("Your althea verification code is [{}]", client.email_code))
+        .text(reg.render_template(&SETTING.get_mailer().unwrap().body, &json!({"email_code": client.email_code.to_string()}))?)
         .build()
         .unwrap();
 
@@ -313,6 +309,7 @@ impl Handler<SetupClient> for DbClient {
                     trace!("Checking if record exists for {:?}", client.global.mesh_ip);
 
                     if client_exists(&client.global.mesh_ip, &conn)? {
+                        update_client(&msg.0, &conn)?;
                         let mut their_record: models::Client = clients
                             .filter(mesh_ip.eq(&client.global.mesh_ip.to_string()))
                             .load::<models::Client>(&conn)

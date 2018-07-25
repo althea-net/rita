@@ -11,6 +11,7 @@ use SETTING;
 use rita_client::rita_loop::Tick;
 use rita_client::traffic_watcher::{TrafficWatcher, Watch};
 
+use futures::future::join_all;
 use futures::Future;
 
 use tokio::net::TcpStream as TokioTcpStream;
@@ -79,7 +80,7 @@ pub fn send_exit_setup_request(
 
     stream.from_err().and_then(move |stream| {
         client::post(&endpoint)
-            .timeout(Duration::from_secs(2))
+            .timeout(Duration::from_secs(8))
             .with_connection(Connection::from_stream(stream))
             .json(ident)
             .unwrap()
@@ -222,7 +223,7 @@ impl SystemService for ExitManager {
 }
 
 impl Handler<Tick> for ExitManager {
-    type Result = Result<(), Error>;
+    type Result = ResponseFuture<(), Error>;
 
     fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
         let exit_server = {
@@ -246,6 +247,8 @@ impl Handler<Tick> for ExitManager {
         // code that manages requesting details to exits
         let servers = { SETTING.get_exits().clone() };
 
+        let mut futs: Vec<Box<Future<Item = (), Error = Error>>> = Vec::new();
+
         for (k, s) in servers {
             match s.info {
                 ExitState::Denied { .. }
@@ -255,40 +258,44 @@ impl Handler<Tick> for ExitManager {
                     ..
                 } => {}
                 ExitState::New { .. } => {
-                    Arbiter::spawn(exit_general_details_request(k.clone()).then(move |res| {
-                        match res {
-                            Ok(_) => {
-                                info!("exit details request to {} was successful", k);
-                            }
-                            Err(e) => {
-                                info!("exit details request to {} failed with {:?}", k, e);
-                            }
-                        };
-                        Ok(())
-                    }));
+                    futs.push(Box::new(exit_general_details_request(k.clone()).then(
+                        move |res| {
+                            match res {
+                                Ok(_) => {
+                                    info!("exit details request to {} was successful", k);
+                                }
+                                Err(e) => {
+                                    info!("exit details request to {} failed with {:?}", k, e);
+                                }
+                            };
+                            Ok(())
+                        },
+                    )));
                 }
                 ExitState::Registering { .. }
                 | ExitState::GotInfo {
                     auto_register: true,
                     ..
                 } => {
-                    Arbiter::spawn(exit_setup_request(k.clone(), None).then(move |res| {
-                        match res {
-                            Ok(_) => {
-                                info!("exit setup request (no code) to {} was successful", k);
-                            }
-                            Err(e) => {
-                                info!("exit setup request to {} failed with {:?}", k, e);
-                            }
-                        };
-                        Ok(())
-                    }));
+                    futs.push(Box::new(exit_setup_request(k.clone(), None).then(
+                        move |res| {
+                            match res {
+                                Ok(_) => {
+                                    info!("exit setup request (no code) to {} was successful", k);
+                                }
+                                Err(e) => {
+                                    info!("exit setup request to {} failed with {:?}", k, e);
+                                }
+                            };
+                            Ok(())
+                        },
+                    )));
                 }
                 ExitState::Pending {
                     email_code: Some(email_code),
                     ..
                 } => {
-                    Arbiter::spawn(
+                    futs.push(Box::new(
                         exit_setup_request(k.clone(), Some(email_code.clone())).then(move |res| {
                             match res {
                                 Ok(_) => {
@@ -300,10 +307,10 @@ impl Handler<Tick> for ExitManager {
                             };
                             Ok(())
                         }),
-                    );
+                    ));
                 }
                 ExitState::Registered { .. } => {
-                    Arbiter::spawn(exit_status_request(k.clone()).then(move |res| {
+                    futs.push(Box::new(exit_status_request(k.clone()).then(move |res| {
                         match res {
                             Ok(_) => {
                                 info!("exit status request to {} was successful", k);
@@ -313,7 +320,7 @@ impl Handler<Tick> for ExitManager {
                             }
                         };
                         Ok(())
-                    }));
+                    })));
                 }
                 _ => {
                     info!("waiting on one time code for {}", k);
@@ -321,6 +328,6 @@ impl Handler<Tick> for ExitManager {
             }
         }
 
-        Ok(())
+        Box::new(join_all(futs).and_then(|_| Ok(()))) as ResponseFuture<(), Error>
     }
 }
