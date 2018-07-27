@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# export PATH="$PATH:$HOME/.cargo/bin"
 BABELD_DIR="deps/babeld"
 NETLAB_PATH="deps/network-lab/network-lab.sh"
 
@@ -74,4 +75,4 @@ else
   popd
 fi
 
-sudo -E python3 rita.py $@
+sudo -E PATH="$PATH:$HOME/.cargo/bin" python3 rita.py $@
