@@ -511,7 +511,7 @@ class World:
         print("network topology: {}".format(network))
 
         print(NETWORK_LAB)
-        proc = subprocess.Popen([NETWORK_LAB], stdin=subprocess.PIPE, universal_newlines=True)
+        proc = subprocess.Popen(['/bin/bash', NETWORK_LAB], stdin=subprocess.PIPE, universal_newlines=True)
         proc.stdin.write(network_string)
         proc.stdin.close()
 
