@@ -41,10 +41,7 @@ use althea_kernel_interface::TestCommandRunner;
 
 use config::Config;
 
-use althea_types::{
-    DeserializeWith, EthAddress, ExitClientDetails, ExitDetails, ExitRegistrationDetails,
-    ExitState, Identity,
-};
+use althea_types::{EthAddress, ExitRegistrationDetails, ExitState, Identity};
 
 use num256::Int256;
 
@@ -178,20 +175,11 @@ pub struct ExitServer {
     pub id: Identity,
     /// The port over which we will reach the exit apis on over the mesh
     pub registration_port: u16,
-    /// This stores information which the exit gives us from registration, and is specific to this
-    /// particular node (such as local ip on the exit tunnel)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub our_details: Option<ExitClientDetails>,
-    /// This stores information on the exit which is consistent across all nodes which the exit
-    /// serves (for example the exit's own ip/gateway ip within the exit tunnel)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub general_details: Option<ExitDetails>,
-    /// The state the exit is in, used to control if/when/how to poll the exit
-    #[serde(default, deserialize_with = "ExitState::deserialize_with")]
-    pub state: ExitState,
-    /// The message returned from the exit from registration
     #[serde(default)]
-    pub message: String,
+    pub description: String,
+    /// The state and data about the exit
+    #[serde(default, flatten)]
+    pub info: ExitState,
 }
 
 /// This struct is used by rita to encapsulate all the state/information needed to connect/register
@@ -219,9 +207,8 @@ impl Default for ExitClientSettings {
             current_exit: None,
             wg_listen_port: 59999,
             reg_details: Some(ExitRegistrationDetails {
-                zip_code: Some("1234".into()),
                 email: Some("1234@gmail.com".into()),
-                country: Some("Althea".into()),
+                email_code: Some("000000".into()),
             }),
             lan_nics: HashSet::new(),
         }
@@ -285,6 +272,48 @@ impl Default for ExitNetworkSettings {
     }
 }
 
+fn default_email_subject() -> String {
+    String::from("Althea Exit verification code")
+}
+
+fn default_email_body() -> String {
+    // templated using the handlebars language
+    // the code will be placed in the {{email_code}}, the [] is for integration testing
+    String::from("Your althea verification code is [{{email_code}}]")
+}
+
+// TODO: make this cleaner/use enums
+/// This is the settings for email verification
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
+pub struct ExitMailerSettings {
+    /// The email address of the from field of the email sent
+    pub from_address: String,
+    /// Min amount of time for emails going to the same address
+    pub email_cooldown: u64,
+
+    // templating stuff
+    #[serde(default = "default_email_subject")]
+    pub subject: String,
+
+    #[serde(default = "default_email_body")]
+    pub body: String,
+
+    #[serde(default)]
+    pub test: bool,
+    #[serde(default)]
+    pub test_dir: String,
+    /// SMTP server url e.g. smtp.fastmail.com
+    #[serde(default)]
+    pub smtp_url: String,
+    /// SMTP domain url e.g. mail.example.com
+    #[serde(default)]
+    pub smtp_domain: String,
+    #[serde(default)]
+    pub smtp_username: String,
+    #[serde(default)]
+    pub smtp_password: String,
+}
+
 /// This is the main settings struct for rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct RitaExitSettingsStruct {
@@ -299,6 +328,8 @@ pub struct RitaExitSettingsStruct {
     /// (ISO country code)
     #[serde(skip_serializing_if = "HashSet::is_empty", default)]
     allowed_countries: HashSet<String>,
+    #[serde(default)]
+    mailer: Option<ExitMailerSettings>,
     #[serde(skip)]
     future: bool,
 }
@@ -535,6 +566,7 @@ pub trait RitaExitSettings {
     fn get_exit_network<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, ExitNetworkSettings>;
+    fn get_mailer(&self) -> Option<ExitMailerSettings>;
     fn get_db_file(&self) -> String;
     fn get_description(&self) -> String;
     fn get_allowed_countries<'ret, 'me: 'ret>(
@@ -558,6 +590,9 @@ impl RitaExitSettings for Arc<RwLock<RitaExitSettingsStruct>> {
         &'me self,
     ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, HashSet<String>> {
         RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.allowed_countries)
+    }
+    fn get_mailer(&self) -> Option<ExitMailerSettings> {
+        self.read().unwrap().mailer.clone()
     }
 }
 
@@ -660,4 +695,30 @@ where
         KI.fs_sync()?;
         Ok(())
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_settings_example() {
+        RitaSettingsStruct::new("example.toml").unwrap();
+    }
+
+    #[test]
+    fn test_settings_default() {
+        RitaSettingsStruct::new("default.toml").unwrap();
+    }
+
+    #[test]
+    fn test_exit_settings_default() {
+        RitaExitSettingsStruct::new("default_exit.toml").unwrap();
+    }
+
+    #[test]
+    fn test_exit_settings_example() {
+        RitaExitSettingsStruct::new("example_exit.toml").unwrap();
+    }
+
 }

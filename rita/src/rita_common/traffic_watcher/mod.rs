@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
 
-use ip_network::IpNetwork;
+use ipnetwork::IpNetwork;
 
 use settings::RitaCommonSettings;
 use SETTING;
@@ -91,17 +91,11 @@ pub fn watch<T: Read + Write>(
     info!("Got routes: {:?}", routes);
 
     let mut identities: HashMap<IpAddr, LocalIdentity> = HashMap::new();
-    for ident in neighbors {
-        identities.insert(ident.0.global.mesh_ip, ident.0.clone());
-    }
-
     let mut if_to_ip: HashMap<String, IpAddr> = HashMap::new();
-    for ident in neighbors {
-        if_to_ip.insert(ident.clone().1, ident.0.global.mesh_ip);
-    }
-
     let mut ip_to_if: HashMap<IpAddr, String> = HashMap::new();
     for ident in neighbors {
+        identities.insert(ident.0.global.mesh_ip, ident.0.clone());
+        if_to_ip.insert(ident.clone().1, ident.0.global.mesh_ip);
         ip_to_if.insert(ident.0.global.mesh_ip, ident.clone().1);
     }
 
@@ -112,11 +106,8 @@ pub fn watch<T: Read + Write>(
         // Only ip6
         if let IpNetwork::V6(ref ip) = route.prefix {
             // Only host addresses and installed routes
-            if ip.get_netmask() == 128 && route.installed {
-                destinations.insert(
-                    IpAddr::V6(ip.get_network_address()),
-                    Int256::from(route.price + local_price),
-                );
+            if ip.prefix() == 128 && route.installed {
+                destinations.insert(IpAddr::V6(ip.ip()), Int256::from(route.price + local_price));
             }
         }
     }
@@ -200,11 +191,9 @@ pub fn watch<T: Read + Write>(
 
     trace!("Collated total debts: {:?}", debts);
 
-    for (k, v) in &debts {
-        trace!("collated debt for {} is {}", k.global.mesh_ip, v);
-    }
-
     for (from, amount) in debts {
+        trace!("collated debt for {} is {}", from.global.mesh_ip, amount);
+
         let update = debt_keeper::TrafficUpdate {
             from: from.global.clone(),
             amount,
@@ -222,6 +211,7 @@ pub fn watch<T: Read + Write>(
         _ => false,
     };
 
+    trace!("We are a Gateway: {}", gateway);
     SETTING.get_network_mut().is_gateway = gateway;
 
     Ok(())

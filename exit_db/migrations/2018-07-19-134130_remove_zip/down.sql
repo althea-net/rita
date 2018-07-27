@@ -1,0 +1,2 @@
+ALTER TABLE clients
+  ADD zip VARCHAR DEFAULT "0" NOT NULL;

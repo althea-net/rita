@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream};
 use std::path::Path;
 
-use actix::actors;
+use actix::actors::resolver;
 use actix::prelude::*;
 
 use futures;
@@ -12,7 +12,7 @@ use althea_types::{Identity, LocalIdentity};
 
 use KI;
 
-use babel_monitor::Babel;
+use babel_monitor::{Babel, Route};
 
 use rita_common;
 use rita_common::http_client::Hello;
@@ -22,11 +22,9 @@ use SETTING;
 
 use failure::Error;
 
-#[cfg(not(test))]
-use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
-
 #[cfg(test)]
 use actix::actors::mocker::Mocker;
+use ipnetwork::IpNetwork;
 
 #[cfg(test)]
 type HTTPClient = Mocker<rita_common::http_client::HTTPClient>;
@@ -35,10 +33,10 @@ type HTTPClient = Mocker<rita_common::http_client::HTTPClient>;
 type HTTPClient = rita_common::http_client::HTTPClient;
 
 #[cfg(test)]
-type Connector = Mocker<actors::Connector>;
+type Resolver = Mocker<resolver::Resolver>;
 
 #[cfg(not(test))]
-type Connector = actors::Connector;
+type Resolver = resolver::Resolver;
 
 #[derive(Debug, Fail)]
 pub enum TunnelManagerError {
@@ -81,23 +79,6 @@ impl SystemService for TunnelManager {
             self.listen_interfaces.insert(i);
         }
         trace!("Loaded listen interfaces {:?}", self.listen_interfaces);
-
-        #[cfg(not(test))]
-        {
-            Arbiter::registry().init_actor(|_| {
-                //TODO: make the configurable when trust-dns-resolver serde issue is solved
-                //default is 8.8.8.8
-                Connector::new(ResolverConfig::default(), ResolverOpts::default())
-            });
-            // Resolves the gateway client corner case
-            // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
-            for i in ResolverConfig::default().name_servers() {
-                KI.manual_peers_route(
-                    &i.socket_addr.ip(),
-                    &mut SETTING.get_network_mut().default_route,
-                ).unwrap();
-            }
-        }
     }
 }
 
@@ -131,6 +112,45 @@ impl Handler<Listen> for TunnelManager {
     fn handle(&mut self, listen: Listen, _: &mut Context<Self>) -> Self::Result {
         self.listen_interfaces.insert(listen.0);
         SETTING.get_network_mut().peer_interfaces = self.listen_interfaces.clone();
+    }
+}
+
+#[derive(Debug)]
+pub struct GetPhyIpFromMeshIp(pub IpAddr);
+impl Message for GetPhyIpFromMeshIp {
+    type Result = Result<IpAddr, Error>;
+}
+
+impl Handler<GetPhyIpFromMeshIp> for TunnelManager {
+    type Result = Result<IpAddr, Error>;
+
+    fn handle(&mut self, mesh_ip: GetPhyIpFromMeshIp, _: &mut Context<Self>) -> Self::Result {
+        let stream = TcpStream::connect::<SocketAddr>(
+            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
+        )?;
+
+        let mut babel = Babel::new(stream);
+        babel.start_connection()?;
+        let routes = babel.parse_routes()?;
+
+        let mut route_to_des: Option<Route> = None;
+
+        for route in routes {
+            // Only ip6
+            if let IpNetwork::V6(ref ip) = route.prefix {
+                // Only host addresses and installed routes
+                if ip.prefix() == 128 && route.installed {
+                    if IpAddr::V6(ip.ip()) == mesh_ip.0 {
+                        route_to_des = Some(route.clone());
+                    }
+                }
+            }
+        }
+
+        match route_to_des {
+            Some(route) => Ok(KI.get_wg_remote_ip(&route.iface)?),
+            None => bail!("No route found for mesh ip: {:?}", mesh_ip),
+        }
     }
 }
 
@@ -262,15 +282,34 @@ impl TunnelManager {
             .map(|&(ip_address, ref dev)| (ip_address.to_string(), Some(dev.clone())))
             .chain({
                 let mut out = Vec::new();
-                for i in SETTING.get_network().manual_peers.clone() {
-                    out.push((i, None))
+                if SETTING.get_network().is_gateway && SETTING.get_network().external_nic.is_some()
+                {
+                    for i in SETTING.get_network().manual_peers.clone() {
+                        out.push((i, SETTING.get_network().external_nic.clone()))
+                    }
                 }
                 out
             })
             .filter_map(|(ip_address, dev)| {
                 info!("neighbor at interface {:?}, ip {}", dev, ip_address,);
                 if let Some(dev) = dev.clone() {
-                    if !self.listen_interfaces.contains(&dev) {
+                    // Demorgans equal to "if a neighbor is on the listen interfaces and has a valid
+                    // ip or if it's a manual peer and from the right nic don't filter it"
+                    if !(self.listen_interfaces.contains(&dev)
+                        && ip_address.parse::<IpAddr>().is_ok())
+                        && !(SETTING.get_network().external_nic.is_some()
+                            && SETTING
+                                .get_network()
+                                .external_nic
+                                .clone()
+                                .unwrap()
+                                .contains(&dev)
+                            && SETTING.get_network().manual_peers.contains(&ip_address))
+                    {
+                        info!(
+                            "Filtering neighbor at interface {:?}, ip {}",
+                            dev, ip_address,
+                        );
                         return None;
                     }
                 }
@@ -314,32 +353,45 @@ impl TunnelManager {
             0
         };
 
-        Box::new(
-            Connector::from_registry()
-                .send(actors::Resolve::host(their_hostname.clone()))
-                .from_err()
-                .and_then(move |res| {
-                    let url = format!("http://[{}%{:?}]:4876/hello", their_hostname, dev);
-                    info!("Saying hello to: {:?} at ip {:?}", url, res);
+        trace!("Checking if {} is a url", their_hostname);
+        match their_hostname.parse::<IpAddr>() {
+            Ok(ip) => Box::new({
+                let url = format!("http://[{}%{:?}]:4876/hello", their_hostname, dev);
+                info!("Saying hello to: {:?}", url);
 
-                    if let Ok(res) = res {
-                        if res.len() > 0 && SETTING.get_network().is_gateway {
-                            let their_ip = res[0].ip();
+                TunnelManager::contact_neighbor(iface_index, ip)
+            }),
+            _ => Box::new(
+                Resolver::from_registry()
+                    .send(resolver::Resolve::host(their_hostname.clone()))
+                    .from_err()
+                    .and_then(move |res| {
+                        let url = format!("http://[{}%{:?}]:4876/hello", their_hostname, dev);
+                        info!("Saying hello to: {:?} at ip {:?}", url, res);
 
-                            TunnelManager::contact_neighbor(iface_index, their_ip)
+                        if let Ok(res) = res {
+                            if res.len() > 0 && SETTING.get_network().is_gateway {
+                                let their_ip = res[0].ip();
+
+                                TunnelManager::contact_neighbor(iface_index, their_ip)
+                            } else {
+                                trace!(
+                                    "We're not a gateway or we got a zero length dns response: {:?}",
+                                    res
+                                );
+                                Box::new(futures::future::err(
+                                    TunnelManagerError::DNSLookupError.into(),
+                                ))
+                            }
                         } else {
+                            trace!("Error during dns request!");
                             Box::new(futures::future::err(
                                 TunnelManagerError::DNSLookupError.into(),
                             ))
                         }
-                    } else {
-                        match their_hostname.parse() {
-                            Ok(their_ip) => TunnelManager::contact_neighbor(iface_index, their_ip),
-                            Err(err) => Box::new(futures::future::err(err.into())),
-                        }
-                    }
-                }),
-        )
+                    }),
+            ),
+        }
     }
 
     fn contact_neighbor(
@@ -459,7 +511,7 @@ mod tests {
 
     use super::*;
 
-    use actix::actors::ConnectorError;
+    use actix::actors::resolver::ResolverError;
     use std::collections::VecDeque;
     use std::net::Ipv4Addr;
 
@@ -548,7 +600,7 @@ mod tests {
 
         let sys = System::new("test");
 
-        let _: Addr<Syn, _> = HTTPClient::init_actor(|_| {
+        System::current().registry().set(
             HTTPClient::mock(Box::new(|msg, _ctx| {
                 assert_eq!(
                     msg.downcast_ref::<Hello>(),
@@ -563,12 +615,12 @@ mod tests {
                     global: SETTING.get_identity(),
                 });
                 Box::new(Some(ret))
-            }))
-        });
+            })).start(),
+        );
 
         let res = TunnelManager::contact_neighbor(0, "1.1.1.1".parse().unwrap());
 
-        sys.handle().spawn(res.then(|res| {
+        Arbiter::spawn(res.then(|res| {
             assert_eq!(
                 res.unwrap(),
                 (
@@ -581,7 +633,7 @@ mod tests {
                 )
             );
 
-            Arbiter::system().do_send(msgs::SystemExit(0));
+            System::current().stop();
             future::result(Ok(()))
         }));
 
@@ -662,7 +714,7 @@ mod tests {
 
         let sys = System::new("test");
 
-        let _: Addr<Syn, _> = HTTPClient::init_actor(|_| {
+        System::current().registry().set(
             HTTPClient::mock(Box::new(|msg, _ctx| {
                 assert_eq!(
                     msg.downcast_ref::<Hello>(),
@@ -677,29 +729,29 @@ mod tests {
                     global: SETTING.get_identity(),
                 });
                 Box::new(Some(ret))
-            }))
-        });
+            })).start(),
+        );
 
-        let _: Addr<Unsync, _> = Connector::init_actor(|_| {
-            Connector::mock(Box::new(|msg, _ctx| {
+        System::current().registry().set(
+            Resolver::mock(Box::new(|msg, _ctx| {
                 assert_eq!(
-                    msg.downcast_ref::<actors::Resolve>(),
-                    Some(&actors::Resolve::host("test.altheamesh.com"))
+                    msg.downcast_ref::<actors::resolver::Resolve>(),
+                    Some(&actors::resolver::Resolve::host("test.altheamesh.com"))
                 );
 
-                let ret: Result<VecDeque<SocketAddr>, ConnectorError> = Ok({
+                let ret: Result<VecDeque<SocketAddr>, ResolverError> = Ok({
                     let mut ips = VecDeque::new();
                     ips.push_back(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 0));
                     ips
                 });
                 Box::new(Some(ret))
-            }))
-        });
+            })).start(),
+        );
 
         let mut tm = TunnelManager::new();
         let res = tm.neighbor_inquiry("test.altheamesh.com".to_string(), None);
 
-        sys.handle().spawn(res.then(|res| {
+        Arbiter::spawn(res.then(|res| {
             assert_eq!(
                 res.unwrap(),
                 (
@@ -712,7 +764,7 @@ mod tests {
                 )
             );
 
-            Arbiter::system().do_send(msgs::SystemExit(0));
+            System::current().stop();
             future::result(Ok(()))
         }));
 
@@ -793,7 +845,7 @@ mod tests {
 
         let sys = System::new("test");
 
-        let _: Addr<Syn, _> = HTTPClient::init_actor(|_| {
+        System::current().registry().set(
             HTTPClient::mock(Box::new(|msg, _ctx| {
                 assert_eq!(
                     msg.downcast_ref::<Hello>(),
@@ -808,26 +860,26 @@ mod tests {
                     global: SETTING.get_identity(),
                 });
                 Box::new(Some(ret))
-            }))
-        });
+            })).start(),
+        );
 
-        let _: Addr<Unsync, _> = Connector::init_actor(|_| {
-            Connector::mock(Box::new(|msg, _ctx| {
+        System::current().registry().set(
+            Resolver::mock(Box::new(|msg, _ctx| {
                 assert_eq!(
-                    msg.downcast_ref::<actors::Resolve>(),
-                    Some(&actors::Resolve::host("1.1.1.1"))
+                    msg.downcast_ref::<actors::resolver::Resolve>(),
+                    Some(&actors::resolver::Resolve::host("1.1.1.1"))
                 );
 
-                let ret: Result<VecDeque<SocketAddr>, ConnectorError> =
-                    Err(ConnectorError::Resolver("Thats an IP address!".to_string()));
+                let ret: Result<VecDeque<SocketAddr>, ResolverError> =
+                    Err(ResolverError::Resolver("Thats an IP address!".to_string()));
                 Box::new(Some(ret))
-            }))
-        });
+            })).start(),
+        );
 
         let mut tm = TunnelManager::new();
         let res = tm.neighbor_inquiry("1.1.1.1".to_string(), None);
 
-        sys.handle().spawn(res.then(|res| {
+        Arbiter::spawn(res.then(|res| {
             assert_eq!(
                 res.unwrap(),
                 (
@@ -840,7 +892,7 @@ mod tests {
                 )
             );
 
-            Arbiter::system().do_send(msgs::SystemExit(0));
+            System::current().stop();
             future::result(Ok(()))
         }));
 
@@ -865,7 +917,7 @@ mod tests {
         let mut ip_route_add_counter = 0;
         let mut iface_counter = 0;
 
-        let external_ips = ["fe80::1234", "1.1.1.1", "2.2.2.2"];
+        let external_ips = ["fe80::1234", "2.2.2.2", "1.1.1.1"];
         let wg_ifaces = ["wg0", "wg1", "wg2"];
 
         KI.set_mock(Box::new(move |program, args| {
@@ -963,7 +1015,7 @@ mod tests {
 
         let mut ctr = 1;
 
-        let _: Addr<Syn, _> = HTTPClient::init_actor(move |_| {
+        System::current().registry().set(
             HTTPClient::mock(Box::new(move |msg, _ctx| {
                 trace!("{:?}", msg.downcast_ref::<Hello>());
                 let ret: Result<LocalIdentity, Error> = match msg.downcast_ref::<Hello>() {
@@ -983,19 +1035,19 @@ mod tests {
                 };
                 ctr += 1;
                 Box::new(Some(ret))
-            }))
-        });
+            })).start(),
+        );
 
-        let _: Addr<Unsync, _> = Connector::init_actor(|_| {
-            Connector::mock(Box::new(|msg, _ctx| {
-                let msg = msg.downcast_ref::<actors::Resolve>().unwrap();
-                let ret: Result<VecDeque<SocketAddr>, ConnectorError> = if msg
-                    == &actors::Resolve::host("fe80::1234")
+        System::current().registry().set(
+            Resolver::mock(Box::new(|msg, _ctx| {
+                let msg = msg.downcast_ref::<actors::resolver::Resolve>().unwrap();
+                let ret: Result<VecDeque<SocketAddr>, ResolverError> = if msg
+                    == &actors::resolver::Resolve::host("fe80::1234")
                 {
-                    Err(ConnectorError::Resolver("Thats an IP address!".to_string()))
-                } else if msg == &actors::Resolve::host("2.2.2.2") {
-                    Err(ConnectorError::Resolver("Thats an IP address!".to_string()))
-                } else if msg == &actors::Resolve::host("test.altheamesh.com") {
+                    Err(ResolverError::Resolver("Thats an IP address!".to_string()))
+                } else if msg == &actors::resolver::Resolve::host("2.2.2.2") {
+                    Err(ResolverError::Resolver("Thats an IP address!".to_string()))
+                } else if msg == &actors::resolver::Resolve::host("test.altheamesh.com") {
                     Ok({
                         let mut ips = VecDeque::new();
                         ips.push_back(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 0));
@@ -1005,13 +1057,13 @@ mod tests {
                     panic!("unexpected host found")
                 };
                 Box::new(Some(ret))
-            }))
-        });
+            })).start(),
+        );
 
         let mut tm = TunnelManager::new();
         let res = tm.get_neighbors();
 
-        sys.handle().spawn(res.then(|res| {
+        Arbiter::spawn(res.then(|res| {
             assert_eq!(
                 res.unwrap(),
                 vec![
@@ -1025,24 +1077,24 @@ mod tests {
                     ),
                     (
                         LocalIdentity {
-                            wg_port: 60002,
-                            global: get_inc_id(2),
-                        },
-                        "wg1".to_string(),
-                        "1.1.1.1".parse().unwrap(),
-                    ),
-                    (
-                        LocalIdentity {
                             wg_port: 60003,
                             global: get_inc_id(3),
                         },
                         "wg2".to_string(),
+                        "1.1.1.1".parse().unwrap(),
+                    ),
+                    (
+                        LocalIdentity {
+                            wg_port: 60002,
+                            global: get_inc_id(2),
+                        },
+                        "wg1".to_string(),
                         "2.2.2.2".parse().unwrap(),
                     ),
                 ]
             );
 
-            Arbiter::system().do_send(msgs::SystemExit(0));
+            System::current().stop();
             future::result(Ok(()))
         }));
 

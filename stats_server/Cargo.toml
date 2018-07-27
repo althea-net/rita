@@ -4,8 +4,8 @@ version = "0.1.0"
 authors = ["kingoflolz <wangben3@gmail.com>"]
 
 [dependencies]
-actix = "0.5.7"
-actix-web = {version = "0.6.7" , default-features = false}
+actix = { git = "https://github.com/actix/actix" }
+actix-web = { git = "https://github.com/actix/actix-web", default-features = false, branch = "fix-missing-content-length"}
 serde = "1.0.24"
 serde_derive = "1.0.24"
 serde_json = "1.0.8"

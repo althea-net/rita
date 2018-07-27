@@ -1,4 +1,7 @@
-#![cfg_attr(feature = "system_alloc", feature(alloc_system, allocator_api))]
+#![cfg_attr(
+    feature = "system_alloc",
+    feature(alloc_system, allocator_api)
+)]
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
@@ -21,6 +24,8 @@ extern crate lazy_static;
 extern crate log;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate serde_json;
 
 extern crate actix;
 extern crate actix_web;
@@ -31,13 +36,15 @@ extern crate dotenv;
 extern crate env_logger;
 extern crate eui48;
 extern crate futures;
-extern crate ip_network;
+extern crate handlebars;
+extern crate ipnetwork;
+extern crate lettre;
+extern crate lettre_email;
 extern crate minihttpse;
 extern crate rand;
 extern crate regex;
 extern crate reqwest;
 extern crate serde;
-extern crate serde_json;
 extern crate settings;
 extern crate tokio;
 extern crate tokio_core;
@@ -45,7 +52,6 @@ extern crate trust_dns_resolver;
 
 use settings::{RitaCommonSettings, RitaExitSettings, RitaExitSettingsStruct};
 
-#[cfg(not(test))]
 use docopt::Docopt;
 #[cfg(not(test))]
 use settings::FileWrite;
@@ -61,6 +67,7 @@ extern crate babel_monitor;
 extern crate exit_db;
 extern crate num256;
 
+pub mod actix_utils;
 mod middleware;
 mod rita_common;
 mod rita_exit;
@@ -80,7 +87,6 @@ struct Args {
     flag_future: bool,
 }
 
-#[cfg(not(test))]
 lazy_static! {
     static ref USAGE: String = format!(
         "Usage: rita_exit --config=<settings>
@@ -145,6 +151,16 @@ lazy_static! {
 
 fn main() {
     env_logger::init();
+
+    let args: Args = Docopt::new((*USAGE).as_str())
+        .and_then(|d| d.deserialize())
+        .unwrap_or_else(|e| e.exit());
+
+    let settings_file = args.flag_config;
+
+    // to get errors before lazy static
+    RitaExitSettingsStruct::new(&settings_file).expect("Settings parse failure");
+
     trace!("Starting");
     info!(
         "crate ver {}, git hash {}",
@@ -164,31 +180,39 @@ fn main() {
     assert!(rita_exit::traffic_watcher::TrafficWatcher::from_registry().connected());
     assert!(rita_exit::db_client::DbClient::from_registry().connected());
 
-    server::new(|| App::new().resource("/hello", |r| r.method(Method::POST).with2(hello_response)))
+    server::new(|| App::new().resource("/hello", |r| r.method(Method::POST).with(hello_response)))
         .bind(format!("[::0]:{}", SETTING.get_network().rita_hello_port))
         .unwrap()
+        .shutdown_timeout(0)
         .start();
     server::new(|| {
         App::new().resource("/make_payment", |r| {
-            r.method(Method::POST).with2(make_payments)
+            r.method(Method::POST).with(make_payments)
         })
     }).workers(1)
         .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
         .unwrap()
+        .shutdown_timeout(0)
         .start();
 
     // Exit stuff
     server::new(|| {
         App::new()
-            .resource("/setup", |r| r.method(Method::POST).with2(setup_request))
+            .resource("/setup", |r| r.method(Method::POST).with(setup_request))
+            .resource("/status", |r| {
+                r.method(Method::POST).with_async(status_request)
+            })
             .resource("/list", |r| r.method(Method::POST).with(list_clients))
-            .resource("/exit_info", |r| r.method(Method::GET).with(get_exit_info))
+            .resource("/exit_info", |r| {
+                r.method(Method::GET).with(get_exit_info_http)
+            })
             .resource("/rtt", |r| r.method(Method::GET).with(rtt))
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_exit_network().exit_hello_port
     ))
         .unwrap()
+        .shutdown_timeout(0)
         .start();
 
     // Dashboard
@@ -207,13 +231,14 @@ fn main() {
         SETTING.get_network().rita_dashboard_port
     ))
         .unwrap()
+        .shutdown_timeout(0)
         .start();
 
     let common = rita_common::rita_loop::RitaLoop::new();
-    let _: Addr<Unsync, _> = common.start();
+    let _: Addr<_> = common.start();
 
     let exit = rita_exit::rita_loop::RitaLoop {};
-    let _: Addr<Unsync, _> = exit.start();
+    let _: Addr<_> = exit.start();
 
     system.run();
 }

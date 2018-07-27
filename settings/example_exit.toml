@@ -1,4 +1,4 @@
-db_file = "exit.db"
+db_file = "../exit_db/test.db"
 description = "just a normal althea exit"
 
 [payment]
@@ -35,7 +35,9 @@ exit_start_ip = "172.168.1.100"
 netmask = 24
 
 [mailer]
-test = true
 email_cooldown=60
-test_dir = "mail"
-from_address = "email-verif@example.com"
+from_address = "verification@example.com"
+smtp_url = "smtp.fastmail.com"
+smtp_domain = "mail.example.com"
+smtp_username = "changeme"
+smtp_password = "changeme"

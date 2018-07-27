@@ -1,4 +1,7 @@
-#![cfg_attr(feature = "system_alloc", feature(alloc_system, allocator_api))]
+#![cfg_attr(
+    feature = "system_alloc",
+    feature(alloc_system, allocator_api)
+)]
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
@@ -20,6 +23,8 @@ extern crate lazy_static;
 extern crate log;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate serde_json;
 
 extern crate actix;
 extern crate actix_web;
@@ -29,19 +34,20 @@ extern crate docopt;
 extern crate env_logger;
 extern crate eui48;
 extern crate futures;
-extern crate ip_network;
+extern crate handlebars;
+extern crate ipnetwork;
+extern crate lettre;
+extern crate lettre_email;
 extern crate minihttpse;
 extern crate rand;
 extern crate regex;
 extern crate reqwest;
 extern crate serde;
-extern crate serde_json;
 extern crate settings;
 extern crate tokio;
 extern crate tokio_core;
 extern crate trust_dns_resolver;
 
-#[cfg(not(test))]
 use docopt::Docopt;
 #[cfg(not(test))]
 use settings::FileWrite;
@@ -63,6 +69,7 @@ extern crate althea_types;
 extern crate babel_monitor;
 extern crate num256;
 
+pub mod actix_utils;
 mod middleware;
 mod rita_client;
 mod rita_common;
@@ -78,7 +85,6 @@ struct Args {
     flag_future: bool,
 }
 
-#[cfg(not(test))]
 lazy_static! {
     static ref USAGE: String = format!(
         "Usage: rita --config=<settings> --platform=<platform> [--future]
@@ -144,6 +150,16 @@ lazy_static! {
 
 fn main() {
     env_logger::init();
+
+    let args: Args = Docopt::new((*USAGE).as_str())
+        .and_then(|d| d.deserialize())
+        .unwrap_or_else(|e| e.exit());
+
+    let settings_file = args.flag_config;
+
+    // to get errors before lazy static
+    RitaSettingsStruct::new(&settings_file).expect("Settings parse failure");
+
     trace!("Starting");
     info!(
         "crate ver {}, git hash {}",
@@ -162,18 +178,20 @@ fn main() {
     assert!(rita_client::exit_manager::ExitManager::from_registry().connected());
 
     // rita
-    server::new(|| App::new().resource("/hello", |r| r.method(Method::POST).with2(hello_response)))
+    server::new(|| App::new().resource("/hello", |r| r.method(Method::POST).with(hello_response)))
         .workers(1)
         .bind(format!("[::0]:{}", SETTING.get_network().rita_hello_port))
         .unwrap()
+        .shutdown_timeout(0)
         .start();
     server::new(|| {
         App::new().resource("/make_payment", |r| {
-            r.method(Method::POST).with2(make_payments)
+            r.method(Method::POST).with(make_payments)
         })
     }).workers(1)
         .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
         .unwrap()
+        .shutdown_timeout(0)
         .start();
 
     // dashboard
@@ -186,6 +204,8 @@ fn main() {
             .route("/settings", Method::POST, set_settings)
             .route("/neighbors", Method::GET, get_node_info)
             .route("/exits", Method::GET, get_exit_info)
+            .route("/exits/{name}/reset", Method::POST, reset_exit)
+            .route("/exits/{name}/select", Method::POST, select_exit)
             .route("/info", Method::GET, get_own_info)
             .route("/version", Method::GET, version)
     }).workers(1)
@@ -194,13 +214,14 @@ fn main() {
             SETTING.get_network().rita_dashboard_port
         ))
         .unwrap()
+        .shutdown_timeout(0)
         .start();
 
     let common = rita_common::rita_loop::RitaLoop::new();
-    let _: Addr<Unsync, _> = common.start();
+    let _: Addr<_> = common.start();
 
     let client = rita_client::rita_loop::RitaLoop {};
-    let _: Addr<Unsync, _> = client.start();
+    let _: Addr<_> = client.start();
 
     system.run();
 }

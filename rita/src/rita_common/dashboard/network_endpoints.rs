@@ -5,6 +5,8 @@ use futures::Future;
 
 use std::boxed::Box;
 
+use failure::Error;
+
 use serde_json;
 
 use settings::RitaCommonSettings;

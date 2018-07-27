@@ -1,14 +1,13 @@
 use actix::registry::SystemService;
 use actix_web::*;
-
+use failure::Error;
 use futures::Future;
 
-use std::boxed::Box;
-
-use super::{
-    Dashboard, ExitInfo, GetExitInfo, GetNodeInfo, GetWifiConfig, NodeInfo, SetWifiConfig,
-};
 use rita_client::dashboard::WifiInterface;
+
+use super::*;
+
+use std::boxed::Box;
 
 pub fn get_wifi_config(
     _req: HttpRequest,
@@ -50,6 +49,26 @@ pub fn get_exit_info(_req: HttpRequest) -> Box<Future<Item = Json<Vec<ExitInfo>>
     debug!("Exit endpoint hit!");
     Dashboard::from_registry()
         .send(GetExitInfo {})
+        .from_err()
+        .and_then(move |reply| Ok(Json(reply?)))
+        .responder()
+}
+
+pub fn reset_exit(name: Path<String>) -> Box<Future<Item = Json<()>, Error = Error>> {
+    debug!("/exits/{}/reset hit", name);
+
+    Dashboard::from_registry()
+        .send(ResetExit(name.into_inner()))
+        .from_err()
+        .and_then(move |reply| Ok(Json(reply?)))
+        .responder()
+}
+
+pub fn select_exit(name: Path<String>) -> Box<Future<Item = Json<()>, Error = Error>> {
+    debug!("/exits/{}/select hit", name);
+
+    Dashboard::from_registry()
+        .send(SelectExit(name.into_inner()))
         .from_err()
         .and_then(move |reply| Ok(Json(reply?)))
         .responder()

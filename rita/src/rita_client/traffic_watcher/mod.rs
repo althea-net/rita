@@ -1,6 +1,6 @@
 use actix::prelude::*;
 use failure::Error;
-use ip_network::IpNetwork;
+use ipnetwork::IpNetwork;
 use reqwest;
 
 use std::collections::HashMap;
@@ -72,8 +72,8 @@ pub fn watch<T: Read + Write>(
         // Only ip6
         if let IpNetwork::V6(ref ip) = route.prefix {
             // Only host addresses and installed routes
-            if ip.get_netmask() == 128 && route.installed {
-                destinations.insert(IpAddr::V6(ip.get_network_address()), route);
+            if ip.prefix() == 128 && route.installed {
+                destinations.insert(IpAddr::V6(ip.ip()), route);
             }
         }
     }
@@ -95,6 +95,8 @@ pub fn watch<T: Read + Write>(
             .timeout(Duration::from_secs(5))
             .build()?;
 
+        let target_route = destinations[&exit.mesh_ip];
+        let exit_dest_price: Int256 = Int256::from(target_route.price) + exit_price;
         let client_tx = SystemTime::now();
         let RTTimestamps { exit_rx, exit_tx } = client
             .get(&format!(
@@ -120,20 +122,15 @@ pub fn watch<T: Read + Write>(
 
         trace!(
             "RTTs: per-hop {}ms, inner {}ms",
-            destinations[&exit.mesh_ip].full_path_rtt,
+            target_route.full_path_rtt,
             inner_rtt_millis
         );
 
-        trace!(
-            "exit destination price {}",
-            Int256::from(destinations[&exit.mesh_ip].price) + exit_price
-        );
+        trace!("exit destination price {}", exit_dest_price);
         trace!("Exit ip: {:?}", exit.mesh_ip);
-        trace!("Exit destination:\n{:#?}", destinations[&exit.mesh_ip]);
+        trace!("Exit destination:\n{:#?}", target_route);
 
-        owes += Int256::from(exit_price * output);
-
-        owes += (Int256::from(destinations[&exit.mesh_ip].price) + exit_price) * input;
+        owes += Int256::from(exit_price * output) + exit_dest_price * input;
 
         let update = TrafficUpdate {
             from: exit.clone(),
