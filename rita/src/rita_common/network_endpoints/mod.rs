@@ -73,8 +73,7 @@ pub fn hello_response(
                         wg_port: wg_iface?.listen_port,
                     }))
                 })
-        })
-        .responder()
+        }).responder()
 }
 
 pub fn version(_req: HttpRequest) -> String {

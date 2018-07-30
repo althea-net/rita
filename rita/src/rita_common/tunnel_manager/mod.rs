@@ -289,8 +289,7 @@ impl TunnelManager {
                     }
                 }
                 out
-            })
-            .filter_map(|(ip_address, dev)| {
+            }).filter_map(|(ip_address, dev)| {
                 info!("neighbor at interface {:?}, ip {}", dev, ip_address,);
                 if let Some(dev) = dev.clone() {
                     // Demorgans equal to "if a neighbor is on the listen interfaces and has a valid
@@ -326,8 +325,7 @@ impl TunnelManager {
                     )
                         as Box<Future<Item = Option<(LocalIdentity, String, IpAddr)>, Error = ()>>,
                 )
-            })
-            .collect();
+            }).collect();
         Box::new(futures::future::join_all(neighs).then(|res| {
             let mut output = Vec::new();
             for i in res.unwrap() {
@@ -418,8 +416,7 @@ impl TunnelManager {
                 .send(Hello {
                     my_id: SETTING.get_identity(),
                     to: socket,
-                })
-                .from_err()
+                }).from_err()
                 .and_then(move |res| match res {
                     Ok(res) => Box::new(
                         TunnelManager::from_registry()
