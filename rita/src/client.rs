@@ -250,13 +250,12 @@ fn main() {
                 remove_from_dao_list,
             )
     }).workers(1)
-        .bind(format!(
-            "[::0]:{}",
-            SETTING.get_network().rita_dashboard_port
-        ))
-        .unwrap()
-        .shutdown_timeout(0)
-        .start();
+    .bind(format!(
+        "[::0]:{}",
+        SETTING.get_network().rita_dashboard_port
+    )).unwrap()
+    .shutdown_timeout(0)
+    .start();
 
     let common = rita_common::rita_loop::RitaLoop::new();
     let _: Addr<_> = common.start();
