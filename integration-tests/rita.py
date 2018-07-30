@@ -495,7 +495,7 @@ class World:
         switch_binaries(self.exit_id)
         start_rita_exit(self.nodes[self.exit_id])
 
-        time.sleep(6)
+        time.sleep(1)
 
         EXIT_SETTINGS["exits"]["exit_a"]["id"]["wg_public_key"] = get_rita_settings(self.exit_id)["network"]["wg_public_key"]
         EXIT_SETTINGS["exits"]["exit_a"]["id"]["eth_address"] = get_rita_settings(self.exit_id)["payment"]["eth_address"]
@@ -907,8 +907,6 @@ def main():
         choice = input()
         if choice != 'y':
             sys.exit(0)
-
-    time.sleep(10)
 
     world.test_traffic(c3, f6, {
         1: 0,
