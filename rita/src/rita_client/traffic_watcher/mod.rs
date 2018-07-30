@@ -10,7 +10,10 @@ use std::time::{Duration, SystemTime};
 
 use althea_types::{Identity, RTTimestamps};
 use babel_monitor::Babel;
+
+#[cfg(feature = "guac")]
 use guac_actix::{Counterparty, PaymentController, Register};
+
 use num256::Int256;
 use rita_common::debt_keeper::{DebtKeeper, TrafficUpdate};
 use settings::{RitaClientSettings, RitaCommonSettings};
