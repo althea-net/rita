@@ -17,4 +17,4 @@ export OPENSSL_STATIC=1
 
 rustup target add arm-unknown-linux-musleabihf
 
-cargo build --target arm-unknown-linux-musleabihf --release -p rita --bin rita
+cargo build --target arm-unknown-linux-musleabihf --release -p rita --bin rita --features "system_alloc"

@@ -17,4 +17,4 @@ export OPENSSL_STATIC=1
 
 rustup target add mips64-unknown-linux-gnuabi64
 
-cargo build --target mips64-unknown-linux-gnuabi64 --release -p rita --bin rita
+cargo build --target mips64-unknown-linux-gnuabi64 --release -p rita --bin rita --features "system_alloc"

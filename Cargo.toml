@@ -7,8 +7,9 @@ authors = ["Stan Drozd <drozdziak1@gmail.com>"]
 rita = { path = "./rita" }
 
 [features]
-default = []
+default = ["guac"]
 guac = ["rita/guac"]
+system_alloc = ["rita/system_alloc"]
 
 [workspace]
 members = ["althea_kernel_interface", "settings", "clu", "exit_db", "stats_server"]
