@@ -11,4 +11,4 @@ export MIPS_UNKNOWN_LINUX_MUSL_OPENSSL_DIR=$PWD/staging_dir/target-mips_24kc_mus
 
 rustup target add mips-unknown-linux-musl
 
-cargo build --target mips-unknown-linux-musl --release --all
+cargo build --target mips-unknown-linux-musl --release --all --no-default-features --features "system_alloc"
