@@ -354,7 +354,7 @@ impl TunnelManager {
         trace!("Checking if {} is a url", their_hostname);
         match their_hostname.parse::<IpAddr>() {
             Ok(ip) => Box::new({
-                let url = format!("http://[{}%{:?}]:4876/hello", their_hostname, dev);
+                let url = format!("http://[{}%{}]:4876/hello", their_hostname, dev.unwrap());
                 info!("Saying hello to: {:?}", url);
 
                 TunnelManager::contact_neighbor(iface_index, ip)
@@ -364,7 +364,7 @@ impl TunnelManager {
                     .send(resolver::Resolve::host(their_hostname.clone()))
                     .from_err()
                     .and_then(move |res| {
-                        let url = format!("http://[{}%{:?}]:4876/hello", their_hostname, dev);
+                        let url = format!("http://[{}%{}]:4876/hello", their_hostname, dev.unwrap());
                         info!("Saying hello to: {:?} at ip {:?}", url, res);
 
                         if let Ok(res) = res {
