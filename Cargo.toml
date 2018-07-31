@@ -4,7 +4,9 @@ version = "0.1.7"
 authors = ["Stan Drozd <drozdziak1@gmail.com>"]
 
 [features]
+default = []
 development = ["rita/development"]
+guac = ["rita/guac"]
 
 [dependencies]
 rita = { path = "./rita" }

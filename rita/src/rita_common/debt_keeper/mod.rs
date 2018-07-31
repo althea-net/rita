@@ -407,7 +407,7 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: 2.into(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: String::from("AAAAAAAAAAA"),
         };
@@ -427,7 +427,7 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: 2.into(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: String::from("AAAAAAAAAAA"),
         };
@@ -448,7 +448,7 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: 2.into(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: String::from("AAAAAAAAAAA"),
         };
@@ -470,7 +470,7 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: 2.into(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: String::from("AAAAAAAAAAA"),
         };
@@ -494,7 +494,7 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: 2.into(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: String::from("AAAAAAAAAAA"),
         };
@@ -518,7 +518,7 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: 2.into(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: String::from("AAAAAAAAAAA"),
         };
@@ -543,7 +543,7 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: 2.into(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: String::from("AAAAAAAAAAA"),
         };
@@ -577,7 +577,7 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: 2.into(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: String::from("AAAAAAAAAAA"),
         };
@@ -603,7 +603,7 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: 2.into(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: String::from("AAAAAAAAAAA"),
         };
@@ -624,7 +624,7 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: 2.into(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: String::from("AAAAAAAAAAA"),
         };
@@ -648,7 +648,7 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: 2.into(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: String::from("AAAAAAAAAAA"),
         };
@@ -677,7 +677,7 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: 2.into(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: String::from("AAAAAAAAAAA"),
         };
@@ -702,7 +702,7 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: 2.into(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: String::from("AAAAAAAAAAA"),
         };
