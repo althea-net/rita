@@ -495,7 +495,8 @@ class World:
         switch_binaries(self.exit_id)
         start_rita_exit(self.nodes[self.exit_id])
 
-        time.sleep(1)
+        # to allow sufficient time for rita to write guac's eth address to file
+        time.sleep(6)
 
         EXIT_SETTINGS["exits"]["exit_a"]["id"]["wg_public_key"] = get_rita_settings(self.exit_id)["network"]["wg_public_key"]
         EXIT_SETTINGS["exits"]["exit_a"]["id"]["eth_address"] = get_rita_settings(self.exit_id)["payment"]["eth_address"]
@@ -944,7 +945,6 @@ def main():
         6: 50 * 1.1,
         7: 10 * 1.1
     })
-
     world.test_traffic(e5, d4, {
         1: 0,
         2: 25 * 1.1,
