@@ -177,10 +177,6 @@ fn update_client(client: &ExitClientIdentity, conn: &SqliteConnection) -> Result
         .set(email.eq(&client.reg_details.email.clone().unwrap()))
         .execute(&*conn)?;
 
-    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-        .set(zip.eq(&client.reg_details.zip_code.clone().unwrap()))
-        .execute(&*conn)?;
-
     Ok(())
 }
 
@@ -232,17 +228,11 @@ fn client_to_new_db_client(
     let mut rng = rand::thread_rng();
     let rand_code: u64 = rng.gen_range(0, 999999);
     models::Client {
-        luci_pass: "".into(),
         wg_port: client.wg_port.to_string(),
         mesh_ip: client.global.mesh_ip.to_string(),
         wg_pubkey: client.global.wg_public_key.clone(),
         internal_ip: new_ip.to_string(),
         email: client.reg_details.email.clone().unwrap_or("".to_string()),
-        zip: client
-            .reg_details
-            .zip_code
-            .clone()
-            .unwrap_or("".to_string()),
         country,
         email_code: format!("{:06}", rand_code),
         verified: false,

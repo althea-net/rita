@@ -331,8 +331,6 @@ def email_verif(node):
     os.system("ip netns exec netlab-{id} curl 127.0.0.1:4877/settings"
               .format(id=id))
 
-
-
 def read_email(node):
     id = node.id
     # TODO: this is O(n^2)
@@ -341,7 +339,7 @@ def read_email(node):
             mail = json.load(mail_file_handle)
             if mail["envelope"]["forward_path"][0] == "{}@example.com".format(id):
                 return ''.join(chr(i) for i in mail["message"])
-    print("cannot find email for node {}".format(id))
+    raise Exception("cannot find email for node {}".format(id))
 
 def start_rita(node):
     id = node.id
