@@ -6,6 +6,10 @@ authors = ["Stan Drozd <drozdziak1@gmail.com>"]
 [dependencies]
 rita = { path = "./rita" }
 
+[features]
+default = []
+guac = ["rita/guac"]
+
 [workspace]
 members = ["althea_kernel_interface", "settings", "clu", "exit_db", "stats_server"]
 
