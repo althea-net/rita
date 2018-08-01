@@ -11,6 +11,6 @@ pub struct Client {
     pub country: String,
     pub email_code: String,
     pub verified: bool,
-    // TODO change before 2038
+    // TODO change before 2038; it's left that way because diesel cannot do `Insertable` for i64
     pub email_sent_time: i32,
 }
