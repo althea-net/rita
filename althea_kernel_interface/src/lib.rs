@@ -11,7 +11,8 @@ extern crate regex;
 
 use std::env;
 use std::io::ErrorKind;
-use std::process::{Command, Output};
+use std::os::unix::process::ExitStatusExt;
+use std::process::{Command, ExitStatus, Output};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -52,23 +53,25 @@ pub enum KernelInterfaceError {
     RuntimeError(String),
 }
 
+#[derive(Debug, Fail)]
+pub enum KernelInterfaceTestError {
+    #[fail(display = "Too many commands run")]
+    TooManyCommandsRun,
+}
+
 #[cfg(test)]
 lazy_static! {
-    pub static ref KI: Box<KernelInterface> = Box::new(TestCommandRunner {
-        run_command: Arc::new(Mutex::new(Box::new(|_program, _args| {
-            panic!("kernel interface used before initialized");
-        })))
-    });
+    pub static ref KI: Box<KernelInterface> = test_kernel_interface();
 }
 
 #[cfg(not(test))]
 lazy_static! {
-    pub static ref KI: Box<KernelInterface> = Box::new(LinuxCommandRunner {});
+    pub static ref KI: Box<KernelInterface> = new_kernel_interface();
 }
 
 pub trait CommandRunner {
     fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, Error>;
-    fn set_mock(&self, mock: Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>);
+    fn test_commands(&self, test_name: &str, test_commands: &[(&str, &str)]);
 }
 
 pub struct LinuxCommandRunner;
@@ -101,14 +104,17 @@ impl CommandRunner for LinuxCommandRunner {
         return Ok(output);
     }
 
-    fn set_mock(&self, _mock: Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>) {
+    fn test_commands(&self, _test_name: &str, _test_commands: &[(&str, &str)]) {
         unimplemented!()
     }
 }
 
 pub struct TestCommandRunner {
     pub run_command: Arc<Mutex<Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>>>,
+    pub current_test: String,
 }
+
+impl TestCommandRunner {}
 
 impl CommandRunner for TestCommandRunner {
     fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, Error> {
@@ -120,8 +126,41 @@ impl CommandRunner for TestCommandRunner {
         (&mut *self.run_command.lock().unwrap())(program.to_string(), args_owned)
     }
 
-    fn set_mock(&self, mock: Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>) {
-        *self.run_command.lock().unwrap() = mock
+    fn test_commands(&self, _test_name: &str, test_commands: &[(&str, &str)]) {
+        let mut commands_owned = Vec::new();
+        for (command, result) in test_commands {
+            commands_owned.push((command.to_string(), result.to_string()))
+        }
+        let mut command_index = 0;
+        let closure = move |command: String, arg: Vec<String>| {
+            let args_string = arg.join(" ");
+            let command_string = vec![command, args_string].join(" ");
+
+            if command_index >= commands_owned.len() {
+                panic!(
+                    "too many commands run in current test, got {}, index {}",
+                    command_string, command_index
+                );
+            }
+
+            let (expected_command, result) = commands_owned[command_index].clone();
+
+            if expected_command == command_string {
+                command_index += 1;
+                return Ok(Output {
+                    stdout: result.as_bytes().to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                });
+            } else {
+                panic!(
+                    "unexpected command! got {}, expected {}, index {}",
+                    command_string, expected_command, command_index
+                );
+            }
+        };
+
+        *self.run_command.lock().unwrap() = Box::new(closure);
     }
 }
 
@@ -129,3 +168,16 @@ pub trait KernelInterface: CommandRunner + Sync {}
 
 impl KernelInterface for LinuxCommandRunner {}
 impl KernelInterface for TestCommandRunner {}
+
+pub fn test_kernel_interface() -> Box<TestCommandRunner> {
+    Box::new(TestCommandRunner {
+        run_command: Arc::new(Mutex::new(Box::new(|_program, _args| {
+            Err(KernelInterfaceTestError::TooManyCommandsRun)?
+        }))),
+        current_test: "uninitialized".to_string(),
+    })
+}
+
+pub fn new_kernel_interface() -> Box<LinuxCommandRunner> {
+    Box::new(LinuxCommandRunner {})
+}

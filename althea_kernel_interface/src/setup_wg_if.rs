@@ -55,38 +55,16 @@ impl KernelInterface {
 fn test_setup_wg_if_linux() {
     use KI;
 
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
-
-    let mut counter = 0;
-
-    let link_args = &["link"];
-    let link_add = &["link", "add", "wg1", "type", "wireguard"];
-    KI.set_mock(Box::new(move |program, args| {
-        assert_eq!(program, "ip");
-        counter += 1;
-
-        match counter {
-            1 => {
-                assert_eq!(args, link_args);
-                Ok(Output{
-                        stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-            }
-            2 => {
-                assert_eq!(args, link_add);
-                Ok(Output {
-                    stdout: b"".to_vec(),
-                    stderr: b"".to_vec(),
-                    status: ExitStatus::from_raw(0),
-                })
-            }
-            _ => panic!("command called too many times"),
-        }
-    }));
+    KI.test_commands(
+        "test_setup_wg_if_linux",
+        &[
+            (
+                "ip link",
+                "82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000",
+            ),
+            ("ip link add wg1 type wireguard", ""),
+        ],
+    );
 
     KI.setup_wg_if().unwrap();
 }
