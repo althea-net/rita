@@ -14,9 +14,6 @@ extern crate serde_derive;
 #[macro_use]
 extern crate log;
 
-#[cfg(test)]
-use std::sync::Mutex;
-
 extern crate serde;
 extern crate serde_json;
 
@@ -35,9 +32,19 @@ use std::time::Duration;
 use althea_kernel_interface::KernelInterface;
 
 #[cfg(not(test))]
-use althea_kernel_interface::LinuxCommandRunner;
+use althea_kernel_interface::new_kernel_interface;
 #[cfg(test)]
-use althea_kernel_interface::TestCommandRunner;
+use althea_kernel_interface::test_kernel_interface;
+
+#[cfg(test)]
+lazy_static! {
+    pub static ref KI: Box<KernelInterface> = test_kernel_interface();
+}
+
+#[cfg(not(test))]
+lazy_static! {
+    pub static ref KI: Box<KernelInterface> = new_kernel_interface();
+}
 
 use config::Config;
 
@@ -52,19 +59,6 @@ use failure::Error;
 
 /// This is the network settings for rita and rita_exit which generally only applies to networking
 /// _within_ the mesh or setting up pre hop tunnels (so nothing on exits)
-#[cfg(test)]
-lazy_static! {
-    static ref KI: Box<KernelInterface> = Box::new(TestCommandRunner {
-        run_command: Arc::new(Mutex::new(Box::new(|_program, _args| {
-            panic!("kernel interface used before initialized");
-        })))
-    });
-}
-
-#[cfg(not(test))]
-lazy_static! {
-    static ref KI: Box<KernelInterface> = Box::new(LinuxCommandRunner {});
-}
 
 fn default_guac_contact_port() -> u16 {
     4874

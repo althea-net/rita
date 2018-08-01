@@ -502,98 +502,37 @@ mod tests {
 
     use env_logger;
 
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
-
     use super::*;
 
     use actix::actors::resolver::ResolverError;
     use std::collections::VecDeque;
     use std::net::Ipv4Addr;
 
-    fn vec_string_to_str<'a>(vstr: &'a Vec<String>) -> Vec<&'a str> {
-        let mut arr = Vec::new();
-        for i in 0..vstr.len() {
-            arr.push(vstr[i].as_str());
-        }
-        arr
-    }
-
     #[test]
     fn test_contact_neighbor_ipv4() {
         env_logger::init();
 
-        let link_args = &["link"];
-        let link_add = &["link", "add", "wg1", "type", "wireguard"];
-
-        let mut counter = 0;
-        KI.set_mock(Box::new(move |program, args| {
-            counter += 1;
-
-            trace!(
-                "program {:?}, args {:?}, counter {}",
-                program,
-                args,
-                counter
-            );
-
-            match counter {
-                1 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, ["route", "list", "default"]);
-                    Ok(Output {
-                        stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
-                            .to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                2 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(
-                        args,
-                        [
-                            "route",
-                            "add",
-                            "1.1.1.1",
-                            "via",
-                            "192.168.1.1",
-                            "dev",
-                            "eth0",
-                            "proto",
-                            "static",
-                            "metric",
-                            "600"
-                        ]
-                    );
-                    Ok(Output {
-                        stdout: b"ok".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                3 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, link_args);
-                    Ok(Output {
-                        stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                4 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, link_add);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                _ => panic!("command called too many times"),
-            }
-        }));
+        KI.test_commands(
+            "test_contact_neighbor_ipv4",
+            &[
+                (
+                    "ip route list default",
+                    "default via 192.168.1.1 dev eth0 proto static metric 600\n",
+                ),
+                (
+                    "ip route add 1.1.1.1 via 192.168.1.1 dev eth0 proto static metric 600",
+                    "ok",
+                ),
+                (
+                    "ip link",
+                    "82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000",
+                ),
+                (
+                    "ip link add wg1 type wireguard",
+                    "",
+                ),
+            ],
+        );
 
         let sys = System::new("test");
 
@@ -639,75 +578,29 @@ mod tests {
 
     #[test]
     fn test_neighbor_inquiry_domain() {
-        let link_args = &["link"];
-        let link_add = &["link", "add", "wg1", "type", "wireguard"];
+        KI.test_commands(
+            "test_neighbor_inquiry_domain",
+            &[
+                (
+                    "ip route list default",
+                    "default via 192.168.1.1 dev eth0 proto static metric 600\n",
+                ),
+                (
+                    "ip route add 1.1.1.1 via 192.168.1.1 dev eth0 proto static metric 600",
+                    "ok",
+                ),
+                (
+                    "ip link",
+                    "82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000",
+                ),
+                (
+                    "ip link add wg1 type wireguard",
+                    "",
+                ),
+            ],
+        );
 
-        let mut counter = 0;
-        KI.set_mock(Box::new(move |program, args| {
-            counter += 1;
-            trace!(
-                "program {:?}, args {:?}, counter {}",
-                program,
-                args,
-                counter
-            );
-
-            match counter {
-                1 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, ["route", "list", "default"]);
-                    Ok(Output {
-                        stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
-                            .to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                2 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(
-                        args,
-                        [
-                            "route",
-                            "add",
-                            "1.1.1.1",
-                            "via",
-                            "192.168.1.1",
-                            "dev",
-                            "eth0",
-                            "proto",
-                            "static",
-                            "metric",
-                            "600"
-                        ]
-                    );
-                    Ok(Output {
-                        stdout: b"ok".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                3 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, link_args);
-                    Ok(Output {
-                        stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                4 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, link_add);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                _ => panic!("command called too many times"),
-            }
-        }));
+        SETTING.get_network_mut().is_gateway = true;
 
         let sys = System::new("test");
 
@@ -731,6 +624,7 @@ mod tests {
 
         System::current().registry().set(
             Resolver::mock(Box::new(|msg, _ctx| {
+                trace!("got msg {:?}", msg);
                 assert_eq!(
                     msg.downcast_ref::<actors::resolver::Resolve>(),
                     Some(&actors::resolver::Resolve::host("test.altheamesh.com"))
@@ -767,78 +661,29 @@ mod tests {
 
         sys.run();
     }
-
     #[test]
     fn test_neighbor_inquiry_ip() {
-        let link_args = &["link"];
-        let link_add = &["link", "add", "wg1", "type", "wireguard"];
-
-        let mut counter = 0;
-        KI.set_mock(Box::new(move |program, args| {
-            counter += 1;
-            trace!(
-                "program {:?}, args {:?}, counter {}",
-                program,
-                args,
-                counter
-            );
-
-            match counter {
-                1 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, ["route", "list", "default"]);
-                    Ok(Output {
-                        stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
-                            .to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                2 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(
-                        args,
-                        [
-                            "route",
-                            "add",
-                            "1.1.1.1",
-                            "via",
-                            "192.168.1.1",
-                            "dev",
-                            "eth0",
-                            "proto",
-                            "static",
-                            "metric",
-                            "600"
-                        ]
-                    );
-                    Ok(Output {
-                        stdout: b"ok".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                3 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, link_args);
-                    Ok(Output {
-                        stdout: b"82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                4 => {
-                    assert_eq!(program, "ip");
-                    assert_eq!(args, link_add);
-                    Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                _ => panic!("command called too many times"),
-            }
-        }));
+        KI.test_commands(
+            "test_neighbor_inquiry_ip",
+            &[
+                (
+                    "ip route list default",
+                    "default via 192.168.1.1 dev eth0 proto static metric 600\n",
+                ),
+                (
+                    "ip route add 1.1.1.1 via 192.168.1.1 dev eth0 proto static metric 600",
+                    "ok",
+                ),
+                (
+                    "ip link",
+                    "82: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000",
+                ),
+                (
+                    "ip link add wg1 type wireguard",
+                    "",
+                ),
+            ],
+        );
 
         let sys = System::new("test");
 
@@ -911,93 +756,82 @@ mod tests {
 
     #[test]
     fn test_get_neighbors() {
-        let mut ip_route_add_counter = 0;
-        let mut iface_counter = 0;
-
-        let external_ips = ["fe80::1234", "2.2.2.2", "1.1.1.1"];
-        let wg_ifaces = ["wg0", "wg1", "wg2"];
-
-        KI.set_mock(Box::new(move |program, args| {
-            match (program.as_str(), &vec_string_to_str(&args)[..]) {
-                ("ping6", _) => {
-                    return Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                ("ip", ["neighbor"]) => {
-                    return Ok(Output {
-                        stdout: b"fe80::1234 dev eth0 lladdr dc:6d:cd:ae:bd:a6 REACHABLE".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                ("ip", ["route", "list", "default"]) => {
-                    return Ok(Output {
-                        stdout: b"default via 192.168.1.1 dev eth0 proto static metric 600\n"
-                            .to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
+        KI.test_commands(
+            "test_get_neighbors",
+            &[
                 (
-                    "ip",
-                    ["route", "add", external_ip, "via", "192.168.1.1", "dev", "eth0", "proto", "static", "metric", "600"],
-                ) => {
-                    assert_eq!(external_ip, &external_ips[ip_route_add_counter]);
-                    ip_route_add_counter += 1;
-                    return Ok(Output {
-                        stdout: b"ok".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    });
-                }
-                ("ip", ["link", "add", iface_name, "type", "wireguard"]) => {
-                    assert_eq!(iface_name, &wg_ifaces[iface_counter]);
-                    iface_counter += 1;
-                    return Ok(Output {
-                        stdout: b"".to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-                }
-                ("ip", ["link"]) => {
-                    match iface_counter {
-                        0 => {
-                            return Ok(Output {
-                                stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                                stderr: b"".to_vec(),
-                                status: ExitStatus::from_raw(0),
-                            })
-                        }
-                        1 => {
-                            return Ok(Output {
-                                stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
-83: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                                stderr: b"".to_vec(),
-                                status: ExitStatus::from_raw(0),
-                            })
-                        }
-                        2 => {
-                            return Ok(Output {
-                                stdout: b"82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
+                    "ping6 -c1 -I eth0 ff02::1",
+                    "",
+                ),
+                (
+                    "ip neighbor",
+                    "fe80::1234 dev eth0 lladdr dc:6d:cd:ae:bd:a6 REACHABLE",
+                ),
+                (
+                    "ip link",
+                    "82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000",
+                ),
+                (
+                    "ip route list default",
+                    "default via 192.168.1.1 dev eth0 proto static metric 600\n",
+                ),
+                (
+                    "ip route add fe80::1234 via 192.168.1.1 dev eth0 proto static metric 600",
+                    "",
+                ),
+                (
+                    "ip link",
+                    "82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000",
+                ),
+                (
+                    "ip link",
+                    "82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000",
+                ),
+                (
+                    "ip route list default",
+                    "default via 192.168.1.1 dev eth0 proto static metric 600\n",
+                ),
+                (
+                    "ip route add 2.2.2.2 via 192.168.1.1 dev eth0 proto static metric 600",
+                    "",
+                ),
+                (
+                    "ip route list default",
+                    "default via 192.168.1.1 dev eth0 proto static metric 600\n",
+                ),
+                (
+                    "ip route add 1.1.1.1 via 192.168.1.1 dev eth0 proto static metric 600",
+                    "",
+                ),
+                (
+                    "ip link",
+                    "82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000",
+                ),
+                (
+                    "ip link add wg0 type wireguard",
+                    "",
+                ),
+                (
+                    "ip link",
+                    "82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
+83: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000",
+                ),
+                (
+                    "ip link add wg1 type wireguard",
+                    "",
+                ),
+                (
+                    "ip link",
+                    "82: eth0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
 83: wg0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000\
-84: wg1: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000".to_vec(),
-                                stderr: b"".to_vec(),
-                                status: ExitStatus::from_raw(0),
-                            })
-                        }
-                        _ => {
-                            panic!("ip link called too many times")
-                        }
-                    }
-                }
-                (program, args) => (
-                    panic!("unimplemented program: {} {:?}", program, args)
-                    ),
-            }
-        }));
+84: wg1: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000",
+                ),
+                (
+                    "ip link add wg2 type wireguard",
+                    "",
+                ),
+            ],
+        );
 
         let sys = System::new("test");
 
