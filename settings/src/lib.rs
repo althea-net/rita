@@ -14,9 +14,6 @@ extern crate serde_derive;
 #[macro_use]
 extern crate log;
 
-#[cfg(test)]
-use std::sync::Mutex;
-
 extern crate serde;
 extern crate serde_json;
 
@@ -35,9 +32,19 @@ use std::time::Duration;
 use althea_kernel_interface::KernelInterface;
 
 #[cfg(not(test))]
-use althea_kernel_interface::LinuxCommandRunner;
+use althea_kernel_interface::new_kernel_interface;
 #[cfg(test)]
-use althea_kernel_interface::TestCommandRunner;
+use althea_kernel_interface::test_kernel_interface;
+
+#[cfg(test)]
+lazy_static! {
+    pub static ref KI: Box<KernelInterface> = test_kernel_interface();
+}
+
+#[cfg(not(test))]
+lazy_static! {
+    pub static ref KI: Box<KernelInterface> = new_kernel_interface();
+}
 
 use config::Config;
 
@@ -52,18 +59,9 @@ use failure::Error;
 
 /// This is the network settings for rita and rita_exit which generally only applies to networking
 /// _within_ the mesh or setting up pre hop tunnels (so nothing on exits)
-#[cfg(test)]
-lazy_static! {
-    static ref KI: Box<KernelInterface> = Box::new(TestCommandRunner {
-        run_command: Arc::new(Mutex::new(Box::new(|_program, _args| {
-            panic!("kernel interface used before initialized");
-        })))
-    });
-}
 
-#[cfg(not(test))]
-lazy_static! {
-    static ref KI: Box<KernelInterface> = Box::new(LinuxCommandRunner {});
+fn default_guac_contact_port() -> u16 {
+    4874
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -77,9 +75,10 @@ pub struct NetworkSettings {
     /// Port on which rita starts the per hop tunnel handshake on (needs to be constant across an
     /// entire althea deployment)
     pub rita_hello_port: u16,
-    /// Port on which rita contacts other althea nodes over the mesh (needs to be constant across an
+    /// Port on which guac contacts other althea nodes over the mesh (needs to be constant across an
     /// entire althea deployment)
-    pub rita_contact_port: u16,
+    #[serde(default = "default_guac_contact_port")]
+    pub guac_contact_port: u16,
     /// Port over which the dashboard will be accessible upon
     pub rita_dashboard_port: u16,
     /// Port over which the bounty hunter will be contacted
@@ -123,7 +122,7 @@ impl Default for NetworkSettings {
             babel_port: 6872,
             rita_hello_port: 4876,
             rita_dashboard_port: 4877,
-            rita_contact_port: 4875,
+            guac_contact_port: 4874,
             bounty_port: 8888,
             rita_tick_interval: 5,
             wg_private_key: String::new(),

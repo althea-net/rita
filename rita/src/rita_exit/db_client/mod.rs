@@ -179,6 +179,11 @@ fn update_client(client: &ExitClientIdentity, conn: &SqliteConnection) -> Result
         .set(email.eq(&client.reg_details.email.clone().unwrap()))
         .execute(&*conn)?;
 
+    // to_string returns a truncated version of the eth address for some reason...
+    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
+        .set(eth_address.eq(&format!("{:?}", client.global.eth_address)))
+        .execute(&*conn)?;
+
     Ok(())
 }
 
@@ -240,6 +245,7 @@ fn client_to_new_db_client(
         email_code: format!("{:06}", rand_code),
         verified: false,
         email_sent_time: 0,
+        eth_address: format!("{:?}", client.global.eth_address),
     }
 }
 
@@ -274,8 +280,7 @@ fn send_mail(client: &models::Client) -> Result<(), Error> {
             .credentials(Credentials::new(
                 SETTING.get_mailer().unwrap().smtp_username,
                 SETTING.get_mailer().unwrap().smtp_password,
-            ))
-            .smtp_utf8(true)
+            )).smtp_utf8(true)
             .authentication_mechanism(Mechanism::Plain)
             .connection_reuse(ConnectionReuseParameters::ReuseUnlimited)
             .build();

@@ -15,6 +15,7 @@ path = "src/client.rs"
 [features]
 default = []
 system_alloc = []
+guac = ["guac_actix"]
 
 [dependencies]
 althea_kernel_interface = { path = "../althea_kernel_interface" }
@@ -24,12 +25,12 @@ clu = { path = "../clu" }
 exit_db = { path = "../exit_db" }
 num256 = { path = "../num256" }
 settings = { path = "../settings" }
+guac_actix = { git = "https://github.com/kingoflolz/guac_rs", optional = true}
 
 actix = { git = "https://github.com/kingoflolz/actix", branch = "althea-mesh"}
-actix-web = { git = "https://github.com/actix/actix-web.git", branch = "fix-missing-content-length", default-features = false}
+actix-web = { version="0.7.2", default-features = false}
 actix_derive = "0.2.0"
 bytes = "0.4"
-clippy = { version = "*", optional = true }
 config = "0.8.0"
 diesel = { version = "=1.2.0", features = ["sqlite"] }
 libsqlite3-sys = { version = "*", features = ["bundled"] }

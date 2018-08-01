@@ -38,27 +38,19 @@ impl KernelInterface {
 fn test_get_neighbors_linux() {
     use KI;
 
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
-
-    KI.set_mock(Box::new(move |program, args| {
-        assert_eq!(program, "ip");
-        assert_eq!(args, &["neighbor"]);
-
-        Ok(Output {
-            stdout: b"10.0.2.2 dev eth0 lladdr 00:00:00:aa:00:03 STALE
+    KI.test_commands(
+        "test_get_neighbors_linux",
+        &[(
+            "ip neighbor",
+            "10.0.2.2 dev eth0 lladdr 00:00:00:aa:00:03 STALE
 10.0.0.2 dev eth0  FAILED
 10.0.1.2 dev eth0 lladdr 00:00:00:aa:00:05 REACHABLE
 2001::2 dev eth0 lladdr 00:00:00:aa:00:56 REACHABLE
 fe80::7459:8eff:fe98:81 dev eth0 lladdr 76:59:8e:98:00:81 STALE
 fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
-2001::2 dev eth0  FAILED"
-                .to_vec(),
-            stderr: b"".to_vec(),
-            status: ExitStatus::from_raw(0),
-        })
-    }));
+2001::2 dev eth0  FAILED",
+        )],
+    );
 
     let addresses = KI.get_neighbors().unwrap();
 

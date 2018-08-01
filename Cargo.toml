@@ -6,17 +6,25 @@ authors = ["Stan Drozd <drozdziak1@gmail.com>"]
 [dependencies]
 rita = { path = "./rita" }
 
+[features]
+default = ["guac"]
+guac = ["rita/guac"]
+system_alloc = ["rita/system_alloc"]
+
 [workspace]
-members = ["althea_kernel_interface", "bounty_hunter", "settings", "clu", "exit_db", "stats_server"]
+members = ["althea_kernel_interface", "settings", "clu", "exit_db", "stats_server"]
 
 [profile.release]
 opt-level = "z"
-debug=true
 lto = true
 codegen-units = 1
 incremental = false
 
 [patch.crates-io]
+ethereum-types = {git="https://github.com/paritytech/primitives.git"}
 actix = { git = "https://github.com/kingoflolz/actix.git", branch = "althea-mesh" }
-actix-web = { git = "https://github.com/actix/actix-web.git", branch = "fix-missing-content-length" }
 trust-dns-resolver = { git = "https://github.com/kingoflolz/trust-dns.git", branch = "lower-max-ttl" }
+
+[patch.'https://github.com/althea-mesh/althea_rs.git']
+num256 = {path = "./num256"}
+althea_types = {path = "./althea_types"}

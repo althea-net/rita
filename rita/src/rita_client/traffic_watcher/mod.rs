@@ -10,6 +10,10 @@ use std::time::{Duration, SystemTime};
 
 use althea_types::{Identity, RTTimestamps};
 use babel_monitor::Babel;
+
+#[cfg(feature = "guac")]
+use guac_actix::{Counterparty, PaymentController, Register};
+
 use num256::Int256;
 use rita_common::debt_keeper::{DebtKeeper, TrafficUpdate};
 use settings::{RitaClientSettings, RitaCommonSettings};
@@ -110,8 +114,7 @@ pub fn watch<T: Read + Write>(
                         ));
                     }
                 }
-            ))
-            .send()?
+            )).send()?
             .json()?;
         let client_rx = SystemTime::now();
 
@@ -136,6 +139,16 @@ pub fn watch<T: Read + Write>(
             from: exit.clone(),
             amount: owes,
         };
+
+        #[cfg(feature = "guac")]
+        PaymentController::from_registry().do_send(Register(Counterparty {
+            address: exit.eth_address,
+            url: format!(
+                "[{}]:{}",
+                exit.mesh_ip,
+                SETTING.get_network().guac_contact_port
+            ),
+        }));
 
         DebtKeeper::from_registry().do_send(update);
     } else {

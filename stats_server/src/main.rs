@@ -41,10 +41,9 @@ struct Args {
 fn index(
     data: (Json<Stats>, HttpRequest<ProxyState>),
 ) -> Box<Future<Item = HttpResponse, Error = Error>> {
-    let stats = data.0.clone();
     info!("got data {:?}", data);
     client::ClientRequest::post(&data.1.state().insert_url)
-        .json(stats)
+        .json(data.0.into_inner())
         .expect("Failed to build post request!")
         .send()
         .map_err(Error::from)
@@ -52,8 +51,7 @@ fn index(
             resp.body()
                 .from_err()
                 .and_then(|body| Ok(HttpResponse::Ok().body(body)))
-        })
-        .responder()
+        }).responder()
 }
 
 fn main() {
@@ -72,10 +70,10 @@ fn main() {
         App::with_state(ProxyState {
             insert_url: insert_url.clone(),
         }).middleware(middleware::Logger::default())
-            .resource("/stats/", |r| r.method(http::Method::POST).with(index))
+        .resource("/stats/", |r| r.method(http::Method::POST).with(index))
     }).bind(args.flag_bind_url)
-        .unwrap()
-        .start();
+    .unwrap()
+    .start();
 
     let _ = sys.run();
 }

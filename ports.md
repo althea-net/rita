@@ -3,7 +3,7 @@
 # Exit
 
 ## Open to mesh
-- network/rita_contact_port (default 4874)
+- network/guac_contact_port (default 4874)
 - exit_network/exit_registration_port (default 4875)
 - exit_network/wg_listen_port (default 59999)
 
@@ -17,7 +17,7 @@
 # Client/gateway
 
 ## Open to mesh
-- network/rita_contact_port (default 4874)
+- network/guac_contact_port (default 4874)
 - exit_client/wg_listen_port (default 59999)
 
 ## Open to external
