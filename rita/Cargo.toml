@@ -28,7 +28,7 @@ settings = { path = "../settings" }
 guac_actix = { git = "https://github.com/kingoflolz/guac_rs", optional = true}
 
 actix = { git = "https://github.com/kingoflolz/actix", branch = "althea-mesh"}
-actix-web = { git = "https://github.com/actix/actix-web.git", default-features = false}
+actix-web = { version="0.7.2", default-features = false}
 actix_derive = "0.2.0"
 bytes = "0.4"
 config = "0.8.0"

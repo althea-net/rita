@@ -23,7 +23,6 @@ incremental = false
 [patch.crates-io]
 ethereum-types = {git="https://github.com/paritytech/primitives.git"}
 actix = { git = "https://github.com/kingoflolz/actix.git", branch = "althea-mesh" }
-actix-web = { git = "https://github.com/actix/actix-web.git"}
 trust-dns-resolver = { git = "https://github.com/kingoflolz/trust-dns.git", branch = "lower-max-ttl" }
 
 [patch.'https://github.com/althea-mesh/althea_rs.git']
