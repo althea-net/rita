@@ -119,22 +119,18 @@ About:
 use althea_kernel_interface::KernelInterface;
 
 #[cfg(not(test))]
-use althea_kernel_interface::LinuxCommandRunner;
+use althea_kernel_interface::new_kernel_interface;
 #[cfg(test)]
-use althea_kernel_interface::TestCommandRunner;
+use althea_kernel_interface::test_kernel_interface;
 
 #[cfg(test)]
 lazy_static! {
-    pub static ref KI: Box<KernelInterface> = Box::new(TestCommandRunner {
-        run_command: Arc::new(Mutex::new(Box::new(|_program, _args| {
-            panic!("kernel interface used before initialized");
-        })))
-    });
+    pub static ref KI: Box<KernelInterface> = test_kernel_interface();
 }
 
 #[cfg(not(test))]
 lazy_static! {
-    pub static ref KI: Box<KernelInterface> = Box::new(LinuxCommandRunner {});
+    pub static ref KI: Box<KernelInterface> = new_kernel_interface();
 }
 
 #[cfg(not(test))]

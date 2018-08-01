@@ -17,22 +17,9 @@ impl KernelInterface {
 
 #[test]
 fn test_delete_tunnel_linux() {
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
-
     use KI;
 
-    let ip_args = &["link", "del", "wg1"];
+    KI.test_commands("test_delete_tunnel_linux", &[("ip link del wg1", "")]);
 
-    KI.set_mock(Box::new(move |program, args| {
-        assert_eq!(program, "ip");
-        assert_eq!(args, ip_args);
-        Ok(Output {
-            stdout: b"".to_vec(),
-            stderr: b"".to_vec(),
-            status: ExitStatus::from_raw(0),
-        })
-    }));
     KI.delete_tunnel(&String::from("wg1")).unwrap();
 }

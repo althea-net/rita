@@ -138,27 +138,19 @@ impl KernelInterface {
 fn test_get_device_name_linux() {
     use KI;
 
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
-
-    KI.set_mock(Box::new(move |program, args| {
-        assert_eq!(program, "ip");
-        assert_eq!(args, &["neighbor"]);
-
-        Ok(Output {
-            stdout: b"10.0.2.2 dev eth0 lladdr 00:00:00:aa:00:03 STALE
+    KI.test_commands(
+        "test_get_device_name_linux",
+        &[(
+            "ip neighbor",
+            "10.0.2.2 dev eth0 lladdr 00:00:00:aa:00:03 STALE
 10.0.0.2 dev eth0  FAILED
 10.0.1.2 dev eth0 lladdr 00:00:00:aa:00:05 REACHABLE
 2001::2 dev eth0 lladdr 00:00:00:aa:00:56 REACHABLE
 fe80::7459:8eff:fe98:81 dev eth0 lladdr 76:59:8e:98:00:81 STALE
 fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE
-2001::2 dev eth0  FAILED"
-                .to_vec(),
-            stderr: b"".to_vec(),
-            status: ExitStatus::from_raw(0),
-        })
-    }));
+2001::2 dev eth0  FAILED",
+        )],
+    );
 
     let dev = KI
         .get_device_name("fe80::433:25ff:fe8c:e1ea".parse().unwrap())
@@ -171,24 +163,18 @@ fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE
 fn test_get_link_local_device_ip_linux() {
     use KI;
 
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
-
-    KI.set_mock(Box::new(move |program, args| {
-        assert_eq!(program, "ip");
-        assert_eq!(args, &["addr", "show", "dev", "eth0", "scope", "link"]);
-
-        Ok(Output {
-                stdout: b"2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
+    KI.test_commands(
+        "test_get_link_local_device_ip_linux",
+        &[
+            (
+                "ip addr show dev eth0 scope link",
+                "2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
     link/ether 74:df:bf:30:37:f3 brd ff:ff:ff:ff:ff:ff
     inet6 fe80::96:3add:69d9:906a/64 scope link
-       valid_lft forever preferred_lft forever"
-                    .to_vec(),
-                stderr: b"".to_vec(),
-                status: ExitStatus::from_raw(0),
-            })
-    }));
+       valid_lft forever preferred_lft forever",
+            ),
+        ],
+    );
 
     let ip = KI.get_link_local_device_ip("eth0").unwrap();
 
@@ -199,45 +185,23 @@ fn test_get_link_local_device_ip_linux() {
 fn test_get_link_local_reply_ip_linux() {
     use KI;
 
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
-
-    let mut counter = 0;
-
-    KI.set_mock(Box::new(move |program, args| {
-        counter += 1;
-        match counter {
-            1 => {
-                assert_eq!(program, "ip");
-                assert_eq!(args, &["neighbor"]);
-
-                Ok(Output {
-                    stdout: b"
-fe80::7459:8eff:fe98:81 dev eth0 lladdr 76:59:8e:98:00:81 STALE
-fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE"
-                        .to_vec(),
-                    stderr: b"".to_vec(),
-                    status: ExitStatus::from_raw(0),
-                })
-            }
-            2 => {
-                assert_eq!(program, "ip");
-                assert_eq!(args, &["addr", "show", "dev", "eth0", "scope", "link"]);
-
-                Ok(Output {
-                        stdout: b"2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
+    KI.test_commands(
+        "test_get_link_local_reply_ip_linux",
+        &[
+            (
+                "ip neighbor",
+                "fe80::7459:8eff:fe98:81 dev eth0 lladdr 76:59:8e:98:00:81 STALE
+fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE",
+            ),
+            (
+                "ip addr show dev eth0 scope link",
+                "2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
     link/ether 74:df:bf:30:37:f3 brd ff:ff:ff:ff:ff:ff
     inet6 fe80::96:3add:69d9:906a/64 scope link
-       valid_lft forever preferred_lft forever"
-                            .to_vec(),
-                        stderr: b"".to_vec(),
-                        status: ExitStatus::from_raw(0),
-                    })
-            }
-            _ => unimplemented!("called too many times"),
-        }
-    }));
+       valid_lft forever preferred_lft forever",
+            ),
+        ],
+    );
 
     let dev = KI
         .get_reply_ip("fe80::7459:8eff:fe98:81".parse().unwrap(), None)
