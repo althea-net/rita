@@ -52,8 +52,7 @@ fn index(
             resp.body()
                 .from_err()
                 .and_then(|body| Ok(HttpResponse::Ok().body(body)))
-        })
-        .responder()
+        }).responder()
 }
 
 fn main() {
@@ -72,10 +71,10 @@ fn main() {
         App::with_state(ProxyState {
             insert_url: insert_url.clone(),
         }).middleware(middleware::Logger::default())
-            .resource("/stats/", |r| r.method(http::Method::POST).with(index))
+        .resource("/stats/", |r| r.method(http::Method::POST).with(index))
     }).bind(args.flag_bind_url)
-        .unwrap()
-        .start();
+    .unwrap()
+    .start();
 
     let _ = sys.run();
 }

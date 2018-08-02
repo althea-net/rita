@@ -44,8 +44,7 @@ pub fn make_payments(
     PaymentController::from_registry()
         .send(rita_common::payment_controller::PaymentReceived(
             pmt.0.clone(),
-        ))
-        .from_err()
+        )).from_err()
         .and_then(|_| Ok(HttpResponse::Ok().into()))
         .responder()
 }
@@ -89,8 +88,7 @@ pub fn hello_response(
                         wg_port: wg_iface?.listen_port,
                     }))
                 })
-        })
-        .responder()
+        }).responder()
 }
 
 pub fn version(_req: HttpRequest) -> String {
