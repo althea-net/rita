@@ -1,5 +1,5 @@
 use actix::registry::SystemService;
-use actix_web::*;
+use actix_web::{AsyncResponder, HttpRequest, Json};
 use failure::Error;
 use futures::Future;
 
@@ -69,6 +69,36 @@ pub fn select_exit(name: Path<String>) -> Box<Future<Item = Json<()>, Error = Er
 
     Dashboard::from_registry()
         .send(SelectExit(name.into_inner()))
+        .from_err()
+        .and_then(move |reply| Ok(Json(reply?)))
+        .responder()
+}
+
+pub fn set_wifi_ssid(wifi_ssid: Json<WifiSSID>) -> Box<Future<Item = Json<()>, Error = Error>> {
+    debug!("/wifi_settings/ssid hit with {:?}", wifi_ssid);
+
+    Dashboard::from_registry()
+        .send(SetWiFiSSID(wifi_ssid.into_inner()))
+        .from_err()
+        .and_then(move |reply| Ok(Json(reply?)))
+        .responder()
+}
+
+pub fn set_wifi_pass(wifi_pass: Json<WifiPass>) -> Box<Future<Item = Json<()>, Error = Error>> {
+    debug!("/wifi_settings/pass hit with {:?}", wifi_pass);
+
+    Dashboard::from_registry()
+        .send(SetWiFiPass(wifi_pass.into_inner()))
+        .from_err()
+        .and_then(move |reply| Ok(Json(reply?)))
+        .responder()
+}
+
+pub fn set_wifi_mesh(wifi_mesh: Json<WifiMesh>) -> Box<Future<Item = Json<()>, Error = Error>> {
+    debug!("/wifi_settings/mesh hit with {:?}", wifi_mesh);
+
+    Dashboard::from_registry()
+        .send(SetWiFiMesh(wifi_mesh.into_inner()))
         .from_err()
         .and_then(move |reply| Ok(Json(reply?)))
         .responder()

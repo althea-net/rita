@@ -364,3 +364,76 @@ This file documents the dashboard API found in Rita client.
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"default_radio0": {"ssid": "NetworkName"}}'`
+
+---
+
+## /wifi_settings/ssid
+
+- URL: `<rita ip>:<rita_dashboard_port>/wifi_settings/ssid`
+- Method: `POST`
+- URL Params: `Content-Type: application/json`
+- Data Params: `Radio to change the ssid of and ssid`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+{}
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:<rita_dashboard_port>/wifi_settings/ssid -H 'Content-Type: application/json' -i -d '{"radio":"radio0", "ssid": "this is a freeform ssid"}'`
+
+
+---
+
+## /wifi_settings/pass
+
+- URL: `<rita ip>:<rita_dashboard_port>/wifi_settings/pass`
+- Method: `POST`
+- URL Params: `Content-Type: application/json`
+- Data Params: `Radio to change the password of and password`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+{}
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:<rita_dashboard_port>/wifi_settings/pass -H 'Content-Type: application/json' -i -d '{"radio":"radio0", "pass": "this is a freeform password"}'`
+
+
+---
+
+## /wifi_settings/mesh
+
+- URL: `<rita ip>:<rita_dashboard_port>/wifi_settings/mesh`
+- Method: `POST`
+- URL Params: `Content-Type: application/json`
+- Data Params: `Radio to toggle mesh and mesh bool, resets radio to default ssid and pass on disable`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+{}
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:<rita_dashboard_port>/wifi_settings/mesh -H 'Content-Type: application/json' -i -d '{"radio":"radio0", "mesh": true}'`
+
+
+---
+
+
