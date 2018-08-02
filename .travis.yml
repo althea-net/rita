@@ -12,9 +12,9 @@ env:
   - TEST_COMMAND="cargo build --verbose --all"
   - TEST_COMMAND="./integration-tests/cross-build.sh"
   - TEST_COMMAND="cargo test --verbose --all" RUST_TEST_THREADS=1
-  - TEST_COMMAND="./integration-tests/rita.sh" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
-  - TEST_COMMAND="./integration-tests/rita.sh" REVISION_B=release COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
-  - TEST_COMMAND="./integration-tests/rita.sh" REVISION_B=master COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
+  - TEST_COMMAND="travis_wait 30 ./integration-tests/rita.sh" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
+  - TEST_COMMAND="travis_wait 30 ./integration-tests/rita.sh" REVISION_B=release COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
+  - TEST_COMMAND="travis_wait 30 ./integration-tests/rita.sh" REVISION_B=master COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
 rust:
   - stable
   - beta
@@ -32,10 +32,10 @@ matrix:
   - rust: beta
     env: TEST_COMMAND="./integration-tests/cross-build.sh"
   - rust: stable
-    env: TEST_COMMAND="./integration-tests/rita.sh" REVISION_B=release COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
+    env: TEST_COMMAND="travis_wait 30 ./integration-tests/rita.sh" REVISION_B=release COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
   - rust: beta
-    env: TEST_COMMAND="./integration-tests/rita.sh" REVISION_B=release COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
+    env: TEST_COMMAND="travis_wait 30 ./integration-tests/rita.sh" REVISION_B=release COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
   - rust: stable
-    env: TEST_COMMAND="./integration-tests/rita.sh" REVISION_B=master COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
+    env: TEST_COMMAND="travis_wait 30 ./integration-tests/rita.sh" REVISION_B=master COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
   - rust: beta
-    env: TEST_COMMAND="./integration-tests/rita.sh" REVISION_B=master COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
+    env: TEST_COMMAND="travis_wait 30 ./integration-tests/rita.sh" REVISION_B=master COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
