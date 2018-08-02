@@ -3,7 +3,6 @@ table! {
         mesh_ip -> Text,
         wg_pubkey -> Text,
         wg_port -> Text,
-        luci_pass -> Text,
         internal_ip -> Text,
         email -> Text,
         country -> Text,

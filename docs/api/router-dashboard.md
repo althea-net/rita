@@ -25,7 +25,7 @@ This file documents the dashboard API found in Rita client.
 
 `curl 127.0.0.1:4877/info`
 
----
+
 
 ## /neighbors
 
@@ -64,11 +64,12 @@ This file documents the dashboard API found in Rita client.
 
 `curl 127.0.0.1:4877/neighbors`
 
----
+
 
 ## /exits
 
 - URL: `<rita ip>:<rita_dashboard_port>/exits'
+- Comment: Gets all the configured exits
 - Method: `GET`
 - URL Params: `None`
 - Data Params: `None`
@@ -104,8 +105,37 @@ This file documents the dashboard API found in Rita client.
 
 `curl 127.0.0.1:4877/exits`
 
----
 
+
+## /exits/{nickname}/reset
+
+- URL: `<rita ip>:<rita_dashboard_port>/exits/{nickname}/reset'
+- Comment: Resets the exit named `nickname`
+- Method: `POST`
+- URL Params: `nickname`, string
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `null`
+- Error Response: `500 Server Error`
+- Sample Call:
+
+`curl 127.0.0.1:4877/exits/borked/reset`
+
+## /exits/{nickname}/select
+
+- URL: `<rita ip>:<rita_dashboard_port>/exits/{nickname}/select'
+- Comment: Sets the exit named `nickname` as the current exit
+- Method: `POST`
+- URL Params: `nickname`, string
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `null`
+- Error Response: `500 Server Error`
+- Sample Call:
+
+`curl 127.0.0.1:4877/exits/borked/reset`
 
 ## /settings
 
@@ -228,7 +258,7 @@ This file documents the dashboard API found in Rita client.
 
 `curl 127.0.0.1:4877/settings`
 
----
+
 
 ## /settings
 
@@ -254,7 +284,7 @@ This file documents the dashboard API found in Rita client.
 `curl -XPOST 127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"exit_client": {"current_exit": "SELECTEDEXIT"}}'`
 }
 
----
+
 
 ## /wifi_settings
 
@@ -313,7 +343,7 @@ This file documents the dashboard API found in Rita client.
 
 `curl 127.0.0.1:4877/wifi_settings`
 
----
+
 
 ## /wifi_settings
 
@@ -334,5 +364,3 @@ This file documents the dashboard API found in Rita client.
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"default_radio0": {"ssid": "NetworkName"}}'`
-
----
