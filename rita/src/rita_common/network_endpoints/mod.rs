@@ -1,4 +1,4 @@
-use althea_types::{Identity, LocalIdentity, PaymentTx};
+use althea_types::{LocalIdentity, PaymentTx};
 
 use actix::registry::SystemService;
 use actix_web::*;
@@ -12,9 +12,12 @@ use SETTING;
 
 use serde_json;
 
+use std::net::SocketAddr;
+
 use rita_common;
 use rita_common::payment_controller::PaymentController;
-use rita_common::tunnel_manager::{GetWgInterface, OpenTunnelListener, TunnelManager};
+use rita_common::peer_listener::Peer;
+use rita_common::tunnel_manager::{IdentityCallback, TunnelManager};
 
 use std::boxed::Box;
 
@@ -52,43 +55,51 @@ pub fn make_payments(
 pub fn hello_response(
     req: (Json<serde_json::Value>, HttpRequest),
 ) -> Box<Future<Item = Json<LocalIdentity>, Error = Error>> {
-    let new_id: Result<Identity, serde_json::Error> = serde_json::from_value(req.0.clone());
-    let old_id: Result<LocalIdentity, serde_json::Error> = serde_json::from_value(req.0.clone());
+    let id: Result<LocalIdentity, serde_json::Error> = serde_json::from_value(req.0.clone());
 
-    // remove in Alpha 6
-    let their_id = match new_id {
-        Ok(new_id) => {
-            info!("got new id sending new response");
-            new_id
+    let their_id = match id {
+        Ok(id) => {
+            info!("got id sending response");
+            Ok(id)
         }
-        Err(_) => match old_id {
-            Ok(old_id) => {
-                info!("got old_id sending new response");
-                old_id.global
-            }
-            _ => panic!("did not match either"),
-        },
+        Err(err) => {
+            warn!("Error parsing hello");
+            Err(err)
+        }
     };
+
+    let their_id = their_id.unwrap();
+    let socket = req
+        .1
+        .connection_info()
+        .remote()
+        .unwrap()
+        .parse::<SocketAddr>()
+        .unwrap();
 
     info!("Got Hello from {:?}", req.1.connection_info().remote());
 
     trace!("Received neighbour identity: {:?}", their_id);
 
+    info!("opening tunnel in hello_response for {:?}", their_id);
+
+    let peer = Peer {
+        contact_ip: socket.ip(),
+        contact_socket: socket,
+        ifidx: 0, // only works because we lookup ifname in kernel interface
+    };
+
+    // We send the callback, which can safely allocate a port because it already successfully
+    // contacted a neighbor
     TunnelManager::from_registry()
-        .send(OpenTunnelListener(their_id.clone()))
-        .from_err()
-        .and_then(move |_| {
-            info!("opening tunnel in hello_response for {:?}", their_id);
-            TunnelManager::from_registry()
-                .send(GetWgInterface(their_id.mesh_ip))
-                .from_err()
-                .and_then(|wg_iface| {
-                    Ok(Json(LocalIdentity {
-                        global: SETTING.get_identity(),
-                        wg_port: wg_iface?.listen_port,
-                    }))
-                })
-        }).responder()
+        .send(IdentityCallback(their_id, peer, None))
+        .and_then(|tunnel| {
+            Ok(Json(LocalIdentity {
+                global: SETTING.get_identity(),
+                wg_port: tunnel.unwrap().listen_port,
+            }))
+        }).from_err()
+        .responder()
 }
 
 pub fn version(_req: HttpRequest) -> String {

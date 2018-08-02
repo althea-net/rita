@@ -11,6 +11,7 @@ eth_address = "0x0101010101010101010101010101010101010101"
 [network]
 own_ip = "fd00::1"
 bounty_ip = "fd00::3"
+discovery_ip = "ff02::1:8"
 babel_port = 6872
 rita_hello_port = 4876
 rita_contact_port = 4874
