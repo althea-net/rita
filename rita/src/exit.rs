@@ -190,10 +190,10 @@ fn main() {
             r.method(Method::POST).with(make_payments)
         })
     }).workers(1)
-        .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
-        .unwrap()
-        .shutdown_timeout(0)
-        .start();
+    .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
+    .unwrap()
+    .shutdown_timeout(0)
+    .start();
 
     // Exit stuff
     server::new(|| {
@@ -201,19 +201,16 @@ fn main() {
             .resource("/setup", |r| r.method(Method::POST).with(setup_request))
             .resource("/status", |r| {
                 r.method(Method::POST).with_async(status_request)
-            })
-            .resource("/list", |r| r.method(Method::POST).with(list_clients))
+            }).resource("/list", |r| r.method(Method::POST).with(list_clients))
             .resource("/exit_info", |r| {
                 r.method(Method::GET).with(get_exit_info_http)
-            })
-            .resource("/rtt", |r| r.method(Method::GET).with(rtt))
+            }).resource("/rtt", |r| r.method(Method::GET).with(rtt))
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_exit_network().exit_hello_port
-    ))
-        .unwrap()
-        .shutdown_timeout(0)
-        .start();
+    )).unwrap()
+    .shutdown_timeout(0)
+    .start();
 
     // Dashboard
     server::new(|| {
@@ -229,10 +226,9 @@ fn main() {
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_network().rita_dashboard_port
-    ))
-        .unwrap()
-        .shutdown_timeout(0)
-        .start();
+    )).unwrap()
+    .shutdown_timeout(0)
+    .start();
 
     let common = rita_common::rita_loop::RitaLoop::new();
     let _: Addr<_> = common.start();
