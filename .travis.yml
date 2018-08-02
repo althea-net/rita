@@ -20,7 +20,7 @@ rust:
   - beta
   - nightly
 script:
-  - (eval "$TEST_COMMAND")
+  - eval "$TEST_COMMAND"
 matrix:
   exclude:
   - rust: stable
