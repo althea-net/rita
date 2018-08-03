@@ -211,25 +211,28 @@ impl Handler<PeersToContact> for TunnelManager {
                 warn!("Neighbor inqury for {:?} failed!", peer);
             }
         }
-        for manual_peer in SETTING.get_network().manual_peers.iter() {
-            let ip = manual_peer.parse::<IpAddr>();
-            let port = SETTING.get_network().rita_hello_port;
-            if ip.is_ok() {
-                let ip = ip.unwrap();
-                let socket = SocketAddr::new(ip, port);
-                let man_peer = Peer {
-                    contact_ip: ip,
-                    ifidx: 0,
-                    contact_socket: socket,
-                };
-                let res = self.neighbor_inquiry(man_peer);
-                if res.is_err() {
-                    warn!("Neighbor inqury for {:?} failed!", manual_peer);
-                }
-            } else {
-                let res = self.neighbor_inquiry_hostname(manual_peer.to_string());
-                if res.is_err() {
-                    warn!("Neighbor inqury for {:?} failed!", manual_peer);
+        // Do not contact manual peers if we are not a gateway
+        if SETTING.get_network().is_gateway {
+            for manual_peer in SETTING.get_network().manual_peers.iter() {
+                let ip = manual_peer.parse::<IpAddr>();
+                let port = SETTING.get_network().rita_hello_port;
+                if ip.is_ok() {
+                    let ip = ip.unwrap();
+                    let socket = SocketAddr::new(ip, port);
+                    let man_peer = Peer {
+                        contact_ip: ip,
+                        ifidx: 0,
+                        contact_socket: socket,
+                    };
+                    let res = self.neighbor_inquiry(man_peer);
+                    if res.is_err() {
+                        warn!("Neighbor inqury for {:?} failed!", manual_peer);
+                    }
+                } else {
+                    let res = self.neighbor_inquiry_hostname(manual_peer.to_string());
+                    if res.is_err() {
+                        warn!("Neighbor inqury for {:?} failed!", manual_peer);
+                    }
                 }
             }
         }
