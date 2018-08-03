@@ -8,13 +8,8 @@ before_install:
   - which diesel || cargo install diesel_cli --no-default-features --features sqlite
   - sudo cp $(which diesel) /usr/bin
 env:
-  - TEST_COMMAND="rustup component add rustfmt-preview --toolchain nightly && cargo fmt --all -- --check"
   - TEST_COMMAND="cargo build --verbose --all"
-  - TEST_COMMAND="./integration-tests/cross-build.sh" 
   - TEST_COMMAND="cargo test --verbose --all" RUST_TEST_THREADS=1
-  - TEST_COMMAND="./integration-tests/rita.sh" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
-  - TEST_COMMAND="./integration-tests/rita.sh" REVISION_B=release COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
-  - TEST_COMMAND="./integration-tests/rita.sh" REVISION_B=master COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
 rust:
   - stable
   - beta
@@ -22,20 +17,17 @@ rust:
 script:
   - (eval "$TEST_COMMAND")
 matrix:
-  exclude:
-  - rust: stable
-    env: TEST_COMMAND="rustup component add rustfmt-preview --toolchain nightly && cargo fmt --all -- --check"
-  - rust: beta
-    env: TEST_COMMAND="rustup component add rustfmt-preview --toolchain nightly && cargo fmt --all -- --check"
-  - rust: stable
-    env: TEST_COMMAND="./integration-tests/cross-build.sh"
-  - rust: beta
-    env: TEST_COMMAND="./integration-tests/cross-build.sh"
-  - rust: stable
-    env: TEST_COMMAND="./integration-tests/rita.sh" REVISION_B=release COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
-  - rust: beta
-    env: TEST_COMMAND="./integration-tests/rita.sh" REVISION_B=release COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
-  - rust: stable
-    env: TEST_COMMAND="./integration-tests/rita.sh" REVISION_B=master COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
-  - rust: beta
-    env: TEST_COMMAND="./integration-tests/rita.sh" REVISION_B=master COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
+  allow_failures:
+    - rust: beta
+    - rust: nightly
+  include:
+    - name: "cargo fmt"
+      script: rustup component add rustfmt-preview --toolchain nightly && cargo fmt --all -- --check
+    - name: "Cross compile on MIPS"
+      script: ./integration-tests/cross-build.sh
+    - script: ./integration-tests/rita.sh
+      env: INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
+    - script: ./integration-tests/rita.sh
+      env: REVISION_B=release COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
+    - script: ./integration-tests/rita.sh
+      env: REVISION_B=master COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
