@@ -39,10 +39,13 @@ impl Message for Hello {
     type Result = Result<(), Error>;
 }
 
+/// Handler for sending hello messages, it's important that any path by which this handler
+/// may crash is handled such that ports are returned to tunnel manager, otherwise we end
+/// up with a port leak which will eventually crash the program
 impl Handler<Hello> for HTTPClient {
     type Result = ResponseFuture<(), Error>;
     fn handle(&mut self, msg: Hello, _: &mut Self::Context) -> Self::Result {
-        info!("sending {:?}", msg);
+        info!("HTTPClient Sending Hello {:?}", msg);
 
         let stream = TokioTcpStream::connect(&msg.to.contact_socket);
 

@@ -230,8 +230,8 @@ impl ListenInterface {
 
         let linklocal_socketaddr = SocketAddrV6::new(link_ip, port.into(), 0, iface_index);
         let linklocal_socket = UdpSocket::bind(linklocal_socketaddr).expect(&format!(
-            "ListenInterface Failed to bind to link local address {:?} on {:?}",
-            link_ip, ifname
+            "ListenInterface Failed to bind to link local address {:?} on {:?} with iface_index {:?} ",
+            link_ip, ifname, iface_index
         ));
         let res = linklocal_socket.set_nonblocking(true);
         trace!("ListenInterface init set nonblocking with {:?}", res);
