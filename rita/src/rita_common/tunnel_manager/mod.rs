@@ -344,6 +344,9 @@ impl TunnelManager {
         for tunnel in self.tunnels.iter() {
             if tunnel.ip == ip {
                 trace!("found existing wg interface for {}", ip);
+                // at this stage a port has been allocated, if it turns out
+                // we don't need it we need to return it
+                self.free_ports.push(our_port);
                 return tunnel.clone();
             }
         }
