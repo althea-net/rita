@@ -57,16 +57,42 @@ pub struct Tunnel {
 }
 
 impl Tunnel {
-    fn new(ip: IpAddr, our_listen_port: u16, their_id: LocalIdentity) -> Tunnel {
+    fn new(ip: IpAddr, our_listen_port: u16, their_id: LocalIdentity) -> Result<Tunnel, Error> {
         let iface_name = KI.setup_wg_if().unwrap();
+
         //let init = TunnelState::Init;
-        Tunnel {
+        let tunnel = Tunnel {
             ip: ip,                       //tunnel endpoint
             iface_name: iface_name,       //name of wg#
             listen_port: our_listen_port, //the port this tunnel resides on
             //            tunnel_state: init,           //how this tunnel feels about it's life
-            localid: their_id, // the identity of the counterparty tunnel once we have it
-        }
+            localid: their_id.clone(), // the identity of the counterparty tunnel once we have it
+        };
+
+        let network = SETTING.get_network().clone();
+
+        // TODO you have the iface index use it
+        KI.open_tunnel(
+            &tunnel.iface_name,
+            tunnel.listen_port,
+            &SocketAddr::new(ip, their_id.wg_port),
+            &their_id.global.wg_public_key,
+            Path::new(&network.wg_private_key_path),
+            &network.own_ip,
+            network.external_nic.clone(),
+            &mut SETTING.get_network_mut().default_route,
+        )?;
+
+        let stream = TcpStream::connect::<SocketAddr>(
+            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
+        )?;
+
+        let mut babel = Babel::new(stream);
+
+        babel.start_connection()?;
+        babel.monitor(&tunnel.iface_name)?;
+
+        Ok(tunnel)
     }
 }
 
@@ -336,29 +362,6 @@ impl TunnelManager {
         contact_neighbor(peer, our_port)
     }
 
-    fn new_tunnel(&mut self, ip: IpAddr, id: LocalIdentity, our_port: u16) -> Tunnel {
-        trace!("creating new interface");
-        let r = Tunnel::new(ip, our_port, id);
-        info!("creating new wg interface {:?}", r);
-        r
-    }
-
-    fn get_tunnel(&mut self, ip: IpAddr, id: LocalIdentity, our_port: u16) -> Tunnel {
-        for tunnel in self.tunnels.iter() {
-            if tunnel.ip == ip {
-                trace!("found existing wg interface for {}", ip);
-                // at this stage a port has been allocated, if it turns out
-                // we don't need it we need to return it
-                self.free_ports.push(our_port);
-                return tunnel.clone();
-            }
-        }
-        trace!("creating new wg interface for {}", ip);
-        let new = self.new_tunnel(ip, id, our_port);
-        self.tunnels.push(new.clone());
-        new
-    }
-
     /// Given a LocalIdentity, connect to the neighbor over wireguard
     pub fn open_tunnel(
         &mut self,
@@ -366,31 +369,29 @@ impl TunnelManager {
         peer: Peer,
         our_port: u16,
     ) -> Result<Tunnel, Error> {
-        trace!("Getting tunnel, open tunnel");
-        let tunnel = self.get_tunnel(peer.contact_ip, their_id.clone(), our_port);
-        let network = SETTING.get_network().clone();
-
-        // TODO you have the iface index use it
-        KI.open_tunnel(
-            &tunnel.iface_name,
-            tunnel.listen_port,
-            &SocketAddr::new(peer.contact_ip, their_id.wg_port),
-            &their_id.global.wg_public_key,
-            Path::new(&network.wg_private_key_path),
-            &network.own_ip,
-            network.external_nic.clone(),
-            &mut SETTING.get_network_mut().default_route,
-        )?;
-
-        let stream = TcpStream::connect::<SocketAddr>(
-            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
-        )?;
-
-        let mut babel = Babel::new(stream);
-
-        babel.start_connection()?;
-        babel.monitor(&tunnel.iface_name)?;
-        self.tunnels.push(tunnel.clone());
-        Ok(tunnel)
+        trace!("TunnelManager getting existing tunnel or opening a new one");
+        for tunnel in self.tunnels.iter() {
+            if tunnel.ip == peer.contact_ip {
+                trace!("TunnelManager We already have a tunnel for {:?}", tunnel.ip);
+                // return allocated port as it's not required
+                self.free_ports.push(our_port);
+                return Ok(tunnel.clone());
+            }
+        }
+        trace!(
+            "TunnelManager no tunnel found for {:?} creating",
+            peer.contact_ip
+        );
+        let tunnel = Tunnel::new(peer.contact_ip, our_port, their_id.clone());
+        match tunnel {
+            Ok(tunnel) => {
+                self.tunnels.push(tunnel.clone());
+                Ok(tunnel)
+            }
+            Err(e) => {
+                warn!("Open Tunnel failed with {:?}", e);
+                return Err(e);
+            }
+        }
     }
 }
