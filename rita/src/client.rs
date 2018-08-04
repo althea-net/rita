@@ -1,7 +1,4 @@
-#![cfg_attr(
-    feature = "system_alloc",
-    feature(alloc_system, allocator_api)
-)]
+#![cfg_attr(feature = "system_alloc", feature(alloc_system, allocator_api))]
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
@@ -23,7 +20,6 @@ extern crate lazy_static;
 extern crate log;
 #[macro_use]
 extern crate serde_derive;
-extern crate serde_json;
 
 extern crate actix;
 extern crate actix_web;
@@ -43,6 +39,7 @@ extern crate rand;
 extern crate regex;
 extern crate reqwest;
 extern crate serde;
+extern crate serde_json;
 extern crate settings;
 extern crate tokio;
 extern crate tokio_codec;
@@ -191,10 +188,10 @@ fn main() {
             r.method(Method::POST).with(make_payments)
         })
     }).workers(1)
-    .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
-    .unwrap()
-    .shutdown_timeout(0)
-    .start();
+        .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
+        .unwrap()
+        .shutdown_timeout(0)
+        .start();
 
     // dashboard
     server::new(|| {
@@ -214,12 +211,13 @@ fn main() {
             .route("/info", Method::GET, get_own_info)
             .route("/version", Method::GET, version)
     }).workers(1)
-    .bind(format!(
-        "[::0]:{}",
-        SETTING.get_network().rita_dashboard_port
-    )).unwrap()
-    .shutdown_timeout(0)
-    .start();
+        .bind(format!(
+            "[::0]:{}",
+            SETTING.get_network().rita_dashboard_port
+        ))
+        .unwrap()
+        .shutdown_timeout(0)
+        .start();
 
     let common = rita_common::rita_loop::RitaLoop::new();
     let _: Addr<_> = common.start();
