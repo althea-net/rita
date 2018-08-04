@@ -51,19 +51,26 @@ pub enum TunnelState {
 pub struct Tunnel {
     pub ip: IpAddr,
     pub iface_name: String,
+    pub listen_ifidx: u32,
     pub listen_port: u16,
     //    pub tunnel_state: TunnelState,
     pub localid: LocalIdentity,
 }
 
 impl Tunnel {
-    fn new(ip: IpAddr, our_listen_port: u16, their_id: LocalIdentity) -> Result<Tunnel, Error> {
+    fn new(
+        ip: IpAddr,
+        our_listen_port: u16,
+        ifidx: u32,
+        their_id: LocalIdentity,
+    ) -> Result<Tunnel, Error> {
         let iface_name = KI.setup_wg_if().unwrap();
 
         //let init = TunnelState::Init;
         let tunnel = Tunnel {
             ip: ip,                       //tunnel endpoint
             iface_name: iface_name,       //name of wg#
+            listen_ifidx: ifidx,          //The physical port this tunnel is listening on
             listen_port: our_listen_port, //the port this tunnel resides on
             //            tunnel_state: init,           //how this tunnel feels about it's life
             localid: their_id.clone(), // the identity of the counterparty tunnel once we have it
@@ -371,18 +378,25 @@ impl TunnelManager {
     ) -> Result<Tunnel, Error> {
         trace!("TunnelManager getting existing tunnel or opening a new one");
         for tunnel in self.tunnels.iter() {
-            if tunnel.ip == peer.contact_ip {
-                trace!("TunnelManager We already have a tunnel for {:?}", tunnel.ip);
+            // This is deceptively simple, see the commit message
+            // TODO delete ifidx zero tunnels once we start deleting tunnels at all
+            if tunnel.ip == peer.contact_ip && tunnel.listen_ifidx == peer.ifidx {
+                trace!(
+                    "TunnelManager We already have a tunnel for {:?}%{:?}",
+                    tunnel.ip,
+                    tunnel.listen_ifidx,
+                );
                 // return allocated port as it's not required
                 self.free_ports.push(our_port);
                 return Ok(tunnel.clone());
             }
         }
         trace!(
-            "TunnelManager no tunnel found for {:?} creating",
-            peer.contact_ip
+            "TunnelManager no tunnel found for {:?}%{:?} creating",
+            peer.contact_ip,
+            peer.ifidx,
         );
-        let tunnel = Tunnel::new(peer.contact_ip, our_port, their_id.clone());
+        let tunnel = Tunnel::new(peer.contact_ip, our_port, peer.ifidx, their_id.clone());
         match tunnel {
             Ok(tunnel) => {
                 self.tunnels.push(tunnel.clone());
