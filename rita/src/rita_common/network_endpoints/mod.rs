@@ -10,8 +10,6 @@ use failure::Error;
 use settings::RitaCommonSettings;
 use SETTING;
 
-use serde_json;
-
 use std::net::SocketAddr;
 
 use rita_common;
@@ -47,28 +45,17 @@ pub fn make_payments(
     PaymentController::from_registry()
         .send(rita_common::payment_controller::PaymentReceived(
             pmt.0.clone(),
-        )).from_err()
+        ))
+        .from_err()
         .and_then(|_| Ok(HttpResponse::Ok().into()))
         .responder()
 }
 
 pub fn hello_response(
-    req: (Json<serde_json::Value>, HttpRequest),
+    req: (Json<LocalIdentity>, HttpRequest),
 ) -> Box<Future<Item = Json<LocalIdentity>, Error = Error>> {
-    let id: Result<LocalIdentity, serde_json::Error> = serde_json::from_value(req.0.clone());
+    let their_id = req.0.clone();
 
-    let their_id = match id {
-        Ok(id) => {
-            info!("got id sending response");
-            Ok(id)
-        }
-        Err(err) => {
-            warn!("Error parsing hello");
-            Err(err)
-        }
-    };
-
-    let their_id = their_id.unwrap();
     let socket = req
         .1
         .connection_info()
@@ -98,7 +85,8 @@ pub fn hello_response(
                 global: SETTING.get_identity(),
                 wg_port: tunnel.unwrap().listen_port,
             }))
-        }).from_err()
+        })
+        .from_err()
         .responder()
 }
 
