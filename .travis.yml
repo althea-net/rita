@@ -22,7 +22,8 @@ matrix:
     - rust: nightly
   include:
     - name: "cargo fmt"
-      script: rustup component add rustfmt-preview --toolchain nightly && cargo fmt --all -- --check
+      # This runs on `stable` so thats why we call `rustup`.
+      script: rustup toolchain install nightly && rustup component add rustfmt-preview --toolchain nightly && cargo +nightly fmt --all -- --check
     - name: "Cross compile on MIPS"
       script: ./integration-tests/cross-build.sh
     - script: ./integration-tests/rita.sh
