@@ -257,9 +257,18 @@ fn encode_im_here(addr: Ipv6Addr) -> Vec<u8> {
     buf
 }
 
-/// Decodes an ImHere packet with a very simple binary layout
-/// magic <u32>, message size <u16>, then IpV6Addr <u128>
-fn decode_im_here(buf: &mut Vec<u8>) -> Result<Ipv6Addr, io::Error> {
+#[test]
+fn test_encode_im_here() {
+    let data = encode_im_here(Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0xc00a, 0x2ff));
+    assert_eq!(
+        data,
+        vec![
+            91, 109, 65, 88, 0, 22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 192, 10, 2, 255,
+        ]
+    );
+}
+
+fn decode_im_here(buf: &Vec<u8>) -> Result<Ipv6Addr, io::Error> {
     trace!("Starting ImHere packet decode!");
     if buf.is_empty() {
         trace!("Recieved an empty ImHere packet!");
