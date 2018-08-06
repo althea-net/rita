@@ -61,23 +61,27 @@ impl Handler<Hello> for HTTPClient {
             let peer = msg.to;
             let wg_port = msg.my_id.wg_port;
 
-            if stream.is_err() {
-                trace!("Error getting stream from hello {:?}", stream);
-                TunnelManager::from_registry().do_send(PortCallback(wg_port));
-                return Box::new(future_ok(())) as Box<Future<Item = (), Error = Error>>;
-            }
-            let stream = stream.unwrap();
+            let stream = match stream {
+                Ok(s) => s,
+                Err(e) => {
+                    trace!("Error getting stream from hello {:?}", e);
+                    TunnelManager::from_registry().do_send(PortCallback(wg_port));
+                    return Box::new(future_ok(())) as Box<Future<Item = (), Error = Error>>;
+                }
+            };
 
             let network_request = network_request.with_connection(Connection::from_stream(stream));
 
             let network_json = network_request.json(&msg.my_id);
 
-            if network_json.is_err() {
-                trace!("Error serializing our request {:?}", network_json);
-                TunnelManager::from_registry().do_send(PortCallback(wg_port));
-                return Box::new(future_ok(())) as Box<Future<Item = (), Error = Error>>;
-            }
-            let network_json = network_json.unwrap();
+            let network_json = match network_json {
+                Ok(n) => n,
+                Err(e) => {
+                    trace!("Error serializing our request {:?}", e);
+                    TunnelManager::from_registry().do_send(PortCallback(wg_port));
+                    return Box::new(future_ok(())) as Box<Future<Item = (), Error = Error>>;
+                }
+            };
 
             trace!("sending hello request {:?}", network_json);
 

@@ -273,7 +273,7 @@ impl Handler<PeersToContact> for TunnelManager {
 }
 
 /// Sets out to contact a neighbor, takes a speculative port (only assigned if the neighbor
-/// responds successfully) TODO implement callback to return this port
+/// responds successfully)
 fn contact_neighbor(peer: Peer, our_port: u16) -> Result<(), Error> {
     KI.manual_peers_route(
         &peer.contact_ip,
@@ -294,6 +294,8 @@ fn contact_neighbor(peer: Peer, our_port: u16) -> Result<(), Error> {
 impl TunnelManager {
     pub fn new() -> Self {
         let start = SETTING.get_network().wg_start_port;
+        // TODO we can eliminate the possiblitly of port leaks and save 256kb of ram by
+        // going through and using the operating system to keep track of free ports
         let mut ports = Vec::<u16>::new();
         for i in start..65500 {
             ports.push(i);
