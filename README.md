@@ -32,6 +32,15 @@ You are now ready to build code from this Rust repository by running
 
 	cargo build --all
 
+## Development
+
+Please install required git hooks before contributing. Those hooks are responsible for making the codebase consistent.
+
+```sh
+rustup component add rustfmt-preview --toolchain nightly
+cd .git/hooks && ln -s ../../scripts/.git-hooks/pre-commit
+```
+
 ## Components
 
 ### Rita
