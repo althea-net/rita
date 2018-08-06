@@ -14,12 +14,6 @@ use rita_common::rita_loop::Tick;
 use KI;
 use SETTING;
 
-#[derive(Debug, Fail)]
-pub enum PeerListenerError {
-    #[fail(display = "Could not connect to Tunnel Manager")]
-    PeerListenerInterfaceError,
-}
-
 pub const MSG_IM_HERE: u32 = 0x5b6d4158;
 
 #[derive(Debug)]
@@ -92,11 +86,14 @@ impl Handler<Tick> for PeerListener {
             error!("Sending ImHere failed with {:?}", res);
         }
 
-        let res = recieve_imhere(&mut self.interfaces);
-        if res.is_err() {
-            error!("Receiving ImHere failed with {:?}", res);
+        match recieve_imhere(&mut self.interfaces) {
+            Ok(new_peers) => {
+                self.peers = new_peers;
+            }
+            Err(e) => {
+                error!("Receiving ImHere failed with {:?}", e);
+            }
         }
-        self.peers = res.unwrap();
 
         Ok(())
     }
@@ -114,14 +111,17 @@ impl Handler<Listen> for PeerListener {
         trace!("Peerlistener listen on {:?}", listen.0);
         let new_iface_name = listen.0;
         let new_iface = ListenInterface::new(&new_iface_name);
-        if new_iface.is_ok() {
-            self.interfaces.push(new_iface.unwrap());
-            SETTING
-                .get_network_mut()
-                .peer_interfaces
-                .insert(new_iface_name);
-        } else {
-            error!("Peer listener failed to listen on {:?}", new_iface_name);
+        match new_iface {
+            Ok(n) => {
+                self.interfaces.push(n);
+                SETTING
+                    .get_network_mut()
+                    .peer_interfaces
+                    .insert(new_iface_name);
+            }
+            Err(e) => {
+                error!("Peer listener failed to listen on {:?}", e);
+            }
         }
     }
 }
@@ -205,16 +205,17 @@ impl ListenInterface {
         let disc_ip = SETTING.get_network().discovery_ip;
         trace!("Binding to {:?} for ListenInterface", ifname);
         // Lookup interface link local ip
-        let link_ip = KI.get_link_local_device_ip(&ifname);
-        if link_ip.is_err() {
-            return Err(PeerListenerError::PeerListenerInterfaceError.into());
-        }
-        let link_ip = link_ip.unwrap();
+        let link_ip = match KI.get_link_local_device_ip(&ifname) {
+            Ok(ip) => ip,
+            Err(e) => {
+                return Err(e);
+            }
+        };
         // Lookup interface index
-        let iface_index = if KI.get_iface_index(&ifname).is_ok() {
-            KI.get_iface_index(&ifname).unwrap()
-        } else {
-            0
+
+        let iface_index = match KI.get_iface_index(&ifname) {
+            Ok(idx) => idx,
+            Err(_) => 0,
         };
         // Bond to multicast discovery address on each listen port
         let multicast_socketaddr = SocketAddrV6::new(disc_ip, port.into(), 0, iface_index);
