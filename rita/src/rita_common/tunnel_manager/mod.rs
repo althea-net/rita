@@ -1,3 +1,10 @@
+/*
+Tunnel manager manages WireGuard tunnels between mesh peers. In rita_loop PeerListener is called
+and asked about what peers it has heard from since the last cycle, these peers are passed to
+TunnelManager, which then orchestrates calling these peers over their http endpoints and setting
+up tunnels if they respond, likewise if someone calls us their hello goes through network_endpoints
+then into TunnelManager to open a tunnel for them.
+*/
 use rita_common::peer_listener::Peer;
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::path::Path;
