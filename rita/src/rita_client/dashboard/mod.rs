@@ -344,7 +344,7 @@ impl Handler<ResetExit> for Dashboard {
     fn handle(&mut self, msg: ResetExit, _ctx: &mut Self::Context) -> Self::Result {
         let mut exits = SETTING.get_exits_mut();
 
-        if let Some(mut exit) = exits.get_mut(&msg.0) {
+        if let Some(exit) = exits.get_mut(&msg.0) {
             info!("Changing exit {:?} state to New", msg.0);
             exit.info = ExitState::New;
         } else {
