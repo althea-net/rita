@@ -21,6 +21,9 @@ matrix:
   allow_failures:
     - rust: beta
     - rust: nightly
+      env: TEST_COMMAND="cargo build --verbose --all"
+    - rust: nightly
+      env: TEST_COMMAND="cargo test --verbose --all" RUST_TEST_THREADS=1
   exclude:
     - rust: beta
       env: TEST_COMMAND="cargo +nightly fmt --all -- --check"
