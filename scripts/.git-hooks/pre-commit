@@ -1,0 +1,23 @@
+#!/bin/bash
+
+inconsistent_files=()
+result=0
+
+while read file; do
+    if [ ${file: -3} == ".rs" ]; then
+        rustfmt +nightly --skip-children --check $file 1>/dev/null;
+        if [ $? != 0 ]; then
+        	inconsistent_files+=($file);
+            result=1
+        fi
+    fi
+done < <(git diff --name-only --cached)
+
+if [ $result != 0 ]; then
+    printf "Detected inconsistent formatting in: \n"
+    for file in $inconsistent_files; do
+        printf "    rustfmt +nightly $file\n";
+    done
+    printf "Or run 'rustfmt +nightly --all' to fix formatting across the codebase.\n";
+    exit 1
+fi
