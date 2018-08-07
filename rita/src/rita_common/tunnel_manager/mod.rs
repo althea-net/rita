@@ -5,7 +5,7 @@ TunnelManager, which then orchestrates calling these peers over their http endpo
 up tunnels if they respond, likewise if someone calls us their hello goes through network_endpoints
 then into TunnelManager to open a tunnel for them.
 */
-use rita_common::peer_listener::Peer;
+use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::path::Path;
 
@@ -22,6 +22,7 @@ use babel_monitor::{Babel, Route};
 
 use rita_common;
 use rita_common::http_client::Hello;
+use rita_common::peer_listener::Peer;
 
 use settings::RitaCommonSettings;
 use SETTING;
@@ -44,6 +45,12 @@ type Resolver = Mocker<resolver::Resolver>;
 #[cfg(not(test))]
 type Resolver = resolver::Resolver;
 
+#[derive(Debug, Fail)]
+pub enum TunnelManagerError {
+    #[fail(display = "Port Error: {:?}", _0)]
+    PortError(String),
+}
+
 /* Uncomment when tunnel state handling is added
 #[derive(Debug, Clone)]
 pub enum TunnelState {
@@ -56,12 +63,12 @@ pub enum TunnelState {
 
 #[derive(Debug, Clone)]
 pub struct Tunnel {
-    pub ip: IpAddr,
-    pub iface_name: String,
-    pub listen_ifidx: u32,
-    pub listen_port: u16,
-    //    pub tunnel_state: TunnelState,
-    pub localid: LocalIdentity,
+    pub ip: IpAddr,         // Tunnel endpoint
+    pub iface_name: String, // name of wg#
+    pub listen_ifidx: u32,  // the physical interface this tunnel is listening on
+    pub listen_port: u16,   // the local port this tunnel is listening on
+    //    pub tunnel_state: TunnelState, // how this exit feels about it's lifecycle
+    pub localid: LocalIdentity, // the identity of the counterparty tunnel
 }
 
 impl Tunnel {
@@ -75,17 +82,16 @@ impl Tunnel {
 
         //let init = TunnelState::Init;
         let tunnel = Tunnel {
-            ip: ip,                       //tunnel endpoint
-            iface_name: iface_name,       //name of wg#
-            listen_ifidx: ifidx,          //The physical port this tunnel is listening on
-            listen_port: our_listen_port, //the port this tunnel resides on
-            //            tunnel_state: init,           //how this tunnel feels about it's life
-            localid: their_id.clone(), // the identity of the counterparty tunnel once we have it
+            ip: ip,
+            iface_name: iface_name,
+            listen_ifidx: ifidx,
+            listen_port: our_listen_port,
+            //tunnel_state: init,
+            localid: their_id.clone(),
         };
 
         let network = SETTING.get_network().clone();
 
-        // TODO you have the iface index use it
         KI.open_tunnel(
             &tunnel.iface_name,
             tunnel.listen_port,
@@ -112,7 +118,7 @@ impl Tunnel {
 
 pub struct TunnelManager {
     free_ports: Vec<u16>,
-    tunnels: Vec<Tunnel>,
+    tunnels: HashMap<(IpAddr, u32), Tunnel>,
 }
 
 impl Actor for TunnelManager {
@@ -149,7 +155,13 @@ impl Handler<IdentityCallback> for TunnelManager {
         let peer = msg.1;
         let our_port = match msg.2 {
             Some(port) => port,
-            _ => self.get_port(),
+            _ => match self.free_ports.pop() {
+                Some(p) => p,
+                None => {
+                    warn!("Failed to allocate tunnel port! All tunnel opening will fail");
+                    return None;
+                }
+            },
         };
 
         let res = self.open_tunnel(peer_local_id, peer, our_port);
@@ -228,27 +240,31 @@ impl Handler<GetNeighbors> for TunnelManager {
 
     fn handle(&mut self, _: GetNeighbors, _: &mut Context<Self>) -> Self::Result {
         let mut res = Vec::new();
-        for tunnel in self.tunnels.iter() {
+        for obj in self.tunnels.iter() {
+            let tunnel = obj.1;
             res.push((tunnel.localid.clone(), tunnel.iface_name.clone(), tunnel.ip));
         }
         Ok(res)
     }
 }
 
-pub struct PeersToContact(pub Vec<Peer>);
+pub struct PeersToContact(pub HashMap<IpAddr, Peer>);
 
 impl Message for PeersToContact {
     type Result = ();
 }
 
+/// Takes a list of peers to contact and dispatches requests if you have a WAN connection
+/// it will also dispatch neighbor requests to manual peers
 impl Handler<PeersToContact> for TunnelManager {
     type Result = ();
-    fn handle(&mut self, peers: PeersToContact, _ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: PeersToContact, _ctx: &mut Context<Self>) -> Self::Result {
         trace!("TunnelManager contacting peers");
-        for peer in peers.0.iter() {
+        for obj in msg.0.iter() {
+            let peer = obj.1;
             let res = self.neighbor_inquiry(peer.clone());
             if res.is_err() {
-                warn!("Neighbor inqury for {:?} failed!", peer);
+                warn!("Neighbor inqury for {:?} failed! with {:?}", peer, res);
             }
         }
         // Do not contact manual peers if we are not a gateway
@@ -256,22 +272,30 @@ impl Handler<PeersToContact> for TunnelManager {
             for manual_peer in SETTING.get_network().manual_peers.iter() {
                 let ip = manual_peer.parse::<IpAddr>();
                 let port = SETTING.get_network().rita_hello_port;
-                if ip.is_ok() {
-                    let ip = ip.unwrap();
-                    let socket = SocketAddr::new(ip, port);
-                    let man_peer = Peer {
-                        contact_ip: ip,
-                        ifidx: 0,
-                        contact_socket: socket,
-                    };
-                    let res = self.neighbor_inquiry(man_peer);
-                    if res.is_err() {
-                        warn!("Neighbor inqury for {:?} failed!", manual_peer);
+
+                match ip {
+                    Ok(ip) => {
+                        let socket = SocketAddr::new(ip, port);
+                        let man_peer = Peer {
+                            ifidx: 0,
+                            contact_socket: socket,
+                        };
+                        let res = self.neighbor_inquiry(man_peer);
+                        if res.is_err() {
+                            warn!(
+                                "Neighbor inqury for {:?} failed with: {:?}",
+                                manual_peer, res
+                            );
+                        }
                     }
-                } else {
-                    let res = self.neighbor_inquiry_hostname(manual_peer.to_string());
-                    if res.is_err() {
-                        warn!("Neighbor inqury for {:?} failed!", manual_peer);
+                    Err(_) => {
+                        let res = self.neighbor_inquiry_hostname(manual_peer.to_string());
+                        if res.is_err() {
+                            warn!(
+                                "Neighbor inqury for {:?} failed with: {:?}",
+                                manual_peer, res
+                            );
+                        }
                     }
                 }
             }
@@ -283,9 +307,9 @@ impl Handler<PeersToContact> for TunnelManager {
 /// responds successfully)
 fn contact_neighbor(peer: Peer, our_port: u16) -> Result<(), Error> {
     KI.manual_peers_route(
-        &peer.contact_ip,
+        &peer.contact_socket.ip(),
         &mut SETTING.get_network_mut().default_route,
-    ).unwrap();
+    )?;
 
     let _res = HTTPClient::from_registry().do_send(Hello {
         my_id: LocalIdentity {
@@ -301,31 +325,26 @@ fn contact_neighbor(peer: Peer, our_port: u16) -> Result<(), Error> {
 impl TunnelManager {
     pub fn new() -> Self {
         let start = SETTING.get_network().wg_start_port;
-        // TODO we can eliminate the possiblitly of port leaks and save 256kb of ram by
-        // going through and using the operating system to keep track of free ports
-        let mut ports = Vec::<u16>::new();
-        for i in start..65500 {
-            ports.push(i);
-        }
+        let ports = (start..65535).collect();
         TunnelManager {
             free_ports: ports,
-            tunnels: Vec::<Tunnel>::new(),
+            tunnels: HashMap::<(IpAddr, u32), Tunnel>::new(),
         }
     }
 
-    pub fn get_port(&mut self) -> u16 {
-        let port = self.free_ports.pop();
-        if port.is_none() {
-            panic!("Tunnelmanager ran out of ports!")
-        }
-        port.unwrap()
-    }
-
+    /// This function generates a future and hands it off to the Actix arbiter to actually resolve
+    /// in the case that the DNS request is successful the hello handler and eventually the Identity
+    /// callback continue execution flow. But this function itself returns syncronously
     pub fn neighbor_inquiry_hostname(&mut self, their_hostname: String) -> Result<(), Error> {
         trace!("Getting tunnel, inq");
 
-        // possible port allocation
-        let our_port = self.get_port();
+        let our_port = match self.free_ports.pop() {
+            Some(p) => p,
+            None => {
+                warn!("Failed to allocate tunnel port! All tunnel opening will fail");
+                return Err(TunnelManagerError::PortError("No remaining ports!".to_string()).into());
+            }
+        };
 
         let res = Resolver::from_registry()
             .send(resolver::Resolve::host(their_hostname.clone()))
@@ -338,7 +357,6 @@ impl TunnelManager {
                         let their_ip = dnsresult[0].ip();
                         let socket = SocketAddr::new(their_ip, port);
                         let man_peer = Peer {
-                            contact_ip: their_ip,
                             ifidx: 0,
                             contact_socket: socket,
                         };
@@ -372,8 +390,13 @@ impl TunnelManager {
     /// interface name.
     pub fn neighbor_inquiry(&mut self, peer: Peer) -> Result<(), Error> {
         trace!("TunnelManager neigh inquiry for {:?}", peer);
-        // possible port allocation
-        let our_port = self.get_port();
+        let our_port = match self.free_ports.pop() {
+            Some(p) => p,
+            None => {
+                warn!("Failed to allocate tunnel port! All tunnel opening will fail");
+                return Err(TunnelManagerError::PortError("No remaining ports!".to_string()).into());
+            }
+        };
 
         contact_neighbor(peer, our_port)
     }
@@ -386,29 +409,37 @@ impl TunnelManager {
         our_port: u16,
     ) -> Result<Tunnel, Error> {
         trace!("TunnelManager getting existing tunnel or opening a new one");
-        for tunnel in self.tunnels.iter() {
-            // This is deceptively simple, see the commit message
-            // TODO delete ifidx zero tunnels once we start deleting tunnels at all
-            if tunnel.ip == peer.contact_ip && tunnel.listen_ifidx == peer.ifidx {
-                trace!(
-                    "TunnelManager We already have a tunnel for {:?}%{:?}",
-                    tunnel.ip,
-                    tunnel.listen_ifidx,
-                );
-                // return allocated port as it's not required
-                self.free_ports.push(our_port);
-                return Ok(tunnel.clone());
-            }
+        // This is deceptively simple, see the commit message
+        let key = &(peer.contact_socket.ip(), peer.ifidx);
+        if self.tunnels.contains_key(key) {
+            trace!(
+                "TunnelManager We already have a tunnel for {:?}%{:?}",
+                peer.contact_socket.ip(),
+                peer.ifidx,
+            );
+            // return allocated port as it's not required
+            self.free_ports.push(our_port);
+            // Unwrap is safe because we check membership immediately before
+            let tunnel = self.tunnels.get(key).unwrap();
+            return Ok(tunnel.clone());
         }
+
         trace!(
             "TunnelManager no tunnel found for {:?}%{:?} creating",
-            peer.contact_ip,
+            peer.contact_socket.ip(),
             peer.ifidx,
         );
-        let tunnel = Tunnel::new(peer.contact_ip, our_port, peer.ifidx, their_id.clone());
+        let tunnel = Tunnel::new(
+            peer.contact_socket.ip(),
+            our_port,
+            peer.ifidx,
+            their_id.clone(),
+        );
+
         match tunnel {
             Ok(tunnel) => {
-                self.tunnels.push(tunnel.clone());
+                let new_key = (tunnel.ip.clone(), tunnel.listen_ifidx.clone());
+                self.tunnels.insert(new_key, tunnel.clone());
                 Ok(tunnel)
             }
             Err(e) => {

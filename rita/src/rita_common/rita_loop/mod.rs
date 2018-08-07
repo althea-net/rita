@@ -99,16 +99,17 @@ impl Handler<Tick> for RitaLoop {
             self.was_gateway = false
         }
 
-        // TODO refactor this abomination
         let start = Instant::now();
         ctx.spawn(
             TunnelManager::from_registry()
                 .send(GetNeighbors)
                 .into_actor(self)
                 .then(move |res, act, _ctx| {
+                    // TODO refactor to use an struct instead of a tuple
+                    // Vec<(LocalIdentity, Iface Name, IpAddr)>
                     let res = res.unwrap().unwrap();
 
-                    info!("TunnelManager got tunnels: {:?}", res);
+                    info!("Currently open tunnels: {:?}", res);
 
                     let neigh = Instant::now();
 
@@ -135,9 +136,10 @@ impl Handler<Tick> for RitaLoop {
             PeerListener::from_registry()
                 .send(Tick {})
                 .then(|res| {
-                    trace!("PeerListener said {:?}", res);
+                    trace!("PeerListener said after tick: {:?}", res);
                     res
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
         );
 
         trace!("Getting Peers from PeerListener to pass to TunnelManager");
@@ -145,9 +147,10 @@ impl Handler<Tick> for RitaLoop {
             PeerListener::from_registry()
                 .send(GetPeers {})
                 .and_then(|peers| {
-                    trace!("Got peers from PeerListener, passing to TunnelManager");
+                    trace!("Got peers structs from PeerListener, passing to TunnelManager");
                     TunnelManager::from_registry().send(PeersToContact(peers.unwrap())) // GetPeers never fails so unwrap is safe
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
         );
 
         Ok(())

@@ -45,7 +45,8 @@ pub fn make_payments(
     PaymentController::from_registry()
         .send(rita_common::payment_controller::PaymentReceived(
             pmt.0.clone(),
-        )).from_err()
+        ))
+        .from_err()
         .and_then(|_| Ok(HttpResponse::Ok().into()))
         .responder()
 }
@@ -70,7 +71,6 @@ pub fn hello_response(
     info!("opening tunnel in hello_response for {:?}", their_id);
 
     let peer = Peer {
-        contact_ip: socket.ip(),
         contact_socket: socket,
         ifidx: 0, // only works because we lookup ifname in kernel interface
     };
@@ -84,7 +84,8 @@ pub fn hello_response(
                 global: SETTING.get_identity(),
                 wg_port: tunnel.unwrap().listen_port,
             }))
-        }).from_err()
+        })
+        .from_err()
         .responder()
 }
 
