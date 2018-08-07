@@ -51,7 +51,7 @@ impl Handler<Hello> for HTTPClient {
 
         let endpoint = format!(
             "http://[{}]:{}/hello",
-            msg.to.contact_ip,
+            msg.to.contact_socket.ip(),
             msg.to.contact_socket.port()
         );
 

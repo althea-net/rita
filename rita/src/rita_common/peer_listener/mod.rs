@@ -4,7 +4,7 @@ a link local multicast address, on each listen port.
 
 On initilization a set of ListenInterface objects are created, these are important becuase they
 actually hold the sockets required to listen and broadcast on the listen interfaces, every
-rita_loop iteration we send out out own IP as a UDP boradcast packet and then get our peers
+rita_loop iteration we send out our own IP as a UDP boradcast packet and then get our peers
 off the queue. These are turned into Peer structs which are passed to TunnelManager to do
 whatever remaining work there may be. 
 */
@@ -14,7 +14,7 @@ use byteorder::{BigEndian, ReadBytesExt};
 use bytes::BufMut;
 use failure::Error;
 use settings::RitaCommonSettings;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::io;
 use std::io::Cursor;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
@@ -24,17 +24,17 @@ use rita_common::rita_loop::Tick;
 use KI;
 use SETTING;
 
-pub const MSG_IM_HERE: u32 = 0x5b6d4158;
+pub const MSG_IM_HERE: u8 = 0x5b;
+pub const MSG_IM_HERE_LEN: u16 = 22;
 
 #[derive(Debug)]
 pub struct PeerListener {
-    interfaces: Vec<ListenInterface>,
-    peers: Vec<Peer>,
+    interfaces: HashMap<String, ListenInterface>,
+    peers: HashMap<IpAddr, Peer>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Peer {
-    pub contact_ip: IpAddr,
     pub ifidx: u32,
     pub contact_socket: SocketAddr,
 }
@@ -44,7 +44,6 @@ impl Peer {
         let port = SETTING.get_network().rita_hello_port;
         let socket = SocketAddrV6::new(ip, port.into(), 0, idx);
         Peer {
-            contact_ip: ip.into(),
             ifidx: idx,
             contact_socket: socket.into(),
         }
@@ -64,8 +63,8 @@ impl Default for PeerListener {
 impl PeerListener {
     pub fn new() -> Result<PeerListener, Error> {
         Ok(PeerListener {
-            interfaces: Vec::new(),
-            peers: Vec::new(),
+            interfaces: HashMap::new(),
+            peers: HashMap::new(),
         })
     }
 }
@@ -81,7 +80,9 @@ impl SystemService for PeerListener {
         for iface in iface_list.iter() {
             let res = ListenInterface::new(iface);
             if res.is_ok() {
-                self.interfaces.push(res.unwrap());
+                let new_listen_interface = res.unwrap();
+                self.interfaces
+                    .insert(new_listen_interface.ifname.clone(), new_listen_interface);
             }
         }
     }
@@ -91,12 +92,12 @@ impl Handler<Tick> for PeerListener {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
         trace!("Starting PeerListener tick!");
-        let res = send_imhere(&mut self.interfaces);
+        let res = send_im_here(&mut self.interfaces);
         if res.is_err() {
             error!("Sending ImHere failed with {:?}", res);
         }
 
-        match recieve_imhere(&mut self.interfaces) {
+        match receive_im_here(&mut self.interfaces) {
             Ok(new_peers) => {
                 self.peers = new_peers;
             }
@@ -109,21 +110,30 @@ impl Handler<Tick> for PeerListener {
     }
 }
 
+// message containing interface name as a string
 pub struct Listen(pub String);
 impl Message for Listen {
     type Result = ();
 }
 
+/// Adds a given interface to the list of interfaces on which peers can be found
+/// and contacted
 impl Handler<Listen> for PeerListener {
     type Result = ();
 
     fn handle(&mut self, listen: Listen, _: &mut Context<Self>) -> Self::Result {
         trace!("Peerlistener listen on {:?}", listen.0);
         let new_iface_name = listen.0;
+
+        if self.interfaces.contains_key(&new_iface_name) {
+            error!("Someone attempted a double listen!");
+            return ();
+        }
+
         let new_iface = ListenInterface::new(&new_iface_name);
         match new_iface {
             Ok(n) => {
-                self.interfaces.push(n);
+                self.interfaces.insert(new_iface_name.clone(), n);
                 SETTING
                     .get_network_mut()
                     .peer_interfaces
@@ -136,63 +146,40 @@ impl Handler<Listen> for PeerListener {
     }
 }
 
+// message containing interface name as a string
 pub struct UnListen(pub String);
 impl Message for UnListen {
     type Result = ();
 }
 
+/// Removes a given interface to the list of interfaces on which peers can be found
+/// and contacted
 impl Handler<UnListen> for PeerListener {
     type Result = ();
 
     fn handle(&mut self, un_listen: UnListen, _: &mut Context<Self>) -> Self::Result {
         trace!("Peerlistener unlisten on {:?}", un_listen.0);
         let ifname_to_delete = un_listen.0;
-        let mut entry_found = false;
-        let mut to_del = 0;
-        let mut count = 0;
-        for item in self.interfaces.iter() {
-            if item.ifname == ifname_to_delete {
-                to_del = count;
-                entry_found = true;
-            }
-            count = count + 1;
-        }
-        if entry_found {
-            self.interfaces.remove(to_del);
+        if self.interfaces.contains_key(&ifname_to_delete) {
+            self.interfaces.remove(&ifname_to_delete);
             SETTING
                 .get_network_mut()
                 .peer_interfaces
                 .remove(&ifname_to_delete);
         } else {
-            error!("Peer listener failed to unlisten on {:?}", ifname_to_delete);
+            error!("Tried to unlisten interface that's not present!")
         }
-    }
-}
-
-pub struct GetListen;
-impl Message for GetListen {
-    type Result = Result<HashSet<String>, Error>;
-}
-
-impl Handler<GetListen> for PeerListener {
-    type Result = Result<HashSet<String>, Error>;
-    fn handle(&mut self, _: GetListen, _: &mut Context<Self>) -> Self::Result {
-        let mut res = HashSet::new();
-        for item in self.interfaces.iter() {
-            res.insert(item.ifname.clone());
-        }
-        Ok(res.clone())
     }
 }
 
 #[derive(Debug)]
 pub struct GetPeers();
 impl Message for GetPeers {
-    type Result = Result<Vec<Peer>, Error>;
+    type Result = Result<HashMap<IpAddr, Peer>, Error>;
 }
 
 impl Handler<GetPeers> for PeerListener {
-    type Result = Result<Vec<Peer>, Error>;
+    type Result = Result<HashMap<IpAddr, Peer>, Error>;
 
     fn handle(&mut self, _: GetPeers, _: &mut Context<Self>) -> Self::Result {
         Ok(self.peers.clone())
@@ -213,16 +200,11 @@ impl ListenInterface {
     pub fn new(ifname: &str) -> Result<ListenInterface, Error> {
         let port = SETTING.get_network().rita_hello_port;
         let disc_ip = SETTING.get_network().discovery_ip;
-        trace!("Binding to {:?} for ListenInterface", ifname);
+        debug!("Binding to {:?} for ListenInterface", ifname);
         // Lookup interface link local ip
-        let link_ip = match KI.get_link_local_device_ip(&ifname) {
-            Ok(ip) => ip,
-            Err(e) => {
-                return Err(e);
-            }
-        };
-        // Lookup interface index
+        let link_ip = KI.get_link_local_device_ip(&ifname)?;
 
+        // Lookup interface index
         let iface_index = match KI.get_iface_index(&ifname) {
             Ok(idx) => idx,
             Err(_) => 0,
@@ -261,10 +243,12 @@ impl ListenInterface {
     }
 }
 
+/// Creates an ImHere packet with a very simple binary layout
+/// magic <u32>, message size <u16>, then IpV6Addr <u128>
 fn encode_im_here(addr: Ipv6Addr) -> Vec<u8> {
     let mut buf = Vec::new();
-    buf.put_u32_be(MSG_IM_HERE);
-    buf.put_u16_be(22);
+    buf.put_u8(MSG_IM_HERE);
+    buf.put_u16_be(MSG_IM_HERE_LEN);
     let ipaddr_bytes: [u8; 16] = addr.octets();
     for i in 0..16 {
         buf.put_u8(ipaddr_bytes[i]);
@@ -273,29 +257,34 @@ fn encode_im_here(addr: Ipv6Addr) -> Vec<u8> {
     buf
 }
 
-fn decode_im_here(buf: &mut Vec<u8>) -> Result<Option<Ipv6Addr>, io::Error> {
+/// Decodes an ImHere packet with a very simple binary layout
+/// magic <u32>, message size <u16>, then IpV6Addr <u128>
+fn decode_im_here(buf: &mut Vec<u8>) -> Result<Ipv6Addr, io::Error> {
     trace!("Starting ImHere packet decode!");
     if buf.is_empty() {
         trace!("Recieved an empty ImHere packet!");
-        return Ok(None);
+        error!("Got an empty packet!");
     }
     let mut pointer = Cursor::new(&buf);
-    let packet_magic = pointer.read_u32::<BigEndian>()?;
+    let packet_magic = pointer.read_u8()?;
     if packet_magic != MSG_IM_HERE {
         trace!(
             "Recieved an ImHere packet with an invalid magic: {:?}",
             packet_magic
         );
-        return Ok(None);
+        error!("Invalid magic");
     }
 
     let packet_size = pointer.read_u16::<BigEndian>()?;
-    if packet_size < 22 as u16 {
+
+    // We check that we can parse the ImHere we expect fully, but allow
+    // for trailing data for forwards compatiblity
+    if packet_size < MSG_IM_HERE_LEN as u16 {
         trace!(
             "Recieved an ImHere packet with an invalid size: {:?}",
             packet_size
         );
-        return Ok(None);
+        error!("ImHere is too small");
     }
 
     let mut peer_address_arr: [u16; 8] = [0xFFFF; 8];
@@ -318,16 +307,17 @@ fn decode_im_here(buf: &mut Vec<u8>) -> Result<Option<Ipv6Addr>, io::Error> {
             "Recieved a valid ImHere with an invalid ip address: {:?}",
             peer_address,
         );
-        return Ok(None);
+        error!("Invalid IP in ImHere");
     }
 
     trace!("ImHere decoding completed successfully {:?}", peer_address);
-    Ok(Some(peer_address))
+    Ok(peer_address)
 }
 
-fn send_imhere(interfaces: &mut Vec<ListenInterface>) -> Result<(), Error> {
+fn send_im_here(interfaces: &mut HashMap<String, ListenInterface>) -> Result<(), Error> {
     trace!("About to send ImHere");
-    for listen_interface in interfaces.iter_mut() {
+    for obj in interfaces.iter_mut() {
+        let listen_interface = obj.1;
         trace!(
             "Sending ImHere to {:?}, with ip {:?}",
             listen_interface.ifname,
@@ -338,59 +328,53 @@ fn send_imhere(interfaces: &mut Vec<ListenInterface>) -> Result<(), Error> {
             &encode_im_here(listen_interface.linklocal_ip.clone()),
             listen_interface.multicast_socketaddr,
         );
-        trace!("Sending ImHere to broadcast gets {:?}", result);
+        trace!("Sending ImHere to multicast gets {:?}", result);
     }
     Ok(())
 }
 
-fn recieve_imhere(interfaces: &mut Vec<ListenInterface>) -> Result<Vec<Peer>, Error> {
+fn receive_im_here(
+    interfaces: &mut HashMap<String, ListenInterface>,
+) -> Result<HashMap<IpAddr, Peer>, Error> {
     trace!("About to dequeue ImHere");
-    let mut output = Vec::<Peer>::new();
-    for listen_interface in interfaces.iter_mut() {
-        let mut socket_empty = false;
+    let mut output = HashMap::<IpAddr, Peer>::new();
+    for obj in interfaces.iter_mut() {
+        let listen_interface = obj.1;
         // Since the only datagrams we are interested in are very small (22 bytes plus overhead)
         // this buffer is kept intentionally small to discard larger packets earlier rather than later
-        while !socket_empty {
+        loop {
             let mut datagram: [u8; 100] = [0; 100];
-            let res = listen_interface.multicast_socket.recv_from(&mut datagram);
-            if res.is_err() {
-                trace!("Could not recv ImHere");
-                // TODO Consider we might want to remove interfaces that produce specific types
-                // of errors from the active list
-                socket_empty = true;
-                continue;
-            }
+            let _bytes_read = match listen_interface.multicast_socket.recv_from(&mut datagram) {
+                Ok(d) => d,
+                Err(e) => {
+                    trace!("Out of data on socket wtih message: {:?}", e);
+                    break;
+                }
+            };
 
-            let res = decode_im_here(&mut datagram.to_vec());
-            if res.is_err() {
-                trace!("ImHere decode failed!");
-                continue;
-            }
-
-            let res = res.unwrap();
-            if res.is_none() {
-                trace!("ImHere decode was unsuccessful!");
-                continue;
-            }
-            let ipaddr = res.unwrap();
+            let ipaddr = match decode_im_here(&mut datagram.to_vec()) {
+                Ok(ip) => ip,
+                Err(e) => {
+                    trace!("ImHere decode failed with: {:?}", e);
+                    continue;
+                }
+            };
 
             if ipaddr == listen_interface.linklocal_ip {
                 trace!("Got ImHere from myself");
                 continue;
             }
 
-            for peer in output.iter() {
-                if peer.contact_ip == ipaddr {
-                    trace!(
-                        "Discarding ImHere We already have a peer with {:?} for this cycle",
-                        ipaddr
-                    );
-                    continue;
-                }
+            if output.contains_key(&ipaddr.into()) {
+                trace!(
+                    "Discarding ImHere We already have a peer with {:?} for this cycle",
+                    ipaddr
+                );
+                continue;
             }
             trace!("ImHere with {:?}", ipaddr);
             let peer = Peer::new(ipaddr, listen_interface.ifidx);
-            output.push(peer);
+            output.insert(peer.contact_socket.ip(), peer);
         }
     }
     Ok(output)
