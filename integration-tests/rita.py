@@ -693,7 +693,9 @@ class World:
                     pprint(neighbors)
                 else:
                     print(result.stdout.read().decode('utf-8'))
-            except json.JSONDecodeError as e:
+            except ValueError as e:
+                if VERBOSE:
+                    print('Unable to decode JSON {!r}: {!r}'.format(result, e))
                 assert_test(False, "Decoding the neighbors JSON")
 
             # /exits
@@ -711,7 +713,9 @@ class World:
                     pprint(exits)
                 else:
                     print(result.stdout.read().decode('utf-8'))
-            except json.JSONDecodeError as e:
+            except ValueError as e:
+                if VERBOSE:
+                    print('Unable to decode JSON {!r}: {!r}'.format(result, e))
                 assert_test(False, "Decoding the exits JSON")
 
             # /info
@@ -729,7 +733,9 @@ class World:
                     pprint(info)
                 else:
                     print(result.stdout.read().decode('utf-8'))
-            except json.JSONDecodeError as e:
+            except ValueError as e:
+                if VERBOSE:
+                    print('Unable to decode JSON {!r}: {!r}'.format(result, e))
                 assert_test(False, "Decoding the info JSON")
 
             # /settings
@@ -747,7 +753,9 @@ class World:
                     pprint(settings)
                 else:
                     print(result.stdout.read().decode('utf-8'))
-            except json.JSONDecodeError as e:
+            except ValueError as e:
+                if VERBOSE:
+                    print('Unable to decode JSON {!r}: {!r}'.format(result, e))
                 assert_test(False, "Decoding the settings JSON")
 
 
