@@ -138,8 +138,7 @@ impl Handler<Tick> for RitaLoop {
                 .then(|res| {
                     trace!("PeerListener said after tick: {:?}", res);
                     res
-                })
-                .then(|_| Ok(())),
+                }).then(|_| Ok(())),
         );
 
         trace!("Getting Peers from PeerListener to pass to TunnelManager");
