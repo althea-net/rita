@@ -1,4 +1,5 @@
 use actix::prelude::*;
+use actix_web::Path;
 
 use failure::Error;
 use futures::Future;
@@ -49,6 +50,24 @@ pub struct WifiDevice {
     pub disabled: String,
     #[serde(default)]
     pub radio_type: String,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+pub struct WifiSSID {
+    pub radio: String,
+    pub ssid: String,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+pub struct WifiPass {
+    pub radio: String,
+    pub pass: String,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+pub struct WifiMesh {
+    pub radio: String,
+    pub mesh: bool,
 }
 
 struct GetWifiConfig;
@@ -142,10 +161,6 @@ impl Handler<SetWifiConfig> for Dashboard {
 
                 TunnelManager::from_registry().do_send(UnListen(iface_name));
                 KI.set_uci_var(&format!("wireless.{}.ssid", i.section_name), &i.ssid)?;
-                KI.set_uci_var(
-                    &format!("wireless.{}.encryption", i.section_name),
-                    &i.encryption,
-                )?;
                 KI.set_uci_var(&format!("wireless.{}.key", i.section_name), &i.key)?;
                 KI.set_uci_var(&format!("wireless.{}.mode", i.section_name), "ap")?;
                 KI.set_uci_var(
@@ -377,6 +392,103 @@ impl Handler<SelectExit> for Dashboard {
             error!("Requested selection of an unknown exit {:?}", msg.0);
             bail!("Requested selection of an unknown exit {:?}", msg.0);
         }
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct SetWiFiSSID(WifiSSID);
+
+impl Message for SetWiFiSSID {
+    type Result = Result<(), Error>;
+}
+
+impl Handler<SetWiFiSSID> for Dashboard {
+    type Result = Result<(), Error>;
+    fn handle(&mut self, msg: SetWiFiSSID, _ctx: &mut Self::Context) -> Self::Result {
+        // think radio0, radio1
+        let iface_name = msg.0.radio;
+        let ssid = msg.0.ssid;
+        let section_name = format!("default_{}", iface_name);
+        KI.set_uci_var(&format!("wireless.{}.ssid", section_name), &ssid)?;
+
+        KI.uci_commit()?;
+        KI.openwrt_reset_wireless()?;
+
+        // We edited disk contents, force global sync
+        KI.fs_sync()?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct SetWiFiPass(WifiPass);
+
+impl Message for SetWiFiPass {
+    type Result = Result<(), Error>;
+}
+
+impl Handler<SetWiFiPass> for Dashboard {
+    type Result = Result<(), Error>;
+    fn handle(&mut self, msg: SetWiFiPass, _ctx: &mut Self::Context) -> Self::Result {
+        // think radio0, radio1
+        let iface_name = msg.0.radio;
+        let pass = msg.0.pass;
+        let section_name = format!("default_{}", iface_name);
+        KI.set_uci_var(&format!("wireless.{}.key", section_name), &pass)?;
+
+        KI.uci_commit()?;
+        KI.openwrt_reset_wireless()?;
+
+        // We edited disk contents, force global sync
+        KI.fs_sync()?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct SetWiFiMesh(WifiMesh);
+
+impl Message for SetWiFiMesh {
+    type Result = Result<(), Error>;
+}
+
+impl Handler<SetWiFiMesh> for Dashboard {
+    type Result = Result<(), Error>;
+    fn handle(&mut self, msg: SetWiFiMesh, _ctx: &mut Self::Context) -> Self::Result {
+        // think radio0, radio1
+        let iface_name = msg.0.radio;
+        let mesh = msg.0.mesh;
+        let iface_number = iface_name.clone().chars().last();
+        let wlan_name = format!("wlan{}", iface_number.unwrap());
+        let section_name = format!("default_{}", iface_name);
+
+        if mesh {
+            TunnelManager::from_registry().do_send(Listen(iface_name.clone()));
+            KI.set_uci_var(&format!("wireless.{}.ssid", section_name), "AltheaMesh")?;
+            KI.set_uci_var(&format!("wireless.{}.encryption", section_name), "none")?;
+            KI.set_uci_var(&format!("wireless.{}.mode", section_name), "adhoc")?;
+            KI.set_uci_var(&format!("wireless.{}.network", section_name), &iface_name)?;
+            KI.set_uci_var(&format!("network.{}", wlan_name), "interface")?;
+            KI.set_uci_var(&format!("network.{}.ifname", wlan_name), &wlan_name)?;
+            KI.set_uci_var(&format!("network.{}.proto", wlan_name), "static")?;
+        } else {
+            TunnelManager::from_registry().do_send(UnListen(iface_name));
+            KI.set_uci_var(&format!("wireless.{}.ssid", section_name), "AltheaHome")?;
+            KI.set_uci_var(&format!("wireless.{}.key", section_name), "ChangeMe")?;
+            KI.set_uci_var(&format!("wireless.{}.mode", section_name), "ap")?;
+            KI.set_uci_var(
+                &format!("wireless.{}.encryption", section_name),
+                "psk2+tkip+aes",
+            )?;
+            KI.set_uci_var(&format!("wireless.{}.network", section_name), "lan")?;
+        }
+
+        KI.uci_commit()?;
+        KI.openwrt_reset_wireless()?;
+
+        // We edited disk contents, force global sync
+        KI.fs_sync()?;
         Ok(())
     }
 }
