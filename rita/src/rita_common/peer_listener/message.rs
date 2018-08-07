@@ -53,7 +53,7 @@ fn test_message_error() {
 }
 
 const MSG_IM_HERE: u8 = 0x5b;
-const MSG_IM_HERE_LEN: u16 = 22;
+const MSG_IM_HERE_LEN: u16 = 19;
 
 /**
  * An enum that contains all supported p2p packets
@@ -156,14 +156,16 @@ fn test_encode_im_here() {
     let data = PeerMessage::ImHere(Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0xc00a, 0x2ff)).encode();
     assert_eq!(
         data,
-        vec![91, 109, 65, 88, 0, 22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 192, 10, 2, 255,]
+        vec![
+            91, 0, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 192, 10, 2, 255,
+        ]
     );
 }
 
 #[test]
 fn test_decode_imhere() {
     let result = PeerMessage::decode(&vec![
-        91, 109, 65, 88, 0, 22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 192, 10, 2, 255,
+        91, 0, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 192, 10, 2, 255,
     ]);
     match result {
         Ok(PeerMessage::ImHere(addr)) => {
