@@ -10,13 +10,9 @@ whatever remaining work there may be.
 */
 use actix::prelude::*;
 use actix::{Actor, Context};
-use byteorder::{BigEndian, ReadBytesExt};
-use bytes::BufMut;
 use failure::Error;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
-use std::io;
-use std::io::Cursor;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
 
 use rita_common::rita_loop::Tick;
@@ -24,8 +20,8 @@ use rita_common::rita_loop::Tick;
 use KI;
 use SETTING;
 
-pub const MSG_IM_HERE: u8 = 0x5b;
-pub const MSG_IM_HERE_LEN: u16 = 22;
+mod message;
+use self::message::PeerMessage;
 
 #[derive(Debug)]
 pub struct PeerListener {
@@ -243,86 +239,6 @@ impl ListenInterface {
     }
 }
 
-/// Creates an ImHere packet with a very simple binary layout
-/// magic <u32>, message size <u16>, then IpV6Addr <u128>
-fn encode_im_here(addr: Ipv6Addr) -> Vec<u8> {
-    let mut buf = Vec::new();
-    buf.put_u8(MSG_IM_HERE);
-    buf.put_u16_be(MSG_IM_HERE_LEN);
-    let ipaddr_bytes: [u8; 16] = addr.octets();
-    for i in 0..16 {
-        buf.put_u8(ipaddr_bytes[i]);
-    }
-    trace!("Encoded ImHere packet {:x?}", buf);
-    buf
-}
-
-#[test]
-fn test_encode_im_here() {
-    let data = encode_im_here(Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0xc00a, 0x2ff));
-    assert_eq!(
-        data,
-        vec![
-            91, 109, 65, 88, 0, 22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 192, 10, 2, 255,
-        ]
-    );
-}
-
-fn decode_im_here(buf: &Vec<u8>) -> Result<Ipv6Addr, io::Error> {
-    trace!("Starting ImHere packet decode!");
-    if buf.is_empty() {
-        trace!("Recieved an empty ImHere packet!");
-        error!("Got an empty packet!");
-    }
-    let mut pointer = Cursor::new(&buf);
-    let packet_magic = pointer.read_u8()?;
-    if packet_magic != MSG_IM_HERE {
-        trace!(
-            "Recieved an ImHere packet with an invalid magic: {:?}",
-            packet_magic
-        );
-        error!("Invalid magic");
-    }
-
-    let packet_size = pointer.read_u16::<BigEndian>()?;
-
-    // We check that we can parse the ImHere we expect fully, but allow
-    // for trailing data for forwards compatiblity
-    if packet_size < MSG_IM_HERE_LEN as u16 {
-        trace!(
-            "Recieved an ImHere packet with an invalid size: {:?}",
-            packet_size
-        );
-        error!("ImHere is too small");
-    }
-
-    let mut peer_address_arr: [u16; 8] = [0xFFFF; 8];
-    for i in (0..8).rev() {
-        peer_address_arr[i] = pointer.read_u16::<BigEndian>()?;
-    }
-    let peer_address = Ipv6Addr::new(
-        peer_address_arr[7],
-        peer_address_arr[6],
-        peer_address_arr[5],
-        peer_address_arr[4],
-        peer_address_arr[3],
-        peer_address_arr[2],
-        peer_address_arr[1],
-        peer_address_arr[0],
-    );
-
-    if peer_address.is_unspecified() || peer_address.is_loopback() || peer_address.is_multicast() {
-        trace!(
-            "Recieved a valid ImHere with an invalid ip address: {:?}",
-            peer_address,
-        );
-        error!("Invalid IP in ImHere");
-    }
-
-    trace!("ImHere decoding completed successfully {:?}", peer_address);
-    Ok(peer_address)
-}
-
 fn send_im_here(interfaces: &mut HashMap<String, ListenInterface>) -> Result<(), Error> {
     trace!("About to send ImHere");
     for obj in interfaces.iter_mut() {
@@ -332,12 +248,11 @@ fn send_im_here(interfaces: &mut HashMap<String, ListenInterface>) -> Result<(),
             listen_interface.ifname,
             listen_interface.linklocal_ip
         );
-
-        let result = listen_interface.linklocal_socket.send_to(
-            &encode_im_here(listen_interface.linklocal_ip.clone()),
-            listen_interface.multicast_socketaddr,
-        );
-        trace!("Sending ImHere to multicast gets {:?}", result);
+        let message = PeerMessage::ImHere(listen_interface.linklocal_ip.clone());
+        let result = listen_interface
+            .linklocal_socket
+            .send_to(&message.encode(), listen_interface.multicast_socketaddr);
+        trace!("Sending ImHere to broadcast gets {:?}", result);
     }
     Ok(())
 }
@@ -353,18 +268,28 @@ fn receive_im_here(
         // this buffer is kept intentionally small to discard larger packets earlier rather than later
         loop {
             let mut datagram: [u8; 100] = [0; 100];
-            let _bytes_read = match listen_interface.multicast_socket.recv_from(&mut datagram) {
-                Ok(d) => d,
+            let (bytes_read, sock_addr) = match listen_interface
+                .multicast_socket
+                .recv_from(&mut datagram)
+            {
+                Ok(b) => b,
                 Err(e) => {
-                    trace!("Out of data on socket wtih message: {:?}", e);
+                    trace!("Could not recv ImHere: {:?}", e);
+                    // TODO Consider we might want to remove interfaces that produce specific types
+                    // of errors from the active list
                     break;
                 }
             };
+            trace!(
+                "Received {} bytes on multicast socket from {:?}",
+                bytes_read,
+                sock_addr
+            );
 
-            let ipaddr = match decode_im_here(&mut datagram.to_vec()) {
-                Ok(ip) => ip,
+            let ipaddr = match PeerMessage::decode(&datagram.to_vec()) {
+                Ok(PeerMessage::ImHere(ipaddr)) => ipaddr,
                 Err(e) => {
-                    trace!("ImHere decode failed with: {:?}", e);
+                    warn!("ImHere decode failed: {:?}", e);
                     continue;
                 }
             };
