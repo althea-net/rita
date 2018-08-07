@@ -156,9 +156,7 @@ fn test_encode_im_here() {
     let data = PeerMessage::ImHere(Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0xc00a, 0x2ff)).encode();
     assert_eq!(
         data,
-        vec![
-            91, 109, 65, 88, 0, 22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 192, 10, 2, 255,
-        ]
+        vec![91, 109, 65, 88, 0, 22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 192, 10, 2, 255,]
     );
 }
 
