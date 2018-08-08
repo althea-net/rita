@@ -686,14 +686,16 @@ class World:
                 + "netlab-{} curl -sfg6 [::1]:4877/neighbors".format(node.id)),
                 stdout=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /neighbors")
+            stdout = result.stdout.read().decode('utf-8')
             try:
                 print("Received neighbors:")
                 if VERBOSE:
-                    neighbors = json.loads(result.stdout.read().decode('utf-8'))
+                    neighbors = json.loads(stdout)
                     pprint(neighbors)
                 else:
-                    print(result.stdout.read().decode('utf-8'))
-            except json.JSONDecodeError as e:
+                    print(stdout)
+            except ValueError as e:
+                print('Unable to decode JSON {!r}: {}'.format(stdout, e))
                 assert_test(False, "Decoding the neighbors JSON")
 
             # /exits
@@ -704,14 +706,16 @@ class World:
                 + "netlab-{} curl -sfg6 [::1]:4877/exits".format(node.id)),
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /exits")
+            stdout = result.stdout.read().decode('utf-8')
             try:
                 print("Received exits:")
                 if VERBOSE:
-                    exits = json.loads(result.stdout.read().decode('utf-8'))
+                    exits = json.loads(stdout)
                     pprint(exits)
                 else:
-                    print(result.stdout.read().decode('utf-8'))
-            except json.JSONDecodeError as e:
+                    print(stdout)
+            except ValueError as e:
+                print('Unable to decode JSON {!r}: {}'.format(stdout, e))
                 assert_test(False, "Decoding the exits JSON")
 
             # /info
@@ -722,14 +726,16 @@ class World:
                 + "netlab-{} curl -sfg6 [::1]:4877/info".format(node.id)),
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /info")
+            stdout = result.stdout.read().decode('utf-8')
             try:
                 print("Received info:")
                 if VERBOSE:
-                    info = json.loads(result.stdout.read().decode('utf-8'))
+                    info = json.loads(stdout)
                     pprint(info)
                 else:
-                    print(result.stdout.read().decode('utf-8'))
-            except json.JSONDecodeError as e:
+                    print(stdout)
+            except ValueError as e:
+                print('Unable to decode JSON {!r}: {}'.format(stdout, e))
                 assert_test(False, "Decoding the info JSON")
 
             # /settings
@@ -740,14 +746,16 @@ class World:
                 + "netlab-{} curl -sfg6 [::1]:4877/settings".format(node.id)),
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /settings")
+            stdout = result.stdout.read().decode('utf-8')
             try:
                 print("Received settings:")
                 if VERBOSE:
-                    settings = json.loads(result.stdout.read().decode('utf-8'))
+                    settings = json.loads(stdout)
                     pprint(settings)
                 else:
-                    print(result.stdout.read().decode('utf-8'))
-            except json.JSONDecodeError as e:
+                    print(stdout)
+            except ValueError as e:
+                print('Unable to decode JSON {!r}: {}'.format(stdout, e))
                 assert_test(False, "Decoding the settings JSON")
 
 
