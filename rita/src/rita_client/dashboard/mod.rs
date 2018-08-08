@@ -349,55 +349,6 @@ impl Handler<GetExitInfo> for Dashboard {
 }
 
 #[derive(Debug)]
-pub struct ResetExit(String);
-
-impl Message for ResetExit {
-    type Result = Result<(), Error>;
-}
-
-impl Handler<ResetExit> for Dashboard {
-    type Result = Result<(), Error>;
-    fn handle(&mut self, msg: ResetExit, _ctx: &mut Self::Context) -> Self::Result {
-        let mut exits = SETTING.get_exits_mut();
-
-        if let Some(exit) = exits.get_mut(&msg.0) {
-            info!("Changing exit {:?} state to New", msg.0);
-            exit.info = ExitState::New;
-        } else {
-            error!("Requested a reset on an unknown exit {:?}", msg.0);
-            bail!("Requested a reset on an unknown exit {:?}", msg.0);
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
-pub struct SelectExit(String);
-
-impl Message for SelectExit {
-    type Result = Result<(), Error>;
-}
-
-impl Handler<SelectExit> for Dashboard {
-    type Result = Result<(), Error>;
-    fn handle(&mut self, msg: SelectExit, _ctx: &mut Self::Context) -> Self::Result {
-        debug!("Attempting to select exit {:?}", msg.0);
-
-        let mut exit_client = SETTING.get_exit_client_mut();
-
-        if exit_client.exits.contains_key(&msg.0) {
-            info!("Selecting exit {:?}", msg.0);
-            exit_client.current_exit = Some(msg.0);
-        } else {
-            error!("Requested selection of an unknown exit {:?}", msg.0);
-            bail!("Requested selection of an unknown exit {:?}", msg.0);
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
 pub struct SetWiFiSSID(WifiSSID);
 
 impl Message for SetWiFiSSID {

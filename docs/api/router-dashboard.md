@@ -105,8 +105,6 @@ This file documents the dashboard API found in Rita client.
 
 `curl 127.0.0.1:4877/exits`
 
-
-
 ## /exits/{nickname}/reset
 
 - URL: `<rita ip>:<rita_dashboard_port>/exits/{nickname}/reset'
@@ -116,11 +114,17 @@ This file documents the dashboard API found in Rita client.
 - Data Params: `None`
 - Success Response:
   - Code: 200 OK
-  - Contents: `null`
-- Error Response: `500 Server Error`
+  - Contents: `{}`
+- Error Response: `400 Bad Request`
+- Error Contents:
+```json
+{
+    "error": "<description>",
+}
+```
 - Sample Call:
 
-`curl 127.0.0.1:4877/exits/borked/reset`
+`curl -XPOST 127.0.0.1:4877/exits/borked/reset`
 
 ## /exits/{nickname}/select
 
@@ -131,11 +135,64 @@ This file documents the dashboard API found in Rita client.
 - Data Params: `None`
 - Success Response:
   - Code: 200 OK
-  - Contents: `null`
-- Error Response: `500 Server Error`
+  - Contents: `{}`
+- Error Response: `400 Bad Request`
+- Error Contents:
+```json
+{
+    "error": "<description>",
+}
+```
 - Sample Call:
 
-`curl 127.0.0.1:4877/exits/borked/reset`
+`curl -XPOST 127.0.0.1:4877/exits/borked/reset`
+
+## /exits/{nickname}/register
+
+- URL: `<rita ip>:<rita_dashboard_port>/exits/{nickname}/register'
+- Comment: Asks exit `{nickname}` to be registered
+- Method: `POST`
+- URL Params: `nickname`, string
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `{}`
+- Error Response: `400 Bad Request`
+- Error Contents:
+```json
+{
+    "error": "<description>",
+    "rust_error": "<stringified_rust_error>"
+}
+```
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:4877/exits/borked/register`
+
+## /exits/{nickname}/verify/{code}
+
+- URL: `<rita ip>:<rita_dashboard_port>/exits/{nickname}/verify/{code}'
+- Comment: After registering and receiving a verification code, asks exit
+  `{nickname}` for verification using `{code}`
+- Method: `POST`
+- URL Params:
+    - `nickname`, string
+    - `code`, string
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `{}`
+- Error Response: `400 Bad Request`
+- Error Contents:
+```json
+{
+    "error": "<description>",
+    "rust_error": "<stringified_rust_error>"
+}
+```
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:4877/exits/borked/register`
 
 ## /settings
 
