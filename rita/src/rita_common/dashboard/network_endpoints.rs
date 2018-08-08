@@ -13,7 +13,7 @@ use settings::RitaCommonSettings;
 use SETTING;
 
 use super::{Dashboard, GetOwnInfo, OwnInfo};
-
+use actix_web::{error, fs, http, HttpResponse};
 use rita_common::network_endpoints::JsonStatusResponse;
 
 pub fn get_own_info(_req: HttpRequest) -> Box<Future<Item = Json<OwnInfo>, Error = Error>> {
@@ -37,4 +37,13 @@ pub fn set_settings(
     SETTING.merge(new_settings.into_inner())?;
 
     JsonStatusResponse::new(Ok("New settings applied".to_string()))
+}
+
+pub fn wipe(_req: HttpRequest) -> impl Responder {
+    if cfg!(not(debug_assertions)) {
+        return HttpResponse::new(http::StatusCode::NOT_FOUND);
+    }
+
+    // TODO: Implement wiping logic
+    HttpResponse::new(http::StatusCode::NO_CONTENT)
 }

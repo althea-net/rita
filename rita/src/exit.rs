@@ -228,6 +228,7 @@ fn main() {
             .route("/settings", Method::GET, get_settings)
             .route("/settings", Method::POST, set_settings)
             .route("/version", Method::GET, version)
+            .route("/wipe", Method::POST, wipe)
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_network().rita_dashboard_port
