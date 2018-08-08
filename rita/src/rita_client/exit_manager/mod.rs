@@ -11,6 +11,7 @@ use SETTING;
 use rita_client::rita_loop::Tick;
 use rita_client::traffic_watcher::{TrafficWatcher, Watch};
 
+use futures::future;
 use futures::future::join_all;
 use futures::Future;
 
@@ -146,9 +147,15 @@ fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = 
     })
 }
 
-fn exit_setup_request(exit: String, code: Option<String>) -> impl Future<Item = (), Error = Error> {
+pub fn exit_setup_request(
+    exit: String,
+    code: Option<String>,
+) -> Box<Future<Item = (), Error = Error>> {
     let exits = SETTING.get_exits();
-    let current_exit = &exits[&exit];
+    let current_exit = match exits.get(&exit) {
+        Some(exit_struct) => exit_struct,
+        None => return Box::new(future::err(format_err!("Could not find exit {:?}", exit))),
+    };
     let exit_server = current_exit.id.mesh_ip;
     let mut reg_details = SETTING.get_exit_client().reg_details.clone().unwrap();
     reg_details.email_code = code;
@@ -163,19 +170,24 @@ fn exit_setup_request(exit: String, code: Option<String>) -> impl Future<Item = 
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
 
-    send_exit_setup_request(&endpoint, ident)
-        .from_err()
-        .and_then(move |exit_response| {
-            let mut exits = SETTING.get_exits_mut();
+    Box::new(
+        send_exit_setup_request(&endpoint, ident)
+            .from_err()
+            .and_then(move |exit_response| {
+                let mut exits = SETTING.get_exits_mut();
 
-            let current_exit = exits.get_mut(&exit).unwrap();
+                let current_exit = match exits.get_mut(&exit) {
+                    Some(exit_struct) => exit_struct,
+                    None => bail!("Could not find exit {:?}", exit),
+                };
 
-            current_exit.info = exit_response.clone();
+                current_exit.info = exit_response.clone();
 
-            trace!("Got exit setup response {:?}", exit_response.clone());
+                trace!("Got exit setup response {:?}", exit_response.clone());
 
-            Ok(())
-        })
+                Ok(())
+            }),
+    )
 }
 
 fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
@@ -272,43 +284,6 @@ impl Handler<Tick> for ExitManager {
                         },
                     )));
                 }
-                ExitState::Registering { .. }
-                | ExitState::GotInfo {
-                    auto_register: true,
-                    ..
-                } => {
-                    futs.push(Box::new(exit_setup_request(k.clone(), None).then(
-                        move |res| {
-                            match res {
-                                Ok(_) => {
-                                    info!("exit setup request (no code) to {} was successful", k);
-                                }
-                                Err(e) => {
-                                    info!("exit setup request to {} failed with {:?}", k, e);
-                                }
-                            };
-                            Ok(())
-                        },
-                    )));
-                }
-                ExitState::Pending {
-                    email_code: Some(email_code),
-                    ..
-                } => {
-                    futs.push(Box::new(
-                        exit_setup_request(k.clone(), Some(email_code.clone())).then(move |res| {
-                            match res {
-                                Ok(_) => {
-                                    info!("exit setup request (with code) to {} was successful", k);
-                                }
-                                Err(e) => {
-                                    info!("exit setup request to {} failed with {:?}", k, e);
-                                }
-                            };
-                            Ok(())
-                        }),
-                    ));
-                }
                 ExitState::Registered { .. } => {
                     futs.push(Box::new(exit_status_request(k.clone()).then(move |res| {
                         match res {
@@ -322,8 +297,8 @@ impl Handler<Tick> for ExitManager {
                         Ok(())
                     })));
                 }
-                _ => {
-                    info!("waiting on one time code for {}", k);
+                state => {
+                    info!("Waiting on exit state {:?} for {}", state, k);
                 }
             }
         }

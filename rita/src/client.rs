@@ -211,7 +211,12 @@ fn main() {
             .route("/wifi_settings/ssid", Method::POST, set_wifi_ssid)
             .route("/wifi_settings/pass", Method::POST, set_wifi_pass)
             .route("/wifi_settings/mesh", Method::POST, set_wifi_mesh)
-            .route("/info", Method::GET, get_own_info)
+            .route("/exits/{name}/register", Method::POST, register_to_exit)
+            .route(
+                "/exits/{name}/verify/{code}",
+                Method::POST,
+                verify_on_exit_with_code,
+            ).route("/info", Method::GET, get_own_info)
             .route("/version", Method::GET, version)
     }).workers(1)
     .bind(format!(
