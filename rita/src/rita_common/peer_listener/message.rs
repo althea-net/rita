@@ -67,7 +67,7 @@ impl PeerMessage {
     /**
      * Encode an ImHere message
      * Message format is very simple
-     * Magic <u8>, Size <u16>, Ipaddr <u128>
+     * Magic <u8>, Size <u16>, Ipaddr &[u16; 8]
      */
     pub fn encode(&self) -> Vec<u8> {
         let mut buf = Vec::new();
@@ -88,7 +88,7 @@ impl PeerMessage {
     /**
      * Decode buffer of data into a ImHere message
      * Message format is very simple
-     * Magic <u8>, Size <u16>, Ipaddr <u128>
+     * Magic <u8>, Size <u16>, Ipaddr &[u16; 8]
      */
     pub fn decode(buf: &Vec<u8>) -> Result<PeerMessage, MessageError> {
         trace!("Starting ImHere packet decode!");
@@ -141,10 +141,7 @@ impl PeerMessage {
                 Ok(PeerMessage::ImHere(peer_address))
             }
             _ => {
-                trace!(
-                    "Recieved an ImHere packet with an invalid magic: {:X?}",
-                    packet_magic
-                );
+                trace!("Recieved packet with an unknown magic: {:X?}", packet_magic);
                 return Err(MessageError::InvalidMagic);
             }
         }
@@ -156,9 +153,7 @@ fn test_encode_im_here() {
     let data = PeerMessage::ImHere(Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0xc00a, 0x2ff)).encode();
     assert_eq!(
         data,
-        vec![
-            91, 0, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 192, 10, 2, 255,
-        ]
+        vec![91, 0, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 192, 10, 2, 255,]
     );
 }
 

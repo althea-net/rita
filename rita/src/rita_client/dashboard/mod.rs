@@ -465,7 +465,7 @@ impl Handler<SetWiFiMesh> for Dashboard {
         let section_name = format!("default_{}", iface_name);
 
         if mesh {
-            TunnelManager::from_registry().do_send(Listen(iface_name.clone()));
+            PeerListener::from_registry().do_send(Listen(iface_name.clone()));
             KI.set_uci_var(&format!("wireless.{}.ssid", section_name), "AltheaMesh")?;
             KI.set_uci_var(&format!("wireless.{}.encryption", section_name), "none")?;
             KI.set_uci_var(&format!("wireless.{}.mode", section_name), "adhoc")?;
@@ -474,7 +474,7 @@ impl Handler<SetWiFiMesh> for Dashboard {
             KI.set_uci_var(&format!("network.{}.ifname", wlan_name), &wlan_name)?;
             KI.set_uci_var(&format!("network.{}.proto", wlan_name), "static")?;
         } else {
-            TunnelManager::from_registry().do_send(UnListen(iface_name));
+            PeerListener::from_registry().do_send(UnListen(iface_name));
             KI.set_uci_var(&format!("wireless.{}.ssid", section_name), "AltheaHome")?;
             KI.set_uci_var(&format!("wireless.{}.key", section_name), "ChangeMe")?;
             KI.set_uci_var(&format!("wireless.{}.mode", section_name), "ap")?;
