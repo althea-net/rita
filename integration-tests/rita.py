@@ -162,7 +162,7 @@ class Node:
             interfaces.append("veth-{}-{}".format(self.id, i))
         return interfaces
 
-    def has_route(self, dest, price, next_hop, backlog=5000, verbose=False):
+    def has_route(self, dest, price, next_hop, backlog=10000, verbose=False):
         """
         This function takes :data:`self` and returns ``True`` if a specified
         route is installed in the last :data:`backlog` characters of the node's

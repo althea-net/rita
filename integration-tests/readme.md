@@ -12,7 +12,7 @@ Network lab needs to be installed using `bpkg`.
 Example:
 ```
 # use this or whatever package manager is available on your platform
-sudo apt-get install -y libsqlite3-dev iperf3 python3-pip bridge-utils wireguard linux-source linux-headers-$(uname -r) curl git libssl-dev pkg-config build-essential ipset
+sudo apt-get install -y libsqlite3-dev iperf3 python3-pip bridge-utils wireguard linux-source linux-headers-$(uname -r) curl git libssl-dev pkg-config build-essential ipset jq
 
 cargo install diesel_cli --no-default-features --features sqlite
 bpkg install sudomesh/network-lab
