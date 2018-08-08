@@ -17,12 +17,17 @@ set -euxo pipefail
 
 cd $(dirname $0) # Make the script runnable from anywhere
 
+# Loads module if not loaded and available, does nothing if already loaded and fails if not available
+sudo modprobe wireguard
+
+
 build_rev() {
   remote=$1
   revision=$2
   dir=$3
   target_dir=$4
 
+  git show
   mkdir -p $target_dir
 
   if [ -z "${NO_PULL-}" ] ; then
