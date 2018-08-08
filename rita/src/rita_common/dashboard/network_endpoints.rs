@@ -54,9 +54,12 @@ pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {
 pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {
     // Clean up existing WG interfaces
     match cleanup() {
-        Ok(_) => trace!("wipe: Cleanup success!"),
+        Ok(_) => trace!("wipe: WireGuard interfaces cleanup success!"),
         Err(e) => {
-            warn!("wipe: Unable to complete cleanup: {:?}", e);
+            warn!(
+                "wipe: Unable to complete WireGuard interfaces cleanup: {:?}",
+                e
+            );
             return Err(e);
         }
     }
