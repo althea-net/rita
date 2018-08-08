@@ -33,7 +33,7 @@ pub enum CluError {
     RuntimeError(String),
 }
 
-fn linux_generate_wg_keys(config: &mut NetworkSettings) -> Result<(), Error> {
+pub fn linux_generate_wg_keys(config: &mut NetworkSettings) -> Result<(), Error> {
     let keys = KI.create_wg_keypair()?;
     let wg_public_key = &keys[0];
     let wg_private_key = &keys[1];
@@ -45,7 +45,7 @@ fn linux_generate_wg_keys(config: &mut NetworkSettings) -> Result<(), Error> {
     Ok(())
 }
 
-fn linux_generate_mesh_ip(config: &mut NetworkSettings) -> Result<(), Error> {
+pub fn linux_generate_mesh_ip(config: &mut NetworkSettings) -> Result<(), Error> {
     let seed: String = thread_rng().gen_ascii_chars().take(50).collect();
     let mesh_ip = ipgen::ip(&seed, "fd00::/8").unwrap();
 
