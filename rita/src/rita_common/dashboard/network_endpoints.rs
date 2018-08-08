@@ -54,35 +54,35 @@ pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {
 pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {
     // Clean up existing WG interfaces
     match cleanup() {
-        Ok(_) => trace!("Cleanup success!"),
+        Ok(_) => trace!("wipe: Cleanup success!"),
         Err(e) => {
-            warn!("Unable to complete cleanup: {:?}", e);
+            warn!("wipe: Unable to complete cleanup: {:?}", e);
             return Err(e);
         }
     }
 
     // Restore default route
     match KI.restore_default_route(&mut SETTING.get_network_mut().default_route) {
-        Ok(_) => trace!("Restore default route success!"),
+        Ok(_) => trace!("wipe: Restore default route success!"),
         Err(e) => {
-            warn!("Unable to restore default route: {:?}", e);
+            warn!("wipe: Unable to restore default route: {:?}", e);
             return Err(e);
         }
     }
 
     // Create new WireGuard keys
     match linux_generate_wg_keys(&mut SETTING.get_network_mut()) {
-        Ok(_) => trace!("Generated new WireGuard keys"),
+        Ok(_) => trace!("wipe: Generated new WireGuard keys"),
         Err(e) => {
-            warn!("Unable to generate new WireGuard keys: {:?}", e);
+            warn!("wipe: Unable to generate new WireGuard keys: {:?}", e);
             return Err(e);
         }
     }
     // Generate new mesh IP
     match linux_generate_mesh_ip(&mut SETTING.get_network_mut()) {
-        Ok(_) => trace!("Generated new mesh IP"),
+        Ok(_) => trace!("wipe: Generated new mesh IP"),
         Err(e) => {
-            warn!("Unable to generate new mesh IP: {:?}", e);
+            warn!("wipe: Unable to generate new mesh IP: {:?}", e);
             return Err(e);
         }
     }
@@ -92,9 +92,9 @@ pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {
         &Path::new(&SETTING.get_network().wg_private_key_path),
         &SETTING.get_network().wg_private_key,
     ) {
-        Ok(_) => trace!("Generated new WireGuard keys"),
+        Ok(_) => trace!("wipe: Generated new WireGuard keys"),
         Err(e) => {
-            warn!("Unable to generate new WireGuard keys: {:?}", e);
+            warn!("wipe: Unable to generate new WireGuard keys: {:?}", e);
             return Err(e);
         }
     }
