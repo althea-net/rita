@@ -222,6 +222,7 @@ fn main() {
                 verify_on_exit_with_code,
             ).route("/info", Method::GET, get_own_info)
             .route("/version", Method::GET, version)
+            .route("/wipe", Method::POST, wipe)
     }).workers(1)
     .bind(format!(
         "[::0]:{}",
