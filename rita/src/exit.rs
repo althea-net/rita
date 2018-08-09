@@ -42,6 +42,7 @@ extern crate ipnetwork;
 extern crate lettre;
 extern crate lettre_email;
 extern crate minihttpse;
+extern crate openssl_probe;
 extern crate rand;
 extern crate regex;
 extern crate reqwest;
@@ -81,7 +82,6 @@ use std::sync::{Arc, RwLock};
 #[cfg(test)]
 use std::sync::Mutex;
 
-extern crate openssl_probe;
 #[derive(Debug, Deserialize)]
 struct Args {
     flag_config: String,

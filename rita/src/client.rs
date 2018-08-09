@@ -38,6 +38,7 @@ extern crate ipnetwork;
 extern crate lettre;
 extern crate lettre_email;
 extern crate minihttpse;
+extern crate openssl_probe;
 extern crate rand;
 extern crate regex;
 extern crate reqwest;
@@ -78,8 +79,6 @@ mod rita_common;
 use rita_client::dashboard::network_endpoints::*;
 use rita_common::dashboard::network_endpoints::*;
 use rita_common::network_endpoints::*;
-
-extern crate openssl_probe;
 
 #[derive(Debug, Deserialize)]
 struct Args {
