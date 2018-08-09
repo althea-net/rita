@@ -13,7 +13,8 @@ use babel_monitor::Babel;
 use num256::Int256;
 use rita_common::dashboard::Dashboard;
 use rita_common::debt_keeper::{DebtKeeper, Dump};
-use rita_common::tunnel_manager::{Listen, TunnelManager, UnListen};
+use rita_common::peer_listener::PeerListener;
+use rita_common::peer_listener::{Listen, UnListen};
 use settings::ExitServer;
 use settings::RitaClientSettings;
 use settings::RitaCommonSettings;
@@ -143,23 +144,23 @@ impl Handler<SetWifiConfig> for Dashboard {
             let iface_number = i.section_name.clone().chars().last();
 
             if i.mesh && iface_number.is_some() {
-                let iface_name = format!("rita_wlan{}", iface_number.unwrap());
+                let iface_name = format!("wlan{}", iface_number.unwrap());
 
-                TunnelManager::from_registry().do_send(Listen(iface_name.clone()));
+                PeerListener::from_registry().do_send(Listen(iface_name.clone()));
                 KI.set_uci_var(&format!("wireless.{}.ssid", i.section_name), "AltheaMesh")?;
                 KI.set_uci_var(&format!("wireless.{}.encryption", i.section_name), "none")?;
                 KI.set_uci_var(&format!("wireless.{}.mode", i.section_name), "adhoc")?;
                 KI.set_uci_var(&format!("wireless.{}.network", i.section_name), &iface_name)?;
-                KI.set_uci_var(&format!("network.{}", iface_name.clone()), "interface")?;
+                KI.set_uci_var(&format!("network.rita_{}", iface_name.clone()), "interface")?;
                 KI.set_uci_var(
                     &format!("network.{}.ifname", iface_name.clone()),
                     &iface_name,
                 )?;
                 KI.set_uci_var(&format!("network.{}.proto", iface_name.clone()), "static")?;
             } else if iface_number.is_some() {
-                let iface_name = format!("rita_wlan{:?}", iface_number);
+                let iface_name = format!("wlan{}", iface_number.unwrap());
 
-                TunnelManager::from_registry().do_send(UnListen(iface_name));
+                PeerListener::from_registry().do_send(UnListen(iface_name));
                 KI.set_uci_var(&format!("wireless.{}.ssid", i.section_name), &i.ssid)?;
                 KI.set_uci_var(&format!("wireless.{}.key", i.section_name), &i.key)?;
                 KI.set_uci_var(&format!("wireless.{}.mode", i.section_name), "ap")?;
@@ -464,7 +465,7 @@ impl Handler<SetWiFiMesh> for Dashboard {
         let section_name = format!("default_{}", iface_name);
 
         if mesh {
-            TunnelManager::from_registry().do_send(Listen(iface_name.clone()));
+            PeerListener::from_registry().do_send(Listen(iface_name.clone()));
             KI.set_uci_var(&format!("wireless.{}.ssid", section_name), "AltheaMesh")?;
             KI.set_uci_var(&format!("wireless.{}.encryption", section_name), "none")?;
             KI.set_uci_var(&format!("wireless.{}.mode", section_name), "adhoc")?;
@@ -473,7 +474,7 @@ impl Handler<SetWiFiMesh> for Dashboard {
             KI.set_uci_var(&format!("network.{}.ifname", wlan_name), &wlan_name)?;
             KI.set_uci_var(&format!("network.{}.proto", wlan_name), "static")?;
         } else {
-            TunnelManager::from_registry().do_send(UnListen(iface_name));
+            PeerListener::from_registry().do_send(UnListen(iface_name));
             KI.set_uci_var(&format!("wireless.{}.ssid", section_name), "AltheaHome")?;
             KI.set_uci_var(&format!("wireless.{}.key", section_name), "ChangeMe")?;
             KI.set_uci_var(&format!("wireless.{}.mode", section_name), "ap")?;

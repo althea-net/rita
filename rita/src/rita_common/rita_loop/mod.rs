@@ -16,14 +16,21 @@ use rita_common::tunnel_manager::{GetNeighbors, TunnelManager};
 
 use rita_common::traffic_watcher::{TrafficWatcher, Watch};
 
+use rita_common::peer_listener::PeerListener;
+
 use rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 
 use rita_common::payment_controller::{PaymentController, PaymentControllerUpdate};
 
 use rita_common::stats_collector::StatsCollector;
 
+use rita_common::peer_listener::GetPeers;
+
+use rita_common::tunnel_manager::PeersToContact;
+
 use failure::Error;
-use rita_common::tunnel_manager::OpenTunnel;
+
+use futures::Future;
 
 use settings::RitaCommonSettings;
 use SETTING;
@@ -98,20 +105,17 @@ impl Handler<Tick> for RitaLoop {
                 .send(GetNeighbors)
                 .into_actor(self)
                 .then(move |res, act, _ctx| {
+                    // TODO refactor to use an struct instead of a tuple
+                    // Vec<(LocalIdentity, Iface Name, IpAddr)>
                     let res = res.unwrap().unwrap();
 
-                    info!("got neighbors: {:?}", res);
+                    info!("Currently open tunnels: {:?}", res);
 
                     let neigh = Instant::now();
 
-                    for &(ref their_id, _, ref ip) in &res {
-                        TunnelManager::from_registry()
-                            .do_send(OpenTunnel(their_id.clone(), ip.clone()));
-                    }
-
                     let res = res
                         .iter()
-                        .map(|input| (input.0.clone(), input.1.clone()))
+                        .map(|res| (res.0.clone(), res.1.clone()))
                         .collect();
 
                     TrafficWatcher::from_registry()
@@ -119,13 +123,35 @@ impl Handler<Tick> for RitaLoop {
                         .into_actor(act)
                         .then(move |_res, _act, _ctx| {
                             info!("loop completed in {:?}", start.elapsed());
-                            info!("traffic watcher completed in {:?}", neigh.elapsed());
+                            info!("TrafficWatcher completed in {:?}", neigh.elapsed());
                             DebtKeeper::from_registry().do_send(SendUpdate {});
                             PaymentController::from_registry().do_send(PaymentControllerUpdate {});
                             actix::fut::ok(())
                         })
                 }),
         );
+
+        trace!("Starting PeerListener tick");
+        Arbiter::spawn(
+            PeerListener::from_registry()
+                .send(Tick {})
+                .then(|res| {
+                    trace!("PeerListener said after tick: {:?}", res);
+                    res
+                }).then(|_| Ok(())),
+        );
+
+        trace!("Getting Peers from PeerListener to pass to TunnelManager");
+        Arbiter::spawn(
+            PeerListener::from_registry()
+                .send(GetPeers {})
+                .and_then(|peers| {
+                    trace!("Got peers structs from PeerListener, passing to TunnelManager");
+                    TunnelManager::from_registry().send(PeersToContact(peers.unwrap())) // GetPeers never fails so unwrap is safe
+                })
+                .then(|_| Ok(())),
+        );
+
         Ok(())
     }
 }

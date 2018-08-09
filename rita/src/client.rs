@@ -23,10 +23,10 @@ extern crate lazy_static;
 extern crate log;
 #[macro_use]
 extern crate serde_derive;
-extern crate serde_json;
 
 extern crate actix;
 extern crate actix_web;
+extern crate byteorder;
 extern crate bytes;
 extern crate clu;
 extern crate docopt;
@@ -42,9 +42,11 @@ extern crate rand;
 extern crate regex;
 extern crate reqwest;
 extern crate serde;
+extern crate serde_json;
 extern crate settings;
 extern crate tokio;
-extern crate tokio_core;
+extern crate tokio_codec;
+extern crate tokio_io;
 extern crate trust_dns_resolver;
 
 use docopt::Docopt;
@@ -174,6 +176,7 @@ fn main() {
     assert!(rita_common::tunnel_manager::TunnelManager::from_registry().connected());
     assert!(rita_common::http_client::HTTPClient::from_registry().connected());
     assert!(rita_common::traffic_watcher::TrafficWatcher::from_registry().connected());
+    assert!(rita_common::peer_listener::PeerListener::from_registry().connected());
     assert!(rita_client::exit_manager::ExitManager::from_registry().connected());
 
     // rita

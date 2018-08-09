@@ -17,7 +17,7 @@ pub struct ExitClient {
 impl KernelInterface {
     pub fn set_exit_wg_config(
         &self,
-        clients: Vec<(ExitClient)>,
+        clients: Vec<ExitClient>,
         listen_port: u16,
         private_key_path: &str,
         local_ip: &IpAddr,

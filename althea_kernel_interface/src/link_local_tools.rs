@@ -1,6 +1,6 @@
 use super::{KernelInterface, KernelInterfaceError};
 
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv6Addr};
 
 use regex::Regex;
 
@@ -8,7 +8,7 @@ use failure::Error;
 
 impl KernelInterface {
     /// This gets our link local ip for a given device
-    pub fn get_link_local_device_ip(&self, dev: &str) -> Result<IpAddr, Error> {
+    pub fn get_link_local_device_ip(&self, dev: &str) -> Result<Ipv6Addr, Error> {
         let output = self.run_command("ip", &["addr", "show", "dev", dev, "scope", "link"])?;
         trace!("Got {:?} from `ip addr`", output);
 
@@ -17,7 +17,7 @@ impl KernelInterface {
         let cap = re.captures(&str);
         if let Some(cap) = cap {
             trace!("got link local IP of {} from device {}", &cap[1], &dev);
-            Ok(cap[1].parse()?)
+            Ok(cap[1].parse::<Ipv6Addr>()?)
         } else {
             Err(KernelInterfaceError::RuntimeError(
                 "No link local addresses found or no interface found".to_string(),
@@ -26,7 +26,7 @@ impl KernelInterface {
     }
 
     /// This gets our global ip for a given device
-    pub fn get_global_device_ip(&self, dev: &str) -> Result<IpAddr, Error> {
+    pub fn get_global_device_ip(&self, dev: &str) -> Result<Ipv6Addr, Error> {
         let output = self.run_command("ip", &["addr", "show", "dev", dev, "scope", "global"])?;
         trace!("Got {:?} from `ip addr`", output);
 
@@ -35,7 +35,7 @@ impl KernelInterface {
         let cap = re.captures(&str);
         if let Some(cap) = cap {
             trace!("got global IP of {} from device {}", &cap[1], &dev);
-            Ok(cap[1].parse()?)
+            Ok(cap[1].parse::<Ipv6Addr>()?)
         } else {
             Err(KernelInterfaceError::RuntimeError(
                 "No global found or no interface found".to_string(),
@@ -59,9 +59,9 @@ impl KernelInterface {
     /// This gets our link local ip that can be reached by another node with link local ip
     pub fn get_reply_ip(
         &self,
-        their_ip: IpAddr,
+        their_ip: Ipv6Addr,
         external_interface: Option<String>,
-    ) -> Result<IpAddr, Error> {
+    ) -> Result<Ipv6Addr, Error> {
         let neigh = self.get_neighbors()?;
 
         trace!("Looking for {:?} in {:?} for reply ip", their_ip, neigh);
