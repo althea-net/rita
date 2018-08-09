@@ -47,7 +47,7 @@ pub fn set_settings(
 #[cfg(not(debug_assertions))]
 pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {
     // This is returned on production builds.
-    Ok(HttpResponse::NotFound().finish());
+    Ok(HttpResponse::NotFound().finish())
 }
 
 #[cfg(debug_assertions)]
