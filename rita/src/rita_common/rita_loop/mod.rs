@@ -4,9 +4,6 @@ use actix::prelude::*;
 use actix::registry::SystemService;
 use actix_utils::KillActor;
 
-#[cfg(not(test))]
-use trust_dns_resolver::config::ResolverConfig;
-
 use actix_utils::ResolverWrapper;
 
 #[cfg(not(test))]
@@ -86,14 +83,16 @@ impl Handler<Tick> for RitaLoop {
 
                 self.was_gateway = true
             }
-            trace!("Adding default routes for TrustDNS");
-            #[cfg(not(test))]
-            for i in ResolverConfig::default().name_servers() {
-                trace!("TrustDNS default {:?}", i);
-                KI.manual_peers_route(
-                    &i.socket_addr.ip(),
-                    &mut SETTING.get_network_mut().default_route,
-                ).unwrap();
+
+            match KI.get_resolv_servers() {
+                Ok(s) => {
+                    for ip in s.iter() {
+                        trace!("Resolv route {:?}", ip);
+                        KI.manual_peers_route(&ip, &mut SETTING.get_network_mut().default_route)
+                            .unwrap();
+                    }
+                }
+                Err(e) => warn!("Failed to add DNS routes with {:?}", e),
             }
         } else {
             self.was_gateway = false
