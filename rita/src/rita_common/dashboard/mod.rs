@@ -46,11 +46,12 @@ impl Handler<GetOwnInfo> for Dashboard {
             PaymentController::from_registry()
                 .send(GetOwnBalance {})
                 .from_err()
-                .and_then(|res| {
-                    Ok(OwnInfo {
-                        balance: res?,
+                .and_then(|own_balance| match own_balance {
+                    Ok(balance) => Ok(OwnInfo {
+                        balance: balance,
                         version: env!("CARGO_PKG_VERSION").to_string(),
-                    })
+                    }),
+                    Err(e) => Err(e),
                 }),
         )
     }
