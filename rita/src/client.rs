@@ -79,6 +79,8 @@ use rita_client::dashboard::network_endpoints::*;
 use rita_common::dashboard::network_endpoints::*;
 use rita_common::network_endpoints::*;
 
+extern crate openssl_probe;
+
 #[derive(Debug, Deserialize)]
 struct Args {
     flag_config: String,
@@ -150,6 +152,9 @@ lazy_static! {
 }
 
 fn main() {
+    // On Linux static builds we need to probe ssl certs path to be able to
+    // do TLS stuff.
+    openssl_probe::init_ssl_cert_env_vars();
     env_logger::init();
 
     let args: Args = Docopt::new((*USAGE).as_str())
