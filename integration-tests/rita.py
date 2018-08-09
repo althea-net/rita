@@ -312,24 +312,20 @@ def switch_binaries(node_id):
             "BOUNTY_HUNTER:\t{}").format(RITA, RITA_EXIT, BOUNTY_HUNTER))
 
 def register_to_exit(node):
-    id = node.id
-    os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
-              .format(id=id, data=json.dumps({"exit_client": EXIT_SELECT})))
+    os.system(("ip netns exec netlab-{} curl -XPOST " +
+        "127.0.0.1:4877/exits/exit_a/register").format(node.id))
 
 def email_verif(node):
-    id = node.id
-
     email_text = read_email(node)
 
     code = re.search(r"\[([0-9]+)\]", email_text).group(1)
 
-    print(code)
+    print("Email code for node {} is {}".format(node.id, code))
 
-    os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
-              .format(id=id, data=json.dumps({"exit_client": {"exits": {"exit_a": {"email_code": code}}}})))
-
-    os.system("ip netns exec netlab-{id} curl 127.0.0.1:4877/settings"
-              .format(id=id))
+    exec_or_exit(("ip netns exec netlab-{} curl -XPOST " +
+        "127.0.0.1:4877/exits/exit_a/verify/{}").format(node.id, code))
+    exec_or_exit(("ip netns exec netlab-{} curl " +
+        "127.0.0.1:4877/settings").format(node.id))
 
 def read_email(node):
     id = node.id
