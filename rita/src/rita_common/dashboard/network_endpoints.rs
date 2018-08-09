@@ -95,9 +95,9 @@ pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {
         &Path::new(&SETTING.get_network().wg_private_key_path),
         &SETTING.get_network().wg_private_key,
     ) {
-        Ok(_) => trace!("wipe: Generated new WireGuard keys"),
+        Ok(_) => trace!("wipe: Saved new WireGuard keys to disk"),
         Err(e) => {
-            warn!("wipe: Unable to generate new WireGuard keys: {:?}", e);
+            warn!("wipe: Unable to save new WireGuard keys: {:?}", e);
             return Err(e);
         }
     }
