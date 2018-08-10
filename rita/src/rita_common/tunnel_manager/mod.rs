@@ -140,16 +140,17 @@ impl Default for TunnelManager {
 
 pub struct IdentityCallback(pub LocalIdentity, pub Peer, pub Option<u16>);
 impl Message for IdentityCallback {
-    type Result = Option<Tunnel>;
+    type Result = Option<(Tunnel, bool)>;
 }
 
 // An attempt to contact a neighbor has succeeded or a neighbor has contacted us, either way
 // we need to allocate a tunnel for them and place it onto our local storage.  In the case
 // that a neighbor contacts us we don't have a port already allocated and we need to choose one
 // in the case that we have atempted to contact a neighbor we have already sent them a port that
-// we now must attach to their tunnel entry.
+// we now must attach to their tunnel entry. If we also return a bool for if the tunnel already
+// exists
 impl Handler<IdentityCallback> for TunnelManager {
-    type Result = Option<Tunnel>;
+    type Result = Option<(Tunnel, bool)>;
 
     fn handle(&mut self, msg: IdentityCallback, _: &mut Context<Self>) -> Self::Result {
         let peer_local_id = msg.0;
@@ -316,6 +317,7 @@ fn contact_neighbor(peer: Peer, our_port: u16) -> Result<(), Error> {
         my_id: LocalIdentity {
             global: SETTING.get_identity(),
             wg_port: our_port,
+            have_tunnel: None,
         },
         to: peer,
     });
@@ -375,6 +377,7 @@ impl TunnelManager {
                 }
                 Err(e) => {
                     warn!("Actor mailbox failure from DNS resolver! {:?}", e);
+                    // We might need a port callback here
                     Ok(())
                 }
 
@@ -403,30 +406,64 @@ impl TunnelManager {
     }
 
     /// Given a LocalIdentity, connect to the neighbor over wireguard
+    /// return the tunnel object and if already had a tunnel
     pub fn open_tunnel(
         &mut self,
         their_localid: LocalIdentity,
         peer: Peer,
         our_port: u16,
-    ) -> Result<Tunnel, Error> {
-        trace!("TunnelManager getting existing tunnel or opening a new one");
-        // This is deceptively simple, see the commit message
+    ) -> Result<(Tunnel, bool), Error> {
+        trace!("getting existing tunnel or opening a new one");
+        // ifidx must be a part of the key so that we can open multiple tunnels
+        // if we have more than one physical connection to the same peer
         let key = &(their_localid.global.clone(), peer.ifidx);
-        if self.tunnels.contains_key(key) {
+
+        let we_have_tunnel = self.tunnels.contains_key(key);
+        let they_have_tunnel = match their_localid.have_tunnel {
+            Some(v) => v,
+            None => true, // when we don't take the more conservative option
+        };
+
+        let mut return_bool = false;
+
+        if we_have_tunnel && they_have_tunnel {
             trace!(
-                "TunnelManager We already have a tunnel for {:?}%{:?}",
+                "We already have a tunnel for {:?}%{:?}",
                 peer.contact_socket.ip(),
                 peer.ifidx,
             );
             // return allocated port as it's not required
             self.free_ports.push(our_port);
-            // Unwrap is safe because we check membership immediately before
+            // Unwrap is safe because we confirm membership
             let tunnel = self.tunnels.get(key).unwrap();
-            return Ok(tunnel.clone());
+            return Ok((tunnel.clone(), true));
+        }
+
+        if we_have_tunnel && !they_have_tunnel {
+            trace!(
+                "We have a tunnel but our peer {:?} does not! Handling",
+                peer.contact_socket.ip()
+            );
+            // Unwrap is safe because we confirm membership
+            let iface_name = self.tunnels.get(key).unwrap().iface_name.clone();
+            let port = self.tunnels.get(key).unwrap().listen_port.clone();
+            let res = KI.del_interface(&iface_name);
+            if res.is_err() {
+                warn!(
+                    "We failed to delete the interface {:?} with {:?} it's now orphaned",
+                    iface_name, res
+                );
+            }
+
+            // In the case that we have a tunnel and they don't we drop our existing one
+            // and agree on the new parameters in this message
+            self.tunnels.remove(key);
+            self.free_ports.push(port);
+            return_bool = true;
         }
 
         trace!(
-            "TunnelManager no tunnel found for {:?}%{:?} creating",
+            "no tunnel found for {:?}%{:?} creating",
             peer.contact_socket.ip(),
             peer.ifidx,
         );
@@ -441,7 +478,7 @@ impl TunnelManager {
             Ok(tunnel) => {
                 let new_key = (tunnel.localid.global.clone(), tunnel.listen_ifidx.clone());
                 self.tunnels.insert(new_key, tunnel.clone());
-                Ok(tunnel)
+                Ok((tunnel, return_bool))
             }
             Err(e) => {
                 warn!("Open Tunnel failed with {:?}", e);
