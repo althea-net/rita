@@ -156,6 +156,12 @@ fn main() {
     openssl_probe::init_ssl_cert_env_vars();
     env_logger::init();
 
+    if cfg!(feature = "development") {
+        println!("Warning!");
+        println!("This build is meant only for development purposes.");
+        println!("Running this on production is unsupported and not safe!");
+    }
+
     let args: Args = Docopt::new((*USAGE).as_str())
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
