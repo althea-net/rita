@@ -45,7 +45,7 @@ impl Message for Hello {
 impl Handler<Hello> for HTTPClient {
     type Result = ResponseFuture<(), Error>;
     fn handle(&mut self, msg: Hello, _: &mut Self::Context) -> Self::Result {
-        info!("HTTPClient Sending Hello {:?}", msg);
+        info!("Sending Hello {:?}", msg);
 
         let stream = TokioTcpStream::connect(&msg.to.contact_socket);
 
@@ -85,7 +85,6 @@ impl Handler<Hello> for HTTPClient {
 
             trace!("sending hello request {:?}", network_json);
 
-            //TODO in case of failure we must return the port to the list via a callback!
             let http_result = network_json.send().then(move |response| {
                 trace!("got response from Hello {:?}", response);
                 match response {

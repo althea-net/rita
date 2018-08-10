@@ -146,6 +146,7 @@ impl Message for Identity {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct LocalIdentity {
     pub wg_port: u16,
+    pub have_tunnel: Option<bool>, // If we have an existing tunnel, None if we don't know
     pub global: Identity,
 }
 
