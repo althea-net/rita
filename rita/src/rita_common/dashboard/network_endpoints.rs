@@ -44,13 +44,13 @@ pub fn set_settings(
     JsonStatusResponse::new(Ok("New settings applied".to_string()))
 }
 
-#[cfg(not(debug_assertions))]
+#[cfg(not(feature = "development"))]
 pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {
     // This is returned on production builds.
     Ok(HttpResponse::NotFound().finish())
 }
 
-#[cfg(debug_assertions)]
+#[cfg(feature = "development")]
 pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {
     // Clean up existing WG interfaces
     match cleanup() {

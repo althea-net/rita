@@ -85,14 +85,15 @@ pub fn rtt(_req: HttpRequest) -> Result<Json<RTTimestamps>> {
     }))
 }
 
-#[cfg(not(debug_assertions))]
+#[cfg(not(feature = "development"))]
 pub fn nuke_db(_req: HttpRequest) -> Result<HttpResponse, Error> {
     // This is returned on production builds.
     Ok(HttpResponse::NotFound().finish())
 }
 
-#[cfg(debug_assertions)]
+#[cfg(feature = "development")]
 pub fn nuke_db(_req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Error>> {
+    trace!("nuke_db: Truncating all data from the database");
     DbClient::from_registry()
         .send(TruncateTables {})
         .from_err()
