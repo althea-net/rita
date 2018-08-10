@@ -75,7 +75,8 @@ pub fn hello_response(
     };
 
     // We send the callback, which can safely allocate a port because it already successfully
-    // contacted a neighbor
+    // contacted a neighbor. The exception to this is when the TCP session fails at exactly
+    // the wrong time.
     TunnelManager::from_registry()
         .send(IdentityCallback(their_id, peer, None))
         .and_then(|tunnel| {
