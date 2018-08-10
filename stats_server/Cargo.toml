@@ -14,4 +14,4 @@ log = "0.4.3"
 env_logger = "0.5.11"
 futures = "0.1.23"
 althea_types = { path = "../althea_types", features = ["actix"]}
-docopt = "1.0.0"
+docopt = "0.8.3"
