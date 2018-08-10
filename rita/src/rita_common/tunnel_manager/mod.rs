@@ -14,6 +14,7 @@ use actix::prelude::*;
 
 use futures::Future;
 
+use althea_types::Identity;
 use althea_types::LocalIdentity;
 
 use KI;
@@ -118,7 +119,7 @@ impl Tunnel {
 
 pub struct TunnelManager {
     free_ports: Vec<u16>,
-    tunnels: HashMap<(IpAddr, u32), Tunnel>,
+    tunnels: HashMap<(Identity, u32), Tunnel>,
 }
 
 impl Actor for TunnelManager {
@@ -328,7 +329,7 @@ impl TunnelManager {
         let ports = (start..65535).collect();
         TunnelManager {
             free_ports: ports,
-            tunnels: HashMap::<(IpAddr, u32), Tunnel>::new(),
+            tunnels: HashMap::<(Identity, u32), Tunnel>::new(),
         }
     }
 
@@ -404,13 +405,13 @@ impl TunnelManager {
     /// Given a LocalIdentity, connect to the neighbor over wireguard
     pub fn open_tunnel(
         &mut self,
-        their_id: LocalIdentity,
+        their_localid: LocalIdentity,
         peer: Peer,
         our_port: u16,
     ) -> Result<Tunnel, Error> {
         trace!("TunnelManager getting existing tunnel or opening a new one");
         // This is deceptively simple, see the commit message
-        let key = &(peer.contact_socket.ip(), peer.ifidx);
+        let key = &(their_localid.global.clone(), peer.ifidx);
         if self.tunnels.contains_key(key) {
             trace!(
                 "TunnelManager We already have a tunnel for {:?}%{:?}",
@@ -433,12 +434,12 @@ impl TunnelManager {
             peer.contact_socket.ip(),
             our_port,
             peer.ifidx,
-            their_id.clone(),
+            their_localid.clone(),
         );
 
         match tunnel {
             Ok(tunnel) => {
-                let new_key = (tunnel.ip.clone(), tunnel.listen_ifidx.clone());
+                let new_key = (tunnel.localid.global.clone(), tunnel.listen_ifidx.clone());
                 self.tunnels.insert(new_key, tunnel.clone());
                 Ok(tunnel)
             }
