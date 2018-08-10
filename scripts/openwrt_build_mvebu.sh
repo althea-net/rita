@@ -1,5 +1,9 @@
 #!/bin/bash
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Parse command line arguments
+source $DIR/build_common.sh
+
 if [[ ! -d $DIR/staging_dir ]]; then
     pushd $DIR
     wget -N https://updates.altheamesh.com/staging.tar.xz -O staging.tar.xz > /dev/null; tar -xf staging.tar.xz
@@ -17,4 +21,4 @@ export OPENSSL_STATIC=1
 
 rustup target add armv7-unknown-linux-musleabihf
 
-cargo build --target armv7-unknown-linux-musleabihf --release -p rita --bin rita
+cargo build --target armv7-unknown-linux-musleabihf ${PROFILE} ${FEATURES} -p rita --bin rita
