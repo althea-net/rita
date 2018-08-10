@@ -8,7 +8,7 @@ settings = { path = "../settings" }
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 althea_types = { path = "../althea_types" }
 lazy_static = "1.0.2"
-docopt = "1.0.0"
+docopt = "0.8.3"
 log = "0.4.3"
 env_logger = "0.5.11"
 failure = "0.1.2"
