@@ -97,6 +97,6 @@ pub fn nuke_db(_req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Err
     DbClient::from_registry()
         .send(TruncateTables {})
         .from_err()
-        .and_then(move |reply| Ok(HttpResponse::NoContent().finish()))
+        .and_then(move |_| Ok(HttpResponse::NoContent().finish()))
         .responder()
 }
