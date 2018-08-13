@@ -80,9 +80,11 @@ pub fn hello_response(
     TunnelManager::from_registry()
         .send(IdentityCallback(their_id, peer, None))
         .and_then(|tunnel| {
+            let tunnel = tunnel.unwrap();
             Ok(Json(LocalIdentity {
                 global: SETTING.get_identity(),
-                wg_port: tunnel.unwrap().listen_port,
+                wg_port: tunnel.0.listen_port,
+                have_tunnel: Some(tunnel.1),
             }))
         }).from_err()
         .responder()
