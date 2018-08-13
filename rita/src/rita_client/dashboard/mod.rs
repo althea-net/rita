@@ -7,6 +7,7 @@ use serde_json;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::net::{SocketAddr, TcpStream};
+use std::{thread, time};
 
 use althea_types::ExitState;
 use babel_monitor::Babel;
@@ -146,7 +147,6 @@ impl Handler<SetWifiConfig> for Dashboard {
             if i.mesh && iface_number.is_some() {
                 let iface_name = format!("wlan{}", iface_number.unwrap());
 
-                PeerListener::from_registry().do_send(Listen(iface_name.clone()));
                 KI.set_uci_var(&format!("wireless.{}.ssid", i.section_name), "AltheaMesh")?;
                 KI.set_uci_var(&format!("wireless.{}.encryption", i.section_name), "none")?;
                 KI.set_uci_var(&format!("wireless.{}.mode", i.section_name), "adhoc")?;
@@ -157,10 +157,16 @@ impl Handler<SetWifiConfig> for Dashboard {
                     &iface_name,
                 )?;
                 KI.set_uci_var(&format!("network.{}.proto", iface_name.clone()), "static")?;
+
+                // These must run before listen/unlisten to avoid race conditions
+                KI.uci_commit()?;
+                KI.openwrt_reset_wireless()?;
+                // when we run wifi reset it takes seconds for a new fe80 address to show up
+                thread::sleep(time::Duration::from_millis(30000));
+
+                PeerListener::from_registry().do_send(Listen(iface_name.clone()));
             } else if iface_number.is_some() {
                 let iface_name = format!("wlan{}", iface_number.unwrap());
-
-                PeerListener::from_registry().do_send(UnListen(iface_name));
                 KI.set_uci_var(&format!("wireless.{}.ssid", i.section_name), &i.ssid)?;
                 KI.set_uci_var(&format!("wireless.{}.key", i.section_name), &i.key)?;
                 KI.set_uci_var(&format!("wireless.{}.mode", i.section_name), "ap")?;
@@ -169,6 +175,12 @@ impl Handler<SetWifiConfig> for Dashboard {
                     "psk2+tkip+aes",
                 )?;
                 KI.set_uci_var(&format!("wireless.{}.network", i.section_name), "lan")?;
+
+                // Order is reversed here
+                PeerListener::from_registry().do_send(UnListen(iface_name));
+
+                KI.uci_commit()?;
+                KI.openwrt_reset_wireless()?;
             }
         }
 
@@ -416,16 +428,22 @@ impl Handler<SetWiFiMesh> for Dashboard {
         let section_name = format!("default_{}", iface_name);
 
         if mesh {
-            PeerListener::from_registry().do_send(Listen(iface_name.clone()));
             KI.set_uci_var(&format!("wireless.{}.ssid", section_name), "AltheaMesh")?;
             KI.set_uci_var(&format!("wireless.{}.encryption", section_name), "none")?;
             KI.set_uci_var(&format!("wireless.{}.mode", section_name), "adhoc")?;
-            KI.set_uci_var(&format!("wireless.{}.network", section_name), &iface_name)?;
+            KI.set_uci_var(&format!("wireless.{}.network", section_name), &wlan_name)?;
             KI.set_uci_var(&format!("network.{}", wlan_name), "interface")?;
             KI.set_uci_var(&format!("network.{}.ifname", wlan_name), &wlan_name)?;
             KI.set_uci_var(&format!("network.{}.proto", wlan_name), "static")?;
+
+            // These must run before listen/unlisten to avoid race conditions
+            KI.uci_commit()?;
+            KI.openwrt_reset_wireless()?;
+            // when we run wifi reset it takes seconds for a new fe80 address to show up
+            thread::sleep(time::Duration::from_millis(30000));
+
+            PeerListener::from_registry().do_send(Listen(wlan_name.clone()));
         } else {
-            PeerListener::from_registry().do_send(UnListen(iface_name));
             KI.set_uci_var(&format!("wireless.{}.ssid", section_name), "AltheaHome")?;
             KI.set_uci_var(&format!("wireless.{}.key", section_name), "ChangeMe")?;
             KI.set_uci_var(&format!("wireless.{}.mode", section_name), "ap")?;
@@ -434,10 +452,13 @@ impl Handler<SetWiFiMesh> for Dashboard {
                 "psk2+tkip+aes",
             )?;
             KI.set_uci_var(&format!("wireless.{}.network", section_name), "lan")?;
-        }
 
-        KI.uci_commit()?;
-        KI.openwrt_reset_wireless()?;
+            // Order is reversed here
+            PeerListener::from_registry().do_send(UnListen(wlan_name));
+
+            KI.uci_commit()?;
+            KI.openwrt_reset_wireless()?;
+        }
 
         // We edited disk contents, force global sync
         KI.fs_sync()?;
