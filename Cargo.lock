@@ -130,9 +130,9 @@ dependencies = [
 
 [[package]]
 name = "althea_rs"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
- "rita 0.1.4",
+ "rita 0.1.5",
 ]
 
 [[package]]
@@ -1943,7 +1943,7 @@ dependencies = [
 
 [[package]]
 name = "rita"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "actix 0.7.0 (git+https://github.com/kingoflolz/actix.git?branch=althea-mesh)",
  "actix-web 0.7.0 (git+https://github.com/actix/actix-web.git?branch=fix-missing-content-length)",
