@@ -1,7 +1,7 @@
 use super::KernelInterface;
 
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv6Addr};
 use std::str::FromStr;
 
 use regex::Regex;
@@ -54,6 +54,38 @@ fn parse_ipset(input: &str) -> Result<HashMap<(IpAddr, String), u64>, Error> {
         );
     }
     Ok(map)
+}
+
+#[test]
+fn test_parse_ipset() {
+    let data = r#"
+add asdf 1234:5678:9801:2345:6789:0123:4567:8901,wg42 packets 123456789 bytes 987654321
+add zxcv 1234:5678:9801:2345:6789:0123:4567:8902,wg0 packets 123456789 bytes 987654320
+"#;
+    let result = parse_ipset(data);
+    match result {
+        Ok(result) => {
+            let addr1 = Ipv6Addr::new(
+                0x1234, 0x5678, 0x9801, 0x2345, 0x6789, 0x0123, 0x4567, 0x8901,
+            );
+            assert_eq!(result.len(), 2);
+            let value1 = result
+                .get(&(IpAddr::V6(addr1), "wg42".into()))
+                .expect("Unable to find key");
+            assert_eq!(value1, &(987654321u64 + 123456789u64 * 40));
+
+            let addr2 = Ipv6Addr::new(
+                0x1234, 0x5678, 0x9801, 0x2345, 0x6789, 0x0123, 0x4567, 0x8902,
+            );
+            let value2 = result
+                .get(&(IpAddr::V6(addr2), "wg0".into()))
+                .expect("Unable to find key");
+            assert_eq!(value2, &(987654320u64 + 123456789u64 * 40));
+        }
+        Err(e) => {
+            panic!("Unexpected error {:?}", e);
+        }
+    }
 }
 
 impl KernelInterface {
