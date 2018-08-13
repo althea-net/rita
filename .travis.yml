@@ -35,6 +35,6 @@ matrix:
     - script: ./integration-tests/rita.sh
       env: INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
     - script: ./integration-tests/rita.sh
-      env: REVISION_B=release REMOTE_A=.. COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
+      env: REVISION_B=release REMOTE_A=.. REMOTE_B="https://github.com/althea-mesh/althea_rs.git" COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
     - script: ./integration-tests/rita.sh
-      env: REVISION_B=master REMOTE_A=.. COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
+      env: REVISION_B=master REMOTE_A=.. REMOTE_B="https://github.com/althea-mesh/althea_rs.git" COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1
