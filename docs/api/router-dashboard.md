@@ -494,3 +494,40 @@ This file documents the dashboard API found in Rita client.
 ---
 
 
+## /wipe
+
+**This endpoint works only on development builds and is meant only for development purposes**
+
+- URL: `<rita ip>:<rita_dashboard_port>/wipe`
+- Method: `POST`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 204 NO CONTENT
+  - Contents: `None`
+- Error Response: `500 Server Error`
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:<rita_dashboard_port>/wipe`
+
+---
+
+## /database
+
+**This endpoint worsk only on development builds and is meant only for development purposes**
+
+Calling HTTP `DELETE` request on this endpoint causes all tables to be wiped out of data.
+
+- URL: `<rita ip>:<rita_dashboard_port>/wipe`
+- Method: `DELETE`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 204 NO CONTENT
+  - Contents: `None`
+- Error Response: `500 Server Error`
+- Sample Call:
+
+`curl -XDELETE 127.0.0.1:<rita_dashboard_port>/database`
+
+---

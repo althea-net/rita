@@ -156,6 +156,12 @@ fn main() {
     openssl_probe::init_ssl_cert_env_vars();
     env_logger::init();
 
+    if cfg!(feature = "development") {
+        println!("Warning!");
+        println!("This build is meant only for development purposes.");
+        println!("Running this on production as an exit node is unsupported and not safe!");
+    }
+
     let args: Args = Docopt::new((*USAGE).as_str())
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
@@ -228,6 +234,8 @@ fn main() {
             .route("/settings", Method::GET, get_settings)
             .route("/settings", Method::POST, set_settings)
             .route("/version", Method::GET, version)
+            .route("/wipe", Method::POST, wipe)
+            .route("/database", Method::DELETE, nuke_db)
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_network().rita_dashboard_port

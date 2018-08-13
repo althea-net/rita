@@ -4,7 +4,7 @@ use actix_web::*;
 use futures;
 use futures::Future;
 
-use rita_exit::db_client::{get_exit_info, ClientStatus, DbClient, SetupClient};
+use rita_exit::db_client::{get_exit_info, ClientStatus, DbClient, SetupClient, TruncateTables};
 
 use std::boxed::Box;
 use std::time::SystemTime;
@@ -83,4 +83,20 @@ pub fn rtt(_req: HttpRequest) -> Result<Json<RTTimestamps>> {
         exit_rx: SystemTime::now(),
         exit_tx: SystemTime::now(),
     }))
+}
+
+#[cfg(not(feature = "development"))]
+pub fn nuke_db(_req: HttpRequest) -> Result<HttpResponse, Error> {
+    // This is returned on production builds.
+    Ok(HttpResponse::NotFound().finish())
+}
+
+#[cfg(feature = "development")]
+pub fn nuke_db(_req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Error>> {
+    trace!("nuke_db: Truncating all data from the database");
+    DbClient::from_registry()
+        .send(TruncateTables {})
+        .from_err()
+        .and_then(move |_| Ok(HttpResponse::NoContent().finish()))
+        .responder()
 }

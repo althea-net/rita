@@ -3,7 +3,7 @@ set -eux
 export TARGET=mips
 export TRIPLE=mips-unknown-linux-musl
 export ROUTER_IP=192.168.10.1
-bash scripts/openwrt_build_$TARGET.sh
+bash scripts/openwrt_build_$TARGET.sh $@
 set +e
 ssh root@$ROUTER_IP killall -9 rita
 set -e

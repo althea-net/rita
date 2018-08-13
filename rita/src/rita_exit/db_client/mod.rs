@@ -460,3 +460,20 @@ impl Handler<ClientStatus> for DbClient {
         })
     }
 }
+
+pub struct TruncateTables;
+impl Message for TruncateTables {
+    type Result = Result<(), Error>;
+}
+
+impl Handler<TruncateTables> for DbClient {
+    type Result = Result<(), Error>;
+
+    fn handle(&mut self, _: TruncateTables, _: &mut Self::Context) -> Self::Result {
+        use self::schema::clients::dsl::*;
+        info!("Deleting all clients in {:?}", &SETTING.get_db_file());
+        let connection = SqliteConnection::establish(&SETTING.get_db_file()).unwrap();
+        try!(delete(clients).execute(&connection));
+        Ok(())
+    }
+}
