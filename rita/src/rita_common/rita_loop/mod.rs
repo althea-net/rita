@@ -164,7 +164,7 @@ impl Handler<Tick> for RitaLoop {
                         start.elapsed().as_secs(),
                         start.elapsed().subsec_nanos() / 1000000
                     );
-                    TunnelManager::from_registry().send(PeersToContact(peers.unwrap())) // GetPeers never fails so unwrap is safe
+                    TunnelManager::from_registry().send(PeersToContact::new(peers.unwrap())) // GetPeers never fails so unwrap is safe
                 }).then(|_| Ok(())),
         );
 

@@ -267,7 +267,15 @@ impl Handler<GetNeighbors> for TunnelManager {
     }
 }
 
-pub struct PeersToContact(pub HashMap<IpAddr, Peer>);
+pub struct PeersToContact {
+    pub peers: HashMap<IpAddr, Peer>,
+}
+
+impl PeersToContact {
+    pub fn new(peers: HashMap<IpAddr, Peer>) -> PeersToContact {
+        PeersToContact { peers }
+    }
+}
 
 impl Message for PeersToContact {
     type Result = ();
@@ -279,9 +287,8 @@ impl Handler<PeersToContact> for TunnelManager {
     type Result = ();
     fn handle(&mut self, msg: PeersToContact, _ctx: &mut Context<Self>) -> Self::Result {
         trace!("TunnelManager contacting peers");
-        for obj in msg.0.iter() {
-            let peer = obj.1;
-            let res = self.neighbor_inquiry(peer.clone());
+        for (_, peer) in msg.peers.iter() {
+            let res = self.neighbor_inquiry(&peer);
             if res.is_err() {
                 warn!("Neighbor inqury for {:?} failed! with {:?}", peer, res);
             }
@@ -299,7 +306,7 @@ impl Handler<PeersToContact> for TunnelManager {
                             ifidx: 0,
                             contact_socket: socket,
                         };
-                        let res = self.neighbor_inquiry(man_peer);
+                        let res = self.neighbor_inquiry(&man_peer);
                         if res.is_err() {
                             warn!(
                                 "Neighbor inqury for {:?} failed with: {:?}",
@@ -324,7 +331,7 @@ impl Handler<PeersToContact> for TunnelManager {
 
 /// Sets out to contact a neighbor, takes a speculative port (only assigned if the neighbor
 /// responds successfully)
-fn contact_neighbor(peer: Peer, our_port: u16) -> Result<(), Error> {
+fn contact_neighbor(peer: &Peer, our_port: u16) -> Result<(), Error> {
     KI.manual_peers_route(
         &peer.contact_socket.ip(),
         &mut SETTING.get_network_mut().default_route,
@@ -336,7 +343,7 @@ fn contact_neighbor(peer: Peer, our_port: u16) -> Result<(), Error> {
             wg_port: our_port,
             have_tunnel: None,
         },
-        to: peer,
+        to: peer.clone(),
     });
 
     Ok(())
@@ -380,7 +387,7 @@ impl TunnelManager {
                             ifidx: 0,
                             contact_socket: socket,
                         };
-                        let res = contact_neighbor(man_peer, our_port);
+                        let res = contact_neighbor(&man_peer, our_port);
                         if res.is_err() {
                             warn!("Contact neighbor failed with {:?}", res);
                         }
@@ -409,7 +416,7 @@ impl TunnelManager {
 
     /// Contacts one neighbor with our LocalIdentity to get their LocalIdentity and wireguard tunnel
     /// interface name.
-    pub fn neighbor_inquiry(&mut self, peer: Peer) -> Result<(), Error> {
+    pub fn neighbor_inquiry(&mut self, peer: &Peer) -> Result<(), Error> {
         trace!("TunnelManager neigh inquiry for {:?}", peer);
         let our_port = match self.free_ports.pop() {
             Some(p) => p,
