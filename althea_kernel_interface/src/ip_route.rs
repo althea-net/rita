@@ -4,6 +4,22 @@ use std::net::IpAddr;
 
 use failure::Error;
 
+pub enum IpRoute {
+    /// For creating default routes
+    DefaultRoute,
+    /// A route to a specific address
+    ToAddr(IpAddr),
+}
+
+impl ToString for IpRoute {
+    fn to_string(&self) -> String {
+        match *self {
+            IpRoute::DefaultRoute => "default".into(),
+            IpRoute::ToAddr(addr) => addr.to_string(),
+        }
+    }
+}
+
 impl KernelInterface {
     fn get_default_route(&self) -> Option<Vec<String>> {
         let output = self
@@ -20,27 +36,14 @@ impl KernelInterface {
         None
     }
 
-    fn set_route(&self, to: &IpAddr, route: &Vec<String>) -> Result<(), Error> {
+    fn set_route(&self, to: &IpRoute, route: &Vec<String>) -> Result<(), Error> {
         let to = to.to_string();
-
-        let mut def_route = vec!["route", "add", to.as_str()];
+        let mut def_route = vec!["route", "add", &to];
         def_route.reserve(route.len() - 1);
         for token in route.iter().skip(1) {
             def_route.push(&token);
         }
         self.run_command("ip", &def_route)?;
-        Ok(())
-    }
-
-    fn set_default_route(&self, route: &Vec<String>) -> Result<(), Error> {
-        let mut def_route_ref: Vec<&str> = vec!["route", "add", "default"];
-        def_route_ref.reserve(route.len() - 1);
-
-        for token in route.iter().skip(1) {
-            def_route_ref.push(&token)
-        }
-
-        self.run_command("ip", &def_route_ref)?;
         Ok(())
     }
 
@@ -67,7 +70,7 @@ impl KernelInterface {
     ) -> Result<(), Error> {
         self.update_settings_route(settings_default_route)?;
 
-        self.set_route(&endpoint_ip, settings_default_route)?;
+        self.set_route(&IpRoute::ToAddr(*endpoint_ip), &settings_default_route)?;
         Ok(())
     }
 
@@ -78,13 +81,13 @@ impl KernelInterface {
         match self.get_default_route() {
             Some(route) => {
                 if route.contains(&String::from("wg_exit")) {
-                    self.set_default_route(settings_default_route)?;
+                    self.set_route(&IpRoute::DefaultRoute, settings_default_route)?;
                 } else {
                     *settings_default_route = route;
                 }
             }
             None => {
-                self.set_default_route(settings_default_route)?;
+                self.set_route(&IpRoute::DefaultRoute, settings_default_route)?;
             }
         };
         Ok(())
@@ -170,14 +173,13 @@ fn test_set_route() {
     }));
 
     KI.set_route(
-        &IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+        &IpRoute::ToAddr(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
         &vec!["token1".into(), "token2".into(), "token3".into()],
     ).expect("Unable to set route");
 }
 
 #[test]
 fn test_set_default_route() {
-    use std::net::Ipv4Addr;
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
     use std::process::Output;
@@ -201,6 +203,8 @@ fn test_set_default_route() {
         }
     }));
 
-    KI.set_default_route(&vec!["token1".into(), "token2".into(), "token3".into()])
-        .expect("Unable to set default route");
+    KI.set_route(
+        &IpRoute::DefaultRoute,
+        &vec!["token1".into(), "token2".into(), "token3".into()],
+    ).expect("Unable to set default route");
 }
