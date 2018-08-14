@@ -1,7 +1,7 @@
 use super::KernelInterface;
 
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::IpAddr;
 use std::str::FromStr;
 
 use regex::Regex;
@@ -63,11 +63,16 @@ fn test_exit_filter_target_output() {
 }
 
 fn parse_exit_ipset(input: &str) -> Result<HashMap<IpAddr, u64>, Error> {
+    lazy_static! {
+        static ref RE: Regex =
+            Regex::new(r"(?m)^add \S+ (fd00::[a-f0-9:]+) packets (\d+) bytes (\d+)")
+                .expect("Unable to compile regular expression");
+    }
     let mut map = HashMap::new();
 
     // example line `add aa fd00::1 packets 28 bytes 2212`
-    let reg = Regex::new(r"(?m)^add \S+ (fd00::[a-f0-9:]+) packets (\d+) bytes (\d+)")?;
-    for caps in reg.captures_iter(input) {
+
+    for caps in RE.captures_iter(input) {
         map.insert(
             IpAddr::from_str(&caps[1])?,
             caps[3].parse::<u64>()? + caps[2].parse::<u64>()? * 80,
@@ -78,6 +83,8 @@ fn parse_exit_ipset(input: &str) -> Result<HashMap<IpAddr, u64>, Error> {
 
 #[test]
 fn test_parse_exit_ipset() {
+    use std::net::Ipv6Addr;
+
     let data = r#"
 add asdf fd00::1337:123 packets 123456789 bytes 987654321
 add zxcv fd00::b4dc:0d3 packets 123456789 bytes 987654320
@@ -248,6 +255,7 @@ fn test_init_exit_counter() {
 
 #[test]
 fn test_read_exit_server_counters() {
+    use std::net::Ipv6Addr;
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
     use std::process::Output;
