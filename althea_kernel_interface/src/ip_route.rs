@@ -26,7 +26,7 @@ impl KernelInterface {
         let mut def_route = vec!["route", "add", to.as_str()];
         def_route.reserve(route.len() - 1);
         for token in route.iter().skip(1) {
-            def_route.push(token);
+            def_route.push(&token);
         }
         self.run_command("ip", &def_route)?;
         Ok(())
@@ -34,12 +34,13 @@ impl KernelInterface {
 
     fn set_default_route(&self, route: &Vec<String>) -> Result<(), Error> {
         let mut def_route_ref: Vec<&str> = vec!["route", "add", "default"];
+        def_route_ref.reserve(route.len() - 1);
 
-        for i in 1..route.len() {
-            def_route_ref.push(route[i].as_str())
+        for token in route.iter().skip(1) {
+            def_route_ref.push(&token)
         }
 
-        self.run_command("ip", &def_route_ref[..])?;
+        self.run_command("ip", &def_route_ref)?;
         Ok(())
     }
 
@@ -172,4 +173,34 @@ fn test_set_route() {
         &IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
         &vec!["token1".into(), "token2".into(), "token3".into()],
     ).expect("Unable to set route");
+}
+
+#[test]
+fn test_set_default_route() {
+    use std::net::Ipv4Addr;
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
+    use KI;
+    let mut counter = 0;
+
+    KI.set_mock(Box::new(move |program, args| {
+        counter += 1;
+        match counter {
+            1 => {
+                assert_eq!(program, "ip");
+                assert_eq!(args, vec!["route", "add", "default", "token2", "token3"]);
+
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            _ => panic!("Unexpected call {} {:?} {:?}", counter, program, args),
+        }
+    }));
+
+    KI.set_default_route(&vec!["token1".into(), "token2".into(), "token3".into()])
+        .expect("Unable to set default route");
 }
