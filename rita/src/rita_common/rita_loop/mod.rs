@@ -6,7 +6,6 @@ use actix_utils::KillActor;
 
 use actix_utils::ResolverWrapper;
 
-#[cfg(not(test))]
 use KI;
 
 use rita_common::tunnel_manager::{GetNeighbors, TunnelManager};
@@ -137,7 +136,8 @@ impl Handler<Tick> for RitaLoop {
                 .then(|res| {
                     trace!("PeerListener said after tick: {:?}", res);
                     res
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
         );
 
         trace!("Getting Peers from PeerListener to pass to TunnelManager");
