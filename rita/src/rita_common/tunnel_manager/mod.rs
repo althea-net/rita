@@ -256,8 +256,7 @@ impl Handler<GetNeighbors> for TunnelManager {
 
     fn handle(&mut self, _: GetNeighbors, _: &mut Context<Self>) -> Self::Result {
         let mut res = Vec::new();
-        for obj in self.tunnels.iter() {
-            let tunnel = obj.1;
+        for (_, tunnel) in self.tunnels.iter() {
             res.push((tunnel.localid.clone(), tunnel.iface_name.clone(), tunnel.ip));
         }
         Ok(res)
