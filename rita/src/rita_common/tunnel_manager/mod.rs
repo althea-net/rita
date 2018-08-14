@@ -152,7 +152,26 @@ impl Default for TunnelManager {
     }
 }
 
-pub struct IdentityCallback(pub LocalIdentity, pub Peer, pub Option<u16>);
+pub struct IdentityCallback {
+    pub local_identity: LocalIdentity,
+    pub peer: Peer,
+    pub our_port: Option<u16>,
+}
+
+impl IdentityCallback {
+    pub fn new(
+        local_identity: LocalIdentity,
+        peer: Peer,
+        our_port: Option<u16>,
+    ) -> IdentityCallback {
+        IdentityCallback {
+            local_identity,
+            peer,
+            our_port,
+        }
+    }
+}
+
 impl Message for IdentityCallback {
     type Result = Option<(Tunnel, bool)>;
 }
@@ -167,9 +186,7 @@ impl Handler<IdentityCallback> for TunnelManager {
     type Result = Option<(Tunnel, bool)>;
 
     fn handle(&mut self, msg: IdentityCallback, _: &mut Context<Self>) -> Self::Result {
-        let peer_local_id = msg.0;
-        let peer = msg.1;
-        let our_port = match msg.2 {
+        let our_port = match msg.our_port {
             Some(port) => port,
             _ => match self.free_ports.pop() {
                 Some(p) => p,
@@ -180,7 +197,7 @@ impl Handler<IdentityCallback> for TunnelManager {
             },
         };
 
-        let res = self.open_tunnel(peer_local_id, peer, our_port);
+        let res = self.open_tunnel(msg.local_identity, msg.peer, our_port);
         match res {
             Ok(res) => Some(res),
             Err(e) => {
