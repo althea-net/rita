@@ -39,8 +39,10 @@ impl KernelInterface {
     fn set_route(&self, to: &IpRoute, route: &Vec<String>) -> Result<(), Error> {
         let to = to.to_string();
         let mut def_route = vec!["route", "add", &to];
-        def_route.reserve(route.len() - 1);
-        for token in route.iter().skip(1) {
+
+        let tokens = route.iter().skip(1);
+        def_route.reserve_exact(tokens.len());
+        for token in tokens {
             def_route.push(&token);
         }
         self.run_command("ip", &def_route)?;
@@ -191,7 +193,7 @@ fn test_set_default_route() {
         match counter {
             1 => {
                 assert_eq!(program, "ip");
-                assert_eq!(args, vec!["route", "add", "default", "token2", "token3"]);
+                assert_eq!(args, vec!["route", "add", "default"]);
 
                 Ok(Output {
                     stdout: b"".to_vec(),
@@ -203,8 +205,6 @@ fn test_set_default_route() {
         }
     }));
 
-    KI.set_route(
-        &IpRoute::DefaultRoute,
-        &vec!["token1".into(), "token2".into(), "token3".into()],
-    ).expect("Unable to set default route");
+    KI.set_route(&IpRoute::DefaultRoute, &vec![])
+        .expect("Unable to set default route");
 }
