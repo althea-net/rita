@@ -1,4 +1,5 @@
 use actix::prelude::*;
+use rita_common::tunnel_manager::Neighbor;
 
 use althea_kernel_interface::FilterTarget;
 use KI;
@@ -55,7 +56,16 @@ impl Default for TrafficWatcher {
     }
 }
 
-pub struct Watch(pub Vec<(LocalIdentity, String)>);
+pub struct Watch {
+    /// List of neighbors to watch
+    pub neighbors: Vec<Neighbor>,
+}
+
+impl Watch {
+    pub fn new(neighbors: Vec<Neighbor>) -> Watch {
+        Watch { neighbors }
+    }
+}
 
 impl Message for Watch {
     type Result = Result<(), Error>;
@@ -69,7 +79,7 @@ impl Handler<Watch> for TrafficWatcher {
             format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
         )?;
 
-        watch(Babel::new(stream), &msg.0)
+        watch(Babel::new(stream), &msg.neighbors)
     }
 }
 
@@ -80,10 +90,7 @@ impl Handler<Watch> for TrafficWatcher {
 ///
 /// This first time this is run, it will create the rules and then immediately read and zero them.
 /// (should return 0)
-pub fn watch<T: Read + Write>(
-    mut babel: Babel<T>,
-    neighbors: &[(LocalIdentity, String)],
-) -> Result<(), Error> {
+pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) -> Result<(), Error> {
     babel.start_connection()?;
 
     trace!("Getting routes");
@@ -94,9 +101,9 @@ pub fn watch<T: Read + Write>(
     let mut if_to_ip: HashMap<String, IpAddr> = HashMap::new();
     let mut ip_to_if: HashMap<IpAddr, String> = HashMap::new();
     for ident in neighbors {
-        identities.insert(ident.0.global.mesh_ip, ident.0.clone());
-        if_to_ip.insert(ident.clone().1, ident.0.global.mesh_ip);
-        ip_to_if.insert(ident.0.global.mesh_ip, ident.clone().1);
+        identities.insert(ident.identity.global.mesh_ip, ident.identity.clone());
+        if_to_ip.insert(ident.iface_name.clone(), ident.identity.global.mesh_ip);
+        ip_to_if.insert(ident.identity.global.mesh_ip, ident.iface_name.clone());
     }
 
     let mut destinations = HashMap::new();
