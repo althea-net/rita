@@ -103,8 +103,6 @@ impl Handler<Tick> for RitaLoop {
                 .send(GetNeighbors)
                 .into_actor(self)
                 .then(move |res, act, _ctx| {
-                    // TODO refactor to use an struct instead of a tuple
-                    // Vec<(LocalIdentity, Iface Name, IpAddr)>
                     let res = res.unwrap().unwrap();
 
                     info!("Currently open tunnels: {:?}", res);
@@ -118,7 +116,7 @@ impl Handler<Tick> for RitaLoop {
 
                     let res = res
                         .iter()
-                        .map(|res| (res.0.clone(), res.1.clone()))
+                        .map(|res| (res.identity.clone(), res.iface_name.clone()))
                         .collect();
 
                     TrafficWatcher::from_registry()
