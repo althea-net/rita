@@ -117,9 +117,23 @@ impl Tunnel {
     }
 }
 
+#[derive(PartialEq, Eq, Hash, Debug)]
+struct TunnelIdentity {
+    /// Identity of the owner of tunnel
+    identity: Identity,
+    /// Interface index
+    ifidx: u32,
+}
+
+impl TunnelIdentity {
+    fn new(identity: Identity, ifidx: u32) -> TunnelIdentity {
+        TunnelIdentity { identity, ifidx }
+    }
+}
+
 pub struct TunnelManager {
     free_ports: Vec<u16>,
-    tunnels: HashMap<(Identity, u32), Tunnel>,
+    tunnels: HashMap<TunnelIdentity, Tunnel>,
 }
 
 impl Actor for TunnelManager {
@@ -331,7 +345,7 @@ impl TunnelManager {
         let ports = (start..65535).collect();
         TunnelManager {
             free_ports: ports,
-            tunnels: HashMap::<(Identity, u32), Tunnel>::new(),
+            tunnels: HashMap::<TunnelIdentity, Tunnel>::new(),
         }
     }
 
@@ -416,9 +430,8 @@ impl TunnelManager {
         trace!("getting existing tunnel or opening a new one");
         // ifidx must be a part of the key so that we can open multiple tunnels
         // if we have more than one physical connection to the same peer
-        let key = &(their_localid.global.clone(), peer.ifidx);
-
-        let we_have_tunnel = self.tunnels.contains_key(key);
+        let key = TunnelIdentity::new(their_localid.global.clone(), peer.ifidx);
+        let we_have_tunnel = self.tunnels.contains_key(&key);
         let they_have_tunnel = match their_localid.have_tunnel {
             Some(v) => v,
             None => true, // when we don't take the more conservative option
@@ -435,7 +448,7 @@ impl TunnelManager {
             // return allocated port as it's not required
             self.free_ports.push(our_port);
             // Unwrap is safe because we confirm membership
-            let tunnel = self.tunnels.get(key).unwrap();
+            let tunnel = self.tunnels.get(&key).unwrap();
             return Ok((tunnel.clone(), true));
         }
 
@@ -445,8 +458,8 @@ impl TunnelManager {
                 peer.contact_socket.ip()
             );
             // Unwrap is safe because we confirm membership
-            let iface_name = self.tunnels.get(key).unwrap().iface_name.clone();
-            let port = self.tunnels.get(key).unwrap().listen_port.clone();
+            let iface_name = self.tunnels.get(&key).unwrap().iface_name.clone();
+            let port = self.tunnels.get(&key).unwrap().listen_port.clone();
             let res = KI.del_interface(&iface_name);
             if res.is_err() {
                 warn!(
@@ -457,7 +470,7 @@ impl TunnelManager {
 
             // In the case that we have a tunnel and they don't we drop our existing one
             // and agree on the new parameters in this message
-            self.tunnels.remove(key);
+            self.tunnels.remove(&key);
             self.free_ports.push(port);
             return_bool = true;
         }
@@ -476,7 +489,8 @@ impl TunnelManager {
 
         match tunnel {
             Ok(tunnel) => {
-                let new_key = (tunnel.localid.global.clone(), tunnel.listen_ifidx.clone());
+                let new_key =
+                    TunnelIdentity::new(tunnel.localid.global.clone(), tunnel.listen_ifidx.clone());
                 self.tunnels.insert(new_key, tunnel.clone());
                 Ok((tunnel, return_bool))
             }
