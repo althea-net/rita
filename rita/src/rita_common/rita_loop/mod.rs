@@ -136,8 +136,7 @@ impl Handler<Tick> for RitaLoop {
                 .then(|res| {
                     trace!("PeerListener said after tick: {:?}", res);
                     res
-                })
-                .then(|_| Ok(())),
+                }).then(|_| Ok(())),
         );
 
         trace!("Getting Peers from PeerListener to pass to TunnelManager");
@@ -147,8 +146,7 @@ impl Handler<Tick> for RitaLoop {
                 .and_then(|peers| {
                     trace!("Got peers structs from PeerListener, passing to TunnelManager");
                     TunnelManager::from_registry().send(PeersToContact(peers.unwrap())) // GetPeers never fails so unwrap is safe
-                })
-                .then(|_| Ok(())),
+                }).then(|_| Ok(())),
         );
 
         Ok(())
