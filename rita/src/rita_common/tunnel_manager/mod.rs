@@ -251,17 +251,38 @@ impl Handler<GetPhyIpFromMeshIp> for TunnelManager {
 }
 
 pub struct GetNeighbors;
-impl Message for GetNeighbors {
-    type Result = Result<Vec<(LocalIdentity, String, IpAddr)>, Error>;
+
+#[derive(Debug)]
+pub struct Neighbor {
+    pub identity: LocalIdentity,
+    pub iface_name: String,
+    pub tunnel_ip: IpAddr,
 }
 
+impl Neighbor {
+    fn new(identity: LocalIdentity, iface_name: String, tunnel_ip: IpAddr) -> Neighbor {
+        Neighbor {
+            identity,
+            iface_name,
+            tunnel_ip,
+        }
+    }
+}
+
+impl Message for GetNeighbors {
+    type Result = Result<Vec<Neighbor>, Error>;
+}
 impl Handler<GetNeighbors> for TunnelManager {
-    type Result = Result<Vec<(LocalIdentity, String, IpAddr)>, Error>;
+    type Result = Result<Vec<Neighbor>, Error>;
 
     fn handle(&mut self, _: GetNeighbors, _: &mut Context<Self>) -> Self::Result {
         let mut res = Vec::new();
         for (_, tunnel) in self.tunnels.iter() {
-            res.push((tunnel.localid.clone(), tunnel.iface_name.clone(), tunnel.ip));
+            res.push(Neighbor::new(
+                tunnel.localid.clone(),
+                tunnel.iface_name.clone(),
+                tunnel.ip,
+            ));
         }
         Ok(res)
     }
