@@ -52,23 +52,12 @@ pub enum TunnelManagerError {
     PortError(String),
 }
 
-/* Uncomment when tunnel state handling is added
-#[derive(Debug, Clone)]
-pub enum TunnelState {
-    Init,
-    Open,
-    Throttled,
-    Closed,
-}
-*/
-
 #[derive(Debug, Clone)]
 pub struct Tunnel {
-    pub ip: IpAddr,         // Tunnel endpoint
-    pub iface_name: String, // name of wg#
-    pub listen_ifidx: u32,  // the physical interface this tunnel is listening on
-    pub listen_port: u16,   // the local port this tunnel is listening on
-    //    pub tunnel_state: TunnelState, // how this exit feels about it's lifecycle
+    pub ip: IpAddr,             // Tunnel endpoint
+    pub iface_name: String,     // name of wg#
+    pub listen_ifidx: u32,      // the physical interface this tunnel is listening on
+    pub listen_port: u16,       // the local port this tunnel is listening on
     pub localid: LocalIdentity, // the identity of the counterparty tunnel
 }
 
@@ -81,13 +70,11 @@ impl Tunnel {
     ) -> Result<Tunnel, Error> {
         let iface_name = KI.setup_wg_if().unwrap();
 
-        //let init = TunnelState::Init;
         let tunnel = Tunnel {
             ip: ip,
             iface_name: iface_name,
             listen_ifidx: ifidx,
             listen_port: our_listen_port,
-            //tunnel_state: init,
             localid: their_id.clone(),
         };
 
