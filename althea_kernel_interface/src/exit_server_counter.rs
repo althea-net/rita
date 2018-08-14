@@ -44,6 +44,24 @@ impl ExitFilterTarget {
     }
 }
 
+#[test]
+fn test_exit_filter_target_input() {
+    let value = ExitFilterTarget::Input;
+    assert_eq!(value.table(), "INPUT");
+    assert_eq!(value.set_name(), "rita_exit_input");
+    assert_eq!(value.direction(), "src");
+    assert_eq!(value.interface(), "-o");
+}
+
+#[test]
+fn test_exit_filter_target_output() {
+    let value = ExitFilterTarget::Output;
+    assert_eq!(value.table(), "OUTPUT");
+    assert_eq!(value.set_name(), "rita_exit_output");
+    assert_eq!(value.direction(), "dst");
+    assert_eq!(value.interface(), "-i");
+}
+
 fn parse_exit_ipset(input: &str) -> Result<HashMap<IpAddr, u64>, Error> {
     let mut map = HashMap::new();
 
@@ -159,4 +177,147 @@ impl KernelInterface {
         self.run_command("ipset", &["destroy", &format!("tmp_{}", target.set_name())])?;
         res
     }
+}
+
+#[test]
+fn test_init_exit_counter() {
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
+
+    use KI;
+
+    let mut counter = 0;
+
+    KI.set_mock(Box::new(move |program, args| {
+        counter += 1;
+        match counter {
+            1 => {
+                assert_eq!(program, "ipset");
+                assert_eq!(
+                    args,
+                    vec![
+                        "create",
+                        "rita_exit_input",
+                        "hash:net",
+                        "family",
+                        "inet6",
+                        "counters"
+                    ]
+                );
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            2 => {
+                assert_eq!(program, "ip6tables");
+                assert_eq!(
+                    args,
+                    vec![
+                        "-w",
+                        "-C",
+                        "INPUT",
+                        "-m",
+                        "set",
+                        "!",
+                        "--match-set",
+                        "rita_exit_input",
+                        "src",
+                        "-j",
+                        "SET",
+                        "--add-set",
+                        "rita_exit_input",
+                        "src"
+                    ]
+                );
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+
+            _ => panic!("Unexpected call {} {:?} {:?}", counter, program, args),
+        }
+    }));
+    KI.init_exit_counter(&ExitFilterTarget::Input)
+        .expect("Unable to init exit counter");
+}
+
+#[test]
+fn test_read_exit_server_counters() {
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
+
+    use KI;
+
+    let mut counter = 0;
+
+    KI.set_mock(Box::new(move |program, args| {
+        counter += 1;
+        match counter {
+            1 => {
+                assert_eq!(program, "ipset");
+                assert_eq!(
+                    args,
+                    vec![
+                        "create",
+                        "tmp_rita_exit_input",
+                        "hash:net",
+                        "family",
+                        "inet6",
+                        "counters"
+                    ]
+                );
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            2 => {
+                assert_eq!(program, "ipset");
+                assert_eq!(args, vec!["swap", "tmp_rita_exit_input", "rita_exit_input"]);
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            3 => {
+                assert_eq!(program, "ipset");
+                assert_eq!(args, vec!["save", "tmp_rita_exit_input"]);
+                Ok(Output {
+                    stdout: b"
+add asdf fd00::dead:beef packets 100 bytes 200
+".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            4 => {
+                assert_eq!(program, "ipset");
+                assert_eq!(args, vec!["destroy", "tmp_rita_exit_input"]);
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            _ => panic!("Unexpected call {} {:?} {:?}", counter, program, args),
+        }
+    }));
+    let result = KI
+        .read_exit_server_counters(&ExitFilterTarget::Input)
+        .expect("Unable to read values");
+    assert_eq!(result.len(), 1);
+
+    let value = result
+        .get(&IpAddr::V6(Ipv6Addr::new(
+            0xfd00, 0, 0, 0, 0, 0, 0xdead, 0xbeef,
+        ))).expect("Unable to find key");
+    assert_eq!(value, &(200u64 + 100u64 * 80));
 }
