@@ -78,7 +78,7 @@ pub fn hello_response(
     // contacted a neighbor. The exception to this is when the TCP session fails at exactly
     // the wrong time.
     TunnelManager::from_registry()
-        .send(IdentityCallback(their_id, peer, None))
+        .send(IdentityCallback::new(their_id, peer, None))
         .and_then(|tunnel| {
             let tunnel = tunnel.unwrap();
             Ok(Json(LocalIdentity {
