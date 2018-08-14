@@ -43,11 +43,16 @@ impl FilterTarget {
 }
 
 fn parse_ipset(input: &str) -> Result<HashMap<(IpAddr, String), u64>, Error> {
+    lazy_static! {
+        static ref RE: Regex =
+            Regex::new(r"(?m)^add \S+ ([a-f0-9:]+),(wg\d+) packets (\d+) bytes (\d+)")
+                .expect("Unable to compile regular expression");
+    }
     let mut map = HashMap::new();
 
     // example line `add aa fd00::1,wg0 packets 28 bytes 2212`
-    let reg = Regex::new(r"(?m)^add \S+ ([a-f0-9:]+),(wg\d+) packets (\d+) bytes (\d+)")?;
-    for caps in reg.captures_iter(input) {
+
+    for caps in RE.captures_iter(input) {
         map.insert(
             (IpAddr::from_str(&caps[1])?, String::from(&caps[2])),
             caps[4].parse::<u64>()? + caps[3].parse::<u64>()? * 40,
