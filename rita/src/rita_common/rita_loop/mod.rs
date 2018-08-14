@@ -114,13 +114,8 @@ impl Handler<Tick> for RitaLoop {
                         start.elapsed().subsec_nanos() / 1000000
                     );
 
-                    let res = res
-                        .iter()
-                        .map(|res| (res.identity.clone(), res.iface_name.clone()))
-                        .collect();
-
                     TrafficWatcher::from_registry()
-                        .send(Watch(res))
+                        .send(Watch::new(res))
                         .into_actor(act)
                         .then(move |_res, _act, _ctx| {
                             info!(
