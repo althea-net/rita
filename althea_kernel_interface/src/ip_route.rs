@@ -12,19 +12,9 @@ impl KernelInterface {
 
         let stdout = String::from_utf8(output.stdout).unwrap();
 
-        let mut def_route = Vec::new();
-
         // find all lines
-        for i in stdout.lines() {
-            // starting with default
-            if i.starts_with("default") {
-                for j in i.split_whitespace() {
-                    if j.len() != 0 {
-                        def_route.push(String::from(j));
-                    }
-                }
-                return Some(def_route);
-            }
+        for i in stdout.lines().filter(|line| line.starts_with("default")) {
+            return Some(i.split_whitespace().map(|s| s.to_string()).collect());
         }
 
         None
