@@ -23,15 +23,12 @@ impl KernelInterface {
     fn set_route(&self, to: &IpAddr, route: &Vec<String>) -> Result<(), Error> {
         let to = to.to_string();
 
-        let mut def_route_ref: Vec<&str> = vec!["route", "add"];
-
-        def_route_ref.push(to.as_str());
-
-        for i in 1..route.len() {
-            def_route_ref.push(route[i].as_str())
+        let mut def_route = vec!["route", "add", to.as_str()];
+        def_route.reserve(route.len() - 1);
+        for token in route.iter().skip(1) {
+            def_route.push(token);
         }
-
-        self.run_command("ip", &def_route_ref[..])?;
+        self.run_command("ip", &def_route)?;
         Ok(())
     }
 
@@ -143,4 +140,36 @@ default via 192.168.9.1 dev wifiinterface proto dhcp metric 1200
             "600"
         ]
     );
+}
+
+#[test]
+fn test_set_route() {
+    use std::net::Ipv4Addr;
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
+    use KI;
+    let mut counter = 0;
+
+    KI.set_mock(Box::new(move |program, args| {
+        counter += 1;
+        match counter {
+            1 => {
+                assert_eq!(program, "ip");
+                assert_eq!(args, vec!["route", "add", "127.0.0.1", "token2", "token3"]);
+
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            _ => panic!("Unexpected call {} {:?} {:?}", counter, program, args),
+        }
+    }));
+
+    KI.set_route(
+        &IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+        &vec!["token1".into(), "token2".into(), "token3".into()],
+    ).expect("Unable to set route");
 }
