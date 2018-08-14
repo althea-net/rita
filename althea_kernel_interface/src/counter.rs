@@ -1,7 +1,7 @@
 use super::KernelInterface;
 
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::IpAddr;
 use std::str::FromStr;
 
 use regex::Regex;
@@ -42,6 +42,30 @@ impl FilterTarget {
     }
 }
 
+#[test]
+fn test_filter_target_interface() {
+    assert_eq!(FilterTarget::Input.interface(), "src");
+    assert_eq!(FilterTarget::ForwardInput.interface(), "src");
+    assert_eq!(FilterTarget::Output.interface(), "dst");
+    assert_eq!(FilterTarget::ForwardOutput.interface(), "dst");
+}
+
+#[test]
+fn test_filter_table_set_name() {
+    assert_eq!(FilterTarget::Input.set_name(), "rita_input");
+    assert_eq!(FilterTarget::Output.set_name(), "rita_output");
+    assert_eq!(FilterTarget::ForwardInput.set_name(), "rita_fwd_input");
+    assert_eq!(FilterTarget::ForwardOutput.set_name(), "rita_fwd_output");
+}
+
+#[test]
+fn test_filter_table_table() {
+    assert_eq!(FilterTarget::Input.table(), "INPUT");
+    assert_eq!(FilterTarget::Output.table(), "OUTPUT");
+    assert_eq!(FilterTarget::ForwardOutput.table(), "FORWARD");
+    assert_eq!(FilterTarget::ForwardInput.table(), "FORWARD");
+}
+
 fn parse_ipset(input: &str) -> Result<HashMap<(IpAddr, String), u64>, Error> {
     lazy_static! {
         static ref RE: Regex =
@@ -63,6 +87,7 @@ fn parse_ipset(input: &str) -> Result<HashMap<(IpAddr, String), u64>, Error> {
 
 #[test]
 fn test_parse_ipset() {
+    use std::net::Ipv6Addr;
     let data = r#"
 add asdf 1234:5678:9801:2345:6789:0123:4567:8901,wg42 packets 123456789 bytes 987654321
 add zxcv 1234:5678:9801:2345:6789:0123:4567:8902,wg0 packets 123456789 bytes 987654320
@@ -160,4 +185,148 @@ impl KernelInterface {
         self.run_command("ipset", &["destroy", &format!("tmp_{}", target.set_name())])?;
         res
     }
+}
+
+#[test]
+fn test_init_counter() {
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
+
+    use KI;
+
+    let mut counter = 0;
+
+    KI.set_mock(Box::new(move |program, args| {
+        counter += 1;
+        match counter {
+            1 => {
+                assert_eq!(program, "ipset");
+                assert_eq!(
+                    args,
+                    vec![
+                        "create",
+                        "rita_input",
+                        "hash:net,iface",
+                        "family",
+                        "inet6",
+                        "counters"
+                    ]
+                );
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            2 => {
+                assert_eq!(program, "ip6tables");
+                assert_eq!(
+                    args,
+                    vec![
+                        "-w",
+                        "-C",
+                        "INPUT",
+                        "-m",
+                        "set",
+                        "!",
+                        "--match-set",
+                        "rita_input",
+                        "dst,src",
+                        "-j",
+                        "SET",
+                        "--add-set",
+                        "rita_input",
+                        "dst,src"
+                    ]
+                );
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+
+            _ => panic!("Unexpected call {} {:?} {:?}", counter, program, args),
+        }
+    }));
+    KI.init_counter(&FilterTarget::Input)
+        .expect("Unable to init counter");
+}
+#[test]
+fn test_read_counters() {
+    use std::net::Ipv6Addr;
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
+
+    use KI;
+
+    let mut counter = 0;
+
+    KI.set_mock(Box::new(move |program, args| {
+        counter += 1;
+        match counter {
+            1 => {
+                assert_eq!(program, "ipset");
+                assert_eq!(
+                    args,
+                    vec![
+                        "create",
+                        "tmp_rita_input",
+                        "hash:net,iface",
+                        "family",
+                        "inet6",
+                        "counters"
+                    ]
+                );
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            2 => {
+                assert_eq!(program, "ipset");
+                assert_eq!(args, vec!["swap", "tmp_rita_input", "rita_input"]);
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            3 => {
+                assert_eq!(program, "ipset");
+                assert_eq!(args, vec!["save", "tmp_rita_input"]);
+                Ok(Output {
+                    stdout: b"
+add xxx fd00::dead:beef,wg42 packets 111 bytes 222
+".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            4 => {
+                assert_eq!(program, "ipset");
+                assert_eq!(args, vec!["destroy", "tmp_rita_input"]);
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            _ => panic!("Unexpected call {} {:?} {:?}", counter, program, args),
+        }
+    }));
+    let result = KI
+        .read_counters(&FilterTarget::Input)
+        .expect("Unable to read values");
+    assert_eq!(result.len(), 1);
+
+    let value = result
+        .get(&(
+            IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0xdead, 0xbeef)),
+            "wg42".into(),
+        )).expect("Unable to find key");
+    assert_eq!(value, &(222u64 + 111u64 * 40));
 }
