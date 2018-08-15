@@ -4,6 +4,7 @@ use actix_web::{AsyncResponder, HttpRequest, HttpResponse, Json};
 use failure::Error;
 use futures::future;
 use futures::Future;
+use std::time::Instant;
 
 use rita_client::dashboard::WifiInterface;
 use rita_client::exit_manager::exit_setup_request;

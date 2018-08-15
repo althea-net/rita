@@ -246,9 +246,13 @@ impl Handler<Tick> for ExitManager {
         };
 
         // code that connects to the current exit server
+        trace!("About to setup exit tunnel!");
         if let Some(exit) = exit_server {
+            trace!("We have selected an exit!");
             if let Some(ref general_details) = exit.info.general_details() {
+                trace!("We have details for the selected exit!");
                 if let Some(_) = exit.info.our_details() {
+                    trace!("We are signed up for the selected exit!");
                     linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
                     TrafficWatcher::from_registry()
                         .do_send(Watch(exit.id.clone(), general_details.exit_price));

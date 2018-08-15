@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use actix::prelude::*;
 use actix::registry::SystemService;
@@ -55,6 +55,7 @@ fn to_exit_client(client: Client) -> Result<ExitClient, Error> {
 impl Handler<Tick> for RitaLoop {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
+        let start = Instant::now();
         trace!("Exit tick!");
 
         ctx.spawn(
@@ -101,6 +102,11 @@ impl Handler<Tick> for RitaLoop {
                 }),
         );
 
+        info!(
+            "Rita Exit loop completed in {}s {}ms",
+            start.elapsed().as_secs(),
+            start.elapsed().subsec_nanos() / 1000000
+        );
         Ok(())
     }
 }
