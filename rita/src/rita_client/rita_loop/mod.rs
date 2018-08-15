@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use actix::prelude::*;
 use actix::registry::SystemService;
@@ -13,7 +13,10 @@ impl Actor for RitaLoop {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        ctx.notify_later(Tick {}, Duration::from_secs(5));
+        ctx.run_interval(Duration::from_secs(5), |_act, ctx| {
+            let addr: Addr<Self> = ctx.address();
+            addr.do_send(Tick);
+        });
     }
 }
 
@@ -33,9 +36,8 @@ impl Handler<Tick> for RitaLoop {
             ExitManager::from_registry()
                 .send(Tick {})
                 .into_actor(self)
-                .then(|res, _act, ctx| {
+                .then(|res, _act, _ctx| {
                     trace!("exit manager said {:?}", res);
-                    ctx.notify_later(Tick {}, Duration::from_secs(10));
                     actix::fut::ok(())
                 }),
         );
