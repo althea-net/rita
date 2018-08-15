@@ -150,7 +150,7 @@ impl PaymentController {
             .body(serde_json::to_string(&update)?)
             .send()?;
 
-        if r.status() == StatusCode::Ok {
+        if r.status() == StatusCode::OK {
             Ok(())
         } else {
             trace!("Unsuccessfully in sending update to bounty hunter");
@@ -246,7 +246,7 @@ impl PaymentController {
 
         let mut r = self.client.post(&neighbor_url).json(&pmt).send()?;
 
-        if r.status() == StatusCode::Ok {
+        if r.status() == StatusCode::OK {
             self.balance = self.balance.clone() - Int256::from(pmt.amount.clone());
             self.update_bounty(BountyUpdate {
                 from: self.identity.clone(),

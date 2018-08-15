@@ -65,7 +65,7 @@ impl Handler<Tick> for RitaLoop {
             DbClient::from_registry()
                 .send(ListClients {})
                 .into_actor(self)
-                .then(|res, _act, ctx| {
+                .then(|res, _act, _ctx| {
                     let clients = res.unwrap().unwrap();
                     let ids = clients
                         .clone()
