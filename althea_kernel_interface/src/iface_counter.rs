@@ -46,7 +46,7 @@ impl KernelInterface {
     ) -> Result<(IfaceCounter, IfaceCounter), Error> {
         lazy_static! {
             static ref RE: Regex =
-                Regex::new(r"(?m)^\s+(?P<pkts>\d+)\s+(?P<bytes>\d+)\s+all\s+--\s+(?P<in>[\w\d_]+)\s+(?P<out>[\w\d_]+)\s+")
+                Regex::new(r"(?m)^\s+(?P<pkts>\d+)\s+(?P<bytes>\d+)\s+all\s+--\s+(?P<in>.+?)\s+(?P<out>.+?)\s+")
                     .expect("Unable to compile regular expression");
         }
         let chain_name = format!("{}-counter", interface);
@@ -72,6 +72,10 @@ impl KernelInterface {
             }
         }
 
+        if input.is_none() || output.is_none() {
+            error!("Unable to parse iface counters: {}", stdout);
+        }
+
         Ok((
             input.expect("Unable to parse input counters"),
             output.expect("Unable to parse output counters"),
@@ -93,13 +97,13 @@ fn test_read_iface_counters() {
         match counter {
             1 => {
                 assert_eq!(program, "iptables");
-                assert_eq!(args, vec!["-w", "-L", "eth0-counter", "-Z", "-x", "-v"]);
+                assert_eq!(args, vec!["-w", "-L", "veth-5-8_weird^name-counter", "-Z", "-x", "-v"]);
                 Ok(Output {
-                    stdout: b"Chain eth0-counter (2 references)
+                    stdout: b"Chain veth-5-8_weird^name-counter (2 references)
     pkts      bytes target     prot opt in     out     source               destination         
      4567  123456            all  --  any    eth1    anywhere             anywhere            
-     201   455840            all  --  any    eth0    anywhere             anywhere            
-      87     5873            all  --  eth0   any     anywhere             anywhere            
+     201   455840            all  --  any    veth-5-8_weird^name    anywhere             anywhere            
+      87     5873            all  --  veth-5-8_weird^name   any     anywhere             anywhere            
      288   461713 RETURN     all  --  any    any     anywhere             anywhere
      42    6666              all  --  eth1    any    anywhere             anywhere"
                         .to_vec(),
@@ -111,7 +115,7 @@ fn test_read_iface_counters() {
         }
     }));
     let (input_counter, output_counter) = KI
-        .read_iface_counters("eth0")
+        .read_iface_counters("veth-5-8_weird^name")
         .expect("Unable to parse iface counters");
 
     assert_eq!(input_counter.bytes, 5873);
