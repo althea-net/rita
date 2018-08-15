@@ -212,7 +212,7 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
     // check if we are a gateway
     let gateway = match SETTING.get_network().external_nic {
         Some(ref external_nic) => {
-            let wan_input_packets = (KI.read_iface_counters(external_nic)?.0).1;
+            let wan_input_packets = (KI.read_iface_counters(external_nic)?.0).packets;
             wan_input_packets > 0
         }
         _ => false,
