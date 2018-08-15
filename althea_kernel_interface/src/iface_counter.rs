@@ -13,6 +13,11 @@ impl IfaceCounter {
     pub fn new(bytes: u64, packets: u64) -> IfaceCounter {
         IfaceCounter { bytes, packets }
     }
+
+    /// Return sum of bytes and packet times the overhead
+    pub fn total_bytes(&self) -> u64 {
+        self.bytes + self.packets * 80
+    }
 }
 
 impl KernelInterface {
