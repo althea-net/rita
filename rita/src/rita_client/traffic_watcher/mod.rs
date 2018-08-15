@@ -81,8 +81,8 @@ pub fn watch<T: Read + Write>(
     let (input, output) = KI.read_iface_counters("wg_exit")?;
 
     // account for wg packet overhead
-    let input = input.bytes + input.packets * 80;
-    let output = output.bytes + output.packets * 80;
+    let input = input.total_bytes();
+    let output = output.total_bytes();
 
     trace!("got {:?} from client exit counters", (&input, &output));
 
