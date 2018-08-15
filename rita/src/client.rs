@@ -1,4 +1,7 @@
-#![cfg_attr(feature = "system_alloc", feature(alloc_system, allocator_api))]
+#![cfg_attr(
+    feature = "system_alloc",
+    feature(alloc_system, allocator_api)
+)]
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
@@ -198,10 +201,10 @@ fn main() {
             r.method(Method::POST).with(make_payments)
         })
     }).workers(1)
-        .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
-        .unwrap()
-        .shutdown_timeout(0)
-        .start();
+    .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
+    .unwrap()
+    .shutdown_timeout(0)
+    .start();
 
     // dashboard
     server::new(|| {
@@ -223,18 +226,16 @@ fn main() {
                 "/exits/{name}/verify/{code}",
                 Method::POST,
                 verify_on_exit_with_code,
-            )
-            .route("/info", Method::GET, get_own_info)
+            ).route("/info", Method::GET, get_own_info)
             .route("/version", Method::GET, version)
             .route("/wipe", Method::POST, wipe)
     }).workers(1)
-        .bind(format!(
-            "[::0]:{}",
-            SETTING.get_network().rita_dashboard_port
-        ))
-        .unwrap()
-        .shutdown_timeout(0)
-        .start();
+    .bind(format!(
+        "[::0]:{}",
+        SETTING.get_network().rita_dashboard_port
+    )).unwrap()
+    .shutdown_timeout(0)
+    .start();
 
     let common = rita_common::rita_loop::RitaLoop::new();
     let _: Addr<_> = common.start();
