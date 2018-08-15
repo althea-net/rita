@@ -4,6 +4,17 @@ use failure::Error;
 
 use regex::Regex;
 
+pub struct IfaceCounter {
+    pub bytes: u64,
+    pub packets: u64,
+}
+
+impl IfaceCounter {
+    pub fn new(bytes: u64, packets: u64) -> IfaceCounter {
+        IfaceCounter { bytes, packets }
+    }
+}
+
 impl KernelInterface {
     pub fn init_iface_counters(&self, interface: &str) -> Result<(), Error> {
         let chain_name = format!("{}-counter", interface);
@@ -23,29 +34,43 @@ impl KernelInterface {
         Ok(())
     }
 
-    /// returns ((input bytes, input packets), (output bytes, output packets))
-    pub fn read_iface_counters(&self, interface: &str) -> Result<((u64, u64), (u64, u64)), Error> {
+    /// returns (input counters, output counters)
+    pub fn read_iface_counters(
+        &self,
+        interface: &str,
+    ) -> Result<(IfaceCounter, IfaceCounter), Error> {
+        lazy_static! {
+            static ref RE: Regex =
+                Regex::new(r"(?m)^\s+(?P<pkts>\d+)\s+(?P<bytes>\d+)\s+all\s+--\s+(?P<in>[\w\d_]+)\s+(?P<out>[\w\d_]+)\s+")
+                    .expect("Unable to compile regular expression");
+        }
         let chain_name = format!("{}-counter", interface);
 
         let output = self.run_command("iptables", &["-w", "-L", &chain_name, "-Z", "-x", "-v"])?;
 
         let stdout = String::from_utf8(output.stdout)?;
 
-        let re = Regex::new(&format!(
-            r"(?m)^\s+(\d+)\s+(\d+)\s+all\s+--\s+any\s+{}",
-            interface
-        )).unwrap();
-        let caps = re.captures(&stdout).unwrap();
-        let output_traffic = (caps[2].parse::<u64>()?, caps[1].parse::<u64>()?);
+        let mut input: Option<IfaceCounter> = None;
+        let mut output: Option<IfaceCounter> = None;
 
-        let re = Regex::new(&format!(
-            r"(?m)^\s+(\d+)\s+(\d+)\s+all\s+--\s+{}\s+any",
-            interface
-        )).unwrap();
-        let caps = re.captures(&stdout).unwrap();
-        let input_traffic = (caps[2].parse::<u64>()?, caps[1].parse::<u64>()?);
+        for caps in RE.captures_iter(&stdout) {
+            if &caps["in"] == "any" && &caps["out"] == interface {
+                output = Some(IfaceCounter::new(
+                    caps["bytes"].parse()?,
+                    caps["pkts"].parse()?,
+                ));
+            } else if &caps["in"] == interface && &caps["out"] == "any" {
+                input = Some(IfaceCounter::new(
+                    caps["bytes"].parse()?,
+                    caps["pkts"].parse()?,
+                ));
+            }
+        }
 
-        Ok((input_traffic, output_traffic))
+        Ok((
+            input.expect("Unable to parse input counters"),
+            output.expect("Unable to parse output counters"),
+        ))
     }
 }
 
@@ -55,10 +80,6 @@ fn test_read_iface_counters() {
     use std::process::ExitStatus;
     use std::process::Output;
     use KI;
-    /*
-
-
-*/
 
     let mut counter = 0;
 
@@ -84,12 +105,12 @@ fn test_read_iface_counters() {
             _ => panic!("Unexpected call {} {:?} {:?}", counter, program, args),
         }
     }));
-    let ((input_bytes, input_packets), (output_bytes, output_packets)) = KI
+    let (input_counter, output_counter) = KI
         .read_iface_counters("eth0")
         .expect("Unable to parse iface counters");
 
-    assert_eq!(input_bytes, 5873);
-    assert_eq!(input_packets, 87);
-    assert_eq!(output_bytes, 455840);
-    assert_eq!(output_packets, 201);
+    assert_eq!(input_counter.bytes, 5873);
+    assert_eq!(input_counter.packets, 87);
+    assert_eq!(output_counter.bytes, 455840);
+    assert_eq!(output_counter.packets, 201);
 }
