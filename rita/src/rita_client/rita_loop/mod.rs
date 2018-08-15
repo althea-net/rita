@@ -26,6 +26,7 @@ impl Message for Tick {
 impl Handler<Tick> for RitaLoop {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
+        let start = Instant::now();
         trace!("Client Tick!");
 
         ctx.spawn(
@@ -39,6 +40,11 @@ impl Handler<Tick> for RitaLoop {
                 }),
         );
 
+        info!(
+            "Rita Client loop completed in {}s {}ms",
+            start.elapsed().as_secs(),
+            start.elapsed().subsec_nanos() / 1000000
+        );
         Ok(())
     }
 }

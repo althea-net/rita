@@ -110,6 +110,11 @@ impl Handler<Tick> for RitaLoop {
                     info!("Currently open tunnels: {:?}", res);
 
                     let neigh = Instant::now();
+                    info!(
+                        "GetNeighbors completed in {}s {}ms",
+                        start.elapsed().as_secs(),
+                        start.elapsed().subsec_nanos() / 1000000
+                    );
 
                     let res = res
                         .iter()
@@ -120,8 +125,11 @@ impl Handler<Tick> for RitaLoop {
                         .send(Watch(res))
                         .into_actor(act)
                         .then(move |_res, _act, _ctx| {
-                            info!("loop completed in {:?}", start.elapsed());
-                            info!("TrafficWatcher completed in {:?}", neigh.elapsed());
+                            info!(
+                                "TrafficWatcher completed in {}s {}ms",
+                                neigh.elapsed().as_secs(),
+                                neigh.elapsed().subsec_nanos() / 1000000
+                            );
                             DebtKeeper::from_registry().do_send(SendUpdate {});
                             PaymentController::from_registry().do_send(PaymentControllerUpdate {});
                             actix::fut::ok(())
@@ -129,24 +137,37 @@ impl Handler<Tick> for RitaLoop {
                 }),
         );
 
+        let start = Instant::now();
         trace!("Starting PeerListener tick");
         Arbiter::spawn(
             PeerListener::from_registry()
                 .send(Tick {})
-                .then(|res| {
-                    trace!("PeerListener said after tick: {:?}", res);
+                .then(move |res| {
+                    info!(
+                        "PeerListener tick completed in {}s {}ms, with result {:?}",
+                        start.elapsed().as_secs(),
+                        start.elapsed().subsec_nanos() / 1000000,
+                        res
+                    );
                     res
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
         );
 
+        let start = Instant::now();
         trace!("Getting Peers from PeerListener to pass to TunnelManager");
         Arbiter::spawn(
             PeerListener::from_registry()
                 .send(GetPeers {})
-                .and_then(|peers| {
-                    trace!("Got peers structs from PeerListener, passing to TunnelManager");
+                .and_then(move |peers| {
+                    info!(
+                        "PeerListener get peers completed in {}s {}ms",
+                        start.elapsed().as_secs(),
+                        start.elapsed().subsec_nanos() / 1000000
+                    );
                     TunnelManager::from_registry().send(PeersToContact(peers.unwrap())) // GetPeers never fails so unwrap is safe
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
         );
 
         Ok(())
