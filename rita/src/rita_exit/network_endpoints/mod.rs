@@ -4,7 +4,7 @@ use actix_web::*;
 use futures;
 use futures::Future;
 
-use rita_exit::db_client::{get_exit_info, ClientStatus, DbClient, SetupClient, TruncateTables};
+use rita_exit::db_client::{get_exit_info, ClientStatus, DbClient, SetupClient};
 
 use std::boxed::Box;
 use std::time::SystemTime;

@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use actix::prelude::*;
 use actix::registry::SystemService;
@@ -25,7 +25,10 @@ impl Actor for RitaLoop {
 
     fn started(&mut self, ctx: &mut Context<Self>) {
         info!("exit loop started");
-        ctx.notify_later(Tick {}, Duration::from_secs(5));
+        ctx.run_interval(Duration::from_secs(5), |_act, ctx| {
+            let addr: Addr<Self> = ctx.address();
+            addr.do_send(Tick);
+        });
     }
 }
 
@@ -55,13 +58,14 @@ fn to_exit_client(client: Client) -> Result<ExitClient, Error> {
 impl Handler<Tick> for RitaLoop {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
+        let start = Instant::now();
         trace!("Exit tick!");
 
         ctx.spawn(
             DbClient::from_registry()
                 .send(ListClients {})
                 .into_actor(self)
-                .then(|res, _act, ctx| {
+                .then(|res, _act, _ctx| {
                     let clients = res.unwrap().unwrap();
                     let ids = clients
                         .clone()
@@ -96,11 +100,15 @@ impl Handler<Tick> for RitaLoop {
                         Err(e) => warn!("Error in Exit WG setup {:?}", e),
                     }
 
-                    ctx.notify_later(Tick {}, Duration::from_secs(5));
                     actix::fut::ok(())
                 }),
         );
 
+        info!(
+            "Rita Exit loop completed in {}s {}ms",
+            start.elapsed().as_secs(),
+            start.elapsed().subsec_nanos() / 1000000
+        );
         Ok(())
     }
 }
