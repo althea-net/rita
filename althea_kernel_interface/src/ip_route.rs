@@ -28,12 +28,19 @@ impl KernelInterface {
 
         let stdout = String::from_utf8(output.stdout).unwrap();
 
-        // find all lines
-        for i in stdout.lines().filter(|line| line.starts_with("default")) {
-            return Some(i.split_whitespace().map(|s| s.to_string()).collect());
-        }
-
-        None
+        // Get the first line that starts with "default", and
+        // convert token separated by whitespace into a valid
+        // result of type Vec<String>. Otherwise returns
+        // None if it couldn't be found.
+        Some(
+            stdout
+                .lines()
+                .filter(|line| line.starts_with("default"))
+                .nth(0)?
+                .split_whitespace() // Extract first
+                .map(|s| s.to_string())
+                .collect(),
+        )
     }
 
     fn set_route(&self, to: &IpRoute, route: &Vec<String>) -> Result<(), Error> {
@@ -94,6 +101,39 @@ impl KernelInterface {
         };
         Ok(())
     }
+}
+
+#[test]
+fn test_get_default_route_invalid() {
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
+    use KI;
+    let mut counter = 0;
+
+    // This will mock `run_command` to run a real output of `ip route`
+    // with addition that there are additional spaces, more than one default
+    // route etc.
+    KI.set_mock(Box::new(move |program, args| {
+        counter += 1;
+        match counter {
+            1 => {
+                assert_eq!(program, "ip");
+                assert_eq!(args, vec!["route", "list", "default"]);
+                Ok(Output {
+                    stdout: b"1.2.3.4/16 dev interface scope link metric 1000".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            _ => panic!("Unexpected call {} {:?} {:?}", counter, program, args),
+        }
+    }));
+
+    assert!(
+        KI.get_default_route().is_none(),
+        "Invalid `ip route` unexpectedly returned a valid route"
+    );
 }
 
 #[test]
