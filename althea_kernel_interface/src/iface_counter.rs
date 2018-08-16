@@ -20,6 +20,23 @@ impl IfaceCounter {
     }
 }
 
+#[derive(Debug, Fail)]
+enum IfaceCounterError {
+    #[fail(display = "Unable to find counter for interface {}", name)]
+    NoCounterForIfaceError { name: String },
+}
+
+#[test]
+fn test_iface_counter_error() {
+    let err: Error = IfaceCounterError::NoCounterForIfaceError {
+        name: "iface".into(),
+    }.into();
+    assert_eq!(
+        err.to_string(),
+        "Unable to find counter for interface iface"
+    );
+}
+
 impl KernelInterface {
     pub fn init_iface_counters(&self, interface: &str) -> Result<(), Error> {
         let chain_name = format!("{}-counter", interface);
@@ -73,13 +90,14 @@ impl KernelInterface {
         }
 
         if input.is_none() || output.is_none() {
-            error!("Unable to parse iface counters: {}", stdout);
+            error!("Unable to parse iface counters: {:?}", stdout);
+            return Err(IfaceCounterError::NoCounterForIfaceError {
+                name: interface.into(),
+            }.into());
         }
 
-        Ok((
-            input.expect("Unable to parse input counters"),
-            output.expect("Unable to parse output counters"),
-        ))
+        // At this point its safe to unwrap optionals
+        Ok((input.unwrap(), output.unwrap()))
     }
 }
 
@@ -122,4 +140,48 @@ fn test_read_iface_counters() {
     assert_eq!(input_counter.packets, 87);
     assert_eq!(output_counter.bytes, 455840);
     assert_eq!(output_counter.packets, 201);
+}
+
+#[test]
+fn test_read_iface_counters_with_missing_ifaces() {
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
+    use KI;
+
+    let mut counter = 0;
+
+    KI.set_mock(Box::new(move |program, args| {
+        counter += 1;
+        match counter {
+            1 => {
+                assert_eq!(program, "iptables");
+                assert_eq!(
+                    args,
+                    vec!["-w", "-L", "veth-5-8_weird^name-counter", "-Z", "-x", "-v"]
+                );
+                Ok(Output {
+                    stdout: b"Chain veth-5-8_weird^name-counter (2 references)
+    pkts      bytes target     prot opt in     out     source               destination         
+     4567  123456            all  --  any    eth1    anywhere             anywhere            
+     288   461713 RETURN     all  --  any    any     anywhere             anywhere
+     42    6666              all  --  eth1    any    anywhere             anywhere"
+                        .to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            _ => panic!("Unexpected call {} {:?} {:?}", counter, program, args),
+        }
+    }));
+    let result = KI.read_iface_counters("veth-5-8_weird^name");
+    match result {
+        Err(err) => {
+            let IfaceCounterError::NoCounterForIfaceError { name } = err
+                .downcast::<IfaceCounterError>()
+                .expect("Unable to downcast");
+            assert_eq!(name, "veth-5-8_weird^name");
+        }
+        _ => assert!(false, "Invalid error"),
+    }
 }
