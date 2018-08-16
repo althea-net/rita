@@ -50,7 +50,7 @@ minihttpse = "0.1.6"
 mockito = "0.12.0"
 mockstream = { git = "https://github.com/lazy-bitfield/rust-mockstream.git" }
 rand = "0.5.4"
-reqwest = {git = "https://github.com/seanmonstar/reqwest"}
+reqwest = {git = "https://github.com/seanmonstar/reqwest", rev = "3424e91746f64a50bd02408750a5f01eef2abd5f"}
 serde = "1.0.70"
 serde_derive = "1.0.70"
 serde_json = "1.0.24"
