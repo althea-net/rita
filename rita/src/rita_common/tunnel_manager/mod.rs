@@ -52,23 +52,12 @@ pub enum TunnelManagerError {
     PortError(String),
 }
 
-/* Uncomment when tunnel state handling is added
-#[derive(Debug, Clone)]
-pub enum TunnelState {
-    Init,
-    Open,
-    Throttled,
-    Closed,
-}
-*/
-
 #[derive(Debug, Clone)]
 pub struct Tunnel {
-    pub ip: IpAddr,         // Tunnel endpoint
-    pub iface_name: String, // name of wg#
-    pub listen_ifidx: u32,  // the physical interface this tunnel is listening on
-    pub listen_port: u16,   // the local port this tunnel is listening on
-    //    pub tunnel_state: TunnelState, // how this exit feels about it's lifecycle
+    pub ip: IpAddr,             // Tunnel endpoint
+    pub iface_name: String,     // name of wg#
+    pub listen_ifidx: u32,      // the physical interface this tunnel is listening on
+    pub listen_port: u16,       // the local port this tunnel is listening on
     pub localid: LocalIdentity, // the identity of the counterparty tunnel
 }
 
@@ -81,13 +70,11 @@ impl Tunnel {
     ) -> Result<Tunnel, Error> {
         let iface_name = KI.setup_wg_if().unwrap();
 
-        //let init = TunnelState::Init;
         let tunnel = Tunnel {
             ip: ip,
             iface_name: iface_name,
             listen_ifidx: ifidx,
             listen_port: our_listen_port,
-            //tunnel_state: init,
             localid: their_id.clone(),
         };
 
@@ -117,9 +104,23 @@ impl Tunnel {
     }
 }
 
+#[derive(PartialEq, Eq, Hash, Debug)]
+struct TunnelIdentity {
+    /// Identity of the owner of tunnel
+    identity: Identity,
+    /// Interface index
+    ifidx: u32,
+}
+
+impl TunnelIdentity {
+    fn new(identity: Identity, ifidx: u32) -> TunnelIdentity {
+        TunnelIdentity { identity, ifidx }
+    }
+}
+
 pub struct TunnelManager {
     free_ports: Vec<u16>,
-    tunnels: HashMap<(Identity, u32), Tunnel>,
+    tunnels: HashMap<TunnelIdentity, Tunnel>,
 }
 
 impl Actor for TunnelManager {
@@ -138,7 +139,26 @@ impl Default for TunnelManager {
     }
 }
 
-pub struct IdentityCallback(pub LocalIdentity, pub Peer, pub Option<u16>);
+pub struct IdentityCallback {
+    pub local_identity: LocalIdentity,
+    pub peer: Peer,
+    pub our_port: Option<u16>,
+}
+
+impl IdentityCallback {
+    pub fn new(
+        local_identity: LocalIdentity,
+        peer: Peer,
+        our_port: Option<u16>,
+    ) -> IdentityCallback {
+        IdentityCallback {
+            local_identity,
+            peer,
+            our_port,
+        }
+    }
+}
+
 impl Message for IdentityCallback {
     type Result = Option<(Tunnel, bool)>;
 }
@@ -153,9 +173,7 @@ impl Handler<IdentityCallback> for TunnelManager {
     type Result = Option<(Tunnel, bool)>;
 
     fn handle(&mut self, msg: IdentityCallback, _: &mut Context<Self>) -> Self::Result {
-        let peer_local_id = msg.0;
-        let peer = msg.1;
-        let our_port = match msg.2 {
+        let our_port = match msg.our_port {
             Some(port) => port,
             _ => match self.free_ports.pop() {
                 Some(p) => p,
@@ -166,7 +184,7 @@ impl Handler<IdentityCallback> for TunnelManager {
             },
         };
 
-        let res = self.open_tunnel(peer_local_id, peer, our_port);
+        let res = self.open_tunnel(msg.local_identity, msg.peer, our_port);
         match res {
             Ok(res) => Some(res),
             Err(e) => {
@@ -233,24 +251,52 @@ impl Handler<GetPhyIpFromMeshIp> for TunnelManager {
 }
 
 pub struct GetNeighbors;
-impl Message for GetNeighbors {
-    type Result = Result<Vec<(LocalIdentity, String, IpAddr)>, Error>;
+
+#[derive(Debug)]
+pub struct Neighbor {
+    pub identity: LocalIdentity,
+    pub iface_name: String,
+    pub tunnel_ip: IpAddr,
 }
 
+impl Neighbor {
+    fn new(identity: LocalIdentity, iface_name: String, tunnel_ip: IpAddr) -> Neighbor {
+        Neighbor {
+            identity,
+            iface_name,
+            tunnel_ip,
+        }
+    }
+}
+
+impl Message for GetNeighbors {
+    type Result = Result<Vec<Neighbor>, Error>;
+}
 impl Handler<GetNeighbors> for TunnelManager {
-    type Result = Result<Vec<(LocalIdentity, String, IpAddr)>, Error>;
+    type Result = Result<Vec<Neighbor>, Error>;
 
     fn handle(&mut self, _: GetNeighbors, _: &mut Context<Self>) -> Self::Result {
         let mut res = Vec::new();
-        for obj in self.tunnels.iter() {
-            let tunnel = obj.1;
-            res.push((tunnel.localid.clone(), tunnel.iface_name.clone(), tunnel.ip));
+        for (_, tunnel) in self.tunnels.iter() {
+            res.push(Neighbor::new(
+                tunnel.localid.clone(),
+                tunnel.iface_name.clone(),
+                tunnel.ip,
+            ));
         }
         Ok(res)
     }
 }
 
-pub struct PeersToContact(pub HashMap<IpAddr, Peer>);
+pub struct PeersToContact {
+    pub peers: HashMap<IpAddr, Peer>,
+}
+
+impl PeersToContact {
+    pub fn new(peers: HashMap<IpAddr, Peer>) -> PeersToContact {
+        PeersToContact { peers }
+    }
+}
 
 impl Message for PeersToContact {
     type Result = ();
@@ -262,9 +308,8 @@ impl Handler<PeersToContact> for TunnelManager {
     type Result = ();
     fn handle(&mut self, msg: PeersToContact, _ctx: &mut Context<Self>) -> Self::Result {
         trace!("TunnelManager contacting peers");
-        for obj in msg.0.iter() {
-            let peer = obj.1;
-            let res = self.neighbor_inquiry(peer.clone());
+        for (_, peer) in msg.peers.iter() {
+            let res = self.neighbor_inquiry(&peer);
             if res.is_err() {
                 warn!("Neighbor inqury for {:?} failed! with {:?}", peer, res);
             }
@@ -282,7 +327,7 @@ impl Handler<PeersToContact> for TunnelManager {
                             ifidx: 0,
                             contact_socket: socket,
                         };
-                        let res = self.neighbor_inquiry(man_peer);
+                        let res = self.neighbor_inquiry(&man_peer);
                         if res.is_err() {
                             warn!(
                                 "Neighbor inqury for {:?} failed with: {:?}",
@@ -307,7 +352,7 @@ impl Handler<PeersToContact> for TunnelManager {
 
 /// Sets out to contact a neighbor, takes a speculative port (only assigned if the neighbor
 /// responds successfully)
-fn contact_neighbor(peer: Peer, our_port: u16) -> Result<(), Error> {
+fn contact_neighbor(peer: &Peer, our_port: u16) -> Result<(), Error> {
     KI.manual_peers_route(
         &peer.contact_socket.ip(),
         &mut SETTING.get_network_mut().default_route,
@@ -319,7 +364,7 @@ fn contact_neighbor(peer: Peer, our_port: u16) -> Result<(), Error> {
             wg_port: our_port,
             have_tunnel: None,
         },
-        to: peer,
+        to: peer.clone(),
     });
 
     Ok(())
@@ -331,7 +376,7 @@ impl TunnelManager {
         let ports = (start..65535).collect();
         TunnelManager {
             free_ports: ports,
-            tunnels: HashMap::<(Identity, u32), Tunnel>::new(),
+            tunnels: HashMap::<TunnelIdentity, Tunnel>::new(),
         }
     }
 
@@ -363,7 +408,7 @@ impl TunnelManager {
                             ifidx: 0,
                             contact_socket: socket,
                         };
-                        let res = contact_neighbor(man_peer, our_port);
+                        let res = contact_neighbor(&man_peer, our_port);
                         if res.is_err() {
                             warn!("Contact neighbor failed with {:?}", res);
                         }
@@ -392,7 +437,7 @@ impl TunnelManager {
 
     /// Contacts one neighbor with our LocalIdentity to get their LocalIdentity and wireguard tunnel
     /// interface name.
-    pub fn neighbor_inquiry(&mut self, peer: Peer) -> Result<(), Error> {
+    pub fn neighbor_inquiry(&mut self, peer: &Peer) -> Result<(), Error> {
         trace!("TunnelManager neigh inquiry for {:?}", peer);
         let our_port = match self.free_ports.pop() {
             Some(p) => p,
@@ -416,9 +461,8 @@ impl TunnelManager {
         trace!("getting existing tunnel or opening a new one");
         // ifidx must be a part of the key so that we can open multiple tunnels
         // if we have more than one physical connection to the same peer
-        let key = &(their_localid.global.clone(), peer.ifidx);
-
-        let we_have_tunnel = self.tunnels.contains_key(key);
+        let key = TunnelIdentity::new(their_localid.global.clone(), peer.ifidx);
+        let we_have_tunnel = self.tunnels.contains_key(&key);
         let they_have_tunnel = match their_localid.have_tunnel {
             Some(v) => v,
             None => true, // when we don't take the more conservative option
@@ -435,7 +479,7 @@ impl TunnelManager {
             // return allocated port as it's not required
             self.free_ports.push(our_port);
             // Unwrap is safe because we confirm membership
-            let tunnel = self.tunnels.get(key).unwrap();
+            let tunnel = self.tunnels.get(&key).unwrap();
             return Ok((tunnel.clone(), true));
         }
 
@@ -445,8 +489,8 @@ impl TunnelManager {
                 peer.contact_socket.ip()
             );
             // Unwrap is safe because we confirm membership
-            let iface_name = self.tunnels.get(key).unwrap().iface_name.clone();
-            let port = self.tunnels.get(key).unwrap().listen_port.clone();
+            let iface_name = self.tunnels.get(&key).unwrap().iface_name.clone();
+            let port = self.tunnels.get(&key).unwrap().listen_port.clone();
             let res = KI.del_interface(&iface_name);
             if res.is_err() {
                 warn!(
@@ -457,7 +501,7 @@ impl TunnelManager {
 
             // In the case that we have a tunnel and they don't we drop our existing one
             // and agree on the new parameters in this message
-            self.tunnels.remove(key);
+            self.tunnels.remove(&key);
             self.free_ports.push(port);
             return_bool = true;
         }
@@ -476,7 +520,8 @@ impl TunnelManager {
 
         match tunnel {
             Ok(tunnel) => {
-                let new_key = (tunnel.localid.global.clone(), tunnel.listen_ifidx.clone());
+                let new_key =
+                    TunnelIdentity::new(tunnel.localid.global.clone(), tunnel.listen_ifidx.clone());
                 self.tunnels.insert(new_key, tunnel.clone());
                 Ok((tunnel, return_bool))
             }

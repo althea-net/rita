@@ -90,7 +90,7 @@ impl Handler<Hello> for HTTPClient {
                 match response {
                     Ok(response) => Box::new(response.json().then(move |val| match val {
                         Ok(val) => {
-                            TunnelManager::from_registry().do_send(IdentityCallback(
+                            TunnelManager::from_registry().do_send(IdentityCallback::new(
                                 val,
                                 peer,
                                 Some(wg_port),

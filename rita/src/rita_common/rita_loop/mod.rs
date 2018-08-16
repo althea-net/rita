@@ -103,8 +103,6 @@ impl Handler<Tick> for RitaLoop {
                 .send(GetNeighbors)
                 .into_actor(self)
                 .then(move |res, act, _ctx| {
-                    // TODO refactor to use an struct instead of a tuple
-                    // Vec<(LocalIdentity, Iface Name, IpAddr)>
                     let res = res.unwrap().unwrap();
 
                     info!("Currently open tunnels: {:?}", res);
@@ -116,13 +114,8 @@ impl Handler<Tick> for RitaLoop {
                         start.elapsed().subsec_nanos() / 1000000
                     );
 
-                    let res = res
-                        .iter()
-                        .map(|res| (res.0.clone(), res.1.clone()))
-                        .collect();
-
                     TrafficWatcher::from_registry()
-                        .send(Watch(res))
+                        .send(Watch::new(res))
                         .into_actor(act)
                         .then(move |_res, _act, _ctx| {
                             info!(
@@ -164,7 +157,7 @@ impl Handler<Tick> for RitaLoop {
                         start.elapsed().as_secs(),
                         start.elapsed().subsec_nanos() / 1000000
                     );
-                    TunnelManager::from_registry().send(PeersToContact(peers.unwrap())) // GetPeers never fails so unwrap is safe
+                    TunnelManager::from_registry().send(PeersToContact::new(peers.unwrap())) // GetPeers never fails so unwrap is safe
                 }).then(|_| Ok(())),
         );
 
