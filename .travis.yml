@@ -9,8 +9,8 @@ before_install:
   - sudo cp $(which diesel) /usr/bin
 env:
   - TEST_COMMAND="rustup component add rustfmt-preview --toolchain nightly && cargo +nightly fmt --all -- --check"
-  - TEST_COMMAND="cargo build --verbose --all"
-  - TEST_COMMAND="cargo test --verbose --all" RUST_TEST_THREADS=1
+  - TEST_COMMAND="cargo build --locked --verbose --all"
+  - TEST_COMMAND="cargo test --locked --verbose --all" RUST_TEST_THREADS=1
 rust:
   - stable
   - beta
@@ -21,9 +21,9 @@ matrix:
   allow_failures:
     - rust: beta
     - rust: nightly
-      env: TEST_COMMAND="cargo build --verbose --all"
+      env: TEST_COMMAND="cargo build --locked --verbose --all"
     - rust: nightly
-      env: TEST_COMMAND="cargo test --verbose --all" RUST_TEST_THREADS=1
+      env: TEST_COMMAND="cargo test --locked --verbose --all" RUST_TEST_THREADS=1
   exclude:
     - rust: beta
       env: TEST_COMMAND="rustup component add rustfmt-preview --toolchain nightly && cargo +nightly fmt --all -- --check"
