@@ -15,3 +15,4 @@ integration-tests/staging*
 integration-tests/althea_rs_*
 integration-tests/target*
 integration-tests/mail/*
+integration-tests/bounty.db-journal

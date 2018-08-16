@@ -4,17 +4,15 @@ use actix::prelude::*;
 use actix::registry::SystemService;
 use actix_utils::KillActor;
 
-#[cfg(not(test))]
-use trust_dns_resolver::config::ResolverConfig;
-
 use actix_utils::ResolverWrapper;
 
-#[cfg(not(test))]
 use KI;
 
 use rita_common::tunnel_manager::{GetNeighbors, TunnelManager};
 
 use rita_common::traffic_watcher::{TrafficWatcher, Watch};
+
+use rita_common::peer_listener::PeerListener;
 
 use rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 
@@ -22,8 +20,13 @@ use rita_common::payment_controller::{PaymentController, PaymentControllerUpdate
 
 use rita_common::stats_collector::StatsCollector;
 
+use rita_common::peer_listener::GetPeers;
+
+use rita_common::tunnel_manager::PeersToContact;
+
 use failure::Error;
-use rita_common::tunnel_manager::OpenTunnel;
+
+use futures::Future;
 
 use settings::RitaCommonSettings;
 use SETTING;
@@ -79,14 +82,16 @@ impl Handler<Tick> for RitaLoop {
 
                 self.was_gateway = true
             }
-            trace!("Adding default routes for TrustDNS");
-            #[cfg(not(test))]
-            for i in ResolverConfig::default().name_servers() {
-                trace!("TrustDNS default {:?}", i);
-                KI.manual_peers_route(
-                    &i.socket_addr.ip(),
-                    &mut SETTING.get_network_mut().default_route,
-                ).unwrap();
+
+            match KI.get_resolv_servers() {
+                Ok(s) => {
+                    for ip in s.iter() {
+                        trace!("Resolv route {:?}", ip);
+                        KI.manual_peers_route(&ip, &mut SETTING.get_network_mut().default_route)
+                            .unwrap();
+                    }
+                }
+                Err(e) => warn!("Failed to add DNS routes with {:?}", e),
             }
         } else {
             self.was_gateway = false
@@ -98,34 +103,71 @@ impl Handler<Tick> for RitaLoop {
                 .send(GetNeighbors)
                 .into_actor(self)
                 .then(move |res, act, _ctx| {
+                    // TODO refactor to use an struct instead of a tuple
+                    // Vec<(LocalIdentity, Iface Name, IpAddr)>
                     let res = res.unwrap().unwrap();
 
-                    info!("got neighbors: {:?}", res);
+                    info!("Currently open tunnels: {:?}", res);
 
                     let neigh = Instant::now();
-
-                    for &(ref their_id, _, ref ip) in &res {
-                        TunnelManager::from_registry()
-                            .do_send(OpenTunnel(their_id.clone(), ip.clone()));
-                    }
+                    info!(
+                        "GetNeighbors completed in {}s {}ms",
+                        start.elapsed().as_secs(),
+                        start.elapsed().subsec_nanos() / 1000000
+                    );
 
                     let res = res
                         .iter()
-                        .map(|input| (input.0.clone(), input.1.clone()))
+                        .map(|res| (res.0.clone(), res.1.clone()))
                         .collect();
 
                     TrafficWatcher::from_registry()
                         .send(Watch(res))
                         .into_actor(act)
                         .then(move |_res, _act, _ctx| {
-                            info!("loop completed in {:?}", start.elapsed());
-                            info!("traffic watcher completed in {:?}", neigh.elapsed());
+                            info!(
+                                "TrafficWatcher completed in {}s {}ms",
+                                neigh.elapsed().as_secs(),
+                                neigh.elapsed().subsec_nanos() / 1000000
+                            );
                             DebtKeeper::from_registry().do_send(SendUpdate {});
                             PaymentController::from_registry().do_send(PaymentControllerUpdate {});
                             actix::fut::ok(())
                         })
                 }),
         );
+
+        let start = Instant::now();
+        trace!("Starting PeerListener tick");
+        Arbiter::spawn(
+            PeerListener::from_registry()
+                .send(Tick {})
+                .then(move |res| {
+                    info!(
+                        "PeerListener tick completed in {}s {}ms, with result {:?}",
+                        start.elapsed().as_secs(),
+                        start.elapsed().subsec_nanos() / 1000000,
+                        res
+                    );
+                    res
+                }).then(|_| Ok(())),
+        );
+
+        let start = Instant::now();
+        trace!("Getting Peers from PeerListener to pass to TunnelManager");
+        Arbiter::spawn(
+            PeerListener::from_registry()
+                .send(GetPeers {})
+                .and_then(move |peers| {
+                    info!(
+                        "PeerListener get peers completed in {}s {}ms",
+                        start.elapsed().as_secs(),
+                        start.elapsed().subsec_nanos() / 1000000
+                    );
+                    TunnelManager::from_registry().send(PeersToContact(peers.unwrap())) // GetPeers never fails so unwrap is safe
+                }).then(|_| Ok(())),
+        );
+
         Ok(())
     }
 }

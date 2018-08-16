@@ -25,7 +25,7 @@ This file documents the dashboard API found in Rita client.
 
 `curl 127.0.0.1:4877/info`
 
----
+
 
 ## /neighbors
 
@@ -64,11 +64,12 @@ This file documents the dashboard API found in Rita client.
 
 `curl 127.0.0.1:4877/neighbors`
 
----
+
 
 ## /exits
 
 - URL: `<rita ip>:<rita_dashboard_port>/exits'
+- Comment: Gets all the configured exits
 - Method: `GET`
 - URL Params: `None`
 - Data Params: `None`
@@ -104,8 +105,94 @@ This file documents the dashboard API found in Rita client.
 
 `curl 127.0.0.1:4877/exits`
 
----
+## /exits/{nickname}/reset
 
+- URL: `<rita ip>:<rita_dashboard_port>/exits/{nickname}/reset'
+- Comment: Resets the exit named `nickname`
+- Method: `POST`
+- URL Params: `nickname`, string
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `{}`
+- Error Response: `400 Bad Request`
+- Error Contents:
+```json
+{
+    "error": "<description>",
+}
+```
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:4877/exits/borked/reset`
+
+## /exits/{nickname}/select
+
+- URL: `<rita ip>:<rita_dashboard_port>/exits/{nickname}/select'
+- Comment: Sets the exit named `nickname` as the current exit
+- Method: `POST`
+- URL Params: `nickname`, string
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `{}`
+- Error Response: `400 Bad Request`
+- Error Contents:
+```json
+{
+    "error": "<description>",
+}
+```
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:4877/exits/borked/reset`
+
+## /exits/{nickname}/register
+
+- URL: `<rita ip>:<rita_dashboard_port>/exits/{nickname}/register'
+- Comment: Asks exit `{nickname}` to be registered
+- Method: `POST`
+- URL Params: `nickname`, string
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `{}`
+- Error Response: `400 Bad Request`
+- Error Contents:
+```json
+{
+    "error": "<description>",
+    "rust_error": "<stringified_rust_error>"
+}
+```
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:4877/exits/borked/register`
+
+## /exits/{nickname}/verify/{code}
+
+- URL: `<rita ip>:<rita_dashboard_port>/exits/{nickname}/verify/{code}'
+- Comment: After registering and receiving a verification code, asks exit
+  `{nickname}` for verification using `{code}`
+- Method: `POST`
+- URL Params:
+    - `nickname`, string
+    - `code`, string
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `{}`
+- Error Response: `400 Bad Request`
+- Error Contents:
+```json
+{
+    "error": "<description>",
+    "rust_error": "<stringified_rust_error>"
+}
+```
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:4877/exits/borked/register`
 
 ## /settings
 
@@ -228,7 +315,7 @@ This file documents the dashboard API found in Rita client.
 
 `curl 127.0.0.1:4877/settings`
 
----
+
 
 ## /settings
 
@@ -254,7 +341,7 @@ This file documents the dashboard API found in Rita client.
 `curl -XPOST 127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"exit_client": {"current_exit": "SELECTEDEXIT"}}'`
 }
 
----
+
 
 ## /wifi_settings
 
@@ -313,7 +400,7 @@ This file documents the dashboard API found in Rita client.
 
 `curl 127.0.0.1:4877/wifi_settings`
 
----
+
 
 ## /wifi_settings
 
@@ -334,5 +421,113 @@ This file documents the dashboard API found in Rita client.
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"default_radio0": {"ssid": "NetworkName"}}'`
+
+---
+
+## /wifi_settings/ssid
+
+- URL: `<rita ip>:<rita_dashboard_port>/wifi_settings/ssid`
+- Method: `POST`
+- URL Params: `Content-Type: application/json`
+- Data Params: `Radio to change the ssid of and ssid`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+{}
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:<rita_dashboard_port>/wifi_settings/ssid -H 'Content-Type: application/json' -i -d '{"radio":"radio0", "ssid": "this is a freeform ssid"}'`
+
+
+---
+
+## /wifi_settings/pass
+
+- URL: `<rita ip>:<rita_dashboard_port>/wifi_settings/pass`
+- Method: `POST`
+- URL Params: `Content-Type: application/json`
+- Data Params: `Radio to change the password of and password`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+{}
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:<rita_dashboard_port>/wifi_settings/pass -H 'Content-Type: application/json' -i -d '{"radio":"radio0", "pass": "this is a freeform password"}'`
+
+
+---
+
+## /wifi_settings/mesh
+
+- URL: `<rita ip>:<rita_dashboard_port>/wifi_settings/mesh`
+- Method: `POST`
+- URL Params: `Content-Type: application/json`
+- Data Params: `Radio to toggle mesh and mesh bool, resets radio to default ssid and pass on disable`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+{}
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:<rita_dashboard_port>/wifi_settings/mesh -H 'Content-Type: application/json' -i -d '{"radio":"radio0", "mesh": true}'`
+
+
+---
+
+
+## /wipe
+
+**This endpoint works only on development builds and is meant only for development purposes**
+
+- URL: `<rita ip>:<rita_dashboard_port>/wipe`
+- Method: `POST`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 204 NO CONTENT
+  - Contents: `None`
+- Error Response: `500 Server Error`
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:<rita_dashboard_port>/wipe`
+
+---
+
+## /database
+
+**This endpoint worsk only on development builds and is meant only for development purposes**
+
+Calling HTTP `DELETE` request on this endpoint causes all tables to be wiped out of data.
+
+- URL: `<rita ip>:<rita_dashboard_port>/wipe`
+- Method: `DELETE`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 204 NO CONTENT
+  - Contents: `None`
+- Error Response: `500 Server Error`
+- Sample Call:
+
+`curl -XDELETE 127.0.0.1:<rita_dashboard_port>/database`
 
 ---

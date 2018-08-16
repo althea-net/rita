@@ -20,6 +20,7 @@ use std::str;
 mod counter;
 mod create_wg_key;
 mod delete_tunnel;
+mod dns;
 mod exit_client_tunnel;
 mod exit_server_counter;
 mod exit_server_tunnel;

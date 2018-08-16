@@ -5,9 +5,9 @@ authors = ["Jehan <jehan.tremback@gmail.com>"]
 license = "Apache 2.0"
 
 [dependencies]
-num = "0.1.41"
-serde = "1.0.24"
-serde_derive = "1.0.24"
-serde_json = "1.0.8"
-lazy_static = "1.0.0"
+num = "0.2.0"
+serde = "1.0.70"
+serde_derive = "1.0.70"
+serde_json = "1.0.24"
+lazy_static = "1.0.2"
 ethereum-types = {git="https://github.com/paritytech/primitives.git"}

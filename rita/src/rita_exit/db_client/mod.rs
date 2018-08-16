@@ -230,7 +230,6 @@ fn client_to_new_db_client(
     let mut rng = rand::thread_rng();
     let rand_code: u64 = rng.gen_range(0, 999999);
     models::Client {
-        luci_pass: "".into(),
         wg_port: client.wg_port.to_string(),
         mesh_ip: client.global.mesh_ip.to_string(),
         wg_pubkey: client.global.wg_public_key.clone(),
@@ -274,8 +273,7 @@ fn send_mail(client: &models::Client) -> Result<(), Error> {
             .credentials(Credentials::new(
                 SETTING.get_mailer().unwrap().smtp_username,
                 SETTING.get_mailer().unwrap().smtp_password,
-            ))
-            .smtp_utf8(true)
+            )).smtp_utf8(true)
             .authentication_mechanism(Mechanism::Plain)
             .connection_reuse(ConnectionReuseParameters::ReuseUnlimited)
             .build();
@@ -460,5 +458,22 @@ impl Handler<ClientStatus> for DbClient {
                 Ok(ExitState::New)
             }
         })
+    }
+}
+
+pub struct TruncateTables;
+impl Message for TruncateTables {
+    type Result = Result<(), Error>;
+}
+
+impl Handler<TruncateTables> for DbClient {
+    type Result = Result<(), Error>;
+
+    fn handle(&mut self, _: TruncateTables, _: &mut Self::Context) -> Self::Result {
+        use self::schema::clients::dsl::*;
+        info!("Deleting all clients in {:?}", &SETTING.get_db_file());
+        let connection = SqliteConnection::establish(&SETTING.get_db_file()).unwrap();
+        try!(delete(clients).execute(&connection));
+        Ok(())
     }
 }

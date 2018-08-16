@@ -29,6 +29,7 @@ extern crate serde_json;
 
 extern crate actix;
 extern crate actix_web;
+extern crate byteorder;
 extern crate bytes;
 extern crate clu;
 extern crate docopt;
@@ -41,13 +42,13 @@ extern crate ipnetwork;
 extern crate lettre;
 extern crate lettre_email;
 extern crate minihttpse;
+extern crate openssl_probe;
 extern crate rand;
 extern crate regex;
 extern crate reqwest;
 extern crate serde;
 extern crate settings;
 extern crate tokio;
-extern crate tokio_core;
 extern crate trust_dns_resolver;
 
 use settings::{RitaCommonSettings, RitaExitSettings, RitaExitSettingsStruct};
@@ -150,7 +151,16 @@ lazy_static! {
 }
 
 fn main() {
+    // On Linux static builds we need to probe ssl certs path to be able to
+    // do TLS stuff.
+    openssl_probe::init_ssl_cert_env_vars();
     env_logger::init();
+
+    if cfg!(feature = "development") {
+        println!("Warning!");
+        println!("This build is meant only for development purposes.");
+        println!("Running this on production as an exit node is unsupported and not safe!");
+    }
 
     let args: Args = Docopt::new((*USAGE).as_str())
         .and_then(|d| d.deserialize())
@@ -176,6 +186,7 @@ fn main() {
     assert!(rita_common::tunnel_manager::TunnelManager::from_registry().connected());
     assert!(rita_common::http_client::HTTPClient::from_registry().connected());
     assert!(rita_common::traffic_watcher::TrafficWatcher::from_registry().connected());
+    assert!(rita_common::peer_listener::PeerListener::from_registry().connected());
 
     assert!(rita_exit::traffic_watcher::TrafficWatcher::from_registry().connected());
     assert!(rita_exit::db_client::DbClient::from_registry().connected());
@@ -190,10 +201,10 @@ fn main() {
             r.method(Method::POST).with(make_payments)
         })
     }).workers(1)
-        .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
-        .unwrap()
-        .shutdown_timeout(0)
-        .start();
+    .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
+    .unwrap()
+    .shutdown_timeout(0)
+    .start();
 
     // Exit stuff
     server::new(|| {
@@ -201,19 +212,16 @@ fn main() {
             .resource("/setup", |r| r.method(Method::POST).with(setup_request))
             .resource("/status", |r| {
                 r.method(Method::POST).with_async(status_request)
-            })
-            .resource("/list", |r| r.method(Method::POST).with(list_clients))
+            }).resource("/list", |r| r.method(Method::POST).with(list_clients))
             .resource("/exit_info", |r| {
                 r.method(Method::GET).with(get_exit_info_http)
-            })
-            .resource("/rtt", |r| r.method(Method::GET).with(rtt))
+            }).resource("/rtt", |r| r.method(Method::GET).with(rtt))
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_exit_network().exit_hello_port
-    ))
-        .unwrap()
-        .shutdown_timeout(0)
-        .start();
+    )).unwrap()
+    .shutdown_timeout(0)
+    .start();
 
     // Dashboard
     server::new(|| {
@@ -226,13 +234,14 @@ fn main() {
             .route("/settings", Method::GET, get_settings)
             .route("/settings", Method::POST, set_settings)
             .route("/version", Method::GET, version)
+            .route("/wipe", Method::POST, wipe)
+            .route("/database", Method::DELETE, nuke_db)
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_network().rita_dashboard_port
-    ))
-        .unwrap()
-        .shutdown_timeout(0)
-        .start();
+    )).unwrap()
+    .shutdown_timeout(0)
+    .start();
 
     let common = rita_common::rita_loop::RitaLoop::new();
     let _: Addr<_> = common.start();

@@ -4,14 +4,14 @@ version = "0.1.0"
 authors = ["kingoflolz <wangben3@gmail.com>"]
 
 [dependencies]
-actix = { git = "https://github.com/actix/actix" }
+actix = { git = "https://github.com/kingoflolz/actix", branch = "althea-mesh"}
 actix-web = { git = "https://github.com/actix/actix-web", default-features = false, branch = "fix-missing-content-length"}
-serde = "1.0.24"
-serde_derive = "1.0.24"
-serde_json = "1.0.8"
-failure = "0.1.1"
-log = "^0.4"
-env_logger = "^0.5.5"
-futures = "0.1"
+serde = "1.0.70"
+serde_derive = "1.0.70"
+serde_json = "1.0.24"
+failure = "0.1.2"
+log = "0.4.3"
+env_logger = "0.5.11"
+futures = "0.1.23"
 althea_types = { path = "../althea_types", features = ["actix"]}
 docopt = "0.8.3"

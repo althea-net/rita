@@ -1,7 +1,10 @@
 [package]
 name = "althea_rs"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Stan Drozd <drozdziak1@gmail.com>"]
+
+[features]
+development = ["rita/development"]
 
 [dependencies]
 rita = { path = "./rita" }
@@ -11,7 +14,6 @@ members = ["althea_kernel_interface", "bounty_hunter", "settings", "clu", "exit_
 
 [profile.release]
 opt-level = "z"
-debug=true
 lto = true
 codegen-units = 1
 incremental = false

@@ -162,7 +162,7 @@ class Node:
             interfaces.append("veth-{}-{}".format(self.id, i))
         return interfaces
 
-    def has_route(self, dest, price, next_hop, backlog=5000, verbose=False):
+    def has_route(self, dest, price, next_hop, backlog=10000, verbose=False):
         """
         This function takes :data:`self` and returns ``True`` if a specified
         route is installed in the last :data:`backlog` characters of the node's
@@ -312,26 +312,20 @@ def switch_binaries(node_id):
             "BOUNTY_HUNTER:\t{}").format(RITA, RITA_EXIT, BOUNTY_HUNTER))
 
 def register_to_exit(node):
-    id = node.id
-    os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
-              .format(id=id, data=json.dumps({"exit_client": EXIT_SELECT})))
+    os.system(("ip netns exec netlab-{} curl -XPOST " +
+        "127.0.0.1:4877/exits/exit_a/register").format(node.id))
 
 def email_verif(node):
-    id = node.id
-
     email_text = read_email(node)
 
     code = re.search(r"\[([0-9]+)\]", email_text).group(1)
 
-    print(code)
+    print("Email code for node {} is {}".format(node.id, code))
 
-    os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
-              .format(id=id, data=json.dumps({"exit_client": {"exits": {"exit_a": {"email_code": code}}}})))
-
-    os.system("ip netns exec netlab-{id} curl 127.0.0.1:4877/settings"
-              .format(id=id))
-
-
+    exec_or_exit(("ip netns exec netlab-{} curl -XPOST " +
+        "127.0.0.1:4877/exits/exit_a/verify/{}").format(node.id, code))
+    exec_or_exit(("ip netns exec netlab-{} curl " +
+        "127.0.0.1:4877/settings").format(node.id))
 
 def read_email(node):
     id = node.id
@@ -341,7 +335,7 @@ def read_email(node):
             mail = json.load(mail_file_handle)
             if mail["envelope"]["forward_path"][0] == "{}@example.com".format(id):
                 return ''.join(chr(i) for i in mail["message"])
-    print("cannot find email for node {}".format(id))
+    raise Exception("cannot find email for node {}".format(id))
 
 def start_rita(node):
     id = node.id
@@ -511,7 +505,7 @@ class World:
         print("network topology: {}".format(network))
 
         print(NETWORK_LAB)
-        proc = subprocess.Popen([NETWORK_LAB], stdin=subprocess.PIPE, universal_newlines=True)
+        proc = subprocess.Popen(['/bin/bash', NETWORK_LAB], stdin=subprocess.PIPE, universal_newlines=True)
         proc.stdin.write(network_string)
         proc.stdin.close()
 
@@ -688,14 +682,16 @@ class World:
                 + "netlab-{} curl -sfg6 [::1]:4877/neighbors".format(node.id)),
                 stdout=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /neighbors")
+            stdout = result.stdout.read().decode('utf-8')
             try:
                 print("Received neighbors:")
                 if VERBOSE:
-                    neighbors = json.loads(result.stdout.read().decode('utf-8'))
+                    neighbors = json.loads(stdout)
                     pprint(neighbors)
                 else:
-                    print(result.stdout.read().decode('utf-8'))
-            except json.JSONDecodeError as e:
+                    print(stdout)
+            except ValueError as e:
+                print('Unable to decode JSON {!r}: {}'.format(stdout, e))
                 assert_test(False, "Decoding the neighbors JSON")
 
             # /exits
@@ -706,14 +702,16 @@ class World:
                 + "netlab-{} curl -sfg6 [::1]:4877/exits".format(node.id)),
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /exits")
+            stdout = result.stdout.read().decode('utf-8')
             try:
                 print("Received exits:")
                 if VERBOSE:
-                    exits = json.loads(result.stdout.read().decode('utf-8'))
+                    exits = json.loads(stdout)
                     pprint(exits)
                 else:
-                    print(result.stdout.read().decode('utf-8'))
-            except json.JSONDecodeError as e:
+                    print(stdout)
+            except ValueError as e:
+                print('Unable to decode JSON {!r}: {}'.format(stdout, e))
                 assert_test(False, "Decoding the exits JSON")
 
             # /info
@@ -724,14 +722,16 @@ class World:
                 + "netlab-{} curl -sfg6 [::1]:4877/info".format(node.id)),
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /info")
+            stdout = result.stdout.read().decode('utf-8')
             try:
                 print("Received info:")
                 if VERBOSE:
-                    info = json.loads(result.stdout.read().decode('utf-8'))
+                    info = json.loads(stdout)
                     pprint(info)
                 else:
-                    print(result.stdout.read().decode('utf-8'))
-            except json.JSONDecodeError as e:
+                    print(stdout)
+            except ValueError as e:
+                print('Unable to decode JSON {!r}: {}'.format(stdout, e))
                 assert_test(False, "Decoding the info JSON")
 
             # /settings
@@ -742,14 +742,16 @@ class World:
                 + "netlab-{} curl -sfg6 [::1]:4877/settings".format(node.id)),
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /settings")
+            stdout = result.stdout.read().decode('utf-8')
             try:
                 print("Received settings:")
                 if VERBOSE:
-                    settings = json.loads(result.stdout.read().decode('utf-8'))
+                    settings = json.loads(stdout)
                     pprint(settings)
                 else:
-                    print(result.stdout.read().decode('utf-8'))
-            except json.JSONDecodeError as e:
+                    print(stdout)
+            except ValueError as e:
+                print('Unable to decode JSON {!r}: {}'.format(stdout, e))
                 assert_test(False, "Decoding the settings JSON")
 
 

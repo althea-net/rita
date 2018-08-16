@@ -27,7 +27,7 @@ use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::Write;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv6Addr};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
@@ -66,12 +66,20 @@ lazy_static! {
     static ref KI: Box<KernelInterface> = Box::new(LinuxCommandRunner {});
 }
 
+fn default_discovery_ip() -> Ipv6Addr {
+    warn!("Add discovery_ip to network, removed in the next version!");
+    Ipv6Addr::new(0xff02, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x8)
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
     /// Our own mesh IP (in fd00::/8)
     pub own_ip: IpAddr,
     /// Mesh IP of bounty hunter (in fd00::/8)
     pub bounty_ip: IpAddr,
+    /// Broadcast ip address used for peer discovery (in ff02::/8)
+    #[serde(default = "default_discovery_ip")]
+    pub discovery_ip: Ipv6Addr,
     /// Port on which we connect to a local babel instance (read-write connection required)
     pub babel_port: u16,
     /// Port on which rita starts the per hop tunnel handshake on (needs to be constant across an
@@ -120,6 +128,7 @@ impl Default for NetworkSettings {
         NetworkSettings {
             own_ip: "fd00::1".parse().unwrap(),
             bounty_ip: "fd00::3".parse().unwrap(),
+            discovery_ip: Ipv6Addr::new(0xff02, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x8),
             babel_port: 6872,
             rita_hello_port: 4876,
             rita_dashboard_port: 4877,
