@@ -18,8 +18,6 @@ use rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 
 use rita_common::payment_controller::{PaymentController, PaymentControllerUpdate};
 
-use rita_common::stats_collector::StatsCollector;
-
 use rita_common::peer_listener::GetPeers;
 
 use rita_common::dao_manager::DAOCheck;
@@ -35,16 +33,12 @@ use settings::RitaCommonSettings;
 use SETTING;
 
 pub struct RitaLoop {
-    stats_collector: Addr<StatsCollector>,
     was_gateway: bool,
 }
 
 impl RitaLoop {
     pub fn new() -> RitaLoop {
-        RitaLoop {
-            stats_collector: SyncArbiter::start(1, || StatsCollector::new()),
-            was_gateway: false,
-        }
+        RitaLoop { was_gateway: false }
     }
 }
 
