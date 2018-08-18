@@ -50,6 +50,100 @@ fn linux_setup_exit_tunnel() -> Result<(), Error> {
     Ok(())
 }
 
+fn linux_setup_dashboard_forward() -> Result<(), Error> {
+    trace!("Setting up dashboard forward");
+    let lan_nics = &SETTING.get_exit_client().lan_nics;
+    let lan_ip = SETTING.get_network().lan_address.to_string();
+    for nic in lan_nics {
+        KI.add_iptables_rule(
+            "iptables",
+            &[
+                "-t",
+                "nat",
+                "-A",
+                "PREROUTING",
+                "-i",
+                nic,
+                "-p",
+                "tcp",
+                "--dport",
+                "80",
+                "-j",
+                "DNAT",
+                "--to-destination",
+                &lan_ip,
+            ],
+        )?;
+        KI.add_iptables_rule(
+            "iptables",
+            &[
+                "-t",
+                "nat",
+                "-A",
+                "PREROUTING",
+                "-i",
+                nic,
+                "-p",
+                "tcp",
+                "--dport",
+                "443",
+                "-j",
+                "DNAT",
+                "--to-destination",
+                &lan_ip,
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+fn linux_stop_dashboard_forward() -> Result<(), Error> {
+    trace!("Setting up dashboard forward");
+    let lan_nics = &SETTING.get_exit_client().lan_nics;
+    let lan_ip = SETTING.get_network().lan_address.to_string();
+    for nic in lan_nics {
+        KI.add_iptables_rule(
+            "iptables",
+            &[
+                "-t",
+                "nat",
+                "-D",
+                "PREROUTING",
+                "-i",
+                nic,
+                "-p",
+                "tcp",
+                "--dport",
+                "80",
+                "-j",
+                "DNAT",
+                "--to-destination",
+                &lan_ip,
+            ],
+        )?;
+        KI.add_iptables_rule(
+            "iptables",
+            &[
+                "-t",
+                "nat",
+                "-D",
+                "PREROUTING",
+                "-i",
+                nic,
+                "-p",
+                "tcp",
+                "--dport",
+                "443",
+                "-j",
+                "DNAT",
+                "--to-destination",
+                &lan_ip,
+            ],
+        )?;
+    }
+    Ok(())
+}
+
 pub fn get_exit_info(to: &SocketAddr) -> impl Future<Item = ExitState, Error = Error> {
     let endpoint = format!("http://[{}]:{}/exit_info", to.ip(), to.port());
 
@@ -221,7 +315,9 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
 
 /// An actor which pays the exit
 #[derive(Default)]
-pub struct ExitManager;
+pub struct ExitManager {
+    is_setup: Option<bool>, // If the exit tunnel has been created
+}
 
 impl Actor for ExitManager {
     type Context = Context<Self>;
@@ -231,6 +327,7 @@ impl Supervised for ExitManager {}
 impl SystemService for ExitManager {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("Exit Manager started");
+        self.is_setup = None;
     }
 }
 
@@ -245,7 +342,8 @@ impl Handler<Tick> for ExitManager {
                 .map(|c| c.clone())
         };
 
-        // code that connects to the current exit server
+        // Handles exit server setup cases, as well as tracking when a tunnel has been setup
+        // so that we don't have to do it twice.
         trace!("About to setup exit tunnel!");
         if let Some(exit) = exit_server {
             trace!("We have selected an exit!");
@@ -253,10 +351,31 @@ impl Handler<Tick> for ExitManager {
                 trace!("We have details for the selected exit!");
                 if let Some(_) = exit.info.our_details() {
                     trace!("We are signed up for the selected exit!");
-                    linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
-                    TrafficWatcher::from_registry()
-                        .do_send(Watch(exit.id.clone(), general_details.exit_price));
+                    if self.is_setup.is_none() || self.is_setup == Some(false) {
+                        linux_stop_dashboard_forward().expect("failure stopping dash redirect");
+                        linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
+                        TrafficWatcher::from_registry()
+                            .do_send(Watch(exit.id.clone(), general_details.exit_price));
+                        self.is_setup = Some(true);
+                    } else {
+                        trace!("Exit tunnel is already setup!");
+                    }
+                } else {
+                    if self.is_setup.is_none() || self.is_setup == Some(true) {
+                        self.is_setup = Some(false);
+                        let _ = linux_setup_dashboard_forward();
+                    }
                 }
+            } else {
+                if self.is_setup.is_none() || self.is_setup == Some(true) {
+                    self.is_setup = Some(false);
+                    let _ = linux_setup_dashboard_forward();
+                }
+            }
+        } else {
+            if self.is_setup.is_none() || self.is_setup == Some(true) {
+                self.is_setup = Some(false);
+                let _ = linux_setup_dashboard_forward();
             }
         }
 

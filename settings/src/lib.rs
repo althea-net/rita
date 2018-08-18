@@ -75,6 +75,10 @@ fn default_tunnel_timeout() -> u64 {
     900 // 15 minutes
 }
 
+fn default_lan_address() -> IpAddr {
+    "192.168.10.1".parse().unwrap()
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
     /// Our own mesh IP (in fd00::/8)
@@ -118,6 +122,10 @@ pub struct NetworkSettings {
     /// This is a route in the format of `ip route` which is set by default (assuming it will reach
     /// the internet), used to tunnel manual peers over a specific route
     pub default_route: Vec<String>,
+    /// The Lan address of the Rita instance, on OpenWRT this is auto configured on a Linux
+    /// install you need to setup dhcp for your clients
+    #[serde(default = "default_lan_address")]
+    pub lan_address: IpAddr,
     /// This is the NIC which connects to the internet, used by gateways/exits to find its
     /// globally routable ip
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -150,6 +158,7 @@ impl Default for NetworkSettings {
             manual_peers: Vec::new(),
             external_nic: None,
             default_route: Vec::new(),
+            lan_address: default_lan_address(),
             is_gateway: false,
             tunnel_timeout_seconds: default_tunnel_timeout(),
         }
