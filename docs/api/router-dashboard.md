@@ -534,7 +534,7 @@ Calling HTTP `DELETE` request on this endpoint causes all tables to be wiped out
 
 ## /debts
 
-Calling HTTP `GET` request on this endpoint returns a list of debts.
+Calling HTTP `GET` request on this endpoint returns a list of debts. Each element of the resulting list contains a 2-elements array where first elements contains `Identity` data, and second element contains details about the debt owed.
 
 - URL: `<rita ip>:<rita_dashboard_port>/debts`
 - Method: `GET`
@@ -549,17 +549,22 @@ Calling HTTP `GET` request on this endpoint returns a list of debts.
 `curl 127.0..1:<rita_dashboard_port>/debts`
 
 Format:
-```
+
+```json
 [
- [[mesh_ip,
-   eth_address,
-   wg_public_key],
-  [total_payment_received,
-   total_payment_sent,
-   debt,
-   incoming_payments,
-   debt_buffer]],
-  ...
+  [
+    {
+      "mesh_ip": "a:b:c:d:e:f:g:h",
+      "eth_address": "0x0101010101010101010101010101010101010101",
+      "wg_public_key": "pubkey"
+    },
+    {
+      "total_payment_recieved": "0x0",
+      "total_payment_sent": "0x0",
+      "debt": "0",
+      "incoming_payments": "0"
+    }
+  ]
 ]
 ```
 
