@@ -248,11 +248,11 @@ impl Handler<GetNodeInfo> for Dashboard {
                             if maybe_route.is_err() {
                                 output.push(NodeInfo {
                                     nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
-                                    route_metric_to_exit: 0,
+                                    route_metric_to_exit: u16::max_value(),
                                     total_payments: debt_info.total_payment_received.into(),
                                     debt: debt_info.debt.clone().into(),
-                                    link_cost: 0,
-                                    price_to_exit: 0,
+                                    link_cost: u16::max_value(),
+                                    price_to_exit: u32::max_value(),
                                 });
                                 continue;
                             }
@@ -269,11 +269,11 @@ impl Handler<GetNodeInfo> for Dashboard {
                         } else {
                             output.push(NodeInfo {
                                 nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
-                                route_metric_to_exit: 0,
+                                route_metric_to_exit: u16::max_value(),
                                 total_payments: debt_info.total_payment_received.into(),
                                 debt: debt_info.debt.clone().into(),
-                                link_cost: 0,
-                                price_to_exit: 0,
+                                link_cost: u16::max_value(),
+                                price_to_exit: u32::max_value(),
                             })
                         }
                     }
