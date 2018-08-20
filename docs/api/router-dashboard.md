@@ -531,3 +531,36 @@ Calling HTTP `DELETE` request on this endpoint causes all tables to be wiped out
 `curl -XDELETE 127.0.0.1:<rita_dashboard_port>/database`
 
 ---
+
+## /debts
+
+Calling HTTP `GET` request on this endpoint returns a list of debts.
+
+- URL: `<rita ip>:<rita_dashboard_port>/debts`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `JSON` structured message. See below for an example format.
+- Error Response: `500 Server Error`
+- Sample Call
+
+`curl 127.0..1:<rita_dashboard_port>/debts`
+
+Format:
+```
+[
+ [[mesh_ip,
+   eth_address,
+   wg_public_key],
+  [total_payment_received,
+   total_payment_sent,
+   debt,
+   incoming_payments,
+   debt_buffer]],
+  ...
+]
+```
+
+---
