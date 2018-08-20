@@ -115,7 +115,10 @@ fn test_read_iface_counters() {
         match counter {
             1 => {
                 assert_eq!(program, "iptables");
-                assert_eq!(args, vec!["-w", "-L", "veth-5-8_weird^name-counter", "-Z", "-x", "-v"]);
+                assert_eq!(
+                    args,
+                    vec!["-w", "-L", "veth-5-8_weird^name-counter", "-Z", "-x", "-v"]
+                );
                 Ok(Output {
                     stdout: b"Chain veth-5-8_weird^name-counter (2 references)
     pkts      bytes target     prot opt in     out     source               destination         

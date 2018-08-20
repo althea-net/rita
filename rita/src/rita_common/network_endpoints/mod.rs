@@ -45,7 +45,8 @@ pub fn make_payments(
     PaymentController::from_registry()
         .send(rita_common::payment_controller::PaymentReceived(
             pmt.0.clone(),
-        )).from_err()
+        ))
+        .from_err()
         .and_then(|_| Ok(HttpResponse::Ok().into()))
         .responder()
 }
@@ -86,7 +87,8 @@ pub fn hello_response(
                 wg_port: tunnel.0.listen_port,
                 have_tunnel: Some(tunnel.1),
             }))
-        }).from_err()
+        })
+        .from_err()
         .responder()
 }
 
