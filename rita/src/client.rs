@@ -227,6 +227,7 @@ fn main() {
             .route("/info", Method::GET, get_own_info)
             .route("/version", Method::GET, version)
             .route("/wipe", Method::POST, wipe)
+            .route("/debts", Method::GET, get_debts)
     }).workers(1)
         .bind(format!(
             "[::0]:{}",
