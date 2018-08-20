@@ -14,7 +14,7 @@ use rita_common::payment_controller::PaymentController;
 
 use failure::Error;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodeDebtData {
     pub total_payment_recieved: Uint256,
     pub total_payment_sent: Uint256,
@@ -23,6 +23,7 @@ pub struct NodeDebtData {
     /// Front = older
     /// Only pop from front
     /// Only push to back
+    #[serde(skip_serializing)]
     pub debt_buffer: VecDeque<Int256>,
 }
 
@@ -44,8 +45,10 @@ impl NodeDebtData {
     }
 }
 
+pub type DebtData = HashMap<Identity, NodeDebtData>;
+
 pub struct DebtKeeper {
-    debt_data: HashMap<Identity, NodeDebtData>,
+    debt_data: DebtData,
 }
 
 impl Actor for DebtKeeper {
@@ -62,13 +65,13 @@ impl SystemService for DebtKeeper {
 pub struct Dump;
 
 impl Message for Dump {
-    type Result = Result<HashMap<Identity, NodeDebtData>, Error>;
+    type Result = Result<DebtData, Error>;
 }
 
 impl Handler<Dump> for DebtKeeper {
-    type Result = Result<HashMap<Identity, NodeDebtData>, Error>;
+    type Result = Result<DebtData, Error>;
     fn handle(&mut self, _msg: Dump, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.debt_data.clone())
+        Ok(self.get_debts())
     }
 }
 
@@ -148,8 +151,12 @@ impl DebtKeeper {
         assert!(SETTING.get_payment().close_fraction > Int256::from(0));
 
         DebtKeeper {
-            debt_data: HashMap::new(),
+            debt_data: DebtData::new(),
         }
+    }
+
+    fn get_debts(&self) -> DebtData {
+        self.debt_data.clone()
     }
 
     fn get_debt_data(&mut self, ident: &Identity) -> &mut NodeDebtData {
