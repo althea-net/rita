@@ -64,9 +64,9 @@ fn test_exit_filter_target_output() {
 
 fn parse_exit_ipset(input: &str) -> Result<HashMap<IpAddr, u64>, Error> {
     lazy_static! {
-        static ref RE: Regex =
-            Regex::new(r"(?m)^add \S+ (fd00::[a-f0-9:]+) packets (\d+) bytes (\d+)")
-                .expect("Unable to compile regular expression");
+        static ref RE: Regex = Regex::new(
+            r"(?m)^add \S+ (fd00::[a-f0-9:]+) packets (\d+) bytes (\d+)"
+        ).expect("Unable to compile regular expression");
     }
     let mut map = HashMap::new();
 
@@ -209,7 +209,7 @@ fn test_init_exit_counter() {
                         "hash:net",
                         "family",
                         "inet6",
-                        "counters"
+                        "counters",
                     ]
                 );
                 Ok(Output {
@@ -236,7 +236,7 @@ fn test_init_exit_counter() {
                         "SET",
                         "--add-set",
                         "rita_exit_input",
-                        "src"
+                        "src",
                     ]
                 );
                 Ok(Output {
@@ -277,7 +277,7 @@ fn test_read_exit_server_counters() {
                         "hash:net",
                         "family",
                         "inet6",
-                        "counters"
+                        "counters",
                     ]
                 );
                 Ok(Output {
@@ -301,7 +301,8 @@ fn test_read_exit_server_counters() {
                 Ok(Output {
                     stdout: b"
 add asdf fd00::dead:beef packets 100 bytes 200
-".to_vec(),
+"
+                        .to_vec(),
                     stderr: b"".to_vec(),
                     status: ExitStatus::from_raw(0),
                 })
@@ -326,6 +327,7 @@ add asdf fd00::dead:beef packets 100 bytes 200
     let value = result
         .get(&IpAddr::V6(Ipv6Addr::new(
             0xfd00, 0, 0, 0, 0, 0, 0xdead, 0xbeef,
-        ))).expect("Unable to find key");
+        )))
+        .expect("Unable to find key");
     assert_eq!(value, &(200u64 + 100u64 * 80));
 }

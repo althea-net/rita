@@ -183,7 +183,7 @@ default via 192.168.9.1 dev wifiinterface proto dhcp metric 1200
             "proto",
             "dhcp",
             "metric",
-            "600"
+            "600",
         ]
     );
 }
