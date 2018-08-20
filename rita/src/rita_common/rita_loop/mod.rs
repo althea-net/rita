@@ -139,7 +139,8 @@ impl Handler<Tick> for RitaLoop {
                         res
                     );
                     res
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
         );
 
         let start = Instant::now();
@@ -154,7 +155,8 @@ impl Handler<Tick> for RitaLoop {
                         start.elapsed().subsec_nanos() / 1000000
                     );
                     TunnelManager::from_registry().send(PeersToContact::new(peers.unwrap())) // GetPeers never fails so unwrap is safe
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
         );
 
         Ok(())
