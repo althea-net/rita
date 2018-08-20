@@ -69,10 +69,6 @@ impl Handler<Tick> for RitaLoop {
     fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
         trace!("Common tick!");
 
-        // let mut babel = Babel::new(&format!("[::1]:{}", SETTING.get_network().babel_port).parse().unwrap());
-
-        self.stats_collector.do_send(Tick {});
-
         // Resolves the gateway client corner case
         // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
         if SETTING.get_network().is_gateway {
