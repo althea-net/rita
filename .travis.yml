@@ -8,7 +8,7 @@ before_install:
   - which diesel || cargo install diesel_cli --no-default-features --features sqlite
   - sudo cp $(which diesel) /usr/bin
 env:
-  - TEST_COMMAND="rustup component add rustfmt-preview --toolchain nightly && cargo +nightly fmt --all -- --check"
+  - TEST_COMMAND="rustup component add rustfmt-preview --toolchain stable && cargo fmt --all && git status && if ! git diff-index --quiet HEAD --; then exit 1; fi"
   - TEST_COMMAND="cargo build --locked --verbose --all"
   - TEST_COMMAND="cargo test --locked --verbose --all" RUST_TEST_THREADS=1
 rust:
@@ -26,9 +26,9 @@ matrix:
       env: TEST_COMMAND="cargo test --locked --verbose --all" RUST_TEST_THREADS=1
   exclude:
     - rust: beta
-      env: TEST_COMMAND="rustup component add rustfmt-preview --toolchain nightly && cargo +nightly fmt --all -- --check"
-    - rust: stable
-      env: TEST_COMMAND="rustup component add rustfmt-preview --toolchain nightly && cargo +nightly fmt --all -- --check"
+      env: TEST_COMMAND="rustup component add rustfmt-preview --toolchain stable && cargo fmt --all && git status && if ! git diff-index --quiet HEAD --; then exit 1; fi"
+    - rust: nightly
+      env: TEST_COMMAND="rustup component add rustfmt-preview --toolchain stable && cargo fmt --all && git status && if ! git diff-index --quiet HEAD --; then exit 1; fi"
   include:
     - name: "Cross compile on MIPS"
       script: ./integration-tests/cross-build.sh
