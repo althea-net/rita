@@ -94,7 +94,7 @@ impl PeerMessage {
         trace!("Starting ImHere packet decode!");
         // Check if buffer is empty
         if buf.is_empty() {
-            trace!("Recieved an empty ImHere packet!");
+            trace!("Received an empty ImHere packet!");
             return Err(MessageError::InvalidPayloadError);
         }
         let mut pointer = Cursor::new(&buf);
@@ -105,7 +105,7 @@ impl PeerMessage {
                 let packet_size = pointer.read_u16::<BigEndian>()?;
                 if packet_size < MSG_IM_HERE_LEN {
                     trace!(
-                        "Recieved an ImHere packet with an invalid size: {:?}",
+                        "Received an ImHere packet with an invalid size: {:?}",
                         packet_size
                     );
                     return Err(MessageError::BufferUnderflow);
@@ -131,7 +131,7 @@ impl PeerMessage {
                     || peer_address.is_multicast()
                 {
                     trace!(
-                        "Recieved a valid ImHere with an invalid ip address: {:?}",
+                        "Received a valid ImHere with an invalid ip address: {:?}",
                         peer_address,
                     );
                     return Err(MessageError::InvalidIpAddress);
@@ -141,7 +141,7 @@ impl PeerMessage {
                 Ok(PeerMessage::ImHere(peer_address))
             }
             _ => {
-                trace!("Recieved packet with an unknown magic: {:X?}", packet_magic);
+                trace!("Received packet with an unknown magic: {:X?}", packet_magic);
                 return Err(MessageError::InvalidMagic);
             }
         }

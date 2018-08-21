@@ -4,7 +4,7 @@ There are 3 different buckets which credits/debits to a neighboring node is stor
 - Debt buffer
 - Debt
 ## Incoming payments
-Incoming payments represents the payments which a node as recieved from its neighbours. It is
+Incoming payments represents the payments which a node as received from its neighbours. It is
 treated differently from credit from traffic counters as _it will never be sent back to the node
 which sent it_.
 ## Debt buffer
@@ -19,7 +19,7 @@ There are 3 different ways to update the DebtKeeper state:
 - PaymentReceived
 - TrafficUpdate
 - CycleUpdate
-## PaymentRecieved
+## PaymentReceived
 This simply increments the incoming payments value
 ## TrafficUpdate
 Traffic updates are treated differently depending on if the update is positive or negative.
@@ -33,10 +33,10 @@ a DebtAction based on the result of the update
 ### State update
 To update the state, first we pop off the front value of the debt buffer to get a \"time delayed\"
 debt value from several billing cycles ago. 
-Then we check if the PaymentRecieved is enough to pay off the time delayed debt. If there is
+Then we check if the PaymentReceived is enough to pay off the time delayed debt. If there is
 enough, we can also check if there is any Debt to pay off, and try to pay that off with the 
-payments we recieved.
-However, if the PaymentRecieved value is not enough to pay off the time delayed debt, we just
+payments we received.
+However, if the PaymentReceived value is not enough to pay off the time delayed debt, we just
 subtract the difference from the debt.
 ### DebtAction decision
 - If their debt is below our cutoff, suspend the tunnel
