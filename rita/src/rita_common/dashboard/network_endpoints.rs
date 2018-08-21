@@ -1,5 +1,6 @@
 use actix::registry::SystemService;
 use rita_common::debt_keeper::Dump;
+use rita_common::debt_keeper::GetDebtsList;
 
 use futures::Future;
 
@@ -16,7 +17,7 @@ use super::{Dashboard, GetOwnInfo, OwnInfo};
 use actix_web::*;
 
 use althea_types::Identity;
-use rita_common::debt_keeper::{DebtKeeper, NodeDebtData};
+use rita_common::debt_keeper::{DebtKeeper, GetDebtsResult};
 use rita_common::network_endpoints::JsonStatusResponse;
 
 pub fn get_own_info(_req: HttpRequest) -> Box<Future<Item = Json<OwnInfo>, Error = Error>> {
@@ -105,20 +106,11 @@ pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {
 
 pub fn get_debts(
     _req: HttpRequest,
-) -> Box<Future<Item = Json<Vec<(Identity, NodeDebtData)>>, Error = Error>> {
+) -> Box<Future<Item = Json<Vec<GetDebtsResult>>, Error = Error>> {
     trace!("get_debts: Hit");
     DebtKeeper::from_registry()
-        .send(Dump {})
+        .send(GetDebtsList {})
         .from_err()
-        .and_then(move |reply| {
-            // Transform a HashMap into a vector of tuple. This way
-            // we can make a simple workaround for the fact that JSON
-            // objects needs strings/numbers as keys.
-            let vec: Vec<(Identity, NodeDebtData)> = reply?
-                .iter()
-                .map(|(key, value)| (key.clone(), value.clone()))
-                .collect();
-            Ok(Json(vec))
-            // Ok(Json(reply?)))
-        }).responder()
+        .and_then(move |reply| Ok(Json(reply?)))
+        .responder()
 }
