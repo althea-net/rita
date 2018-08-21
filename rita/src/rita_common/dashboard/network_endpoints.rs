@@ -1,5 +1,4 @@
 use actix::registry::SystemService;
-use rita_common::debt_keeper::Dump;
 use rita_common::debt_keeper::GetDebtsList;
 
 use futures::Future;
@@ -16,7 +15,6 @@ use SETTING;
 use super::{Dashboard, GetOwnInfo, OwnInfo};
 use actix_web::*;
 
-use althea_types::Identity;
 use rita_common::debt_keeper::{DebtKeeper, GetDebtsResult};
 use rita_common::network_endpoints::JsonStatusResponse;
 
