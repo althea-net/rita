@@ -1,4 +1,5 @@
 use actix::registry::SystemService;
+use rita_common::debt_keeper::GetDebtsList;
 
 use futures::Future;
 
@@ -14,6 +15,7 @@ use SETTING;
 use super::{Dashboard, GetOwnInfo, OwnInfo};
 use actix_web::*;
 
+use rita_common::debt_keeper::{DebtKeeper, GetDebtsResult};
 use rita_common::network_endpoints::JsonStatusResponse;
 
 pub fn get_own_info(_req: HttpRequest) -> Box<Future<Item = Json<OwnInfo>, Error = Error>> {
@@ -98,4 +100,15 @@ pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {
     }
 
     Ok(HttpResponse::NoContent().finish())
+}
+
+pub fn get_debts(
+    _req: HttpRequest,
+) -> Box<Future<Item = Json<Vec<GetDebtsResult>>, Error = Error>> {
+    trace!("get_debts: Hit");
+    DebtKeeper::from_registry()
+        .send(GetDebtsList {})
+        .from_err()
+        .and_then(move |reply| Ok(Json(reply?)))
+        .responder()
 }

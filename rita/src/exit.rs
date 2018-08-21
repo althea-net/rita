@@ -236,6 +236,7 @@ fn main() {
             .route("/version", Method::GET, version)
             .route("/wipe", Method::POST, wipe)
             .route("/database", Method::DELETE, nuke_db)
+            .route("/debts", Method::GET, get_debts)
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_network().rita_dashboard_port

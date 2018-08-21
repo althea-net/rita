@@ -14,22 +14,23 @@ use rita_common::payment_controller::PaymentController;
 
 use failure::Error;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodeDebtData {
-    pub total_payment_recieved: Uint256,
+    pub total_payment_received: Uint256,
     pub total_payment_sent: Uint256,
     pub debt: Int256,
     pub incoming_payments: Int256,
     /// Front = older
     /// Only pop from front
     /// Only push to back
+    #[serde(skip_serializing)]
     pub debt_buffer: VecDeque<Int256>,
 }
 
 impl NodeDebtData {
     fn new(buffer_period: u32) -> NodeDebtData {
         NodeDebtData {
-            total_payment_recieved: Uint256::from(0u32),
+            total_payment_received: Uint256::from(0u32),
             total_payment_sent: Uint256::from(0u32),
             debt: Int256::from(0),
             incoming_payments: Int256::from(0),
@@ -44,8 +45,10 @@ impl NodeDebtData {
     }
 }
 
+pub type DebtData = HashMap<Identity, NodeDebtData>;
+
 pub struct DebtKeeper {
-    debt_data: HashMap<Identity, NodeDebtData>,
+    debt_data: DebtData,
 }
 
 impl Actor for DebtKeeper {
@@ -62,13 +65,13 @@ impl SystemService for DebtKeeper {
 pub struct Dump;
 
 impl Message for Dump {
-    type Result = Result<HashMap<Identity, NodeDebtData>, Error>;
+    type Result = Result<DebtData, Error>;
 }
 
 impl Handler<Dump> for DebtKeeper {
-    type Result = Result<HashMap<Identity, NodeDebtData>, Error>;
+    type Result = Result<DebtData, Error>;
     fn handle(&mut self, _msg: Dump, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.debt_data.clone())
+        Ok(self.get_debts())
     }
 }
 
@@ -148,8 +151,12 @@ impl DebtKeeper {
         assert!(SETTING.get_payment().close_fraction > Int256::from(0));
 
         DebtKeeper {
-            debt_data: HashMap::new(),
+            debt_data: DebtData::new(),
         }
+    }
+
+    fn get_debts(&self) -> DebtData {
+        self.debt_data.clone()
     }
 
     fn get_debt_data(&mut self, ident: &Identity) -> &mut NodeDebtData {
@@ -169,7 +176,7 @@ impl DebtKeeper {
             old_balance
         );
         debt_data.incoming_payments += amount.clone();
-        debt_data.total_payment_recieved += amount.clone();
+        debt_data.total_payment_received += amount.clone();
 
         trace!(
             "new balance for {:?}: {:?}",
@@ -250,7 +257,7 @@ impl DebtKeeper {
         }
 
         let close_threshold = SETTING.get_payment().close_threshold.clone()
-            - debt_data.total_payment_recieved.clone()
+            - debt_data.total_payment_received.clone()
                 / SETTING.get_payment().close_fraction.clone();
 
         if debt_data.debt < close_threshold {
@@ -278,6 +285,41 @@ impl DebtKeeper {
         } else {
             DebtAction::None
         }
+    }
+}
+
+pub struct GetDebtsList;
+
+impl Message for GetDebtsList {
+    type Result = Result<Vec<GetDebtsResult>, Error>;
+}
+
+#[derive(Serialize)]
+pub struct GetDebtsResult {
+    identity: Identity,
+    payment_details: NodeDebtData,
+}
+
+impl GetDebtsResult {
+    pub fn new(identity: &Identity, payment_details: &NodeDebtData) -> GetDebtsResult {
+        GetDebtsResult {
+            identity: identity.clone(),
+            payment_details: payment_details.clone(),
+        }
+    }
+}
+
+impl Handler<GetDebtsList> for DebtKeeper {
+    type Result = Result<Vec<GetDebtsResult>, Error>;
+
+    fn handle(&mut self, _msg: GetDebtsList, _ctx: &mut Context<Self>) -> Self::Result {
+        let debts: Vec<GetDebtsResult> = self
+            .debt_data
+            .iter()
+            .map(|(key, value)| GetDebtsResult::new(&key, &value))
+            .collect();
+        trace!("Debts: {}", debts.len());
+        Ok(debts)
     }
 }
 
