@@ -559,7 +559,7 @@ Format:
       "wg_public_key": "pubkey"
     },
     {
-      "total_payment_recieved": "0x0",
+      "total_payment_received": "0x0",
       "total_payment_sent": "0x0",
       "debt": "0",
       "incoming_payments": "0"

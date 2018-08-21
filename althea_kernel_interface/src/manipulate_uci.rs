@@ -7,7 +7,7 @@ impl KernelInterface {
         let output = self.run_command(command, args)?;
         if !output.stderr.is_empty() {
             return Err(KernelInterfaceError::RuntimeError(format!(
-                "recieved error while setting UCI: {}",
+                "received error while setting UCI: {}",
                 String::from_utf8(output.stderr)?
             )).into());
         }
@@ -50,7 +50,7 @@ impl KernelInterface {
         let output = self.run_command("uci", &["show", &key])?;
         if !output.stderr.is_empty() {
             return Err(KernelInterfaceError::RuntimeError(format!(
-                "recieved error while getting UCI: {}",
+                "received error while getting UCI: {}",
                 String::from_utf8(output.stderr)?
             )).into());
         }
@@ -62,7 +62,7 @@ impl KernelInterface {
         let output = self.run_command("uci", &["commit"])?;
         if !output.status.success() {
             return Err(KernelInterfaceError::RuntimeError(format!(
-                "recieved error while commiting UCI: {}",
+                "received error while commiting UCI: {}",
                 String::from_utf8(output.stderr)?
             )).into());
         }
@@ -73,7 +73,7 @@ impl KernelInterface {
         let output = self.run_command(&format!("/etc/init.d/{}", program), &["reload"])?;
         if !output.status.success() {
             return Err(KernelInterfaceError::RuntimeError(format!(
-                "recieved error while refreshing {}: {}",
+                "received error while refreshing {}: {}",
                 program,
                 String::from_utf8(output.stderr)?
             )).into());

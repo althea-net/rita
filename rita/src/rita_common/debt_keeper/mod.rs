@@ -16,7 +16,7 @@ use failure::Error;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodeDebtData {
-    pub total_payment_recieved: Uint256,
+    pub total_payment_received: Uint256,
     pub total_payment_sent: Uint256,
     pub debt: Int256,
     pub incoming_payments: Int256,
@@ -30,7 +30,7 @@ pub struct NodeDebtData {
 impl NodeDebtData {
     fn new(buffer_period: u32) -> NodeDebtData {
         NodeDebtData {
-            total_payment_recieved: Uint256::from(0u32),
+            total_payment_received: Uint256::from(0u32),
             total_payment_sent: Uint256::from(0u32),
             debt: Int256::from(0),
             incoming_payments: Int256::from(0),
@@ -176,7 +176,7 @@ impl DebtKeeper {
             old_balance
         );
         debt_data.incoming_payments += amount.clone();
-        debt_data.total_payment_recieved += amount.clone();
+        debt_data.total_payment_received += amount.clone();
 
         trace!(
             "new balance for {:?}: {:?}",
@@ -257,7 +257,7 @@ impl DebtKeeper {
         }
 
         let close_threshold = SETTING.get_payment().close_threshold.clone()
-            - debt_data.total_payment_recieved.clone()
+            - debt_data.total_payment_received.clone()
                 / SETTING.get_payment().close_fraction.clone();
 
         if debt_data.debt < close_threshold {
