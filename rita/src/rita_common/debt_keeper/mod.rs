@@ -288,6 +288,41 @@ impl DebtKeeper {
     }
 }
 
+pub struct GetDebtsList;
+
+impl Message for GetDebtsList {
+    type Result = Result<Vec<GetDebtsResult>, Error>;
+}
+
+#[derive(Serialize)]
+pub struct GetDebtsResult {
+    identity: Identity,
+    payment_details: NodeDebtData,
+}
+
+impl GetDebtsResult {
+    pub fn new(identity: &Identity, payment_details: &NodeDebtData) -> GetDebtsResult {
+        GetDebtsResult {
+            identity: identity.clone(),
+            payment_details: payment_details.clone(),
+        }
+    }
+}
+
+impl Handler<GetDebtsList> for DebtKeeper {
+    type Result = Result<Vec<GetDebtsResult>, Error>;
+
+    fn handle(&mut self, _msg: GetDebtsList, _ctx: &mut Context<Self>) -> Self::Result {
+        let debts: Vec<GetDebtsResult> = self
+            .debt_data
+            .iter()
+            .map(|(key, value)| GetDebtsResult::new(&key, &value))
+            .collect();
+        trace!("Debts: {}", debts.len());
+        Ok(debts)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
