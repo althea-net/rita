@@ -34,6 +34,8 @@ use failure::Error;
 #[cfg(test)]
 use actix::actors::mocker::Mocker;
 use ipnetwork::IpNetwork;
+use std::fmt;
+use std::io::{Read, Write};
 
 #[cfg(test)]
 type HTTPClient = Mocker<rita_common::http_client::HTTPClient>;
@@ -51,6 +53,46 @@ type Resolver = resolver::Resolver;
 pub enum TunnelManagerError {
     #[fail(display = "Port Error: {:?}", _0)]
     PortError(String),
+    #[fail(display = "Invalid state")]
+    InvalidStateError,
+}
+
+/// Action that progresses the state machine
+#[derive(Debug, Clone)]
+pub enum TunnelAction {
+    /// Received confirmed membership of an identity
+    MembershipConfirmed(Identity),
+}
+
+impl fmt::Display for TunnelAction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+///
+/// TunnelState indicates a state where a tunnel is currently in.
+///
+/// State changes:
+/// NotRegistered -> (MembershipConfirmed) -> Registered
+#[derive(PartialEq, Debug, Clone)]
+pub enum TunnelState {
+    /// Tunnel is not registered (default)
+    NotRegistered,
+    /// Tunnel is registered
+    Registered,
+}
+
+impl fmt::Display for TunnelState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[test]
+fn test_tunnel_state() {
+    assert_eq!(TunnelState::NotRegistered.to_string(), "NotRegistered");
+    assert_eq!(TunnelState::Registered.to_string(), "Registered");
 }
 
 #[derive(Debug, Clone)]
@@ -61,49 +103,81 @@ pub struct Tunnel {
     pub listen_port: u16,       // the local port this tunnel is listening on
     pub localid: LocalIdentity, // the identity of the counterparty tunnel
     pub last_contact: Instant,  // When's the last we heard from the other end of this tunnel?
+    state: TunnelState,
 }
 
 impl Tunnel {
     fn new(
         ip: IpAddr,
+        iface_name: String,
         our_listen_port: u16,
         ifidx: u32,
         their_id: LocalIdentity,
-    ) -> Result<Tunnel, Error> {
-        let iface_name = KI.setup_wg_if().unwrap();
-
-        let tunnel = Tunnel {
+    ) -> Tunnel {
+        Tunnel {
             ip: ip,
             iface_name: iface_name,
             listen_ifidx: ifidx,
             listen_port: our_listen_port,
             localid: their_id.clone(),
             last_contact: Instant::now(),
-        };
+            // By default new tunnels are in NotRegistered state
+            state: TunnelState::NotRegistered,
+        }
+    }
 
+    /// Open physical tunnel
+    pub fn open(&self) -> Result<(), Error> {
         let network = SETTING.get_network().clone();
-
         KI.open_tunnel(
-            &tunnel.iface_name,
-            tunnel.listen_port,
-            &SocketAddr::new(ip, their_id.wg_port),
-            &their_id.global.wg_public_key,
+            &self.iface_name,
+            self.listen_port,
+            &SocketAddr::new(self.ip, self.localid.wg_port),
+            &self.localid.global.wg_public_key,
             Path::new(&network.wg_private_key_path),
             &network.own_ip,
             network.external_nic.clone(),
             &mut SETTING.get_network_mut().default_route,
-        )?;
+        )
+    }
 
-        let stream = TcpStream::connect::<SocketAddr>(
-            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
-        )?;
-
+    /// Register this tunnel into Babel monitor
+    pub fn monitor<T: Read + Write>(&self, stream: T) -> Result<(), Error> {
         let mut babel = Babel::new(stream);
-
         babel.start_connection()?;
-        babel.monitor(&tunnel.iface_name)?;
+        babel.monitor(&self.iface_name)?;
+        Ok(())
+    }
 
-        Ok(tunnel)
+    pub fn set_state(&mut self, new_state: TunnelState) -> Result<(), Error> {
+        match (&self.state, &new_state) {
+            (TunnelState::NotRegistered, TunnelState::Registered) => self.unrestrict()?,
+            (TunnelState::Registered, TunnelState::NotRegistered) => self.restrict()?,
+            _ => {
+                warn!(
+                    "Invalid tunnel state manipulation: from {} to {}",
+                    self.state, new_state
+                );
+                return Err(TunnelManagerError::InvalidStateError.into());
+            }
+        }
+        self.state = new_state;
+        Ok(())
+    }
+
+    pub fn restrict(&self) -> Result<(), Error> {
+        // TODO: Implement tunnel restricting
+        info!("Restricting tunnel {:?}", self);
+        Ok(())
+    }
+    pub fn unrestrict(&self) -> Result<(), Error> {
+        // TODO: Implement unrestricting
+        info!("Unrestricting tunnel {:?}", self);
+        Ok(())
+    }
+
+    pub fn get_state(&self) -> &TunnelState {
+        &self.state
     }
 }
 
@@ -568,25 +642,89 @@ impl TunnelManager {
             peer.contact_socket.ip(),
             peer.ifidx,
         );
+        // Create new tunnel
         let tunnel = Tunnel::new(
             peer.contact_socket.ip(),
+            KI.setup_wg_if().unwrap(),
             our_port,
             peer.ifidx,
             their_localid.clone(),
         );
+        // Open tunnel
+        match tunnel.open() {
+            Ok(_) => info!("Tunnel {:?} is open", tunnel),
+            Err(e) => {
+                error!("Unable to open tunnel {:?}: {}", tunnel, e);
+                return Err(e);
+            }
+        }
+        let babel_stream = TcpStream::connect::<SocketAddr>(
+            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
+        )?;
 
-        match tunnel {
-            Ok(tunnel) => {
+        debug_assert_eq!(tunnel.get_state(), &TunnelState::NotRegistered);
+        tunnel.restrict()?;
+
+        match tunnel.monitor(babel_stream) {
+            Ok(_) => {
                 let new_key =
                     TunnelIdentity::new(tunnel.localid.global.clone(), tunnel.listen_ifidx.clone());
                 self.tunnels.insert(new_key, tunnel.clone());
                 Ok((tunnel, return_bool))
             }
             Err(e) => {
-                warn!("Open Tunnel failed with {:?}", e);
-                return Err(e);
+                error!(
+                    "Unable to execute babel monitor on tunnel {:?}: {}",
+                    tunnel, e
+                );
+                Err(e)
             }
         }
+    }
+
+    pub fn find_tunnel_by_id(&mut self, identity: &Identity) -> Option<&mut Tunnel> {
+        // TODO: This is temporary as a change of datastructure is considered
+        // that would make it easier as calling self.tunnels.entry(id).
+
+        let mutable = &mut self.tunnels;
+        for (key, tunnel) in mutable {
+            if &key.identity == identity {
+                return Some(tunnel);
+            }
+        }
+        None
+    }
+}
+
+pub struct TunnelStateChange {
+    identity: Identity,
+    action: TunnelAction,
+}
+
+impl Message for TunnelStateChange {
+    type Result = Result<(), Error>;
+}
+
+impl Handler<TunnelStateChange> for TunnelManager {
+    type Result = Result<(), Error>;
+
+    fn handle(&mut self, msg: TunnelStateChange, _: &mut Context<Self>) -> Self::Result {
+        info!(
+            "Tunnel state change request for {:?} with action {:?}",
+            msg.identity, msg.action
+        );
+        match msg.action {
+            TunnelAction::MembershipConfirmed(identity) => {
+                if let Some(tunnel) = self.find_tunnel_by_id(&identity) {
+                    info!(
+                        "Membership confirmed for identity {:?} returned tunnel {:?}",
+                        identity, tunnel
+                    );
+                    tunnel.set_state(TunnelState::Registered)?;
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -594,4 +732,66 @@ impl TunnelManager {
 pub fn test_tunnel_manager() {
     let mut tunnel_manager = TunnelManager::new();
     assert_eq!(tunnel_manager.free_ports.pop().unwrap(), 65534);
+}
+
+#[test]
+pub fn test_tunnel_manager_lookup() {
+    use althea_types::EthAddress;
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
+    use std::str::FromStr;
+
+    let mut tunnel_manager = TunnelManager::new();
+
+    // Create dummy identity
+    let id = Identity::new(
+        "0.0.0.0".parse().unwrap(),
+        EthAddress::from_str("ffffffffffffffffffffffffffffffffffffffff").unwrap(),
+        String::from("abc0abc1abc2abc3abc4abc5abc6abc7abc8abc9"),
+    );
+    assert!(tunnel_manager.find_tunnel_by_id(&id).is_none());
+
+    // Create dummy tunnel
+    tunnel_manager.tunnels.insert(
+        TunnelIdentity {
+            identity: id.clone(),
+            ifidx: 0,
+        },
+        Tunnel::new(
+            "0.0.0.0".parse().unwrap(),
+            "iface".into(),
+            65535,
+            0,
+            LocalIdentity {
+                wg_port: 65535,
+                have_tunnel: Some(true),
+                global: id.clone(),
+            },
+        ),
+    );
+
+    {
+        let existing_tunnel = tunnel_manager
+            .find_tunnel_by_id(&id)
+            .expect("Unable to find existing tunnel");
+        assert_eq!(existing_tunnel.state, TunnelState::NotRegistered);
+        // Verify mutability - manual modifications shouldn't happen elsewhere
+        existing_tunnel
+            .set_state(TunnelState::Registered)
+            .expect("Invalid state manipulation");
+    }
+
+    // Verify if object is modified
+    {
+        let existing_tunnel = tunnel_manager
+            .find_tunnel_by_id(&id)
+            .expect("Unable to find existing tunnel");
+        assert_eq!(existing_tunnel.get_state(), &TunnelState::Registered);
+
+        assert!(
+            existing_tunnel.set_state(TunnelState::Registered).is_err(),
+            "Tunnel is already registered"
+        );
+    }
 }
