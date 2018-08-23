@@ -53,6 +53,8 @@ type Resolver = resolver::Resolver;
 pub enum TunnelManagerError {
     #[fail(display = "Port Error: {:?}", _0)]
     PortError(String),
+    #[fail(display = "Unable to find tunnel by interface index {}", _0)]
+    NoTunnelForIfaceError(u32),
     #[fail(display = "Invalid state")]
     InvalidStateError,
 }
@@ -197,7 +199,7 @@ impl TunnelIdentity {
 
 pub struct TunnelManager {
     free_ports: Vec<u16>,
-    tunnels: HashMap<TunnelIdentity, Tunnel>,
+    tunnels: HashMap<Identity, HashMap<u32, Tunnel>>,
 }
 
 impl Actor for TunnelManager {
@@ -354,12 +356,14 @@ impl Handler<GetNeighbors> for TunnelManager {
 
     fn handle(&mut self, _: GetNeighbors, _: &mut Context<Self>) -> Self::Result {
         let mut res = Vec::new();
-        for (_, tunnel) in self.tunnels.iter() {
-            res.push(Neighbor::new(
-                tunnel.localid.clone(),
-                tunnel.iface_name.clone(),
-                tunnel.ip,
-            ));
+        for (_, tunnels) in self.tunnels.iter() {
+            for (_, tunnel) in tunnels.iter() {
+                res.push(Neighbor::new(
+                    tunnel.localid.clone(),
+                    tunnel.iface_name.clone(),
+                    tunnel.ip,
+                ));
+            }
         }
         Ok(res)
     }
@@ -375,15 +379,40 @@ impl Message for TriggerGC {
 impl Handler<TriggerGC> for TunnelManager {
     type Result = Result<(), Error>;
     fn handle(&mut self, msg: TriggerGC, _ctx: &mut Context<Self>) -> Self::Result {
-        // Split entries into good and timed out
-        let (good, timed_out): (
-            HashMap<TunnelIdentity, Tunnel>,
-            HashMap<TunnelIdentity, Tunnel>,
-        ) = self
-            .tunnels
-            .iter()
-            .map(|(ident, tunnel)| (ident.clone(), tunnel.clone()))
-            .partition(|(_ident, tunnel)| tunnel.last_contact.elapsed() < msg.0);
+        let mut good: HashMap<Identity, HashMap<u32, Tunnel>> = HashMap::new();
+        let mut timed_out: HashMap<Identity, HashMap<u32, Tunnel>> = HashMap::new();
+        // Split entries into good and timed out rebuilding the double hashmap strucutre
+        // as you can tell this is enterly copy based and uses 2n ram to prevent borrow
+        // checker issues, we should consider a method that does modify in place
+        for (identity, tunnels) in self.tunnels.iter() {
+            for (ifidx, tunnel) in tunnels.iter() {
+                if tunnel.last_contact.elapsed() < msg.0 {
+                    if good.contains_key(identity) {
+                        good.get_mut(identity)
+                            .unwrap()
+                            .insert(ifidx.clone(), tunnel.clone());
+                    } else {
+                        good.insert(identity.clone(), HashMap::new());
+                        good.get_mut(identity)
+                            .unwrap()
+                            .insert(ifidx.clone(), tunnel.clone());
+                    }
+                } else {
+                    if timed_out.contains_key(identity) {
+                        timed_out
+                            .get_mut(identity)
+                            .unwrap()
+                            .insert(ifidx.clone(), tunnel.clone());
+                    } else {
+                        timed_out.insert(identity.clone(), HashMap::new());
+                        timed_out
+                            .get_mut(identity)
+                            .unwrap()
+                            .insert(ifidx.clone(), tunnel.clone());
+                    }
+                }
+            }
+        }
 
         info!("TriggerGC: removing tunnels: {:?}", timed_out);
 
@@ -397,11 +426,13 @@ impl Handler<TriggerGC> for TunnelManager {
         // would lead to nasty bugs in case del_interface() goes wrong for whatever reason.
         self.tunnels = good;
 
-        for (_ident, tunnel) in timed_out {
-            // In the same spirit, we return the port to the free port pool only after tunnel
-            // deletion goes well.
-            KI.del_interface(&tunnel.iface_name)?;
-            self.free_ports.push(tunnel.listen_port);
+        for (_ident, tunnels) in timed_out {
+            for (_ifidx, tunnel) in tunnels {
+                // In the same spirit, we return the port to the free port pool only after tunnel
+                // deletion goes well.
+                KI.del_interface(&tunnel.iface_name)?;
+                self.free_ports.push(tunnel.listen_port);
+            }
         }
 
         Ok(())
@@ -496,7 +527,7 @@ impl TunnelManager {
         let ports = (start..65535).collect();
         TunnelManager {
             free_ports: ports,
-            tunnels: HashMap::<TunnelIdentity, Tunnel>::new(),
+            tunnels: HashMap::new(),
         }
     }
 
@@ -581,7 +612,7 @@ impl TunnelManager {
         trace!("getting existing tunnel or opening a new one");
         // ifidx must be a part of the key so that we can open multiple tunnels
         // if we have more than one physical connection to the same peer
-        let key = TunnelIdentity::new(their_localid.global.clone(), peer.ifidx);
+        let key = their_localid.global.clone();
         let we_have_tunnel = self.tunnels.contains_key(&key);
         let they_have_tunnel = match their_localid.have_tunnel {
             Some(v) => v,
@@ -589,17 +620,19 @@ impl TunnelManager {
         };
 
         let mut return_bool = false;
-
         if we_have_tunnel {
             // Scope the last_contact bump to let go of self.tunnels before next use
             {
-                let tunnel = self.tunnels.get_mut(&key).unwrap();
-                debug!(
-                    "Bumping timestamp after {}s for tunnel: {:?}",
-                    tunnel.last_contact.elapsed().as_secs(),
-                    tunnel
-                );
-                tunnel.last_contact = Instant::now();
+                let tunnels = self.tunnels.get_mut(&key).unwrap();
+                for hash_obj in tunnels.iter_mut() {
+                    let tunnel = hash_obj.1;
+                    trace!(
+                        "Bumping timestamp after {}s for tunnel: {:?}",
+                        tunnel.last_contact.elapsed().as_secs(),
+                        tunnel
+                    );
+                    tunnel.last_contact = Instant::now();
+                }
             }
 
             if they_have_tunnel {
@@ -611,32 +644,54 @@ impl TunnelManager {
                 // return allocated port as it's not required
                 self.free_ports.push(our_port);
                 // Unwrap is safe because we confirm membership
-                let tunnel = self.tunnels.get(&key).unwrap();
+                let tunnels = self.tunnels.get(&key).unwrap();
+                // Filter by Tunnel::ifidx
+                let tunnel = match tunnels.get(&peer.ifidx) {
+                    Some(tunnel) => tunnel,
+                    None => {
+                        return Err(TunnelManagerError::NoTunnelForIfaceError(peer.ifidx).into())
+                    }
+                };
+
                 return Ok((tunnel.clone(), true));
             } else {
                 trace!(
                     "We have a tunnel but our peer {:?} does not! Handling",
                     peer.contact_socket.ip()
                 );
-                // Unwrap is safe because we confirm membership
-                let iface_name = self.tunnels.get(&key).unwrap().iface_name.clone();
-                let port = self.tunnels.get(&key).unwrap().listen_port.clone();
-                let res = KI.del_interface(&iface_name);
+                // Unwrapping is safe because we confirm membership. This is done
+                // in a separate scope to limit surface of borrow checker.
+                let (tunnel, size) = {
+                    // Find tunnels by identity
+                    let tunnels = self.tunnels.get_mut(&key).unwrap();
+                    // Find tunnel by interface index
+                    let (_, value) = tunnels.remove_entry(&peer.ifidx).unwrap();
+                    // Outer HashMap (self.tunnels) can contain empty HashMaps,
+                    // so the resulting tuple will consist of the tunnel itself, and
+                    // how many tunnels are still associated with that ID.
+                    (value, tunnels.len())
+                };
+                if size == 0 {
+                    // Remove this identity if there are no tunnels associated with it.
+                    self.tunnels.remove(&key);
+                }
+
+                // Remove interface
+                let res = KI.del_interface(&tunnel.iface_name);
                 if res.is_err() {
                     warn!(
                         "We failed to delete the interface {:?} with {:?} it's now orphaned",
-                        iface_name, res
+                        tunnel.iface_name, res
                     );
                 }
 
                 // In the case that we have a tunnel and they don't we drop our existing one
                 // and agree on the new parameters in this message
                 self.tunnels.remove(&key);
-                self.free_ports.push(port);
+                self.free_ports.push(tunnel.listen_port);
                 return_bool = true;
             }
         }
-
         trace!(
             "no tunnel found for {:?}%{:?} creating",
             peer.contact_socket.ip(),
@@ -667,9 +722,12 @@ impl TunnelManager {
 
         match tunnel.monitor(babel_stream) {
             Ok(_) => {
-                let new_key =
-                    TunnelIdentity::new(tunnel.localid.global.clone(), tunnel.listen_ifidx.clone());
-                self.tunnels.insert(new_key, tunnel.clone());
+                let new_key = tunnel.localid.global.clone();
+                // Add a tunnel to internal map based on identity, and interface index.
+                self.tunnels
+                    .entry(new_key)
+                    .or_insert(HashMap::new())
+                    .insert(tunnel.listen_ifidx.clone(), tunnel.clone());
                 Ok((tunnel, return_bool))
             }
             Err(e) => {
@@ -680,19 +738,6 @@ impl TunnelManager {
                 Err(e)
             }
         }
-    }
-
-    pub fn find_tunnel_by_id(&mut self, identity: &Identity) -> Option<&mut Tunnel> {
-        // TODO: This is temporary as a change of datastructure is considered
-        // that would make it easier as calling self.tunnels.entry(id).
-
-        let mutable = &mut self.tunnels;
-        for (key, tunnel) in mutable {
-            if &key.identity == identity {
-                return Some(tunnel);
-            }
-        }
-        None
     }
 }
 
@@ -715,12 +760,21 @@ impl Handler<TunnelStateChange> for TunnelManager {
         );
         match msg.action {
             TunnelAction::MembershipConfirmed(identity) => {
-                if let Some(tunnel) = self.find_tunnel_by_id(&identity) {
+                // Find a tunnel
+                if let Some(tunnels) = self.tunnels.get_mut(&identity) {
                     info!(
                         "Membership confirmed for identity {:?} returned tunnel {:?}",
-                        identity, tunnel
+                        identity, tunnels
                     );
-                    tunnel.set_state(TunnelState::Registered)?;
+
+                    tunnels.iter_mut().for_each(|(ifidx, tunnel)| {
+                        match tunnel.set_state(TunnelState::Registered) {
+                            Ok(_) => trace!("State changed successfuly for {} {:?}", ifidx, tunnel),
+                            Err(e) => {
+                                error!("Unable change state on {} {:?}: {}", ifidx, tunnel, e)
+                            }
+                        }
+                    });
                 }
             }
         }
@@ -737,9 +791,6 @@ pub fn test_tunnel_manager() {
 #[test]
 pub fn test_tunnel_manager_lookup() {
     use althea_types::EthAddress;
-    use std::os::unix::process::ExitStatusExt;
-    use std::process::ExitStatus;
-    use std::process::Output;
     use std::str::FromStr;
 
     let mut tunnel_manager = TunnelManager::new();
@@ -750,30 +801,33 @@ pub fn test_tunnel_manager_lookup() {
         EthAddress::from_str("ffffffffffffffffffffffffffffffffffffffff").unwrap(),
         String::from("abc0abc1abc2abc3abc4abc5abc6abc7abc8abc9"),
     );
-    assert!(tunnel_manager.find_tunnel_by_id(&id).is_none());
+    assert!(tunnel_manager.tunnels.get(&id).is_none());
 
     // Create dummy tunnel
-    tunnel_manager.tunnels.insert(
-        TunnelIdentity {
-            identity: id.clone(),
-            ifidx: 0,
-        },
-        Tunnel::new(
-            "0.0.0.0".parse().unwrap(),
-            "iface".into(),
-            65535,
+    tunnel_manager
+        .tunnels
+        .entry(id.clone())
+        .or_insert(HashMap::new())
+        .insert(
             0,
-            LocalIdentity {
-                wg_port: 65535,
-                have_tunnel: Some(true),
-                global: id.clone(),
-            },
-        ),
-    );
-
+            Tunnel::new(
+                "0.0.0.0".parse().unwrap(),
+                "iface".into(),
+                65535,
+                0,
+                LocalIdentity {
+                    wg_port: 65535,
+                    have_tunnel: Some(true),
+                    global: id.clone(),
+                },
+            ),
+        );
     {
         let existing_tunnel = tunnel_manager
-            .find_tunnel_by_id(&id)
+            .tunnels
+            .get_mut(&id)
+            .unwrap()
+            .get_mut(&0u32)
             .expect("Unable to find existing tunnel");
         assert_eq!(existing_tunnel.state, TunnelState::NotRegistered);
         // Verify mutability - manual modifications shouldn't happen elsewhere
@@ -785,7 +839,10 @@ pub fn test_tunnel_manager_lookup() {
     // Verify if object is modified
     {
         let existing_tunnel = tunnel_manager
-            .find_tunnel_by_id(&id)
+            .tunnels
+            .get_mut(&id)
+            .unwrap()
+            .get_mut(&0u32)
             .expect("Unable to find existing tunnel");
         assert_eq!(existing_tunnel.get_state(), &TunnelState::Registered);
 
