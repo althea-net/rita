@@ -557,7 +557,7 @@ impl TunnelManager {
             );
             let tunnel = tunnels
                 .get(&peer.ifidx)
-                .expect("Unable to find tunnel by ifidx {}", peer.ifidx);
+                .unwrap_or_else(|| panic!("Unable to find tunnel by ifidx {}", peer.ifidx));
             return Ok((tunnel.clone(), true));
         }
 
