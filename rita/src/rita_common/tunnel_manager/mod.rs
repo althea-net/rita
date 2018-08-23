@@ -52,8 +52,6 @@ type Resolver = resolver::Resolver;
 pub enum TunnelManagerError {
     #[fail(display = "Port Error: {:?}", _0)]
     PortError(String),
-    #[fail(display = "Unable to find tunnel by interface index {}", _0)]
-    NoTunnelForIfaceError(u32),
     #[fail(display = "Invalid state")]
     InvalidStateError,
 }
@@ -545,11 +543,7 @@ impl TunnelManager {
             // Unwrap is safe because we confirm membership
             let tunnels = self.tunnels.get(&key).unwrap();
             // Filter by Tunnel::ifidx
-            let tunnel = match tunnels.get(&peer.ifidx) {
-                Some(tunnel) => tunnel,
-                None => return Err(TunnelManagerError::NoTunnelForIfaceError(peer.ifidx).into()),
-            };
-
+            let tunnel = tunnels.get(&peer.ifidx).unwrap();
             return Ok((tunnel.clone(), true));
         }
 
