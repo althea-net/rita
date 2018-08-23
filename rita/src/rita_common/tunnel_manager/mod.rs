@@ -524,7 +524,12 @@ impl TunnelManager {
         // ifidx must be a part of the key so that we can open multiple tunnels
         // if we have more than one physical connection to the same peer
         let key = their_localid.global.clone();
-        let we_have_tunnel = self.tunnels.contains_key(&key);
+        let we_have_tunnel = self
+            .tunnels
+            .get(&key)
+            .unwrap_or(&HashMap::new())
+            .contains_key(&peer.ifidx);
+
         let they_have_tunnel = match their_localid.have_tunnel {
             Some(v) => v,
             None => true, // when we don't take the more conservative option
@@ -541,9 +546,18 @@ impl TunnelManager {
             // return allocated port as it's not required
             self.free_ports.push(our_port);
             // Unwrap is safe because we confirm membership
+            trace!("Looking up for a tunnels by {:?}", key);
             let tunnels = self.tunnels.get(&key).unwrap();
             // Filter by Tunnel::ifidx
-            let tunnel = tunnels.get(&peer.ifidx).unwrap();
+            trace!(
+                "Got tunnels by key {:?}: {:?}. Ifidx is {}",
+                key,
+                tunnels,
+                peer.ifidx
+            );
+            let tunnel = tunnels
+                .get(&peer.ifidx)
+                .expect("Unable to find tunnel by ifidx {}", peer.ifidx);
             return Ok((tunnel.clone(), true));
         }
 
