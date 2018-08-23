@@ -53,8 +53,6 @@ type Resolver = resolver::Resolver;
 pub enum TunnelManagerError {
     #[fail(display = "Port Error: {:?}", _0)]
     PortError(String),
-    #[fail(display = "Unable to find tunnel by interface index {}", _0)]
-    NoTunnelForIfaceError(u32),
     #[fail(display = "Invalid state")]
     InvalidStateError,
 }
