@@ -1,3 +1,4 @@
+pub mod dao_manager;
 pub mod dashboard;
 pub mod debt_keeper;
 pub mod http_client;
