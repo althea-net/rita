@@ -237,6 +237,13 @@ fn main() {
             .route("/wipe", Method::POST, wipe)
             .route("/database", Method::DELETE, nuke_db)
             .route("/debts", Method::GET, get_debts)
+            .route("/dao_list", Method::GET, get_dao_list)
+            .route("/dao_list/add/{address}", Method::POST, add_to_dao_list)
+            .route(
+                "/dao_list/remove/{address}",
+                Method::POST,
+                remove_from_dao_list,
+            )
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_network().rita_dashboard_port
