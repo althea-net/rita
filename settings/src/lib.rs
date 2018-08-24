@@ -237,10 +237,23 @@ pub struct StatsServerSettings {
     pub stats_enabled: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
+pub struct SubnetDAOSettings {
+    /// If we should take action based on DAO membership
+    pub dao_enforcement: bool,
+    /// The amount of time an entry is used before refreshing the cache
+    pub cache_timeout: Duration,
+    /// A list of nodes to query for blockchain data
+    pub node_list: Vec<(IpAddr, u16)>,
+    /// List of subnet DAO's to which we are a member
+    pub dao_addresses: Vec<EthAddress>,
+}
+
 /// This is the main struct for rita
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct RitaSettingsStruct {
     payment: PaymentSettings,
+    dao: SubnetDAOSettings,
     network: NetworkSettings,
     exit_client: ExitClientSettings,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -329,6 +342,7 @@ pub struct RitaExitSettingsStruct {
     db_file: String,
     description: String,
     payment: PaymentSettings,
+    dao: SubnetDAOSettings,
     network: NetworkSettings,
     exit_network: ExitNetworkSettings,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -348,6 +362,11 @@ pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
     fn get_payment_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, T, PaymentSettings>;
+
+    fn get_dao<'ret, 'me: 'ret>(&'me self) -> RwLockReadGuardRef<'ret, T, SubnetDAOSettings>;
+    fn get_dao_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, T, SubnetDAOSettings>;
 
     fn get_network<'ret, 'me: 'ret>(&'me self) -> RwLockReadGuardRef<'ret, T, NetworkSettings>;
     fn get_network_mut<'ret, 'me: 'ret>(
@@ -392,6 +411,18 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, PaymentSettings> {
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.payment)
+    }
+
+    fn get_dao<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, SubnetDAOSettings> {
+        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.dao)
+    }
+
+    fn get_dao_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, SubnetDAOSettings> {
+        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.dao)
     }
 
     fn get_network<'ret, 'me: 'ret>(
@@ -467,6 +498,18 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, PaymentSettings> {
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.payment)
+    }
+
+    fn get_dao<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, SubnetDAOSettings> {
+        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.dao)
+    }
+
+    fn get_dao_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, SubnetDAOSettings> {
+        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.dao)
     }
 
     fn get_network<'ret, 'me: 'ret>(
