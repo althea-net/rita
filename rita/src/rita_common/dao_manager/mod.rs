@@ -86,7 +86,12 @@ impl Handler<DAOCheck> for DAOManager {
 }
 
 /// Called by returning DAO requests, sends a message to TunnelManager
-pub struct CacheCallback((Identity, EthAddress, Web3Response));
+pub struct CacheCallback {
+    id: Identity,
+    dao_address: EthAddress,
+    response: Web3Response,
+}
+
 impl Message for CacheCallback {
     type Result = ();
 }
@@ -95,26 +100,32 @@ impl Handler<CacheCallback> for DAOManager {
     type Result = ();
 
     fn handle(&mut self, msg: CacheCallback, _: &mut Context<Self>) -> Self::Result {
-        let their_id = (msg.0).0;
-        let dao_address = (msg.0).1;
-        let response = (msg.0).2;
+        let their_id = msg.id;
+        let dao_address = msg.dao_address;
+        let response = msg.response;
 
         let has_vec = self.entries.contains_key(&their_id);
-        let on_dao = response.result == Uint256::zero();
+        let on_dao = !(response.result == Uint256::zero());
 
         if has_vec {
             let entry_vec = self.entries.get_mut(&their_id).unwrap();
             let mut found_entry = false;
-            for entry in entry_vec.iter_mut() {
-                // There exists an entry, and we found it, so update it
-                if dao_address == entry.dao_address {
+            match entry_vec
+                .iter_mut()
+                .find(|ref i| dao_address == i.dao_address)
+            {
+                Some(entry) => {
                     entry.on_list = on_dao;
                     entry.last_updated = Instant::now();
                     found_entry = true;
                     send_membership_message(on_dao, their_id.clone());
-                    break;
                 }
+                None => (),
             }
+
+            // We can't place this into the match because the mutable ref lives even
+            // in the none case where it's obviously not being used. Until the borrow
+            // checker is smart enough to allow that this will have to do
             if !found_entry {
                 // A list exists but does not contain an entry from this dao
                 // create one and insert it into the list
@@ -135,9 +146,7 @@ impl Handler<CacheCallback> for DAOManager {
                 id: their_id.clone(),
                 last_updated: Instant::now(),
             };
-            let mut v = Vec::new();
-            v.push(entry);
-            self.entries.insert(their_id.clone(), v);
+            self.entries.insert(their_id.clone(), vec![entry]);
 
             send_membership_message(on_dao, their_id);
         }
@@ -146,34 +155,28 @@ impl Handler<CacheCallback> for DAOManager {
 
 /// True if timestamp does not need to be updated
 fn timer_check(timestamp: Instant) -> bool {
-    if Instant::now() - timestamp < SETTING.get_dao().cache_timeout {
-        true
-    } else {
-        false
-    }
+    Instant::now() - timestamp < SETTING.get_dao().cache_timeout
 }
 
 /// Sends off a message to TunnelManager about the dao state
 fn send_membership_message(on_dao: bool, their_id: Identity) -> () {
-    if on_dao {
-        TunnelManager::from_registry().do_send(TunnelStateChange {
-            identity: their_id.clone(),
-            action: TunnelAction::MembershipConfirmed,
-        });
-    } else {
-        TunnelManager::from_registry().do_send(TunnelStateChange {
-            identity: their_id,
-            action: TunnelAction::MembershipExpired,
-        });
-    }
+    TunnelManager::from_registry().do_send(TunnelStateChange {
+        identity: their_id.clone(),
+        action: if on_dao {
+            TunnelAction::MembershipConfirmed
+        } else {
+            TunnelAction::MembershipExpired
+        },
+    });
 }
 
-/// Checks is an identity is in at least one of the set of DAO's we are a member of.
+/// Checks if an identity is in at least one of the set of DAO's we are a member of.
 /// will check the cache first before going out and updating via web3
-fn check_cache(their_id: Identity, entries: &HashMap<Identity, Vec<DAOEntry>>) -> () {
+fn check_cache(their_id: Identity, ident2dao: &HashMap<Identity, Vec<DAOEntry>>) -> () {
     trace!("Checking the DAOManager Cache for {:?}", their_id);
+    let dao_settings = SETTING.get_dao();
     // we don't care about subnet DAO's, short circuit.
-    if !SETTING.get_dao().dao_enforcement {
+    if !dao_settings.dao_enforcement || dao_settings.dao_addresses.len() == 0 {
         trace!("DAO enforcement disabled DAOMAnager doing nothing!");
         send_membership_message(true, their_id);
         return ();
@@ -181,7 +184,7 @@ fn check_cache(their_id: Identity, entries: &HashMap<Identity, Vec<DAOEntry>>) -
     // TODO when we start enforcing dao state more strictly we will need
     // to detect when we are bootstrapping and explicitly allow everyone
 
-    match entries.get(&their_id) {
+    match ident2dao.get(&their_id) {
         // Cache hit
         Some(membership_list) => {
             for entry in membership_list.iter() {
@@ -201,7 +204,7 @@ fn check_cache(their_id: Identity, entries: &HashMap<Identity, Vec<DAOEntry>>) -
         }
         // Cache miss, do a lookup for all DAO's
         None => {
-            for dao in SETTING.get_dao().dao_addresses.iter() {
+            for dao in dao_settings.dao_addresses.iter() {
                 get_membership(dao.clone(), their_id.clone());
             }
         }
@@ -249,11 +252,11 @@ fn get_membership(dao_address: EthAddress, target: Identity) -> () {
                             trace!("Got {:?} from full node DAO request", val);
                             return Ok(());
                         }
-                        DAOManager::from_registry().do_send(CacheCallback((
-                            target,
-                            dao_address.clone(),
-                            val.unwrap(),
-                        )));
+                        DAOManager::from_registry().do_send(CacheCallback {
+                            id: target,
+                            dao_address: dao_address.clone(),
+                            response: val.unwrap(),
+                        });
                         Ok(()) as Result<(), JsonPayloadError>
                     },
                 );
