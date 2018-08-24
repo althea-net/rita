@@ -60,7 +60,9 @@ pub enum TunnelManagerError {
 #[derive(Debug, Clone)]
 pub enum TunnelAction {
     /// Received confirmed membership of an identity
-    MembershipConfirmed(Identity),
+    MembershipConfirmed,
+    /// Membership expired for an identity
+    MembershipExpired,
 }
 
 impl fmt::Display for TunnelAction {
@@ -118,8 +120,8 @@ impl Tunnel {
             listen_ifidx: ifidx,
             listen_port: our_listen_port,
             localid: their_id.clone(),
-            // By default new tunnels are in NotRegistered state
-            state: TunnelState::NotRegistered,
+            // By default new tunnels are in Registered state
+            state: TunnelState::Registered,
         }
     }
 
@@ -140,41 +142,19 @@ impl Tunnel {
 
     /// Register this tunnel into Babel monitor
     pub fn monitor<T: Read + Write>(&self, stream: T) -> Result<(), Error> {
+        info!("Monitoring tunnel {}", self.iface_name);
         let mut babel = Babel::new(stream);
         babel.start_connection()?;
         babel.monitor(&self.iface_name)?;
         Ok(())
     }
 
-    pub fn set_state(&mut self, new_state: TunnelState) -> Result<(), Error> {
-        match (&self.state, &new_state) {
-            (TunnelState::NotRegistered, TunnelState::Registered) => self.unrestrict()?,
-            (TunnelState::Registered, TunnelState::NotRegistered) => self.restrict()?,
-            _ => {
-                warn!(
-                    "Invalid tunnel state manipulation: from {} to {}",
-                    self.state, new_state
-                );
-                return Err(TunnelManagerError::InvalidStateError.into());
-            }
-        }
-        self.state = new_state;
+    pub fn unmonitor<T: Read + Write>(&self, stream: T) -> Result<(), Error> {
+        warn!("Unmonitoring tunnel {}", self.iface_name);
+        let mut babel = Babel::new(stream);
+        babel.start_connection()?;
+        babel.unmonitor(&self.iface_name)?;
         Ok(())
-    }
-
-    pub fn restrict(&self) -> Result<(), Error> {
-        // TODO: Implement tunnel restricting
-        info!("Restricting tunnel {:?}", self);
-        Ok(())
-    }
-    pub fn unrestrict(&self) -> Result<(), Error> {
-        // TODO: Implement unrestricting
-        info!("Unrestricting tunnel {:?}", self);
-        Ok(())
-    }
-
-    pub fn get_state(&self) -> &TunnelState {
-        &self.state
     }
 }
 
@@ -277,15 +257,18 @@ impl Message for GetPhyIpFromMeshIp {
     type Result = Result<IpAddr, Error>;
 }
 
+fn make_babel_stream() -> Result<TcpStream, Error> {
+    let stream = TcpStream::connect::<SocketAddr>(
+        format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
+    )?;
+    Ok(stream)
+}
+
 impl Handler<GetPhyIpFromMeshIp> for TunnelManager {
     type Result = Result<IpAddr, Error>;
 
     fn handle(&mut self, mesh_ip: GetPhyIpFromMeshIp, _: &mut Context<Self>) -> Self::Result {
-        let stream = TcpStream::connect::<SocketAddr>(
-            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
-        )?;
-
-        let mut babel = Babel::new(stream);
+        let mut babel = Babel::new(make_babel_stream()?);
         babel.start_connection()?;
         let routes = babel.parse_routes()?;
 
@@ -619,14 +602,8 @@ impl TunnelManager {
                 return Err(e);
             }
         }
-        let babel_stream = TcpStream::connect::<SocketAddr>(
-            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
-        )?;
-
-        debug_assert_eq!(tunnel.get_state(), &TunnelState::NotRegistered);
-        tunnel.restrict()?;
-
-        match tunnel.monitor(babel_stream) {
+        debug_assert_eq!(tunnel.state, TunnelState::Registered);
+        match tunnel.monitor(make_babel_stream()?) {
             Ok(_) => {
                 let new_key = tunnel.localid.global.clone();
                 // Add a tunnel to internal map based on identity, and interface index.
@@ -664,24 +641,47 @@ impl Handler<TunnelStateChange> for TunnelManager {
             "Tunnel state change request for {:?} with action {:?}",
             msg.identity, msg.action
         );
-        match msg.action {
-            TunnelAction::MembershipConfirmed(identity) => {
-                // Find a tunnel
-                if let Some(tunnels) = self.tunnels.get_mut(&identity) {
-                    info!(
-                        "Membership confirmed for identity {:?} returned tunnel {:?}",
-                        identity, tunnels
-                    );
-
-                    tunnels.iter_mut().for_each(|(ifidx, tunnel)| {
-                        match tunnel.set_state(TunnelState::Registered) {
-                            Ok(_) => trace!("State changed successfuly for {} {:?}", ifidx, tunnel),
-                            Err(e) => {
-                                error!("Unable change state on {} {:?}: {}", ifidx, tunnel, e)
+        // Find a tunnel
+        match self.tunnels.get_mut(&msg.identity) {
+            Some(tunnels) => {
+                for (_, tunnel) in tunnels.iter_mut() {
+                    trace!("Handle action {} on tunnel {:?}", msg.action, tunnel);
+                    match msg.action {
+                        TunnelAction::MembershipConfirmed => {
+                            info!(
+                                "Membership confirmed for identity {:?} returned tunnel {:?}",
+                                msg.identity, tunnel
+                            );
+                            match tunnel.state {
+                                TunnelState::NotRegistered => {
+                                    tunnel.monitor(make_babel_stream()?)?;
+                                    tunnel.state = TunnelState::Registered;
+                                }
+                                TunnelState::Registered => {
+                                    warn!("Tunnel {:?} already in registered state", tunnel);
+                                    continue;
+                                }
                             }
                         }
-                    });
+                        TunnelAction::MembershipExpired => {
+                            info!("Membership for identity {:?} is expired", msg.identity);
+                            match tunnel.state {
+                                TunnelState::Registered => {
+                                    tunnel.unmonitor(make_babel_stream()?)?;
+                                    tunnel.state = TunnelState::NotRegistered;
+                                }
+                                TunnelState::NotRegistered => {
+                                    info!("Tunnel {:?} already in not registered state.", tunnel);
+                                    continue;
+                                }
+                            }
+                        }
+                    }
                 }
+            }
+            None => {
+                // TODO: This should probably return error
+                warn!("Couldn't find tunnel for identity {:?}", msg.identity);
             }
         }
         Ok(())
@@ -738,11 +738,9 @@ pub fn test_tunnel_manager_lookup() {
             .unwrap()
             .get_mut(&0u32)
             .expect("Unable to find existing tunnel");
-        assert_eq!(existing_tunnel.state, TunnelState::NotRegistered);
+        assert_eq!(existing_tunnel.state, TunnelState::Registered);
         // Verify mutability - manual modifications shouldn't happen elsewhere
-        existing_tunnel
-            .set_state(TunnelState::Registered)
-            .expect("Invalid state manipulation");
+        existing_tunnel.state = TunnelState::NotRegistered;
     }
 
     // Verify if object is modified
@@ -753,11 +751,6 @@ pub fn test_tunnel_manager_lookup() {
             .unwrap()
             .get_mut(&0u32)
             .expect("Unable to find existing tunnel");
-        assert_eq!(existing_tunnel.get_state(), &TunnelState::Registered);
-
-        assert!(
-            existing_tunnel.set_state(TunnelState::Registered).is_err(),
-            "Tunnel is already registered"
-        );
+        assert_eq!(existing_tunnel.state, TunnelState::NotRegistered);
     }
 }
