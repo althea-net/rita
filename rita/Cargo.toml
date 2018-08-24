@@ -27,8 +27,8 @@ exit_db = { path = "../exit_db" }
 num256 = { path = "../num256" }
 settings = { path = "../settings" }
 
-actix = { git = "https://github.com/kingoflolz/actix", branch = "althea-mesh"}
-actix-web = { git = "https://github.com/actix/actix-web", default-features = false, branch = "fix-missing-content-length"}
+actix = "0.7.3"
+actix-web = "0.7.4"
 actix_derive = "0.3.0"
 bytes = "0.4.9"
 clippy = { version = "0.0.212", optional = true }
