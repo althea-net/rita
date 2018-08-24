@@ -28,7 +28,7 @@ num256 = { path = "../num256" }
 settings = { path = "../settings" }
 
 actix = "0.7.3"
-actix-web = "0.7.4"
+actix-web = { version = "0.7.4", default-features = false }
 actix_derive = "0.3.0"
 bytes = "0.4.9"
 clippy = { version = "0.0.212", optional = true }
