@@ -769,10 +769,8 @@ impl Handler<TunnelStateChange> for TunnelManager {
                             info!("Membership for identity {:?} is expired", msg.identity);
                             match tunnel.state {
                                 TunnelState::Registered => {
-                                    // TODO make this real after testing
-                                    trace!("Fake removing {:?} from peers", msg.identity);
-                                    //tunnel.unmonitor(make_babel_stream()?)?;
-                                    //tunnel.state = TunnelState::NotRegistered;
+                                    tunnel.unmonitor(make_babel_stream()?)?;
+                                    tunnel.state = TunnelState::NotRegistered;
                                 }
                                 TunnelState::NotRegistered => {
                                     info!("Tunnel {:?} already in not registered state.", tunnel);
