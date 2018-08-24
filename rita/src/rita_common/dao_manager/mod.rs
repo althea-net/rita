@@ -20,6 +20,9 @@ use tokio::net::TcpStream as TokioTcpStream;
 use althea_types::EthAddress;
 use althea_types::Identity;
 use num256::Uint256;
+use rita_common::tunnel_manager::TunnelAction;
+use rita_common::tunnel_manager::TunnelManager;
+use rita_common::tunnel_manager::TunnelStateChange;
 use settings::RitaCommonSettings;
 
 use SETTING;
@@ -68,7 +71,7 @@ pub struct DAOEntry {
     last_updated: Instant,
 }
 
-pub struct DAOCheck(Identity);
+pub struct DAOCheck(pub Identity);
 impl Message for DAOCheck {
     type Result = ();
 }
@@ -97,6 +100,7 @@ impl Handler<CacheCallback> for DAOManager {
         let response = (msg.0).2;
 
         let has_vec = self.entries.contains_key(&their_id);
+        let on_dao = response.result == Uint256::zero();
 
         if has_vec {
             let entry_vec = self.entries.get_mut(&their_id).unwrap();
@@ -104,10 +108,10 @@ impl Handler<CacheCallback> for DAOManager {
             for entry in entry_vec.iter_mut() {
                 // There exists an entry, and we found it, so update it
                 if dao_address == entry.dao_address {
-                    entry.on_list = response.result == Uint256::zero();
+                    entry.on_list = on_dao;
                     entry.last_updated = Instant::now();
                     found_entry = true;
-                    // send message
+                    send_membership_message(on_dao, their_id.clone());
                     break;
                 }
             }
@@ -115,26 +119,27 @@ impl Handler<CacheCallback> for DAOManager {
                 // A list exists but does not contain an entry from this dao
                 // create one and insert it into the list
                 let entry = DAOEntry {
-                    on_list: response.result == Uint256::zero(),
+                    on_list: on_dao,
                     dao_address: dao_address,
                     id: their_id.clone(),
                     last_updated: Instant::now(),
                 };
                 entry_vec.push(entry);
-                // send appropriate dao message
+                send_membership_message(on_dao, their_id);
             }
         } else {
             // No entry exists in the HashMap for this ID, create one
             let entry = DAOEntry {
-                on_list: response.result == Uint256::zero(),
+                on_list: on_dao,
                 dao_address: dao_address,
                 id: their_id.clone(),
                 last_updated: Instant::now(),
             };
             let mut v = Vec::new();
             v.push(entry);
-            self.entries.insert(their_id, v);
-            // send appropriate dao message
+            self.entries.insert(their_id.clone(), v);
+
+            send_membership_message(on_dao, their_id);
         }
     }
 }
@@ -148,12 +153,29 @@ fn timer_check(timestamp: Instant) -> bool {
     }
 }
 
+/// Sends off a message to TunnelManager about the dao state
+fn send_membership_message(on_dao: bool, their_id: Identity) -> () {
+    if on_dao {
+        TunnelManager::from_registry().do_send(TunnelStateChange {
+            identity: their_id.clone(),
+            action: TunnelAction::MembershipConfirmed,
+        });
+    } else {
+        TunnelManager::from_registry().do_send(TunnelStateChange {
+            identity: their_id,
+            action: TunnelAction::MembershipExpired,
+        });
+    }
+}
+
 /// Checks is an identity is in at least one of the set of DAO's we are a member of.
 /// will check the cache first before going out and updating via web3
 fn check_cache(their_id: Identity, entries: &HashMap<Identity, Vec<DAOEntry>>) -> () {
+    trace!("Checking the DAOManager Cache for {:?}", their_id);
     // we don't care about subnet DAO's, short circuit.
     if !SETTING.get_dao().dao_enforcement {
         trace!("DAO enforcement disabled DAOMAnager doing nothing!");
+        send_membership_message(true, their_id);
         return ();
     }
     // TODO when we start enforcing dao state more strictly we will need
@@ -169,13 +191,13 @@ fn check_cache(their_id: Identity, entries: &HashMap<Identity, Vec<DAOEntry>>) -
                         their_id.clone(),
                         entry.dao_address
                     );
-                // send approval
+                    send_membership_message(true, their_id.clone());
                 } else if !timer_check(entry.last_updated) {
                     get_membership(entry.dao_address, entry.id.clone());
                 }
             }
             trace!("{:?} is not on any SubnetDAO", their_id);
-            // send rejection
+            send_membership_message(false, their_id);
         }
         // Cache miss, do a lookup for all DAO's
         None => {
@@ -187,8 +209,8 @@ fn check_cache(their_id: Identity, entries: &HashMap<Identity, Vec<DAOEntry>>) -
 }
 
 fn get_membership(dao_address: EthAddress, target: Identity) -> () {
-    let (url, port) = get_web3_server();
-    let endpoint = format!("{}:{}/", url, port);
+    let url = get_web3_server();
+    let endpoint = format!("{}/", url);
     let socket: SocketAddr = endpoint.parse().expect("Invalid DAO fullnode!");
 
     // We transform the ip address into a argument
@@ -244,7 +266,7 @@ fn get_membership(dao_address: EthAddress, target: Identity) -> () {
 /// Checks the list of full nodes, panics if none exist, if there exists
 /// one or more it rotates the entires such that requests are load balanced
 /// evenly. TODO sort before writing in settings to reduce flash wear
-fn get_web3_server() -> (String, u16) {
+fn get_web3_server() -> String {
     if SETTING.get_dao().node_list.len() == 0 {
         panic!("DAO enforcement enabled but not DAO's configured!");
     }

@@ -96,3 +96,9 @@ description = "ExitD"
 eth_address = "0x0101010101010101010101010101010101010101"
 mesh_ip = "fd00::5"
 wg_public_key = "twSLk4SyWO7rlW6OqJPxFzx6tXUFcVD07tpd0AUCPgE="
+
+
+[dao]
+dao_enforcement = false
+node_list = []
+dao_addresses = []

@@ -726,14 +726,15 @@ impl TunnelManager {
 }
 
 pub struct TunnelStateChange {
-    identity: Identity,
-    action: TunnelAction,
+    pub identity: Identity,
+    pub action: TunnelAction,
 }
 
 impl Message for TunnelStateChange {
     type Result = Result<(), Error>;
 }
 
+// Called by DAOManager to notify TunnelManager about the registration state of a given peer
 impl Handler<TunnelStateChange> for TunnelManager {
     type Result = Result<(), Error>;
 
@@ -768,8 +769,10 @@ impl Handler<TunnelStateChange> for TunnelManager {
                             info!("Membership for identity {:?} is expired", msg.identity);
                             match tunnel.state {
                                 TunnelState::Registered => {
-                                    tunnel.unmonitor(make_babel_stream()?)?;
-                                    tunnel.state = TunnelState::NotRegistered;
+                                    // TODO make this real after testing
+                                    trace!("Fake removing {:?} from peers", msg.identity);
+                                    //tunnel.unmonitor(make_babel_stream()?)?;
+                                    //tunnel.state = TunnelState::NotRegistered;
                                 }
                                 TunnelState::NotRegistered => {
                                     info!("Tunnel {:?} already in not registered state.", tunnel);

@@ -35,6 +35,11 @@ own_internal_ip = "172.168.1.254"
 exit_start_ip = "172.168.1.100"
 netmask = 24
 
+[dao]
+dao_enforcement = false
+node_list = []
+dao_addresses = []
+
 [mailer]
 test = true
 email_cooldown=60
