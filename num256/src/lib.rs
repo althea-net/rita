@@ -7,6 +7,7 @@ use num::bigint::{BigInt, BigUint, ToBigInt};
 use num::traits::ops::checked::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
 use num::traits::Signed;
 use num::ToPrimitive;
+use num::Zero;
 use serde::ser::Serialize;
 use serde::{Deserialize, Deserializer, Serializer};
 use std::fmt;
@@ -27,6 +28,10 @@ pub struct Int256(BigInt);
 impl Int256 {
     pub fn abs(&self) -> Self {
         Int256(self.clone().0.abs())
+    }
+
+    pub fn zero() -> Self {
+        Int256(BigInt::zero())
     }
 }
 
