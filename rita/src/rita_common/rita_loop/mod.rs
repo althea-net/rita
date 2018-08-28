@@ -136,6 +136,7 @@ impl Handler<Tick> for RitaLoop {
                 .then(move |neighbors| {
                     match neighbors {
                         Ok(Ok(neighbors)) => {
+                            trace!("Sending DAOCheck");
                             for neigh in neighbors.iter() {
                                 let their_id = neigh.identity.global.clone();
                                 DAOManager::from_registry().do_send(DAOCheck(their_id));
