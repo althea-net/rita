@@ -211,11 +211,14 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
 
     // check if we are a gateway
     let gateway = match SETTING.get_network().external_nic {
-        Some(ref external_nic) => {
-            let wan_input_packets = (KI.read_iface_counters(external_nic)?.0).packets;
-            wan_input_packets > 0
+        Some(ref external_nic) => match KI.is_iface_up(external_nic) {
+            Some(val) => val,
+            None => false,
+        },
+        _ => {
+            trace!("Parsing of external nic setting failed!");
+            false
         }
-        _ => false,
     };
 
     trace!("We are a Gateway: {}", gateway);
