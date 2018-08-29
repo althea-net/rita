@@ -1,13 +1,14 @@
 /*
-Tunnel manager manages WireGuard tunnels between mesh peers. In rita_loop PeerListener is called
-and asked about what peers it has heard from since the last cycle, these peers are passed to
-TunnelManager, which then orchestrates calling these peers over their http endpoints and setting
-up tunnels if they respond, likewise if someone calls us their hello goes through network_endpoints
-then into TunnelManager to open a tunnel for them.
-*/
+   Tunnel manager manages WireGuard tunnels between mesh peers. In rita_loop PeerListener is called
+   and asked about what peers it has heard from since the last cycle, these peers are passed to
+   TunnelManager, which then orchestrates calling these peers over their http endpoints and setting
+   up tunnels if they respond, likewise if someone calls us their hello goes through network_endpoints
+   then into TunnelManager to open a tunnel for them.
+   */
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use actix::actors::resolver;
 use actix::prelude::*;
@@ -59,6 +60,7 @@ pub struct Tunnel {
     pub listen_ifidx: u32,      // the physical interface this tunnel is listening on
     pub listen_port: u16,       // the local port this tunnel is listening on
     pub localid: LocalIdentity, // the identity of the counterparty tunnel
+    pub last_contact: Instant,  // When's the last we heard from the other end of this tunnel?
 }
 
 impl Tunnel {
@@ -76,6 +78,7 @@ impl Tunnel {
             listen_ifidx: ifidx,
             listen_port: our_listen_port,
             localid: their_id.clone(),
+            last_contact: Instant::now(),
         };
 
         let network = SETTING.get_network().clone();
@@ -104,7 +107,7 @@ impl Tunnel {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Debug)]
+#[derive(PartialEq, Eq, Hash, Debug, Clone)]
 struct TunnelIdentity {
     /// Identity of the owner of tunnel
     identity: Identity,
@@ -285,6 +288,49 @@ impl Handler<GetNeighbors> for TunnelManager {
             ));
         }
         Ok(res)
+    }
+}
+
+/// A message type for deleting all tunnels we haven't heard from for more than the duration.
+pub struct TriggerGC(pub Duration);
+
+impl Message for TriggerGC {
+    type Result = Result<(), Error>;
+}
+
+impl Handler<TriggerGC> for TunnelManager {
+    type Result = Result<(), Error>;
+    fn handle(&mut self, msg: TriggerGC, _ctx: &mut Context<Self>) -> Self::Result {
+        // Split entries into good and timed out
+        let (good, timed_out): (
+            HashMap<TunnelIdentity, Tunnel>,
+            HashMap<TunnelIdentity, Tunnel>,
+        ) = self
+            .tunnels
+            .iter()
+            .map(|(ident, tunnel)| (ident.clone(), tunnel.clone()))
+            .partition(|(_ident, tunnel)| tunnel.last_contact.elapsed() < msg.0);
+
+        info!("TriggerGC: removing tunnels: {:?}", timed_out);
+
+        // Please keep in mind it makes more sense to update the tunnel map *before* yielding the
+        // actual interfaces and ports from timed_out.
+        //
+        // The difference is leaking interfaces on del_interface() failure vs. Rita thinking
+        // it has freed ports/interfaces which are still there/claimed.
+        //
+        // The former would be a mere performance bug while inconsistent-with-reality Rita state
+        // would lead to nasty bugs in case del_interface() goes wrong for whatever reason.
+        self.tunnels = good;
+
+        for (_ident, tunnel) in timed_out {
+            // In the same spirit, we return the port to the free port pool only after tunnel
+            // deletion goes well.
+            KI.del_interface(&tunnel.iface_name)?;
+            self.free_ports.push(tunnel.listen_port);
+        }
+
+        Ok(())
     }
 }
 
@@ -470,40 +516,51 @@ impl TunnelManager {
 
         let mut return_bool = false;
 
-        if we_have_tunnel && they_have_tunnel {
-            trace!(
-                "We already have a tunnel for {:?}%{:?}",
-                peer.contact_socket.ip(),
-                peer.ifidx,
-            );
-            // return allocated port as it's not required
-            self.free_ports.push(our_port);
-            // Unwrap is safe because we confirm membership
-            let tunnel = self.tunnels.get(&key).unwrap();
-            return Ok((tunnel.clone(), true));
-        }
-
-        if we_have_tunnel && !they_have_tunnel {
-            trace!(
-                "We have a tunnel but our peer {:?} does not! Handling",
-                peer.contact_socket.ip()
-            );
-            // Unwrap is safe because we confirm membership
-            let iface_name = self.tunnels.get(&key).unwrap().iface_name.clone();
-            let port = self.tunnels.get(&key).unwrap().listen_port.clone();
-            let res = KI.del_interface(&iface_name);
-            if res.is_err() {
-                warn!(
-                    "We failed to delete the interface {:?} with {:?} it's now orphaned",
-                    iface_name, res
+        if we_have_tunnel {
+            // Scope the last_contact bump to let go of self.tunnels before next use
+            {
+                let tunnel = self.tunnels.get_mut(&key).unwrap();
+                debug!(
+                    "Bumping timestamp after {}s for tunnel: {:?}",
+                    tunnel.last_contact.elapsed().as_secs(),
+                    tunnel
                 );
+                tunnel.last_contact = Instant::now();
             }
 
-            // In the case that we have a tunnel and they don't we drop our existing one
-            // and agree on the new parameters in this message
-            self.tunnels.remove(&key);
-            self.free_ports.push(port);
-            return_bool = true;
+            if they_have_tunnel {
+                trace!(
+                    "We already have a tunnel for {:?}%{:?}",
+                    peer.contact_socket.ip(),
+                    peer.ifidx,
+                );
+                // return allocated port as it's not required
+                self.free_ports.push(our_port);
+                // Unwrap is safe because we confirm membership
+                let tunnel = self.tunnels.get(&key).unwrap();
+                return Ok((tunnel.clone(), true));
+            } else {
+                trace!(
+                    "We have a tunnel but our peer {:?} does not! Handling",
+                    peer.contact_socket.ip()
+                );
+                // Unwrap is safe because we confirm membership
+                let iface_name = self.tunnels.get(&key).unwrap().iface_name.clone();
+                let port = self.tunnels.get(&key).unwrap().listen_port.clone();
+                let res = KI.del_interface(&iface_name);
+                if res.is_err() {
+                    warn!(
+                        "We failed to delete the interface {:?} with {:?} it's now orphaned",
+                        iface_name, res
+                    );
+                }
+
+                // In the case that we have a tunnel and they don't we drop our existing one
+                // and agree on the new parameters in this message
+                self.tunnels.remove(&key);
+                self.free_ports.push(port);
+                return_bool = true;
+            }
         }
 
         trace!(
