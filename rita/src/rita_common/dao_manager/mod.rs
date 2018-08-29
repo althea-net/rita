@@ -9,10 +9,15 @@ use actix::prelude::*;
 use actix_web::client::Connection;
 use actix_web::error::JsonPayloadError;
 use actix_web::*;
+use futures::future::ok;
 use futures::Future;
+use rand::thread_rng;
+use rand::Rng;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::net::SocketAddr;
+use std::net::ToSocketAddrs;
 use std::time::Duration;
 use std::time::Instant;
 use tokio::net::TcpStream as TokioTcpStream;
@@ -30,10 +35,10 @@ use SETTING;
 // A json object specifcally for the web3 function
 // call response we expect from the SubnetDAO contract
 #[derive(Deserialize, Debug)]
-struct Web3Response {
+pub struct Web3Response {
     jsonrpc: String,
-    id: u32,
-    result: Uint256,
+    result: Option<String>,
+    error: Option<Value>,
 }
 
 pub struct DAOManager {
@@ -64,6 +69,7 @@ impl DAOManager {
     }
 }
 
+#[derive(Debug)]
 pub struct DAOEntry {
     on_list: bool,
     dao_address: EthAddress,
@@ -103,9 +109,23 @@ impl Handler<CacheCallback> for DAOManager {
         let their_id = msg.id;
         let dao_address = msg.dao_address;
         let response = msg.response;
+        trace!("Got response {:?}", response);
+        let num: Uint256 = match response.result {
+            Some(uint) => match uint.replace("0x", "").parse() {
+                Ok(parsed) => parsed,
+                Err(e) => {
+                    trace!("Parsing error {:?}", e);
+                    return ();
+                }
+            },
+            None => {
+                trace!("Full node request got errror {:?}", response);
+                return ();
+            }
+        };
 
         let has_vec = self.entries.contains_key(&their_id);
-        let on_dao = !(response.result == Uint256::zero());
+        let on_dao = !(num == Uint256::zero());
 
         if has_vec {
             let entry_vec = self.entries.get_mut(&their_id).unwrap();
@@ -118,6 +138,7 @@ impl Handler<CacheCallback> for DAOManager {
                     entry.on_list = on_dao;
                     entry.last_updated = Instant::now();
                     found_entry = true;
+                    trace!("Updating exising entry {:?}", entry);
                     send_membership_message(on_dao, their_id.clone());
                 }
                 None => (),
@@ -135,6 +156,7 @@ impl Handler<CacheCallback> for DAOManager {
                     id: their_id.clone(),
                     last_updated: Instant::now(),
                 };
+                trace!("Adding new cache entry to existing ID {:?}", entry);
                 entry_vec.push(entry);
                 send_membership_message(on_dao, their_id);
             }
@@ -146,6 +168,7 @@ impl Handler<CacheCallback> for DAOManager {
                 id: their_id.clone(),
                 last_updated: Instant::now(),
             };
+            trace!("Creating new ID in cache {:?}", entry);
             self.entries.insert(their_id.clone(), vec![entry]);
 
             send_membership_message(on_dao, their_id);
@@ -196,6 +219,7 @@ fn check_cache(their_id: Identity, ident2dao: &HashMap<Identity, Vec<DAOEntry>>)
                     );
                     send_membership_message(true, their_id.clone());
                 } else if !timer_check(entry.last_updated) {
+                    trace!("Cache entry has expired, updating");
                     get_membership(entry.dao_address, entry.id.clone());
                 }
             }
@@ -213,8 +237,22 @@ fn check_cache(their_id: Identity, ident2dao: &HashMap<Identity, Vec<DAOEntry>>)
 
 fn get_membership(dao_address: EthAddress, target: Identity) -> () {
     let url = get_web3_server();
-    let endpoint = format!("{}/", url);
-    let socket: SocketAddr = endpoint.parse().expect("Invalid DAO fullnode!");
+    let endpoint = format!("http://{}/", url);
+    trace!("Getting DAO membership from {}", url);
+    let socket: SocketAddr = match url.to_socket_addrs() {
+        Ok(mut iter) => match iter.next() {
+            Some(socket) => socket,
+            None => {
+                trace!("No ip found for domain name!");
+                return ();
+            }
+        },
+        Err(e) => {
+            trace!("Could not resolve full node domain name {:?}", e);
+            return ();
+        }
+    };
+    trace!("Got IP {:?}", socket);
 
     // We transform the ip address into a argument
     let ip_bytes = match target.mesh_ip {
@@ -223,60 +261,75 @@ fn get_membership(dao_address: EthAddress, target: Identity) -> () {
     };
     let mut full_bytes: [u8; 32] = [0; 32];
     let mut i = 0;
+    let func_magic = [0x37, 0x66, 0x79, 0xb0];
+    for byte in func_magic.iter() {
+        full_bytes[i] = byte.clone();
+        i = i + 1;
+    }
     for byte in ip_bytes.iter() {
         full_bytes[i] = byte.clone();
         i = i + 1;
     }
 
     let call_args: Uint256 = full_bytes.into();
-    let func_call = format!("{{'jsonrpc':'2.0','method':'eth_call','params':[{{'to': '{:x}', 'data': '{:x}'}}, 'latest'],'id':1}}", dao_address, call_args);
+    let func_call = format!("{{'jsonrpc':'2.0','method':'eth_call','params':[{{'to': '0x{:x}', 'data': '0x{:x}'}}, 'latest'],'id':1}}", dao_address, call_args);
 
+    // it's really awkward to escape that many " so we just repace them
+    let func_call = func_call.replace("'", "\"");
+    trace!("Calling full node with: {}", func_call);
     let stream = TokioTcpStream::connect(&socket);
 
-    let res = stream.then(move |stream| {
-        let stream = stream.expect("Error opening connection to DAO node!");
-        client::post(&endpoint)
-            .timeout(Duration::from_secs(8))
-            .with_connection(Connection::from_stream(stream))
-            .json(func_call)
-            .unwrap()
-            .send()
-            .then(move |response| {
-                if response.is_err() {
-                    trace!("Got {:?} from full node DAO request", response);
-                    return Ok(());
-                }
-                let _ = response.unwrap().json().then(
-                    |val: Result<Web3Response, JsonPayloadError>| {
-                        if val.is_err() {
-                            trace!("Got {:?} from full node DAO request", val);
-                            return Ok(());
+    let res = stream
+        .then(move |stream| {
+            let stream = stream.expect("Error attaching to full node socket");
+            client::post(&endpoint)
+                .timeout(Duration::from_secs(8))
+                .with_connection(Connection::from_stream(stream))
+                .content_type("application/json")
+                .body(func_call)
+                .unwrap()
+                .send()
+                .then(move |response| {
+                    trace!("Got response {:?}", response);
+                    match response {
+                        Ok(res) => Box::new(res.json().then(
+                            move |val: Result<Web3Response, JsonPayloadError>| match val {
+                                Ok(val) => {
+                                    DAOManager::from_registry().do_send(CacheCallback {
+                                        id: target,
+                                        dao_address: dao_address.clone(),
+                                        response: val,
+                                    });
+                                    Ok(())
+                                }
+                                Err(e) => {
+                                    trace!("Got bad Web3Response {:?}", e);
+                                    return Ok(());
+                                }
+                            },
+                        ))
+                            as Box<Future<Item = (), Error = JsonPayloadError>>,
+                        Err(e) => {
+                            warn!("Got error from full node {:?}", e);
+                            Box::new(ok(()))
                         }
-                        DAOManager::from_registry().do_send(CacheCallback {
-                            id: target,
-                            dao_address: dao_address.clone(),
-                            response: val.unwrap(),
-                        });
-                        Ok(()) as Result<(), JsonPayloadError>
-                    },
-                );
-                Ok(())
-            })
-    });
+                    }
+                })
+        })
+        .then(|_err| Ok(()));
     Arbiter::spawn(res);
 }
 
-/// Checks the list of full nodes, panics if none exist, if there exists
-/// one or more it rotates the entires such that requests are load balanced
-/// evenly. TODO sort before writing in settings to reduce flash wear
+/// Checks the list of full nodes, panics if none exist, if there exist
+/// one or more a random entry from the list is returned in an attempt
+/// to load balance across fullnodes
 fn get_web3_server() -> String {
     if SETTING.get_dao().node_list.len() == 0 {
         panic!("DAO enforcement enabled but not DAO's configured!");
     }
+    let node_list = SETTING.get_dao().node_list.clone();
+    let mut rng = thread_rng();
+    let val = rng.gen_range(0, node_list.len());
 
-    let node_list = &mut SETTING.get_dao_mut().node_list;
-    let ret = node_list.pop().unwrap();
-    node_list.push(ret.clone());
-
-    ret
+    node_list[val].clone()
 }
