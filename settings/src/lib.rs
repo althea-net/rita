@@ -71,6 +71,10 @@ fn default_discovery_ip() -> Ipv6Addr {
     Ipv6Addr::new(0xff02, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x8)
 }
 
+fn default_tunnel_timeout() -> u64 {
+    900 // 15 minutes
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
     /// Our own mesh IP (in fd00::/8)
@@ -121,6 +125,9 @@ pub struct NetworkSettings {
     /// This in memory variable specifies if we are a gateway or not
     #[serde(skip_deserializing, default)]
     pub is_gateway: bool,
+    /// How long do we wait without contact from a peer before we delete the associated tunnel?
+    #[serde(default = "default_tunnel_timeout")]
+    pub tunnel_timeout_seconds: u64,
 }
 
 impl Default for NetworkSettings {
@@ -128,7 +135,7 @@ impl Default for NetworkSettings {
         NetworkSettings {
             own_ip: "fd00::1".parse().unwrap(),
             bounty_ip: "fd00::3".parse().unwrap(),
-            discovery_ip: Ipv6Addr::new(0xff02, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x8),
+            discovery_ip: default_discovery_ip(),
             babel_port: 6872,
             rita_hello_port: 4876,
             rita_dashboard_port: 4877,
@@ -144,6 +151,7 @@ impl Default for NetworkSettings {
             external_nic: None,
             default_route: Vec::new(),
             is_gateway: false,
+            tunnel_timeout_seconds: default_tunnel_timeout(),
         }
     }
 }

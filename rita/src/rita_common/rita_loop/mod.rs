@@ -8,7 +8,7 @@ use actix_utils::ResolverWrapper;
 
 use KI;
 
-use rita_common::tunnel_manager::{GetNeighbors, TunnelManager};
+use rita_common::tunnel_manager::{GetNeighbors, TriggerGC, TunnelManager};
 
 use rita_common::traffic_watcher::{TrafficWatcher, Watch};
 
@@ -124,6 +124,24 @@ impl Handler<Tick> for RitaLoop {
                             actix::fut::ok(())
                         })
                 }),
+        );
+
+        let start = Instant::now();
+        Arbiter::spawn(
+            TunnelManager::from_registry()
+                .send(TriggerGC(Duration::from_secs(
+                    SETTING.get_network().tunnel_timeout_seconds,
+                )))
+                .then(move |res| {
+                    info!(
+                        "TunnelManager GC pass completed in {}s {}ms, with result {:?}",
+                        start.elapsed().as_secs(),
+                        start.elapsed().subsec_nanos() / 1000000,
+                        res
+                    );
+                    res
+                })
+                .then(|_| Ok(())),
         );
 
         let start = Instant::now();
