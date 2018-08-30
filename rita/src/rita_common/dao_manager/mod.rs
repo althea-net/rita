@@ -178,7 +178,7 @@ impl Handler<CacheCallback> for DAOManager {
 
 /// True if timestamp does not need to be updated
 fn timer_check(timestamp: Instant) -> bool {
-    Instant::now() - timestamp < SETTING.get_dao().cache_timeout
+    Instant::now() - timestamp < Duration::new(SETTING.get_dao().cache_timeout_seconds, 0)
 }
 
 /// Sends off a message to TunnelManager about the dao state

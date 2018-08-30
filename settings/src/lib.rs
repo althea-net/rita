@@ -245,8 +245,9 @@ pub struct StatsServerSettings {
     pub stats_enabled: bool,
 }
 
-fn default_cache_timeout() -> Duration {
-    Duration::new(600, 0)
+// in seconds
+fn default_cache_timeout() -> u64 {
+    600
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
@@ -255,7 +256,7 @@ pub struct SubnetDAOSettings {
     pub dao_enforcement: bool,
     /// The amount of time an entry is used before refreshing the cache
     #[serde(default = "default_cache_timeout")]
-    pub cache_timeout: Duration,
+    pub cache_timeout_seconds: u64,
     /// A list of nodes to query for blockchain data
     pub node_list: Vec<String>,
     /// List of subnet DAO's to which we are a member
