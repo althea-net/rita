@@ -61,16 +61,21 @@ pub enum KernelInterfaceTestError {
 
 #[cfg(test)]
 lazy_static! {
-    pub static ref KI: Box<KernelInterface> = test_kernel_interface();
+    pub static ref KI: Box<KernelInterface> = Box::new(TestCommandRunner {
+        run_command: Arc::new(Mutex::new(Box::new(|_program, _args| {
+            panic!("kernel interface used before initialized");
+        })))
+    });
 }
 
 #[cfg(not(test))]
 lazy_static! {
-    pub static ref KI: Box<KernelInterface> = new_kernel_interface();
+    pub static ref KI: Box<KernelInterface> = Box::new(LinuxCommandRunner {});
 }
 
 pub trait CommandRunner {
     fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, Error>;
+    fn set_mock(&self, mock: Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>);
     fn test_commands(&self, test_name: &str, test_commands: &[(&str, &str)]);
 }
 
@@ -107,11 +112,14 @@ impl CommandRunner for LinuxCommandRunner {
     fn test_commands(&self, _test_name: &str, _test_commands: &[(&str, &str)]) {
         unimplemented!()
     }
+
+    fn set_mock(&self, _mock: Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>) {
+        unimplemented!()
+    }
 }
 
 pub struct TestCommandRunner {
     pub run_command: Arc<Mutex<Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>>>,
-    pub current_test: String,
 }
 
 impl TestCommandRunner {}
@@ -125,7 +133,6 @@ impl CommandRunner for TestCommandRunner {
 
         (&mut *self.run_command.lock().unwrap())(program.to_string(), args_owned)
     }
-
     fn test_commands(&self, _test_name: &str, test_commands: &[(&str, &str)]) {
         let mut commands_owned = Vec::new();
         for (command, result) in test_commands {
@@ -135,16 +142,13 @@ impl CommandRunner for TestCommandRunner {
         let closure = move |command: String, arg: Vec<String>| {
             let args_string = arg.join(" ");
             let command_string = vec![command, args_string].join(" ");
-
             if command_index >= commands_owned.len() {
                 panic!(
                     "too many commands run in current test, got {}, index {}",
                     command_string, command_index
                 );
             }
-
             let (expected_command, result) = commands_owned[command_index].clone();
-
             if expected_command == command_string {
                 command_index += 1;
                 return Ok(Output {
@@ -159,8 +163,11 @@ impl CommandRunner for TestCommandRunner {
                 );
             }
         };
-
         *self.run_command.lock().unwrap() = Box::new(closure);
+    }
+
+    fn set_mock(&self, mock: Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>) {
+        *self.run_command.lock().unwrap() = mock
     }
 }
 
@@ -174,7 +181,6 @@ pub fn test_kernel_interface() -> Box<TestCommandRunner> {
         run_command: Arc::new(Mutex::new(Box::new(|_program, _args| {
             Err(KernelInterfaceTestError::TooManyCommandsRun)?
         }))),
-        current_test: "uninitialized".to_string(),
     })
 }
 
