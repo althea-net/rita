@@ -262,12 +262,13 @@ fn main() {
             .route("/wifi_settings", Method::GET, get_wifi_config)
             .route("/wipe", Method::POST, wipe)
     }).workers(1)
-    .bind(format!(
-        "[::0]:{}",
-        SETTING.get_network().rita_dashboard_port
-    )).unwrap()
-    .shutdown_timeout(0)
-    .start();
+        .bind(format!(
+            "[::0]:{}",
+            SETTING.get_network().rita_dashboard_port
+        ))
+        .unwrap()
+        .shutdown_timeout(0)
+        .start();
 
     let common = rita_common::rita_loop::RitaLoop::new();
     let _: Addr<_> = common.start();

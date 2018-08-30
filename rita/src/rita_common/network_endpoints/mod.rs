@@ -15,7 +15,6 @@ use SETTING;
 use std::net::SocketAddr;
 
 use rita_common;
-use rita_common::payment_controller::PaymentController;
 use rita_common::peer_listener::Peer;
 use rita_common::tunnel_manager::{IdentityCallback, TunnelManager};
 

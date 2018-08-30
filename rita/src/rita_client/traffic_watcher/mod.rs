@@ -131,7 +131,8 @@ pub fn watch<T: Read + Write>(
                         ));
                     }
                 }
-            )).send()?
+            ))
+            .send()?
             .json()?;
         let client_rx = SystemTime::now();
 
