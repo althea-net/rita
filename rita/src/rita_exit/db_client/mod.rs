@@ -242,6 +242,7 @@ fn client_to_new_db_client(
     let mut rng = rand::thread_rng();
     let rand_code: u64 = rng.gen_range(0, 999999);
     models::Client {
+        luci_pass: "".into(),
         wg_port: client.wg_port.to_string(),
         mesh_ip: client.global.mesh_ip.to_string(),
         wg_pubkey: client.global.wg_public_key.clone(),
