@@ -6,7 +6,7 @@ use actix::prelude::*;
 
 use std::collections::{HashMap, VecDeque};
 
-use althea_types::{Identity, PaymentTx};
+use althea_types::interop::{Identity, PaymentTx};
 
 use num256::{Int256, Uint256};
 

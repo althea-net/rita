@@ -22,7 +22,4 @@ incremental = false
 
 [patch.crates-io]
 trust-dns-resolver = { git = "https://github.com/kingoflolz/trust-dns.git", branch = "lower-max-ttl" }
-
-[patch.'https://github.com/althea-mesh/althea_rs.git']
-num256 = {path = "./num256"}
 althea_types = {path = "./althea_types"}
