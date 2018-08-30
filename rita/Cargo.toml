@@ -26,7 +26,7 @@ clu = { path = "../clu" }
 exit_db = { path = "../exit_db" }
 num256 = { path = "../num256" }
 settings = { path = "../settings" }
-guac_actix = { git = "https://github.com/mpapierski/guac_rs", branch = "enforce-eth-types-0.3", optional = true}
+guac_actix = { git = "https://github.com/mpapierski/guac_rs", branch = "6-cargo", optional = true}
 
 syslog = "^4.0"
 actix = "0.7.4"
