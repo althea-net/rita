@@ -23,6 +23,7 @@ wg_private_key_path = "/tmp/priv"
 wg_public_key = ""
 wg_start_port = 60000
 peer_interfaces = []
+tunnel_timeout_seconds = 900
 manual_peers = []
 external_nic = "veth-5-8"
 default_route = []
@@ -37,6 +38,7 @@ netmask = 24
 
 [dao]
 dao_enforcement = false
+cache_timeout_seconds = 600
 node_list = []
 dao_addresses = []
 
