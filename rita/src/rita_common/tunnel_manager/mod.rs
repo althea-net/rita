@@ -161,20 +161,6 @@ impl Tunnel {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Debug, Clone)]
-struct TunnelIdentity {
-    /// Identity of the owner of tunnel
-    identity: Identity,
-    /// Interface index
-    ifidx: u32,
-}
-
-impl TunnelIdentity {
-    fn new(identity: Identity, ifidx: u32) -> TunnelIdentity {
-        TunnelIdentity { identity, ifidx }
-    }
-}
-
 pub struct TunnelManager {
     free_ports: Vec<u16>,
     tunnels: HashMap<Identity, HashMap<u32, Tunnel>>,
@@ -602,7 +588,7 @@ impl TunnelManager {
 
         let they_have_tunnel = match their_localid.have_tunnel {
             Some(v) => v,
-            None => true, // when we don't take the more conservative option
+            None => true, // when we don't know take the more conservative option
         };
 
         let mut return_bool = false;
@@ -610,23 +596,20 @@ impl TunnelManager {
             // Scope the last_contact bump to let go of self.tunnels before next use
             {
                 let tunnels = self.tunnels.get_mut(&key).unwrap();
-                for hash_obj in tunnels.iter_mut() {
-                    let tunnel = hash_obj.1;
-                    trace!(
-                        "Bumping timestamp after {}s for tunnel: {:?}",
-                        tunnel.last_contact.elapsed().as_secs(),
-                        tunnel
-                    );
-                    tunnel.last_contact = Instant::now();
+                for (ifidx, tunnel) in tunnels.iter_mut() {
+                    if *ifidx == peer.ifidx {
+                        trace!("We already have a tunnel for {:?}", tunnel);
+                        trace!(
+                            "Bumping timestamp after {}s for tunnel: {:?}",
+                            tunnel.last_contact.elapsed().as_secs(),
+                            tunnel
+                        );
+                        tunnel.last_contact = Instant::now();
+                    }
                 }
             }
 
             if they_have_tunnel {
-                trace!(
-                    "We already have a tunnel for {:?}%{:?}",
-                    peer.contact_socket.ip(),
-                    peer.ifidx,
-                );
                 // return allocated port as it's not required
                 self.free_ports.push(our_port);
                 trace!("Looking up for a tunnels by {:?}", key);
@@ -645,6 +628,8 @@ impl TunnelManager {
 
                 return Ok((tunnel.clone(), true));
             } else {
+                // In the case that we have a tunnel and they don't we drop our existing one
+                // and agree on the new parameters in this message
                 trace!(
                     "We have a tunnel but our peer {:?} does not! Handling",
                     peer.contact_socket.ip()
@@ -675,9 +660,6 @@ impl TunnelManager {
                     );
                 }
 
-                // In the case that we have a tunnel and they don't we drop our existing one
-                // and agree on the new parameters in this message
-                self.tunnels.remove(&key);
                 self.free_ports.push(tunnel.listen_port);
                 return_bool = true;
             }
@@ -703,7 +685,6 @@ impl TunnelManager {
                 return Err(e);
             }
         }
-        debug_assert_eq!(tunnel.state, TunnelState::Registered);
         match tunnel.monitor(make_babel_stream()?) {
             Ok(_) => {
                 let new_key = tunnel.localid.global.clone();
