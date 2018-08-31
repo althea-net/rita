@@ -59,13 +59,9 @@ impl Handler<GetOwnInfo> for Dashboard {
                 .from_err()
                 .and_then(|own_balance| match own_balance {
                     Ok(balance) => {
-                        let balance = if balance > Int256::zero() {
-                            balance
-                                .checked_div(&Int256::from(1_000_000_000i64))
-                                .ok_or(OwnInfoError::DivisionError(balance.clone()))?
-                        } else {
-                            Int256::zero()
-                        };
+                        let balance = balance
+                            .checked_div(&Int256::from(1_000_000_000i64))
+                            .ok_or(OwnInfoError::DivisionError(balance.clone()))?;
                         Ok(OwnInfo {
                             balance: balance.to_i64().ok_or(OwnInfoError::CastError(balance))?,
                             version: env!("CARGO_PKG_VERSION").to_string(),
