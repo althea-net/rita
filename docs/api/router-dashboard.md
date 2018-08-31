@@ -567,7 +567,7 @@ Format:
 
 ## /dao_list
 
-Calling HTTP `GET` request on this endpoint returns a list of EthAddress' for a configured subnet dao
+Calling HTTP `GET` request on this endpoint returns a list of EthAddresses for a configured subnet DAO. If no DAO is configured it will return an empty list. 
 
 - URL: `<rita ip>:<rita_dashboard_port>/dao_list`
 - Method: `GET`
@@ -594,7 +594,7 @@ Format:
 
 ## /dao_list/add/{address}
 
-Calling HTTP `POST` request on this endpoint removes the provided address from the configured list of
+Calling HTTP `POST` request on this endpoint adds the provided address to the configured list of
 SubnetDAO's
 
 - URL: `<rita ip>:<rita_dashboard_port>/dao_list/add/{address}`
