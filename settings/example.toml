@@ -18,6 +18,7 @@ wg_private_key = ""
 wg_private_key_path = "/tmp/priv"
 wg_public_key = ""
 wg_start_port = 60000
+tunnel_timeout_seconds = 900
 peer_interfaces = []
 manual_peers = []
 default_route = []
@@ -96,3 +97,10 @@ description = "ExitD"
 eth_address = "0x0101010101010101010101010101010101010101"
 mesh_ip = "fd00::5"
 wg_public_key = "twSLk4SyWO7rlW6OqJPxFzx6tXUFcVD07tpd0AUCPgE="
+
+
+[dao]
+dao_enforcement = false
+cache_timeout_seconds = 600
+node_list = []
+dao_addresses = []

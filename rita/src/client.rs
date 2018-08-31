@@ -228,6 +228,13 @@ fn main() {
             .route("/version", Method::GET, version)
             .route("/wipe", Method::POST, wipe)
             .route("/debts", Method::GET, get_debts)
+            .route("/dao_list", Method::GET, get_dao_list)
+            .route("/dao_list/add/{address}", Method::POST, add_to_dao_list)
+            .route(
+                "/dao_list/remove/{address}",
+                Method::POST,
+                remove_from_dao_list,
+            )
     }).workers(1)
         .bind(format!(
             "[::0]:{}",

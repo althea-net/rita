@@ -22,6 +22,9 @@ use rita_common::stats_collector::StatsCollector;
 
 use rita_common::peer_listener::GetPeers;
 
+use rita_common::dao_manager::DAOCheck;
+use rita_common::dao_manager::DAOManager;
+
 use rita_common::tunnel_manager::PeersToContact;
 
 use failure::Error;
@@ -123,6 +126,30 @@ impl Handler<Tick> for RitaLoop {
                             PaymentController::from_registry().do_send(PaymentControllerUpdate {});
                             actix::fut::ok(())
                         })
+                }),
+        );
+
+        trace!("Starting DAOManager loop");
+        Arbiter::spawn(
+            TunnelManager::from_registry()
+                .send(GetNeighbors)
+                .then(move |neighbors| {
+                    match neighbors {
+                        Ok(Ok(neighbors)) => {
+                            trace!("Sending DAOCheck");
+                            for neigh in neighbors.iter() {
+                                let their_id = neigh.identity.global.clone();
+                                DAOManager::from_registry().do_send(DAOCheck(their_id));
+                            }
+                        }
+                        Ok(Err(e)) => {
+                            trace!("Failed to get neighbors from tunnel manager {:?}", e);
+                        }
+                        Err(e) => {
+                            trace!("Failed to get neighbors from tunnel manager {:?}", e);
+                        }
+                    };
+                    Ok(())
                 }),
         );
 

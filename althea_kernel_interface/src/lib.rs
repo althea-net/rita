@@ -28,6 +28,7 @@ mod fs_sync;
 mod get_neighbors;
 mod iface_counter;
 mod interface_tools;
+mod ip_addr;
 mod ip_route;
 mod iptables;
 mod link_local_tools;

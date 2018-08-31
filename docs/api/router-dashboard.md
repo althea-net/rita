@@ -25,8 +25,6 @@ This file documents the dashboard API found in Rita client.
 
 `curl 127.0.0.1:4877/info`
 
-
-
 ## /neighbors
 
 - URL: `<rita ip>:<rita_dashboard_port>/neighbors`
@@ -63,8 +61,6 @@ This file documents the dashboard API found in Rita client.
 - Sample Call:
 
 `curl 127.0.0.1:4877/neighbors`
-
-
 
 ## /exits
 
@@ -117,11 +113,13 @@ This file documents the dashboard API found in Rita client.
   - Contents: `{}`
 - Error Response: `400 Bad Request`
 - Error Contents:
+
 ```json
 {
-    "error": "<description>",
+  "error": "<description>"
 }
 ```
+
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:4877/exits/borked/reset`
@@ -138,11 +136,13 @@ This file documents the dashboard API found in Rita client.
   - Contents: `{}`
 - Error Response: `400 Bad Request`
 - Error Contents:
+
 ```json
 {
-    "error": "<description>",
+  "error": "<description>"
 }
 ```
+
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:4877/exits/borked/reset`
@@ -159,12 +159,14 @@ This file documents the dashboard API found in Rita client.
   - Contents: `{}`
 - Error Response: `400 Bad Request`
 - Error Contents:
+
 ```json
 {
-    "error": "<description>",
-    "rust_error": "<stringified_rust_error>"
+  "error": "<description>",
+  "rust_error": "<stringified_rust_error>"
 }
 ```
+
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:4877/exits/borked/register`
@@ -176,20 +178,22 @@ This file documents the dashboard API found in Rita client.
   `{nickname}` for verification using `{code}`
 - Method: `POST`
 - URL Params:
-    - `nickname`, string
-    - `code`, string
+  - `nickname`, string
+  - `code`, string
 - Data Params: `None`
 - Success Response:
   - Code: 200 OK
   - Contents: `{}`
 - Error Response: `400 Bad Request`
 - Error Contents:
+
 ```json
 {
-    "error": "<description>",
-    "rust_error": "<stringified_rust_error>"
+  "error": "<description>",
+  "rust_error": "<stringified_rust_error>"
 }
 ```
+
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:4877/exits/borked/register`
@@ -315,8 +319,6 @@ This file documents the dashboard API found in Rita client.
 
 `curl 127.0.0.1:4877/settings`
 
-
-
 ## /settings
 
 - URL: `<rita ip>:<rita_dashboard_port>/settings`
@@ -340,8 +342,6 @@ This file documents the dashboard API found in Rita client.
 
 `curl -XPOST 127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"exit_client": {"current_exit": "SELECTEDEXIT"}}'`
 }
-
-
 
 ## /wifi_settings
 
@@ -400,8 +400,6 @@ This file documents the dashboard API found in Rita client.
 
 `curl 127.0.0.1:4877/wifi_settings`
 
-
-
 ## /wifi_settings
 
 - URL: `<rita ip>:<rita_dashboard_port>/wifi_settings`
@@ -444,7 +442,6 @@ This file documents the dashboard API found in Rita client.
 
 `curl -XPOST 127.0.0.1:<rita_dashboard_port>/wifi_settings/ssid -H 'Content-Type: application/json' -i -d '{"radio":"radio0", "ssid": "this is a freeform ssid"}'`
 
-
 ---
 
 ## /wifi_settings/pass
@@ -466,7 +463,6 @@ This file documents the dashboard API found in Rita client.
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:<rita_dashboard_port>/wifi_settings/pass -H 'Content-Type: application/json' -i -d '{"radio":"radio0", "pass": "this is a freeform password"}'`
-
 
 ---
 
@@ -490,9 +486,7 @@ This file documents the dashboard API found in Rita client.
 
 `curl -XPOST 127.0.0.1:<rita_dashboard_port>/wifi_settings/mesh -H 'Content-Type: application/json' -i -d '{"radio":"radio0", "mesh": true}'`
 
-
 ---
-
 
 ## /wipe
 
@@ -567,6 +561,83 @@ Format:
   },
   ...
 ]
+```
+
+---
+
+## /dao_list
+
+Calling HTTP `GET` request on this endpoint returns a list of EthAddresses for a configured subnet DAO. If no DAO is configured it will return an empty list. 
+
+- URL: `<rita ip>:<rita_dashboard_port>/dao_list`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `JSON` structured message. See below for an example format.
+- Error Response: `500 Server Error`
+- Sample Call
+
+`curl 127.0..1:<rita_dashboard_port>/dao_list`
+
+Format:
+
+```json
+[
+  "0xf7402c9b6ee98acb1b7d131607108d1f15b552cd",
+  ...
+]
+```
+
+---
+
+## /dao_list/add/{address}
+
+Calling HTTP `POST` request on this endpoint adds the provided address to the configured list of
+SubnetDAO's
+
+- URL: `<rita ip>:<rita_dashboard_port>/dao_list/add/{address}`
+- Method: `POST`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `JSON` structured message. See below for an example format.
+- Error Response: `500 Server Error`
+- Sample Call
+
+`curl 127.0..1:<rita_dashboard_port>/dao_list/add/0xf7402c9b6ee98acb1b7d131607108d1f15b552cd`
+
+Format:
+
+```json
+[]
+```
+
+---
+
+## /dao_list/remove/{address}
+
+Calling HTTP `POST` request on this endpoint removes the provided address from the configured list of
+SubnetDAO's
+
+- URL: `<rita ip>:<rita_dashboard_port>/dao_list/remove/{address}`
+- Method: `POST`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `JSON` structured message. See below for an example format.
+- Error Response: `500 Server Error`
+- Sample Call
+
+`curl 127.0..1:<rita_dashboard_port>/dao_list/remove/0xf7402c9b6ee98acb1b7d131607108d1f15b552cd`
+
+Format:
+
+```json
+[]
 ```
 
 ---

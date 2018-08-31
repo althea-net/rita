@@ -517,6 +517,7 @@ class World:
             prep_netns(id)
 
         print("namespaces prepped")
+        time.sleep(10)
 
         print("starting babel")
 
