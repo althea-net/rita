@@ -42,7 +42,7 @@ pub struct Web3Response {
 }
 
 pub struct DAOManager {
-    entries: HashMap<Identity, Vec<DAOEntry>>,
+    ident2dao: HashMap<Identity, Vec<DAOEntry>>,
 }
 
 impl Actor for DAOManager {
@@ -64,7 +64,7 @@ impl Default for DAOManager {
 impl DAOManager {
     fn new() -> DAOManager {
         DAOManager {
-            entries: HashMap::<Identity, Vec<DAOEntry>>::new(),
+            ident2dao: HashMap::<Identity, Vec<DAOEntry>>::new(),
         }
     }
 }
@@ -87,7 +87,7 @@ impl Handler<DAOCheck> for DAOManager {
 
     fn handle(&mut self, msg: DAOCheck, _: &mut Context<Self>) -> Self::Result {
         let their_id = msg.0;
-        check_cache(their_id, &self.entries);
+        check_cache(their_id, &self.ident2dao);
     }
 }
 
@@ -124,11 +124,11 @@ impl Handler<CacheCallback> for DAOManager {
             }
         };
 
-        let has_vec = self.entries.contains_key(&their_id);
+        let has_vec = self.ident2dao.contains_key(&their_id);
         let on_dao = !(num == Uint256::zero());
 
         if has_vec {
-            let entry_vec = self.entries.get_mut(&their_id).unwrap();
+            let entry_vec = self.ident2dao.get_mut(&their_id).unwrap();
             let mut found_entry = false;
             match entry_vec
                 .iter_mut()
@@ -169,7 +169,7 @@ impl Handler<CacheCallback> for DAOManager {
                 last_updated: Instant::now(),
             };
             trace!("Creating new ID in cache {:?}", entry);
-            self.entries.insert(their_id.clone(), vec![entry]);
+            self.ident2dao.insert(their_id.clone(), vec![entry]);
 
             send_membership_message(on_dao, their_id);
         }
