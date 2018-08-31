@@ -39,6 +39,7 @@ extern crate ipnetwork;
 extern crate lettre;
 extern crate lettre_email;
 extern crate minihttpse;
+extern crate num_traits;
 extern crate openssl_probe;
 extern crate rand;
 extern crate regex;

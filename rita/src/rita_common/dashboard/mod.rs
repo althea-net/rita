@@ -5,8 +5,11 @@ use futures::Future;
 
 use rita_common::payment_controller::{GetOwnBalance, PaymentController};
 
-pub mod network_endpoints;
+use num256::Int256;
 
+pub mod network_endpoints;
+use num_traits::ops::checked::CheckedDiv;
+use num_traits::ToPrimitive;
 pub struct Dashboard;
 
 impl Actor for Dashboard {
@@ -24,6 +27,14 @@ impl Default for Dashboard {
     fn default() -> Dashboard {
         Dashboard {}
     }
+}
+
+#[derive(Debug, Fail)]
+enum OwnInfoError {
+    #[fail(display = "Unable to divide {}", _0)]
+    DivisionError(Int256),
+    #[fail(display = "Unable to downcast value {}", _0)]
+    CastError(Int256),
 }
 
 #[derive(Serialize)]
@@ -47,10 +58,19 @@ impl Handler<GetOwnInfo> for Dashboard {
                 .send(GetOwnBalance {})
                 .from_err()
                 .and_then(|own_balance| match own_balance {
-                    Ok(balance) => Ok(OwnInfo {
-                        balance: balance,
-                        version: env!("CARGO_PKG_VERSION").to_string(),
-                    }),
+                    Ok(balance) => {
+                        let balance = if balance > Int256::zero() {
+                            balance
+                                .checked_div(&Int256::from(1_000_000_000i64))
+                                .ok_or(OwnInfoError::DivisionError(balance.clone()))?
+                        } else {
+                            Int256::zero()
+                        };
+                        Ok(OwnInfo {
+                            balance: balance.to_i64().ok_or(OwnInfoError::CastError(balance))?,
+                            version: env!("CARGO_PKG_VERSION").to_string(),
+                        })
+                    }
                     Err(e) => Err(e),
                 }),
         )
