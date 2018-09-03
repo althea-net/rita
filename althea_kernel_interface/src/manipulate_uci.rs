@@ -22,7 +22,10 @@ impl KernelInterface {
 
     //Adds an arbitrary UCI variable on OpenWRT
     pub fn add_uci_var(&self, key: &str, value: &str) -> Result<bool, Error> {
-        self.run_uci("uci", &["add", key, value])?;
+        let value = value.replace("'", "");
+        let value = value.replace("\\", "");
+        let value = value.replace("/", "");
+        self.run_uci("uci", &["add", key, &value])?;
         Ok(true)
     }
 
