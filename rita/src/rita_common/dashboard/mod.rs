@@ -31,10 +31,10 @@ impl Default for Dashboard {
 
 #[derive(Debug, Fail)]
 enum OwnInfoError {
-    #[fail(display = "Unable to divide {}", _0)]
-    DivisionError(Int256),
-    #[fail(display = "Unable to downcast value {}", _0)]
-    CastError(Int256),
+    #[fail(display = "Unable to round balance of {} down to 1 ETH", _0)]
+    RoundDownError(Int256),
+    #[fail(display = "Unable to downcast value {} to signed 64 bits", _0)]
+    DownCastError(Int256),
 }
 
 #[derive(Serialize)]
@@ -61,9 +61,11 @@ impl Handler<GetOwnInfo> for Dashboard {
                     Ok(balance) => {
                         let balance = balance
                             .checked_div(&Int256::from(1_000_000_000i64))
-                            .ok_or(OwnInfoError::DivisionError(balance.clone()))?;
+                            .ok_or(OwnInfoError::RoundDownError(balance.clone()))?;
                         Ok(OwnInfo {
-                            balance: balance.to_i64().ok_or(OwnInfoError::CastError(balance))?,
+                            balance: balance
+                                .to_i64()
+                                .ok_or(OwnInfoError::DownCastError(balance))?,
                             version: env!("CARGO_PKG_VERSION").to_string(),
                         })
                     }
