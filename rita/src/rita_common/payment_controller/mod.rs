@@ -1,3 +1,5 @@
+//! Placehodler payment manager, to be removed with Gauc integration
+
 use actix::prelude::*;
 
 use althea_types::{Identity, PaymentTx};

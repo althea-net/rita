@@ -1,3 +1,12 @@
+//! This is the main source file for the Rita client binary, by 'client' we mean 'not an exit server'
+//! all meshing and billing functionaltiy is contained in rita_common and is common to both rita and
+//! rita_exit. The major difference is billing and connection code for the 'exit', the mandatory
+//! vpn system integrated into the Althea network design, as well as API endpoints for a management
+//! dashboard of router functions like wifi, which the exit is not expected to have.
+//!
+//! This file initilizes the dashboard endpoints for the client as well as the common and client
+//! specific actors.
+
 #![cfg_attr(feature = "system_alloc", feature(alloc_system, allocator_api))]
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]

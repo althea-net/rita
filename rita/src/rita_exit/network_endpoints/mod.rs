@@ -1,3 +1,6 @@
+//! Network endpoints for rita-exit that are not dashboard or local infromational endpoints
+//! these are called by rita instances to operate the mesh
+
 use actix::registry::SystemService;
 use actix_web::*;
 
