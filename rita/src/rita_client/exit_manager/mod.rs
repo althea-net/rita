@@ -1,3 +1,21 @@
+//! This module contains utility functions for dealing with the exit signup and connection procedure
+//! the procedure goes as follows.
+//!
+//! Exit is preconfigured with wireguard, mesh ip, and eth address info, this removes the possiblity
+//! of an effective MITM attack.
+//!
+//! The exit is quiered for info about it that might change, such as it's subnet settings and default
+//! route.
+//!
+//! Once the 'general' settings are aquired we contact the exit with our email, after getting an email
+//! we input the confirmation code.
+//!
+//! The exit then serves up our user specific settings (our own exit internal ip) which we configure
+//! and open the wg_exit tunnel. The exit performs the other side of this operation after querying
+//! the database and finding a new entry.
+//!
+//! Signup is complete and the user may use the connection
+
 use actix::prelude::*;
 use actix::registry::SystemService;
 use actix_web::client::Connection;

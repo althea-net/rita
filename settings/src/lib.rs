@@ -1,3 +1,14 @@
+//! The Settings crate handles settings for Rita, specifically it uses lazy_static to load and
+//! deserialize the config file on system start. Once deserialized using Serde into internal data
+//! structures it is then provided to Rita as a global static reference, this reference is locked
+//! using a RwLock to allow multiple readers and writers throughout the code. If you hold a read
+//! reference in a blocking function call or a read and write reference at the same time you will
+//! cause a deadlock.
+//!
+//! This can be dependent on the behavior of the borrow checker since the lock
+//! is released based on when the reference is dropped. Take care when using _mut to either
+//! namespace or clone quickly to avoid deadlocks.
+
 extern crate althea_types;
 extern crate config;
 extern crate eui48;

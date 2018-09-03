@@ -1,3 +1,10 @@
+//! Actor used for handling the dispatch of http messages, right now just hello messages
+//!
+//! The call path goes like this
+//!
+//! peer listener gets udp ImHere -> TunnelManager tries to contact peer with hello
+//! -> http_client actually manages that request -> http_client calls back to tunnel manager
+
 use tokio::net::TcpStream as TokioTcpStream;
 
 use actix::prelude::*;

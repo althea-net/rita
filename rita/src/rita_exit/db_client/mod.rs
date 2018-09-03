@@ -1,3 +1,10 @@
+//! DB client is essentially a layer over Diesel which is itself a layer over a sqllite database
+//! at some point we will need to add multi-database support such that we can scale exits
+//! horizontally.
+//!
+//! This 'abstraction' layer is pretty closely tied to the signup process for exits and contains
+//! too much sign up logic.
+
 use actix::prelude::*;
 use actix_web::*;
 use diesel;

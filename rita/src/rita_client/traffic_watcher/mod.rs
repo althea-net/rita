@@ -1,3 +1,11 @@
+//! Traffic watcher monitors system traffic by interfacing with KernelInterface to create and check
+//! iptables and ip counters on each per hop tunnel (the WireGuard tunnel between two devices). These counts
+//! are then stored and used to compute amounts for bills.
+//!
+//! This is the client specific billing code used to determine how exits should be compensted. Which is
+//! different in that mesh nodes are paid by forwarding traffic, but exits have to return traffic and
+//! must get paid for doing so.
+
 use actix::prelude::*;
 use failure::Error;
 use ipnetwork::IpNetwork;

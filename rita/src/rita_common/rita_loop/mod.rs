@@ -1,3 +1,10 @@
+//! The main actor loop for Rita, this loop is common to both rita and rita_exit (as is everything
+//! in rita common).
+//!
+//! This loops ties together various actors through messages and is generally the rate limiter on
+//! all system functions. Anything that blocks will eventually filter up to block this loop and
+//! halt essential functions like opening tunnels and managing peers
+
 use std::time::{Duration, Instant};
 
 use actix::prelude::*;

@@ -1,3 +1,5 @@
+//! Network endptoints for common Rita functionality (such as exchanging hello messages)
+
 use althea_types::{LocalIdentity, PaymentTx};
 
 use actix::registry::SystemService;

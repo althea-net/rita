@@ -1,3 +1,7 @@
+//! While traffic watcher keeps an eye on how much traffic flows and what that is worth debtkeeper
+//! maintains the long term memory of who owes whow what so that it may later be quiered and paid
+//! by payment manager in the current implementation or guac in the more final one
+
 use actix::prelude::*;
 
 use std::collections::{HashMap, VecDeque};

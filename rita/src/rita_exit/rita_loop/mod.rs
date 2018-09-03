@@ -1,3 +1,9 @@
+//! This is the primary actor loop for rita-exit, where periodic tasks are spawed and Actors are
+//! tied together with message calls.
+//!
+//! In this loop the exit checks it's database for registered users and deploys the endpoint for
+//! their exit tunnel
+
 use std::time::{Duration, Instant};
 
 use actix::prelude::*;

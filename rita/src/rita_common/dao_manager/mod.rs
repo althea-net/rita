@@ -1,9 +1,9 @@
-// Manages subnet DAO membership, DAOManager mantains a cache of subnet DAO entries.
-// The workflow goes as follows, an actor message DAOCheck is sent to DAOManager
-// if the identity is not on the DAO it will run a callback to tunnel manager to remove
-// that tunnel from operation. If the identity is on the DAO it will do nothing.
-// Entires from the DAO are cached for a configurable amount of time, this may of course
-// have the effect of adding someone to the DAO taking time to kick in.
+//! Manages subnet DAO membership, DAOManager mantains a cache of subnet DAO entries.
+//! The workflow goes as follows, an actor message DAOCheck is sent to DAOManager
+//! if the identity is not on the DAO it will run a callback to tunnel manager to remove
+//! that tunnel from operation. If the identity is on the DAO it will do nothing.
+//! Entires from the DAO are cached for a configurable amount of time, this may of course
+//! have the effect of adding someone to the DAO taking time to kick in.
 
 use actix::prelude::*;
 use actix_web::client::Connection;

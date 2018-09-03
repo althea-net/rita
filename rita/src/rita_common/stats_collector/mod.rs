@@ -1,3 +1,8 @@
+//! Stats collector, intended to collect anonomized stats for use by deployment operators or developer
+//! use, currently defunct as we never found the infromation it could provide very useful. Mainly because
+//! crashes take devices offline, making it essentially impossible to report anything that's very interesting
+//! in this development stage
+
 use actix::prelude::*;
 use rita_common::rita_loop::Tick;
 
