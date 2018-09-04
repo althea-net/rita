@@ -282,6 +282,7 @@ pub struct SubnetDAOSettings {
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct RitaSettingsStruct {
     payment: PaymentSettings,
+    #[serde(default)]
     dao: SubnetDAOSettings,
     network: NetworkSettings,
     exit_client: ExitClientSettings,
