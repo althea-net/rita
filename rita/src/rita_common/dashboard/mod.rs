@@ -1,3 +1,7 @@
+//! The common user infromation endpoints for Rita, these are http endpoints that exist for user
+//! management and automation. They exist on port 4877 by default and should be firewalled
+//! from the outside world for obvious security reasons.
+
 use actix::prelude::*;
 
 use failure::Error;

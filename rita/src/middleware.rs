@@ -1,3 +1,6 @@
+//! This is the Actix-web middleware that attaches the content headers we need for
+//! the client dashboard
+
 use actix_web::middleware::{Middleware, Response, Started};
 use actix_web::{HttpRequest, HttpResponse, Result};
 use http::{header, HttpTryFrom, Method, StatusCode};

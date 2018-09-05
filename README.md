@@ -2,6 +2,9 @@
 
 This contains many (although confusingly not all) of the Rust components for the Althea firmware. The only separated component is [guac_rs](https://github.com/althea-mesh/guac_rs) which we want to be easily used externally as a Rust Ethereum light client.
 
+The primary binary crate in this repo is 'rita' which produces two binaries 'rita' and 'rita_exit'
+see the file headers for descriptions. 
+
 This is primarily an infrastructure repo, to get a working version of Althea you should look at [installer](https://github.com/althea-mesh/installer) for desktop linux and [althea-firmware](https://github.com/althea-mesh/althea-firmware) for OpenWRT.
 
 ## Building
@@ -51,7 +54,7 @@ cd .git/hooks && ln -s ../../scripts/.git-hooks/pre-commit
 The only binary output of this repo that ends up on routers and the 'main' Crate. The Rita binary is run as a daemon on the mesh nodes as well as the exit nodes in an Althea network.
 
 Status:
- - Discovering Peers: done  (should maybe have a proper discovery packet instead of ebtables)
+ - Discovering Peers: done
  - Opening Wireguard tunnels with Peers: done
  - Contacting the Exit server to negotiate credentials: done
  - Opening a Wireguard tunnel to the exit: done
@@ -82,9 +85,6 @@ Status: Needs fraud detection implementation
 Manages things like exit tunnel setup, key generation, and other more using facing tasks. 
 
 Status: Feature complete  
-
-### kv-store
-No longer used, should be removed
 
 ### num256
 

@@ -1,3 +1,7 @@
+//! Traffic watcher monitors system traffic by interfacing with KernelInterface to create and check
+//! iptables and ipset counters on each per hop tunnel (the WireGuard tunnel between two devices). These counts
+//! are then stored and used to compute amounts for bills.
+
 use actix::prelude::*;
 use rita_common::tunnel_manager::Neighbor;
 
