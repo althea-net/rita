@@ -75,11 +75,6 @@ Status: Feature Complete
 Communicates with Babel's local configuration API to list routes along with their quality and price. 
 
 Status: Needs fraud detection implementation 
-
-### bounty_hunter
- A separate daemon from Rita designed to be run by channel bounty hunters on the internet. In a production Alteha network mesh devices would periodically upload their channel states to a bounty hunter. The bounty hunter will then watch the blockchain state and publish these channel states if an attempt at fraud was made. Claiming a small bounty and preventing channel fraud even when a device is knocked offline. 
- 
- Status: Needs Parity integration and real channel states (removed for now, adding back to guac_rs)
  
 ### clu
 Manages things like exit tunnel setup, key generation, and other more using facing tasks. 
