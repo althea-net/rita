@@ -1,13 +1,12 @@
-/*
-PeerListener is used to detect nearby mesh peers, it listens on a ff02::/8 ipv6 address, which is
-a link local multicast address, on each listen port. 
+//! PeerListener is used to detect nearby mesh peers, it listens on a ff02::/8 ipv6 address, which is
+//! a link local multicast address, on each listen port.
+//!
+//! On initilization a set of ListenInterface objects are created, these are important becuase they
+//! actually hold the sockets required to listen and broadcast on the listen interfaces, every
+//! rita_loop iteration we send out our own IP as a UDP boradcast packet and then get our peers
+//! off the queue. These are turned into Peer structs which are passed to TunnelManager to do
+//! whatever remaining work there may be.
 
-On initilization a set of ListenInterface objects are created, these are important becuase they
-actually hold the sockets required to listen and broadcast on the listen interfaces, every
-rita_loop iteration we send out our own IP as a UDP boradcast packet and then get our peers
-off the queue. These are turned into Peer structs which are passed to TunnelManager to do
-whatever remaining work there may be. 
-*/
 use actix::prelude::*;
 use actix::{Actor, Context};
 use failure::Error;
@@ -268,16 +267,18 @@ fn receive_im_here(
         // this buffer is kept intentionally small to discard larger packets earlier rather than later
         loop {
             let mut datagram: [u8; 100] = [0; 100];
-            let (bytes_read, sock_addr) =
-                match listen_interface.multicast_socket.recv_from(&mut datagram) {
-                    Ok(b) => b,
-                    Err(e) => {
-                        trace!("Could not recv ImHere: {:?}", e);
-                        // TODO Consider we might want to remove interfaces that produce specific types
-                        // of errors from the active list
-                        break;
-                    }
-                };
+            let (bytes_read, sock_addr) = match listen_interface
+                .multicast_socket
+                .recv_from(&mut datagram)
+            {
+                Ok(b) => b,
+                Err(e) => {
+                    trace!("Could not recv ImHere: {:?}", e);
+                    // TODO Consider we might want to remove interfaces that produce specific types
+                    // of errors from the active list
+                    break;
+                }
+            };
             trace!(
                 "Received {} bytes on multicast socket from {:?}",
                 bytes_read,

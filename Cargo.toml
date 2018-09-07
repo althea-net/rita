@@ -1,6 +1,6 @@
 [package]
 name = "althea_rs"
-version = "0.1.5"
+version = "0.1.6"
 authors = ["Stan Drozd <drozdziak1@gmail.com>"]
 
 [features]
@@ -19,6 +19,4 @@ codegen-units = 1
 incremental = false
 
 [patch.crates-io]
-actix = { git = "https://github.com/kingoflolz/actix.git", branch = "althea-mesh" }
-actix-web = { git = "https://github.com/actix/actix-web.git", branch = "fix-missing-content-length" }
 trust-dns-resolver = { git = "https://github.com/kingoflolz/trust-dns.git", branch = "lower-max-ttl" }

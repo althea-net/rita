@@ -1,3 +1,5 @@
+//! Placehodler payment manager, to be removed with Gauc integration
+
 use actix::prelude::*;
 
 use althea_types::{Identity, PaymentTx};
@@ -90,13 +92,13 @@ impl Handler<PaymentControllerUpdate> for PaymentController {
 pub struct GetOwnBalance;
 
 impl Message for GetOwnBalance {
-    type Result = Result<i64, Error>;
+    type Result = Result<Int256, Error>;
 }
 
 impl Handler<GetOwnBalance> for PaymentController {
-    type Result = Result<i64, Error>;
+    type Result = Result<Int256, Error>;
     fn handle(&mut self, _msg: GetOwnBalance, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.balance.clone().into())
+        Ok(self.balance.clone())
     }
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "rita"
-version = "0.1.5"
+version = "0.1.6"
 authors = ["Jehan <jehan.tremback@gmail.com>", "Ben <wangben3@gmail.com>"]
 build = "build.rs"
 
@@ -27,8 +27,8 @@ exit_db = { path = "../exit_db" }
 num256 = { path = "../num256" }
 settings = { path = "../settings" }
 
-actix = { git = "https://github.com/kingoflolz/actix", branch = "althea-mesh"}
-actix-web = { git = "https://github.com/actix/actix-web", default-features = false, branch = "fix-missing-content-length"}
+actix = "0.7.4"
+actix-web = { version = "0.7.4", default_features = false }
 actix_derive = "0.3.0"
 bytes = "0.4.9"
 clippy = { version = "0.0.212", optional = true }
@@ -62,3 +62,4 @@ trust-dns-resolver = "0.9.0"
 handlebars = "1.0.0"
 byteorder = { version = "1.2.4", features = ["i128"] }
 openssl-probe = "0.1.2"
+num-traits="0.2"

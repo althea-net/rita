@@ -1,3 +1,10 @@
+//! DB client is essentially a layer over Diesel which is itself a layer over a sqllite database
+//! at some point we will need to add multi-database support such that we can scale exits
+//! horizontally.
+//!
+//! This 'abstraction' layer is pretty closely tied to the signup process for exits and contains
+//! too much sign up logic.
+
 use actix::prelude::*;
 use actix_web::*;
 use diesel;
@@ -258,8 +265,10 @@ fn send_mail(client: &models::Client) -> Result<(), Error> {
         .from(SETTING.get_mailer().unwrap().from_address)
         .subject(SETTING.get_mailer().unwrap().subject)
         // TODO: maybe have a proper templating engine
-        .text(reg.render_template(&SETTING.get_mailer().unwrap().body, &json!({"email_code": client.email_code.to_string()}))?)
-        .build()
+        .text(reg.render_template(
+            &SETTING.get_mailer().unwrap().body,
+            &json!({"email_code": client.email_code.to_string()}),
+        )?).build()
         .unwrap();
 
     if SETTING.get_mailer().unwrap().test {
@@ -273,7 +282,8 @@ fn send_mail(client: &models::Client) -> Result<(), Error> {
             .credentials(Credentials::new(
                 SETTING.get_mailer().unwrap().smtp_username,
                 SETTING.get_mailer().unwrap().smtp_password,
-            )).smtp_utf8(true)
+            ))
+            .smtp_utf8(true)
             .authentication_mechanism(Mechanism::Plain)
             .connection_reuse(ConnectionReuseParameters::ReuseUnlimited)
             .build();

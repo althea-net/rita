@@ -1,3 +1,14 @@
+//! The Settings crate handles settings for Rita, specifically it uses lazy_static to load and
+//! deserialize the config file on system start. Once deserialized using Serde into internal data
+//! structures it is then provided to Rita as a global static reference, this reference is locked
+//! using a RwLock to allow multiple readers and writers throughout the code. If you hold a read
+//! reference in a blocking function call or a read and write reference at the same time you will
+//! cause a deadlock.
+//!
+//! This can be dependent on the behavior of the borrow checker since the lock
+//! is released based on when the reference is dropped. Take care when using _mut to either
+//! namespace or clone quickly to avoid deadlocks.
+
 extern crate althea_types;
 extern crate config;
 extern crate eui48;
@@ -71,6 +82,10 @@ fn default_discovery_ip() -> Ipv6Addr {
     Ipv6Addr::new(0xff02, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x8)
 }
 
+fn default_tunnel_timeout() -> u64 {
+    900 // 15 minutes
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
     /// Our own mesh IP (in fd00::/8)
@@ -121,6 +136,9 @@ pub struct NetworkSettings {
     /// This in memory variable specifies if we are a gateway or not
     #[serde(skip_deserializing, default)]
     pub is_gateway: bool,
+    /// How long do we wait without contact from a peer before we delete the associated tunnel?
+    #[serde(default = "default_tunnel_timeout")]
+    pub tunnel_timeout_seconds: u64,
 }
 
 impl Default for NetworkSettings {
@@ -128,7 +146,7 @@ impl Default for NetworkSettings {
         NetworkSettings {
             own_ip: "fd00::1".parse().unwrap(),
             bounty_ip: "fd00::3".parse().unwrap(),
-            discovery_ip: Ipv6Addr::new(0xff02, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x8),
+            discovery_ip: default_discovery_ip(),
             babel_port: 6872,
             rita_hello_port: 4876,
             rita_dashboard_port: 4877,
@@ -144,6 +162,7 @@ impl Default for NetworkSettings {
             external_nic: None,
             default_route: Vec::new(),
             is_gateway: false,
+            tunnel_timeout_seconds: default_tunnel_timeout(),
         }
     }
 }
@@ -237,10 +256,45 @@ pub struct StatsServerSettings {
     pub stats_enabled: bool,
 }
 
+// in seconds
+fn default_cache_timeout() -> u64 {
+    600
+}
+
+fn default_dao_enforcement() -> bool {
+    true
+}
+
+fn default_node_list() -> Vec<String> {
+    vec!["http://sasquatch.network:9545".to_string()]
+}
+
+fn default_dao_address() -> Vec<EthAddress> {
+    Vec::new()
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
+pub struct SubnetDAOSettings {
+    /// If we should take action based on DAO membership
+    #[serde(default = "default_dao_enforcement")]
+    pub dao_enforcement: bool,
+    /// The amount of time an entry is used before refreshing the cache
+    #[serde(default = "default_cache_timeout")]
+    pub cache_timeout_seconds: u64,
+    /// A list of nodes to query for blockchain data
+    #[serde(default = "default_node_list")]
+    pub node_list: Vec<String>,
+    /// List of subnet DAO's to which we are a member
+    #[serde(default = "default_dao_address")]
+    pub dao_addresses: Vec<EthAddress>,
+}
+
 /// This is the main struct for rita
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct RitaSettingsStruct {
     payment: PaymentSettings,
+    #[serde(default)]
+    dao: SubnetDAOSettings,
     network: NetworkSettings,
     exit_client: ExitClientSettings,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -329,6 +383,7 @@ pub struct RitaExitSettingsStruct {
     db_file: String,
     description: String,
     payment: PaymentSettings,
+    dao: SubnetDAOSettings,
     network: NetworkSettings,
     exit_network: ExitNetworkSettings,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -348,6 +403,11 @@ pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
     fn get_payment_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, T, PaymentSettings>;
+
+    fn get_dao<'ret, 'me: 'ret>(&'me self) -> RwLockReadGuardRef<'ret, T, SubnetDAOSettings>;
+    fn get_dao_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, T, SubnetDAOSettings>;
 
     fn get_network<'ret, 'me: 'ret>(&'me self) -> RwLockReadGuardRef<'ret, T, NetworkSettings>;
     fn get_network_mut<'ret, 'me: 'ret>(
@@ -392,6 +452,18 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, PaymentSettings> {
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.payment)
+    }
+
+    fn get_dao<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, SubnetDAOSettings> {
+        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.dao)
+    }
+
+    fn get_dao_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, SubnetDAOSettings> {
+        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.dao)
     }
 
     fn get_network<'ret, 'me: 'ret>(
@@ -467,6 +539,18 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, PaymentSettings> {
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.payment)
+    }
+
+    fn get_dao<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, SubnetDAOSettings> {
+        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.dao)
+    }
+
+    fn get_dao_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, SubnetDAOSettings> {
+        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.dao)
     }
 
     fn get_network<'ret, 'me: 'ret>(

@@ -1,3 +1,8 @@
+//! Actix utils is mostly a wrapper for TrustDNS so that we can kill it and restart it
+//! I assume it holds some sort of internal socket prevents it from operating if you plug
+//! in the wan port after initializing it. We may replace that with simple syncronous name
+//! resolution which is slower but almost not enough to care.
+
 use actix::actors::resolver::{Resolve, Resolver};
 use actix::*;
 use futures::Future;

@@ -1,3 +1,10 @@
+//! The main actor loop for Rita, this loop is common to both rita and rita_exit (as is everything
+//! in rita common).
+//!
+//! This loops ties together various actors through messages and is generally the rate limiter on
+//! all system functions. Anything that blocks will eventually filter up to block this loop and
+//! halt essential functions like opening tunnels and managing peers
+
 use std::time::{Duration, Instant};
 
 use actix::prelude::*;
@@ -8,7 +15,7 @@ use actix_utils::ResolverWrapper;
 
 use KI;
 
-use rita_common::tunnel_manager::{GetNeighbors, TunnelManager};
+use rita_common::tunnel_manager::{GetNeighbors, TriggerGC, TunnelManager};
 
 use rita_common::traffic_watcher::{TrafficWatcher, Watch};
 
@@ -18,9 +25,10 @@ use rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 
 use rita_common::payment_controller::{PaymentController, PaymentControllerUpdate};
 
-use rita_common::stats_collector::StatsCollector;
-
 use rita_common::peer_listener::GetPeers;
+
+use rita_common::dao_manager::DAOCheck;
+use rita_common::dao_manager::DAOManager;
 
 use rita_common::tunnel_manager::PeersToContact;
 
@@ -32,16 +40,12 @@ use settings::RitaCommonSettings;
 use SETTING;
 
 pub struct RitaLoop {
-    stats_collector: Addr<StatsCollector>,
     was_gateway: bool,
 }
 
 impl RitaLoop {
     pub fn new() -> RitaLoop {
-        RitaLoop {
-            stats_collector: SyncArbiter::start(1, || StatsCollector::new()),
-            was_gateway: false,
-        }
+        RitaLoop { was_gateway: false }
     }
 }
 
@@ -68,10 +72,6 @@ impl Handler<Tick> for RitaLoop {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
         trace!("Common tick!");
-
-        // let mut babel = Babel::new(&format!("[::1]:{}", SETTING.get_network().babel_port).parse().unwrap());
-
-        self.stats_collector.do_send(Tick {});
 
         // Resolves the gateway client corner case
         // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
@@ -103,8 +103,6 @@ impl Handler<Tick> for RitaLoop {
                 .send(GetNeighbors)
                 .into_actor(self)
                 .then(move |res, act, _ctx| {
-                    // TODO refactor to use an struct instead of a tuple
-                    // Vec<(LocalIdentity, Iface Name, IpAddr)>
                     let res = res.unwrap().unwrap();
 
                     info!("Currently open tunnels: {:?}", res);
@@ -116,13 +114,8 @@ impl Handler<Tick> for RitaLoop {
                         start.elapsed().subsec_nanos() / 1000000
                     );
 
-                    let res = res
-                        .iter()
-                        .map(|res| (res.0.clone(), res.1.clone()))
-                        .collect();
-
                     TrafficWatcher::from_registry()
-                        .send(Watch(res))
+                        .send(Watch::new(res))
                         .into_actor(act)
                         .then(move |_res, _act, _ctx| {
                             info!(
@@ -135,6 +128,48 @@ impl Handler<Tick> for RitaLoop {
                             actix::fut::ok(())
                         })
                 }),
+        );
+
+        trace!("Starting DAOManager loop");
+        Arbiter::spawn(
+            TunnelManager::from_registry()
+                .send(GetNeighbors)
+                .then(move |neighbors| {
+                    match neighbors {
+                        Ok(Ok(neighbors)) => {
+                            trace!("Sending DAOCheck");
+                            for neigh in neighbors.iter() {
+                                let their_id = neigh.identity.global.clone();
+                                DAOManager::from_registry().do_send(DAOCheck(their_id));
+                            }
+                        }
+                        Ok(Err(e)) => {
+                            trace!("Failed to get neighbors from tunnel manager {:?}", e);
+                        }
+                        Err(e) => {
+                            trace!("Failed to get neighbors from tunnel manager {:?}", e);
+                        }
+                    };
+                    Ok(())
+                }),
+        );
+
+        let start = Instant::now();
+        Arbiter::spawn(
+            TunnelManager::from_registry()
+                .send(TriggerGC(Duration::from_secs(
+                    SETTING.get_network().tunnel_timeout_seconds,
+                )))
+                .then(move |res| {
+                    info!(
+                        "TunnelManager GC pass completed in {}s {}ms, with result {:?}",
+                        start.elapsed().as_secs(),
+                        start.elapsed().subsec_nanos() / 1000000,
+                        res
+                    );
+                    res
+                })
+                .then(|_| Ok(())),
         );
 
         let start = Instant::now();
@@ -150,7 +185,8 @@ impl Handler<Tick> for RitaLoop {
                         res
                     );
                     res
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
         );
 
         let start = Instant::now();
@@ -164,8 +200,9 @@ impl Handler<Tick> for RitaLoop {
                         start.elapsed().as_secs(),
                         start.elapsed().subsec_nanos() / 1000000
                     );
-                    TunnelManager::from_registry().send(PeersToContact(peers.unwrap())) // GetPeers never fails so unwrap is safe
-                }).then(|_| Ok(())),
+                    TunnelManager::from_registry().send(PeersToContact::new(peers.unwrap())) // GetPeers never fails so unwrap is safe
+                })
+                .then(|_| Ok(())),
         );
 
         Ok(())

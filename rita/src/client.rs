@@ -1,7 +1,13 @@
-#![cfg_attr(
-    feature = "system_alloc",
-    feature(alloc_system, allocator_api)
-)]
+//! This is the main source file for the Rita client binary, by 'client' we mean 'not an exit server'
+//! all meshing and billing functionaltiy is contained in rita_common and is common to both rita and
+//! rita_exit. The major difference is billing and connection code for the 'exit', the mandatory
+//! vpn system integrated into the Althea network design, as well as API endpoints for a management
+//! dashboard of router functions like wifi, which the exit is not expected to have.
+//!
+//! This file initilizes the dashboard endpoints for the client as well as the common and client
+//! specific actors.
+
+#![cfg_attr(feature = "system_alloc", feature(alloc_system, allocator_api))]
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
@@ -38,6 +44,7 @@ extern crate ipnetwork;
 extern crate lettre;
 extern crate lettre_email;
 extern crate minihttpse;
+extern crate num_traits;
 extern crate openssl_probe;
 extern crate rand;
 extern crate regex;
@@ -201,10 +208,10 @@ fn main() {
             r.method(Method::POST).with(make_payments)
         })
     }).workers(1)
-    .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
-    .unwrap()
-    .shutdown_timeout(0)
-    .start();
+        .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
+        .unwrap()
+        .shutdown_timeout(0)
+        .start();
 
     // dashboard
     server::new(|| {
@@ -226,16 +233,26 @@ fn main() {
                 "/exits/{name}/verify/{code}",
                 Method::POST,
                 verify_on_exit_with_code,
-            ).route("/info", Method::GET, get_own_info)
+            )
+            .route("/info", Method::GET, get_own_info)
             .route("/version", Method::GET, version)
             .route("/wipe", Method::POST, wipe)
+            .route("/debts", Method::GET, get_debts)
+            .route("/dao_list", Method::GET, get_dao_list)
+            .route("/dao_list/add/{address}", Method::POST, add_to_dao_list)
+            .route(
+                "/dao_list/remove/{address}",
+                Method::POST,
+                remove_from_dao_list,
+            )
     }).workers(1)
-    .bind(format!(
-        "[::0]:{}",
-        SETTING.get_network().rita_dashboard_port
-    )).unwrap()
-    .shutdown_timeout(0)
-    .start();
+        .bind(format!(
+            "[::0]:{}",
+            SETTING.get_network().rita_dashboard_port
+        ))
+        .unwrap()
+        .shutdown_timeout(0)
+        .start();
 
     let common = rita_common::rita_loop::RitaLoop::new();
     let _: Addr<_> = common.start();

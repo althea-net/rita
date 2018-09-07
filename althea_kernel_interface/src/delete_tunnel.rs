@@ -7,7 +7,7 @@ impl KernelInterface {
         let output = self.run_command("ip", &["link", "del", &interface])?;
         if !output.stderr.is_empty() {
             return Err(KernelInterfaceError::RuntimeError(format!(
-                "recieved error deleting wireguard interface: {}",
+                "received error deleting wireguard interface: {}",
                 String::from_utf8(output.stderr)?
             )).into());
         }

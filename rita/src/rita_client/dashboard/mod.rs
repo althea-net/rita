@@ -1,3 +1,9 @@
+//! This file contains all the network endpoints used for the client dashbaord. This management dashboard
+//! is for users to use to configure and manage their router and should be firewalled from the outside
+//! world.
+//!
+//! For more documentation on specific functions see the router-dashboard file in the docs folder
+
 use actix::prelude::*;
 use actix_web::Path;
 
@@ -248,11 +254,11 @@ impl Handler<GetNodeInfo> for Dashboard {
                             if maybe_route.is_err() {
                                 output.push(NodeInfo {
                                     nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
-                                    route_metric_to_exit: 0,
-                                    total_payments: debt_info.total_payment_recieved.into(),
+                                    route_metric_to_exit: u16::max_value(),
+                                    total_payments: debt_info.total_payment_received.into(),
                                     debt: debt_info.debt.clone().into(),
-                                    link_cost: 0,
-                                    price_to_exit: 0,
+                                    link_cost: u16::max_value(),
+                                    price_to_exit: u32::max_value(),
                                 });
                                 continue;
                             }
@@ -261,7 +267,7 @@ impl Handler<GetNodeInfo> for Dashboard {
                             output.push(NodeInfo {
                                 nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
                                 route_metric_to_exit: route.metric,
-                                total_payments: debt_info.total_payment_recieved.into(),
+                                total_payments: debt_info.total_payment_received.into(),
                                 debt: debt_info.debt.clone().into(),
                                 link_cost: route.refmetric,
                                 price_to_exit: route.price,
@@ -269,11 +275,11 @@ impl Handler<GetNodeInfo> for Dashboard {
                         } else {
                             output.push(NodeInfo {
                                 nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
-                                route_metric_to_exit: 0,
-                                total_payments: debt_info.total_payment_recieved.into(),
+                                route_metric_to_exit: u16::max_value(),
+                                total_payments: debt_info.total_payment_received.into(),
                                 debt: debt_info.debt.clone().into(),
-                                link_cost: 0,
-                                price_to_exit: 0,
+                                link_cost: u16::max_value(),
+                                price_to_exit: u32::max_value(),
                             })
                         }
                     }

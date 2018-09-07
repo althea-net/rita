@@ -1,3 +1,9 @@
+//! This is the primary actor loop for rita-client, where periodic tasks are spawed and Actors are
+//! tied together with message calls.
+//!
+//! This loop manages exit signup based on the settings configuration state and deploys an exit vpn
+//! tunnel if the signup was successful on the selected exit.
+
 use std::time::{Duration, Instant};
 
 use actix::prelude::*;

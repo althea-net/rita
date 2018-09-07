@@ -1,7 +1,15 @@
-#![cfg_attr(
-    feature = "system_alloc",
-    feature(alloc_system, allocator_api)
-)]
+//! This is the main source file for the Rita exit binary, by 'exit' we mean 'a vpn server, not a
+//! mesh router out in the field'.
+//!
+//! All meshing and billing functionaltiy is contained in rita_common and is common to both rita and
+//! rita_exit. The major difference is billing and connection code for the 'exit', the mandatory
+//! vpn system integrated into the Althea network design, as well as API endpoints for a management
+//! dashboard of router functions like wifi, which the exit is not expected to have.
+//!
+//! This file initilizes the dashboard endpoints for the exit as well as the common and exit
+//! specific actors.
+
+#![cfg_attr(feature = "system_alloc", feature(alloc_system, allocator_api))]
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
@@ -42,6 +50,7 @@ extern crate ipnetwork;
 extern crate lettre;
 extern crate lettre_email;
 extern crate minihttpse;
+extern crate num_traits;
 extern crate openssl_probe;
 extern crate rand;
 extern crate regex;
@@ -201,10 +210,10 @@ fn main() {
             r.method(Method::POST).with(make_payments)
         })
     }).workers(1)
-    .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
-    .unwrap()
-    .shutdown_timeout(0)
-    .start();
+        .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
+        .unwrap()
+        .shutdown_timeout(0)
+        .start();
 
     // Exit stuff
     server::new(|| {
@@ -212,16 +221,19 @@ fn main() {
             .resource("/setup", |r| r.method(Method::POST).with(setup_request))
             .resource("/status", |r| {
                 r.method(Method::POST).with_async(status_request)
-            }).resource("/list", |r| r.method(Method::POST).with(list_clients))
+            })
+            .resource("/list", |r| r.method(Method::POST).with(list_clients))
             .resource("/exit_info", |r| {
                 r.method(Method::GET).with(get_exit_info_http)
-            }).resource("/rtt", |r| r.method(Method::GET).with(rtt))
+            })
+            .resource("/rtt", |r| r.method(Method::GET).with(rtt))
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_exit_network().exit_hello_port
-    )).unwrap()
-    .shutdown_timeout(0)
-    .start();
+    ))
+        .unwrap()
+        .shutdown_timeout(0)
+        .start();
 
     // Dashboard
     server::new(|| {
@@ -236,12 +248,21 @@ fn main() {
             .route("/version", Method::GET, version)
             .route("/wipe", Method::POST, wipe)
             .route("/database", Method::DELETE, nuke_db)
+            .route("/debts", Method::GET, get_debts)
+            .route("/dao_list", Method::GET, get_dao_list)
+            .route("/dao_list/add/{address}", Method::POST, add_to_dao_list)
+            .route(
+                "/dao_list/remove/{address}",
+                Method::POST,
+                remove_from_dao_list,
+            )
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_network().rita_dashboard_port
-    )).unwrap()
-    .shutdown_timeout(0)
-    .start();
+    ))
+        .unwrap()
+        .shutdown_timeout(0)
+        .start();
 
     let common = rita_common::rita_loop::RitaLoop::new();
     let _: Addr<_> = common.start();
