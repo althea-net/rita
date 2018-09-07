@@ -429,14 +429,20 @@ This file documents the dashboard API found in Rita client.
 - URL Params: `Content-Type: application/json`
 - Data Params: `Radio to change the ssid of and ssid`
 - Success Response:
-  - Code: 200 OK
+  - Code: `200 OK`
   - Contents:
-
-```
+```json
 {}
 ```
 
-- Error Response: `500 Server Error`
+- Error Response:
+  - Code: `400 Bad Request`
+  - Contents:
+```json
+{
+  "error": "<human-readable description>"
+}
+```
 
 - Sample Call:
 
@@ -457,8 +463,14 @@ This file documents the dashboard API found in Rita client.
 ```
 {}
 ```
-
-- Error Response: `500 Server Error`
+- Error Response:
+  - Code: `400 Bad Request`
+  - Contents:
+```json
+{
+  "error": "<human-readable description>"
+}
+```
 
 - Sample Call:
 
@@ -567,7 +579,7 @@ Format:
 
 ## /dao_list
 
-Calling HTTP `GET` request on this endpoint returns a list of EthAddresses for a configured subnet DAO. If no DAO is configured it will return an empty list. 
+Calling HTTP `GET` request on this endpoint returns a list of EthAddresses for a configured subnet DAO. If no DAO is configured it will return an empty list.
 
 - URL: `<rita ip>:<rita_dashboard_port>/dao_list`
 - Method: `GET`

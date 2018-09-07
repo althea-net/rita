@@ -265,8 +265,10 @@ fn send_mail(client: &models::Client) -> Result<(), Error> {
         .from(SETTING.get_mailer().unwrap().from_address)
         .subject(SETTING.get_mailer().unwrap().subject)
         // TODO: maybe have a proper templating engine
-        .text(reg.render_template(&SETTING.get_mailer().unwrap().body, &json!({"email_code": client.email_code.to_string()}))?)
-        .build()
+        .text(reg.render_template(
+            &SETTING.get_mailer().unwrap().body,
+            &json!({"email_code": client.email_code.to_string()}),
+        )?).build()
         .unwrap();
 
     if SETTING.get_mailer().unwrap().test {
