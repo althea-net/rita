@@ -55,7 +55,7 @@ EXIT_SETTINGS = {
         "exit_a": {
             "id": {
                 "mesh_ip": "fd00::5",
-                "eth_address": "fd00::5",
+                "eth_address": "0x0101010101010101010101010101010101010101",
                 "wg_public_key": "fd00::5",
             },
             "registration_port": 4875,
