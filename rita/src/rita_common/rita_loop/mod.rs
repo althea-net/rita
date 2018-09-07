@@ -23,7 +23,6 @@ use rita_common::peer_listener::PeerListener;
 
 use rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 
-#[cfg(feature = "guac")]
 use guac_actix::{PaymentController, Tick as GuacTick};
 
 use rita_common::debt_keeper::Tick as DebtTick;
@@ -130,18 +129,13 @@ impl Handler<Tick> for RitaLoop {
                                 neigh.elapsed().subsec_nanos() / 1000000
                             );
                             DebtKeeper::from_registry().do_send(SendUpdate {});
-                            #[cfg(feature = "guac")]
-                            {
-                                PaymentController::from_registry()
-                                    .send(GuacTick {})
-                                    .into_actor(act)
-                                    .then(move |x, _, _| {
-                                        trace!("PaymentController returned {:?}", x);
-                                        actix::fut::ok(())
-                                    })
-                            }
-                            #[cfg(not(feature = "guac"))]
-                            actix::fut::ok(())
+                            PaymentController::from_registry()
+                                .send(GuacTick {})
+                                .into_actor(act)
+                                .then(move |x, _, _| {
+                                    trace!("PaymentController returned {:?}", x);
+                                    actix::fut::ok(())
+                                })
                         })
                 }),
         );

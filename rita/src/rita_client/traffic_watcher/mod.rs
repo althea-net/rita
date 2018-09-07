@@ -19,7 +19,6 @@ use std::time::{Duration, SystemTime};
 use althea_types::{Identity, RTTimestamps};
 use babel_monitor::Babel;
 
-#[cfg(feature = "guac")]
 use guac_actix::{Counterparty, PaymentController, Register};
 
 use num256::Int256;
@@ -158,7 +157,6 @@ pub fn watch<T: Read + Write>(
             amount: owes,
         };
 
-        #[cfg(feature = "guac")]
         PaymentController::from_registry().do_send(Register(Counterparty {
             address: exit.eth_address,
             url: format!(

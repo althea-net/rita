@@ -21,7 +21,6 @@ use alloc_system::System;
 #[global_allocator]
 static A: System = System;
 
-#[cfg(feature = "guac")]
 extern crate guac_actix;
 
 #[macro_use]
@@ -87,7 +86,6 @@ mod middleware;
 mod rita_client;
 mod rita_common;
 
-#[cfg(feature = "guac")]
 use guac_actix::CryptoService;
 
 use rita_client::dashboard::network_endpoints::*;
@@ -191,10 +189,7 @@ fn main() {
         env!("GIT_HASH")
     );
 
-    #[cfg(feature = "guac")]
-    {
-        SETTING.get_payment_mut().eth_address = guac_actix::CRYPTO.own_eth_addr();
-    }
+    SETTING.get_payment_mut().eth_address = guac_actix::CRYPTO.own_eth_addr();
 
     trace!("Starting with Identity: {:?}", SETTING.get_identity());
 
@@ -206,7 +201,6 @@ fn main() {
     assert!(rita_common::traffic_watcher::TrafficWatcher::from_registry().connected());
     assert!(rita_client::exit_manager::ExitManager::from_registry().connected());
 
-    #[cfg(feature = "guac")]
     assert!(guac_actix::PaymentController::from_registry().connected());
 
     // rita
@@ -276,7 +270,6 @@ fn main() {
     let client = rita_client::rita_loop::RitaLoop {};
     let _: Addr<_> = client.start();
 
-    #[cfg(feature = "guac")]
     guac_actix::init_server(SETTING.get_network().guac_contact_port);
 
     system.run();

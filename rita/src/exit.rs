@@ -23,7 +23,6 @@ use alloc_system::System;
 #[global_allocator]
 static A: System = System;
 
-#[cfg(feature = "guac")]
 extern crate guac_actix;
 
 extern crate diesel;
@@ -85,7 +84,6 @@ mod middleware;
 mod rita_common;
 mod rita_exit;
 
-#[cfg(feature = "guac")]
 use guac_actix::CryptoService;
 
 use rita_common::dashboard::network_endpoints::*;
@@ -182,10 +180,7 @@ fn main() {
     // to get errors before lazy static
     RitaExitSettingsStruct::new(&settings_file).expect("Settings parse failure");
 
-    #[cfg(feature = "guac")]
-    {
-        SETTING.get_payment_mut().eth_address = guac_actix::CRYPTO.own_eth_addr();
-    }
+    SETTING.get_payment_mut().eth_address = guac_actix::CRYPTO.own_eth_addr();
 
     trace!("Starting");
     info!(
@@ -206,7 +201,6 @@ fn main() {
     assert!(rita_exit::traffic_watcher::TrafficWatcher::from_registry().connected());
     assert!(rita_exit::db_client::DbClient::from_registry().connected());
 
-    #[cfg(feature = "guac")]
     assert!(guac_actix::PaymentController::from_registry().connected());
 
     server::new(|| App::new().resource("/hello", |r| r.method(Method::POST).with(hello_response)))
@@ -270,7 +264,6 @@ fn main() {
     let exit = rita_exit::rita_loop::RitaLoop {};
     let _: Addr<_> = exit.start();
 
-    #[cfg(feature = "guac")]
     guac_actix::init_server(SETTING.get_network().guac_contact_port);
 
     system.run();
