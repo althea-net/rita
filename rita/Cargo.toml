@@ -16,7 +16,6 @@ path = "src/client.rs"
 default = []
 system_alloc = []
 development = []
-guac = ["guac_actix"]
 
 [dependencies]
 althea_kernel_interface = { path = "../althea_kernel_interface" }
@@ -26,7 +25,7 @@ clu = { path = "../clu" }
 exit_db = { path = "../exit_db" }
 num256 = { path = "../num256" }
 settings = { path = "../settings" }
-guac_actix = { git = "https://github.com/mpapierski/guac_rs", branch = "6-cargo", optional = true}
+guac_actix = { git = "https://github.com/althea-mesh/guac_rs", branch = "master" }
 
 actix = "0.7.4"
 actix-web = { version = "0.7.4", default_features = false }

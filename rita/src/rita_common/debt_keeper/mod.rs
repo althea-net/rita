@@ -13,7 +13,6 @@ use num256::{Int256, Uint256};
 use settings::RitaCommonSettings;
 use SETTING;
 
-#[cfg(feature = "guac")]
 use guac_actix::{Counterparty, MakePayment, PaymentController, Register, Withdraw};
 
 use actix;
@@ -104,34 +103,31 @@ impl Handler<Tick> for DebtKeeper {
     type Result = ();
 
     fn handle(&mut self, _msg: Tick, ctx: &mut Context<Self>) -> Self::Result {
-        #[cfg(feature = "guac")]
-        {
-            for (id, _) in self.debt_data.clone() {
-                PaymentController::from_registry().do_send(Register(Counterparty {
-                    address: id.eth_address,
-                    url: format!(
-                        "[{}]:{}",
-                        id.mesh_ip,
-                        SETTING.get_network().guac_contact_port
-                    ),
-                }));
+        for (id, _) in self.debt_data.clone() {
+            PaymentController::from_registry().do_send(Register(Counterparty {
+                address: id.eth_address,
+                url: format!(
+                    "[{}]:{}",
+                    id.mesh_ip,
+                    SETTING.get_network().guac_contact_port
+                ),
+            }));
 
-                ctx.spawn(
-                    PaymentController::from_registry()
-                        .send(Withdraw(id.eth_address))
-                        .into_actor(self)
-                        .then(move |x, act, _ctx| match x.unwrap() {
-                            Ok(x) => {
-                                act.payment_received(&id, x);
-                                actix::fut::ok(())
-                            }
-                            Err(e) => {
-                                trace!("withdraw from {:?} returned error {:?}", id, e);
-                                actix::fut::ok(())
-                            }
-                        }),
-                );
-            }
+            ctx.spawn(
+                PaymentController::from_registry()
+                    .send(Withdraw(id.eth_address))
+                    .into_actor(self)
+                    .then(move |x, act, _ctx| match x.unwrap() {
+                        Ok(x) => {
+                            act.payment_received(&id, x);
+                            actix::fut::ok(())
+                        }
+                        Err(e) => {
+                            trace!("withdraw from {:?} returned error {:?}", id, e);
+                            actix::fut::ok(())
+                        }
+                    }),
+            );
         }
     }
 }
@@ -174,19 +170,14 @@ impl Handler<SendUpdate> for DebtKeeper {
             match self.send_update(&k) {
                 DebtAction::SuspendTunnel => {}
                 DebtAction::OpenTunnel => {}
-                #[cfg(feature = "guac")]
                 DebtAction::MakePayment { to, amount } => {
+                    trace!("Make payment to={:?} amount={:?}", to, amount);
                     PaymentController::from_registry().do_send(MakePayment(PaymentTx {
                         to,
                         from: SETTING.get_identity(),
                         amount,
                     }));
                 }
-                #[cfg(not(feature = "guac"))]
-                DebtAction::MakePayment { to, amount } => warn!(
-                    "dropping payment to {:?} for {} as guac is disabled",
-                    to, amount
-                ),
                 DebtAction::None => {}
             }
         }
