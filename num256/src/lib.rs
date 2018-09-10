@@ -3,6 +3,7 @@ extern crate num;
 extern crate serde;
 extern crate serde_json;
 
+pub use ethereum_types::U256;
 use num::bigint::{BigInt, BigUint, ToBigInt};
 use num::traits::ops::checked::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
 use num::traits::Signed;
@@ -51,7 +52,7 @@ impl Neg for Int256 where {
     }
 }
 
-pub type Uint256 = ethereum_types::U256;
+pub type Uint256 = U256;
 
 impl From<Uint256> for Int256 {
     fn from(n: Uint256) -> Self {
