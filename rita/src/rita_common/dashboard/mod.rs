@@ -11,11 +11,10 @@ use futures::Future;
 
 use guac_actix::{GetOwnBalance, PaymentController};
 
-use num256::Int256;
+use num256::{Int256, Uint256};
+use num_traits::ToPrimitive;
 
 pub mod network_endpoints;
-use num_traits::ops::checked::CheckedDiv;
-use num_traits::ToPrimitive;
 pub struct Dashboard;
 
 impl Actor for Dashboard {
@@ -39,10 +38,7 @@ impl Default for Dashboard {
 enum OwnInfoError {
     #[fail(display = "Unable to round balance of {} down to 1 ETH", _0)]
     RoundDownError(Int256),
-    #[fail(
-        display = "Unable to downcast value {} to signed 64 bits",
-        _0
-    )]
+    #[fail(display = "Unable to downcast value {} to signed 64 bits", _0)]
     DownCastError(Int256),
 }
 
@@ -69,10 +65,10 @@ impl Handler<GetOwnInfo> for Dashboard {
                 .and_then(|own_balance| match own_balance {
                     Ok(balance) => {
                         let balance = balance
-                            .checked_div(&Int256::from(1_000_000_000i64))
+                            .checked_div(Uint256::from(1_000_000_000u64))
                             .ok_or(OwnInfoError::RoundDownError(balance.clone()))?;
                         Ok(OwnInfo {
-                            balance: balance
+                            balance: Int256::from(balance)
                                 .to_i64()
                                 .ok_or(OwnInfoError::DownCastError(balance))?,
                             version: env!("CARGO_PKG_VERSION").to_string(),
