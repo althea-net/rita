@@ -258,6 +258,8 @@ fn send_mail(client: &models::Client) -> Result<(), Error> {
         return Ok(());
     };
 
+    info!("Sending exit signup email for client");
+
     let reg = Handlebars::new();
 
     let email = EmailBuilder::new()
