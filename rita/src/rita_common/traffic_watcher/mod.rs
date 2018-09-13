@@ -8,7 +8,7 @@ use rita_common::tunnel_manager::Neighbor;
 use althea_kernel_interface::FilterTarget;
 use KI;
 
-use althea_types::LocalIdentity;
+use althea_types::Identity;
 
 use babel_monitor::Babel;
 
@@ -101,13 +101,16 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
     let routes = babel.parse_routes()?;
     info!("Got routes: {:?}", routes);
 
-    let mut identities: HashMap<IpAddr, LocalIdentity> = HashMap::new();
-    let mut if_to_ip: HashMap<String, IpAddr> = HashMap::new();
+    let mut identities: HashMap<IpAddr, Identity> = HashMap::new();
+    let mut if_to_id: HashMap<String, Identity> = HashMap::new();
     let mut ip_to_if: HashMap<IpAddr, String> = HashMap::new();
-    for ident in neighbors {
-        identities.insert(ident.identity.global.mesh_ip, ident.identity.clone());
-        if_to_ip.insert(ident.iface_name.clone(), ident.identity.global.mesh_ip);
-        ip_to_if.insert(ident.identity.global.mesh_ip, ident.iface_name.clone());
+    for neigh in neighbors {
+        // provides a lookup from mesh ip to identity
+        identities.insert(neigh.identity.global.mesh_ip, neigh.identity.global.clone());
+        // provides a lookup from wireguard interface to mesh ip
+        if_to_id.insert(neigh.iface_name.clone(), neigh.identity.global.clone());
+        // provides a lookup from mesh ip to wireguard interface
+        ip_to_if.insert(neigh.identity.global.mesh_ip, neigh.iface_name.clone());
     }
 
     let mut destinations = HashMap::new();
@@ -126,16 +129,52 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
     destinations.insert(SETTING.get_network().own_ip, Int256::from(0));
 
     trace!("Getting input counters");
-    let input_counters = KI.read_counters(&FilterTarget::Input)?;
-    info!("Got output counters: {:?}", input_counters);
+    let input_counters = match KI.read_counters(&FilterTarget::Input) {
+        Ok(res) => res,
+        Err(e) => {
+            warn!(
+                "Error getting input counters {:?} traffic has gone unaccounted!",
+                e
+            );
+            return Err(e);
+        }
+    };
+    trace!("Got input counters: {:?}", input_counters);
 
-    trace!("Getting destination counters");
-    let output_counters = KI.read_counters(&FilterTarget::Output)?;
-    info!("Got destination counters: {:?}", output_counters);
+    trace!("Getting ouput counters");
+    let output_counters = match KI.read_counters(&FilterTarget::Output) {
+        Ok(res) => res,
+        Err(e) => {
+            warn!(
+                "Error getting output counters {:?} traffic has gone unaccounted!",
+                e
+            );
+            return Err(e);
+        }
+    };
+    trace!("Got output counters: {:?}", output_counters);
 
     trace!("Getting fwd counters");
-    let fwd_input_counters = KI.read_counters(&FilterTarget::ForwardInput)?;
-    let fwd_output_counters = KI.read_counters(&FilterTarget::ForwardOutput)?;
+    let fwd_input_counters = match KI.read_counters(&FilterTarget::ForwardInput) {
+        Ok(res) => res,
+        Err(e) => {
+            warn!(
+                "Error getting input counters {:?} traffic has gone unaccounted!",
+                e
+            );
+            return Err(e);
+        }
+    };
+    let fwd_output_counters = match KI.read_counters(&FilterTarget::ForwardOutput) {
+        Ok(res) => res,
+        Err(e) => {
+            warn!(
+                "Error getting input counters {:?} traffic has gone unaccounted!",
+                e
+            );
+            return Err(e);
+        }
+    };
 
     info!(
         "Got fwd counters: {:?}",
@@ -186,39 +225,63 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
         debts.insert(ident, Int256::from(0));
     }
 
+    // We take the destination ip and input interface and then look up what local neighbor
+    // to credit that debt to using the interface (since tunnel interfaces are unique to a neighbor)
+    // we also look up the destination cost from babel using the destination ip
     for ((ip, interface), bytes) in total_input_counters {
-        if destinations.contains_key(&ip)
-            && if_to_ip.contains_key(&interface)
-            && identities.contains_key(&if_to_ip[&interface])
-        {
-            let id = identities[&if_to_ip[&interface]].clone();
-            *debts.get_mut(&id).unwrap() -= (destinations[&ip].clone()) * bytes;
-        } else {
-            warn!("flow destination not found {}, {}", ip, bytes);
+        let state = (destinations.get(&ip), if_to_id.get(&interface));
+        match state {
+            (Some(dest), Some(id_from_if)) => {
+                match debts.get_mut(&id_from_if) {
+                    Some(debt) => {
+                        *debt -= (dest.clone()) * bytes;
+                    }
+                    // debts is generated from identities, this should be impossible
+                    None => warn!("No debts entry for input entry id {:?}", id_from_if),
+                }
+            }
+            // this can be caused by a peer that has not yet formed a babel route
+            // we use _ because ip_to_if is created from identites, if one fails the other must
+            (None, Some(id)) => warn!("We have an id {:?} but not destination", id),
+            // if we have a babel route we should have a peer it's possible we have a mesh client sneaking in?
+            (Some(dest), None) => warn!("We have a destination {:?} but no id", dest),
+            // dead entry?
+            (None, None) => warn!("We have a counter but nothing else on {:?}", ip),
         }
     }
 
     trace!("Collated flow debts: {:?}", debts);
 
+    // We take the destination ip and output interface and then look up what local neighbor
+    // to credit that debt from us using the interface (since tunnel interfaces are unique to a neighbor)
+    // we also look up the destination cost from babel using the destination ip
     for ((ip, interface), bytes) in total_output_counters {
-        if destinations.contains_key(&ip)
-            && if_to_ip.contains_key(&interface)
-            && identities.contains_key(&if_to_ip[&interface])
-        {
-            let id = identities[&if_to_ip[&interface]].clone();
-            *debts.get_mut(&id).unwrap() += (destinations[&ip].clone() - local_price) * bytes;
-        } else {
-            warn!("destination not found {}, {}", ip, bytes);
+        let state = (destinations.get(&ip), if_to_id.get(&interface));
+        match state {
+            (Some(dest), Some(id_from_if)) => match debts.get_mut(&id_from_if) {
+                Some(debt) => {
+                    *debt += (dest.clone() - local_price) * bytes;
+                }
+                // debts is generated from identities, this should be impossible
+                None => warn!("No debts entry for input entry id {:?}", id_from_if),
+            },
+            // this can be caused by a peer that has not yet formed a babel route
+            // we use _ because ip_to_if is created from identites, if one fails the other must
+            (None, Some(id_from_if)) => warn!("We have an id {:?} but not destination", id_from_if),
+            // if we have a babel route we should have a peer it's possible we have a mesh client sneaking in?
+            (Some(dest), None) => warn!("We have a destination {:?} but no id", dest),
+            // dead entry?
+            (None, None) => warn!("We have a counter but nothing else on {:?}", ip),
         }
     }
 
     trace!("Collated total debts: {:?}", debts);
 
     for (from, amount) in debts {
-        trace!("collated debt for {} is {}", from.global.mesh_ip, amount);
+        trace!("collated debt for {} is {}", from.mesh_ip, amount);
 
         let update = debt_keeper::TrafficUpdate {
-            from: from.global.clone(),
+            from: from.clone(),
             amount,
         };
 
