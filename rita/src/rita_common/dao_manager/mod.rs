@@ -315,8 +315,7 @@ fn get_membership(dao_address: EthAddress, target: Identity) -> () {
                         }
                     }
                 })
-        })
-        .then(|_err| Ok(()));
+        }).then(|_err| Ok(()));
     Arbiter::spawn(res);
 }
 

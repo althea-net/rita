@@ -37,7 +37,10 @@ impl Default for Dashboard {
 enum OwnInfoError {
     #[fail(display = "Unable to round balance of {} down to 1 ETH", _0)]
     RoundDownError(Int256),
-    #[fail(display = "Unable to downcast value {} to signed 64 bits", _0)]
+    #[fail(
+        display = "Unable to downcast value {} to signed 64 bits",
+        _0
+    )]
     DownCastError(Int256),
 }
 
