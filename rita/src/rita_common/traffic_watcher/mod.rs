@@ -163,6 +163,18 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
 
     info!("Got final input counters: {:?}", total_input_counters);
     info!("Got final output counters: {:?}", total_output_counters);
+    let mut total_in: u64 = 0;
+    for entry in total_input_counters.iter() {
+        let input = entry.1;
+        total_in += input;
+    }
+    info!("Total input of {} bytes this round", total_in);
+    let mut total_out: u64 = 0;
+    for entry in total_output_counters.iter() {
+        let output = entry.1;
+        total_out += output;
+    }
+    info!("Total output of {} bytes this round", total_out);
 
     // Flow counters should debit your neighbor which you received the packet from
     // Destination counters should credit your neighbor which you sent the packet to
