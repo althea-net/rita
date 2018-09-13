@@ -71,7 +71,7 @@ impl Handler<Tick> for RitaLoop {
             DbClient::from_registry()
                 .send(ListClients {})
                 .into_actor(self)
-                .then(|res, _act, _ctx| {
+                .then(move |res, _act, _ctx| {
                     let clients = res.unwrap().unwrap();
                     let ids = clients
                         .clone()
@@ -105,16 +105,15 @@ impl Handler<Tick> for RitaLoop {
                         Ok(_) => (),
                         Err(e) => warn!("Error in Exit WG setup {:?}", e),
                     }
-
+                    info!(
+                        "Rita Exit loop completed in {}s {}ms",
+                        start.elapsed().as_secs(),
+                        start.elapsed().subsec_nanos() / 1000000
+                    );
                     actix::fut::ok(())
                 }),
         );
 
-        info!(
-            "Rita Exit loop completed in {}s {}ms",
-            start.elapsed().as_secs(),
-            start.elapsed().subsec_nanos() / 1000000
-        );
         Ok(())
     }
 }
