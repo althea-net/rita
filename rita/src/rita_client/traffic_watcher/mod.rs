@@ -86,7 +86,16 @@ pub fn watch<T: Read + Write>(
         }
     }
 
-    let (input, output) = KI.read_iface_counters("wg_exit")?;
+    let (input, output) = match KI.read_iface_counters("wg_exit") {
+        Ok(res) => res,
+        Err(e) => {
+            warn!(
+                "Error getting input output counters {:?} traffic has gone unaccounted!",
+                e
+            );
+            return Err(e);
+        }
+    };
 
     // account for wg packet overhead
     let input = input.total_bytes();
@@ -118,8 +127,7 @@ pub fn watch<T: Read + Write>(
                         ));
                     }
                 }
-            ))
-            .send()?
+            )).send()?
             .json()?;
         let client_rx = SystemTime::now();
 
