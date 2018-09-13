@@ -663,7 +663,7 @@ impl TunnelManager {
                 return_bool = true;
             }
         }
-        trace!(
+        info!(
             "no tunnel found for {:?}%{:?} creating",
             peer.contact_socket.ip(),
             peer.ifidx,
@@ -740,7 +740,7 @@ impl Handler<TunnelStateChange> for TunnelManager {
                                     tunnel.state = TunnelState::Registered;
                                 }
                                 TunnelState::Registered => {
-                                    warn!("Tunnel {:?} already in registered state", tunnel);
+                                    trace!("Tunnel {:?} already in registered state", tunnel);
                                     continue;
                                 }
                             }
@@ -753,7 +753,7 @@ impl Handler<TunnelStateChange> for TunnelManager {
                                     tunnel.state = TunnelState::NotRegistered;
                                 }
                                 TunnelState::NotRegistered => {
-                                    info!("Tunnel {:?} already in not registered state.", tunnel);
+                                    trace!("Tunnel {:?} already in not registered state.", tunnel);
                                     continue;
                                 }
                             }

@@ -15,7 +15,7 @@ extern crate actix;
 pub mod interop;
 pub mod rtt;
 
-pub use ethereum_types::{Address, H160, Public, Secret, Signature, U256};
+pub use ethereum_types::{Address, Public, Secret, Signature, H160, U256};
 
 pub use interop::*;
 pub use rtt::RTTimestamps;

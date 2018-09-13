@@ -109,7 +109,19 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, clients: Vec<Identity>) -> Re
     let output_counters = KI.read_exit_server_counters(&ExitFilterTarget::Output)?;
 
     trace!("input exit counters: {:?}", input_counters);
+    let mut total_in: u64 = 0;
+    for entry in input_counters.iter() {
+        let input = entry.1;
+        total_in += input;
+    }
+    info!("Total input of {} bytes this round", total_in);
     trace!("output exit counters: {:?}", output_counters);
+    let mut total_out: u64 = 0;
+    for entry in output_counters.iter() {
+        let output = entry.1;
+        total_out += output;
+    }
+    info!("Total output of {} bytes this round", total_in);
 
     let mut debts = HashMap::new();
 
@@ -141,6 +153,14 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, clients: Vec<Identity>) -> Re
     }
 
     trace!("Collated total exit debts: {:?}", debts);
+
+    info!("Computed exit debts for {:?} clients", debts.len());
+    let mut total_income = Int256::zero();
+    for entry in debts.iter() {
+        let income = entry.1;
+        total_income += income;
+    }
+    info!("Total income of {:?} Wei this round", total_income);
 
     for (from, amount) in debts {
         let update = debt_keeper::TrafficUpdate {
