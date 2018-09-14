@@ -226,8 +226,7 @@ fn main() {
                 "/dao_list/remove/{address}",
                 Method::POST,
                 remove_from_dao_list,
-            )
-            .route("/debts", Method::GET, get_debts)
+            ).route("/debts", Method::GET, get_debts)
             .route("/exits", Method::GET, get_exit_info)
             .route("/exits/{name}/register", Method::POST, register_to_exit)
             .route("/exits/{name}/reset", Method::POST, reset_exit)
@@ -236,8 +235,8 @@ fn main() {
                 "/exits/{name}/verify/{code}",
                 Method::POST,
                 verify_on_exit_with_code,
-            )
-            .route("/info", Method::GET, get_own_info)
+            ).route("/info", Method::GET, get_own_info)
+            .route("/interfaces", Method::GET, get_interfaces)
             .route("/neighbors", Method::GET, get_node_info)
             .route("/settings", Method::GET, get_settings)
             .route("/settings", Method::POST, set_settings)
