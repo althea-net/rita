@@ -114,14 +114,14 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, clients: Vec<Identity>) -> Re
         let input = entry.1;
         total_in += input;
     }
-    info!("Total input of {} bytes this round", total_in);
+    info!("Total Exit input of {} bytes this round", total_in);
     trace!("output exit counters: {:?}", output_counters);
     let mut total_out: u64 = 0;
     for entry in output_counters.iter() {
         let output = entry.1;
         total_out += output;
     }
-    info!("Total output of {} bytes this round", total_in);
+    info!("Total Exit output of {} bytes this round", total_out);
 
     let mut debts = HashMap::new();
 
