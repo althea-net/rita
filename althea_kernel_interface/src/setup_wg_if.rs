@@ -1,5 +1,7 @@
 use super::{KernelInterface, KernelInterfaceError};
+use failure::err_msg;
 use std::str::from_utf8;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use failure::Error;
 
@@ -49,6 +51,27 @@ impl KernelInterface {
         }
         Ok(())
     }
+
+    /// Returns the number of clients that are active on the wg_exit tunnel
+    pub fn get_wg_exit_clients_online(&self) -> Result<u32, Error> {
+        let output = self.run_command("wg", &["show", "wg_exit", "latest-handshakes"])?;
+        let mut num: u32 = 0;
+        let out = String::from_utf8(output.stdout)?;
+        for line in out.lines() {
+            let content: Vec<&str> = line.split("\t").collect();
+            let mut itr = content.iter();
+            itr.next();
+            let timestamp = itr
+                .next()
+                .ok_or(err_msg("Option did not contain a value."))?;
+            let d = UNIX_EPOCH + Duration::from_secs(timestamp.parse()?);
+
+            if SystemTime::now().duration_since(d)? < Duration::new(600, 0) {
+                num += 1;
+            }
+        }
+        Ok(num)
+    }
 }
 
 #[test]
@@ -89,4 +112,35 @@ fn test_setup_wg_if_linux() {
     }));
 
     KI.setup_wg_if().unwrap();
+}
+
+#[test]
+fn test_get_wg_exit_clients_online() {
+    use KI;
+
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
+
+    let mut counter = 0;
+
+    let link_args = &["show", "wg_exit", "latest-handshakes"];
+    KI.set_mock(Box::new(move |program, args| {
+        assert_eq!(program, "wg");
+        counter += 1;
+
+        match counter {
+            1 => {
+                assert_eq!(args, link_args);
+                Ok(Output{
+                        stdout: format!("88gbNAZx7NoNK9hatYuDkeZOjQ8EBmJ8VBpcFhXPqHs=	{}\nW1BwNSC9ulTutCg53KIlo+z2ihkXao3sXHaBBpaCXEw=	1536936247\n9jRr6euMHu3tBIsZyqxUmjbuKVVFZCBOYApOR2pLNkQ=	0", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()).as_bytes().to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+            }
+            _ => panic!("command called too many times"),
+        }
+    }));
+
+    assert_eq!(KI.get_wg_exit_clients_online().unwrap(), 1);
 }
