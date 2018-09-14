@@ -13,6 +13,7 @@ use serde_json;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::net::{SocketAddr, TcpStream};
+use std::string::ToString;
 use std::{thread, time};
 
 use althea_types::ExitState;
@@ -483,5 +484,116 @@ impl Handler<SetWiFiMesh> for Dashboard {
         // We edited disk contents, force global sync
         KI.fs_sync()?;
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct GetInterfaces;
+
+impl Message for GetInterfaces {
+    type Result = Result<HashMap<String, String>, Error>;
+}
+
+impl Handler<GetInterfaces> for Dashboard {
+    type Result = Result<HashMap<String, String>, Error>;
+    fn handle(&mut self, _msg: GetInterfaces, _ctx: &mut Self::Context) -> Self::Result {
+        let mut retval = HashMap::new();
+
+        // Wired
+        for (setting_name, value) in KI.uci_show(Some("network"))? {
+            // Only non-loopback non-bridge interface names should get past
+            if setting_name.contains("ifname") && !value.contains("backhaul") && value != "lo" {
+                retval.insert(
+                    value.clone(),
+                    ethernet2mode(&value, &setting_name)?.to_string(),
+                );
+            }
+        }
+
+        // Wireless
+        for (setting_name, value) in KI.uci_show(Some("wireless"))? {
+            if setting_name.contains("ifname") {
+                retval.insert(value.clone(), wlan2mode(&value, &setting_name)?.to_string());
+            }
+        }
+
+        Ok(retval)
+    }
+}
+
+/// Find out a wired interface's mode (mesh, LAN, WAN) from the setting name
+pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, Error> {
+    trace!(
+        "ethernet2mode: ifname {:?}, setting_name {:?}",
+        ifname,
+        setting_name
+    );
+
+    // Match parent section name
+    Ok(match &setting_name.replace(".ifname", "") {
+        s if s.contains("rita_") => InterfaceMode::Mesh,
+        s if s.contains("lan") => InterfaceMode::LAN,
+        s if s.contains("backhaul") => InterfaceMode::WAN,
+        other => bail!(
+            "Unknown wired port mode for interface {:?}, section name {:?}",
+            ifname,
+            other
+        ),
+    })
+}
+
+/// Find out a wireless interface's mode (mesh, LAN, WAN) from the 802.11 mode of operation
+pub fn wlan2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, Error> {
+    trace!(
+        "wlan2mode: ifname {:?}, setting_name {:?}",
+        ifname,
+        setting_name
+    );
+
+    let uci = KI.uci_show(Some("wireless"))?;
+
+    let radio_name = setting_name.replace("wireless.", "").replace(".ifname", "");
+
+    // Find the mode entry
+    let mode_entry_name = format!("wireless.default_{}.mode", radio_name);
+
+    let mode_name = match uci.get(&mode_entry_name) {
+        Some(mode_name) => mode_name,
+        None => {
+            error!("Mode setting entry {:?} not found", mode_entry_name);
+            bail!("Mode setting entry {:?} not found", mode_entry_name);
+        }
+    };
+
+    // Match mode
+    Ok(match mode_name.as_str() {
+        "adhoc" => InterfaceMode::Mesh,
+        "ap" => InterfaceMode::LAN,
+        "sta" => InterfaceMode::WAN,
+        other => {
+            warn!(
+                "Ambiguous WiFi mode {:?} on interface {:?}, radio {:?}",
+                other, ifname, radio_name
+            );
+            InterfaceMode::Unknown
+        }
+    })
+}
+
+pub enum InterfaceMode {
+    Mesh,
+    LAN,
+    WAN,
+    Unknown, // Ambiguous wireless modes like monitor or promiscuous
+}
+
+impl ToString for InterfaceMode {
+    fn to_string(&self) -> String {
+        match self {
+            InterfaceMode::Mesh => "mesh".to_owned(),
+            InterfaceMode::LAN => "LAN".to_owned(),
+            InterfaceMode::WAN => "WAN".to_owned(),
+            InterfaceMode::Unknown => "unknown".to_owned(),
+        }
     }
 }

@@ -243,6 +243,17 @@ pub fn set_wifi_mesh(wifi_mesh: Json<WifiMesh>) -> Box<Future<Item = Json<()>, E
         .responder()
 }
 
+pub fn get_interfaces(
+    _req: HttpRequest,
+) -> Box<Future<Item = Json<HashMap<String, String>>, Error = Error>> {
+    debug!("/interfaces hit");
+    Dashboard::from_registry()
+        .send(GetInterfaces)
+        .from_err()
+        .and_then(move |reply| Ok(Json(reply?)))
+        .responder()
+}
+
 /// This function checks that a supplied string is non-empty and doesn't contain any of the
 /// `FORBIDDEN_CHARS`. If everything's alright the string itself is moved and returned for
 /// convenience.
