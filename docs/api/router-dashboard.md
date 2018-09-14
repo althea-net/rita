@@ -653,3 +653,27 @@ Format:
 ```
 
 ---
+
+## /interfaces
+
+- URL: `<rita ip>:<rita_dashboard_port>/interfaces`
+- Comment: Gets all network interfaces and their assigned functions
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: 
+```json
+{
+"<interface_name>": "{LAN|WAN|mesh}"
+"<interface_name>": "{LAN|WAN|mesh}"
+"<interface_name>": "{LAN|WAN|mesh}"
+[...]
+}
+```
+
+- Error Response: `None` / 500 Internal Server Error
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:4877/interfaces`
