@@ -162,6 +162,11 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, clients: Vec<Identity>) -> Re
     }
     info!("Total income of {:?} Wei this round", total_income);
 
+    match KI.get_wg_exit_clients_online() {
+        Ok(users) => info!("Total of {} users online", users),
+        Err(e) => warn!("Getting clients failed with {:?}", e),
+    }
+
     for (from, amount) in debts {
         let update = debt_keeper::TrafficUpdate {
             from: from.clone(),
