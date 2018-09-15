@@ -2,7 +2,7 @@ use super::{KernelInterface, KernelInterfaceError};
 
 use failure::Error;
 
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 impl KernelInterface {
     pub fn set_client_exit_tunnel_config(
@@ -58,7 +58,7 @@ impl KernelInterface {
             ],
         )?;
 
-        let prev_ip = self.get_global_device_ip("wg_exit");
+        let prev_ip: Result<Ipv4Addr, Error> = self.get_global_device_ip_v4("wg_exit");
 
         match prev_ip {
             Ok(prev_ip) => {
