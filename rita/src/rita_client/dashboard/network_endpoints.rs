@@ -233,16 +233,6 @@ pub fn set_wifi_pass(wifi_pass: Json<WifiPass>) -> Box<Future<Item = HttpRespons
     )
 }
 
-pub fn set_wifi_mesh(wifi_mesh: Json<WifiMesh>) -> Box<Future<Item = Json<()>, Error = Error>> {
-    debug!("/wifi_settings/mesh hit with {:?}", wifi_mesh);
-
-    Dashboard::from_registry()
-        .send(SetWiFiMesh(wifi_mesh.into_inner()))
-        .from_err()
-        .and_then(move |reply| Ok(Json(reply?)))
-        .responder()
-}
-
 pub fn get_interfaces(
     _req: HttpRequest,
 ) -> Box<Future<Item = Json<HashMap<String, String>>, Error = Error>> {

@@ -432,62 +432,6 @@ impl Handler<SetWiFiPass> for Dashboard {
 }
 
 #[derive(Debug)]
-pub struct SetWiFiMesh(WifiMesh);
-
-impl Message for SetWiFiMesh {
-    type Result = Result<(), Error>;
-}
-
-impl Handler<SetWiFiMesh> for Dashboard {
-    type Result = Result<(), Error>;
-    fn handle(&mut self, msg: SetWiFiMesh, _ctx: &mut Self::Context) -> Self::Result {
-        // think radio0, radio1
-        let iface_name = msg.0.radio;
-        let mesh = msg.0.mesh;
-        let iface_number = iface_name.clone().chars().last();
-        let wlan_name = format!("wlan{}", iface_number.unwrap());
-        let section_name = format!("default_{}", iface_name);
-
-        if mesh {
-            KI.set_uci_var(&format!("wireless.{}.ssid", section_name), "AltheaMesh")?;
-            KI.set_uci_var(&format!("wireless.{}.encryption", section_name), "none")?;
-            KI.set_uci_var(&format!("wireless.{}.mode", section_name), "adhoc")?;
-            KI.set_uci_var(&format!("wireless.{}.network", section_name), &wlan_name)?;
-            KI.set_uci_var(&format!("network.{}", wlan_name), "interface")?;
-            KI.set_uci_var(&format!("network.{}.ifname", wlan_name), &wlan_name)?;
-            KI.set_uci_var(&format!("network.{}.proto", wlan_name), "static")?;
-
-            // These must run before listen/unlisten to avoid race conditions
-            KI.uci_commit()?;
-            KI.openwrt_reset_wireless()?;
-            // when we run wifi reset it takes seconds for a new fe80 address to show up
-            thread::sleep(time::Duration::from_millis(30000));
-
-            PeerListener::from_registry().do_send(Listen(wlan_name.clone()));
-        } else {
-            KI.set_uci_var(&format!("wireless.{}.ssid", section_name), "AltheaHome")?;
-            KI.set_uci_var(&format!("wireless.{}.key", section_name), "ChangeMe")?;
-            KI.set_uci_var(&format!("wireless.{}.mode", section_name), "ap")?;
-            KI.set_uci_var(
-                &format!("wireless.{}.encryption", section_name),
-                "psk2+tkip+aes",
-            )?;
-            KI.set_uci_var(&format!("wireless.{}.network", section_name), "lan")?;
-
-            // Order is reversed here
-            PeerListener::from_registry().do_send(UnListen(wlan_name));
-
-            KI.uci_commit()?;
-            KI.openwrt_reset_wireless()?;
-        }
-
-        // We edited disk contents, force global sync
-        KI.fs_sync()?;
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
 pub struct GetInterfaces;
 
 impl Message for GetInterfaces {
