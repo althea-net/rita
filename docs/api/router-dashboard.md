@@ -431,6 +431,7 @@ This file documents the dashboard API found in Rita client.
 - Success Response:
   - Code: `200 OK`
   - Contents:
+
 ```json
 {}
 ```
@@ -438,6 +439,7 @@ This file documents the dashboard API found in Rita client.
 - Error Response:
   - Code: `400 Bad Request`
   - Contents:
+
 ```json
 {
   "error": "<human-readable description>"
@@ -463,9 +465,11 @@ This file documents the dashboard API found in Rita client.
 ```
 {}
 ```
+
 - Error Response:
   - Code: `400 Bad Request`
   - Contents:
+
 ```json
 {
   "error": "<human-readable description>"
@@ -475,28 +479,6 @@ This file documents the dashboard API found in Rita client.
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:<rita_dashboard_port>/wifi_settings/pass -H 'Content-Type: application/json' -i -d '{"radio":"radio0", "pass": "this is a freeform password"}'`
-
----
-
-## /wifi_settings/mesh
-
-- URL: `<rita ip>:<rita_dashboard_port>/wifi_settings/mesh`
-- Method: `POST`
-- URL Params: `Content-Type: application/json`
-- Data Params: `Radio to toggle mesh and mesh bool, resets radio to default ssid and pass on disable`
-- Success Response:
-  - Code: 200 OK
-  - Contents:
-
-```
-{}
-```
-
-- Error Response: `500 Server Error`
-
-- Sample Call:
-
-`curl -XPOST 127.0.0.1:<rita_dashboard_port>/wifi_settings/mesh -H 'Content-Type: application/json' -i -d '{"radio":"radio0", "mesh": true}'`
 
 ---
 
