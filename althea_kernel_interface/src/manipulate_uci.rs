@@ -72,6 +72,18 @@ impl KernelInterface {
         Ok(true)
     }
 
+    //Resets unsaved changes to UCI
+    pub fn uci_revert(&self, section: &str) -> Result<bool, Error> {
+        let output = self.run_command("uci", &["revert", section])?;
+        if !output.status.success() {
+            return Err(KernelInterfaceError::RuntimeError(format!(
+                "received error while reverting UCI: {}",
+                String::from_utf8(output.stderr)?
+            )).into());
+        }
+        Ok(true)
+    }
+
     pub fn refresh_initd(&self, program: &str) -> Result<(), Error> {
         let output = self.run_command(&format!("/etc/init.d/{}", program), &["reload"])?;
         if !output.status.success() {
