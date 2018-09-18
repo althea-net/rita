@@ -242,8 +242,6 @@ fn main() {
             .route("/settings", Method::GET, get_settings)
             .route("/settings", Method::POST, set_settings)
             .route("/version", Method::GET, version)
-            .route("/wifi_settings", Method::GET, get_wifi_config)
-            .route("/wifi_settings", Method::POST, set_wifi_config)
             .route("/wifi_settings/pass", Method::POST, set_wifi_pass)
             .route("/wifi_settings/ssid", Method::POST, set_wifi_ssid)
             .route("/wipe", Method::POST, wipe)
