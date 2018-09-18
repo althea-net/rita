@@ -343,83 +343,6 @@ This file documents the dashboard API found in Rita client.
 `curl -XPOST 127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"exit_client": {"current_exit": "SELECTEDEXIT"}}'`
 }
 
-## /wifi_settings
-
-- URL: `<rita ip>:<rita_dashboard_port>/wifi_settings`
-- Method: `GET`
-- URL Params: `None`
-- Data Params: `None`
-- Success Response:
-  - Code: 200 OK
-  - Contents:
-
-```
-[
-   {
-      "section_name":"default_radio0",
-      "network":"lan",
-      "mesh":false,
-      "ssid":"AltheaHome",
-      "encryption":"psk2+tkip+aes",
-      "key":"ChangeMe",
-      "device":{
-         "section_name":"radio0",
-         "type":"mac80211",
-         "channel":"36",
-         "path":"pci0000:00/0000:00:00.0",
-         "htmode":"VHT80",
-         "hwmode":"11a",
-         "disabled":"0",
-         "radio_type":"5ghz"
-      }
-   },
-   {
-      "section_name":"default_radio1",
-      "network":"lan",
-      "mesh":false,
-      "ssid":"AltheaHome",
-      "encryption":"psk2+tkip+aes",
-      "key":"ChangeMe",
-      "device":{
-         "section_name":"radio1",
-         "type":"mac80211",
-         "channel":"11",
-         "path":"platform/qca953x_wmac",
-         "htmode":"HT20",
-         "hwmode":"11ng",
-         "disabled":"0",
-         "radio_type":"2ghz"
-      }
-   }
-]
-```
-
-- Error Response: `500 Server Error`
-
-- Sample Call:
-
-`curl 127.0.0.1:4877/wifi_settings`
-
-## /wifi_settings
-
-- URL: `<rita ip>:<rita_dashboard_port>/wifi_settings`
-- Method: `POST`
-- URL Params: `Content-Type: application/json`
-- Data Params: `Partial JSON settings to be changed`
-- Success Response:
-  - Code: 200 OK
-  - Contents:
-
-```
-{}
-```
-
-- Error Response: `500 Server Error`
-
-- Sample Call:
-
-`curl -XPOST 127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"default_radio0": {"ssid": "NetworkName"}}'`
-
 ---
 
 ## /wifi_settings/ssid
@@ -518,7 +441,7 @@ Calling HTTP `DELETE` request on this endpoint causes all tables to be wiped out
 
 `curl -XDELETE 127.0.0.1:<rita_dashboard_port>/database`
 
----
+--
 
 ## /debts
 
