@@ -235,10 +235,22 @@ pub fn set_wifi_pass(wifi_pass: Json<WifiPass>) -> Box<Future<Item = HttpRespons
 
 pub fn get_interfaces(
     _req: HttpRequest,
-) -> Box<Future<Item = Json<HashMap<String, String>>, Error = Error>> {
-    debug!("/interfaces hit");
+) -> Box<Future<Item = Json<HashMap<String, InterfaceMode>>, Error = Error>> {
+    debug!("get /interfaces hit");
     Dashboard::from_registry()
         .send(GetInterfaces)
+        .from_err()
+        .and_then(move |reply| Ok(Json(reply?)))
+        .responder()
+}
+
+pub fn set_interfaces(
+    interface: Json<InterfaceToSet>,
+) -> Box<Future<Item = Json<()>, Error = Error>> {
+    debug!("set /interfaces hit");
+    let to_set = interface.into_inner();
+    Dashboard::from_registry()
+        .send(to_set)
         .from_err()
         .and_then(move |reply| Ok(Json(reply?)))
         .responder()
