@@ -105,11 +105,41 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, clients: Vec<Identity>) -> Re
         }
     }
 
-    let input_counters = KI.read_exit_server_counters(&ExitFilterTarget::Input)?;
-    let output_counters = KI.read_exit_server_counters(&ExitFilterTarget::Output)?;
+    let input_counters = match KI.read_exit_server_counters(&ExitFilterTarget::Input) {
+        Ok(res) => res,
+        Err(e) => {
+            warn!(
+                "Error getting input counters {:?} traffic has gone unaccounted!",
+                e
+            );
+            return Err(e);
+        }
+    };
+    let output_counters = match KI.read_exit_server_counters(&ExitFilterTarget::Output) {
+        Ok(res) => res,
+        Err(e) => {
+            warn!(
+                "Error getting output counters {:?} traffic has gone unaccounted!",
+                e
+            );
+            return Err(e);
+        }
+    };
 
     trace!("input exit counters: {:?}", input_counters);
+    let mut total_in: u64 = 0;
+    for entry in input_counters.iter() {
+        let input = entry.1;
+        total_in += input;
+    }
+    info!("Total Exit input of {} bytes this round", total_in);
     trace!("output exit counters: {:?}", output_counters);
+    let mut total_out: u64 = 0;
+    for entry in output_counters.iter() {
+        let output = entry.1;
+        total_out += output;
+    }
+    info!("Total Exit output of {} bytes this round", total_out);
 
     let mut debts = HashMap::new();
 
@@ -121,26 +151,59 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, clients: Vec<Identity>) -> Re
     let price = SETTING.get_exit_network().exit_price;
 
     for (ip, bytes) in input_counters {
-        if identities.contains_key(&ip) && destinations.contains_key(&ip) {
-            let id = identities[&ip].clone();
-            *debts.get_mut(&id).unwrap() -= price * bytes;
-        } else {
-            warn!("input sender not found {}, {}", ip, bytes);
+        let state = (identities.get(&ip), destinations.get(&ip));
+        match state {
+            (Some(id), Some(_dest)) => match debts.get_mut(&id) {
+                Some(debt) => {
+                    *debt -= price * bytes;
+                }
+                // debts is generated from identities, this should be impossible
+                None => warn!("No debts entry for input entry id {:?}", id),
+            },
+            // this can be caused by a peer that has not yet formed a babel route
+            (Some(id), None) => warn!("We have an id {:?} but not destination", id),
+            // if we have a babel route we should have a peer it's possible we have a mesh client sneaking in?
+            (None, Some(dest)) => warn!("We have a destination {:?} but no id", dest),
+            // dead entry?
+            (None, None) => warn!("We have no id or dest for an input counter on {:?}", ip),
         }
     }
 
     trace!("Collated input exit debts: {:?}", debts);
 
     for (ip, bytes) in output_counters {
-        if identities.contains_key(&ip) && destinations.contains_key(&ip) {
-            let id = identities[&ip].clone();
-            *debts.get_mut(&id).unwrap() -= (destinations[&ip].clone() + price) * bytes;
-        } else {
-            warn!("input sender not found {}, {}", ip, bytes);
+        let state = (identities.get(&ip), destinations.get(&ip));
+        match state {
+            (Some(id), Some(dest)) => match debts.get_mut(&id) {
+                Some(debt) => {
+                    *debt -= (dest.clone() + price) * bytes;
+                }
+                // debts is generated from identities, this should be impossible
+                None => warn!("No debts entry for input entry id {:?}", id),
+            },
+            // this can be caused by a peer that has not yet formed a babel route
+            (Some(id), None) => warn!("We have an id {:?} but not destination", id),
+            // if we have a babel route we should have a peer it's possible we have a mesh client sneaking in?
+            (None, Some(dest)) => warn!("We have a destination {:?} but no id", dest),
+            // dead entry?
+            (None, None) => warn!("We have no id or dest for an input counter on {:?}", ip),
         }
     }
 
     trace!("Collated total exit debts: {:?}", debts);
+
+    info!("Computed exit debts for {:?} clients", debts.len());
+    let mut total_income = Int256::zero();
+    for entry in debts.iter() {
+        let income = entry.1;
+        total_income += income;
+    }
+    info!("Total income of {:?} Wei this round", total_income);
+
+    match KI.get_wg_exit_clients_online() {
+        Ok(users) => info!("Total of {} users online", users),
+        Err(e) => warn!("Getting clients failed with {:?}", e),
+    }
 
     for (from, amount) in debts {
         let update = debt_keeper::TrafficUpdate {

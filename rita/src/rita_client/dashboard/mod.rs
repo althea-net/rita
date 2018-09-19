@@ -352,13 +352,27 @@ impl Handler<GetExitInfo> for Dashboard {
         let current_exit = exit_client.get_current_exit();
 
         for exit in exit_client.exits.clone().into_iter() {
+            let selected = is_selected(&exit.1, current_exit)?;
+            let have_route = babel.do_we_have_route(&exit.1.id.mesh_ip, &route_table_sample)?;
+
+            // failed pings block for one second, so we should be sure it's at least reasonable
+            // to expect the pings to work before issuing them.
+            let reachable = match have_route {
+                true => KI.ping_check_v6(&exit.1.id.mesh_ip)?,
+                false => false,
+            };
+            let tunnel_working = match (have_route, selected) {
+                (true, true) => is_tunnel_working(&exit.1, current_exit)?,
+                _ => false,
+            };
+
             output.push(ExitInfo {
                 nickname: exit.0,
                 exit_settings: exit.1.clone(),
-                is_selected: is_selected(&exit.1, current_exit)?,
-                have_route: babel.do_we_have_route(&exit.1.id.mesh_ip, &route_table_sample)?,
-                is_reachable: KI.ping_check_v6(&exit.1.id.mesh_ip)?,
-                is_tunnel_working: is_tunnel_working(&exit.1, current_exit)?,
+                is_selected: selected,
+                have_route: have_route,
+                is_reachable: reachable,
+                is_tunnel_working: tunnel_working,
             })
         }
 

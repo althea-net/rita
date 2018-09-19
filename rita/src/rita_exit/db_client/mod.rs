@@ -258,6 +258,8 @@ fn send_mail(client: &models::Client) -> Result<(), Error> {
         return Ok(());
     };
 
+    info!("Sending exit signup email for client");
+
     let reg = Handlebars::new();
 
     let email = EmailBuilder::new()
@@ -282,8 +284,7 @@ fn send_mail(client: &models::Client) -> Result<(), Error> {
             .credentials(Credentials::new(
                 SETTING.get_mailer().unwrap().smtp_username,
                 SETTING.get_mailer().unwrap().smtp_password,
-            ))
-            .smtp_utf8(true)
+            )).smtp_utf8(true)
             .authentication_mechanism(Mechanism::Plain)
             .connection_reuse(ConnectionReuseParameters::ReuseUnlimited)
             .build();

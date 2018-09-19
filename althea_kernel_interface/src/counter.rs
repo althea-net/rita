@@ -68,9 +68,9 @@ fn test_filter_table_table() {
 
 fn parse_ipset(input: &str) -> Result<HashMap<(IpAddr, String), u64>, Error> {
     lazy_static! {
-        static ref RE: Regex = Regex::new(
-            r"(?m)^add \S+ ([a-f0-9:]+),(wg\d+) packets (\d+) bytes (\d+)"
-        ).expect("Unable to compile regular expression");
+        static ref RE: Regex =
+            Regex::new(r"(?m)^add \S+ ([a-f0-9:]+),(wg\d+) packets (\d+) bytes (\d+)")
+                .expect("Unable to compile regular expression");
     }
     let mut map = HashMap::new();
 
@@ -301,8 +301,7 @@ fn test_read_counters() {
                 Ok(Output {
                     stdout: b"
 add xxx fd00::dead:beef,wg42 packets 111 bytes 222
-"
-                        .to_vec(),
+".to_vec(),
                     stderr: b"".to_vec(),
                     status: ExitStatus::from_raw(0),
                 })
@@ -328,7 +327,6 @@ add xxx fd00::dead:beef,wg42 packets 111 bytes 222
         .get(&(
             IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0xdead, 0xbeef)),
             "wg42".into(),
-        ))
-        .expect("Unable to find key");
+        )).expect("Unable to find key");
     assert_eq!(value, &(222u64 + 111u64 * 40));
 }

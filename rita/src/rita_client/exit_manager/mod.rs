@@ -23,7 +23,7 @@ use actix_web::*;
 
 use althea_types::{ExitClientIdentity, ExitState};
 
-use settings::{RitaClientSettings, RitaCommonSettings};
+use settings::{ExitServer, RitaClientSettings, RitaCommonSettings};
 use SETTING;
 
 use rita_client::rita_loop::Tick;
@@ -239,7 +239,9 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
 
 /// An actor which pays the exit
 #[derive(Default)]
-pub struct ExitManager;
+pub struct ExitManager {
+    last_exit: Option<ExitServer>,
+}
 
 impl Actor for ExitManager {
     type Context = Context<Self>;
@@ -249,6 +251,7 @@ impl Supervised for ExitManager {}
 impl SystemService for ExitManager {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("Exit Manager started");
+        self.last_exit = None;
     }
 }
 
@@ -269,11 +272,21 @@ impl Handler<Tick> for ExitManager {
             trace!("We have selected an exit!");
             if let Some(ref general_details) = exit.info.general_details() {
                 trace!("We have details for the selected exit!");
-                if let Some(_) = exit.info.our_details() {
+                // run billing at all times when an exit is setup
+                if self.last_exit.is_some() {
                     trace!("We are signed up for the selected exit!");
-                    linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
                     TrafficWatcher::from_registry()
                         .do_send(Watch(exit.id.clone(), general_details.exit_price));
+                }
+                // only run if we have our own details and we either have no setup exit or the chosen
+                // exit has changed
+                if exit.info.our_details().is_some()
+                    && !(self.last_exit.is_some() && self.last_exit.clone().unwrap() == exit)
+                {
+                    trace!("Exit change, setting up exit tunnel");
+                    linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
+
+                    self.last_exit = Some(exit.clone());
                 }
             }
         }

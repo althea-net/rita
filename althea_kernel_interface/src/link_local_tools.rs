@@ -1,6 +1,6 @@
 use super::{KernelInterface, KernelInterfaceError};
 
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use regex::Regex;
 
@@ -12,9 +12,13 @@ impl KernelInterface {
         let output = self.run_command("ip", &["addr", "show", "dev", dev, "scope", "link"])?;
         trace!("Got {:?} from `ip addr`", output);
 
-        let re = Regex::new(r"inet6 (\S*?)(/[0-9]+)? scope link").unwrap();
-        let str = String::from_utf8(output.stdout)?;
-        let cap = re.captures(&str);
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r"inet6 (\S*?)(/[0-9]+)? scope link")
+                .expect("Unable to compile regular expression");
+        }
+
+        let cap_str = String::from_utf8(output.stdout)?;
+        let cap = RE.captures(&cap_str);
         if let Some(cap) = cap {
             trace!("got link local IP of {} from device {}", &cap[1], &dev);
             Ok(cap[1].parse::<Ipv6Addr>()?)
@@ -30,12 +34,37 @@ impl KernelInterface {
         let output = self.run_command("ip", &["addr", "show", "dev", dev, "scope", "global"])?;
         trace!("Got {:?} from `ip addr`", output);
 
-        let re = Regex::new(r"inet (\S*?)(/[0-9]+)? scope global").unwrap();
-        let str = String::from_utf8(output.stdout)?;
-        let cap = re.captures(&str);
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r"inet (\S*?)(/[0-9]+)? scope global")
+                .expect("Unable to compile regular expression");
+        }
+
+        let cap_str = String::from_utf8(output.stdout)?;
+        let cap = RE.captures(&cap_str);
         if let Some(cap) = cap {
             trace!("got global IP of {} from device {}", &cap[1], &dev);
             Ok(cap[1].parse::<Ipv6Addr>()?)
+        } else {
+            Err(KernelInterfaceError::RuntimeError(
+                "No global found or no interface found".to_string(),
+            ).into())
+        }
+    }
+
+    pub fn get_global_device_ip_v4(&self, dev: &str) -> Result<Ipv4Addr, Error> {
+        let output = self.run_command("ip", &["addr", "show", "dev", dev, "scope", "global"])?;
+        trace!("Got {:?} from `ip addr`", output);
+
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r"inet (\S*?)(/[0-9]+)? scope global")
+                .expect("Unable to compile regular expression");
+        }
+
+        let cap_str = String::from_utf8(output.stdout)?;
+        let cap = RE.captures(&cap_str);
+        if let Some(cap) = cap {
+            trace!("got global IP of {} from device {}", &cap[1], &dev);
+            Ok(cap[1].parse::<Ipv4Addr>()?)
         } else {
             Err(KernelInterfaceError::RuntimeError(
                 "No global found or no interface found".to_string(),
@@ -91,8 +120,12 @@ impl KernelInterface {
     pub fn get_iface_index(&self, name: &str) -> Result<u32, Error> {
         let links = String::from_utf8(self.run_command("ip", &["link"])?.stdout)?;
 
-        let re = Regex::new(r"([0-9]+): (.*?)(:|@)").unwrap();
-        for caps in re.captures_iter(&links) {
+        lazy_static! {
+            static ref RE: Regex =
+                Regex::new(r"([0-9]+): (.*?)(:|@)").expect("Unable to compile regular expression");
+        }
+
+        for caps in RE.captures_iter(&links) {
             if name == &caps[2] {
                 return Ok(caps[1].parse()?);
             }
