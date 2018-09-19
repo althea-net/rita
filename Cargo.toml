@@ -10,7 +10,7 @@ development = ["rita/development"]
 rita = { path = "./rita" }
 
 [workspace]
-members = ["althea_kernel_interface", "bounty_hunter", "settings", "clu", "exit_db", "stats_server"]
+members = ["althea_kernel_interface", "bounty_hunter", "settings", "clu", "exit_db"]
 
 [profile.release]
 opt-level = "z"

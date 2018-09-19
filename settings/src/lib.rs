@@ -249,13 +249,6 @@ impl ExitClientSettings {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
-pub struct StatsServerSettings {
-    pub stats_address: String,
-    pub stats_port: u16,
-    pub stats_enabled: bool,
-}
-
 // in seconds
 fn default_cache_timeout() -> u64 {
     600
@@ -297,8 +290,6 @@ pub struct RitaSettingsStruct {
     dao: SubnetDAOSettings,
     network: NetworkSettings,
     exit_client: ExitClientSettings,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    stats_server: Option<StatsServerSettings>,
     #[serde(skip)]
     future: bool,
 }
@@ -386,8 +377,6 @@ pub struct RitaExitSettingsStruct {
     dao: SubnetDAOSettings,
     network: NetworkSettings,
     exit_network: ExitNetworkSettings,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    stats_server: Option<StatsServerSettings>,
     /// Countries which the clients to the exit are allowed from, blank for no geoip validation.
     /// (ISO country code)
     #[serde(skip_serializing_if = "HashSet::is_empty", default)]
@@ -413,10 +402,6 @@ pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
     fn get_network_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, T, NetworkSettings>;
-
-    fn get_stats_server_settings<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> Option<RwLockReadGuardRef<'ret, T, StatsServerSettings>>;
 
     fn merge(&self, changed_settings: Value) -> Result<(), Error>;
     fn get_all(&self) -> Result<serde_json::Value, Error>;
@@ -476,21 +461,6 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, NetworkSettings> {
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.network)
-    }
-
-    fn get_stats_server_settings<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> Option<RwLockReadGuardRef<'ret, RitaSettingsStruct, StatsServerSettings>> {
-        if self.read().unwrap().stats_server.is_some() {
-            Some(
-                RwLockReadGuardRef::new(self.read().unwrap()).map(|g| match g.stats_server {
-                    Some(ref stat_server) => stat_server,
-                    None => panic!("exit client not set but needed"),
-                }),
-            )
-        } else {
-            None
-        }
     }
 
     fn merge(&self, changed_settings: serde_json::Value) -> Result<(), Error> {
@@ -563,21 +533,6 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, NetworkSettings> {
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.network)
-    }
-
-    fn get_stats_server_settings<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> Option<RwLockReadGuardRef<'ret, RitaExitSettingsStruct, StatsServerSettings>> {
-        if self.read().unwrap().stats_server.is_some() {
-            Some(
-                RwLockReadGuardRef::new(self.read().unwrap()).map(|g| match g.stats_server {
-                    Some(ref stat_server) => stat_server,
-                    None => panic!("exit client not set but needed"),
-                }),
-            )
-        } else {
-            None
-        }
     }
 
     fn merge(&self, changed_settings: serde_json::Value) -> Result<(), Error> {
