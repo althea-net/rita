@@ -6,9 +6,9 @@ description = "Gets information from and changes settings of kernel network stac
 license = "Apache-2.0"
 
 [dependencies]
-regex = "1.0.2"
+regex = "1.0.5"
 failure = "0.1.2"
 itertools = "0.7.8"
-log = "0.4.3"
-lazy_static = "1.0.2"
+log = "0.4.5"
+lazy_static = "1.1.0"
 eui48 = { git = "https://github.com/althea-mesh/eui48", features = ["serde"] }
