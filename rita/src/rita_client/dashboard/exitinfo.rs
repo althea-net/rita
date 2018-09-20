@@ -31,31 +31,25 @@ impl Message for GetExitInfo {
 }
 
 /// Checks if the provided exit is selected
-fn is_selected(exit: &ExitServer, current_exit: Option<&ExitServer>) -> Result<bool, Error> {
+fn is_selected(exit: &ExitServer, current_exit: Option<&ExitServer>) -> bool {
     match current_exit {
-        None => Ok(false),
-        Some(i) => Ok(i == exit),
+        None => false,
+        Some(i) => i == exit,
     }
 }
 
-/// Determines if the provide exit is currently selected, if it's setup, and then if it can be reached over
+/// Determines if the provided exit is currently selected, if it's setup, and then if it can be reached over
 /// the exit tunnel via a ping
-fn is_tunnel_working(exit: &ExitServer, current_exit: Option<&ExitServer>) -> Result<bool, Error> {
-    if current_exit.is_some() && is_selected(exit, current_exit)? {
-        if current_exit.unwrap().info.general_details().is_some() {
-            let internal_ip = current_exit
-                .unwrap()
-                .clone()
-                .info
-                .general_details()
-                .unwrap()
-                .server_internal_ip;
-            KI.ping_check_v4(&internal_ip)
-        } else {
-            return Ok(false);
-        }
-    } else {
-        return Ok(false);
+fn is_tunnel_working(exit: &ExitServer, current_exit: Option<&ExitServer>) -> bool {
+    match (current_exit, is_selected(exit, current_exit)) {
+        (Some(exit), true) => match exit.info.general_details() {
+            Some(details) => match KI.ping_check_v4(&details.server_internal_ip) {
+                Ok(ping_result) => ping_result,
+                Err(_) => false,
+            },
+            None => false,
+        },
+        (_, _) => false,
     }
 }
 
@@ -76,7 +70,7 @@ impl Handler<GetExitInfo> for Dashboard {
         let current_exit = exit_client.get_current_exit();
 
         for exit in exit_client.exits.clone().into_iter() {
-            let selected = is_selected(&exit.1, current_exit)?;
+            let selected = is_selected(&exit.1, current_exit);
             let have_route = babel.do_we_have_route(&exit.1.id.mesh_ip, &route_table_sample)?;
 
             // failed pings block for one second, so we should be sure it's at least reasonable
@@ -86,7 +80,7 @@ impl Handler<GetExitInfo> for Dashboard {
                 false => false,
             };
             let tunnel_working = match (have_route, selected) {
-                (true, true) => is_tunnel_working(&exit.1, current_exit)?,
+                (true, true) => is_tunnel_working(&exit.1, current_exit),
                 _ => false,
             };
 

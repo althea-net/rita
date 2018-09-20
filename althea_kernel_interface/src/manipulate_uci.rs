@@ -18,19 +18,19 @@ impl KernelInterface {
     }
 
     //Sets an arbitrary UCI variable on OpenWRT
-    pub fn set_uci_var(&self, key: &str, value: &str) -> Result<bool, Error> {
+    pub fn set_uci_var(&self, key: &str, value: &str) -> Result<(), Error> {
         self.run_uci("uci", &["set", &format!("{}={}", key, value)])?;
-        Ok(true)
+        Ok(())
     }
 
     //Adds an arbitrary UCI variable on OpenWRT
-    pub fn add_uci_var(&self, key: &str, value: &str) -> Result<bool, Error> {
+    pub fn add_uci_var(&self, key: &str, value: &str) -> Result<(), Error> {
         self.run_uci("uci", &["add", key, value])?;
-        Ok(true)
+        Ok(())
     }
 
     //Sets an arbitrary UCI list on OpenWRT
-    pub fn set_uci_list(&self, key: &str, value: &[&str]) -> Result<bool, Error> {
+    pub fn set_uci_list(&self, key: &str, value: &[&str]) -> Result<(), Error> {
         match self.del_uci_var(&key) {
             Err(e) => trace!("Delete uci var failed! {:?}", e),
             _ => (),
@@ -39,30 +39,31 @@ impl KernelInterface {
         for v in value {
             self.run_uci("uci", &["add_list", &format!("{}={}", &key, &v)])?;
         }
-        Ok(true)
+        Ok(())
     }
 
     //Deletes an arbitrary UCI variable on OpenWRT
-    pub fn del_uci_var(&self, key: &str) -> Result<bool, Error> {
+    pub fn del_uci_var(&self, key: &str) -> Result<(), Error> {
         self.run_uci("uci", &["delete", &key])?;
-        Ok(true)
+        Ok(())
     }
 
     //Retrieves the value of a given UCI path, could be one or multiple values
     pub fn get_uci_var(&self, key: &str) -> Result<String, Error> {
-        let output = self.run_command("uci", &["show", &key])?;
+        let output = self.run_command("uci", &["get", &key])?;
         if !output.stderr.is_empty() {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error while getting UCI: {}",
                 String::from_utf8(output.stderr)?
             )).into());
         }
-        Ok(String::from_utf8(output.stdout)?)
+        let clean_string = String::from_utf8(output.stdout)?.trim().to_string();
+        Ok(clean_string)
     }
 
     //Commits changes to UCI
-    pub fn uci_commit(&self) -> Result<bool, Error> {
-        let output = self.run_command("uci", &["commit"])?;
+    pub fn uci_commit(&self, subsection: &str) -> Result<bool, Error> {
+        let output = self.run_command("uci", &["commit", subsection])?;
         if !output.status.success() {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error while commiting UCI: {}",
@@ -73,7 +74,7 @@ impl KernelInterface {
     }
 
     //Resets unsaved changes to UCI
-    pub fn uci_revert(&self, section: &str) -> Result<bool, Error> {
+    pub fn uci_revert(&self, section: &str) -> Result<(), Error> {
         let output = self.run_command("uci", &["revert", section])?;
         if !output.status.success() {
             return Err(KernelInterfaceError::RuntimeError(format!(
@@ -81,7 +82,7 @@ impl KernelInterface {
                 String::from_utf8(output.stderr)?
             )).into());
         }
-        Ok(true)
+        Ok(())
     }
 
     pub fn refresh_initd(&self, program: &str) -> Result<(), Error> {
@@ -129,9 +130,22 @@ impl KernelInterface {
                     line
                 ),
             };
-            retval.insert(caps[1].to_owned(), caps[2].to_owned().replace("'", ""));
+            retval.insert(
+                caps[1].to_owned(),
+                caps[2].to_owned().trim_matches('\'').to_string(),
+            );
         }
 
         Ok(retval)
+    }
+
+    pub fn openwrt_reset_wireless(&self) -> Result<(), Error> {
+        self.run_command("wifi", &[])?;
+        Ok(())
+    }
+
+    pub fn openwrt_reset_network(&self) -> Result<(), Error> {
+        self.run_command("/etc/init.d/network", &["restart"])?;
+        Ok(())
     }
 }

@@ -63,7 +63,7 @@ impl Handler<WifiSSID> for Dashboard {
         let section_name = format!("default_{}", iface_name);
         KI.set_uci_var(&format!("wireless.{}.ssid", section_name), &ssid)?;
 
-        KI.uci_commit()?;
+        KI.uci_commit(&"wireless")?;
         KI.openwrt_reset_wireless()?;
 
         // We edited disk contents, force global sync
@@ -85,7 +85,7 @@ impl Handler<WifiPass> for Dashboard {
         let section_name = format!("default_{}", iface_name);
         KI.set_uci_var(&format!("wireless.{}.key", section_name), &pass)?;
 
-        KI.uci_commit()?;
+        KI.uci_commit(&"wireless")?;
         KI.openwrt_reset_wireless()?;
 
         // We edited disk contents, force global sync

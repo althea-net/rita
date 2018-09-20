@@ -558,3 +558,59 @@ Format:
 ```
 
 ---
+
+## /interfaces
+
+Calling HTTP `GET` request on this endpoint provides a list of availabile ports and their current functions
+
+- URL: `<rita ip>:<rita_dashboard_port>/interfaces`
+- Method: `POST`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `JSON` structured message. See below for an example format.
+- Error Response: `500 Server Error`
+- Sample Call
+
+`curl 127.0..1:<rita_dashboard_port>/interfaces'
+
+Format:
+
+```json
+[
+  {
+    "eth0.3": "LAN",
+    "eth0.4": "Mesh",
+    "eth1": "Mesh"
+  }
+]
+```
+
+---
+
+## /interfaces
+
+Calling HTTP `POST` request on this endpoint with a json object specifying an interface and a mode
+will transform that interface to the specified mode. The provided interface must be available from
+the `GET` version of this same endpoint.
+
+- URL: `<rita ip>:<rita_dashboard_port>/interfaces`
+- Method: `POST`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `JSON` structured message. See below for an example format.
+- Error Response: `500 Server Error`
+- Sample Call
+
+`curl 127.0..1:<rita_dashboard_port>/interfaces -H 'Content-Type: application/json' -i -d '{"interface":"wlan0", "mode":"LAN"}''
+
+Format:
+
+```json
+[]
+```
+
+---

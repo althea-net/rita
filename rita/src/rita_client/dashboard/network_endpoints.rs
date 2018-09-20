@@ -14,10 +14,7 @@ use rita_client::dashboard::wifi::{WifiPass, WifiSSID};
 use rita_client::exit_manager::exit_setup_request;
 use rita_common::dashboard::Dashboard;
 use settings::RitaClientSettings;
-use settings::RitaCommonSettings;
 use SETTING;
-
-use super::*;
 
 use std::boxed::Box;
 use std::collections::HashMap;

@@ -41,14 +41,13 @@ impl Handler<GetNodeInfo> for Dashboard {
                 .send(Dump {})
                 .from_err()
                 .and_then(|res| {
+                    let res = res?;
                     let stream = TcpStream::connect::<SocketAddr>(
                         format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
                     )?;
                     let mut babel = Babel::new(stream);
                     babel.start_connection()?;
                     let route_table_sample = babel.parse_routes()?;
-
-                    let res = res?;
 
                     let mut output = Vec::new();
 
@@ -78,7 +77,8 @@ impl Handler<GetNodeInfo> for Dashboard {
                                 });
                                 continue;
                             }
-                            let route = maybe_route?;
+                            // we check that this is safe above
+                            let route = maybe_route.unwrap();
 
                             output.push(NodeInfo {
                                 nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),

@@ -13,7 +13,9 @@ use tokio::timer::Delay;
 use rita_common::dashboard::Dashboard;
 use rita_common::peer_listener::PeerListener;
 use rita_common::peer_listener::{Listen, UnListen};
+use settings::RitaCommonSettings;
 use KI;
+use SETTING;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InterfaceToSet {
@@ -62,7 +64,17 @@ pub fn get_interfaces() -> Result<HashMap<String, InterfaceMode>, Error> {
     for (setting_name, value) in KI.uci_show(Some("network"))? {
         // Only non-loopback non-bridge interface names should get past
         if setting_name.contains("ifname") && !value.contains("backhaul") && value != "lo" {
-            retval.insert(value.clone(), ethernet2mode(&value, &setting_name)?);
+            // it's a list and we need to handle that
+            if value.contains(",") {
+                for list_member in value.split(",") {
+                    retval.insert(
+                        list_member.replace(" ", "").to_string(),
+                        ethernet2mode(&value, &setting_name)?,
+                    );
+                }
+            } else {
+                retval.insert(value.clone(), ethernet2mode(&value, &setting_name)?);
+            }
         }
     }
 
@@ -89,11 +101,13 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
         s if s.contains("rita_") => InterfaceMode::Mesh,
         s if s.contains("lan") => InterfaceMode::LAN,
         s if s.contains("backhaul") => InterfaceMode::WAN,
-        other => bail!(
-            "Unknown wired port mode for interface {:?}, section name {:?}",
-            ifname,
-            other
-        ),
+        other => {
+            warn!(
+                "Unknown wired port mode for interface {:?}, section name {:?}",
+                ifname, other
+            );
+            InterfaceMode::Unknown
+        }
     })
 }
 
@@ -196,6 +210,7 @@ pub fn ethernet_transform_mode(
         // Wan is very simple, just delete it
         InterfaceMode::WAN => {
             let ret = KI.del_uci_var("network.backhaul");
+            SETTING.get_network_mut().external_nic = None;
             return_codes.push(ret);
         }
         // lan is a little more complicated, wifi interfaces
@@ -219,19 +234,23 @@ pub fn ethernet_transform_mode(
     match b {
         // here we add back all the properties of backhaul we removed
         InterfaceMode::WAN => {
-            let ret = KI.add_uci_var("network.backhaul", "interface");
+            SETTING.get_network_mut().external_nic = Some(ifname.to_string());
+            let ret = KI.set_uci_var("network.backhaul", "interface");
             return_codes.push(ret);
-            let ret = KI.add_uci_var("network.backhaul.ifname", ifname);
+            let ret = KI.set_uci_var("network.backhaul.ifname", ifname);
             return_codes.push(ret);
-            let ret = KI.add_uci_var("network.backhaul.proto", "dhcp");
+            let ret = KI.set_uci_var("network.backhaul.proto", "dhcp");
             return_codes.push(ret);
         }
         // since we left lan mostly unomidifed we just pop in the ifname
         InterfaceMode::LAN => {
+            trace!("Converting interface to lan with ifname {:?}", ifname);
             let ret = KI.get_uci_var("network.lan.ifname");
             match ret {
                 Ok(list) => {
+                    trace!("The existing LAN interfaces list is {:?}", list);
                     let new_list = comma_list_add(&list, &ifname);
+                    trace!("Setting the new list {:?}", new_list);
                     let ret = KI.set_uci_var("network.lan.ifname", &new_list);
                     return_codes.push(ret);
                 }
@@ -243,11 +262,11 @@ pub fn ethernet_transform_mode(
         }
         // next we do some magic to listen on the interface after a minute
         InterfaceMode::Mesh => {
-            let ret = KI.add_uci_var(&filtered_ifname, "interface");
+            let ret = KI.set_uci_var(&filtered_ifname, "interface");
             return_codes.push(ret);
-            let ret = KI.add_uci_var(&format!("{}.ifname", filtered_ifname), ifname);
+            let ret = KI.set_uci_var(&format!("{}.ifname", filtered_ifname), ifname);
             return_codes.push(ret);
-            let ret = KI.add_uci_var(&format!("{}.proto", filtered_ifname), "static");
+            let ret = KI.set_uci_var(&format!("{}.proto", filtered_ifname), "static");
             return_codes.push(ret);
             mesh_add = true;
         }
@@ -262,8 +281,8 @@ pub fn ethernet_transform_mode(
         }
     }
     if error_occured {
-        let _ = KI.uci_revert("network");
-        bail!("Error running UCI commands! See logs for details");
+        let res = KI.uci_revert("network");
+        bail!("Error running UCI commands! Revert attempted: {:?}", res);
     } else if mesh_add {
         let when = Instant::now() + Duration::from_millis(60000);
         let locally_owned_ifname = ifname.clone().to_string();
@@ -271,6 +290,7 @@ pub fn ethernet_transform_mode(
         let fut = Delay::new(when)
             .map_err(|e| warn!("timer failed; err={:?}", e))
             .and_then(move |_| {
+                trace!("Adding mesh interface {:?}", locally_owned_ifname);
                 PeerListener::from_registry().do_send(Listen(locally_owned_ifname));
                 Ok(())
             });
@@ -278,7 +298,8 @@ pub fn ethernet_transform_mode(
         Arbiter::spawn(fut);
     }
 
-    KI.uci_commit()?;
+    KI.uci_commit(&"network")?;
+    KI.openwrt_reset_network()?;
 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
@@ -363,11 +384,11 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
             let ret = KI.set_uci_var(&format!("wireless.{}.encryption", network_section), "none");
             return_codes.push(ret);
 
-            let ret = KI.add_uci_var(&format!("network.rita_{}", ifname), "interface");
+            let ret = KI.set_uci_var(&format!("network.rita_{}", ifname), "interface");
             return_codes.push(ret);
-            let ret = KI.add_uci_var(&format!("network.rita_{}.ifname", ifname), ifname);
+            let ret = KI.set_uci_var(&format!("network.rita_{}.ifname", ifname), ifname);
             return_codes.push(ret);
-            let ret = KI.add_uci_var(&format!("network.rita_{}.proto", ifname), "static");
+            let ret = KI.set_uci_var(&format!("network.rita_{}.proto", ifname), "static");
             return_codes.push(ret);
             mesh_add = true;
         }
@@ -382,9 +403,13 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
         }
     }
     if error_occured {
-        let _ = KI.uci_revert("network");
-        let _ = KI.uci_revert("wireless");
-        bail!("Error running UCI commands! See logs for details");
+        let res_a = KI.uci_revert("network");
+        let res_b = KI.uci_revert("wireless");
+        bail!(
+            "Error running UCI commands! Revert attempted: {:?} {:?}",
+            res_a,
+            res_b
+        );
     } else if mesh_add {
         let when = Instant::now() + Duration::from_millis(60000);
         let locally_owned_ifname = ifname.clone().to_string();
@@ -392,6 +417,7 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
         let fut = Delay::new(when)
             .map_err(|e| warn!("timer failed; err={:?}", e))
             .and_then(move |_| {
+                trace!("Adding mesh interface {:?}", locally_owned_ifname);
                 PeerListener::from_registry().do_send(Listen(locally_owned_ifname));
                 Ok(())
             });
@@ -399,7 +425,9 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
         Arbiter::spawn(fut);
     }
 
-    KI.uci_commit()?;
+    KI.uci_commit(&"wireless")?;
+    KI.uci_commit(&"network")?;
+    KI.openwrt_reset_network()?;
     KI.openwrt_reset_wireless()?;
 
     // We edited disk contents, force global sync
@@ -424,13 +452,15 @@ pub fn comma_list_remove(list: &str, entry: &str) -> String {
         let mut new_list = "".to_string();
         let mut first = true;
         for item in split {
+            let filtered_item = item.trim();
             if !item.contains(entry) {
+                trace!("{} is not {} it's on the list!", filtered_item, entry);
                 let tmp_list = new_list.to_string();
                 if first {
-                    new_list = tmp_list + &format!("{}", entry);
+                    new_list = tmp_list + &format!("{}", filtered_item);
                     first = false;
                 } else {
-                    new_list = tmp_list + &format!(", {}", entry);
+                    new_list = tmp_list + &format!(", {}", filtered_item);
                 }
             }
         }
@@ -452,4 +482,43 @@ pub fn get_current_interface_mode(
         }
     }
     InterfaceMode::Unknown
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_comma_list_remove() {
+        let a = "eth0.3, eth1, eth2, eth3, eth4";
+
+        let b = comma_list_remove(a, "eth1");
+        assert_eq!(b, "eth0.3, eth2, eth3, eth4");
+
+        let b = comma_list_remove(&b, "eth0.3");
+        assert_eq!(b, "eth2, eth3, eth4");
+
+        let b = comma_list_remove(&b, "eth4");
+        assert_eq!(b, "eth2, eth3");
+
+        let b = comma_list_remove(&b, "eth2");
+        assert_eq!(b, "eth3");
+
+        let b = comma_list_remove(&b, "eth3");
+        assert_eq!(b, "");
+    }
+
+    #[test]
+    fn test_comma_list_add() {
+        let a = "";
+
+        let b = comma_list_add(a, "eth1");
+        assert_eq!(b, "eth1");
+
+        let b = comma_list_add(&b, "eth0.3");
+        assert_eq!(b, "eth1, eth0.3");
+
+        let b = comma_list_add(&b, "eth4");
+        assert_eq!(b, "eth1, eth0.3, eth4");
+    }
 }
