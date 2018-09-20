@@ -219,10 +219,7 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
             Some(val) => val,
             None => false,
         },
-        _ => {
-            trace!("Parsing of external nic setting failed!");
-            false
-        }
+        None => false,
     };
 
     trace!("We are a Gateway: {}", gateway);
