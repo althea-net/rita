@@ -38,7 +38,6 @@ mod openwrt_ubus;
 mod ping_check;
 mod setup_wg_if;
 mod stats;
-mod wireless;
 
 pub use counter::FilterTarget;
 pub use exit_server_counter::ExitFilterTarget;

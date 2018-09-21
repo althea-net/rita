@@ -1,14 +1,20 @@
-use actix::registry::SystemService;
+use actix::prelude::*;
 use actix_web::http::StatusCode;
+use actix_web::Path;
 use actix_web::{AsyncResponder, HttpRequest, HttpResponse, Json};
 use failure::Error;
 use futures::future;
 use futures::Future;
 
-use rita_client::dashboard::WifiInterface;
+use althea_types::ExitState;
+use rita_client::dashboard::exitinfo::{ExitInfo, GetExitInfo};
+use rita_client::dashboard::interfaces::{GetInterfaces, InterfaceMode, InterfaceToSet};
+use rita_client::dashboard::nodeinfo::{GetNodeInfo, NodeInfo};
+use rita_client::dashboard::wifi::{WifiPass, WifiSSID};
 use rita_client::exit_manager::exit_setup_request;
-
-use super::*;
+use rita_common::dashboard::Dashboard;
+use settings::RitaClientSettings;
+use SETTING;
 
 use std::boxed::Box;
 use std::collections::HashMap;
@@ -27,33 +33,6 @@ pub enum ValidationError {
     Empty,
     #[fail(display = "Value too short ({} required)", _0)]
     TooShort(usize),
-}
-
-pub fn get_wifi_config(
-    _req: HttpRequest,
-) -> Box<Future<Item = Json<Vec<WifiInterface>>, Error = Error>> {
-    debug!("Get wificonfig hit!");
-    Dashboard::from_registry()
-        .send(GetWifiConfig {})
-        .from_err()
-        .and_then(move |reply| Ok(Json(reply?)))
-        .responder()
-}
-
-pub fn set_wifi_config(
-    new_settings: Json<WifiInterface>,
-) -> Box<Future<Item = Json<()>, Error = Error>> {
-    debug!("Set wificonfig endpoint hit!");
-    //This will be dead code if the JS is modified to submit both interfaces
-    //in one vector
-    let mut new_settings_vec = Vec::new();
-    new_settings_vec.push(new_settings.into_inner());
-
-    Dashboard::from_registry()
-        .send(SetWifiConfig(new_settings_vec))
-        .from_err()
-        .and_then(move |reply| Ok(Json(reply?)))
-        .responder()
 }
 
 pub fn get_node_info(_req: HttpRequest) -> Box<Future<Item = Json<Vec<NodeInfo>>, Error = Error>> {
@@ -190,7 +169,7 @@ pub fn set_wifi_ssid(wifi_ssid: Json<WifiSSID>) -> Box<Future<Item = HttpRespons
 
     Box::new(
         Dashboard::from_registry()
-            .send(SetWiFiSSID(wifi_ssid))
+            .send(wifi_ssid)
             .from_err()
             .and_then(move |_reply| future::ok(HttpResponse::Ok().json(ret))),
     )
@@ -227,17 +206,30 @@ pub fn set_wifi_pass(wifi_pass: Json<WifiPass>) -> Box<Future<Item = HttpRespons
 
     Box::new(
         Dashboard::from_registry()
-            .send(SetWiFiPass(wifi_pass))
+            .send(wifi_pass)
             .from_err()
             .and_then(move |_reply| future::ok(HttpResponse::Ok().json(ret))),
     )
 }
 
-pub fn set_wifi_mesh(wifi_mesh: Json<WifiMesh>) -> Box<Future<Item = Json<()>, Error = Error>> {
-    debug!("/wifi_settings/mesh hit with {:?}", wifi_mesh);
-
+pub fn get_interfaces(
+    _req: HttpRequest,
+) -> Box<Future<Item = Json<HashMap<String, InterfaceMode>>, Error = Error>> {
+    debug!("get /interfaces hit");
     Dashboard::from_registry()
-        .send(SetWiFiMesh(wifi_mesh.into_inner()))
+        .send(GetInterfaces)
+        .from_err()
+        .and_then(move |reply| Ok(Json(reply?)))
+        .responder()
+}
+
+pub fn set_interfaces(
+    interface: Json<InterfaceToSet>,
+) -> Box<Future<Item = Json<()>, Error = Error>> {
+    debug!("set /interfaces hit");
+    let to_set = interface.into_inner();
+    Dashboard::from_registry()
+        .send(to_set)
         .from_err()
         .and_then(move |reply| Ok(Json(reply?)))
         .responder()
