@@ -10,7 +10,7 @@ use althea_types::ExitState;
 use rita_client::dashboard::exitinfo::{ExitInfo, GetExitInfo};
 use rita_client::dashboard::interfaces::{GetInterfaces, InterfaceMode, InterfaceToSet};
 use rita_client::dashboard::nodeinfo::{GetNodeInfo, NodeInfo};
-use rita_client::dashboard::wifi::{WifiPass, WifiSSID};
+use rita_client::dashboard::wifi::{GetWifiConfig, WifiInterface, WifiPass, WifiSSID};
 use rita_client::exit_manager::exit_setup_request;
 use rita_common::dashboard::Dashboard;
 use settings::RitaClientSettings;
@@ -255,4 +255,15 @@ fn validate_config_value(s: &str) -> Result<(), ValidationError> {
     } else {
         Ok(())
     }
+}
+
+pub fn get_wifi_config(
+    _req: HttpRequest,
+) -> Box<Future<Item = Json<Vec<WifiInterface>>, Error = Error>> {
+    debug!("Get wificonfig hit!");
+    Dashboard::from_registry()
+        .send(GetWifiConfig {})
+        .from_err()
+        .and_then(move |reply| Ok(Json(reply?)))
+        .responder()
 }
