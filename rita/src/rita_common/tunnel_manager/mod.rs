@@ -345,6 +345,20 @@ impl Message for TriggerGC {
 impl Handler<TriggerGC> for TunnelManager {
     type Result = Result<(), Error>;
     fn handle(&mut self, msg: TriggerGC, _ctx: &mut Context<Self>) -> Self::Result {
+        let stream = match make_babel_stream() {
+            Ok(stream) => stream,
+            Err(e) => {
+                warn!("Tunnel GC failed to open babel stream with {:?}", e);
+                return Err(e);
+            }
+        };
+        let mut babel = Babel::new(stream);
+        let res = babel.start_connection();
+        if res.is_err() {
+            warn!("Failed to start Babel RPC connection! {:?}", res);
+            bail!("Failed to start Babel RPC connection!");
+        }
+
         let mut good: HashMap<Identity, HashMap<u32, Tunnel>> = HashMap::new();
         let mut timed_out: HashMap<Identity, HashMap<u32, Tunnel>> = HashMap::new();
         // Split entries into good and timed out rebuilding the double hashmap strucutre
@@ -396,6 +410,10 @@ impl Handler<TriggerGC> for TunnelManager {
             for (_ifidx, tunnel) in tunnels {
                 // In the same spirit, we return the port to the free port pool only after tunnel
                 // deletion goes well.
+                let res = babel.unmonitor(&tunnel.iface_name);
+                if res.is_err() {
+                    warn!("Failed to unmonitor {} with {:?}", tunnel.iface_name, res);
+                }
                 KI.del_interface(&tunnel.iface_name)?;
                 self.free_ports.push(tunnel.listen_port);
             }
