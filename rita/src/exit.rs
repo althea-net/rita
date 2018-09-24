@@ -66,6 +66,7 @@ extern crate trust_dns_resolver;
 use settings::{RitaCommonSettings, RitaExitSettings, RitaExitSettingsStruct};
 
 use docopt::Docopt;
+use log::LevelFilter;
 #[cfg(not(test))]
 use settings::FileWrite;
 
@@ -89,6 +90,7 @@ use rita_common::dashboard::network_endpoints::*;
 use rita_common::network_endpoints::*;
 use rita_exit::network_endpoints::*;
 
+use std::env;
 use std::sync::{Arc, RwLock};
 
 #[cfg(test)]
@@ -96,19 +98,22 @@ use std::sync::Mutex;
 
 #[derive(Debug, Deserialize)]
 struct Args {
-    flag_config: String,
+    flag_config: Option<String>,
     flag_future: bool,
 }
 
+static DEFAULT_EXIT_SETTINGS_PATH: &'static str = "/etc/rita-exit.toml";
 lazy_static! {
     static ref USAGE: String = format!(
-        "Usage: rita_exit --config=<settings>
+        "Usage: rita_exit [--config=<settings>] [--future] [--help]
 Options:
-    -c, --config=<settings>   Name of config file
+    --config=<settings>     Name of config file; {} by default
     --future                    Enable B side of A/B releases
+    -h, --help                  Show this message
 About:
     Version {}
     git hash {}",
+        DEFAULT_EXIT_SETTINGS_PATH,
         env!("CARGO_PKG_VERSION"),
         env!("GIT_HASH")
     );
@@ -142,15 +147,17 @@ lazy_static! {
             .and_then(|d| d.deserialize())
             .unwrap_or_else(|e| e.exit());
 
-        let settings_file = args.flag_config;
+        let settings_path = args
+            .flag_config
+            .unwrap_or(DEFAULT_EXIT_SETTINGS_PATH.to_owned());
 
-        let s = RitaExitSettingsStruct::new_watched(&settings_file).unwrap();
+        let s = RitaExitSettingsStruct::new_watched(&settings_path).unwrap();
 
         s.set_future(args.flag_future);
 
         clu::exit_init("linux", s.clone());
 
-        s.read().unwrap().write(&settings_file).unwrap();
+        s.read().unwrap().write(&settings_path).unwrap();
 
         s
     };
@@ -166,7 +173,14 @@ fn main() {
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
     openssl_probe::init_ssl_cert_env_vars();
-    env_logger::init();
+
+    // Log at info level by default
+    match env::var("RUST_LOG") {
+        Ok(_) => env_logger::init(),
+        Err(_) => env_logger::Builder::new()
+            .filter_level(LevelFilter::Info)
+            .init(),
+    }
 
     if cfg!(feature = "development") {
         println!("Warning!");
@@ -178,10 +192,12 @@ fn main() {
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
 
-    let settings_file = args.flag_config;
+    let settings_path = args
+        .flag_config
+        .unwrap_or(DEFAULT_EXIT_SETTINGS_PATH.to_owned());
 
     // to get errors before lazy static
-    RitaExitSettingsStruct::new(&settings_file).expect("Settings parse failure");
+    RitaExitSettingsStruct::new(&settings_path).expect("Settings parse failure");
 
     trace!("Starting");
     info!(

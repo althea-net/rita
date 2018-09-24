@@ -61,6 +61,7 @@ extern crate tokio_io;
 extern crate trust_dns_resolver;
 
 use docopt::Docopt;
+use log::LevelFilter;
 #[cfg(not(test))]
 use settings::FileWrite;
 
@@ -71,6 +72,7 @@ use actix::*;
 use actix_web::http::Method;
 use actix_web::*;
 
+use std::env;
 use std::sync::{Arc, RwLock};
 
 #[cfg(test)]
@@ -92,21 +94,27 @@ use rita_common::network_endpoints::*;
 
 #[derive(Debug, Deserialize)]
 struct Args {
-    flag_config: String,
-    flag_platform: String,
+    flag_config: Option<String>,
+    flag_platform: Option<String>,
     flag_future: bool,
 }
 
+static DEFAULT_SETTINGS_PATH: &'static str = "/etc/rita.toml";
+static DEFAULT_PLATFORM: &'static str = "linux";
+
 lazy_static! {
     static ref USAGE: String = format!(
-        "Usage: rita --config=<settings> --platform=<platform> [--future]
+        "Usage: rita [--config=<settings>] [--platform=<platform>)] [--future] [--help]
 Options:
-    -c, --config=<settings>     Name of config file
-    -p, --platform=<platform>   Platform (linux or openwrt)
+    --config=<settings>     Config path; {} by default
+    --platform=<platform>   Platform; {:?} by default; only `linux` is available at the moment
     --future                    Enable B side of A/B releases
+    -h, --help                  Show this message
 About:
     Version {}
     git hash {}",
+        DEFAULT_SETTINGS_PATH,
+        DEFAULT_PLATFORM,
         env!("CARGO_PKG_VERSION"),
         env!("GIT_HASH")
     );
@@ -140,16 +148,16 @@ lazy_static! {
             .and_then(|d| d.deserialize())
             .unwrap_or_else(|e| e.exit());
 
-        let settings_file = args.flag_config;
-        let platform = args.flag_platform;
+        let settings_path = args.flag_config.unwrap_or(DEFAULT_SETTINGS_PATH.to_owned());
+        let platform = args.flag_platform.unwrap_or(DEFAULT_PLATFORM.to_owned());
 
-        let s = RitaSettingsStruct::new_watched(&settings_file).unwrap();
+        let s = RitaSettingsStruct::new_watched(&settings_path).unwrap();
 
         s.set_future(args.flag_future);
 
         clu::init(&platform, s.clone());
 
-        s.read().unwrap().write(&settings_file).unwrap();
+        s.read().unwrap().write(&settings_path).unwrap();
         s
     };
 }
@@ -164,7 +172,14 @@ fn main() {
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
     openssl_probe::init_ssl_cert_env_vars();
-    env_logger::init();
+
+    // Log at info level by default
+    match env::var("RUST_LOG") {
+        Ok(_) => env_logger::init(),
+        Err(_) => env_logger::Builder::new()
+            .filter_level(LevelFilter::Info)
+            .init(),
+    }
 
     if cfg!(feature = "development") {
         println!("Warning!");
@@ -176,10 +191,10 @@ fn main() {
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
 
-    let settings_file = args.flag_config;
+    let settings_path = args.flag_config.unwrap_or(DEFAULT_SETTINGS_PATH.to_owned());
 
     // to get errors before lazy static
-    RitaSettingsStruct::new(&settings_file).expect("Settings parse failure");
+    RitaSettingsStruct::new(&settings_path).expect("Settings parse failure");
 
     trace!("Starting");
     info!(
