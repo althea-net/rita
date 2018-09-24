@@ -7,7 +7,10 @@
 //! This file initilizes the dashboard endpoints for the client as well as the common and client
 //! specific actors.
 
-#![cfg_attr(feature = "system_alloc", feature(alloc_system, allocator_api))]
+#![cfg_attr(
+    feature = "system_alloc",
+    feature(alloc_system, allocator_api)
+)]
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
@@ -208,10 +211,10 @@ fn main() {
             r.method(Method::POST).with(make_payments)
         })
     }).workers(1)
-        .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
-        .unwrap()
-        .shutdown_timeout(0)
-        .start();
+    .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
+    .unwrap()
+    .shutdown_timeout(0)
+    .start();
 
     // dashboard
     server::new(|| {
@@ -223,8 +226,7 @@ fn main() {
                 "/dao_list/remove/{address}",
                 Method::POST,
                 remove_from_dao_list,
-            )
-            .route("/debts", Method::GET, get_debts)
+            ).route("/debts", Method::GET, get_debts)
             .route("/exits", Method::GET, get_exit_info)
             .route("/exits/{name}/register", Method::POST, register_to_exit)
             .route("/exits/{name}/reset", Method::POST, reset_exit)
@@ -233,8 +235,7 @@ fn main() {
                 "/exits/{name}/verify/{code}",
                 Method::POST,
                 verify_on_exit_with_code,
-            )
-            .route("/info", Method::GET, get_own_info)
+            ).route("/info", Method::GET, get_own_info)
             .route("/interfaces", Method::GET, get_interfaces)
             .route("/interfaces", Method::POST, set_interfaces)
             .route("/neighbors", Method::GET, get_node_info)
@@ -246,13 +247,12 @@ fn main() {
             .route("/wifi_settings", Method::GET, get_wifi_config)
             .route("/wipe", Method::POST, wipe)
     }).workers(1)
-        .bind(format!(
-            "[::0]:{}",
-            SETTING.get_network().rita_dashboard_port
-        ))
-        .unwrap()
-        .shutdown_timeout(0)
-        .start();
+    .bind(format!(
+        "[::0]:{}",
+        SETTING.get_network().rita_dashboard_port
+    )).unwrap()
+    .shutdown_timeout(0)
+    .start();
 
     let common = rita_common::rita_loop::RitaLoop::new();
     let _: Addr<_> = common.start();
