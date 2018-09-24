@@ -345,6 +345,24 @@ This file documents the dashboard API found in Rita client.
 
 ---
 
+## /wifi_settings
+- URL: `<rita ip>:<rita_dashboard_port>/wifi_settings`
+- Method: `POST`
+- URL Params: `Content-Type: application/json`
+- Data Params: `Partial JSON settings to be changed`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+```
+{}
+```
+- Error Response: `500 Server Error`
+- Sample Call:
+`curl -XPOST 127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"default_radio0": {"ssid": "NetworkName"}}'`
+
+---
+
+
 ## /wifi_settings/ssid
 
 - URL: `<rita ip>:<rita_dashboard_port>/wifi_settings/ssid`
