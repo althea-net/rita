@@ -4,6 +4,9 @@ These endpoints are used to modify mundane wireless settings
 
 use actix::prelude::*;
 use failure::Error;
+use serde_json;
+use serde_json::Value;
+use std::collections::HashMap;
 
 use rita_common::dashboard::Dashboard;
 use KI;
@@ -18,7 +21,7 @@ pub struct WifiInterface {
     pub mode: String,
     pub ssid: String,
     pub encryption: String,
-    pub key: String,
+    pub key: Option<String>,
     #[serde(default, skip_deserializing)]
     pub device: WifiDevice,
 }
@@ -91,5 +94,53 @@ impl Handler<WifiPass> for Dashboard {
         // We edited disk contents, force global sync
         KI.fs_sync()?;
         Ok(())
+    }
+}
+
+pub struct GetWifiConfig;
+
+impl Message for GetWifiConfig {
+    type Result = Result<Vec<WifiInterface>, Error>;
+}
+
+impl Handler<GetWifiConfig> for Dashboard {
+    type Result = Result<Vec<WifiInterface>, Error>;
+    fn handle(&mut self, _msg: GetWifiConfig, _ctx: &mut Self::Context) -> Self::Result {
+        let mut interfaces = Vec::new();
+        let mut devices = HashMap::new();
+        let config = KI.ubus_call("uci", "get", "{ \"config\": \"wireless\"}")?;
+        let val: Value = serde_json::from_str(&config)?;
+        let items = match val["values"].as_object() {
+            Some(i) => i,
+            None => {
+                error!("No \"values\" key in parsed wifi config!");
+                return Err(format_err!("No \"values\" key parsed wifi config")).into();
+            }
+        };
+        for (k, v) in items {
+            if v[".type"] == "wifi-device" {
+                let mut device: WifiDevice = serde_json::from_value(v.clone())?;
+                device.section_name = k.clone();
+                let channel: String = serde_json::from_value(v["channel"].clone())?;
+                let channel: u8 = channel.parse()?;
+                if channel > 20 {
+                    device.radio_type = "5ghz".to_string();
+                } else {
+                    device.radio_type = "2ghz".to_string();
+                }
+                devices.insert(device.section_name.to_string(), device);
+            }
+        }
+        for (k, v) in items {
+            if v[".type"] == "wifi-iface" && v["mode"] != "mesh" {
+                let mut interface: WifiInterface = serde_json::from_value(v.clone())?;
+                interface.mesh = interface.mode.contains("adhoc");
+                interface.section_name = k.clone();
+                let device_name: String = serde_json::from_value(v["device"].clone())?;
+                interface.device = devices[&device_name].clone();
+                interfaces.push(interface);
+            }
+        }
+        Ok(interfaces)
     }
 }
