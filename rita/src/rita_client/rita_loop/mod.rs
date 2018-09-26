@@ -42,6 +42,7 @@ impl Handler<Tick> for RitaLoop {
             ExitManager::from_registry()
                 .send(Tick {})
                 .into_actor(self)
+                .timeout(Duration::from_secs(5), MailboxError::Timeout)
                 .then(|res, _act, _ctx| {
                     trace!("exit manager said {:?}", res);
                     actix::fut::ok(())

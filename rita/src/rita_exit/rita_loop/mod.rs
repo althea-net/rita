@@ -71,6 +71,7 @@ impl Handler<Tick> for RitaLoop {
             DbClient::from_registry()
                 .send(ListClients {})
                 .into_actor(self)
+                .timeout(Duration::from_secs(5), MailboxError::Timeout)
                 .then(move |res, _act, _ctx| {
                     let clients = res.unwrap().unwrap();
                     let ids = clients
