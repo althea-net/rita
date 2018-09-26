@@ -116,6 +116,7 @@ impl Handler<Tick> for RitaLoop {
 
                     TrafficWatcher::from_registry()
                         .send(Watch::new(res))
+                        .timeout(Duration::from_secs(5))
                         .into_actor(act)
                         .then(move |_res, _act, _ctx| {
                             info!(
@@ -134,6 +135,7 @@ impl Handler<Tick> for RitaLoop {
         Arbiter::spawn(
             TunnelManager::from_registry()
                 .send(GetNeighbors)
+                .timeout(Duration::from_secs(5))
                 .then(move |neighbors| {
                     match neighbors {
                         Ok(Ok(neighbors)) => {
@@ -159,7 +161,9 @@ impl Handler<Tick> for RitaLoop {
             TunnelManager::from_registry()
                 .send(TriggerGC(Duration::from_secs(
                     SETTING.get_network().tunnel_timeout_seconds,
-                ))).then(move |res| {
+                )))
+                .timeout(Duration::from_secs(5))
+                .then(move |res| {
                     info!(
                         "TunnelManager GC pass completed in {}s {}ms, with result {:?}",
                         start.elapsed().as_secs(),
@@ -167,7 +171,8 @@ impl Handler<Tick> for RitaLoop {
                         res
                     );
                     res
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
         );
 
         let start = Instant::now();
@@ -175,6 +180,7 @@ impl Handler<Tick> for RitaLoop {
         Arbiter::spawn(
             PeerListener::from_registry()
                 .send(Tick {})
+                .timeout(Duration::from_secs(5))
                 .then(move |res| {
                     info!(
                         "PeerListener tick completed in {}s {}ms, with result {:?}",
@@ -183,7 +189,8 @@ impl Handler<Tick> for RitaLoop {
                         res
                     );
                     res
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
         );
 
         let start = Instant::now();
@@ -197,7 +204,10 @@ impl Handler<Tick> for RitaLoop {
                         start.elapsed().as_secs(),
                         start.elapsed().subsec_nanos() / 1000000
                     );
-                    TunnelManager::from_registry().send(PeersToContact::new(peers.unwrap())) // GetPeers never fails so unwrap is safe
+                    // GetPeers never fails so unwrap is safe
+                    TunnelManager::from_registry()
+                        .send(PeersToContact::new(peers.unwrap()))
+                        .timeout(Duration::from_secs(5))
                 })
                 .then(|_| Ok(())),
         );
