@@ -49,26 +49,23 @@ use KI;
 fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
     // now that the exit tunnel is up we can start logging over it
     let log = SETTING.get_log();
-    if log.enabled {
-        trace!("About to enable remote logging");
-        let level = match log.level {
-            0 => LevelFilter::Error,
-            1 => LevelFilter::Warn,
-            2 => LevelFilter::Info,
-            3 => LevelFilter::Trace,
-            _ => LevelFilter::Error,
-        };
-        let res = init_udp(
-            "0.0.0.0:5454",
-            &format!("{}:514", server_internal_ip),
-            SETTING.get_network().wg_public_key.clone(),
-            Facility::LOG_USER,
-            level,
-        );
-        info!("Remote logging enabled with {:?}", res);
-        return res;
-    }
-    return Err("Tried to setup remote logging without a configured exit".into());
+    trace!("About to enable remote logging");
+    let level = match log.level {
+        0 => LevelFilter::Error,
+        1 => LevelFilter::Warn,
+        2 => LevelFilter::Info,
+        3 => LevelFilter::Trace,
+        _ => LevelFilter::Error,
+    };
+    let res = init_udp(
+        "0.0.0.0:5454",
+        &format!("{}:514", server_internal_ip),
+        SETTING.get_network().wg_public_key.clone(),
+        Facility::LOG_USER,
+        level,
+    );
+    info!("Remote logging enabled with {:?}", res);
+    return res;
 }
 
 fn linux_setup_exit_tunnel() -> Result<(), Error> {
@@ -303,7 +300,12 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
 /// An actor which pays the exit
 #[derive(Default)]
 pub struct ExitManager {
+    // used to determine if we need to change the logging state
     last_exit: Option<ExitServer>,
+    // used to store the logging state on startup so we don't double init logging
+    // as that would cause a panic
+    remote_logging_setting: bool,
+    remote_logging_already_started: bool,
 }
 
 impl Actor for ExitManager {
@@ -315,6 +317,8 @@ impl SystemService for ExitManager {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("Exit Manager started");
         self.last_exit = None;
+        self.remote_logging_setting = SETTING.get_log().enabled;
+        self.remote_logging_already_started = false;
     }
 }
 
@@ -349,10 +353,13 @@ impl Handler<Tick> for ExitManager {
                     trace!("Exit change, setting up exit tunnel");
                     linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
 
-                    let res = enable_remote_logging(general_details.server_internal_ip);
-                    info!("logging status {:?}", res);
-
                     self.last_exit = Some(exit.clone());
+                }
+                // enable remote logging only if it has not already been started
+                if !self.remote_logging_already_started && self.remote_logging_setting {
+                    let res = enable_remote_logging(general_details.server_internal_ip);
+                    self.remote_logging_already_started = true;
+                    info!("logging status {:?}", res);
                 }
             }
         }
