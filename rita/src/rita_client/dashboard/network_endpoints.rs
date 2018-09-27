@@ -332,3 +332,20 @@ pub fn get_wifi_config(
         .and_then(move |reply| Ok(Json(reply?)))
         .responder()
 }
+
+pub fn remote_logging(path: Path<bool>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+    let enabled = path.into_inner();
+    debug!("/loging/enable/{} hit", enabled);
+
+    SETTING.get_log_mut().enabled = enabled;
+
+    return Box::new(future::ok(HttpResponse::Ok().json(())));
+}
+
+pub fn remote_logging_level(path: Path<u8>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+    let level = path.into_inner();
+    debug!("/loging/level/{}", level);
+
+    SETTING.get_log_mut().level = level;
+    return Box::new(future::ok(HttpResponse::Ok().json(())));
+}
