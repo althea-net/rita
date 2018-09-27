@@ -7,10 +7,7 @@
 //! This file initilizes the dashboard endpoints for the client as well as the common and client
 //! specific actors.
 
-#![cfg_attr(
-    feature = "system_alloc",
-    feature(alloc_system, allocator_api)
-)]
+#![cfg_attr(feature = "system_alloc", feature(alloc_system, allocator_api))]
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
@@ -55,6 +52,7 @@ extern crate reqwest;
 extern crate serde;
 extern crate serde_json;
 extern crate settings;
+extern crate syslog;
 extern crate tokio;
 extern crate tokio_codec;
 extern crate tokio_io;
@@ -64,7 +62,7 @@ use docopt::Docopt;
 #[cfg(not(test))]
 use settings::FileWrite;
 
-use settings::{RitaCommonSettings, RitaSettingsStruct};
+use settings::{RitaClientSettings, RitaCommonSettings, RitaSettingsStruct};
 
 use actix::registry::SystemService;
 use actix::*;
@@ -164,7 +162,10 @@ fn main() {
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
     openssl_probe::init_ssl_cert_env_vars();
-    env_logger::init();
+
+    if !SETTING.get_log().enabled {
+        env_logger::init();
+    }
 
     if cfg!(feature = "development") {
         println!("Warning!");
@@ -211,10 +212,10 @@ fn main() {
             r.method(Method::POST).with(make_payments)
         })
     }).workers(1)
-    .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
-    .unwrap()
-    .shutdown_timeout(0)
-    .start();
+        .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
+        .unwrap()
+        .shutdown_timeout(0)
+        .start();
 
     // dashboard
     server::new(|| {
@@ -226,7 +227,8 @@ fn main() {
                 "/dao_list/remove/{address}",
                 Method::POST,
                 remove_from_dao_list,
-            ).route("/debts", Method::GET, get_debts)
+            )
+            .route("/debts", Method::GET, get_debts)
             .route("/exits", Method::GET, get_exit_info)
             .route("/exits/{name}/register", Method::POST, register_to_exit)
             .route("/exits/{name}/reset", Method::POST, reset_exit)
@@ -235,7 +237,18 @@ fn main() {
                 "/exits/{name}/verify/{code}",
                 Method::POST,
                 verify_on_exit_with_code,
-            ).route("/info", Method::GET, get_own_info)
+            )
+            .route(
+                "/remote_logging/enabled/{enabled}",
+                Method::POST,
+                remote_logging,
+            )
+            .route(
+                "/remote_logging/level/{level}",
+                Method::POST,
+                remote_logging_level,
+            )
+            .route("/info", Method::GET, get_own_info)
             .route("/interfaces", Method::GET, get_interfaces)
             .route("/interfaces", Method::POST, set_interfaces)
             .route("/mesh_ip", Method::GET, get_mesh_ip)
@@ -249,12 +262,13 @@ fn main() {
             .route("/wifi_settings", Method::GET, get_wifi_config)
             .route("/wipe", Method::POST, wipe)
     }).workers(1)
-    .bind(format!(
-        "[::0]:{}",
-        SETTING.get_network().rita_dashboard_port
-    )).unwrap()
-    .shutdown_timeout(0)
-    .start();
+        .bind(format!(
+            "[::0]:{}",
+            SETTING.get_network().rita_dashboard_port
+        ))
+        .unwrap()
+        .shutdown_timeout(0)
+        .start();
 
     let common = rita_common::rita_loop::RitaLoop::new();
     let _: Addr<_> = common.start();

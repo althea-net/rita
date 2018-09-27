@@ -20,6 +20,7 @@ use actix::prelude::*;
 use actix::registry::SystemService;
 use actix_web::client::Connection;
 use actix_web::*;
+use std::net::IpAddr;
 
 use althea_types::{ExitClientIdentity, ExitState};
 
@@ -35,10 +36,40 @@ use futures::Future;
 
 use tokio::net::TcpStream as TokioTcpStream;
 
+use log::LevelFilter;
+use syslog::Error as LogError;
+use syslog::{init_udp, Facility};
+
 use failure::Error;
 use std::net::SocketAddr;
 use std::time::Duration;
 use KI;
+
+/// enables remote logging if the user has configured it
+fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
+    // now that the exit tunnel is up we can start logging over it
+    let log = SETTING.get_log();
+    if log.enabled {
+        trace!("About to enable remote logging");
+        let level = match log.level {
+            0 => LevelFilter::Error,
+            1 => LevelFilter::Warn,
+            2 => LevelFilter::Info,
+            3 => LevelFilter::Trace,
+            _ => LevelFilter::Error,
+        };
+        let res = init_udp(
+            "0.0.0.0:5454",
+            &format!("{}:514", server_internal_ip),
+            SETTING.get_network().wg_public_key.clone(),
+            Facility::LOG_USER,
+            level,
+        );
+        info!("Remote logging enabled with {:?}", res);
+        return res;
+    }
+    return Err("Tried to setup remote logging without a configured exit".into());
+}
 
 fn linux_setup_exit_tunnel() -> Result<(), Error> {
     KI.update_settings_route(&mut SETTING.get_network_mut().default_route)?;
@@ -317,6 +348,9 @@ impl Handler<Tick> for ExitManager {
                 {
                     trace!("Exit change, setting up exit tunnel");
                     linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
+
+                    let res = enable_remote_logging(general_details.server_internal_ip);
+                    info!("logging status {:?}", res);
 
                     self.last_exit = Some(exit.clone());
                 }

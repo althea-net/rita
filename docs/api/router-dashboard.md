@@ -25,6 +25,8 @@ This file documents the dashboard API found in Rita client.
 
 `curl 127.0.0.1:4877/info`
 
+---
+
 ## /neighbors
 
 - URL: `<rita ip>:<rita_dashboard_port>/neighbors`
@@ -61,6 +63,8 @@ This file documents the dashboard API found in Rita client.
 - Sample Call:
 
 `curl 127.0.0.1:4877/neighbors`
+
+---
 
 ## /exits
 
@@ -101,6 +105,8 @@ This file documents the dashboard API found in Rita client.
 
 `curl 127.0.0.1:4877/exits`
 
+---
+
 ## /exits/{nickname}/reset
 
 - URL: `<rita ip>:<rita_dashboard_port>/exits/{nickname}/reset'
@@ -123,6 +129,8 @@ This file documents the dashboard API found in Rita client.
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:4877/exits/borked/reset`
+
+---
 
 ## /exits/{nickname}/select
 
@@ -147,6 +155,8 @@ This file documents the dashboard API found in Rita client.
 
 `curl -XPOST 127.0.0.1:4877/exits/borked/reset`
 
+---
+
 ## /exits/{nickname}/register
 
 - URL: `<rita ip>:<rita_dashboard_port>/exits/{nickname}/register'
@@ -170,6 +180,8 @@ This file documents the dashboard API found in Rita client.
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:4877/exits/borked/register`
+
+---
 
 ## /exits/{nickname}/verify/{code}
 
@@ -197,6 +209,8 @@ This file documents the dashboard API found in Rita client.
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:4877/exits/borked/register`
+
+---
 
 ## /settings
 
@@ -346,6 +360,7 @@ This file documents the dashboard API found in Rita client.
 ---
 
 ## /wifi_settings
+
 - URL: `<rita ip>:<rita_dashboard_port>/wifi_settings`
 - Method: `POST`
 - URL Params: `Content-Type: application/json`
@@ -353,15 +368,16 @@ This file documents the dashboard API found in Rita client.
 - Success Response:
   - Code: 200 OK
   - Contents:
+
 ```
 {}
 ```
+
 - Error Response: `500 Server Error`
 - Sample Call:
-`curl -XPOST 127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"default_radio0": {"ssid": "NetworkName"}}'`
+  `curl -XPOST 127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"default_radio0": {"ssid": "NetworkName"}}'`
 
 ---
-
 
 ## /wifi_settings/ssid
 
@@ -459,7 +475,7 @@ Calling HTTP `DELETE` request on this endpoint causes all tables to be wiped out
 
 `curl -XDELETE 127.0.0.1:<rita_dashboard_port>/database`
 
---
+---
 
 ## /debts
 
@@ -634,15 +650,18 @@ Format:
 ---
 
 ## /mesh_ip POST
+
 - URL: `<rita ip>:<rita_dashboard_port>/mesh_ip`
 - Method: `POST`
 - URL Params: `None`
 - Contents:
+
 ```json
 {
-"mesh_ip": "<new_ipv6_mesh_ip>"
+  "mesh_ip": "<new_ipv6_mesh_ip>"
 }
 ```
+
 - Success Response:
   - This endpoint requires Rita to restart and therefore should give an empty
     response
@@ -653,3 +672,62 @@ Format:
 
 ---
 
+## /remote_logging/enabled/{bool}
+
+Enables or disables remote logging, if enabled on next boot
+the router will send logs to the configured exit over syslog port 514
+
+- URL: `<rita ip>:<rita_dashboard_port>/logging/enabled/{bool}'
+- Method: `POST`
+- URL Params: 'enabled'
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `{}`
+- Error Response: `400 Bad Request`
+- Error Contents:
+
+```json
+{
+  "error": "<description>"
+}
+```
+
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:4877/remote_logging/enabled/true`
+
+---
+
+## /remote_logging/level/{u8}
+
+Sets the level of remote logging
+
+0: Error
+1: Debug
+2: Info
+3: Trace
+\_: Error
+
+Do not use anything above one by default ever!
+it will actually charge
+
+- URL: `<rita ip>:<rita_dashboard_port>/logging/level/{u8}'
+- Method: `POST`
+- URL Params: level
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `{}`
+- Error Response: `400 Bad Request`
+- Error Contents:
+
+```json
+{
+  "error": "<description>"
+}
+```
+
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:4877/remote_logging/level/3`
