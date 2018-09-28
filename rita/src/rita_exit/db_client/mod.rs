@@ -88,12 +88,12 @@ fn increment(address: IpAddr) -> Result<IpAddr, Error> {
     bail!("Not ipv4 addr")
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct GeoIPRet {
     country: GeoIPRetCountry,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct GeoIPRetCountry {
     code: String,
 }
@@ -106,6 +106,7 @@ fn get_country(ip: &IpAddr) -> Result<String, Error> {
     trace!("making geoip request to {}", geo_ip_url);
 
     let res: GeoIPRet = client.get(&geo_ip_url).send()?.json()?;
+    info!("Got {:?} from GeoIP request", res);
 
     return Ok(res.country.code);
 }
