@@ -26,6 +26,7 @@ extern crate serde_derive;
 extern crate log;
 
 #[cfg(test)]
+use log::LevelFilter;
 use std::sync::Mutex;
 
 extern crate serde;
@@ -176,8 +177,8 @@ fn default_logging() -> bool {
     false
 }
 
-fn default_logging_level() -> u8 {
-    0
+fn default_logging_level() -> String {
+    "ERROR".to_string()
 }
 
 /// Remote logging settings. Used to control remote logs being
@@ -190,14 +191,14 @@ pub struct LoggingSettings {
     #[serde(default = "default_logging")]
     pub enabled: bool,
     #[serde(default = "default_logging_level")]
-    pub level: u8,
+    pub level: String,
 }
 
 impl Default for LoggingSettings {
     fn default() -> Self {
         LoggingSettings {
             enabled: false,
-            level: 0, // 0 = error, 1 = warn, 2 = info, 3 = trace
+            level: "ERROR".to_string(),
         }
     }
 }

@@ -703,6 +703,7 @@ the router will send logs to the configured exit over syslog port 514
 
 Sets the level of remote logging
 
+<<<<<<< HEAD
 0: Error
 1: Debug
 2: Info
@@ -711,6 +712,16 @@ Sets the level of remote logging
 
 Do not use anything above one by default ever!
 it will actually charge
+=======
+ERROR
+WARN
+INFO
+DEBUG
+TRACE
+
+Do not use anything above WARN by default ever!
+it will actually consume nontrival bandwidth
+>>>>>>> Use loglevels in the settings
 
 - URL: `<rita ip>:<rita_dashboard_port>/logging/level/{u8}'
 - Method: `POST`
