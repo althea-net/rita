@@ -19,4 +19,3 @@ codegen-units = 1
 incremental = false
 
 [patch.crates-io]
-trust-dns-resolver = { git = "https://github.com/kingoflolz/trust-dns.git", branch = "lower-max-ttl" }
