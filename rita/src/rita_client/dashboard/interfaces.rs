@@ -79,10 +79,15 @@ pub fn get_interfaces() -> Result<HashMap<String, InterfaceMode>, Error> {
     }
 
     // Wireless
-    for (setting_name, value) in KI.uci_show(Some("wireless"))? {
-        if setting_name.contains("ifname") {
-            retval.insert(value.clone(), wlan2mode(&value, &setting_name)?);
+    match KI.uci_show(Some("wireless")) {
+        Ok(value) => {
+            for (setting_name, value) in value {
+                if setting_name.contains("ifname") {
+                    retval.insert(value.clone(), wlan2mode(&value, &setting_name)?);
+                }
+            }
         }
+        _ => trace!("Device does not have WiFi!"),
     }
 
     Ok(retval)
