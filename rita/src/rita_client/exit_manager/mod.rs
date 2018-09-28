@@ -50,12 +50,9 @@ fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
     // now that the exit tunnel is up we can start logging over it
     let log = SETTING.get_log();
     trace!("About to enable remote logging");
-    let level = match log.level {
-        0 => LevelFilter::Error,
-        1 => LevelFilter::Warn,
-        2 => LevelFilter::Info,
-        3 => LevelFilter::Trace,
-        _ => LevelFilter::Error,
+    let level: LevelFilter = match log.level.parse() {
+        Ok(level) => level,
+        Err(_) => LevelFilter::Error,
     };
     let res = init_udp(
         "0.0.0.0:5454",

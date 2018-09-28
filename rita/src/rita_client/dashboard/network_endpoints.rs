@@ -5,6 +5,7 @@ use actix_web::{AsyncResponder, HttpRequest, HttpResponse, Json};
 use failure::Error;
 use futures::future;
 use futures::Future;
+use log::LevelFilter;
 
 use althea_types::ExitState;
 use rita_client::dashboard::exitinfo::{ExitInfo, GetExitInfo};
@@ -342,10 +343,22 @@ pub fn remote_logging(path: Path<bool>) -> Box<Future<Item = HttpResponse, Error
     return Box::new(future::ok(HttpResponse::Ok().json(())));
 }
 
-pub fn remote_logging_level(path: Path<u8>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+pub fn remote_logging_level(path: Path<String>) -> Box<Future<Item = HttpResponse, Error = Error>> {
     let level = path.into_inner();
     debug!("/loging/level/{}", level);
 
-    SETTING.get_log_mut().level = level;
+    let log_level: LevelFilter = match level.parse() {
+        Ok(level) => level,
+        Err(e) => {
+            return Box::new(future::ok(
+                HttpResponse::new(StatusCode::BAD_REQUEST)
+                    .into_builder()
+                    .json(format!("Could not parse loglevel {:?}", e)),
+            ))
+        }
+    };
+
+    SETTING.get_log_mut().level = log_level.to_string();
+
     return Box::new(future::ok(HttpResponse::Ok().json(())));
 }
