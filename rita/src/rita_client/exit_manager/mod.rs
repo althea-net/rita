@@ -30,6 +30,7 @@ use rita_client::rita_loop::Tick;
 use rita_client::traffic_watcher::{TrafficWatcher, Watch};
 
 use futures::future;
+use futures::future::err as future_err;
 use futures::future::join_all;
 use futures::Future;
 
@@ -139,18 +140,25 @@ pub fn send_exit_status_request(
 }
 
 fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = Error> {
-    let exits = SETTING.get_exits();
-    let current_exit = &exits[&exit];
-    let exit_server = current_exit.id.mesh_ip;
+    let current_exit = match SETTING.get_exits().get(&exit) {
+        Some(current_exit) => current_exit.clone(),
+        None => {
+            return Box::new(future_err(format_err!("No valid exit for {}", exit)))
+                as Box<Future<Item = (), Error = Error>>
+        }
+    };
 
-    let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
+    let endpoint = SocketAddr::new(current_exit.id.mesh_ip, current_exit.registration_port);
 
     trace!("sending exit general details request to {}", exit);
 
-    get_exit_info(&endpoint).and_then(move |exit_details| {
+    let r = get_exit_info(&endpoint).and_then(move |exit_details| {
         let mut exits = SETTING.get_exits_mut();
 
-        let current_exit = exits.get_mut(&exit).unwrap();
+        let current_exit = match exits.get_mut(&exit) {
+            Some(exit) => exit,
+            None => bail!("Could not find exit {}", exit),
+        };
 
         match exit_details {
             ExitState::GotInfo { .. } => {
@@ -162,16 +170,17 @@ fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = 
         current_exit.info = exit_details;
 
         Ok(())
-    })
+    });
+
+    Box::new(r)
 }
 
 pub fn exit_setup_request(
     exit: String,
     code: Option<String>,
 ) -> Box<Future<Item = (), Error = Error>> {
-    let exits = SETTING.get_exits();
-    let current_exit = match exits.get(&exit) {
-        Some(exit_struct) => exit_struct,
+    let current_exit = match SETTING.get_exits().get(&exit) {
+        Some(exit_struct) => exit_struct.clone(),
         None => return Box::new(future::err(format_err!("Could not find exit {:?}", exit))),
     };
     let exit_server = current_exit.id.mesh_ip;
@@ -179,7 +188,7 @@ pub fn exit_setup_request(
     reg_details.email_code = code;
 
     let ident = ExitClientIdentity {
-        global: SETTING.get_identity(),
+        global: SETTING.get_identity().clone(),
         wg_port: SETTING.get_exit_client().wg_listen_port.clone(),
         reg_details,
     };
@@ -209,11 +218,17 @@ pub fn exit_setup_request(
 }
 
 fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
-    let exits = SETTING.get_exits();
-    let current_exit = &exits[&exit];
+    let current_exit = match SETTING.get_exits().get(&exit) {
+        Some(current_exit) => current_exit.clone(),
+        None => {
+            return Box::new(future_err(format_err!("No valid exit for {}", exit)))
+                as Box<Future<Item = (), Error = Error>>
+        }
+    };
+
     let exit_server = current_exit.id.mesh_ip;
     let ident = ExitClientIdentity {
-        global: SETTING.get_identity(),
+        global: SETTING.get_identity().clone(),
         wg_port: SETTING.get_exit_client().wg_listen_port.clone(),
         reg_details: SETTING.get_exit_client().reg_details.clone().unwrap(),
     };
@@ -222,19 +237,23 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
 
     trace!("sending exit status request to {}", exit);
 
-    send_exit_status_request(&endpoint, ident)
+    let r = send_exit_status_request(&endpoint, ident)
         .from_err()
         .and_then(move |exit_response| {
             let mut exits = SETTING.get_exits_mut();
 
-            let current_exit = exits.get_mut(&exit).unwrap();
+            let current_exit = match exits.get_mut(&exit) {
+                Some(exit_struct) => exit_struct,
+                None => bail!("Could not find exit {:?}", exit),
+            };
 
             current_exit.info = exit_response.clone();
 
             trace!("Got exit setup response {:?}", exit_response.clone());
 
             Ok(())
-        })
+        });
+    Box::new(r)
 }
 
 /// An actor which pays the exit
