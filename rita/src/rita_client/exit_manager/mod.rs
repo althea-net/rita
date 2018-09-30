@@ -30,7 +30,6 @@ use rita_client::rita_loop::Tick;
 use rita_client::traffic_watcher::{TrafficWatcher, Watch};
 
 use futures::future;
-use futures::future::err as future_err;
 use futures::future::join_all;
 use futures::Future;
 
@@ -143,7 +142,7 @@ fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = 
     let current_exit = match SETTING.get_exits().get(&exit) {
         Some(current_exit) => current_exit.clone(),
         None => {
-            return Box::new(future_err(format_err!("No valid exit for {}", exit)))
+            return Box::new(future::err(format_err!("No valid exit for {}", exit)))
                 as Box<Future<Item = (), Error = Error>>
         }
     };
@@ -188,7 +187,7 @@ pub fn exit_setup_request(
     reg_details.email_code = code;
 
     let ident = ExitClientIdentity {
-        global: SETTING.get_identity().clone(),
+        global: SETTING.get_identity(),
         wg_port: SETTING.get_exit_client().wg_listen_port.clone(),
         reg_details,
     };
@@ -221,14 +220,14 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
     let current_exit = match SETTING.get_exits().get(&exit) {
         Some(current_exit) => current_exit.clone(),
         None => {
-            return Box::new(future_err(format_err!("No valid exit for {}", exit)))
+            return Box::new(future::err(format_err!("No valid exit for {}", exit)))
                 as Box<Future<Item = (), Error = Error>>
         }
     };
 
     let exit_server = current_exit.id.mesh_ip;
     let ident = ExitClientIdentity {
-        global: SETTING.get_identity().clone(),
+        global: SETTING.get_identity(),
         wg_port: SETTING.get_exit_client().wg_listen_port.clone(),
         reg_details: SETTING.get_exit_client().reg_details.clone().unwrap(),
     };
