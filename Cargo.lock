@@ -127,12 +127,13 @@ dependencies = [
 [[package]]
 name = "althea_types"
 version = "0.1.0"
-source = "git+https://github.com/mpapierski/althea_rs.git?branch=236-guac-integration#e513397f63007b701c3f9f46ed43c9f7117101a3"
+source = "git+https://github.com/mpapierski/althea_rs.git?branch=236-guac-integration#e79414b112a6bb93cff6716ed4c27793850853a7"
 dependencies = [
  "base64 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "ethereum-types 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "eui48 0.4.0 (git+https://github.com/althea-mesh/eui48)",
  "hex 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num-bigint 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "num256 0.1.0 (git+https://github.com/mpapierski/althea_rs.git?branch=236-guac-integration)",
  "serde 1.0.75 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.75 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -349,7 +350,7 @@ dependencies = [
 [[package]]
 name = "clarity"
 version = "0.1.1"
-source = "git+https://github.com/mpapierski/clarity?branch=23-hash#56e01d38d86c210522806ebd99c9d6fd25fad3bd"
+source = "git+https://github.com/mpapierski/clarity?branch=23-hash#bcaf4f1b53e7cfc9610320636468a29137e56a82"
 dependencies = [
  "failure 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1739,7 +1740,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "num256"
 version = "0.1.0"
-source = "git+https://github.com/mpapierski/althea_rs.git?branch=236-guac-integration#e513397f63007b701c3f9f46ed43c9f7117101a3"
+source = "git+https://github.com/mpapierski/althea_rs.git?branch=236-guac-integration#e79414b112a6bb93cff6716ed4c27793850853a7"
 dependencies = [
  "ethereum-types 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
