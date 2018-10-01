@@ -127,9 +127,10 @@ dependencies = [
 [[package]]
 name = "althea_types"
 version = "0.1.0"
-source = "git+https://github.com/mpapierski/althea_rs.git?branch=236-guac-integration#d51e520c5625853941094c48d5879a373c08556f"
+source = "git+https://github.com/mpapierski/althea_rs.git?branch=236-guac-integration#c486c5faecf6631b7d4e8a7b4b585b538be752fd"
 dependencies = [
  "base64 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clarity 0.1.1 (git+https://github.com/mpapierski/clarity?branch=23-hash)",
  "ethereum-types 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "eui48 0.4.0 (git+https://github.com/althea-mesh/eui48)",
  "hex 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -968,7 +969,7 @@ dependencies = [
 [[package]]
 name = "guac_actix"
 version = "0.1.0"
-source = "git+https://github.com/mpapierski/guac_rs?branch=clarity-integration#c70c6dcd176ce5bb7bb24904cd8d80190d25fd60"
+source = "git+https://github.com/mpapierski/guac_rs?branch=clarity-integration#81144b809c621517e9ea2015c1dca5289ae64702"
 dependencies = [
  "actix 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-web 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -989,7 +990,7 @@ dependencies = [
 [[package]]
 name = "guac_core"
 version = "0.1.0"
-source = "git+https://github.com/mpapierski/guac_rs?branch=clarity-integration#c70c6dcd176ce5bb7bb24904cd8d80190d25fd60"
+source = "git+https://github.com/mpapierski/guac_rs?branch=clarity-integration#81144b809c621517e9ea2015c1dca5289ae64702"
 dependencies = [
  "althea_types 0.1.0 (git+https://github.com/mpapierski/althea_rs.git?branch=236-guac-integration)",
  "base64 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1741,7 +1742,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "num256"
 version = "0.1.0"
-source = "git+https://github.com/mpapierski/althea_rs.git?branch=236-guac-integration#d51e520c5625853941094c48d5879a373c08556f"
+source = "git+https://github.com/mpapierski/althea_rs.git?branch=236-guac-integration#c486c5faecf6631b7d4e8a7b4b585b538be752fd"
 dependencies = [
  "ethereum-types 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
