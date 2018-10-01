@@ -192,7 +192,7 @@ impl Default for PaymentSettings {
             close_threshold: (-10000).into(),
             close_fraction: 100.into(),
             buffer_period: 3,
-            eth_address: 1.into(),
+            eth_address: "0x00000000000000000000000000000001".parse().unwrap(),
         }
     }
 }

@@ -8,6 +8,7 @@ extern crate serde_json;
 extern crate num_bigint;
 #[macro_use]
 extern crate serde_derive;
+extern crate clarity;
 
 #[cfg(feature = "actix")]
 extern crate actix;
@@ -15,7 +16,8 @@ extern crate actix;
 pub mod interop;
 pub mod rtt;
 
-pub use ethereum_types::{Address, H160, Public, Secret, Signature, U256};
+pub use ethereum_types::{H160, Public, Secret, Signature, U256};
+pub use clarity::Address;
 
 pub use interop::*;
 pub use rtt::RTTimestamps;
