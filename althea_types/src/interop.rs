@@ -1,6 +1,7 @@
 use num256::Uint256;
 use std::net::IpAddr;
 use EthAddress;
+use num_bigint::BigUint;
 
 #[cfg(feature = "actix")]
 use actix::*;
@@ -161,7 +162,7 @@ impl Message for LocalIdentity {
 pub struct PaymentTx {
     pub to: Identity,
     pub from: Identity,
-    pub amount: Uint256,
+    pub amount: BigUint,
 }
 
 /// This contains all the info we need to send the the stats server
