@@ -71,16 +71,16 @@ impl fmt::Display for TunnelAction {
     }
 }
 
-///
-/// TunnelState indicates a state where a tunnel is currently in.
+/// TunnelState indicates a state where a tunnel is currently in. Made into an enum for adding new
+/// states more easily
 ///
 /// State changes:
-/// NotRegistered -> (MembershipConfirmed) -> Registered
+/// NotRegistered -> MembershipConfirmed(not implemented therefore not added) -> Registered
 #[derive(PartialEq, Debug, Clone)]
 pub enum TunnelState {
-    /// Tunnel is not registered (default)
+    /// Tunnel is not registered
     NotRegistered,
-    /// Tunnel is registered
+    /// Tunnel is registered (default)
     Registered,
 }
 
@@ -98,12 +98,12 @@ fn test_tunnel_state() {
 
 #[derive(Debug, Clone)]
 pub struct Tunnel {
-    pub ip: IpAddr,             // Tunnel endpoint
-    pub iface_name: String,     // name of wg#
-    pub listen_ifidx: u32,      // the physical interface this tunnel is listening on
-    pub listen_port: u16,       // the local port this tunnel is listening on
-    pub localid: LocalIdentity, // the identity of the counterparty tunnel
-    pub last_contact: Instant,  // When's the last we heard from the other end of this tunnel?
+    pub ip: IpAddr,              // Tunnel endpoint
+    pub iface_name: String,      // name of wg#
+    pub listen_ifidx: u32,       // the physical interface this tunnel is listening on
+    pub listen_port: u16,        // the local port this tunnel is listening on
+    pub neigh_id: LocalIdentity, // the identity of the counterparty tunnel
+    pub last_contact: Instant,   // When's the last we heard from the other end of this tunnel?
     state: TunnelState,
 }
 
@@ -120,7 +120,7 @@ impl Tunnel {
             iface_name: iface_name,
             listen_ifidx: ifidx,
             listen_port: our_listen_port,
-            localid: their_id.clone(),
+            neigh_id: their_id.clone(),
             last_contact: Instant::now(),
             // By default new tunnels are in Registered state
             state: TunnelState::Registered,
@@ -133,10 +133,13 @@ impl Tunnel {
         KI.open_tunnel(
             &self.iface_name,
             self.listen_port,
-            &SocketAddr::new(self.ip, self.localid.wg_port),
-            &self.localid.global.wg_public_key,
+            &SocketAddr::new(self.ip, self.neigh_id.wg_port),
+            &self.neigh_id.global.wg_public_key,
             Path::new(&network.wg_private_key_path),
-            &network.own_ip,
+            &match network.mesh_ip {
+                Some(ip) => ip,
+                None => bail!("No mesh IP configured yet"),
+            },
             network.external_nic.clone(),
             &mut SETTING.get_network_mut().default_route,
         )
@@ -325,7 +328,7 @@ impl Handler<GetNeighbors> for TunnelManager {
         for (_, tunnels) in self.tunnels.iter() {
             for (_, tunnel) in tunnels.iter() {
                 res.push(Neighbor::new(
-                    tunnel.localid.clone(),
+                    tunnel.neigh_id.clone(),
                     tunnel.iface_name.clone(),
                     tunnel.ip,
                 ));
@@ -495,7 +498,9 @@ fn contact_neighbor(peer: &Peer, our_port: u16) -> Result<(), Error> {
 
     let _res = HTTPClient::from_registry().do_send(Hello {
         my_id: LocalIdentity {
-            global: SETTING.get_identity(),
+            global: SETTING
+                .get_identity()
+                .ok_or(format_err!("Identity has no mesh IP ready yet"))?,
             wg_port: our_port,
             have_tunnel: None,
         },
@@ -704,7 +709,7 @@ impl TunnelManager {
         }
         match tunnel.monitor(make_babel_stream()?) {
             Ok(_) => {
-                let new_key = tunnel.localid.global.clone();
+                let new_key = tunnel.neigh_id.global.clone();
                 // Add a tunnel to internal map based on identity, and interface index.
                 self.tunnels
                     .entry(new_key)

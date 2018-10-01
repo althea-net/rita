@@ -79,17 +79,22 @@ pub fn hello_response(
     // We send the callback, which can safely allocate a port because it already successfully
     // contacted a neighbor. The exception to this is when the TCP session fails at exactly
     // the wrong time.
-    TunnelManager::from_registry()
-        .send(IdentityCallback::new(their_id, peer, None))
-        .and_then(|tunnel| {
-            let tunnel = tunnel.unwrap();
-            Ok(Json(LocalIdentity {
-                global: SETTING.get_identity(),
-                wg_port: tunnel.0.listen_port,
-                have_tunnel: Some(tunnel.1),
-            }))
-        }).from_err()
-        .responder()
+    Box::new(
+        TunnelManager::from_registry()
+            .send(IdentityCallback::new(their_id, peer, None))
+            .from_err()
+            .and_then(|tunnel| {
+                let tunnel = tunnel.unwrap();
+                Ok(Json(LocalIdentity {
+                    global: match SETTING.get_identity() {
+                        Some(id) => id,
+                        None => return Err(format_err!("Identity has no mesh IP ready yet").into()),
+                    },
+                    wg_port: tunnel.0.listen_port,
+                    have_tunnel: Some(tunnel.1),
+                }))
+            }).responder(),
+    )
 }
 
 pub fn version(_req: HttpRequest) -> String {

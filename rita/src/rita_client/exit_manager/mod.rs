@@ -187,7 +187,14 @@ pub fn exit_setup_request(
     reg_details.email_code = code;
 
     let ident = ExitClientIdentity {
-        global: SETTING.get_identity(),
+        global: match SETTING.get_identity() {
+            Some(id) => id,
+            None => {
+                return Box::new(future::err(format_err!(
+                    "Identity has no mesh IP ready yet"
+                )))
+            }
+        },
         wg_port: SETTING.get_exit_client().wg_listen_port.clone(),
         reg_details,
     };
@@ -227,7 +234,14 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
 
     let exit_server = current_exit.id.mesh_ip;
     let ident = ExitClientIdentity {
-        global: SETTING.get_identity(),
+        global: match SETTING.get_identity() {
+            Some(id) => id,
+            None => {
+                return Box::new(future::err(
+                    format_err!("Identity has no mesh IP ready yet").into(),
+                ))
+            }
+        },
         wg_port: SETTING.get_exit_client().wg_listen_port.clone(),
         reg_details: SETTING.get_exit_client().reg_details.clone().unwrap(),
     };
