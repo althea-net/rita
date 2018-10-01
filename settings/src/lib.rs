@@ -88,8 +88,12 @@ fn default_tunnel_timeout() -> u64 {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
-    /// Our own mesh IP (in fd00::/8)
-    pub own_ip: IpAddr,
+    /// The static IP used on mesh interfaces
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mesh_ip: Option<IpAddr>,
+    /// Old name for mesh_ip, left in for back-compat, TODO: REMOVE IN ALPHA 11
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub own_ip: Option<IpAddr>,
     /// Mesh IP of bounty hunter (in fd00::/8)
     pub bounty_ip: IpAddr,
     /// Broadcast ip address used for peer discovery (in ff02::/8)
@@ -144,7 +148,8 @@ pub struct NetworkSettings {
 impl Default for NetworkSettings {
     fn default() -> Self {
         NetworkSettings {
-            own_ip: "fd00::1".parse().unwrap(),
+            mesh_ip: None,
+            own_ip: None,
             bounty_ip: "fd00::3".parse().unwrap(),
             discovery_ip: default_discovery_ip(),
             babel_port: 6872,
@@ -406,7 +411,8 @@ pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
     fn merge(&self, changed_settings: Value) -> Result<(), Error>;
     fn get_all(&self) -> Result<serde_json::Value, Error>;
 
-    fn get_identity(&self) -> Identity;
+    // Can be None if the mesh ip was not configured yet
+    fn get_identity(&self) -> Option<Identity>;
 
     fn get_future(&self) -> bool;
     fn set_future(&self, future: bool);
@@ -481,12 +487,12 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
         Ok(serde_json::to_value(self.read().unwrap().clone())?)
     }
 
-    fn get_identity(&self) -> Identity {
-        Identity::new(
-            self.get_network().own_ip.clone(),
+    fn get_identity(&self) -> Option<Identity> {
+        Some(Identity::new(
+            self.get_network().mesh_ip?.clone(),
             self.get_payment().eth_address.clone(),
             self.get_network().wg_public_key.clone(),
-        )
+        ))
     }
 
     fn get_future(&self) -> bool {
@@ -553,12 +559,12 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
         Ok(serde_json::to_value(self.read().unwrap().clone())?)
     }
 
-    fn get_identity(&self) -> Identity {
-        Identity::new(
-            self.get_network().own_ip.clone(),
+    fn get_identity(&self) -> Option<Identity> {
+        Some(Identity::new(
+            self.get_network().mesh_ip?.clone(),
             self.get_payment().eth_address.clone(),
             self.get_network().wg_public_key.clone(),
-        )
+        ))
     }
 
     fn get_future(&self) -> bool {

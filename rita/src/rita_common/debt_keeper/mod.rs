@@ -109,8 +109,11 @@ impl Handler<TrafficUpdate> for DebtKeeper {
     }
 }
 
-#[derive(Message)]
 pub struct SendUpdate;
+
+impl Message for SendUpdate {
+    type Result = Result<(), Error>;
+}
 
 /// Actions to be taken upon a neighbor's debt reaching either a negative or positive
 /// threshold.
@@ -123,7 +126,7 @@ pub enum DebtAction {
 }
 
 impl Handler<SendUpdate> for DebtKeeper {
-    type Result = ();
+    type Result = Result<(), Error>;
 
     fn handle(&mut self, _msg: SendUpdate, _ctx: &mut Context<Self>) -> Self::Result {
         info!("sending debt keeper update");
@@ -136,12 +139,16 @@ impl Handler<SendUpdate> for DebtKeeper {
                 DebtAction::MakePayment { to, amount } => PaymentController::from_registry()
                     .do_send(payment_controller::MakePayment(PaymentTx {
                         to,
-                        from: SETTING.get_identity(),
+                        from: match SETTING.get_identity() {
+                            Some(id) => id,
+                            None => bail!("Identity has no mesh IP ready yet"),
+                        },
                         amount,
                     })),
                 DebtAction::None => {}
             }
         }
+        Ok(())
     }
 }
 

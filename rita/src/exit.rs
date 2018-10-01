@@ -191,7 +191,7 @@ fn main() {
     );
     trace!("Starting with Identity: {:?}", SETTING.get_identity());
 
-    let system = actix::System::new(format!("main {}", SETTING.get_network().own_ip));
+    let system = actix::System::new(format!("main {:?}", SETTING.get_network().mesh_ip));
 
     assert!(rita_common::debt_keeper::DebtKeeper::from_registry().connected());
     assert!(rita_common::payment_controller::PaymentController::from_registry().connected());

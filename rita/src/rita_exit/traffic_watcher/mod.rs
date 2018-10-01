@@ -86,7 +86,10 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, clients: Vec<Identity>) -> Re
 
     let mut destinations = HashMap::new();
     destinations.insert(
-        SETTING.get_network().own_ip,
+        match SETTING.get_network().mesh_ip {
+            Some(ip) => ip,
+            None => bail!("No mesh IP configured yet"),
+        },
         Int256::from(babel.local_fee().unwrap()),
     );
 

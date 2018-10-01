@@ -623,7 +623,7 @@ the `GET` version of this same endpoint.
 - Error Response: `500 Server Error`
 - Sample Call
 
-`curl 127.0..1:<rita_dashboard_port>/interfaces -H 'Content-Type: application/json' -i -d '{"interface":"wlan0", "mode":"LAN"}''
+`curl 127.0..1:<rita_dashboard_port>/interfaces -H 'Content-Type: application/json' -i -d '{"interface":"wlan0", "mode":"LAN"}'`
 
 Format:
 
@@ -632,3 +632,24 @@ Format:
 ```
 
 ---
+
+## /mesh_ip POST
+- URL: `<rita ip>:<rita_dashboard_port>/mesh_ip`
+- Method: `POST`
+- URL Params: `None`
+- Contents:
+```json
+{
+"mesh_ip": "<new_ipv6_mesh_ip>"
+}
+```
+- Success Response:
+  - This endpoint requires Rita to restart and therefore should give an empty
+    response
+- Error Response: `500 Server Error`
+- Sample Call:
+
+`curl 127.0..1:<rita_dashboard_port>/mesh_ip -H 'Content-Type: application/json' -i -d '{"mesh_ip":"fd00::1"}'`
+
+---
+
