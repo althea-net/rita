@@ -677,12 +677,16 @@ Format:
 Enables or disables remote logging, if enabled on next boot
 the router will send logs to the configured exit over syslog port 514
 
+This endpoint will restart the router so no response
+is expected, an error response indicates that there's
+somthing wrong with the input data.
+
 - URL: `<rita ip>:<rita_dashboard_port>/logging/enabled/{bool}'
 - Method: `POST`
 - URL Params: 'enabled'
 - Data Params: `None`
 - Success Response:
-  - Code: 200 OK
+  - Code: None
   - Contents: `{}`
 - Error Response: `400 Bad Request`
 - Error Contents:
@@ -723,12 +727,16 @@ Do not use anything above WARN by default ever!
 it will actually consume nontrival bandwidth
 >>>>>>> Use loglevels in the settings
 
+This endpoint will restart the router so no response
+is expected, an error response indicates that there's
+somthing wrong with the input data.
+
 - URL: `<rita ip>:<rita_dashboard_port>/logging/level/{u8}'
 - Method: `POST`
 - URL Params: level
 - Data Params: `None`
 - Success Response:
-  - Code: 200 OK
+  - Code: None
   - Contents: `{}`
 - Error Response: `400 Bad Request`
 - Error Contents:
