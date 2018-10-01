@@ -3,11 +3,12 @@ extern crate ethereum_types;
 extern crate eui48;
 extern crate hex;
 extern crate num256;
+extern crate num_bigint;
 extern crate serde;
 extern crate serde_json;
-extern crate num_bigint;
 #[macro_use]
 extern crate serde_derive;
+extern crate clarity;
 
 #[cfg(feature = "actix")]
 extern crate actix;
@@ -15,7 +16,8 @@ extern crate actix;
 pub mod interop;
 pub mod rtt;
 
-pub use ethereum_types::{Address, Public, Secret, Signature, H160, U256};
+pub use clarity::Address;
+pub use ethereum_types::{Address, H160, Public, Secret, Signature, U256};
 
 pub use interop::*;
 pub use rtt::RTTimestamps;
