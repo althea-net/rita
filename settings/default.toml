@@ -6,7 +6,7 @@ buffer_period = 3
 eth_address = "0x0101010101010101010101010101010101010101"
 
 [network]
-own_ip = "fd00::1"
+mesh_ip = "fd00::1"
 bounty_ip = "fd00::3"
 discovery_ip = "ff02::1:8"
 babel_port = 6872

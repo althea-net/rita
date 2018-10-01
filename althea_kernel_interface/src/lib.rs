@@ -40,6 +40,7 @@ mod setup_wg_if;
 mod stats;
 
 pub use counter::FilterTarget;
+pub use create_wg_key::WgKeypair;
 pub use exit_server_counter::ExitFilterTarget;
 pub use exit_server_tunnel::ExitClient;
 

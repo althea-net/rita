@@ -4,10 +4,13 @@ extern crate log;
 #[macro_use]
 extern crate failure;
 
+#[macro_use]
+extern crate lazy_static;
+
 use std::net::IpAddr;
 
 extern crate settings;
-use settings::{NetworkSettings, RitaCommonSettings};
+use settings::RitaCommonSettings;
 
 extern crate ipgen;
 extern crate rand;
@@ -34,45 +37,36 @@ pub enum CluError {
     RuntimeError(String),
 }
 
-pub fn linux_generate_wg_keys(config: &mut NetworkSettings) -> Result<(), Error> {
-    let keys = KI.create_wg_keypair()?;
-    let wg_public_key = &keys[0];
-    let wg_private_key = &keys[1];
-
-    //Mutates settings, intentional side effect
-    config.wg_private_key = wg_private_key.to_string();
-    config.wg_public_key = wg_public_key.to_string();
-
-    Ok(())
-}
-
-pub fn linux_generate_mesh_ip(config: &mut NetworkSettings) -> Result<(), Error> {
+pub fn linux_generate_mesh_ip() -> Result<IpAddr, Error> {
     let seed: String = thread_rng().sample_iter(&Alphanumeric).take(50).collect();
-    let mesh_ip = ipgen::ip(&seed, "fd00::/8").unwrap();
+    let mesh_ip = match ipgen::ip(&seed, "fd00::/8") {
+        Ok(ip) => ip,
+        Err(msg) => bail!(msg), // For some reason, ipgen devs decided to use Strings for all errors
+    };
 
-    info!("generated new ip address {}", mesh_ip);
+    info!("Generated a new mesh IP address: {}", mesh_ip);
 
-    // Mutates Settings intentional side effect
-    config.own_ip = mesh_ip;
-    Ok(())
+    Ok(mesh_ip)
 }
 
 fn validate_wg_key(key: &str) -> bool {
     key.len() == 44 && key.ends_with("=") && !key.contains(" ")
 }
 
-fn validate_mesh_ip(ip: &IpAddr) -> bool {
+pub fn validate_mesh_ip(ip: &IpAddr) -> bool {
     ip.is_ipv6() && !ip.is_unspecified()
 }
 
-/// called before anything is started to delete existing wireguard per hop tunnels
+/// Called before anything is started to delete existing wireguard per hop tunnels
 pub fn cleanup() -> Result<(), Error> {
-    let interfaces = KI.get_interfaces()?;
+    debug!("Cleaning up WireGuard tunnels");
 
-    let re = Regex::new(r"^wg[0-9]+$")?;
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r"^wg[0-9]+$").unwrap();
+    }
 
-    for i in interfaces {
-        if re.is_match(&i) {
+    for i in KI.get_interfaces()? {
+        if RE.is_match(&i) {
             match KI.del_interface(&i) {
                 Err(e) => trace!("Failed to delete wg# {:?}", e),
                 _ => (),
@@ -92,21 +86,65 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
     cleanup()?;
     KI.restore_default_route(&mut config.get_network_mut().default_route)?;
 
-    let privkey = config.get_network().wg_private_key.clone();
-    let pubkey = config.get_network().wg_public_key.clone();
-    let mesh_ip = config.get_network().own_ip.clone();
+    let mut network_settings = config.get_network_mut();
+    let privkey = network_settings.wg_private_key.clone();
+    let pubkey = network_settings.wg_public_key.clone();
+    let mesh_ip_option = network_settings.mesh_ip.clone();
+    let own_ip_option = network_settings.own_ip.clone(); // TODO: REMOVE IN ALPHA 11
+
+    match mesh_ip_option {
+        Some(existing_mesh_ip) => {
+            if !validate_mesh_ip(&existing_mesh_ip) {
+                warn!(
+                    "Existing mesh_ip field {} is invalid, generating a new mesh IP",
+                    existing_mesh_ip
+                );
+                network_settings.mesh_ip =
+                    Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
+            } else {
+                info!("Mesh IP is {}", existing_mesh_ip);
+            }
+        }
+
+        // Fall back and migrate from own_ip if possible, TODO: REMOVE IN ALPHA 11
+        None => match own_ip_option {
+            Some(existing_own_ip) => if validate_mesh_ip(&existing_own_ip) {
+                info!(
+                    "Found existing compat own_ip field {}, migrating to mesh_ip",
+                    existing_own_ip
+                );
+                network_settings.mesh_ip = Some(existing_own_ip);
+            } else {
+                warn!(
+                    "Existing compat own_ip value {} is invalid, generating a new mesh IP and migrating to mesh_ip",
+                    existing_own_ip
+                    );
+                network_settings.mesh_ip =
+                    Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
+            },
+            None => {
+                info!("There's no mesh IP configured, generating");
+                network_settings.mesh_ip =
+                    Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
+            }
+        },
+    }
+
+    // Setting the compat value to None prevents serde from putting it back in the config (thanks
+    // to the skip_serializing_if annotation)
+    network_settings.own_ip = None;
 
     if !validate_wg_key(&privkey) || !validate_wg_key(&pubkey) {
-        linux_generate_wg_keys(&mut config.get_network_mut()).expect("failed to generate wg keys");
-    }
-    if !validate_mesh_ip(&mesh_ip) {
-        linux_generate_mesh_ip(&mut config.get_network_mut()).expect("failed to generate ip");
+        info!("Existing wireguard keypair is invalid, generating from scratch");
+        let keypair = KI.create_wg_keypair().expect("failed to generate wg keys");
+        network_settings.wg_public_key = keypair.public;
+        network_settings.wg_private_key = keypair.private;
     }
 
     //Creates file on disk containing key
     KI.create_wg_key(
-        &Path::new(&config.get_network().wg_private_key_path),
-        &config.get_network().wg_private_key,
+        &Path::new(&network_settings.wg_private_key_path),
+        &network_settings.wg_private_key,
     )?;
 
     Ok(())
@@ -115,21 +153,61 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
 fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Result<(), Error> {
     cleanup()?;
 
-    let privkey = config.get_network().wg_private_key.clone();
-    let pubkey = config.get_network().wg_public_key.clone();
-    let mesh_ip = config.get_network().own_ip.clone();
+    let mut network_settings = config.get_network_mut();
+    let privkey = network_settings.wg_private_key.clone();
+    let pubkey = network_settings.wg_public_key.clone();
+    let mesh_ip_option = network_settings.mesh_ip.clone();
+    let own_ip_option = network_settings.own_ip.clone(); // TODO: REMOVE IN ALPHA 11
+
+    match mesh_ip_option {
+        Some(existing_mesh_ip) => {
+            if !validate_mesh_ip(&existing_mesh_ip) {
+                warn!(
+                    "Existing mesh_ip field {} is invalid, generating a new mesh IP",
+                    existing_mesh_ip
+                );
+                network_settings.mesh_ip =
+                    Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
+            } else {
+                info!("Mesh IP is {}", existing_mesh_ip);
+            }
+        }
+
+        // Fall back and migrate from own_ip if possible, TODO: REMOVE IN ALPHA 11
+        None => match own_ip_option {
+            Some(existing_own_ip) => if validate_mesh_ip(&existing_own_ip) {
+                info!(
+                    "Found existing compat own_ip field {}, migrating to mesh_ip",
+                    existing_own_ip
+                );
+                network_settings.mesh_ip = Some(existing_own_ip);
+            } else {
+                warn!(
+                    "Existing compat own_ip value {} is invalid, generating a new mesh IP and migrating to mesh_ip",
+                    existing_own_ip
+                    );
+                network_settings.mesh_ip =
+                    Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
+            },
+            None => {
+                info!("There's no mesh IP configured, generating");
+                network_settings.mesh_ip =
+                    Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
+            }
+        },
+    }
 
     if !validate_wg_key(&privkey) || !validate_wg_key(&pubkey) {
-        linux_generate_wg_keys(&mut config.get_network_mut())?;
-    }
-    if !validate_mesh_ip(&mesh_ip) {
-        linux_generate_mesh_ip(&mut config.get_network_mut())?;
+        info!("Existing wireguard keypair is invalid, generating from scratch");
+        let keypair = KI.create_wg_keypair().expect("failed to generate wg keys");
+        network_settings.wg_public_key = keypair.public;
+        network_settings.wg_private_key = keypair.private;
     }
 
     //Creates file on disk containing key
     KI.create_wg_key(
-        &Path::new(&config.get_network().wg_private_key_path),
-        &config.get_network().wg_private_key,
+        &Path::new(&network_settings.wg_private_key_path),
+        &network_settings.wg_private_key,
     )?;
 
     Ok(())
@@ -177,11 +255,9 @@ mod tests {
 
     #[test]
     fn test_generate_wg_key() {
-        let keys = KI.create_wg_keypair().unwrap();
-        let wg_public_key = &keys[0];
-        let wg_private_key = &keys[1];
-        assert_eq!(validate_wg_key(&wg_public_key), true);
-        assert_eq!(validate_wg_key(&wg_private_key), true);
+        let keypair = KI.create_wg_keypair().unwrap();
+        assert_eq!(validate_wg_key(&keypair.public), true);
+        assert_eq!(validate_wg_key(&keypair.private), true);
     }
 
     #[test]

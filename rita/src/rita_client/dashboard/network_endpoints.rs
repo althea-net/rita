@@ -13,11 +13,13 @@ use rita_client::dashboard::nodeinfo::{GetNodeInfo, NodeInfo};
 use rita_client::dashboard::wifi::{GetWifiConfig, WifiInterface, WifiPass, WifiSSID};
 use rita_client::exit_manager::exit_setup_request;
 use rita_common::dashboard::Dashboard;
-use settings::RitaClientSettings;
+use settings::{RitaClientSettings, RitaCommonSettings};
+use KI;
 use SETTING;
 
 use std::boxed::Box;
 use std::collections::HashMap;
+use std::net::IpAddr;
 
 /// A string of characters which we don't let users use because of corrupted UCI configs
 static FORBIDDEN_CHARS: &'static str = "'/\"\\";
@@ -233,6 +235,69 @@ pub fn set_interfaces(
         .from_err()
         .and_then(move |reply| Ok(Json(reply?)))
         .responder()
+}
+
+pub fn get_mesh_ip(_req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Error>> {
+    debug!("/mesh_ip GET hit");
+
+    let mut ret = HashMap::new();
+
+    match SETTING.get_network().mesh_ip {
+        Some(ip) => {
+            ret.insert("mesh_ip".to_owned(), format!("{}", ip));
+        }
+        None => {
+            let error_msg = "No mesh IP configured yet";
+            warn!("{}", error_msg);
+            ret.insert("error".to_owned(), error_msg.to_owned());
+        }
+    }
+
+    return Box::new(future::ok(HttpResponse::Ok().json(ret)));
+}
+
+pub fn set_mesh_ip(
+    mesh_ip_data: Json<HashMap<String, String>>,
+) -> Box<Future<Item = HttpResponse, Error = Error>> {
+    debug!("/mesh_ip POST hit");
+
+    let mut ret = HashMap::new();
+
+    match mesh_ip_data.into_inner().get("mesh_ip") {
+        Some(ip_str) => match ip_str.parse::<IpAddr>() {
+            Ok(parsed) => if parsed.is_ipv6() && !parsed.is_unspecified() {
+                SETTING.get_network_mut().mesh_ip = Some(parsed);
+            } else {
+                let error_msg = format!(
+                    "set_mesh_ip: Attempted to set a non-IPv6 or unsepcified address {} as mesh_ip",
+                    parsed
+                );
+                info!("{}", error_msg);
+                ret.insert("error".to_owned(), error_msg);
+            },
+            Err(e) => {
+                let error_msg = format!(
+                    "set_mesh_ip: Failed to parse the address string {:?}",
+                    ip_str
+                );
+                info!("{}", error_msg);
+                ret.insert("error".to_owned(), error_msg);
+                ret.insert("rust_error".to_owned(), e.to_string());
+            }
+        },
+        None => {
+            let error_msg = format!("set_mesh_ip: \"mesh_ip\" not found in supplied JSON");
+            info!("{}", error_msg);
+            ret.insert("error".to_owned(), error_msg);
+        }
+    }
+
+    if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
+        return Box::new(future::err(e));
+    }
+
+    // Note: This will never be reached
+    Box::new(future::ok(HttpResponse::Ok().json(ret)))
 }
 
 /// This function checks that a supplied string is non-empty and doesn't contain any of the

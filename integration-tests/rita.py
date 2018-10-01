@@ -340,7 +340,15 @@ def read_email(node):
 def start_rita(node):
     id = node.id
     settings = get_rita_defaults()
+
+    # TODO: MOVE ON TO mesh_ip IN ALPHA 11
+    # The mesh_ip option is new and defaults to fd00::1. At the same time, it
+    # takes precedence, therefore messing with the desired IP assignment layout.
+    # We're using the old own_ip one to keep A/B tests working and to test that
+    # the code migrating own_ip to mesh_ip is working
+    del settings["network"]["mesh_ip"]
     settings["network"]["own_ip"] = "fd00::{}".format(id)
+
     settings["network"]["wg_private_key_path"] = "{pwd}/private-key-{id}".format(id=id, pwd=dname)
     settings["network"]["peer_interfaces"] = node.get_veth_interfaces()
     save_rita_settings(id, settings)
@@ -361,7 +369,15 @@ def start_rita(node):
 def start_rita_exit(node):
     id = node.id
     settings = get_rita_exit_defaults()
+
+    # TODO: MOVE ON TO mesh_ip IN ALPHA 11
+    # The mesh_ip option is new and defaults to fd00::1. At the same time, it
+    # takes precedence, therefore messing with the desired IP assignment layout.
+    # We're using the old own_ip one to keep A/B tests working and to test that
+    # the code migrating own_ip to mesh_ip is working
+    del settings["network"]["mesh_ip"]
     settings["network"]["own_ip"] = "fd00::{}".format(id)
+
     settings["network"]["wg_private_key_path"] = "{pwd}/private-key-{id}".format(id=id, pwd=dname)
     settings["network"]["peer_interfaces"] = node.get_veth_interfaces()
     save_rita_settings(id, settings)
@@ -900,6 +916,13 @@ def main():
     start_time = time.time()
 
     interval = INITIAL_POLL_INTERVAL
+
+    if DEBUG:
+        print("Debug mode active, examine the mesh and press y to continue " +
+              "with the tests or anything else to exit")
+        choice = input()
+        if choice != 'y':
+            sys.exit(0)
 
     # While we're before convergence deadline
     while (time.time() - start_time) <= CONVERGENCE_DELAY:

@@ -189,7 +189,7 @@ fn main() {
     );
     trace!("Starting with Identity: {:?}", SETTING.get_identity());
 
-    let system = actix::System::new(format!("main {}", SETTING.get_network().own_ip));
+    let system = actix::System::new(format!("main {:?}", SETTING.get_network().mesh_ip));
 
     assert!(rita_common::debt_keeper::DebtKeeper::from_registry().connected());
     assert!(rita_common::payment_controller::PaymentController::from_registry().connected());
@@ -238,6 +238,8 @@ fn main() {
             ).route("/info", Method::GET, get_own_info)
             .route("/interfaces", Method::GET, get_interfaces)
             .route("/interfaces", Method::POST, set_interfaces)
+            .route("/mesh_ip", Method::GET, get_mesh_ip)
+            .route("/mesh_ip", Method::POST, set_mesh_ip)
             .route("/neighbors", Method::GET, get_node_info)
             .route("/settings", Method::GET, get_settings)
             .route("/settings", Method::POST, set_settings)
