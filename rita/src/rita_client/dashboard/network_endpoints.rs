@@ -340,6 +340,10 @@ pub fn remote_logging(path: Path<bool>) -> Box<Future<Item = HttpResponse, Error
 
     SETTING.get_log_mut().enabled = enabled;
 
+    if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
+        return Box::new(future::err(e));
+    }
+
     return Box::new(future::ok(HttpResponse::Ok().json(())));
 }
 
@@ -359,6 +363,10 @@ pub fn remote_logging_level(path: Path<String>) -> Box<Future<Item = HttpRespons
     };
 
     SETTING.get_log_mut().level = log_level.to_string();
+
+    if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
+        return Box::new(future::err(e));
+    }
 
     return Box::new(future::ok(HttpResponse::Ok().json(())));
 }
