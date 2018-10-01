@@ -5,7 +5,7 @@ extern crate hex;
 extern crate num256;
 extern crate serde;
 extern crate serde_json;
-
+extern crate num_bigint;
 #[macro_use]
 extern crate serde_derive;
 
