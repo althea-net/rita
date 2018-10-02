@@ -38,7 +38,7 @@ use ipnetwork::IpNetwork;
 
 use failure::Error;
 
-use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState};
+use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 
 #[derive(Default)]
 pub struct DbClient;
@@ -140,6 +140,7 @@ pub fn get_exit_info() -> ExitDetails {
         exit_price: SETTING.get_exit_network().exit_price,
         netmask: SETTING.get_exit_network().netmask,
         description: SETTING.get_description(),
+        verif_mode: Some(ExitVerifMode::Off),
     }
 }
 
