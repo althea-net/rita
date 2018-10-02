@@ -17,11 +17,15 @@ use reqwest;
 use std::net::IpAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use lettre::file::FileEmailTransport;
-use lettre::smtp::authentication::{Credentials, Mechanism};
-use lettre::smtp::extension::ClientId;
-use lettre::smtp::ConnectionReuseParameters;
-use lettre::{EmailTransport, SmtpTransport};
+use lettre::{
+    file::FileTransport,
+    smtp::{
+        authentication::{Credentials, Mechanism},
+        extension::ClientId,
+        ConnectionReuseParameters,
+    },
+    SmtpClient, Transport,
+};
 use lettre_email::EmailBuilder;
 
 use handlebars::Handlebars;
@@ -290,18 +294,18 @@ fn send_mail(client: &models::Client) -> Result<(), Error> {
         )?).build()?;
 
     if mailer.test {
-        let mut mailer = FileEmailTransport::new(&mailer.test_dir);
-        mailer.send(&email)?;
+        let mut mailer = FileTransport::new(&mailer.test_dir);
+        mailer.send(email.into())?;
     } else {
         // TODO add serde to lettre
-        let mut mailer = SmtpTransport::simple_builder(&mailer.smtp_url)?
+        let mut mailer = SmtpClient::new_simple(&mailer.smtp_url)?
             .hello_name(ClientId::Domain(mailer.smtp_domain))
             .credentials(Credentials::new(mailer.smtp_username, mailer.smtp_password))
             .smtp_utf8(true)
             .authentication_mechanism(Mechanism::Plain)
             .connection_reuse(ConnectionReuseParameters::ReuseUnlimited)
-            .build();
-        mailer.send(&email)?;
+            .transport();
+        mailer.send(email.into())?;
     }
 
     Ok(())
