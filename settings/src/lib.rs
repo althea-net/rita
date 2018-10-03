@@ -181,6 +181,14 @@ fn default_logging_level() -> String {
     "ERROR".to_string()
 }
 
+fn default_logging_send_port() -> u16 {
+    5044
+}
+
+fn default_logging_dest_port() -> u16 {
+    514
+}
+
 /// Remote logging settings. Used to control remote logs being
 /// forwarded to an aggregator on the exit. The reason there is
 /// no general destination setting is that syslog udp is not
@@ -192,6 +200,10 @@ pub struct LoggingSettings {
     pub enabled: bool,
     #[serde(default = "default_logging_level")]
     pub level: String,
+    #[serde(default = "default_logging_send_port")]
+    pub send_port: u16,
+    #[serde(default = "default_logging_dest_port")]
+    pub dest_port: u16,
 }
 
 impl Default for LoggingSettings {
@@ -199,6 +211,8 @@ impl Default for LoggingSettings {
         LoggingSettings {
             enabled: false,
             level: "ERROR".to_string(),
+            send_port: 5044,
+            dest_port: 514,
         }
     }
 }
