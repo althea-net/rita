@@ -43,8 +43,8 @@ failure = "0.1.2"
 futures = "0.1.24"
 ipnetwork = "0.13.1"
 lazy_static = "1.1.0"
-lettre = "0.8.2"
-lettre_email = "0.8.2"
+lettre = {git="https://github.com/lettre/lettre.git"}
+lettre_email = {git="https://github.com/lettre/lettre.git"}
 log = "0.4.5"
 minihttpse = "0.1.6"
 mockito = "0.13.0"
