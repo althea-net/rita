@@ -175,6 +175,14 @@ impl Handler<InterfaceToSet> for Dashboard {
                     bail!("There can only be one WAN interface!");
                 }
             }
+        } else if target_mode == InterfaceMode::LAN && !iface_name.contains("wlan") {
+            // we can only have one LAN ethernet interface, check for others
+            for entry in interfaces {
+                let mode = entry.1;
+                if mode == InterfaceMode::LAN {
+                    bail!("There can only be one LAN ethernet interface!");
+                }
+            }
         }
 
         // in theory you can have all sorts of wonky interface names, but we know
