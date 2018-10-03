@@ -268,8 +268,14 @@ pub fn ethernet_transform_mode(
                     return_codes.push(ret);
                 }
                 Err(e) => {
-                    warn!("Trying to read lan ifname returned {:?}", e);
-                    return_codes.push(Err(e));
+                    if e.to_string().contains("Entry not found") {
+                        trace!("No LAN interfaces found, setting one now");
+                        let ret = KI.set_uci_var("network.lan.ifname", &ifname);
+                        return_codes.push(ret);
+                    } else {
+                        warn!("Trying to read lan ifname returned {:?}", e);
+                        return_codes.push(Err(e));
+                    }
                 }
             }
         }
