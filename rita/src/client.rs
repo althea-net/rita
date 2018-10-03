@@ -55,6 +55,7 @@ extern crate reqwest;
 extern crate serde;
 extern crate serde_json;
 extern crate settings;
+extern crate syslog;
 extern crate tokio;
 extern crate tokio_codec;
 extern crate tokio_io;
@@ -64,7 +65,7 @@ use docopt::Docopt;
 #[cfg(not(test))]
 use settings::FileWrite;
 
-use settings::{RitaCommonSettings, RitaSettingsStruct};
+use settings::{RitaClientSettings, RitaCommonSettings, RitaSettingsStruct};
 
 use actix::registry::SystemService;
 use actix::*;
@@ -164,7 +165,10 @@ fn main() {
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
     openssl_probe::init_ssl_cert_env_vars();
-    env_logger::init();
+
+    if !SETTING.get_log().enabled {
+        env_logger::init();
+    }
 
     if cfg!(feature = "development") {
         println!("Warning!");
@@ -235,6 +239,14 @@ fn main() {
                 "/exits/{name}/verify/{code}",
                 Method::POST,
                 verify_on_exit_with_code,
+            ).route(
+                "/remote_logging/enabled/{enabled}",
+                Method::POST,
+                remote_logging,
+            ).route(
+                "/remote_logging/level/{level}",
+                Method::POST,
+                remote_logging_level,
             ).route("/info", Method::GET, get_own_info)
             .route("/interfaces", Method::GET, get_interfaces)
             .route("/interfaces", Method::POST, set_interfaces)

@@ -20,6 +20,7 @@ use actix::prelude::*;
 use actix::registry::SystemService;
 use actix_web::client::Connection;
 use actix_web::*;
+use std::net::IpAddr;
 
 use althea_types::{ExitClientIdentity, ExitState};
 
@@ -35,10 +36,34 @@ use futures::Future;
 
 use tokio::net::TcpStream as TokioTcpStream;
 
+use log::LevelFilter;
+use syslog::Error as LogError;
+use syslog::{init_udp, Facility};
+
 use failure::Error;
 use std::net::SocketAddr;
 use std::time::Duration;
 use KI;
+
+/// enables remote logging if the user has configured it
+fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
+    // now that the exit tunnel is up we can start logging over it
+    let log = SETTING.get_log();
+    trace!("About to enable remote logging");
+    let level: LevelFilter = match log.level.parse() {
+        Ok(level) => level,
+        Err(_) => LevelFilter::Error,
+    };
+    let res = init_udp(
+        &format!("0.0.0.0:{}", log.send_port),
+        &format!("{}:{}", server_internal_ip, log.dest_port),
+        SETTING.get_network().wg_public_key.clone(),
+        Facility::LOG_USER,
+        level,
+    );
+    info!("Remote logging enabled with {:?}", res);
+    return res;
+}
 
 fn linux_setup_exit_tunnel() -> Result<(), Error> {
     KI.update_settings_route(&mut SETTING.get_network_mut().default_route)?;
@@ -272,7 +297,12 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
 /// An actor which pays the exit
 #[derive(Default)]
 pub struct ExitManager {
+    // used to determine if we need to change the logging state
     last_exit: Option<ExitServer>,
+    // used to store the logging state on startup so we don't double init logging
+    // as that would cause a panic
+    remote_logging_setting: bool,
+    remote_logging_already_started: bool,
 }
 
 impl Actor for ExitManager {
@@ -284,6 +314,8 @@ impl SystemService for ExitManager {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("Exit Manager started");
         self.last_exit = None;
+        self.remote_logging_setting = SETTING.get_log().enabled;
+        self.remote_logging_already_started = false;
     }
 }
 
@@ -319,6 +351,12 @@ impl Handler<Tick> for ExitManager {
                     linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
 
                     self.last_exit = Some(exit.clone());
+                }
+                // enable remote logging only if it has not already been started
+                if !self.remote_logging_already_started && self.remote_logging_setting {
+                    let res = enable_remote_logging(general_details.server_internal_ip);
+                    self.remote_logging_already_started = true;
+                    info!("logging status {:?}", res);
                 }
             }
         }

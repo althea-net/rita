@@ -26,6 +26,7 @@ extern crate serde_derive;
 extern crate log;
 
 #[cfg(test)]
+use log::LevelFilter;
 use std::sync::Mutex;
 
 extern crate serde;
@@ -172,6 +173,50 @@ impl Default for NetworkSettings {
     }
 }
 
+fn default_logging() -> bool {
+    false
+}
+
+fn default_logging_level() -> String {
+    "ERROR".to_string()
+}
+
+fn default_logging_send_port() -> u16 {
+    5044
+}
+
+fn default_logging_dest_port() -> u16 {
+    514
+}
+
+/// Remote logging settings. Used to control remote logs being
+/// forwarded to an aggregator on the exit. The reason there is
+/// no general destination setting is that syslog udp is not
+/// secured or encrypted, sending it over the general internet is
+/// not allowed.
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub struct LoggingSettings {
+    #[serde(default = "default_logging")]
+    pub enabled: bool,
+    #[serde(default = "default_logging_level")]
+    pub level: String,
+    #[serde(default = "default_logging_send_port")]
+    pub send_port: u16,
+    #[serde(default = "default_logging_dest_port")]
+    pub dest_port: u16,
+}
+
+impl Default for LoggingSettings {
+    fn default() -> Self {
+        LoggingSettings {
+            enabled: false,
+            level: "ERROR".to_string(),
+            send_port: 5044,
+            dest_port: 514,
+        }
+    }
+}
+
 /// This struct is used by both rita and rita_exit to configure the dummy payment controller and
 /// debt keeper
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -293,6 +338,8 @@ pub struct RitaSettingsStruct {
     payment: PaymentSettings,
     #[serde(default)]
     dao: SubnetDAOSettings,
+    #[serde(default)]
+    log: LoggingSettings,
     network: NetworkSettings,
     exit_client: ExitClientSettings,
     #[serde(skip)]
@@ -589,6 +636,12 @@ pub trait RitaClientSettings {
     fn get_exits_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, HashMap<String, ExitServer>>;
+    fn get_log<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, LoggingSettings>;
+    fn get_log_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, LoggingSettings>;
 }
 
 impl RitaClientSettings for Arc<RwLock<RitaSettingsStruct>> {
@@ -613,6 +666,18 @@ impl RitaClientSettings for Arc<RwLock<RitaSettingsStruct>> {
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, HashMap<String, ExitServer>> {
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.exit_client.exits)
+    }
+
+    fn get_log<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, LoggingSettings> {
+        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.log)
+    }
+
+    fn get_log_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, LoggingSettings> {
+        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.log)
     }
 }
 

@@ -27,6 +27,7 @@ exit_db = { path = "../exit_db" }
 num256 = { path = "../num256" }
 settings = { path = "../settings" }
 
+syslog = "^4.0"
 actix = "0.7.4"
 actix-web = { version = "0.7.4", default_features = false }
 actix_derive = "0.3.0"
