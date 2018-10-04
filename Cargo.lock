@@ -127,10 +127,10 @@ dependencies = [
 [[package]]
 name = "althea_types"
 version = "0.1.0"
-source = "git+https://github.com/mpapierski/althea_rs.git?branch=236-guac-integration#9f3f4311998d5ba4906a6dce234cf8977778dccc"
+source = "git+https://github.com/mpapierski/althea_rs.git?branch=236-guac-integration#8304cff9dfcc7fb293347f5a37b052535c5e02fa"
 dependencies = [
  "base64 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "clarity 0.1.1 (git+https://github.com/mpapierski/clarity?branch=23-hash)",
+ "clarity 0.1.2 (git+https://github.com/mpapierski/clarity)",
  "ethereum-types 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "eui48 0.4.0 (git+https://github.com/althea-mesh/eui48)",
  "hex 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -147,7 +147,7 @@ version = "0.1.0"
 dependencies = [
  "actix 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "clarity 0.1.1 (git+https://github.com/mpapierski/clarity)",
+ "clarity 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "ethereum-types 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "eui48 0.4.0 (git+https://github.com/althea-mesh/eui48)",
  "hex 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -372,8 +372,8 @@ dependencies = [
 
 [[package]]
 name = "clarity"
-version = "0.1.1"
-source = "git+https://github.com/mpapierski/clarity?branch=23-hash#bcaf4f1b53e7cfc9610320636468a29137e56a82"
+version = "0.1.2"
+source = "git+https://github.com/mpapierski/clarity#68a3fd21740ee4d2860fad24ae4b0adb3c268dcf"
 dependencies = [
  "failure 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -389,8 +389,8 @@ dependencies = [
 
 [[package]]
 name = "clarity"
-version = "0.1.1"
-source = "git+https://github.com/mpapierski/clarity#e75e1419095f02cd52e7e3213b1e2226a312ed02"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "failure 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1023,13 +1023,13 @@ dependencies = [
 [[package]]
 name = "guac_actix"
 version = "0.1.0"
-source = "git+https://github.com/mpapierski/guac_rs?branch=clarity-integration#4e68def8a07e4941e36c19653b8987e247ceac05"
+source = "git+https://github.com/mpapierski/guac_rs?branch=clarity-integration#15a8a06ea1ddaa3dacc084c6104b41d5911d9a4a"
 dependencies = [
  "actix 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-web 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "althea_types 0.1.0 (git+https://github.com/mpapierski/althea_rs.git?branch=236-guac-integration)",
  "bytes 0.4.9 (registry+https://github.com/rust-lang/crates.io-index)",
- "clarity 0.1.1 (git+https://github.com/mpapierski/clarity)",
+ "clarity 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.23 (registry+https://github.com/rust-lang/crates.io-index)",
  "guac_core 0.1.0 (git+https://github.com/mpapierski/guac_rs?branch=clarity-integration)",
@@ -1044,11 +1044,11 @@ dependencies = [
 [[package]]
 name = "guac_core"
 version = "0.1.0"
-source = "git+https://github.com/mpapierski/guac_rs?branch=clarity-integration#4e68def8a07e4941e36c19653b8987e247ceac05"
+source = "git+https://github.com/mpapierski/guac_rs?branch=clarity-integration#15a8a06ea1ddaa3dacc084c6104b41d5911d9a4a"
 dependencies = [
  "althea_types 0.1.0 (git+https://github.com/mpapierski/althea_rs.git?branch=236-guac-integration)",
  "base64 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "clarity 0.1.1 (git+https://github.com/mpapierski/clarity)",
+ "clarity 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "diesel 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "dotenv 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.5.13 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1797,7 +1797,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "num256"
 version = "0.1.0"
-source = "git+https://github.com/mpapierski/althea_rs.git?branch=236-guac-integration#9f3f4311998d5ba4906a6dce234cf8977778dccc"
+source = "git+https://github.com/mpapierski/althea_rs.git?branch=236-guac-integration#8304cff9dfcc7fb293347f5a37b052535c5e02fa"
 dependencies = [
  "ethereum-types 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3401,8 +3401,8 @@ source = "git+https://github.com/kingoflolz/trust-dns.git?branch=lower-max-ttl#e
 "checksum cc 1.0.23 (registry+https://github.com/rust-lang/crates.io-index)" = "c37f0efaa4b9b001fa6f02d4b644dee4af97d3414df07c51e3e4f015f3a3e131"
 "checksum cfg-if 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "0c4e7bb64a8ebb0d856483e1e682ea3422f883c5f5615a90d51a2c82fe87fdd3"
 "checksum chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)" = "45912881121cb26fad7c38c17ba7daa18764771836b34fab7d3fbd93ed633878"
-"checksum clarity 0.1.1 (git+https://github.com/mpapierski/clarity)" = "<none>"
-"checksum clarity 0.1.1 (git+https://github.com/mpapierski/clarity?branch=23-hash)" = "<none>"
+"checksum clarity 0.1.2 (git+https://github.com/mpapierski/clarity)" = "<none>"
+"checksum clarity 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "83fe4a4e1f3446878b7bb3b84f18c674522a563f3825822aebec6cb5de151747"
 "checksum clippy 0.0.212 (registry+https://github.com/rust-lang/crates.io-index)" = "7e253af13a0cc39c7f22cf16f1be49d593dedc5895fe2fbb15f14d66ead00533"
 "checksum clippy_lints 0.0.212 (registry+https://github.com/rust-lang/crates.io-index)" = "bd2326065405649672adbd5cb30dad2fad3a470935653d51c70591d47d3a8512"
 "checksum cloudabi 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)" = "ddfc5b9aa5d4507acaf872de71051dfd0e309860e88966e1051e462a077aac4f"
