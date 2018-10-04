@@ -156,7 +156,7 @@ fn add_dummy(conn: &SqliteConnection) -> Result<(), Error> {
     dummy.mesh_ip = "0.0.0.0".to_string();
 
     match diesel::insert_into(clients).values(&dummy).execute(&*conn) {
-        Err(e) => warn!("got error inserting dummy: {}", e),
+        Err(e) => trace!("Not inserting dummy: {:?}", e),
         _ => {}
     }
     Ok(())
