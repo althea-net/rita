@@ -27,6 +27,8 @@ use rand::distributions::Alphanumeric;
 use regex::Regex;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
+use std::fs::File;
+use std::io::Read;
 
 extern crate althea_types;
 extern crate regex;
@@ -91,6 +93,7 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
     let pubkey = network_settings.wg_public_key.clone();
     let mesh_ip_option = network_settings.mesh_ip.clone();
     let own_ip_option = network_settings.own_ip.clone(); // TODO: REMOVE IN ALPHA 11
+    let device_option = network_settings.device.clone();
 
     match mesh_ip_option {
         Some(existing_mesh_ip) => {
@@ -126,6 +129,32 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
                 info!("There's no mesh IP configured, generating");
                 network_settings.mesh_ip =
                     Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
+            }
+        },
+    }
+
+    match device_option {
+        Some(existing_device) => {
+           info!("Device name is {}", existing_device); 
+        } 
+        None => {
+            info!("No device name was found, reading from /etc/althea-firmware-release");
+            let mut f = File::open("/etc/althea-firmware-release")?;
+            let mut contents = String::new();
+            f.read_to_string(&mut contents)?;
+
+            for line in contents.lines() {
+                if line.starts_with("device:") {
+                    let mut array = line.split(" ");
+                    array.next();
+                    match array.next() {
+                        Some(device) => {
+                            info!("Setting device name to {}", device);
+                            network_settings.device = Some(device.to_string());
+                        },
+                        None => warn!("Unable to get device from /etc/althea-firmware-release"),
+                    }
+                }
             }
         },
     }
