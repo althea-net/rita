@@ -10,6 +10,8 @@ use futures::Future;
 use rita_common::payment_controller::{GetOwnBalance, PaymentController};
 
 use num256::Int256;
+use SETTING;
+use settings::RitaCommonSettings;
 
 pub mod network_endpoints;
 use num_traits::ops::checked::CheckedDiv;
@@ -47,6 +49,7 @@ enum OwnInfoError {
 #[derive(Serialize)]
 pub struct OwnInfo {
     pub balance: i64,
+    pub device: String,
     pub version: String,
 }
 
@@ -69,10 +72,17 @@ impl Handler<GetOwnInfo> for Dashboard {
                         let balance = balance
                             .checked_div(&Int256::from(1_000_000_000i64))
                             .ok_or(OwnInfoError::RoundDownError(balance.clone()))?;
+ 
+                        let device = match SETTING.get_network().device.clone() {
+                            Some(device) => { device.to_string() },
+                            None => { "".to_string() }
+                        };
+
                         Ok(OwnInfo {
                             balance: balance
                                 .to_i64()
                                 .ok_or(OwnInfoError::DownCastError(balance))?,
+                            device: device,
                             version: env!("CARGO_PKG_VERSION").to_string(),
                         })
                     }
