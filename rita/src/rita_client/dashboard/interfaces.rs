@@ -28,13 +28,15 @@ pub enum InterfaceMode {
     Mesh,
     LAN,
     WAN,
-    Unknown, // Ambiguous wireless modes like monitor or promiscuous
+    Meshpoint, //combo of lan and mesh
+    Unknown,   // Ambiguous wireless modes like monitor or promiscuous
 }
 
 impl ToString for InterfaceMode {
     fn to_string(&self) -> String {
         match self {
             InterfaceMode::Mesh => "mesh".to_owned(),
+            InterfaceMode::Meshpoint => "Meshpoint".to_owned(),
             InterfaceMode::LAN => "LAN".to_owned(),
             InterfaceMode::WAN => "WAN".to_owned(),
             InterfaceMode::Unknown => "unknown".to_owned(),
@@ -126,7 +128,13 @@ pub fn wlan2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, Erro
 
     let uci = KI.uci_show(Some("wireless"))?;
 
-    let radio_name = setting_name.replace("wireless.", "").replace(".ifname", "");
+    let radio_name = setting_name
+        .replace("wireless.", "")
+        .replace(".ifname", "")
+        .replace("default_", "")
+        .replace("mesh_", "");
+
+    let meshpoint_enabled = uci.get(&format!("wireless.mesh_{}.disabled", radio_name));
 
     // Find the mode entry
     let mode_entry_name = format!("wireless.default_{}.mode", radio_name);
@@ -140,10 +148,32 @@ pub fn wlan2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, Erro
     };
 
     // Match mode
-    Ok(match mode_name.as_str() {
-        "adhoc" => InterfaceMode::Mesh,
-        "ap" => InterfaceMode::LAN,
-        "sta" => InterfaceMode::WAN,
+    Ok(match (mode_name.as_str(), meshpoint_enabled) {
+        ("adhoc", _) => InterfaceMode::Mesh,
+        ("ap", None) => InterfaceMode::LAN,
+        ("sta", None) => InterfaceMode::WAN,
+        ("ap", Some(v)) => match v.as_str() {
+            "1" => InterfaceMode::LAN,
+            "0" => InterfaceMode::Meshpoint,
+            _ => {
+                warn!(
+                    "Ambiguous Meshpoint status on interface {:?}, radio {:?}",
+                    ifname, radio_name
+                );
+                InterfaceMode::Unknown
+            }
+        },
+        ("sta", Some(v)) => match v.as_str() {
+            "1" => InterfaceMode::LAN,
+            "0" => InterfaceMode::Meshpoint,
+            _ => {
+                warn!(
+                    "Ambiguous Meshpoint status on interface {:?}, radio {:?}",
+                    ifname, radio_name
+                );
+                InterfaceMode::Unknown
+            }
+        },
         other => {
             warn!(
                 "Ambiguous WiFi mode {:?} on interface {:?}, radio {:?}",
@@ -241,6 +271,7 @@ pub fn ethernet_transform_mode(
             let ret = KI.del_uci_var(&filtered_ifname);
             return_codes.push(ret);
         }
+        InterfaceMode::Meshpoint => unimplemented!(),
         InterfaceMode::Unknown => unimplemented!(),
     }
 
@@ -289,6 +320,7 @@ pub fn ethernet_transform_mode(
             return_codes.push(ret);
             mesh_add = true;
         }
+        InterfaceMode::Meshpoint => unimplemented!(),
         InterfaceMode::Unknown => unimplemented!(),
     }
 
@@ -355,17 +387,25 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
         None => bail!("Invalid interface name {:?}", ifname),
     };
     let network_section = format!("default_{}", radio);
+    let mesh_wlan = match ifname {
+        "wlan0" => "wlan2",
+        "wlan1" => "wlan3",
+        // we hardcode meshpoint radios to wlan2 and 3 but this assumes no device
+        // will ever have more than two internal radios
+        _ => bail!("wlan name not considered in design!"),
+    };
 
     match a {
         InterfaceMode::WAN => unimplemented!(),
         // nothing to do here we overwrite everything we need later
         InterfaceMode::LAN => {}
         // for mesh we need to send an unlisten and delete the static interface we made
-        InterfaceMode::Mesh => {
-            let ret = KI.del_uci_var(&format!("network.rita_{}", ifname));
+        InterfaceMode::Meshpoint => {
+            let ret = KI.set_uci_var(&format!("wireless.mesh_{}.disabled", radio), "1");
             return_codes.push(ret);
-            PeerListener::from_registry().do_send(UnListen(ifname.clone().to_string()));
+            PeerListener::from_registry().do_send(UnListen(mesh_wlan.to_string()));
         }
+        InterfaceMode::Mesh => unimplemented!(),
         InterfaceMode::Unknown => unimplemented!(),
     }
 
@@ -389,28 +429,30 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
         }
         // in this section we modfiy the wlan config to mesh and then add a static logical iface
         // that is used for things like ip assignment etc
-        InterfaceMode::Mesh => {
-            let ret = KI.set_uci_var(
-                &format!("wireless.{}.network", network_section),
-                &format!("rita_{}", ifname),
-            );
-            return_codes.push(ret);
-            // TODO detect if the driver perfers adhoc or meshpoint
-            let ret = KI.set_uci_var(&format!("wireless.{}.mode", network_section), "adhoc");
-            return_codes.push(ret);
-            let ret = KI.set_uci_var(&format!("wireless.{}.ssid", network_section), "AltheaMesh");
-            return_codes.push(ret);
-            let ret = KI.set_uci_var(&format!("wireless.{}.encryption", network_section), "none");
-            return_codes.push(ret);
-
-            let ret = KI.set_uci_var(&format!("network.rita_{}", ifname), "interface");
-            return_codes.push(ret);
-            let ret = KI.set_uci_var(&format!("network.rita_{}.ifname", ifname), ifname);
-            return_codes.push(ret);
-            let ret = KI.set_uci_var(&format!("network.rita_{}.proto", ifname), "static");
-            return_codes.push(ret);
-            mesh_add = true;
+        InterfaceMode::Meshpoint => {
+            let val = KI.get_uci_var(&format!("wireless.mesh_{}.disabled", radio));
+            match val {
+                Ok(status) => match status.as_str() {
+                    "0" => {
+                        warn!("You can't meshpoint both wireless interfaces!");
+                        return_codes.push(Err(format_err!(
+                            "You can't meshpoint both wireless interfaces!"
+                        )));
+                    }
+                    "1" => {
+                        let ret = KI.set_uci_var(&format!("wireless.mesh_{}.disabled", radio), "0");
+                        return_codes.push(ret);
+                        mesh_add = true;
+                    }
+                    _ => {
+                        error!("Deivce is not meshpoint enabled?");
+                        return_codes.push(Err(format_err!("Device may not be meshpoint enabled!")));
+                    }
+                },
+                Err(e) => return_codes.push(Err(e)),
+            }
         }
+        InterfaceMode::Mesh => unimplemented!(),
         InterfaceMode::Unknown => unimplemented!(),
     }
 
@@ -431,7 +473,7 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
         );
     } else if mesh_add {
         let when = Instant::now() + Duration::from_millis(60000);
-        let locally_owned_ifname = ifname.clone().to_string();
+        let locally_owned_ifname = mesh_wlan.clone().to_string();
 
         let fut = Delay::new(when)
             .map_err(|e| warn!("timer failed; err={:?}", e))
