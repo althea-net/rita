@@ -17,7 +17,7 @@ pub mod interop;
 pub mod rtt;
 
 pub use clarity::Address;
-pub use ethereum_types::{Address, H160, Public, Secret, Signature, U256};
+pub use ethereum_types::{H160, Public, Secret, Signature, U256};
 
 pub use interop::*;
 pub use rtt::RTTimestamps;
@@ -27,6 +27,8 @@ pub type EthAddress = Address;
 pub type EthPubKey = Public;
 pub type EthPrivateKey = Secret;
 pub type EthSignature = Signature;
+
+use std::fmt;
 
 #[cfg(test)]
 mod tests {

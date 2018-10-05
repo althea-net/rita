@@ -11,6 +11,7 @@ use futures::Future;
 
 use guac_actix::{GetOwnBalance, PaymentController};
 
+use clarity::types::checked_div;
 use num256::{Int256, Uint256};
 use num_traits::ToPrimitive;
 
@@ -66,7 +67,7 @@ impl Handler<GetOwnInfo> for Dashboard {
                     Ok(balance) => {
                         let balance = balance
                             .checked_div(Uint256::from(1_000_000_000u64))
-                            .ok_or(OwnInfoError::RoundDownError(balance.clone()))?;
+                            .ok_or(OwnInfoError::RoundDownError(balance.clone().into()))?;
                         Ok(OwnInfo {
                             balance: Int256::from(balance)
                                 .to_i64()

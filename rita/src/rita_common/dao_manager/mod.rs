@@ -272,7 +272,7 @@ fn get_membership(dao_address: EthAddress, target: Identity) -> () {
     }
 
     let call_args: Uint256 = full_bytes.into();
-    let func_call = format!("{{'jsonrpc':'2.0','method':'eth_call','params':[{{'to': '0x{:x}', 'data': '0x{:x}'}}, 'latest'],'id':1}}", dao_address, call_args);
+    let func_call = format!("{{'jsonrpc':'2.0','method':'eth_call','params':[{{'to': '{:#x}', 'data': '{:#x}'}}, 'latest'],'id':1}}", dao_address, call_args);
 
     // it's really awkward to escape that many " so we just repace them
     let func_call = func_call.replace("'", "\"");
@@ -315,7 +315,8 @@ fn get_membership(dao_address: EthAddress, target: Identity) -> () {
                         }
                     }
                 })
-        }).then(|_err| Ok(()));
+        })
+        .then(|_err| Ok(()));
     Arbiter::spawn(res);
 }
 

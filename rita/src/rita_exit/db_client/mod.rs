@@ -184,7 +184,7 @@ fn incr_dummy(conn: &SqliteConnection) -> Result<IpAddr, Error> {
 }
 
 fn update_client(client: &ExitClientIdentity, conn: &SqliteConnection) -> Result<(), Error> {
-    use self::schema::clients::dsl::{clients, email, wg_port, wg_pubkey};
+    use self::schema::clients::dsl::{clients, email, eth_address, wg_port, wg_pubkey};
     let mail_addr = match client.clone().reg_details.email {
         Some(mail) => mail.clone(),
         None => bail!("Cloud not find email for {:?}", client.clone()),
