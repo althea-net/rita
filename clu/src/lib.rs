@@ -151,7 +151,12 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
                 if line.starts_with("device:") {
                     let mut array = line.split(" ");
                     array.next();
-                    network_settings.device = array.next().map(|s| s.to_string());
+                    let device = array.next();
+
+                    if device.is_some() {
+                        network_settings.device = Some(device.unwrap().to_string());
+                    }
+
                     break;
                 }
             }
