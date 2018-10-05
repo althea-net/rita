@@ -607,7 +607,7 @@ Calling HTTP `GET` request on this endpoint provides a list of availabile ports 
 - Error Response: `500 Server Error`
 - Sample Call
 
-`curl 127.0..1:<rita_dashboard_port>/interfaces'
+`curl 127.0.0.1:<rita_dashboard_port>/interfaces'
 
 Format:
 
@@ -639,7 +639,7 @@ the `GET` version of this same endpoint.
 - Error Response: `500 Server Error`
 - Sample Call
 
-`curl 127.0..1:<rita_dashboard_port>/interfaces -H 'Content-Type: application/json' -i -d '{"interface":"wlan0", "mode":"LAN"}'`
+`curl 127.0.0.1:<rita_dashboard_port>/interfaces -H 'Content-Type: application/json' -i -d '{"interface":"wlan0", "mode":"LAN"}'`
 
 Format:
 
@@ -725,7 +725,8 @@ TRACE
 
 Do not use anything above WARN by default ever!
 it will actually consume nontrival bandwidth
->>>>>>> Use loglevels in the settings
+
+> > > > > > > Use loglevels in the settings
 
 This endpoint will restart the router so no response
 is expected, an error response indicates that there's
