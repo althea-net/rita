@@ -138,12 +138,13 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
            info!("Device name is {}", existing_device); 
         } 
         None => {
-            info!("No device name was found, reading from /etc/althea-firmware-release");
+            let release_file_path = "/etc/althea-firmware-release";
+            info!("No device name was found, reading from {}", release_file_path);
 
             let mut contents = String::new();
-            match File::open("/etc/althea-firmware-release") {
+            match File::open(release_file_path) {
                 Ok(mut f) => { f.read_to_string(&mut contents)?; },
-                Err(e) => warn!("Couldn't open /etc/althea-firmware-release: {}", e),
+                Err(e) => warn!("Couldn't open {}: {}", release_file_path, e),
             };
 
             for line in contents.lines() {
@@ -156,7 +157,7 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
             }
 
             if network_settings.device.is_none() {
-                warn!("Device name could not be read from /etc/althea-firmware-release");
+                warn!("Device name could not be read from {}", release_file_path);
             } 
         },
     }
