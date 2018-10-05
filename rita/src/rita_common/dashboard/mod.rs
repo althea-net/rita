@@ -49,7 +49,7 @@ enum OwnInfoError {
 #[derive(Serialize)]
 pub struct OwnInfo {
     pub balance: i64,
-    pub device: String,
+    pub device: Option<String>,
     pub version: String,
 }
 
@@ -73,16 +73,11 @@ impl Handler<GetOwnInfo> for Dashboard {
                             .checked_div(&Int256::from(1_000_000_000i64))
                             .ok_or(OwnInfoError::RoundDownError(balance.clone()))?;
  
-                        let device = match SETTING.get_network().device.clone() {
-                            Some(device) => { device.to_string() },
-                            None => { "".to_string() }
-                        };
-
                         Ok(OwnInfo {
                             balance: balance
                                 .to_i64()
                                 .ok_or(OwnInfoError::DownCastError(balance))?,
-                            device: device,
+                            device: SETTING.get_network().device.clone(),
                             version: env!("CARGO_PKG_VERSION").to_string(),
                         })
                     }
