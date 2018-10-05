@@ -426,6 +426,10 @@ pub struct ExitMailerSettings {
     pub smtp_password: String,
 }
 
+/// Placeholder
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
+pub struct ExitVerifSettings;
+
 /// This is the main settings struct for rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct RitaExitSettingsStruct {
@@ -439,8 +443,10 @@ pub struct RitaExitSettingsStruct {
     /// (ISO country code)
     #[serde(skip_serializing_if = "HashSet::is_empty", default)]
     allowed_countries: HashSet<String>,
-    #[serde(default)]
-    mailer: Option<ExitMailerSettings>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    mailer: Option<ExitMailerSettings>, // Legacy setting, TODO: remove in Alpha 11
+    #[serde(skip_serializing_if = "Option::is_none",)]
+    verif_settings: Option<ExitVerifSettings>, // mailer's successor with new verif methods readiness
     #[serde(skip)]
     future: bool,
 }
