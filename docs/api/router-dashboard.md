@@ -14,7 +14,8 @@ This file documents the dashboard API found in Rita client.
 
 ```
 {
-    "balance":-1029470595
+    "balance": -1029470595,
+    "device": "mynet-n750",
     "version": "v0.1.1"
 }
 ```

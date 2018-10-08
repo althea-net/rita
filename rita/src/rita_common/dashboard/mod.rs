@@ -10,8 +10,8 @@ use futures::Future;
 use rita_common::payment_controller::{GetOwnBalance, PaymentController};
 
 use num256::Int256;
-use SETTING;
 use settings::RitaCommonSettings;
+use SETTING;
 
 pub mod network_endpoints;
 use num_traits::ops::checked::CheckedDiv;
@@ -72,7 +72,7 @@ impl Handler<GetOwnInfo> for Dashboard {
                         let balance = balance
                             .checked_div(&Int256::from(1_000_000_000i64))
                             .ok_or(OwnInfoError::RoundDownError(balance.clone()))?;
- 
+
                         Ok(OwnInfo {
                             balance: balance
                                 .to_i64()
