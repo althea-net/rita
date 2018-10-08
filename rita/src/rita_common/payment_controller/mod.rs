@@ -29,8 +29,7 @@ pub enum PaymentControllerError {
 }
 
 pub struct PaymentController {
-    pub client: Client,
-    pub identity: Identity,
+    pub reqwest_client: Client,
     pub balance: Int256,
 }
 
@@ -118,15 +117,14 @@ extern crate mockito;
 
 impl Default for PaymentController {
     fn default() -> PaymentController {
-        PaymentController::new(&SETTING.get_identity())
+        PaymentController::new()
     }
 }
 
 impl PaymentController {
-    pub fn new(id: &Identity) -> Self {
+    pub fn new() -> Self {
         PaymentController {
-            identity: id.clone(),
-            client: reqwest::Client::builder()
+            reqwest_client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(5))
                 .build()
                 .unwrap(),
@@ -147,7 +145,7 @@ impl PaymentController {
         };
 
         let mut r = self
-            .client
+            .reqwest_client
             .post(&bounty_url)
             .body(serde_json::to_string(&update)?)
             .send()?;
@@ -196,7 +194,9 @@ impl PaymentController {
         trace!("current balance: {:?}", self.balance);
 
         self.update_bounty(BountyUpdate {
-            from: self.identity.clone(),
+            from: SETTING
+                .get_identity()
+                .ok_or(format_err!("No mesh IP available for Identity yet"))?,
             tx: pmt.clone(),
             balance: self.balance.clone(),
         })?;
@@ -209,11 +209,14 @@ impl PaymentController {
     /// This should be called on a regular interval to update the bounty hunter of a node's current
     /// balance as well as to log the current balance
     pub fn update(&mut self) -> Result<(), Error> {
+        let our_id = SETTING
+            .get_identity()
+            .ok_or(format_err!("No mesh IP available for Identity yet"))?;
         self.update_bounty(BountyUpdate {
-            from: self.identity.clone(),
+            from: our_id.clone(),
             tx: PaymentTx {
-                from: self.identity.clone(),
-                to: self.identity.clone(),
+                from: our_id.clone(),
+                to: our_id.clone(),
                 amount: Uint256::from(0u32),
             },
             balance: self.balance.clone(),
@@ -246,12 +249,14 @@ impl PaymentController {
 
         trace!("current balance: {:?}", self.balance);
 
-        let mut r = self.client.post(&neighbor_url).json(&pmt).send()?;
+        let mut r = self.reqwest_client.post(&neighbor_url).json(&pmt).send()?;
 
         if r.status() == StatusCode::OK {
             self.balance = self.balance.clone() - Int256::from(pmt.amount.clone());
             self.update_bounty(BountyUpdate {
-                from: self.identity.clone(),
+                from: SETTING
+                    .get_identity()
+                    .ok_or(format_err!("No mesh IP available for Identity yet"))?,
                 tx: pmt,
                 balance: self.balance.clone(),
             })?;
@@ -325,7 +330,12 @@ mod tests {
             \"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"balance\":\"-1\",\"tx\":{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"0x1\"}}")
             .create();
 
-        let mut pc = PaymentController::new(&new_identity(1));
+        let id = new_identity(1);
+        SETTING.get_network_mut().mesh_ip = Some(id.mesh_ip);
+        SETTING.get_payment_mut().eth_address = id.eth_address;
+        SETTING.get_network_mut().wg_public_key = id.wg_public_key;
+
+        let mut pc = PaymentController::new();
 
         let _ = pc.make_payment(new_payment(1));
 
@@ -351,8 +361,12 @@ mod tests {
             .with_body("bounty OK")
             .expect(100)
             .create();
+        let id = new_identity(1);
+        SETTING.get_network_mut().mesh_ip = Some(id.mesh_ip);
+        SETTING.get_payment_mut().eth_address = id.eth_address;
+        SETTING.get_network_mut().wg_public_key = id.wg_public_key;
 
-        let mut pc = PaymentController::new(&new_identity(1));
+        let mut pc = PaymentController::new();
 
         for _ in 0..100 {
             pc.make_payment(new_payment(1)).unwrap();
@@ -373,7 +387,11 @@ mod tests {
             .match_body("{\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"balance\":\"1\",\"tx\":{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"0x1\"}}")
             .create();
 
-        let mut pc = PaymentController::new(&new_identity(1));
+        let id = new_identity(1);
+        SETTING.get_network_mut().mesh_ip = Some(id.mesh_ip);
+        SETTING.get_payment_mut().eth_address = id.eth_address;
+        SETTING.get_network_mut().wg_public_key = id.wg_public_key;
+        let mut pc = PaymentController::new();
 
         let out = pc.payment_received(new_payment(1)).unwrap();
 
@@ -399,7 +417,11 @@ mod tests {
             .expect(100)
             .create();
 
-        let mut pc = PaymentController::new(&new_identity(1));
+        let id = new_identity(1);
+        SETTING.get_network_mut().mesh_ip = Some(id.mesh_ip);
+        SETTING.get_payment_mut().eth_address = id.eth_address;
+        SETTING.get_network_mut().wg_public_key = id.wg_public_key;
+        let mut pc = PaymentController::new();
 
         for i in 0..100 {
             let out = pc.payment_received(new_payment(1)).unwrap();

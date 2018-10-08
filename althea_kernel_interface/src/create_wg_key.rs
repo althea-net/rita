@@ -7,6 +7,12 @@ use std::process::{Command, Stdio};
 
 use failure::Error;
 
+#[derive(Debug)]
+pub struct WgKeypair {
+    pub public: String,
+    pub private: String,
+}
+
 impl KernelInterface {
     pub fn create_wg_key(&self, path: &Path, private_key: &String) -> Result<(), Error> {
         trace!("Overwriting old private key file");
@@ -15,7 +21,7 @@ impl KernelInterface {
         Ok(())
     }
 
-    pub fn create_wg_keypair(&self) -> Result<[String; 2], Error> {
+    pub fn create_wg_keypair(&self) -> Result<WgKeypair, Error> {
         let genkey = Command::new("wg")
             .args(&["genkey"])
             .stdout(Stdio::piped())
@@ -42,7 +48,10 @@ impl KernelInterface {
         privkey_str.truncate(44);
         pubkey_str.truncate(44);
 
-        Ok([pubkey_str, privkey_str])
+        Ok(WgKeypair {
+            public: pubkey_str,
+            private: privkey_str,
+        })
     }
 }
 

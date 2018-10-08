@@ -1,17 +1,26 @@
-use actix::registry::SystemService;
+use actix::prelude::*;
 use actix_web::http::StatusCode;
+use actix_web::Path;
 use actix_web::{AsyncResponder, HttpRequest, HttpResponse, Json};
 use failure::Error;
 use futures::future;
 use futures::Future;
+use log::LevelFilter;
 
-use rita_client::dashboard::WifiInterface;
+use althea_types::ExitState;
+use rita_client::dashboard::exitinfo::{ExitInfo, GetExitInfo};
+use rita_client::dashboard::interfaces::{GetInterfaces, InterfaceMode, InterfaceToSet};
+use rita_client::dashboard::nodeinfo::{GetNodeInfo, NodeInfo};
+use rita_client::dashboard::wifi::{GetWifiConfig, WifiInterface, WifiPass, WifiSSID};
 use rita_client::exit_manager::exit_setup_request;
-
-use super::*;
+use rita_common::dashboard::Dashboard;
+use settings::{RitaClientSettings, RitaCommonSettings};
+use KI;
+use SETTING;
 
 use std::boxed::Box;
 use std::collections::HashMap;
+use std::net::IpAddr;
 
 /// A string of characters which we don't let users use because of corrupted UCI configs
 static FORBIDDEN_CHARS: &'static str = "'/\"\\";
@@ -27,33 +36,6 @@ pub enum ValidationError {
     Empty,
     #[fail(display = "Value too short ({} required)", _0)]
     TooShort(usize),
-}
-
-pub fn get_wifi_config(
-    _req: HttpRequest,
-) -> Box<Future<Item = Json<Vec<WifiInterface>>, Error = Error>> {
-    debug!("Get wificonfig hit!");
-    Dashboard::from_registry()
-        .send(GetWifiConfig {})
-        .from_err()
-        .and_then(move |reply| Ok(Json(reply?)))
-        .responder()
-}
-
-pub fn set_wifi_config(
-    new_settings: Json<WifiInterface>,
-) -> Box<Future<Item = Json<()>, Error = Error>> {
-    debug!("Set wificonfig endpoint hit!");
-    //This will be dead code if the JS is modified to submit both interfaces
-    //in one vector
-    let mut new_settings_vec = Vec::new();
-    new_settings_vec.push(new_settings.into_inner());
-
-    Dashboard::from_registry()
-        .send(SetWifiConfig(new_settings_vec))
-        .from_err()
-        .and_then(move |reply| Ok(Json(reply?)))
-        .responder()
 }
 
 pub fn get_node_info(_req: HttpRequest) -> Box<Future<Item = Json<Vec<NodeInfo>>, Error = Error>> {
@@ -190,7 +172,7 @@ pub fn set_wifi_ssid(wifi_ssid: Json<WifiSSID>) -> Box<Future<Item = HttpRespons
 
     Box::new(
         Dashboard::from_registry()
-            .send(SetWiFiSSID(wifi_ssid))
+            .send(wifi_ssid)
             .from_err()
             .and_then(move |_reply| future::ok(HttpResponse::Ok().json(ret))),
     )
@@ -227,20 +209,96 @@ pub fn set_wifi_pass(wifi_pass: Json<WifiPass>) -> Box<Future<Item = HttpRespons
 
     Box::new(
         Dashboard::from_registry()
-            .send(SetWiFiPass(wifi_pass))
+            .send(wifi_pass)
             .from_err()
             .and_then(move |_reply| future::ok(HttpResponse::Ok().json(ret))),
     )
 }
 
-pub fn set_wifi_mesh(wifi_mesh: Json<WifiMesh>) -> Box<Future<Item = Json<()>, Error = Error>> {
-    debug!("/wifi_settings/mesh hit with {:?}", wifi_mesh);
-
+pub fn get_interfaces(
+    _req: HttpRequest,
+) -> Box<Future<Item = Json<HashMap<String, InterfaceMode>>, Error = Error>> {
+    debug!("get /interfaces hit");
     Dashboard::from_registry()
-        .send(SetWiFiMesh(wifi_mesh.into_inner()))
+        .send(GetInterfaces)
         .from_err()
         .and_then(move |reply| Ok(Json(reply?)))
         .responder()
+}
+
+pub fn set_interfaces(
+    interface: Json<InterfaceToSet>,
+) -> Box<Future<Item = Json<()>, Error = Error>> {
+    debug!("set /interfaces hit");
+    let to_set = interface.into_inner();
+    Dashboard::from_registry()
+        .send(to_set)
+        .from_err()
+        .and_then(move |reply| Ok(Json(reply?)))
+        .responder()
+}
+
+pub fn get_mesh_ip(_req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Error>> {
+    debug!("/mesh_ip GET hit");
+
+    let mut ret = HashMap::new();
+
+    match SETTING.get_network().mesh_ip {
+        Some(ip) => {
+            ret.insert("mesh_ip".to_owned(), format!("{}", ip));
+        }
+        None => {
+            let error_msg = "No mesh IP configured yet";
+            warn!("{}", error_msg);
+            ret.insert("error".to_owned(), error_msg.to_owned());
+        }
+    }
+
+    return Box::new(future::ok(HttpResponse::Ok().json(ret)));
+}
+
+pub fn set_mesh_ip(
+    mesh_ip_data: Json<HashMap<String, String>>,
+) -> Box<Future<Item = HttpResponse, Error = Error>> {
+    debug!("/mesh_ip POST hit");
+
+    let mut ret = HashMap::new();
+
+    match mesh_ip_data.into_inner().get("mesh_ip") {
+        Some(ip_str) => match ip_str.parse::<IpAddr>() {
+            Ok(parsed) => if parsed.is_ipv6() && !parsed.is_unspecified() {
+                SETTING.get_network_mut().mesh_ip = Some(parsed);
+            } else {
+                let error_msg = format!(
+                    "set_mesh_ip: Attempted to set a non-IPv6 or unsepcified address {} as mesh_ip",
+                    parsed
+                );
+                info!("{}", error_msg);
+                ret.insert("error".to_owned(), error_msg);
+            },
+            Err(e) => {
+                let error_msg = format!(
+                    "set_mesh_ip: Failed to parse the address string {:?}",
+                    ip_str
+                );
+                info!("{}", error_msg);
+                ret.insert("error".to_owned(), error_msg);
+                ret.insert("rust_error".to_owned(), e.to_string());
+            }
+        },
+        None => {
+            let error_msg = format!("set_mesh_ip: \"mesh_ip\" not found in supplied JSON");
+            info!("{}", error_msg);
+            ret.insert("error".to_owned(), error_msg);
+        }
+    }
+
+    if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
+        return Box::new(future::err(e));
+    }
+
+    // Note: This will never be reached
+    Box::new(future::ok(HttpResponse::Ok().json(ret)))
 }
 
 /// This function checks that a supplied string is non-empty and doesn't contain any of the
@@ -263,4 +321,52 @@ fn validate_config_value(s: &str) -> Result<(), ValidationError> {
     } else {
         Ok(())
     }
+}
+
+pub fn get_wifi_config(
+    _req: HttpRequest,
+) -> Box<Future<Item = Json<Vec<WifiInterface>>, Error = Error>> {
+    debug!("Get wificonfig hit!");
+    Dashboard::from_registry()
+        .send(GetWifiConfig {})
+        .from_err()
+        .and_then(move |reply| Ok(Json(reply?)))
+        .responder()
+}
+
+pub fn remote_logging(path: Path<bool>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+    let enabled = path.into_inner();
+    debug!("/loging/enable/{} hit", enabled);
+
+    SETTING.get_log_mut().enabled = enabled;
+
+    if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
+        return Box::new(future::err(e));
+    }
+
+    return Box::new(future::ok(HttpResponse::Ok().json(())));
+}
+
+pub fn remote_logging_level(path: Path<String>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+    let level = path.into_inner();
+    debug!("/loging/level/{}", level);
+
+    let log_level: LevelFilter = match level.parse() {
+        Ok(level) => level,
+        Err(e) => {
+            return Box::new(future::ok(
+                HttpResponse::new(StatusCode::BAD_REQUEST)
+                    .into_builder()
+                    .json(format!("Could not parse loglevel {:?}", e)),
+            ))
+        }
+    };
+
+    SETTING.get_log_mut().level = log_level.to_string();
+
+    if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
+        return Box::new(future::err(e));
+    }
+
+    return Box::new(future::ok(HttpResponse::Ok().json(())));
 }

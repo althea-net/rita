@@ -25,6 +25,8 @@ This file documents the dashboard API found in Rita client.
 
 `curl 127.0.0.1:4877/info`
 
+---
+
 ## /neighbors
 
 - URL: `<rita ip>:<rita_dashboard_port>/neighbors`
@@ -61,6 +63,8 @@ This file documents the dashboard API found in Rita client.
 - Sample Call:
 
 `curl 127.0.0.1:4877/neighbors`
+
+---
 
 ## /exits
 
@@ -101,6 +105,8 @@ This file documents the dashboard API found in Rita client.
 
 `curl 127.0.0.1:4877/exits`
 
+---
+
 ## /exits/{nickname}/reset
 
 - URL: `<rita ip>:<rita_dashboard_port>/exits/{nickname}/reset'
@@ -123,6 +129,8 @@ This file documents the dashboard API found in Rita client.
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:4877/exits/borked/reset`
+
+---
 
 ## /exits/{nickname}/select
 
@@ -147,6 +155,8 @@ This file documents the dashboard API found in Rita client.
 
 `curl -XPOST 127.0.0.1:4877/exits/borked/reset`
 
+---
+
 ## /exits/{nickname}/register
 
 - URL: `<rita ip>:<rita_dashboard_port>/exits/{nickname}/register'
@@ -170,6 +180,8 @@ This file documents the dashboard API found in Rita client.
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:4877/exits/borked/register`
+
+---
 
 ## /exits/{nickname}/verify/{code}
 
@@ -197,6 +209,8 @@ This file documents the dashboard API found in Rita client.
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:4877/exits/borked/register`
+
+---
 
 ## /settings
 
@@ -343,62 +357,7 @@ This file documents the dashboard API found in Rita client.
 `curl -XPOST 127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"exit_client": {"current_exit": "SELECTEDEXIT"}}'`
 }
 
-## /wifi_settings
-
-- URL: `<rita ip>:<rita_dashboard_port>/wifi_settings`
-- Method: `GET`
-- URL Params: `None`
-- Data Params: `None`
-- Success Response:
-  - Code: 200 OK
-  - Contents:
-
-```
-[
-   {
-      "section_name":"default_radio0",
-      "network":"lan",
-      "mesh":false,
-      "ssid":"AltheaHome",
-      "encryption":"psk2+tkip+aes",
-      "key":"ChangeMe",
-      "device":{
-         "section_name":"radio0",
-         "type":"mac80211",
-         "channel":"36",
-         "path":"pci0000:00/0000:00:00.0",
-         "htmode":"VHT80",
-         "hwmode":"11a",
-         "disabled":"0",
-         "radio_type":"5ghz"
-      }
-   },
-   {
-      "section_name":"default_radio1",
-      "network":"lan",
-      "mesh":false,
-      "ssid":"AltheaHome",
-      "encryption":"psk2+tkip+aes",
-      "key":"ChangeMe",
-      "device":{
-         "section_name":"radio1",
-         "type":"mac80211",
-         "channel":"11",
-         "path":"platform/qca953x_wmac",
-         "htmode":"HT20",
-         "hwmode":"11ng",
-         "disabled":"0",
-         "radio_type":"2ghz"
-      }
-   }
-]
-```
-
-- Error Response: `500 Server Error`
-
-- Sample Call:
-
-`curl 127.0.0.1:4877/wifi_settings`
+---
 
 ## /wifi_settings
 
@@ -415,10 +374,8 @@ This file documents the dashboard API found in Rita client.
 ```
 
 - Error Response: `500 Server Error`
-
 - Sample Call:
-
-`curl -XPOST 127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"default_radio0": {"ssid": "NetworkName"}}'`
+  `curl -XPOST 127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"default_radio0": {"ssid": "NetworkName"}}'`
 
 ---
 
@@ -431,6 +388,7 @@ This file documents the dashboard API found in Rita client.
 - Success Response:
   - Code: `200 OK`
   - Contents:
+
 ```json
 {}
 ```
@@ -438,6 +396,7 @@ This file documents the dashboard API found in Rita client.
 - Error Response:
   - Code: `400 Bad Request`
   - Contents:
+
 ```json
 {
   "error": "<human-readable description>"
@@ -463,9 +422,11 @@ This file documents the dashboard API found in Rita client.
 ```
 {}
 ```
+
 - Error Response:
   - Code: `400 Bad Request`
   - Contents:
+
 ```json
 {
   "error": "<human-readable description>"
@@ -475,28 +436,6 @@ This file documents the dashboard API found in Rita client.
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:<rita_dashboard_port>/wifi_settings/pass -H 'Content-Type: application/json' -i -d '{"radio":"radio0", "pass": "this is a freeform password"}'`
-
----
-
-## /wifi_settings/mesh
-
-- URL: `<rita ip>:<rita_dashboard_port>/wifi_settings/mesh`
-- Method: `POST`
-- URL Params: `Content-Type: application/json`
-- Data Params: `Radio to toggle mesh and mesh bool, resets radio to default ssid and pass on disable`
-- Success Response:
-  - Code: 200 OK
-  - Contents:
-
-```
-{}
-```
-
-- Error Response: `500 Server Error`
-
-- Sample Call:
-
-`curl -XPOST 127.0.0.1:<rita_dashboard_port>/wifi_settings/mesh -H 'Content-Type: application/json' -i -d '{"radio":"radio0", "mesh": true}'`
 
 ---
 
@@ -653,3 +592,161 @@ Format:
 ```
 
 ---
+
+## /interfaces
+
+Calling HTTP `GET` request on this endpoint provides a list of availabile ports and their current functions
+
+- URL: `<rita ip>:<rita_dashboard_port>/interfaces`
+- Method: `POST`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `JSON` structured message. See below for an example format.
+- Error Response: `500 Server Error`
+- Sample Call
+
+`curl 127.0..1:<rita_dashboard_port>/interfaces'
+
+Format:
+
+```json
+[
+  {
+    "eth0.3": "LAN",
+    "eth0.4": "Mesh",
+    "eth1": "Mesh"
+  }
+]
+```
+
+---
+
+## /interfaces
+
+Calling HTTP `POST` request on this endpoint with a json object specifying an interface and a mode
+will transform that interface to the specified mode. The provided interface must be available from
+the `GET` version of this same endpoint.
+
+- URL: `<rita ip>:<rita_dashboard_port>/interfaces`
+- Method: `POST`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `JSON` structured message. See below for an example format.
+- Error Response: `500 Server Error`
+- Sample Call
+
+`curl 127.0..1:<rita_dashboard_port>/interfaces -H 'Content-Type: application/json' -i -d '{"interface":"wlan0", "mode":"LAN"}'`
+
+Format:
+
+```json
+[]
+```
+
+---
+
+## /mesh_ip POST
+
+- URL: `<rita ip>:<rita_dashboard_port>/mesh_ip`
+- Method: `POST`
+- URL Params: `None`
+- Contents:
+
+```json
+{
+  "mesh_ip": "<new_ipv6_mesh_ip>"
+}
+```
+
+- Success Response:
+  - This endpoint requires Rita to restart and therefore should give an empty
+    response
+- Error Response: `500 Server Error`
+- Sample Call:
+
+`curl 127.0..1:<rita_dashboard_port>/mesh_ip -H 'Content-Type: application/json' -i -d '{"mesh_ip":"fd00::1"}'`
+
+---
+
+## /remote_logging/enabled/{bool}
+
+Enables or disables remote logging, if enabled on next boot
+the router will send logs to the configured exit over syslog port 514
+
+This endpoint will restart the router so no response
+is expected, an error response indicates that there's
+somthing wrong with the input data.
+
+- URL: `<rita ip>:<rita_dashboard_port>/logging/enabled/{bool}'
+- Method: `POST`
+- URL Params: 'enabled'
+- Data Params: `None`
+- Success Response:
+  - Code: None
+  - Contents: `{}`
+- Error Response: `400 Bad Request`
+- Error Contents:
+
+```json
+{
+  "error": "<description>"
+}
+```
+
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:4877/remote_logging/enabled/true`
+
+---
+
+## /remote_logging/level/{u8}
+
+Sets the level of remote logging
+
+<<<<<<< HEAD
+0: Error
+1: Debug
+2: Info
+3: Trace
+\_: Error
+
+Do not use anything above one by default ever!
+it will actually charge
+=======
+ERROR
+WARN
+INFO
+DEBUG
+TRACE
+
+Do not use anything above WARN by default ever!
+it will actually consume nontrival bandwidth
+>>>>>>> Use loglevels in the settings
+
+This endpoint will restart the router so no response
+is expected, an error response indicates that there's
+somthing wrong with the input data.
+
+- URL: `<rita ip>:<rita_dashboard_port>/logging/level/{u8}'
+- Method: `POST`
+- URL Params: level
+- Data Params: `None`
+- Success Response:
+  - Code: None
+  - Contents: `{}`
+- Error Response: `400 Bad Request`
+- Error Contents:
+
+```json
+{
+  "error": "<description>"
+}
+```
+
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:4877/remote_logging/level/3`

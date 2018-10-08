@@ -1,6 +1,6 @@
 [package]
 name = "althea_rs"
-version = "0.1.7"
+version = "0.1.8"
 authors = ["Stan Drozd <drozdziak1@gmail.com>"]
 
 [features]
@@ -10,7 +10,7 @@ development = ["rita/development"]
 rita = { path = "./rita" }
 
 [workspace]
-members = ["althea_kernel_interface", "bounty_hunter", "settings", "clu", "exit_db", "stats_server"]
+members = ["althea_kernel_interface", "bounty_hunter", "settings", "clu", "exit_db"]
 
 [profile.release]
 opt-level = "z"
@@ -19,4 +19,3 @@ codegen-units = 1
 incremental = false
 
 [patch.crates-io]
-trust-dns-resolver = { git = "https://github.com/kingoflolz/trust-dns.git", branch = "lower-max-ttl" }

@@ -71,16 +71,16 @@ impl fmt::Display for TunnelAction {
     }
 }
 
-///
-/// TunnelState indicates a state where a tunnel is currently in.
+/// TunnelState indicates a state where a tunnel is currently in. Made into an enum for adding new
+/// states more easily
 ///
 /// State changes:
-/// NotRegistered -> (MembershipConfirmed) -> Registered
+/// NotRegistered -> MembershipConfirmed(not implemented therefore not added) -> Registered
 #[derive(PartialEq, Debug, Clone)]
 pub enum TunnelState {
-    /// Tunnel is not registered (default)
+    /// Tunnel is not registered
     NotRegistered,
-    /// Tunnel is registered
+    /// Tunnel is registered (default)
     Registered,
 }
 
@@ -98,12 +98,12 @@ fn test_tunnel_state() {
 
 #[derive(Debug, Clone)]
 pub struct Tunnel {
-    pub ip: IpAddr,             // Tunnel endpoint
-    pub iface_name: String,     // name of wg#
-    pub listen_ifidx: u32,      // the physical interface this tunnel is listening on
-    pub listen_port: u16,       // the local port this tunnel is listening on
-    pub localid: LocalIdentity, // the identity of the counterparty tunnel
-    pub last_contact: Instant,  // When's the last we heard from the other end of this tunnel?
+    pub ip: IpAddr,              // Tunnel endpoint
+    pub iface_name: String,      // name of wg#
+    pub listen_ifidx: u32,       // the physical interface this tunnel is listening on
+    pub listen_port: u16,        // the local port this tunnel is listening on
+    pub neigh_id: LocalIdentity, // the identity of the counterparty tunnel
+    pub last_contact: Instant,   // When's the last we heard from the other end of this tunnel?
     state: TunnelState,
 }
 
@@ -120,7 +120,7 @@ impl Tunnel {
             iface_name: iface_name,
             listen_ifidx: ifidx,
             listen_port: our_listen_port,
-            localid: their_id.clone(),
+            neigh_id: their_id.clone(),
             last_contact: Instant::now(),
             // By default new tunnels are in Registered state
             state: TunnelState::Registered,
@@ -133,10 +133,13 @@ impl Tunnel {
         KI.open_tunnel(
             &self.iface_name,
             self.listen_port,
-            &SocketAddr::new(self.ip, self.localid.wg_port),
-            &self.localid.global.wg_public_key,
+            &SocketAddr::new(self.ip, self.neigh_id.wg_port),
+            &self.neigh_id.global.wg_public_key,
             Path::new(&network.wg_private_key_path),
-            &network.own_ip,
+            &match network.mesh_ip {
+                Some(ip) => ip,
+                None => bail!("No mesh IP configured yet"),
+            },
             network.external_nic.clone(),
             &mut SETTING.get_network_mut().default_route,
         )
@@ -325,7 +328,7 @@ impl Handler<GetNeighbors> for TunnelManager {
         for (_, tunnels) in self.tunnels.iter() {
             for (_, tunnel) in tunnels.iter() {
                 res.push(Neighbor::new(
-                    tunnel.localid.clone(),
+                    tunnel.neigh_id.clone(),
                     tunnel.iface_name.clone(),
                     tunnel.ip,
                 ));
@@ -345,6 +348,20 @@ impl Message for TriggerGC {
 impl Handler<TriggerGC> for TunnelManager {
     type Result = Result<(), Error>;
     fn handle(&mut self, msg: TriggerGC, _ctx: &mut Context<Self>) -> Self::Result {
+        let stream = match make_babel_stream() {
+            Ok(stream) => stream,
+            Err(e) => {
+                warn!("Tunnel GC failed to open babel stream with {:?}", e);
+                return Err(e);
+            }
+        };
+        let mut babel = Babel::new(stream);
+        let res = babel.start_connection();
+        if res.is_err() {
+            warn!("Failed to start Babel RPC connection! {:?}", res);
+            bail!("Failed to start Babel RPC connection!");
+        }
+
         let mut good: HashMap<Identity, HashMap<u32, Tunnel>> = HashMap::new();
         let mut timed_out: HashMap<Identity, HashMap<u32, Tunnel>> = HashMap::new();
         // Split entries into good and timed out rebuilding the double hashmap strucutre
@@ -396,6 +413,10 @@ impl Handler<TriggerGC> for TunnelManager {
             for (_ifidx, tunnel) in tunnels {
                 // In the same spirit, we return the port to the free port pool only after tunnel
                 // deletion goes well.
+                let res = babel.unmonitor(&tunnel.iface_name);
+                if res.is_err() {
+                    warn!("Failed to unmonitor {} with {:?}", tunnel.iface_name, res);
+                }
                 KI.del_interface(&tunnel.iface_name)?;
                 self.free_ports.push(tunnel.listen_port);
             }
@@ -477,7 +498,9 @@ fn contact_neighbor(peer: &Peer, our_port: u16) -> Result<(), Error> {
 
     let _res = HTTPClient::from_registry().do_send(Hello {
         my_id: LocalIdentity {
-            global: SETTING.get_identity(),
+            global: SETTING
+                .get_identity()
+                .ok_or(format_err!("Identity has no mesh IP ready yet"))?,
             wg_port: our_port,
             have_tunnel: None,
         },
@@ -686,7 +709,7 @@ impl TunnelManager {
         }
         match tunnel.monitor(make_babel_stream()?) {
             Ok(_) => {
-                let new_key = tunnel.localid.global.clone();
+                let new_key = tunnel.neigh_id.global.clone();
                 // Add a tunnel to internal map based on identity, and interface index.
                 self.tunnels
                     .entry(new_key)

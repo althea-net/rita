@@ -17,11 +17,15 @@ use reqwest;
 use std::net::IpAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use lettre::file::FileEmailTransport;
-use lettre::smtp::authentication::{Credentials, Mechanism};
-use lettre::smtp::extension::ClientId;
-use lettre::smtp::ConnectionReuseParameters;
-use lettre::{EmailTransport, SmtpTransport};
+use lettre::{
+    file::FileTransport,
+    smtp::{
+        authentication::{Credentials, Mechanism},
+        extension::ClientId,
+        ConnectionReuseParameters,
+    },
+    SmtpClient, Transport,
+};
 use lettre_email::EmailBuilder;
 
 use handlebars::Handlebars;
@@ -65,7 +69,13 @@ impl Handler<ListClients> for DbClient {
     fn handle(&mut self, _: ListClients, _: &mut Self::Context) -> Self::Result {
         use self::schema::clients::dsl::*;
         info!("Opening {:?}", &SETTING.get_db_file());
-        let connection = SqliteConnection::establish(&SETTING.get_db_file()).unwrap();
+        let connection = match SqliteConnection::establish(&SETTING.get_db_file()) {
+            Ok(connection) => connection,
+            Err(e) => {
+                error!("We could not connect to the database file! {:?}", e);
+                bail!("Could not connect to database file!")
+            }
+        };
 
         let res = clients.load::<models::Client>(&connection)?;
         trace!("Got clients list {:?}", res);
@@ -82,12 +92,12 @@ fn increment(address: IpAddr) -> Result<IpAddr, Error> {
     bail!("Not ipv4 addr")
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct GeoIPRet {
     country: GeoIPRetCountry,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct GeoIPRetCountry {
     code: String,
 }
@@ -100,6 +110,7 @@ fn get_country(ip: &IpAddr) -> Result<String, Error> {
     trace!("making geoip request to {}", geo_ip_url);
 
     let res: GeoIPRet = client.get(&geo_ip_url).send()?.json()?;
+    info!("Got {:?} from GeoIP request", res);
 
     return Ok(res.country.code);
 }
@@ -145,7 +156,7 @@ fn add_dummy(conn: &SqliteConnection) -> Result<(), Error> {
     dummy.mesh_ip = "0.0.0.0".to_string();
 
     match diesel::insert_into(clients).values(&dummy).execute(&*conn) {
-        Err(e) => warn!("got error inserting dummy: {}", e),
+        Err(e) => trace!("Not inserting dummy: {:?}", e),
         _ => {}
     }
     Ok(())
@@ -173,7 +184,12 @@ fn incr_dummy(conn: &SqliteConnection) -> Result<IpAddr, Error> {
 }
 
 fn update_client(client: &ExitClientIdentity, conn: &SqliteConnection) -> Result<(), Error> {
-    use self::schema::clients::dsl::*;
+    use self::schema::clients::dsl::{clients, email, wg_port, wg_pubkey};
+    let mail_addr = match client.clone().reg_details.email {
+        Some(mail) => mail.clone(),
+        None => bail!("Cloud not find email for {:?}", client.clone()),
+    };
+
     diesel::update(clients.find(&client.global.mesh_ip.to_string()))
         .set(wg_port.eq(&client.wg_port.to_string()))
         .execute(&*conn)?;
@@ -183,7 +199,7 @@ fn update_client(client: &ExitClientIdentity, conn: &SqliteConnection) -> Result
         .execute(&*conn)?;
 
     diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-        .set(email.eq(&client.reg_details.email.clone().unwrap()))
+        .set(email.eq(&mail_addr))
         .execute(&*conn)?;
 
     Ok(())
@@ -215,9 +231,13 @@ fn update_mail_sent_time(
     client: &ExitClientIdentity,
     conn: &SqliteConnection,
 ) -> Result<(), Error> {
-    use self::schema::clients::dsl::*;
+    use self::schema::clients::dsl::{clients, email, email_sent_time};
+    let mail_addr = match client.clone().reg_details.email {
+        Some(mail) => mail.clone(),
+        None => bail!("Cloud not find email for {:?}", client.clone()),
+    };
 
-    diesel::update(clients.filter(email.eq(client.reg_details.email.clone().unwrap())))
+    diesel::update(clients.filter(email.eq(mail_addr)))
         .set(email_sent_time.eq(secs_since_unix_epoch() as i32))
         .execute(&*conn)?;
 
@@ -257,6 +277,7 @@ fn send_mail(client: &models::Client) -> Result<(), Error> {
     if SETTING.get_mailer().is_none() {
         return Ok(());
     };
+    let mailer = SETTING.get_mailer().unwrap().clone();
 
     info!("Sending exit signup email for client");
 
@@ -264,31 +285,27 @@ fn send_mail(client: &models::Client) -> Result<(), Error> {
 
     let email = EmailBuilder::new()
         .to(client.email.clone())
-        .from(SETTING.get_mailer().unwrap().from_address)
-        .subject(SETTING.get_mailer().unwrap().subject)
+        .from(mailer.from_address)
+        .subject(mailer.subject)
         // TODO: maybe have a proper templating engine
         .text(reg.render_template(
-            &SETTING.get_mailer().unwrap().body,
+            &mailer.body,
             &json!({"email_code": client.email_code.to_string()}),
-        )?).build()
-        .unwrap();
+        )?).build()?;
 
-    if SETTING.get_mailer().unwrap().test {
-        let mut mailer = FileEmailTransport::new(&SETTING.get_mailer().unwrap().test_dir);
-        mailer.send(&email)?;
+    if mailer.test {
+        let mut mailer = FileTransport::new(&mailer.test_dir);
+        mailer.send(email.into())?;
     } else {
         // TODO add serde to lettre
-        let mut mailer = SmtpTransport::simple_builder(&SETTING.get_mailer().unwrap().smtp_url)
-            .unwrap()
-            .hello_name(ClientId::Domain(SETTING.get_mailer().unwrap().smtp_domain))
-            .credentials(Credentials::new(
-                SETTING.get_mailer().unwrap().smtp_username,
-                SETTING.get_mailer().unwrap().smtp_password,
-            )).smtp_utf8(true)
+        let mut mailer = SmtpClient::new_simple(&mailer.smtp_url)?
+            .hello_name(ClientId::Domain(mailer.smtp_domain))
+            .credentials(Credentials::new(mailer.smtp_username, mailer.smtp_password))
+            .smtp_utf8(true)
             .authentication_mechanism(Mechanism::Plain)
             .connection_reuse(ConnectionReuseParameters::ReuseUnlimited)
-            .build();
-        mailer.send(&email)?;
+            .transport();
+        mailer.send(email.into())?;
     }
 
     Ok(())
@@ -304,8 +321,14 @@ impl Handler<SetupClient> for DbClient {
     type Result = Result<ExitState, Error>;
 
     fn handle(&mut self, msg: SetupClient, _: &mut Self::Context) -> Self::Result {
-        use self::schema::clients::dsl::*;
-        let conn = SqliteConnection::establish(&SETTING.get_db_file()).unwrap();
+        use self::schema::clients::dsl::{clients, mesh_ip};
+        let conn = match SqliteConnection::establish(&SETTING.get_db_file()) {
+            Ok(connection) => connection,
+            Err(e) => {
+                error!("We could not connect to the database file! {:?}", e);
+                bail!("Could not connect to database file!")
+            }
+        };
         let client = msg.0.clone();
 
         trace!("got setup request {:?}", client);
@@ -319,11 +342,16 @@ impl Handler<SetupClient> for DbClient {
 
                     if client_exists(&client.global.mesh_ip, &conn)? {
                         update_client(&msg.0, &conn)?;
-                        let mut their_record: models::Client = clients
+                        let mut their_record: models::Client = match clients
                             .filter(mesh_ip.eq(&client.global.mesh_ip.to_string()))
                             .load::<models::Client>(&conn)
-                            .expect("failed loading record")[0]
-                            .clone();
+                        {
+                            Ok(entry) => entry[0].clone(),
+                            Err(e) => {
+                                error!("We failed to lookup the client {:?} with{:?}", mesh_ip, e);
+                                bail!("We failed to lookup the client!")
+                            }
+                        };
 
                         info!(
                             "expected code {}, got code {:?}",
@@ -346,7 +374,10 @@ impl Handler<SetupClient> for DbClient {
                                 message: "Registration OK".to_string(),
                             })
                         } else {
-                            let cooldown = SETTING.get_mailer().unwrap().email_cooldown as i32;
+                            let cooldown = match SETTING.get_mailer() {
+                                Some(mailer) => mailer.email_cooldown as i32,
+                                None => bail!("There is no mailer configured!"),
+                            };
                             let time_since_last_email =
                                 secs_since_unix_epoch() - their_record.email_sent_time;
 
@@ -398,7 +429,7 @@ impl Handler<SetupClient> for DbClient {
             Err(e) => Ok(ExitState::Denied {
                 message: format!(
                     "This exit only accepts connections from {:?}\n verbose error: {}",
-                    *SETTING.get_allowed_countries(),
+                    SETTING.get_allowed_countries().clone(),
                     e
                 ),
             }),
@@ -416,8 +447,14 @@ impl Handler<ClientStatus> for DbClient {
     type Result = Result<ExitState, Error>;
 
     fn handle(&mut self, msg: ClientStatus, _: &mut Self::Context) -> Self::Result {
-        use self::schema::clients::dsl::*;
-        let conn = SqliteConnection::establish(&SETTING.get_db_file()).unwrap();
+        use self::schema::clients::dsl::{clients, mesh_ip};
+        let conn = match SqliteConnection::establish(&SETTING.get_db_file()) {
+            Ok(connection) => connection,
+            Err(e) => {
+                error!("We could not connect to the database file! {:?}", e);
+                bail!("Could not connect to database file!")
+            }
+        };
         conn.transaction::<_, Error, _>(|| {
             let client = msg.0;
 
@@ -428,11 +465,16 @@ impl Handler<ClientStatus> for DbClient {
             if client_exists(&client.global.mesh_ip, &conn)? {
                 trace!("record exists, updating");
 
-                let their_record: models::Client = clients
+                let their_record: models::Client = match clients
                     .filter(mesh_ip.eq(&client.global.mesh_ip.to_string()))
                     .load::<models::Client>(&conn)
-                    .expect("failed loading record")[0]
-                    .clone();
+                {
+                    Ok(entry) => entry[0].clone(),
+                    Err(e) => {
+                        error!("We failed to lookup the client {:?} with{:?}", mesh_ip, e);
+                        bail!("We failed to lookup the client!")
+                    }
+                };
 
                 if !email_ver_done(&their_record)? {
                     return Ok(ExitState::Pending {
@@ -483,7 +525,13 @@ impl Handler<TruncateTables> for DbClient {
     fn handle(&mut self, _: TruncateTables, _: &mut Self::Context) -> Self::Result {
         use self::schema::clients::dsl::*;
         info!("Deleting all clients in {:?}", &SETTING.get_db_file());
-        let connection = SqliteConnection::establish(&SETTING.get_db_file()).unwrap();
+        let connection = match SqliteConnection::establish(&SETTING.get_db_file()) {
+            Ok(connection) => connection,
+            Err(e) => {
+                error!("We could not connect to the database file! {:?}", e);
+                bail!("Could not connect to database file!")
+            }
+        };
         try!(delete(clients).execute(&connection));
         Ok(())
     }

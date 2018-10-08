@@ -20,6 +20,7 @@ use actix::prelude::*;
 use actix::registry::SystemService;
 use actix_web::client::Connection;
 use actix_web::*;
+use std::net::IpAddr;
 
 use althea_types::{ExitClientIdentity, ExitState};
 
@@ -35,10 +36,34 @@ use futures::Future;
 
 use tokio::net::TcpStream as TokioTcpStream;
 
+use log::LevelFilter;
+use syslog::Error as LogError;
+use syslog::{init_udp, Facility};
+
 use failure::Error;
 use std::net::SocketAddr;
 use std::time::Duration;
 use KI;
+
+/// enables remote logging if the user has configured it
+fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
+    // now that the exit tunnel is up we can start logging over it
+    let log = SETTING.get_log();
+    trace!("About to enable remote logging");
+    let level: LevelFilter = match log.level.parse() {
+        Ok(level) => level,
+        Err(_) => LevelFilter::Error,
+    };
+    let res = init_udp(
+        &format!("0.0.0.0:{}", log.send_port),
+        &format!("{}:{}", server_internal_ip, log.dest_port),
+        SETTING.get_network().wg_public_key.clone(),
+        Facility::LOG_USER,
+        level,
+    );
+    info!("Remote logging enabled with {:?}", res);
+    return res;
+}
 
 fn linux_setup_exit_tunnel() -> Result<(), Error> {
     KI.update_settings_route(&mut SETTING.get_network_mut().default_route)?;
@@ -139,18 +164,25 @@ pub fn send_exit_status_request(
 }
 
 fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = Error> {
-    let exits = SETTING.get_exits();
-    let current_exit = &exits[&exit];
-    let exit_server = current_exit.id.mesh_ip;
+    let current_exit = match SETTING.get_exits().get(&exit) {
+        Some(current_exit) => current_exit.clone(),
+        None => {
+            return Box::new(future::err(format_err!("No valid exit for {}", exit)))
+                as Box<Future<Item = (), Error = Error>>
+        }
+    };
 
-    let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
+    let endpoint = SocketAddr::new(current_exit.id.mesh_ip, current_exit.registration_port);
 
     trace!("sending exit general details request to {}", exit);
 
-    get_exit_info(&endpoint).and_then(move |exit_details| {
+    let r = get_exit_info(&endpoint).and_then(move |exit_details| {
         let mut exits = SETTING.get_exits_mut();
 
-        let current_exit = exits.get_mut(&exit).unwrap();
+        let current_exit = match exits.get_mut(&exit) {
+            Some(exit) => exit,
+            None => bail!("Could not find exit {}", exit),
+        };
 
         match exit_details {
             ExitState::GotInfo { .. } => {
@@ -162,16 +194,17 @@ fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = 
         current_exit.info = exit_details;
 
         Ok(())
-    })
+    });
+
+    Box::new(r)
 }
 
 pub fn exit_setup_request(
     exit: String,
     code: Option<String>,
 ) -> Box<Future<Item = (), Error = Error>> {
-    let exits = SETTING.get_exits();
-    let current_exit = match exits.get(&exit) {
-        Some(exit_struct) => exit_struct,
+    let current_exit = match SETTING.get_exits().get(&exit) {
+        Some(exit_struct) => exit_struct.clone(),
         None => return Box::new(future::err(format_err!("Could not find exit {:?}", exit))),
     };
     let exit_server = current_exit.id.mesh_ip;
@@ -179,7 +212,14 @@ pub fn exit_setup_request(
     reg_details.email_code = code;
 
     let ident = ExitClientIdentity {
-        global: SETTING.get_identity(),
+        global: match SETTING.get_identity() {
+            Some(id) => id,
+            None => {
+                return Box::new(future::err(format_err!(
+                    "Identity has no mesh IP ready yet"
+                )))
+            }
+        },
         wg_port: SETTING.get_exit_client().wg_listen_port.clone(),
         reg_details,
     };
@@ -209,11 +249,24 @@ pub fn exit_setup_request(
 }
 
 fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
-    let exits = SETTING.get_exits();
-    let current_exit = &exits[&exit];
+    let current_exit = match SETTING.get_exits().get(&exit) {
+        Some(current_exit) => current_exit.clone(),
+        None => {
+            return Box::new(future::err(format_err!("No valid exit for {}", exit)))
+                as Box<Future<Item = (), Error = Error>>
+        }
+    };
+
     let exit_server = current_exit.id.mesh_ip;
     let ident = ExitClientIdentity {
-        global: SETTING.get_identity(),
+        global: match SETTING.get_identity() {
+            Some(id) => id,
+            None => {
+                return Box::new(future::err(
+                    format_err!("Identity has no mesh IP ready yet").into(),
+                ))
+            }
+        },
         wg_port: SETTING.get_exit_client().wg_listen_port.clone(),
         reg_details: SETTING.get_exit_client().reg_details.clone().unwrap(),
     };
@@ -222,25 +275,34 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
 
     trace!("sending exit status request to {}", exit);
 
-    send_exit_status_request(&endpoint, ident)
+    let r = send_exit_status_request(&endpoint, ident)
         .from_err()
         .and_then(move |exit_response| {
             let mut exits = SETTING.get_exits_mut();
 
-            let current_exit = exits.get_mut(&exit).unwrap();
+            let current_exit = match exits.get_mut(&exit) {
+                Some(exit_struct) => exit_struct,
+                None => bail!("Could not find exit {:?}", exit),
+            };
 
             current_exit.info = exit_response.clone();
 
             trace!("Got exit setup response {:?}", exit_response.clone());
 
             Ok(())
-        })
+        });
+    Box::new(r)
 }
 
 /// An actor which pays the exit
 #[derive(Default)]
 pub struct ExitManager {
+    // used to determine if we need to change the logging state
     last_exit: Option<ExitServer>,
+    // used to store the logging state on startup so we don't double init logging
+    // as that would cause a panic
+    remote_logging_setting: bool,
+    remote_logging_already_started: bool,
 }
 
 impl Actor for ExitManager {
@@ -252,6 +314,8 @@ impl SystemService for ExitManager {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("Exit Manager started");
         self.last_exit = None;
+        self.remote_logging_setting = SETTING.get_log().enabled;
+        self.remote_logging_already_started = false;
     }
 }
 
@@ -287,6 +351,12 @@ impl Handler<Tick> for ExitManager {
                     linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
 
                     self.last_exit = Some(exit.clone());
+                }
+                // enable remote logging only if it has not already been started
+                if !self.remote_logging_already_started && self.remote_logging_setting {
+                    let res = enable_remote_logging(general_details.server_internal_ip);
+                    self.remote_logging_already_started = true;
+                    info!("logging status {:?}", res);
                 }
             }
         }

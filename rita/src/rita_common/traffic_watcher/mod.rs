@@ -126,7 +126,13 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
         }
     }
 
-    destinations.insert(SETTING.get_network().own_ip, Int256::from(0));
+    destinations.insert(
+        match SETTING.get_network().mesh_ip {
+            Some(ip) => ip,
+            None => bail!("No mesh IP configured yet"),
+        },
+        Int256::from(0),
+    );
 
     trace!("Getting input counters");
     let input_counters = match KI.read_counters(&FilterTarget::Input) {
@@ -294,10 +300,7 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
             Some(val) => val,
             None => false,
         },
-        _ => {
-            trace!("Parsing of external nic setting failed!");
-            false
-        }
+        None => false,
     };
 
     trace!("We are a Gateway: {}", gateway);

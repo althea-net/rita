@@ -26,6 +26,7 @@ extern crate serde_derive;
 extern crate log;
 
 #[cfg(test)]
+use log::LevelFilter;
 use std::sync::Mutex;
 
 extern crate serde;
@@ -88,8 +89,12 @@ fn default_tunnel_timeout() -> u64 {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
-    /// Our own mesh IP (in fd00::/8)
-    pub own_ip: IpAddr,
+    /// The static IP used on mesh interfaces
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mesh_ip: Option<IpAddr>,
+    /// Old name for mesh_ip, left in for back-compat, TODO: REMOVE IN ALPHA 11
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub own_ip: Option<IpAddr>,
     /// Mesh IP of bounty hunter (in fd00::/8)
     pub bounty_ip: IpAddr,
     /// Broadcast ip address used for peer discovery (in ff02::/8)
@@ -144,7 +149,8 @@ pub struct NetworkSettings {
 impl Default for NetworkSettings {
     fn default() -> Self {
         NetworkSettings {
-            own_ip: "fd00::1".parse().unwrap(),
+            mesh_ip: None,
+            own_ip: None,
             bounty_ip: "fd00::3".parse().unwrap(),
             discovery_ip: default_discovery_ip(),
             babel_port: 6872,
@@ -163,6 +169,50 @@ impl Default for NetworkSettings {
             default_route: Vec::new(),
             is_gateway: false,
             tunnel_timeout_seconds: default_tunnel_timeout(),
+        }
+    }
+}
+
+fn default_logging() -> bool {
+    false
+}
+
+fn default_logging_level() -> String {
+    "ERROR".to_string()
+}
+
+fn default_logging_send_port() -> u16 {
+    5044
+}
+
+fn default_logging_dest_port() -> u16 {
+    514
+}
+
+/// Remote logging settings. Used to control remote logs being
+/// forwarded to an aggregator on the exit. The reason there is
+/// no general destination setting is that syslog udp is not
+/// secured or encrypted, sending it over the general internet is
+/// not allowed.
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub struct LoggingSettings {
+    #[serde(default = "default_logging")]
+    pub enabled: bool,
+    #[serde(default = "default_logging_level")]
+    pub level: String,
+    #[serde(default = "default_logging_send_port")]
+    pub send_port: u16,
+    #[serde(default = "default_logging_dest_port")]
+    pub dest_port: u16,
+}
+
+impl Default for LoggingSettings {
+    fn default() -> Self {
+        LoggingSettings {
+            enabled: false,
+            level: "ERROR".to_string(),
+            send_port: 5044,
+            dest_port: 514,
         }
     }
 }
@@ -249,13 +299,6 @@ impl ExitClientSettings {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
-pub struct StatsServerSettings {
-    pub stats_address: String,
-    pub stats_port: u16,
-    pub stats_enabled: bool,
-}
-
 // in seconds
 fn default_cache_timeout() -> u64 {
     600
@@ -295,10 +338,10 @@ pub struct RitaSettingsStruct {
     payment: PaymentSettings,
     #[serde(default)]
     dao: SubnetDAOSettings,
+    #[serde(default)]
+    log: LoggingSettings,
     network: NetworkSettings,
     exit_client: ExitClientSettings,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    stats_server: Option<StatsServerSettings>,
     #[serde(skip)]
     future: bool,
 }
@@ -386,8 +429,6 @@ pub struct RitaExitSettingsStruct {
     dao: SubnetDAOSettings,
     network: NetworkSettings,
     exit_network: ExitNetworkSettings,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    stats_server: Option<StatsServerSettings>,
     /// Countries which the clients to the exit are allowed from, blank for no geoip validation.
     /// (ISO country code)
     #[serde(skip_serializing_if = "HashSet::is_empty", default)]
@@ -414,14 +455,11 @@ pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, T, NetworkSettings>;
 
-    fn get_stats_server_settings<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> Option<RwLockReadGuardRef<'ret, T, StatsServerSettings>>;
-
     fn merge(&self, changed_settings: Value) -> Result<(), Error>;
     fn get_all(&self) -> Result<serde_json::Value, Error>;
 
-    fn get_identity(&self) -> Identity;
+    // Can be None if the mesh ip was not configured yet
+    fn get_identity(&self) -> Option<Identity>;
 
     fn get_future(&self) -> bool;
     fn set_future(&self, future: bool);
@@ -478,21 +516,6 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.network)
     }
 
-    fn get_stats_server_settings<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> Option<RwLockReadGuardRef<'ret, RitaSettingsStruct, StatsServerSettings>> {
-        if self.read().unwrap().stats_server.is_some() {
-            Some(
-                RwLockReadGuardRef::new(self.read().unwrap()).map(|g| match g.stats_server {
-                    Some(ref stat_server) => stat_server,
-                    None => panic!("exit client not set but needed"),
-                }),
-            )
-        } else {
-            None
-        }
-    }
-
     fn merge(&self, changed_settings: serde_json::Value) -> Result<(), Error> {
         let mut settings_value = serde_json::to_value(self.read().unwrap().clone())?;
 
@@ -511,12 +534,12 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
         Ok(serde_json::to_value(self.read().unwrap().clone())?)
     }
 
-    fn get_identity(&self) -> Identity {
-        Identity::new(
-            self.get_network().own_ip.clone(),
+    fn get_identity(&self) -> Option<Identity> {
+        Some(Identity::new(
+            self.get_network().mesh_ip?.clone(),
             self.get_payment().eth_address.clone(),
             self.get_network().wg_public_key.clone(),
-        )
+        ))
     }
 
     fn get_future(&self) -> bool {
@@ -565,21 +588,6 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.network)
     }
 
-    fn get_stats_server_settings<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> Option<RwLockReadGuardRef<'ret, RitaExitSettingsStruct, StatsServerSettings>> {
-        if self.read().unwrap().stats_server.is_some() {
-            Some(
-                RwLockReadGuardRef::new(self.read().unwrap()).map(|g| match g.stats_server {
-                    Some(ref stat_server) => stat_server,
-                    None => panic!("exit client not set but needed"),
-                }),
-            )
-        } else {
-            None
-        }
-    }
-
     fn merge(&self, changed_settings: serde_json::Value) -> Result<(), Error> {
         let mut settings_value = serde_json::to_value(self.read().unwrap().clone())?;
 
@@ -598,12 +606,12 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
         Ok(serde_json::to_value(self.read().unwrap().clone())?)
     }
 
-    fn get_identity(&self) -> Identity {
-        Identity::new(
-            self.get_network().own_ip.clone(),
+    fn get_identity(&self) -> Option<Identity> {
+        Some(Identity::new(
+            self.get_network().mesh_ip?.clone(),
             self.get_payment().eth_address.clone(),
             self.get_network().wg_public_key.clone(),
-        )
+        ))
     }
 
     fn get_future(&self) -> bool {
@@ -628,6 +636,12 @@ pub trait RitaClientSettings {
     fn get_exits_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, HashMap<String, ExitServer>>;
+    fn get_log<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, LoggingSettings>;
+    fn get_log_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, LoggingSettings>;
 }
 
 impl RitaClientSettings for Arc<RwLock<RitaSettingsStruct>> {
@@ -652,6 +666,18 @@ impl RitaClientSettings for Arc<RwLock<RitaSettingsStruct>> {
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, HashMap<String, ExitServer>> {
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.exit_client.exits)
+    }
+
+    fn get_log<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, LoggingSettings> {
+        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.log)
+    }
+
+    fn get_log_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, LoggingSettings> {
+        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.log)
     }
 }
 
