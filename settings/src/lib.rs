@@ -144,6 +144,9 @@ pub struct NetworkSettings {
     /// How long do we wait without contact from a peer before we delete the associated tunnel?
     #[serde(default = "default_tunnel_timeout")]
     pub tunnel_timeout_seconds: u64,
+    /// The name of the device or router model
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
 }
 
 impl Default for NetworkSettings {
@@ -169,6 +172,7 @@ impl Default for NetworkSettings {
             default_route: Vec::new(),
             is_gateway: false,
             tunnel_timeout_seconds: default_tunnel_timeout(),
+            device: None,
         }
     }
 }
