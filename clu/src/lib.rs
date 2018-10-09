@@ -25,6 +25,8 @@ use althea_kernel_interface::KI;
 extern crate althea_kernel_interface;
 use rand::distributions::Alphanumeric;
 use regex::Regex;
+use std::fs::File;
+use std::io::Read;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
@@ -91,6 +93,7 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
     let pubkey = network_settings.wg_public_key.clone();
     let mesh_ip_option = network_settings.mesh_ip.clone();
     let own_ip_option = network_settings.own_ip.clone(); // TODO: REMOVE IN ALPHA 11
+    let device_option = network_settings.device.clone();
 
     match mesh_ip_option {
         Some(existing_mesh_ip) => {
@@ -128,6 +131,44 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
                     Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
             }
         },
+    }
+
+    match device_option {
+        Some(existing_device) => {
+            info!("Device name is {}", existing_device);
+        }
+        None => {
+            let release_file_path = "/etc/althea-firmware-release";
+            info!(
+                "No device name was found, reading from {}",
+                release_file_path
+            );
+
+            let mut contents = String::new();
+            match File::open(release_file_path) {
+                Ok(mut f) => {
+                    f.read_to_string(&mut contents)?;
+                }
+                Err(e) => warn!("Couldn't open {}: {}", release_file_path, e),
+            };
+
+            for line in contents.lines() {
+                if line.starts_with("device:") {
+                    let device = line.split(" ").nth(1).ok_or(format_err!(
+                        "Could not obtain device name from line {:?}",
+                        line
+                    ))?;
+
+                    network_settings.device = Some(device.to_string());
+
+                    break;
+                }
+            }
+
+            if network_settings.device.is_none() {
+                warn!("Device name could not be read from {}", release_file_path);
+            }
+        }
     }
 
     // Setting the compat value to None prevents serde from putting it back in the config (thanks
