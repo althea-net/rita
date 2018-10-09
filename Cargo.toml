@@ -1,6 +1,6 @@
 [package]
 name = "althea_rs"
-version = "0.1.8"
+version = "0.1.9"
 authors = ["Stan Drozd <drozdziak1@gmail.com>"]
 
 [features]
