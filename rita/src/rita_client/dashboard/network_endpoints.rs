@@ -14,7 +14,7 @@ use rita_client::dashboard::nodeinfo::{GetNodeInfo, NodeInfo};
 use rita_client::dashboard::wifi::{GetWifiConfig, WifiInterface, WifiPass, WifiSSID};
 use rita_client::exit_manager::exit_setup_request;
 use rita_common::dashboard::Dashboard;
-use settings::{RitaClientSettings, RitaCommonSettings};
+use settings::{ExitServer, RitaClientSettings, RitaCommonSettings};
 use KI;
 use SETTING;
 
@@ -369,4 +369,14 @@ pub fn remote_logging_level(path: Path<String>) -> Box<Future<Item = HttpRespons
     }
 
     return Box::new(future::ok(HttpResponse::Ok().json(())));
+}
+
+pub fn add_exits(
+    new_exits: Json<HashMap<String, ExitServer>>,
+) -> Box<Future<Item = HttpResponse, Error = Error>> {
+    debug!("/exits POST hit with {:?}", new_exits);
+    let exits = &mut SETTING.get_exit_client_mut().exits;
+    exits.extend(new_exits.into_inner());
+
+    Box::new(future::ok(HttpResponse::Ok().json(exits.clone())))
 }
