@@ -177,12 +177,14 @@ impl Default for NetworkSettings {
     }
 }
 
+// TODO change to false in alpha 11
 fn default_logging() -> bool {
-    false
+    true
 }
 
+// TODO change to warn in alpha 11
 fn default_logging_level() -> String {
-    "ERROR".to_string()
+    "INFO".to_string()
 }
 
 fn default_logging_send_port() -> u16 {
