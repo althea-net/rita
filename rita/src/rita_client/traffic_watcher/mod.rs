@@ -127,7 +127,8 @@ pub fn watch<T: Read + Write>(
                         ));
                     }
                 }
-            )).send()?
+            ))
+            .send()?
             .json()?;
         let client_rx = SystemTime::now();
 
@@ -136,10 +137,9 @@ pub fn watch<T: Read + Write>(
             inner_rtt.as_secs() as f32 * 1000.0 + inner_rtt.subsec_nanos() as f32 / 1_000_000.0;
         //                        secs -> millis                            nanos -> millis
 
-        trace!(
+        info!(
             "RTTs: per-hop {}ms, inner {}ms",
-            target_route.full_path_rtt,
-            inner_rtt_millis
+            target_route.full_path_rtt, inner_rtt_millis
         );
 
         trace!("exit destination price {}", exit_dest_price);
@@ -147,6 +147,8 @@ pub fn watch<T: Read + Write>(
         trace!("Exit destination:\n{:#?}", target_route);
 
         owes += Int256::from(exit_price * output) + exit_dest_price * input;
+
+        info!("Total client debt of {} this round", owes);
 
         let update = TrafficUpdate {
             from: exit.clone(),

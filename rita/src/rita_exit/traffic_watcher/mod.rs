@@ -201,7 +201,7 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, clients: Vec<Identity>) -> Re
         let income = entry.1;
         total_income += income;
     }
-    info!("Total income of {:?} Wei this round", total_income);
+    info!("Total exit income of {:?} Wei this round", total_income);
 
     match KI.get_wg_exit_clients_online() {
         Ok(users) => info!("Total of {} users online", users),

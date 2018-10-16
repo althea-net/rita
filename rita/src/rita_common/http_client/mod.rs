@@ -52,7 +52,7 @@ impl Message for Hello {
 impl Handler<Hello> for HTTPClient {
     type Result = ResponseFuture<(), Error>;
     fn handle(&mut self, msg: Hello, _: &mut Self::Context) -> Self::Result {
-        info!("Sending Hello {:?}", msg);
+        trace!("Sending Hello {:?}", msg);
 
         let stream = TokioTcpStream::connect(&msg.to.contact_socket);
 

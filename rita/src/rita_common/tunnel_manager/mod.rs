@@ -53,7 +53,7 @@ pub enum TunnelManagerError {
     #[fail(display = "Port Error: {:?}", _0)]
     PortError(String),
     #[fail(display = "Invalid state")]
-    InvalidStateError,
+    _InvalidStateError,
 }
 
 /// Action that progresses the state machine
@@ -540,7 +540,7 @@ impl TunnelManager {
                 Ok(Ok(dnsresult)) => {
                     let port = SETTING.get_network().rita_hello_port;
                     let url = format!("http://[{}]:{}/hello", their_hostname, port);
-                    info!("Saying hello to: {:?} at ip {:?}", url, dnsresult);
+                    trace!("Saying hello to: {:?} at ip {:?}", url, dnsresult);
                     if dnsresult.len() > 0 && SETTING.get_network().is_gateway {
                         let their_ip = dnsresult[0].ip();
                         let socket = SocketAddr::new(their_ip, port);
@@ -686,7 +686,7 @@ impl TunnelManager {
                 return_bool = true;
             }
         }
-        info!(
+        trace!(
             "no tunnel found for {:?}%{:?} creating",
             peer.contact_socket.ip(),
             peer.ifidx,
@@ -701,7 +701,7 @@ impl TunnelManager {
         );
         // Open tunnel
         match tunnel.open() {
-            Ok(_) => info!("Tunnel {:?} is open", tunnel),
+            Ok(_) => trace!("Tunnel {:?} is open", tunnel),
             Err(e) => {
                 error!("Unable to open tunnel {:?}: {}", tunnel, e);
                 return Err(e);
@@ -742,9 +742,10 @@ impl Handler<TunnelStateChange> for TunnelManager {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: TunnelStateChange, _: &mut Context<Self>) -> Self::Result {
-        info!(
+        trace!(
             "Tunnel state change request for {:?} with action {:?}",
-            msg.identity, msg.action
+            msg.identity,
+            msg.action
         );
         // Find a tunnel
         match self.tunnels.get_mut(&msg.identity) {
@@ -753,9 +754,10 @@ impl Handler<TunnelStateChange> for TunnelManager {
                     trace!("Handle action {} on tunnel {:?}", msg.action, tunnel);
                     match msg.action {
                         TunnelAction::MembershipConfirmed => {
-                            info!(
+                            trace!(
                                 "Membership confirmed for identity {:?} returned tunnel {:?}",
-                                msg.identity, tunnel
+                                msg.identity,
+                                tunnel
                             );
                             match tunnel.state {
                                 TunnelState::NotRegistered => {
@@ -769,7 +771,7 @@ impl Handler<TunnelStateChange> for TunnelManager {
                             }
                         }
                         TunnelAction::MembershipExpired => {
-                            info!("Membership for identity {:?} is expired", msg.identity);
+                            trace!("Membership for identity {:?} is expired", msg.identity);
                             match tunnel.state {
                                 TunnelState::Registered => {
                                     tunnel.unmonitor(make_babel_stream()?)?;
