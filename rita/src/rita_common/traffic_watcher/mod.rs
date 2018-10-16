@@ -281,7 +281,17 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
         }
     }
 
-    trace!("Collated total debts: {:?}", debts);
+    trace!("Collated total Intermediary debts: {:?}", debts);
+    info!("Computed Intermediary debts for {:?} peers", debts.len());
+    let mut total_income = Int256::zero();
+    for entry in debts.iter() {
+        let income = entry.1;
+        total_income += income;
+    }
+    info!(
+        "Total intermediary income of {:?} Wei this round",
+        total_income
+    );
 
     for (from, amount) in debts {
         trace!("collated debt for {} is {}", from.mesh_ip, amount);
