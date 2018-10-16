@@ -231,6 +231,7 @@ fn main() {
                 Method::POST,
                 remove_from_dao_list,
             ).route("/debts", Method::GET, get_debts)
+            .route("/exits/sync", Method::GET, exits_sync)
             .route("/exits", Method::GET, get_exit_info)
             .route("/exits", Method::POST, add_exits)
             .route("/exits/{name}/register", Method::POST, register_to_exit)
