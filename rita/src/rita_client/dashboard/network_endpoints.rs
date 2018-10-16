@@ -389,9 +389,21 @@ pub fn exits_sync(
     debug!("/exits_update hit with {:?}", list_url_json);
 
     let list_url = match list_url_json.get("url") {
-        Some(url) => url,
+        Some(url) if url.starts_with("https://") => url,
+        Some(_unsafe_url) => {
+            let mut ret = HashMap::new();
+            ret.insert(
+                "error".to_owned(),
+                "Attempted to use a non-HTTPS url".to_owned(),
+            );
+            return Box::new(future::ok(
+                HttpResponse::new(StatusCode::BAD_REQUEST)
+                    .into_builder()
+                    .json(ret),
+            ));
+        }
         None => {
-            let mut ret = HashMap::<String, String>::new();
+            let mut ret = HashMap::new();
 
             ret.insert(
                 "error".to_owned(),
