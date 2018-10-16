@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Jehan <jehan.tremback@gmail.com>"]
 
 [dependencies]
-num256 = { path = "../num256" }
+num256 = { git = "https://github.com/althea-mesh/num256_rs" }
 base64 = "0.9.3"
 serde_derive = "1.0.79"
 serde = "1.0.79"
