@@ -129,7 +129,7 @@ impl Handler<SendUpdate> for DebtKeeper {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, _msg: SendUpdate, _ctx: &mut Context<Self>) -> Self::Result {
-        info!("sending debt keeper update");
+        trace!("sending debt keeper update");
         trace!("total debt data: {:?}", self.debt_data);
         for (k, _) in self.debt_data.clone() {
             trace!("sending update for {:?}", k);
