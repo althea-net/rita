@@ -6,6 +6,7 @@ use failure::Error;
 use futures::future;
 use futures::Future;
 use log::LevelFilter;
+use reqwest;
 
 use althea_types::ExitState;
 use rita_client::dashboard::exitinfo::{ExitInfo, GetExitInfo};
@@ -21,6 +22,7 @@ use SETTING;
 use std::boxed::Box;
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::time::Duration;
 
 /// A string of characters which we don't let users use because of corrupted UCI configs
 static FORBIDDEN_CHARS: &'static str = "'/\"\\";
@@ -377,6 +379,83 @@ pub fn add_exits(
     debug!("/exits POST hit with {:?}", new_exits);
     let exits = &mut SETTING.get_exit_client_mut().exits;
     exits.extend(new_exits.into_inner());
+
+    Box::new(future::ok(HttpResponse::Ok().json(exits.clone())))
+}
+
+pub fn exits_sync(
+    list_url_json: Json<HashMap<String, String>>,
+) -> Box<Future<Item = HttpResponse, Error = Error>> {
+    debug!("/exits_update hit with {:?}", list_url_json);
+
+    let list_url = match list_url_json.get("url") {
+        Some(url) => url,
+        None => {
+            let mut ret = HashMap::<String, String>::new();
+
+            ret.insert(
+                "error".to_owned(),
+                "Could not find a \"url\" key in supplied JSON".to_owned(),
+            );
+            return Box::new(future::ok(
+                HttpResponse::new(StatusCode::BAD_REQUEST)
+                    .into_builder()
+                    .json(ret),
+            ));
+        }
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap();
+
+    let new_exits: HashMap<String, ExitServer> = match client.get(list_url).send() {
+        Ok(mut response) => match response.json() {
+            Ok(deserialized) => deserialized,
+            Err(e) => {
+                let mut ret = HashMap::<String, String>::new();
+
+                error!(
+                    "Could not deserialize exit list at {:?} because of error: {:?}",
+                    list_url, e
+                );
+                ret.insert(
+                    "error".to_owned(),
+                    format!("Could not deserialize exit list at URL {:?}", list_url),
+                );
+
+                return Box::new(future::ok(
+                    HttpResponse::new(StatusCode::BAD_REQUEST)
+                        .into_builder()
+                        .json(ret),
+                ));
+            }
+        },
+        Err(e) => {
+            let mut ret = HashMap::<String, String>::new();
+
+            error!(
+                "Could not make GET request vor URL {:?}, Rust error: {:?}",
+                list_url, e
+            );
+            ret.insert(
+                "error".to_owned(),
+                format!("Could not make GET request for URL {:?}", list_url),
+            );
+            ret.insert("rust_error".to_owned(), format!("{:?}", e));
+            return Box::new(future::ok(
+                HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+                    .into_builder()
+                    .json(ret),
+            ));
+        }
+    };
+
+    info!("exit_sync list: {:#?}", new_exits);
+
+    let exits = &mut SETTING.get_exit_client_mut().exits;
+    exits.extend(new_exits);
 
     Box::new(future::ok(HttpResponse::Ok().json(exits.clone())))
 }
