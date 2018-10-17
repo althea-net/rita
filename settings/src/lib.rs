@@ -427,8 +427,37 @@ pub struct ExitMailerSettings {
 }
 
 /// Placeholder
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
-pub struct ExitVerifSettings;
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub enum ExitVerifSettings {
+    Email {
+        /// The email address of the from field of the email sent
+        from_address: String,
+        /// Min amount of time for emails going to the same address
+        email_cooldown: u64,
+
+        // templating stuff
+        #[serde(default = "default_email_subject")]
+        subject: String,
+
+        #[serde(default = "default_email_body")]
+        body: String,
+
+        #[serde(default)]
+        test: bool,
+        #[serde(default)]
+        test_dir: String,
+        /// SMTP server url e.g. smtp.fastmail.com
+        #[serde(default)]
+        smtp_url: String,
+        /// SMTP domain url e.g. mail.example.com
+        #[serde(default)]
+        smtp_domain: String,
+        #[serde(default)]
+        smtp_username: String,
+        #[serde(default)]
+        smtp_password: String,
+    },
+}
 
 /// This is the main settings struct for rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
