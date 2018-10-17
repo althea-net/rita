@@ -70,6 +70,75 @@ This file documents the dashboard API found in Rita client.
 ## /exits
 
 - URL: `<rita ip>:<rita_dashboard_port>/exits'
+- Comment: Merges a supplied exit list with the existing list; existing entries
+  are overwritten
+- Method: `POST`
+- URL Params: `None`
+- Data Params: A JSON object containing the exits we want to add, e.g.:
+```json
+{
+	"exit_other": {
+		"auto_register": false,
+		"description": "",
+		"general_details": {
+			"description": "EDITEDITjust a normal althea exit",
+			"exit_price": 50,
+			"netmask": 24,
+			"server_internal_ip": "172.168.1.254",
+			"wg_exit_port": 59999
+
+		},
+		"id": {
+			"eth_address": "0x0101010101010101010101010101010101010101",
+			"mesh_ip": "fd00::5",
+			"wg_public_key": "KaTbsJ0Hur4D7Tcb+nc8ofs7n8tKL+wWG3H38KFCwlE="
+
+		},
+		"message": "Got info successfully",
+		"registration_port": 4875,
+		"state": "GotInfo"
+
+	},
+	"exit_yet_another": {
+		"auto_register": false,
+		"description": "",
+		"general_details": {
+			"description": "EDITEDITjust a normal althea exit",
+			"exit_price": 50,
+			"netmask": 24,
+			"server_internal_ip": "172.168.1.254",
+			"wg_exit_port": 59999
+
+		},
+		"id": {
+			"eth_address": "0x0101010101010101010101010101010101010101",
+			"mesh_ip": "fd00::5",
+			"wg_public_key": "KaTbsJ0Hur4D7Tcb+nc8ofs7n8tKL+wWG3H38KFCwlE="
+
+		},
+		"message": "Got info successfully",
+		"registration_port": 4875,
+		"state": "GotInfo"
+
+	}
+}
+```
+- Success Response:
+  - Code: 200 OK
+  - Contents: The complete current exit list containing the result of adding the
+    desired exits; the format is identical to the data param
+- Error Response: `400 Server Error`
+
+- Sample Call:
+
+`curl 127.0.0.1:4877/exits -XPOST -H "Content-Type: application/json" -d
+$(exit_list_of_format_listed_above)`
+
+---
+
+## /exits
+
+- URL: `<rita ip>:<rita_dashboard_port>/exits'
 - Comment: Gets all the configured exits
 - Method: `GET`
 - URL Params: `None`
@@ -105,6 +174,45 @@ This file documents the dashboard API found in Rita client.
 - Sample Call:
 
 `curl 127.0.0.1:4877/exits`
+
+---
+## /exits/sync
+
+- URL: `<rita ip>:<rita_dashboard_port>/exits/sync'
+- Comment: Adds exits from under `url` remote HTTP host to exit list;
+  conflicting entries are overwritten by remote list contents
+- Method: `GET`
+- URL Params: `None`
+- Data Params:
+```
+{
+  "url": "https://wherever.the/json/list/is.json"
+}
+```
+- Success Response:
+  - Code: 200 OK
+  - Contents: Updated exit list (see POST `/exits` for example)
+- Error Response: `400 Bad Request` for unparsable response JSON, `500 Internal Server
+  Error` when the request itself fails for whatever reason
+- Error Contents:
+  - `400 Bad Request` when the JSON is unparsable
+```json
+{
+  "error": "<description>"
+}
+```
+  - `500 Internal Server Error` when the request fails
+```json
+{
+  "error": "<description>",
+  "rust_error": "<stringified_rust_error>"
+}```
+
+- Sample Call:
+
+`curl 127.0.0.1:4877/exits/borked/reset -H "Content-Type:
+application/json" -d '\{"url": "https://somewhere.safe"\}'
+"'`
 
 ---
 
@@ -704,36 +812,25 @@ somthing wrong with the input data.
 
 ---
 
-## /remote_logging/level/{u8}
+## /remote_logging/level/{level_name}
 
-Sets the level of remote logging
-
-<<<<<<< HEAD
-0: Error
-1: Debug
-2: Info
-3: Trace
-\_: Error
-
-Do not use anything above one by default ever!
-it will actually charge
-=======
+Sets the level of remote logging.
+Supported level names
 ERROR
 WARN
 INFO
 DEBUG
 TRACE
 
-Do not use anything above WARN by default ever!
-it will actually consume nontrival bandwidth
-
-> > > > > > > Use loglevels in the settings
+Do not use anything above WARN for everyday use!
+The amount of output will actually consume nontrival bandwidth when passing logs
+to the remote server.
 
 This endpoint will restart the router so no response
 is expected, an error response indicates that there's
 somthing wrong with the input data.
 
-- URL: `<rita ip>:<rita_dashboard_port>/logging/level/{u8}'
+- URL: `<rita ip>:<rita_dashboard_port>/logging/level/{level_namename}'
 - Method: `POST`
 - URL Params: level
 - Data Params: `None`

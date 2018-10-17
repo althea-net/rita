@@ -231,7 +231,9 @@ fn main() {
                 Method::POST,
                 remove_from_dao_list,
             ).route("/debts", Method::GET, get_debts)
+            .route("/exits/sync", Method::GET, exits_sync)
             .route("/exits", Method::GET, get_exit_info)
+            .route("/exits", Method::POST, add_exits)
             .route("/exits/{name}/register", Method::POST, register_to_exit)
             .route("/exits/{name}/reset", Method::POST, reset_exit)
             .route("/exits/{name}/select", Method::POST, select_exit)
@@ -239,7 +241,13 @@ fn main() {
                 "/exits/{name}/verify/{code}",
                 Method::POST,
                 verify_on_exit_with_code,
-            ).route(
+            ).route("/info", Method::GET, get_own_info)
+            .route("/interfaces", Method::GET, get_interfaces)
+            .route("/interfaces", Method::POST, set_interfaces)
+            .route("/mesh_ip", Method::GET, get_mesh_ip)
+            .route("/mesh_ip", Method::POST, set_mesh_ip)
+            .route("/neighbors", Method::GET, get_node_info)
+            .route(
                 "/remote_logging/enabled/{enabled}",
                 Method::POST,
                 remote_logging,
@@ -247,13 +255,7 @@ fn main() {
                 "/remote_logging/level/{level}",
                 Method::POST,
                 remote_logging_level,
-            ).route("/info", Method::GET, get_own_info)
-            .route("/interfaces", Method::GET, get_interfaces)
-            .route("/interfaces", Method::POST, set_interfaces)
-            .route("/mesh_ip", Method::GET, get_mesh_ip)
-            .route("/mesh_ip", Method::POST, set_mesh_ip)
-            .route("/neighbors", Method::GET, get_node_info)
-            .route("/settings", Method::GET, get_settings)
+            ).route("/settings", Method::GET, get_settings)
             .route("/settings", Method::POST, set_settings)
             .route("/version", Method::GET, version)
             .route("/wifi_settings/pass", Method::POST, set_wifi_pass)
