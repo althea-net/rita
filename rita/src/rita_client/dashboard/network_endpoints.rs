@@ -445,7 +445,7 @@ pub fn exits_sync(
             }
         },
         Err(e) => {
-            let mut ret = HashMap::<String, String>::new();
+            let mut ret = HashMap::new();
 
             error!(
                 "Could not make GET request vor URL {:?}, Rust error: {:?}",
