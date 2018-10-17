@@ -386,7 +386,7 @@ pub fn add_exits(
 pub fn exits_sync(
     list_url_json: Json<HashMap<String, String>>,
 ) -> Box<Future<Item = HttpResponse, Error = Error>> {
-    debug!("/exits_update hit with {:?}", list_url_json);
+    debug!("/exits/sync hit with {:?}", list_url_json);
 
     let list_url = match list_url_json.get("url") {
         Some(url) if url.starts_with("https://") => url,
