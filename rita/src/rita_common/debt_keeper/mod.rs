@@ -229,7 +229,7 @@ impl DebtKeeper {
 
         let mut imbalance = Uint256::from(0u32);
         for (_, v) in self.debt_data.clone() {
-            imbalance = imbalance.clone() + v.debt.abs().into()
+            imbalance = imbalance.clone() + v.debt.abs();
         }
         trace!("total debt imbalance: {}", imbalance);
     }
@@ -275,7 +275,7 @@ impl DebtKeeper {
 
         let close_threshold = SETTING.get_payment().close_threshold.clone()
             - debt_data.total_payment_received.clone()
-                / SETTING.get_payment().close_fraction.clone().into();
+                / SETTING.get_payment().close_fraction.clone();
 
         if debt_data.debt < close_threshold {
             trace!(
@@ -293,7 +293,7 @@ impl DebtKeeper {
                 ident.mesh_ip,
                 d
             );
-            debt_data.total_payment_sent = debt_data.total_payment_sent.add(d.clone().into());
+            debt_data.total_payment_sent = debt_data.total_payment_sent.clone().add(d.clone());
             debt_data.debt = Int256::from(0);
             DebtAction::MakePayment {
                 to: ident.clone(),
