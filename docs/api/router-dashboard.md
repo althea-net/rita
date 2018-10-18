@@ -106,6 +106,7 @@ This file documents the dashboard API found in Rita client.
 			"description": "EDITEDITjust a normal althea exit",
 			"exit_price": 50,
 			"netmask": 24,
+                        "verif_mode": "Email"
 			"server_internal_ip": "172.168.1.254",
 			"wg_exit_port": 59999
 
