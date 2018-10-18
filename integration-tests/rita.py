@@ -252,7 +252,7 @@ def start_babel(node):
 
 def start_bounty(id):
     os.system(
-        '(RUST_BACKTRACE=full ip netns exec netlab-{id} {bounty} & echo $! > bounty-n{id}.pid) | grep -Ev "<unknown>|mio" > bounty-n{id}.log &'.format(
+        '(RUST_BACKTRACE=full ip netns exec netlab-{id} {bounty} & echo $! > bounty-n{id}.pid) | grep -Ev "<unknown>|mio|tokio_reactor" > bounty-n{id}.log &'.format(
             id=id, bounty=BOUNTY_HUNTER))
 
 
@@ -356,7 +356,7 @@ def start_rita(node):
     os.system(
         '(RUST_BACKTRACE=full RUST_LOG=TRACE ip netns exec netlab-{id} {rita} --config=rita-settings-n{id}.toml --platform=linux'
         ' 2>&1 & echo $! > rita-n{id}.pid) | '
-        'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA,
+        'grep -Ev "<unknown>|mio|tokio_core|tokio_reactor|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA,
                                                                               pwd=dname)
         )
     time.sleep(1.5)
@@ -385,7 +385,7 @@ def start_rita_exit(node):
     os.system(
         '(RUST_BACKTRACE=full RUST_LOG=TRACE ip netns exec netlab-{id} {rita} --config=rita-settings-n{id}.toml'
         ' 2>&1 & echo $! > rita-n{id}.pid) | '
-        'grep -Ev "<unknown>|mio|tokio_core|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA_EXIT,
+        'grep -Ev "<unknown>|mio|tokio_core|tokio_reactor|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA_EXIT,
                                                                               pwd=dname)
         )
 
