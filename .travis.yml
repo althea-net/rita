@@ -7,29 +7,40 @@ before_install:
   - sudo apt-get install -y libsqlite3-dev iperf3 python3-pip bridge-utils wireguard linux-source linux-headers-$(uname -r) curl git libssl-dev pkg-config build-essential ipset
   - which diesel || cargo install diesel_cli --no-default-features --features sqlite
   - sudo cp $(which diesel) /usr/bin
+  - command -v cross 1>/dev/null || cargo install cross
+
 env:
-  - TEST_COMMAND="rustup component add rustfmt-preview --toolchain stable && cargo fmt --all && git status && if ! git diff-index --quiet HEAD --; then exit 1; fi"
-  - TEST_COMMAND="cargo build --locked --verbose --all"
-  - TEST_COMMAND="cargo test --locked --verbose --all" RUST_TEST_THREADS=1
+  global:
+    - RUST_TEST_THREADS=1
+  matrix:
+    - TARGET="x86_64-unknown-linux-gnu"
+    - TARGET="mips-unknown-linux-gnu"
+    - TARGET="mipsel-unknown-linux-gnu"
+    - TARGET="mips64-unknown-linux-gnuabi64"
+    - TARGET="mips64el-unknown-linux-gnuabi64"
+    - TARGET="aarch64-unknown-linux-gnu"
+
 rust:
   - stable
   - beta
   - nightly
+
 script:
-  - (eval "$TEST_COMMAND")
+  - cross build --target $TARGET --verbose --all
+  - cross test --target $TARGET --verbose --all
+
 matrix:
   allow_failures:
-    - rust: beta
     - rust: nightly
-      env: TEST_COMMAND="cargo build --locked --verbose --all"
-    - rust: nightly
-      env: TEST_COMMAND="cargo test --locked --verbose --all" RUST_TEST_THREADS=1
-  exclude:
-    - rust: beta
-      env: TEST_COMMAND="rustup component add rustfmt-preview --toolchain stable && cargo fmt --all && git status && if ! git diff-index --quiet HEAD --; then exit 1; fi"
-    - rust: nightly
-      env: TEST_COMMAND="rustup component add rustfmt-preview --toolchain stable && cargo fmt --all && git status && if ! git diff-index --quiet HEAD --; then exit 1; fi"
+  fast_finish: true
+
   include:
+    - rust: stable
+      ? env
+      ? before_install
+      script:
+        - rustup component add rustfmt-preview
+        - cargo fmt --all -- --check
     - name: "Cross compile on MIPS"
       script: ./integration-tests/cross-build.sh
     - script: ./integration-tests/rita.sh
