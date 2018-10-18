@@ -394,10 +394,9 @@ fn default_email_body() -> String {
     String::from("Your althea verification code is [{{email_code}}]")
 }
 
-// TODO: make this cleaner/use enums
 /// This is the settings for email verification
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
-pub struct ExitMailerSettings {
+pub struct EmailVerifSettings {
     /// The email address of the from field of the email sent
     pub from_address: String,
     /// Min amount of time for emails going to the same address
@@ -428,35 +427,9 @@ pub struct ExitMailerSettings {
 
 /// Placeholder
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+#[serde(tag = "type", content = "contents")]
 pub enum ExitVerifSettings {
-    Email {
-        /// The email address of the from field of the email sent
-        from_address: String,
-        /// Min amount of time for emails going to the same address
-        email_cooldown: u64,
-
-        // templating stuff
-        #[serde(default = "default_email_subject")]
-        subject: String,
-
-        #[serde(default = "default_email_body")]
-        body: String,
-
-        #[serde(default)]
-        test: bool,
-        #[serde(default)]
-        test_dir: String,
-        /// SMTP server url e.g. smtp.fastmail.com
-        #[serde(default)]
-        smtp_url: String,
-        /// SMTP domain url e.g. mail.example.com
-        #[serde(default)]
-        smtp_domain: String,
-        #[serde(default)]
-        smtp_username: String,
-        #[serde(default)]
-        smtp_password: String,
-    },
+    Email(EmailVerifSettings),
 }
 
 /// This is the main settings struct for rita_exit
@@ -473,7 +446,7 @@ pub struct RitaExitSettingsStruct {
     #[serde(skip_serializing_if = "HashSet::is_empty", default)]
     allowed_countries: HashSet<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    mailer: Option<ExitMailerSettings>, // Legacy setting, TODO: remove in Alpha 11
+    mailer: Option<EmailVerifSettings>, // Legacy setting, TODO: remove in Alpha 11
     #[serde(skip_serializing_if = "Option::is_none",)]
     verif_settings: Option<ExitVerifSettings>, // mailer's successor with new verif methods readiness
     #[serde(skip)]
@@ -726,7 +699,14 @@ pub trait RitaExitSettings {
     fn get_exit_network<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, ExitNetworkSettings>;
-    fn get_mailer(&self) -> Option<ExitMailerSettings>;
+    fn get_verif_settings(&self) -> Option<ExitVerifSettings>;
+    fn get_verif_settings_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, Option<ExitVerifSettings>>;
+    fn get_mailer(&self) -> Option<EmailVerifSettings>;
+    fn get_mailer_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, Option<EmailVerifSettings>>;
     fn get_db_file(&self) -> String;
     fn get_description(&self) -> String;
     fn get_allowed_countries<'ret, 'me: 'ret>(
@@ -751,8 +731,21 @@ impl RitaExitSettings for Arc<RwLock<RitaExitSettingsStruct>> {
     ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, HashSet<String>> {
         RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.allowed_countries)
     }
-    fn get_mailer(&self) -> Option<ExitMailerSettings> {
+    fn get_verif_settings(&self) -> Option<ExitVerifSettings> {
+        self.read().unwrap().verif_settings.clone()
+    }
+    fn get_verif_settings_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, Option<ExitVerifSettings>> {
+        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.verif_settings)
+    }
+    fn get_mailer(&self) -> Option<EmailVerifSettings> {
         self.read().unwrap().mailer.clone()
+    }
+    fn get_mailer_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, Option<EmailVerifSettings>> {
+        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.mailer)
     }
 }
 

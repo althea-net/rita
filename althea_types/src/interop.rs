@@ -136,8 +136,7 @@ pub struct ExitDetails {
     pub wg_exit_port: u16,
     pub exit_price: u64,
     pub description: String,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub verif_mode: Option<ExitVerifMode>,
+    pub verif_mode: ExitVerifMode,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
