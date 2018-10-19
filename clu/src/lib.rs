@@ -295,6 +295,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_generate_wg_key() {
         let keypair = KI.create_wg_keypair().unwrap();
         assert_eq!(validate_wg_key(&keypair.public), true);
