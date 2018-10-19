@@ -10,8 +10,6 @@ before_install:
   - command -v cross 1>/dev/null || cargo install cross
 
 env:
-  global:
-    - RUST_TEST_THREADS=1
   matrix:
     - TARGET="x86_64-unknown-linux-gnu"
     - TARGET="mips-unknown-linux-gnu"
@@ -27,7 +25,7 @@ rust:
 
 script:
   - cross build --target $TARGET --verbose --all
-  - cross test --target $TARGET --verbose --all
+  - cross test --target $TARGET --verbose --all -- --test-threads=1
 
 matrix:
   allow_failures:
