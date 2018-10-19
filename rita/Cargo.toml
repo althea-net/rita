@@ -32,7 +32,6 @@ actix = "0.7.4"
 actix-web = { version = "0.7.4", default_features = false }
 actix_derive = "0.3.0"
 bytes = "0.4.10"
-clippy = { version = "0.0.212", optional = true }
 config = "0.9.0"
 diesel = { version = "1.3.3", features = ["sqlite"] }
 libsqlite3-sys = { version = "0.9.3", features = ["bundled"] }
