@@ -24,7 +24,7 @@ althea_types = { path = "../althea_types", features = ["actix"]}
 babel_monitor = { path = "../babel_monitor" }
 clu = { path = "../clu" }
 exit_db = { path = "../exit_db" }
-num256 = { git = "https://github.com/althea-mesh/num256_rs" }
+num256 = "0.1"
 settings = { path = "../settings" }
 
 syslog = "^4.0"
