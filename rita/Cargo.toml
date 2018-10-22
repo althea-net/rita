@@ -28,8 +28,8 @@ num256 = "0.1"
 settings = { path = "../settings" }
 
 syslog = "^4.0"
-actix = "0.7.4"
-actix-web = { version = "0.7.4", default_features = false }
+actix = "0.7.5"
+actix-web = { version = "0.7.13", default_features = false, features = ["tls", "ssl"]}
 actix_derive = "0.3.0"
 bytes = "0.4.10"
 config = "0.9.0"
@@ -63,3 +63,4 @@ handlebars = "1.0.3"
 byteorder = { version = "1.2.6", features = ["i128"] }
 openssl-probe = "0.1.2"
 num-traits="0.2"
+openssl = "0.10.12"

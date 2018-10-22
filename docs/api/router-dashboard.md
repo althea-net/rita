@@ -1,3 +1,7 @@
+> **Note**
+> If you don't have SSL/TLS (`key_path` and `cert_path` in Rita config) set up,
+> remove `-k` and the `https://` URI from examples before use
+
 # Router dashboard API
 
 This file documents the dashboard API found in Rita client.
@@ -24,7 +28,7 @@ This file documents the dashboard API found in Rita client.
 
 - Sample Call:
 
-`curl 127.0.0.1:4877/info`
+`curl -k https://127.0.0.1:4877/info`
 
 ---
 
@@ -63,7 +67,7 @@ This file documents the dashboard API found in Rita client.
 
 - Sample Call:
 
-`curl 127.0.0.1:4877/neighbors`
+`curl -k https://127.0.0.1:4877/neighbors`
 
 ---
 
@@ -131,7 +135,7 @@ This file documents the dashboard API found in Rita client.
 
 - Sample Call:
 
-`curl 127.0.0.1:4877/exits -XPOST -H "Content-Type: application/json" -d
+`curl -k https://127.0.0.1:4877/exits -XPOST -H "Content-Type: application/json" -d
 $(exit_list_of_format_listed_above)`
 
 ---
@@ -173,7 +177,7 @@ $(exit_list_of_format_listed_above)`
 
 - Sample Call:
 
-`curl 127.0.0.1:4877/exits`
+`curl -k https://127.0.0.1:4877/exits`
 
 ---
 ## /exits/sync
@@ -210,7 +214,7 @@ $(exit_list_of_format_listed_above)`
 
 - Sample Call:
 
-`curl 127.0.0.1:4877/exits/borked/reset -H "Content-Type:
+`curl -k https://127.0.0.1:4877/exits/borked/reset -H "Content-Type:
 application/json" -d '\{"url": "https://somewhere.safe"\}'
 "'`
 
@@ -237,7 +241,7 @@ application/json" -d '\{"url": "https://somewhere.safe"\}'
 
 - Sample Call:
 
-`curl -XPOST 127.0.0.1:4877/exits/borked/reset`
+`curl -XPOST -k https://127.0.0.1:4877/exits/borked/reset`
 
 ---
 
@@ -262,7 +266,7 @@ application/json" -d '\{"url": "https://somewhere.safe"\}'
 
 - Sample Call:
 
-`curl -XPOST 127.0.0.1:4877/exits/borked/reset`
+`curl -XPOST -k https://127.0.0.1:4877/exits/borked/reset`
 
 ---
 
@@ -288,7 +292,7 @@ application/json" -d '\{"url": "https://somewhere.safe"\}'
 
 - Sample Call:
 
-`curl -XPOST 127.0.0.1:4877/exits/borked/register`
+`curl -XPOST -k https://127.0.0.1:4877/exits/borked/register`
 
 ---
 
@@ -317,7 +321,7 @@ application/json" -d '\{"url": "https://somewhere.safe"\}'
 
 - Sample Call:
 
-`curl -XPOST 127.0.0.1:4877/exits/borked/register`
+`curl -XPOST -k https://127.0.0.1:4877/exits/borked/register`
 
 ---
 
@@ -440,7 +444,7 @@ application/json" -d '\{"url": "https://somewhere.safe"\}'
 
 - Sample Call:
 
-`curl 127.0.0.1:4877/settings`
+`curl -k https://127.0.0.1:4877/settings`
 
 ## /settings
 
@@ -463,7 +467,7 @@ application/json" -d '\{"url": "https://somewhere.safe"\}'
 
 - Sample Call:
 
-`curl -XPOST 127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"exit_client": {"current_exit": "SELECTEDEXIT"}}'`
+`curl -XPOST -k https://127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"exit_client": {"current_exit": "SELECTEDEXIT"}}'`
 }
 
 ---
@@ -484,7 +488,7 @@ application/json" -d '\{"url": "https://somewhere.safe"\}'
 
 - Error Response: `500 Server Error`
 - Sample Call:
-  `curl -XPOST 127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"default_radio0": {"ssid": "NetworkName"}}'`
+  `curl -XPOST -k https://127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"default_radio0": {"ssid": "NetworkName"}}'`
 
 ---
 
@@ -514,7 +518,7 @@ application/json" -d '\{"url": "https://somewhere.safe"\}'
 
 - Sample Call:
 
-`curl -XPOST 127.0.0.1:<rita_dashboard_port>/wifi_settings/ssid -H 'Content-Type: application/json' -i -d '{"radio":"radio0", "ssid": "this is a freeform ssid"}'`
+`curl -XPOST -k https://127.0.0.1:<rita_dashboard_port>/wifi_settings/ssid -H 'Content-Type: application/json' -i -d '{"radio":"radio0", "ssid": "this is a freeform ssid"}'`
 
 ---
 
@@ -544,7 +548,7 @@ application/json" -d '\{"url": "https://somewhere.safe"\}'
 
 - Sample Call:
 
-`curl -XPOST 127.0.0.1:<rita_dashboard_port>/wifi_settings/pass -H 'Content-Type: application/json' -i -d '{"radio":"radio0", "pass": "this is a freeform password"}'`
+`curl -XPOST -k https://127.0.0.1:<rita_dashboard_port>/wifi_settings/pass -H 'Content-Type: application/json' -i -d '{"radio":"radio0", "pass": "this is a freeform password"}'`
 
 ---
 
@@ -562,7 +566,7 @@ application/json" -d '\{"url": "https://somewhere.safe"\}'
 - Error Response: `500 Server Error`
 - Sample Call:
 
-`curl -XPOST 127.0.0.1:<rita_dashboard_port>/wipe`
+`curl -XPOST -k https://127.0.0.1:<rita_dashboard_port>/wipe`
 
 ---
 
@@ -582,7 +586,7 @@ Calling HTTP `DELETE` request on this endpoint causes all tables to be wiped out
 - Error Response: `500 Server Error`
 - Sample Call:
 
-`curl -XDELETE 127.0.0.1:<rita_dashboard_port>/database`
+`curl -XDELETE -k https://127.0.0.1:<rita_dashboard_port>/database`
 
 ---
 
@@ -716,7 +720,7 @@ Calling HTTP `GET` request on this endpoint provides a list of availabile ports 
 - Error Response: `500 Server Error`
 - Sample Call
 
-`curl 127.0.0.1:<rita_dashboard_port>/interfaces'
+`curl -k https://127.0.0.1:<rita_dashboard_port>/interfaces'
 
 Format:
 
@@ -748,7 +752,7 @@ the `GET` version of this same endpoint.
 - Error Response: `500 Server Error`
 - Sample Call
 
-`curl 127.0.0.1:<rita_dashboard_port>/interfaces -H 'Content-Type: application/json' -i -d '{"interface":"wlan0", "mode":"LAN"}'`
+`curl -k https://127.0.0.1:<rita_dashboard_port>/interfaces -H 'Content-Type: application/json' -i -d '{"interface":"wlan0", "mode":"LAN"}'`
 
 Format:
 
@@ -808,7 +812,7 @@ somthing wrong with the input data.
 
 - Sample Call:
 
-`curl -XPOST 127.0.0.1:4877/remote_logging/enabled/true`
+`curl -XPOST -k https://127.0.0.1:4877/remote_logging/enabled/true`
 
 ---
 
@@ -848,4 +852,4 @@ somthing wrong with the input data.
 
 - Sample Call:
 
-`curl -XPOST 127.0.0.1:4877/remote_logging/level/3`
+`curl -XPOST -k https://127.0.0.1:4877/remote_logging/level/3`

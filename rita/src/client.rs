@@ -48,6 +48,7 @@ extern crate lettre;
 extern crate lettre_email;
 extern crate minihttpse;
 extern crate num_traits;
+extern crate openssl;
 extern crate openssl_probe;
 extern crate rand;
 extern crate regex;
@@ -62,6 +63,7 @@ extern crate tokio_io;
 extern crate trust_dns_resolver;
 
 use docopt::Docopt;
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 #[cfg(not(test))]
 use settings::FileWrite;
 
@@ -72,6 +74,7 @@ use actix::*;
 use actix_web::http::Method;
 use actix_web::*;
 
+use std::path;
 use std::sync::{Arc, RwLock};
 
 #[cfg(test)]
@@ -220,8 +223,7 @@ fn main() {
     .shutdown_timeout(0)
     .start();
 
-    // dashboard
-    server::new(|| {
+    let app_closure = || {
         App::new()
             .middleware(middleware::Headers)
             .route("/dao_list", Method::GET, get_dao_list)
@@ -262,13 +264,62 @@ fn main() {
             .route("/wifi_settings/ssid", Method::POST, set_wifi_ssid)
             .route("/wifi_settings", Method::GET, get_wifi_config)
             .route("/wipe", Method::POST, wipe)
-    }).workers(1)
-    .bind(format!(
-        "[::0]:{}",
-        SETTING.get_network().rita_dashboard_port
-    )).unwrap()
-    .shutdown_timeout(0)
-    .start();
+    };
+
+    match (
+        SETTING.get_network().key_path.clone(),
+        SETTING.get_network().cert_path.clone(),
+    ) {
+        (Some(key), Some(cert)) => {
+            if path::Path::new(&key).exists() && path::Path::new(&cert).exists() {
+                info!(
+                    "TLS: Starting HTTPS-enabled dashboard (key: {}, cert: {})",
+                    key, cert
+                );
+                let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+                builder
+                    .set_private_key_file(key, SslFiletype::ASN1)
+                    .unwrap();
+                builder
+                    .set_certificate_file(cert, SslFiletype::ASN1)
+                    .unwrap();
+
+                // Serve over TLS
+                server::new(app_closure)
+                    .workers(1)
+                    .bind_ssl(
+                        format!("[::0]:{}", SETTING.get_network().rita_dashboard_port,),
+                        builder,
+                    ).unwrap()
+                    .shutdown_timeout(0)
+                    .start();
+            } else {
+                warn!("TLS: cert and key paths configured but not present on disk, falling back to plain HTTP");
+                server::new(app_closure)
+                    .workers(1)
+                    .bind(format!(
+                        "[::0]:{}",
+                        SETTING.get_network().rita_dashboard_port
+                    )).unwrap()
+                    .shutdown_timeout(0)
+                    .start();
+            }
+        }
+        (other_key_state, other_cert_state) => {
+            warn!(
+                "TLS: not configured, got key {:?} and cert {:?}, expected two defined paths, falling back to plain HTTP",
+                other_key_state, other_cert_state
+            );
+            server::new(app_closure)
+                .workers(1)
+                .bind(format!(
+                    "[::0]:{}",
+                    SETTING.get_network().rita_dashboard_port
+                )).unwrap()
+                .shutdown_timeout(0)
+                .start();
+        }
+    }
 
     let common = rita_common::rita_loop::RitaLoop::new();
     let _: Addr<_> = common.start();
