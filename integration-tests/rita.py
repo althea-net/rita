@@ -312,8 +312,8 @@ def switch_binaries(node_id):
             "BOUNTY_HUNTER:\t{}").format(RITA, RITA_EXIT, BOUNTY_HUNTER))
 
 def register_to_exit(node):
-    os.system(("ip netns exec netlab-{} curl -XPOST " +
-        "127.0.0.1:4877/exits/exit_a/register").format(node.id))
+    os.system(("ip netns exec netlab-{} curl -k -XPOST " +
+        "https://127.0.0.1:4877/exits/exit_a/register").format(node.id))
 
 def email_verif(node):
     email_text = read_email(node)
@@ -322,10 +322,10 @@ def email_verif(node):
 
     print("Email code for node {} is {}".format(node.id, code))
 
-    exec_or_exit(("ip netns exec netlab-{} curl -XPOST " +
-        "127.0.0.1:4877/exits/exit_a/verify/{}").format(node.id, code))
-    exec_or_exit(("ip netns exec netlab-{} curl " +
-        "127.0.0.1:4877/settings").format(node.id))
+    exec_or_exit(("ip netns exec netlab-{} curl -k -XPOST " +
+        "https://127.0.0.1:4877/exits/exit_a/verify/{}").format(node.id, code))
+    exec_or_exit(("ip netns exec netlab-{} curl -k " +
+        "https://127.0.0.1:4877/settings").format(node.id))
 
 def read_email(node):
     id = node.id
@@ -363,7 +363,7 @@ def start_rita(node):
 
     EXIT_SETTINGS["reg_details"]["email"] = "{}@example.com".format(id)
 
-    os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
+    os.system("ip netns exec netlab-{id} curl -k -XPOST https://127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
               .format(id=id, data=json.dumps({"exit_client": EXIT_SETTINGS})))
 
 def start_rita_exit(node):
@@ -696,7 +696,7 @@ class World:
                 print(colored("Hitting /neighbors:", "green"))
 
             result = subprocess.Popen(shlex.split("ip netns exec "
-                + "netlab-{} curl -sfg6 [::1]:4877/neighbors".format(node.id)),
+                + "netlab-{} curl -k -sfg6 https://[::1]:4877/neighbors".format(node.id)),
                 stdout=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /neighbors")
             stdout = result.stdout.read().decode('utf-8')
@@ -716,7 +716,7 @@ class World:
                 print(colored("Hitting /exits:", "green"))
 
             result = subprocess.Popen(shlex.split("ip netns exec "
-                + "netlab-{} curl -sfg6 [::1]:4877/exits".format(node.id)),
+                + "netlab-{} curl -k -sfg6 https://[::1]:4877/exits".format(node.id)),
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /exits")
             stdout = result.stdout.read().decode('utf-8')
@@ -736,7 +736,7 @@ class World:
                 print(colored("Hitting /info:", "green"))
 
             result = subprocess.Popen(shlex.split("ip netns exec "
-                + "netlab-{} curl -sfg6 [::1]:4877/info".format(node.id)),
+                + "netlab-{} curl -k -sfg6 https://[::1]:4877/info".format(node.id)),
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /info")
             stdout = result.stdout.read().decode('utf-8')
@@ -756,7 +756,7 @@ class World:
                 print(colored("Hitting /settings:", "green"))
 
             result = subprocess.Popen(shlex.split("ip netns exec "
-                + "netlab-{} curl -sfg6 [::1]:4877/settings".format(node.id)),
+                + "netlab-{} curl -k -sfg6 https://[::1]:4877/settings".format(node.id)),
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /settings")
             stdout = result.stdout.read().decode('utf-8')
@@ -774,7 +774,8 @@ class World:
 
     def get_balances(self):
         status = subprocess.Popen(
-                 ["ip", "netns", "exec", "netlab-{}".format(self.bounty_id), "curl", "-s", "-g", "-6",
+                 ["ip", "netns", "exec", "netlab-{}".format(self.bounty_id),
+                     "curl", "-s", "-g", "-6",
                   "[::1]:8888/list"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         status.wait()
         output = status.stdout.read().decode("utf-8")
@@ -790,7 +791,7 @@ class World:
         # while s != 0 and n < 1:
         #     status = subprocess.Popen(
         #         ["ip", "netns", "exec", "netlab-{}".format(self.bounty_id), "curl", "-s", "-g", "-6",
-        #          "[::1]:8888/list"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        #          "https://[::1]:8888/list"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         #     status.wait()
         #     output = status.stdout.read().decode("utf-8")
         #     status = json.loads(output)
