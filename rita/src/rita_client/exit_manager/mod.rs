@@ -339,8 +339,17 @@ impl Handler<Tick> for ExitManager {
                 // run billing at all times when an exit is setup
                 if self.last_exit.is_some() {
                     trace!("We are signed up for the selected exit!");
-                    TrafficWatcher::from_registry()
-                        .do_send(Watch(exit.id.clone(), general_details.exit_price));
+                    Arbiter::spawn(
+                        TrafficWatcher::from_registry()
+                            .send(Watch(exit.id.clone(), general_details.exit_price))
+                            .then(|res| match res {
+                                Ok(val) => Ok(val),
+                                Err(e) => {
+                                    error!("Client traffic watcher failed with {:?}", e);
+                                    Err(e)
+                                }
+                            }).then(|_| Ok(())),
+                    );
                 }
                 // only run if we have our own details and we either have no setup exit or the chosen
                 // exit has changed
