@@ -124,12 +124,24 @@ pub struct ExitClientIdentity {
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub enum ExitVerifMode {
+    Email,
+    Off,
+}
+
+fn default_verif_mode() -> ExitVerifMode {
+    ExitVerifMode::Off
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct ExitDetails {
     pub server_internal_ip: IpAddr,
     pub netmask: u8,
     pub wg_exit_port: u16,
     pub exit_price: u64,
     pub description: String,
+    #[serde(default = "default_verif_mode")]
+    pub verif_mode: ExitVerifMode,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]

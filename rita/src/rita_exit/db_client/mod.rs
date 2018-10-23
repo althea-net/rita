@@ -35,14 +35,14 @@ use rand::Rng;
 
 use exit_db::{models, schema};
 
-use settings::RitaExitSettings;
+use settings::{ExitVerifSettings, RitaExitSettings};
 use SETTING;
 
 use ipnetwork::IpNetwork;
 
 use failure::Error;
 
-use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState};
+use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 
 #[derive(Default)]
 pub struct DbClient;
@@ -144,6 +144,10 @@ pub fn get_exit_info() -> ExitDetails {
         exit_price: SETTING.get_exit_network().exit_price,
         netmask: SETTING.get_exit_network().netmask,
         description: SETTING.get_description(),
+        verif_mode: match SETTING.get_verif_settings() {
+            Some(ExitVerifSettings::Email(_mailer_settings)) => ExitVerifMode::Email,
+            None => ExitVerifMode::Off,
+        },
     }
 }
 
@@ -269,15 +273,17 @@ fn client_to_new_db_client(
     }
 }
 
-fn email_ver_done(client: &models::Client) -> Result<bool, Error> {
-    Ok(client.verified || SETTING.get_mailer().is_none())
+fn verif_done(client: &models::Client) -> Result<bool, Error> {
+    Ok(client.verified || SETTING.get_verif_settings().is_none())
 }
 
 fn send_mail(client: &models::Client) -> Result<(), Error> {
-    if SETTING.get_mailer().is_none() {
+    if SETTING.get_verif_settings().is_none() {
         return Ok(());
     };
-    let mailer = SETTING.get_mailer().unwrap().clone();
+    let mailer = match SETTING.get_verif_settings().unwrap() {
+        ExitVerifSettings::Email(mailer) => mailer,
+    };
 
     info!("Sending exit signup email for client");
 
@@ -364,7 +370,7 @@ impl Handler<SetupClient> for DbClient {
                             their_record.verified = true;
                         }
 
-                        if email_ver_done(&their_record)? {
+                        if verif_done(&their_record)? {
                             info!("{:?} is now registered", client);
                             Ok(ExitState::Registered {
                                 our_details: ExitClientDetails {
@@ -374,9 +380,11 @@ impl Handler<SetupClient> for DbClient {
                                 message: "Registration OK".to_string(),
                             })
                         } else {
-                            let cooldown = match SETTING.get_mailer() {
-                                Some(mailer) => mailer.email_cooldown as i32,
-                                None => bail!("There is no mailer configured!"),
+                            let cooldown = match SETTING.get_verif_settings() {
+                                Some(ExitVerifSettings::Email(mailer)) => {
+                                    mailer.email_cooldown as i32
+                                }
+                                None => bail!("There is no verification configured!"),
                             };
                             let time_since_last_email =
                                 secs_since_unix_epoch() - their_record.email_sent_time;
@@ -385,7 +393,7 @@ impl Handler<SetupClient> for DbClient {
                                 Ok(ExitState::GotInfo {
                                     general_details: get_exit_info(),
                                     message: format!(
-                                        "Wait {} more seconds for email verification cooldown",
+                                        "Wait {} more seconds for verification cooldown",
                                         cooldown - time_since_last_email
                                     ),
                                     auto_register: true,
@@ -476,7 +484,7 @@ impl Handler<ClientStatus> for DbClient {
                     }
                 };
 
-                if !email_ver_done(&their_record)? {
+                if !verif_done(&their_record)? {
                     return Ok(ExitState::Pending {
                         general_details: get_exit_info(),
                         message: "awaiting email verification".to_string(),

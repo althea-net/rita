@@ -10,7 +10,7 @@ extern crate lazy_static;
 use std::net::IpAddr;
 
 extern crate settings;
-use settings::RitaCommonSettings;
+use settings::{ExitVerifSettings, RitaCommonSettings, RitaExitSettings};
 
 extern crate ipgen;
 extern crate rand;
@@ -250,6 +250,34 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
         &Path::new(&network_settings.wg_private_key_path),
         &network_settings.wg_private_key,
     )?;
+
+    drop(network_settings);
+
+    // Migrate compat mailer settings. This is put in this particular spot so that the network
+    // settings lock can be dropped beforehand.
+    //
+    // TODO: REMOVE IN ALPHA 13 FROM HERE TILL THE Ok(())
+    let compat_mailer_settings = config.get_mailer().clone();
+    let verif_settings = config.get_verif_settings().clone();
+
+    match verif_settings.clone() {
+        Some(_settings) => match compat_mailer_settings {
+            Some(_) => {
+                info!("Both verif_settings and compat settings exist, removing compat settings.");
+                *config.get_mailer_mut() = None;
+            }
+            None => {}
+        },
+        None => match compat_mailer_settings {
+            Some(compat_settings) => {
+                info!("Only compat mailer settings are present, migrating to verif_settings");
+                *config.get_verif_settings_mut() =
+                    Some(ExitVerifSettings::Email(compat_settings.clone()));
+                *config.get_mailer_mut() = None;
+            }
+            None => {}
+        },
+    }
 
     Ok(())
 }
