@@ -254,7 +254,9 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
     drop(network_settings);
 
     // Migrate compat mailer settings. This is put in this particular spot so that the network
-    // settings lock can be dropped
+    // settings lock can be dropped beforehand.
+    //
+    // TODO: REMOVE IN ALPHA 13 FROM HERE TILL THE Ok(())
     let compat_mailer_settings = config.get_mailer().clone();
     let verif_settings = config.get_verif_settings().clone();
 
