@@ -26,7 +26,6 @@ extern crate serde_derive;
 extern crate log;
 
 #[cfg(test)]
-use log::LevelFilter;
 use std::sync::Mutex;
 
 extern crate serde;
@@ -770,7 +769,7 @@ where
             let new_settings = settings.read().unwrap().clone();
 
             if old_settings != new_settings {
-                info!("writing updated config: {:?}", new_settings);
+                trace!("writing updated config: {:?}", new_settings);
                 match settings.read().unwrap().write(&file_path) {
                     Err(e) => warn!("writing updated config failed {:?}", e),
                     _ => (),
