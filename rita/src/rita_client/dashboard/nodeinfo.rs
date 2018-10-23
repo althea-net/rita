@@ -67,14 +67,6 @@ impl Handler<GetNodeInfo> for Dashboard {
                             // from them to our selected exit. Other errors can also get
                             // caught here
                             if maybe_route.is_err() {
-                                output.push(NodeInfo {
-                                    nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
-                                    route_metric_to_exit: u16::max_value(),
-                                    total_payments: debt_info.total_payment_received.clone().into(),
-                                    debt: debt_info.debt.clone().into(),
-                                    link_cost: u16::max_value(),
-                                    price_to_exit: u32::max_value(),
-                                });
                                 continue;
                             }
                             // we check that this is safe above
