@@ -180,8 +180,7 @@ impl<T: Read + Write> Babel<T> {
     }
 
     pub fn unmonitor(&mut self, iface: &str) -> Result<(), Error> {
-        self.command(&format!("unmonitor {}\n", iface))?;
-        let _ = self.read_babel()?;
+        self.command(&format!("flush interface {}", iface))?;
         Ok(())
     }
 
