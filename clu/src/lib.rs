@@ -57,6 +57,15 @@ fn validate_wg_key(key: &str) -> bool {
 
 pub fn validate_mesh_ip(ip: &IpAddr) -> bool {
     ip.is_ipv6() && !ip.is_unspecified()
+
+fn linux_generate_mesh_ip(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Result<(), Error> {
+    let ki = KernelInterface {};
+    let seed: String = thread_rng().gen_ascii_chars().take(50).collect();
+    let mesh_ip = ipgen::ip(&seed, "fd::/120").unwrap();
+
+    // Mutates Settings intentional side effect
+    SETTINGS.write().unwrap().network.own_ip = mesh_ip;
+    Ok(())
 }
 
 /// Called before anything is started to delete existing wireguard per hop tunnels
@@ -188,6 +197,7 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
         &network_settings.wg_private_key,
     )?;
 
+<<<<<<< HEAD
     Ok(())
 }
 
@@ -244,6 +254,66 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
         network_settings.wg_public_key = keypair.public;
         network_settings.wg_private_key = keypair.private;
     }
+=======
+// Replacement for the setup.ash file in althea firmware
+fn openwrt_init(SETTINGS: Arc<RwLock<settings::RitaSettings>>) -> Result<(), Error> {
+    let privkey = SETTINGS.read().unwrap().network.wg_private_key.clone();
+    let pubkey = SETTINGS.read().unwrap().network.wg_public_key.clone();
+    let mesh_ip = SETTINGS.read().unwrap().network.own_ip.clone();
+    let our_exit_ip = SETTINGS.read().unwrap().exit_client.exit_ip.clone();
+
+    request_own_exit_ip(SETTINGS.clone())?;
+    trace!("Exit ip request exited");
+    if !validate_wg_key(&privkey) || validate_wg_key(&pubkey) {
+        openwrt_generate_and_set_wg_keys(SETTINGS.clone())?;
+    }
+    if !validate_mesh_ip(&mesh_ip) {
+        openwrt_generate_mesh_ip(SETTINGS.clone())?;
+    }
+    if !our_exit_ip.is_ipv4() && !our_exit_ip.is_unspecified() {
+        request_own_exit_ip(SETTINGS.clone())?;
+    }
+    Ok(())
+}
+
+fn linux_init(
+    SETTINGS: Arc<RwLock<settings::RitaSettings>>,
+    file_name: String,
+) -> Result<(), Error> {
+    let privkey = SETTINGS.read().unwrap().network.wg_private_key.clone();
+    let pubkey = SETTINGS.read().unwrap().network.wg_public_key.clone();
+    let mesh_ip = SETTINGS.read().unwrap().network.own_ip.clone();
+    let our_exit_ip = SETTINGS.read().unwrap().exit_client.exit_ip.clone();
+
+    if !validate_wg_key(&privkey) || validate_wg_key(&pubkey) {
+        linux_generate_wg_keys(SETTINGS.clone()).expect("failed to generate wg keys");
+    }
+    if !validate_mesh_ip(&mesh_ip) {
+        linux_generate_mesh_ip(SETTINGS.clone()).expect("failed to generate ip");
+    }
+
+    thread::spawn(move || {
+        assert!(!our_exit_ip.is_ipv4());
+        assert!(!our_exit_ip.is_unspecified());
+
+        loop {
+            let details = request_own_exit_ip(SETTINGS.clone());
+
+            match details {
+                Ok(details) => {
+                    SETTINGS
+                        .write()
+                        .expect("can't write config!")
+                        .exit_client
+                        .details = Some(details);
+                    SETTINGS
+                        .read()
+                        .expect("can't read config!")
+                        .write(&file_name)
+                        .expect("can't write config!");
+
+                    linux_setup_exit_tunnel(SETTINGS.clone()).expect("can't set exit tunnel up!");
+>>>>>>> master
 
     //Creates file on disk containing key
     KI.create_wg_key(
