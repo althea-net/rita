@@ -26,7 +26,6 @@ extern crate serde_derive;
 extern crate log;
 
 #[cfg(test)]
-use log::LevelFilter;
 use std::sync::Mutex;
 
 extern crate serde;
