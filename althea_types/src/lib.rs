@@ -200,7 +200,7 @@ mod tests {
             ExitState::New
         );
 
-        let s = "{\"state\":\"GotInfo\",\"general_details\":{\"server_internal_ip\":\"1.1.1.1\",\"netmask\":16,\"wg_exit_port\":50000,\"exit_price\":50,\"description\":\"An exit\"},\"message\":\"got info ok\",\"auto_register\":false}";
+        let s = "{\"state\":\"GotInfo\",\"general_details\":{\"server_internal_ip\":\"1.1.1.1\",\"netmask\":16,\"wg_exit_port\":50000,\"exit_price\":50,\"description\":\"An exit\", \"verif_mode\":\"Off\"},\"message\":\"got info ok\",\"auto_register\":false}";
 
         assert_eq!(
             serde_json::from_str::<ExitState>(s).unwrap(),
@@ -211,13 +211,14 @@ mod tests {
                     wg_exit_port: 50000,
                     exit_price: 50,
                     description: "An exit".to_string(),
+                    verif_mode: ExitVerifMode::Off,
                 },
                 auto_register: false,
                 message: "got info ok".to_string()
             }
         );
 
-        let s = "{\"state\":\"GotInfo\",\"general_details\":{\"server_internal_ip\":\"1.1.1.1\",\"netmask\":16,\"wg_exit_port\":50000,\"exit_price\":50,\"description\":\"An exit\"},\"message\":\"got info ok\",\"aa\":\"aa\"}";
+        let s = "{\"state\":\"GotInfo\",\"general_details\":{\"server_internal_ip\":\"1.1.1.1\",\"netmask\":16,\"wg_exit_port\":50000,\"exit_price\":50,\"description\":\"An exit\", \"verif_mode\":\"Off\"},\"message\":\"got info ok\",\"aa\":\"aa\"}";
 
         assert_eq!(
             serde_json::from_str::<ExitState>(s).unwrap(),
@@ -228,13 +229,14 @@ mod tests {
                     wg_exit_port: 50000,
                     exit_price: 50,
                     description: "An exit".to_string(),
+                    verif_mode: ExitVerifMode::Off,
                 },
                 auto_register: false,
                 message: "got info ok".to_string()
             }
         );
 
-        let s = "{\"state\":\"Pending\",\"general_details\":{\"server_internal_ip\":\"1.1.1.1\",\"netmask\":16,\"wg_exit_port\":50000,\"exit_price\":50,\"description\":\"An exit\"},\"message\":\"got info ok\",\"aa\":\"aa\", \"email_code\": \"123456\"}";
+        let s = "{\"state\":\"Pending\",\"general_details\":{\"server_internal_ip\":\"1.1.1.1\",\"netmask\":16,\"wg_exit_port\":50000,\"exit_price\":50,\"description\":\"An exit\", \"verif_mode\":\"Email\"},\"message\":\"got info ok\",\"aa\":\"aa\", \"email_code\": \"123456\"}";
 
         assert_eq!(
             serde_json::from_str::<ExitState>(s).unwrap(),
@@ -245,13 +247,14 @@ mod tests {
                     wg_exit_port: 50000,
                     exit_price: 50,
                     description: "An exit".to_string(),
+                    verif_mode: ExitVerifMode::Email,
                 },
                 email_code: Some("123456".to_string()),
                 message: "got info ok".to_string()
             }
         );
 
-        let s = "{\"state\":\"Pending\",\"general_details\":{\"server_internal_ip\":\"1.1.1.1\",\"netmask\":16,\"wg_exit_port\":50000,\"exit_price\":50,\"description\":\"An exit\"},\"message\":\"got info ok\",\"aa\":\"aa\"}";
+        let s = "{\"state\":\"Pending\",\"general_details\":{\"server_internal_ip\":\"1.1.1.1\",\"netmask\":16,\"wg_exit_port\":50000,\"exit_price\":50,\"description\":\"An exit\", \"verif_mode\":\"Off\"},\"message\":\"got info ok\",\"aa\":\"aa\"}";
 
         assert_eq!(
             serde_json::from_str::<ExitState>(s).unwrap(),
@@ -262,6 +265,7 @@ mod tests {
                     wg_exit_port: 50000,
                     exit_price: 50,
                     description: "An exit".to_string(),
+                    verif_mode: ExitVerifMode::Off,
                 },
                 email_code: None,
                 message: "got info ok".to_string()

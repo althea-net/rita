@@ -129,6 +129,10 @@ pub enum ExitVerifMode {
     Off,
 }
 
+fn default_verif_mode() -> ExitVerifMode {
+    ExitVerifMode::Off
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct ExitDetails {
     pub server_internal_ip: IpAddr,
@@ -136,6 +140,7 @@ pub struct ExitDetails {
     pub wg_exit_port: u16,
     pub exit_price: u64,
     pub description: String,
+    #[serde(default = "default_verif_mode")]
     pub verif_mode: ExitVerifMode,
 }
 
