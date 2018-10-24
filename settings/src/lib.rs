@@ -214,8 +214,8 @@ pub struct LoggingSettings {
 impl Default for LoggingSettings {
     fn default() -> Self {
         LoggingSettings {
-            enabled: false,
-            level: "ERROR".to_string(),
+            enabled: true,
+            level: "INFO".to_string(),
             send_port: 5044,
             dest_port: 514,
         }
@@ -446,7 +446,7 @@ pub struct RitaExitSettingsStruct {
     allowed_countries: HashSet<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     mailer: Option<EmailVerifSettings>, // Legacy setting, TODO: remove in Alpha 13
-    #[serde(skip_serializing_if = "Option::is_none",)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     verif_settings: Option<ExitVerifSettings>, // mailer's successor with new verif methods readiness
     #[serde(skip)]
     future: bool,
