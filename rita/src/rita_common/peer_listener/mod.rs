@@ -267,18 +267,16 @@ fn receive_im_here(
         // this buffer is kept intentionally small to discard larger packets earlier rather than later
         loop {
             let mut datagram: [u8; 100] = [0; 100];
-            let (bytes_read, sock_addr) = match listen_interface
-                .multicast_socket
-                .recv_from(&mut datagram)
-            {
-                Ok(b) => b,
-                Err(e) => {
-                    trace!("Could not recv ImHere: {:?}", e);
-                    // TODO Consider we might want to remove interfaces that produce specific types
-                    // of errors from the active list
-                    break;
-                }
-            };
+            let (bytes_read, sock_addr) =
+                match listen_interface.multicast_socket.recv_from(&mut datagram) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        trace!("Could not recv ImHere: {:?}", e);
+                        // TODO Consider we might want to remove interfaces that produce specific types
+                        // of errors from the active list
+                        break;
+                    }
+                };
             trace!(
                 "Received {} bytes on multicast socket from {:?}",
                 bytes_read,
