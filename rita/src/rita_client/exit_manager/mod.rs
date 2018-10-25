@@ -336,6 +336,33 @@ impl Handler<Tick> for ExitManager {
             trace!("We have selected an exit!");
             if let Some(ref general_details) = exit.info.general_details() {
                 trace!("We have details for the selected exit!");
+                // only run if we have our own details and we either have no setup exit or the chosen
+                // exit has changed, if all of that is good we check if the default route is still correct
+                // and change it again if it's not.
+                if exit.info.our_details().is_some()
+                    && !(self.last_exit.is_some() && self.last_exit.clone().unwrap() == exit)
+                {
+                    trace!("Exit change, setting up exit tunnel");
+                    linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
+
+                    self.last_exit = Some(exit.clone());
+                } else if exit.info.our_details().is_some() && !KI
+                    .get_default_route()
+                    .unwrap_or(Vec::new())
+                    .contains(&String::from("wg_exit"))
+                {
+                    trace!("DHCP overwrite setup exit tunnel again");
+                    trace!("Exit change, setting up exit tunnel");
+                    linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
+                }
+
+                // enable remote logging only if it has not already been started
+                if !self.remote_logging_already_started && self.remote_logging_setting {
+                    let res = enable_remote_logging(general_details.server_internal_ip);
+                    self.remote_logging_already_started = true;
+                    info!("logging status {:?}", res);
+                }
+
                 // run billing at all times when an exit is setup
                 if self.last_exit.is_some() {
                     trace!("We are signed up for the selected exit!");
@@ -350,22 +377,6 @@ impl Handler<Tick> for ExitManager {
                                 }
                             }).then(|_| Ok(())),
                     );
-                }
-                // only run if we have our own details and we either have no setup exit or the chosen
-                // exit has changed
-                if exit.info.our_details().is_some()
-                    && !(self.last_exit.is_some() && self.last_exit.clone().unwrap() == exit)
-                {
-                    trace!("Exit change, setting up exit tunnel");
-                    linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
-
-                    self.last_exit = Some(exit.clone());
-                }
-                // enable remote logging only if it has not already been started
-                if !self.remote_logging_already_started && self.remote_logging_setting {
-                    let res = enable_remote_logging(general_details.server_internal_ip);
-                    self.remote_logging_already_started = true;
-                    info!("logging status {:?}", res);
                 }
             }
         }
