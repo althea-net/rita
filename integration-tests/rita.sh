@@ -41,7 +41,7 @@ build_rev() {
   pushd $dir
     git checkout $revision
 
-    CARGO_TARGET_DIR="../$target_dir" cargo build --all
+    CARGO_TARGET_DIR="../$target_dir" cross build --target x86_64-unknown-linux-musl --all
   popd
 }
 
@@ -64,22 +64,22 @@ fi
 # Only care about revisions if a compat layout was picked
 if [ ! -z "${COMPAT_LAYOUT-}" ] ; then
   build_rev $REMOTE_A "$REVISION_A" $DIR_A $TARGET_DIR_A
-  export RITA_A="$target_dir/debug/rita"
-  export RITA_EXIT_A="$target_dir/debug/rita_exit"
-  export BOUNTY_HUNTER_A="$target_dir/debug/bounty_hunter"
+  export RITA_A="$target_dir/x86_64-unknown-linux-musl/debug/rita"
+  export RITA_EXIT_A="$target_dir/x86_64-unknown-linux-musl/debug/rita_exit"
+  export BOUNTY_HUNTER_A="$target_dir/x86_64-unknown-linux-musl/debug/bounty_hunter"
   export DIR_A=$DIR_A
 
   # Save on common dep artifacts between A and B
   cp -r $TARGET_DIR_A $TARGET_DIR_B
 
   build_rev $REMOTE_B "$REVISION_B" $DIR_B $TARGET_DIR_B
-  export RITA_B="$target_dir/debug/rita"
-  export RITA_EXIT_B="$target_dir/debug/rita_exit"
-  export BOUNTY_HUNTER_B="$target_dir/debug/bounty_hunter"
+  export RITA_B="$target_dir/x86_64-unknown-linux-musl/debug/rita"
+  export RITA_EXIT_B="$target_dir/x86_64-unknown-linux-musl/debug/rita_exit"
+  export BOUNTY_HUNTER_B="$target_dir/x86_64-unknown-linux-musl/debug/bounty_hunter"
   export DIR_B=$DIR_B
 else
   pushd ..
-    cargo build --all
+    cross build --target x86_64-unknown-linux-musl --all
   popd
 fi
 
