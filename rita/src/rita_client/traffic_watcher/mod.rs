@@ -24,7 +24,10 @@ use settings::{RitaClientSettings, RitaCommonSettings};
 use KI;
 use SETTING;
 
-pub struct TrafficWatcher;
+pub struct TrafficWatcher {
+    last_read_input: u64,
+    last_read_output: u64,
+}
 
 impl Actor for TrafficWatcher {
     type Context = Context<Self>;
@@ -33,13 +36,16 @@ impl Supervised for TrafficWatcher {}
 impl SystemService for TrafficWatcher {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("Client traffic watcher started");
-
-        KI.init_iface_counters("wg_exit").unwrap();
+        self.last_read_input = 0;
+        self.last_read_output = 0;
     }
 }
 impl Default for TrafficWatcher {
     fn default() -> TrafficWatcher {
-        TrafficWatcher {}
+        TrafficWatcher {
+            last_read_input: 0,
+            last_read_output: 0,
+        }
     }
 }
 
@@ -57,13 +63,14 @@ impl Handler<Watch> for TrafficWatcher {
             format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
         )?;
 
-        watch(Babel::new(stream), msg.0, msg.1)
+        watch(self, Babel::new(stream), msg.0, msg.1)
     }
 }
 
 /// This traffic watcher watches how much traffic we send to the exit, and how much the exit sends
 /// back to us.
 pub fn watch<T: Read + Write>(
+    history: &mut TrafficWatcher,
     mut babel: Babel<T>,
     exit: Identity,
     exit_price: u64,
@@ -86,26 +93,48 @@ pub fn watch<T: Read + Write>(
         }
     }
 
-    let (input, output) = match KI.read_iface_counters("wg_exit") {
-        Ok(res) => res,
+    let counter = match KI.read_wg_counters("wg_exit") {
+        Ok(res) => {
+            if res.len() > 1 {
+                warn!("wg_exit client tunnel has multiple peers!");
+            } else if res.len() == 0 {
+                warn!("No peers on wg_exit why is client traffic watcher running?");
+                return Err(format_err!("No peers on wg_exit"));
+            }
+            // unwrap is safe because we check that len is not equal to zero
+            // then we toss the exit's wg key as we don't need it
+            res.iter().last().unwrap().1.clone()
+        }
         Err(e) => {
             warn!(
-                "Error getting input output counters {:?} traffic has gone unaccounted!",
+                "Error getting router client input output counters {:?} traffic has gone unaccounted!",
                 e
             );
             return Err(e);
         }
     };
 
-    // account for wg packet overhead
-    let input = input.total_bytes();
-    let output = output.total_bytes();
+    // bandwidth usage should always increase if it doesn't the interface has been
+    // deleted and recreated and we need to reset our usage, also protects from negatives
+    if history.last_read_input > counter.download || history.last_read_output > counter.upload {
+        warn!("Exit tunnel reset resetting counters");
+        history.last_read_input = 0;
+        history.last_read_output = 0;
+    }
 
-    trace!("got {:?} from client exit counters", (&input, &output));
+    let input = counter.download - history.last_read_input;
+    let output = counter.upload - history.last_read_output;
+
+    history.last_read_input = counter.download;
+    history.last_read_output = counter.upload;
+
+    info!("{:?} bytes downloaded from exit this round", &input);
+    info!("{:?} bytes uploaded to exit this round", &output);
 
     let mut owes: Int256 = Int256::from(0);
 
-    trace!("exit price {}", exit_price);
+    // the price we pay to send traffic through the exit
+    info!("exit price {}", exit_price);
 
     if destinations.contains_key(&exit.mesh_ip) {
         let client = reqwest::Client::builder()
@@ -127,7 +156,8 @@ pub fn watch<T: Read + Write>(
                         ));
                     }
                 }
-            )).send()?
+            ))
+            .send()?
             .json()?;
         let client_rx = SystemTime::now();
 
@@ -141,7 +171,8 @@ pub fn watch<T: Read + Write>(
             target_route.full_path_rtt, inner_rtt_millis
         );
 
-        trace!("exit destination price {}", exit_dest_price);
+        // the price the exit pays to send stuff back to us we pay this by proxy
+        info!("Exit destination price {}", exit_dest_price);
         trace!("Exit ip: {:?}", exit.mesh_ip);
         trace!("Exit destination:\n{:#?}", target_route);
 
@@ -179,6 +210,10 @@ mod tests {
         env_logger::init();
         let bm_stream = TcpStream::connect::<SocketAddr>("[::1]:9001".parse().unwrap()).unwrap();
         watch(
+            &mut TrafficWatcher {
+                last_read_input: 0u64,
+                last_read_output: 0u64,
+            },
             Babel::new(bm_stream),
             Identity::new(
                 "0.0.0.0".parse().unwrap(),
