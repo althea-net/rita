@@ -26,7 +26,6 @@ mod exit_server_counter;
 mod exit_server_tunnel;
 mod fs_sync;
 mod get_neighbors;
-mod iface_counter;
 mod interface_tools;
 mod ip_addr;
 mod ip_route;
@@ -37,7 +36,7 @@ mod open_tunnel;
 mod openwrt_ubus;
 mod ping_check;
 mod setup_wg_if;
-mod stats;
+mod wg_iface_counter;
 
 pub use counter::FilterTarget;
 pub use create_wg_key::WgKeypair;

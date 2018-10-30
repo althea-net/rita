@@ -43,13 +43,6 @@ impl SystemService for TrafficWatcher {
         KI.init_counter(&FilterTarget::ForwardInput).unwrap();
         KI.init_counter(&FilterTarget::ForwardOutput).unwrap();
 
-        match SETTING.get_network().external_nic {
-            Some(ref external_nic) => {
-                KI.init_iface_counters(external_nic).unwrap();
-            }
-            _ => {}
-        }
-
         info!("Traffic Watcher started");
     }
 }
