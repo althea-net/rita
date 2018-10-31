@@ -57,7 +57,11 @@ fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
     let res = init_udp(
         &format!("0.0.0.0:{}", log.send_port),
         &format!("{}:{}", server_internal_ip, log.dest_port),
-        SETTING.get_network().wg_public_key.clone(),
+        format!(
+            "{} {}",
+            SETTING.get_network().wg_public_key.clone(),
+            env!("CARGO_PKG_VERSION")
+        ),
         Facility::LOG_USER,
         level,
     );
