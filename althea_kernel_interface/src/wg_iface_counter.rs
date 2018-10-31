@@ -28,9 +28,9 @@ impl KernelInterface {
         }
 
         lazy_static! {
-            static ref RE: Regex = Regex::new(
-                r"^(?P<key>[/=0-9a-zA-Z]+)\t(?P<download>[0-9]+)\t(?P<upload>[0-9]+)"
-            ).expect("Unable to compile regular expression");
+            static ref RE: Regex =
+                Regex::new(r"^(?P<key>[/=0-9a-zA-Z]+)\t(?P<download>[0-9]+)\t(?P<upload>[0-9]+)")
+                    .expect("Unable to compile regular expression");
         }
 
         let mut result = HashMap::new();
