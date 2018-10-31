@@ -282,7 +282,7 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
         total_income += income;
     }
     info!(
-        "Total intermediary income of {:?} Wei this round",
+        "Total intermediary debts of {:?} Wei this round",
         total_income
     );
 
