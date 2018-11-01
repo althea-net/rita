@@ -24,6 +24,7 @@ use babel_monitor::{Babel, Route};
 use rita_common;
 use rita_common::http_client::Hello;
 use rita_common::peer_listener::Peer;
+use rita_common::port_emissary::free_ports;
 
 use settings::RitaCommonSettings;
 use SETTING;
@@ -164,7 +165,6 @@ impl Tunnel {
 }
 
 pub struct TunnelManager {
-    free_ports: Vec<u16>,
     tunnels: HashMap<Identity, HashMap<u32, Tunnel>>,
 }
 
@@ -220,7 +220,7 @@ impl Handler<IdentityCallback> for TunnelManager {
     fn handle(&mut self, msg: IdentityCallback, _: &mut Context<Self>) -> Self::Result {
         let our_port = match msg.our_port {
             Some(port) => port,
-            _ => match self.get_port() {
+            _ => match free_ports().pop() {
                 Some(p) => p,
                 None => {
                     warn!("Failed to allocate tunnel port! All tunnel opening will fail");
@@ -252,7 +252,6 @@ impl Handler<PortCallback> for TunnelManager {
 
     fn handle(&mut self, msg: PortCallback, _: &mut Context<Self>) -> Self::Result {
         let port = msg.0;
-        self.free_ports.push(port);
     }
 }
 
@@ -418,7 +417,6 @@ impl Handler<TriggerGC> for TunnelManager {
                     warn!("Failed to unmonitor {} with {:?}", tunnel.iface_name, res);
                 }
                 KI.del_interface(&tunnel.iface_name)?;
-                self.free_ports.push(tunnel.listen_port);
             }
         }
 
@@ -512,10 +510,7 @@ fn contact_neighbor(peer: &Peer, our_port: u16) -> Result<(), Error> {
 
 impl TunnelManager {
     pub fn new() -> Self {
-        let start = SETTING.get_network().wg_start_port;
-        let ports = (start..65535).collect();
         TunnelManager {
-            free_ports: ports,
             tunnels: HashMap::new(),
         }
     }
@@ -557,7 +552,7 @@ impl TunnelManager {
     pub fn neighbor_inquiry_hostname(&mut self, their_hostname: String) -> Result<(), Error> {
         trace!("Getting tunnel, inq");
 
-        let our_port = match self.get_port() {
+        let our_port = match free_ports().pop() {
             Some(p) => p,
             None => {
                 warn!("Failed to allocate tunnel port! All tunnel opening will fail");
@@ -610,7 +605,7 @@ impl TunnelManager {
     /// interface name.
     pub fn neighbor_inquiry(&mut self, peer: &Peer) -> Result<(), Error> {
         trace!("TunnelManager neigh inquiry for {:?}", peer);
-        let our_port = match self.get_port() {
+        let our_port = match free_ports().pop() {
             Some(p) => p,
             None => {
                 warn!("Failed to allocate tunnel port! All tunnel opening will fail");
@@ -663,8 +658,6 @@ impl TunnelManager {
             }
 
             if they_have_tunnel {
-                // return allocated port as it's not required
-                self.free_ports.push(our_port);
                 trace!("Looking up for a tunnels by {:?}", key);
                 // Unwrap is safe because we confirm membership
                 let tunnels = self.tunnels.get(&key).unwrap();
@@ -713,7 +706,6 @@ impl TunnelManager {
                     );
                 }
 
-                self.free_ports.push(tunnel.listen_port);
                 return_bool = true;
             }
         }
@@ -824,12 +816,6 @@ impl Handler<TunnelStateChange> for TunnelManager {
         }
         Ok(())
     }
-}
-
-#[test]
-pub fn test_tunnel_manager() {
-    let mut tunnel_manager = TunnelManager::new();
-    assert_eq!(tunnel_manager.free_ports.pop().unwrap(), 65534);
 }
 
 #[test]
