@@ -86,6 +86,14 @@ fn default_tunnel_timeout() -> u64 {
     900 // 15 minutes
 }
 
+fn default_key_path() -> Option<String> {
+    Some("/etc/uthttpd.key".to_owned())
+}
+
+fn default_cert_path() -> Option<String> {
+    Some("/etc/uhttpd.crt".to_owned())
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
     /// The static IP used on mesh interfaces
@@ -146,6 +154,12 @@ pub struct NetworkSettings {
     /// The name of the device or router model
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device: Option<String>,
+    /// The DER-encoded key used for HTTPS
+    #[serde(default = "default_key_path")]
+    pub key_path: Option<String>,
+    /// The DER-encoded certificate used for HTTPS
+    #[serde(default = "default_cert_path")]
+    pub cert_path: Option<String>,
 }
 
 impl Default for NetworkSettings {
@@ -172,6 +186,8 @@ impl Default for NetworkSettings {
             is_gateway: false,
             tunnel_timeout_seconds: default_tunnel_timeout(),
             device: None,
+            key_path: default_key_path(),
+            cert_path: default_cert_path(),
         }
     }
 }

@@ -23,6 +23,8 @@ tunnel_timeout_seconds = 900
 peer_interfaces = []
 manual_peers = []
 default_route = []
+key_path = "key.der"
+cert_path = "cert.der"
 
 [dao]
 dao_enforcement = false
