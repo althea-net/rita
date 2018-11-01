@@ -14,7 +14,7 @@ impl PortEmissary {
         let mut used_ports: Vec<u16> = Vec::new();
         for si in sockets_info {
             match si.protocol_socket_info {
-                ProtocolSocketInfo::Tcp(tcp_si) => used_ports.push(tcp_si.local_port),
+                ProtocolSocketInfo::Udp(udp_si) => used_ports.push(udp_si.local_port),
                 _ => continue,
             }
         }
