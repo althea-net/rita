@@ -9,7 +9,7 @@ struct PortEmissary {
 impl PortEmissary {
     fn new() -> PortEmissary {
         let af_flags = AddressFamilyFlags::IPV4 | AddressFamilyFlags::IPV6;
-        let sockets_info = get_sockets_info(af_flags, ProtocolFlags::TCP).unwrap();
+        let sockets_info = get_sockets_info(af_flags, ProtocolFlags::UDP).unwrap();
 
         let mut used_ports: Vec<u16> = Vec::new();
         for si in sockets_info {
