@@ -8,7 +8,7 @@
 
 use actix::prelude::*;
 
-use althea_kernel_interface::ExitFilterTarget;
+use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_kernel_interface::KI;
 
 use althea_types::Identity;
@@ -31,7 +31,9 @@ use SETTING;
 
 use failure::Error;
 
-pub struct TrafficWatcher;
+pub struct TrafficWatcher {
+    last_seen_bytes: HashMap<String, WgUsage>,
+}
 
 impl Actor for TrafficWatcher {
     type Context = Context<Self>;
@@ -39,9 +41,6 @@ impl Actor for TrafficWatcher {
 impl Supervised for TrafficWatcher {}
 impl SystemService for TrafficWatcher {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        KI.init_exit_counter(&ExitFilterTarget::Input).unwrap();
-        KI.init_exit_counter(&ExitFilterTarget::Output).unwrap();
-
         match KI.setup_wg_if_named("wg_exit") {
             Err(e) => warn!("exit setup returned {}", e),
             _ => {}
@@ -54,7 +53,9 @@ impl SystemService for TrafficWatcher {
 }
 impl Default for TrafficWatcher {
     fn default() -> TrafficWatcher {
-        TrafficWatcher {}
+        TrafficWatcher {
+            last_seen_bytes: HashMap::new(),
+        }
     }
 }
 
@@ -72,43 +73,62 @@ impl Handler<Watch> for TrafficWatcher {
             format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
         )?;
 
-        watch(Babel::new(stream), msg.0)
+        watch(&mut self.last_seen_bytes, Babel::new(stream), msg.0)
     }
 }
 
 /// This traffic watcher watches how much traffic each we send and receive from each client.
-pub fn watch<T: Read + Write>(mut babel: Babel<T>, clients: Vec<Identity>) -> Result<(), Error> {
+pub fn watch<T: Read + Write>(
+    usage_history: &mut HashMap<String, WgUsage>,
+    mut babel: Babel<T>,
+    clients: Vec<Identity>,
+) -> Result<(), Error> {
     babel.start_connection()?;
 
     trace!("Getting routes");
     let routes = babel.parse_routes()?;
     info!("Got routes: {:?}", routes);
 
+    let mut identities: HashMap<String, Identity> = HashMap::new();
+    let mut id_from_ip: HashMap<IpAddr, Identity> = HashMap::new();
+    let our_id = Identity {
+        mesh_ip: match SETTING.get_network().mesh_ip {
+            Some(ip) => ip.clone(),
+            None => bail!("No mesh ip configured yet!"),
+        },
+        eth_address: SETTING.get_payment().eth_address.clone(),
+        wg_public_key: SETTING.get_network().wg_public_key.clone(),
+    };
+    id_from_ip.insert(SETTING.get_network().mesh_ip.unwrap(), our_id.clone());
+
+    for ident in &clients {
+        identities.insert(ident.wg_public_key.clone(), ident.clone());
+        id_from_ip.insert(ident.mesh_ip, ident.clone());
+    }
+
+    // insert ourselves as a destination, don't think this is actually needed
     let mut destinations = HashMap::new();
     destinations.insert(
-        match SETTING.get_network().mesh_ip {
-            Some(ip) => ip,
-            None => bail!("No mesh IP configured yet"),
-        },
+        our_id.wg_public_key,
         Int256::from(babel.local_fee().unwrap()),
     );
-
-    let mut identities: HashMap<IpAddr, Identity> = HashMap::new();
-    for ident in &clients {
-        identities.insert(ident.mesh_ip, ident.clone());
-    }
 
     for route in &routes {
         // Only ip6
         if let IpNetwork::V6(ref ip) = route.prefix {
             // Only host addresses and installed routes
             if ip.prefix() == 128 && route.installed {
-                destinations.insert(IpAddr::V6(ip.ip()), Int256::from(route.price));
+                match id_from_ip.get(&IpAddr::V6(ip.ip())) {
+                    Some(id) => {
+                        destinations.insert(id.wg_public_key.clone(), Int256::from(route.price));
+                    }
+                    None => warn!("Can't find destinatoin for client {:?}", ip.ip()),
+                }
             }
         }
     }
 
-    let input_counters = match KI.read_exit_server_counters(&ExitFilterTarget::Input) {
+    let counters = match KI.read_wg_counters("wg_exit") {
         Ok(res) => res,
         Err(e) => {
             warn!(
@@ -118,29 +138,19 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, clients: Vec<Identity>) -> Re
             return Err(e);
         }
     };
-    let output_counters = match KI.read_exit_server_counters(&ExitFilterTarget::Output) {
-        Ok(res) => res,
-        Err(e) => {
-            warn!(
-                "Error getting output counters {:?} traffic has gone unaccounted!",
-                e
-            );
-            return Err(e);
-        }
-    };
 
-    trace!("input exit counters: {:?}", input_counters);
+    trace!("exit counters: {:?}", counters);
+
     let mut total_in: u64 = 0;
-    for entry in input_counters.iter() {
+    for entry in counters.iter() {
         let input = entry.1;
-        total_in += input;
+        total_in += input.download;
     }
     info!("Total Exit input of {} bytes this round", total_in);
-    trace!("output exit counters: {:?}", output_counters);
     let mut total_out: u64 = 0;
-    for entry in output_counters.iter() {
+    for entry in counters.iter() {
         let output = entry.1;
-        total_out += output;
+        total_out += output.upload;
     }
     info!("Total Exit output of {} bytes this round", total_out);
 
@@ -153,43 +163,81 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, clients: Vec<Identity>) -> Re
 
     let price = SETTING.get_exit_network().exit_price;
 
-    for (ip, bytes) in input_counters {
-        let state = (identities.get(&ip), destinations.get(&ip));
+    // setup bandwidth history
+    for (wg_key, bytes) in counters.clone() {
+        match usage_history.get(&wg_key) {
+            Some(_) => (),
+            None => {
+                trace!(
+                    "We have not seen {:?} before, starting counter off at {:?}",
+                    wg_key,
+                    bytes
+                );
+                usage_history.insert(wg_key, bytes);
+            }
+        }
+    }
+
+    // accounting for 'input'
+    for (wg_key, bytes) in counters.clone() {
+        let state = (
+            identities.get(&wg_key),
+            destinations.get(&wg_key),
+            usage_history.get_mut(&wg_key),
+        );
         match state {
-            (Some(id), Some(_dest)) => match debts.get_mut(&id) {
+            (Some(id), Some(_dest), Some(history)) => match debts.get_mut(&id) {
                 Some(debt) => {
-                    *debt -= price * bytes;
+                    // tunnel has been reset somehow, reset usage
+                    if history.download > bytes.download {
+                        history.download = 0;
+                    }
+                    *debt -= price * (bytes.download - history.download);
+                    // update history so that we know what was used from previous cycles
+                    history.download = bytes.download;
                 }
                 // debts is generated from identities, this should be impossible
                 None => warn!("No debts entry for input entry id {:?}", id),
             },
+            (Some(id), Some(_dest), None) => warn!("Entry for {:?} should have been created", id),
             // this can be caused by a peer that has not yet formed a babel route
-            (Some(id), None) => warn!("We have an id {:?} but not destination", id),
+            (Some(id), None, _) => warn!("We have an id {:?} but not destination", id),
             // if we have a babel route we should have a peer it's possible we have a mesh client sneaking in?
-            (None, Some(dest)) => warn!("We have a destination {:?} but no id", dest),
+            (None, Some(dest), _) => warn!("We have a destination {:?} but no id", dest),
             // dead entry?
-            (None, None) => warn!("We have no id or dest for an input counter on {:?}", ip),
+            (None, None, _) => warn!("We have no id or dest for an input counter on {:?}", wg_key),
         }
     }
 
     trace!("Collated input exit debts: {:?}", debts);
 
-    for (ip, bytes) in output_counters {
-        let state = (identities.get(&ip), destinations.get(&ip));
+    // accounting for 'output'
+    for (wg_key, bytes) in counters {
+        let state = (
+            identities.get(&wg_key),
+            destinations.get(&wg_key),
+            usage_history.get_mut(&wg_key),
+        );
         match state {
-            (Some(id), Some(dest)) => match debts.get_mut(&id) {
+            (Some(id), Some(dest), Some(history)) => match debts.get_mut(&id) {
                 Some(debt) => {
-                    *debt -= (dest.clone() + price) * bytes;
+                    // tunnel has been reset somehow, reset usage
+                    if history.upload > bytes.upload {
+                        history.upload = 0;
+                    }
+                    *debt -= (dest.clone() + price) * (bytes.upload - history.upload);
+                    history.upload = bytes.upload;
                 }
                 // debts is generated from identities, this should be impossible
                 None => warn!("No debts entry for input entry id {:?}", id),
             },
+            (Some(id), Some(_dest), None) => warn!("Entry for {:?} should have been created", id),
             // this can be caused by a peer that has not yet formed a babel route
-            (Some(id), None) => warn!("We have an id {:?} but not destination", id),
+            (Some(id), None, _) => warn!("We have an id {:?} but not destination", id),
             // if we have a babel route we should have a peer it's possible we have a mesh client sneaking in?
-            (None, Some(dest)) => warn!("We have a destination {:?} but no id", dest),
+            (None, Some(dest), _) => warn!("We have a destination {:?} but no id", dest),
             // dead entry?
-            (None, None) => warn!("We have no id or dest for an input counter on {:?}", ip),
+            (None, None, _) => warn!("We have no id or dest for an input counter on {:?}", wg_key),
         }
     }
 
@@ -231,6 +279,6 @@ mod tests {
     fn debug_babel_socket_client() {
         env_logger::init();
         let bm_stream = TcpStream::connect::<SocketAddr>("[::1]:9001".parse().unwrap()).unwrap();
-        watch(Babel::new(bm_stream), Vec::new()).unwrap();
+        watch(&mut HashMap::new(), Babel::new(bm_stream), Vec::new()).unwrap();
     }
 }

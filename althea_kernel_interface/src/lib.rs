@@ -22,7 +22,6 @@ mod create_wg_key;
 mod delete_tunnel;
 mod dns;
 mod exit_client_tunnel;
-mod exit_server_counter;
 mod exit_server_tunnel;
 mod fs_sync;
 mod get_neighbors;
@@ -36,11 +35,10 @@ mod open_tunnel;
 mod openwrt_ubus;
 mod ping_check;
 mod setup_wg_if;
-mod wg_iface_counter;
+pub mod wg_iface_counter;
 
 pub use counter::FilterTarget;
 pub use create_wg_key::WgKeypair;
-pub use exit_server_counter::ExitFilterTarget;
 pub use exit_server_tunnel::ExitClient;
 
 use failure::Error;
