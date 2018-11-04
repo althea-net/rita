@@ -1,35 +1,42 @@
-extern crate netstat;
+use std::fs::File;
+use std::io::prelude::*;
+use std::u16;
 
-use rita_common::port_emissary::netstat::*;
+/// Helper function for parsing out port number from local_address column
+fn take_local_port(s: &str) -> u16 {
+    // second column in table contains local_address
+    let local_addr = s.split_whitespace().nth(1).unwrap();
+    // having a format like "00000000:14E9"
+    let port = local_addr.split(":").nth(1).unwrap();
 
-/// Retrieves list of free, unused, ports.
-pub fn used_ports() -> Result<Vec<u16>, Error> {
-    let prot_flags = ProtocolFlags::UDP;
-    let af_flags = AddressFamilyFlags::IPV4 | AddressFamilyFlags::IPV6;
-    let sockets_info = match get_sockets_info(af_flags, prot_flags) {
-        Err(e) => return Err(e),
-        Ok(info) => info,
-    };
-
-    let mut used_ports: Vec<u16> = Vec::new();
-
-    for si in sockets_info {
-        match si.protocol_socket_info {
-            ProtocolSocketInfo::Udp(udp_si) => used_ports.push(udp_si.local_port),
-            _ => continue,
-        }
-    }
-
-    Ok(used_ports)
+    u16::from_str_radix(port, 16).unwrap()
 }
 
-/// Retrieves list of free, unused, ports.
+/// Returns list of ports in use as seen in the UDP socket table (/proc/net/udp)
+fn used_ports() -> Vec<u16> {
+    let mut f = File::open("/proc/net/udp").expect("UDP socket table not found!");
+    let mut udp_sockets_table = String::new();
+
+    f.read_to_string(&mut udp_sockets_table)
+        .expect("Error reading UDP socket table!");
+
+    let mut lines = udp_sockets_table.split("\n");
+
+    lines.next(); // advance iterator to skip header
+
+    let ports: Vec<u16> = lines
+        .take_while(|line| line.len() > 0)
+        .map(|line| take_local_port(line))
+        .collect();
+
+    ports
+}
+
+/// Returns a list of all those ports not found in the UDP socket table.
 pub fn free_ports() -> Vec<u16> {
-    if let Some(ports_inuse) = used_ports().ok() {
-        (0..65535).filter(|s| !ports_inuse.contains(s)).collect()
-    } else {
-        Vec::new()
-    }
+    (0..65535)
+        .filter(|port| !(used_ports().contains(port)))
+        .collect()
 }
 
 #[test]
