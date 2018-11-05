@@ -14,7 +14,7 @@ use actix::prelude::*;
 
 use futures::Future;
 
-use althea_kernel_interface::udp_socket_table::free_ports;
+use althea_kernel_interface::udp_socket_table::used_ports;
 use althea_types::Identity;
 use althea_types::LocalIdentity;
 use KI;
@@ -164,7 +164,9 @@ impl Tunnel {
 }
 
 pub struct TunnelManager {
+    // maps a node's identity to their associated port and tunnel
     tunnels: HashMap<Identity, HashMap<u32, Tunnel>>,
+    ports: Vec<u16>, // maintained list of free UDP ports
 }
 
 impl Actor for TunnelManager {
@@ -219,7 +221,7 @@ impl Handler<IdentityCallback> for TunnelManager {
     fn handle(&mut self, msg: IdentityCallback, _: &mut Context<Self>) -> Self::Result {
         let our_port = match msg.our_port {
             Some(port) => port,
-            _ => match free_ports().pop() {
+            _ => match self.port_query() {
                 Some(p) => p,
                 None => {
                     warn!("Failed to allocate tunnel port! All tunnel opening will fail");
@@ -509,39 +511,22 @@ fn contact_neighbor(peer: &Peer, our_port: u16) -> Result<(), Error> {
 
 impl TunnelManager {
     pub fn new() -> Self {
+        let start = SETTING.get_network().wg_start_port;
         TunnelManager {
+            ports: (start..65535).collect(),
             tunnels: HashMap::new(),
         }
     }
 
-    /// Gets a port off of the internal port list after checking that said port is free
-    /// with the operating system
-    fn get_port(&mut self) -> Option<u16> {
-        let udp_table = KI.used_ports();
-        let port = self.free_ports.pop();
-        match (port, udp_table) {
-            (Some(p), Ok(used_ports)) => {
-                if used_ports.contains(&p) {
-                    warn!("We tried to allocate a used port!");
-
-                    // don't use push here, you'll get that same
-                    // entry back in the next pop and recurse forever
-                    // hopefully the port will be free when we get
-                    // back to it in a few hours
-                    self.free_ports.insert(0, p);
-
-                    self.get_port()
-                } else {
-                    Some(p)
-                }
+    /// Attempts to find a free unused UDP port by querying OS.
+    pub fn port_query() -> Option<u16> {
+        match self.ports.find(|p| !(used_ports().contains(port))) {
+            Ok(port) => {
+                // if unused port found, remove it from maintained list
+                self.ports = self.ports.filter(|p| p != port).collect();
+                Some(port)
             }
-            (Some(p), Err(e)) => {
-                // we can either crash for sure here or take the chance
-                // that the port is not actually used, we chose the latter
-                warn!("Failed to check if port was in use! {:?}", e);
-                Some(p)
-            }
-            (None, _) => None,
+            Err(_) => None, // all ports in use.
         }
     }
 
@@ -551,7 +536,7 @@ impl TunnelManager {
     pub fn neighbor_inquiry_hostname(&mut self, their_hostname: String) -> Result<(), Error> {
         trace!("Getting tunnel, inq");
 
-        let our_port = match free_ports().pop() {
+        let our_port = match self.port_query() {
             Some(p) => p,
             None => {
                 warn!("Failed to allocate tunnel port! All tunnel opening will fail");
@@ -604,7 +589,7 @@ impl TunnelManager {
     /// interface name.
     pub fn neighbor_inquiry(&mut self, peer: &Peer) -> Result<(), Error> {
         trace!("TunnelManager neigh inquiry for {:?}", peer);
-        let our_port = match free_ports().pop() {
+        let our_port = match self.port_query() {
             Some(p) => p,
             None => {
                 warn!("Failed to allocate tunnel port! All tunnel opening will fail");
