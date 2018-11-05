@@ -35,7 +35,7 @@ fn parse_local_port(s: &str) -> Result<u16, Error> {
 }
 
 /// Returns list of ports in use as seen in the UDP socket table (/proc/net/udp)
-fn used_ports() -> Result<Vec<u16>, &'static str> {
+fn used_ports() -> Result<Vec<u16>, Error> {
     let mut f = match File::open("/proc/net/udp") {
         Ok(file) => file,
         Err(err) => return Err(err),
@@ -75,11 +75,12 @@ pub fn test_parse_local_port_on_valid_string_successful() {
     assert_eq!(parse_local_port(line).unwrap(), 5353)
 }
 
-#[test]
-pub fn test_parse_local_port_failure_on_totally_malformed_string() {
-    let line = "abcdefg";
-
-    assert!(parse_local_port(line).is_err())
+/// Returns a list of all those ports not found in the UDP socket table.
+pub fn free_ports() -> Result<Vec<u16>, Error> {
+    let ports_inuse = used_ports()?;
+    Ok((0..65535)
+        .filter(|port| !(ports_inuse.contains(port)))
+        .collect())
 }
 
 #[test]
