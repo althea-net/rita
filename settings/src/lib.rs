@@ -501,7 +501,10 @@ pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
     fn set_future(&self, future: bool);
 
     fn get_local_fee(&self) -> u32;
+    fn set_local_fee(&self, u32);
+
     fn get_metric_factor(&self) -> u32;
+    fn set_metric_factor(&self, u32);
 }
 
 /// This merges 2 json objects, overwriting conflicting values in `a`
@@ -593,8 +596,16 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
         self.read().unwrap().local_fee
     }
 
+    fn set_local_fee(&self, new_fee: u32) {
+        self.write().unwrap().local_fee = new_fee;
+    }
+
     fn get_metric_factor(&self) -> u32 {
         self.read().unwrap().metric_factor
+    }
+
+    fn set_metric_factor(&self, new_factor: u32) {
+        self.write().unwrap().metric_factor = new_factor;
     }
 }
 
@@ -673,8 +684,16 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
         self.read().unwrap().local_fee
     }
 
+    fn set_local_fee(&self, new_fee: u32) {
+        self.write().unwrap().local_fee = new_fee;
+    }
+
     fn get_metric_factor(&self) -> u32 {
         self.read().unwrap().metric_factor
+    }
+
+    fn set_metric_factor(&self, new_factor: u32) {
+        self.write().unwrap().metric_factor = new_factor;
     }
 }
 
