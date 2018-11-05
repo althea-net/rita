@@ -48,3 +48,6 @@ smtp_url = "smtp.fastmail.com"
 smtp_domain = "mail.example.com"
 smtp_username = "changeme"
 smtp_password = "changeme"
+
+[log]
+enabled = false
