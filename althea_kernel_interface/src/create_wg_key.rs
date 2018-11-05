@@ -7,6 +7,7 @@ use std::process::{Command, Stdio};
 
 use failure::Error;
 
+// TODO: Create a WireguardKey type
 #[derive(Debug)]
 pub struct WgKeypair {
     pub public: String,
@@ -55,4 +56,4 @@ impl KernelInterface {
     }
 }
 
-//Tested in CLU
+// Tested in CLU
