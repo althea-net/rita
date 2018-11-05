@@ -14,9 +14,9 @@ use actix::prelude::*;
 
 use futures::Future;
 
+use althea_kernel_interface::udp_socket_table::free_ports;
 use althea_types::Identity;
 use althea_types::LocalIdentity;
-
 use KI;
 
 use babel_monitor::{Babel, Route};
@@ -24,7 +24,6 @@ use babel_monitor::{Babel, Route};
 use rita_common;
 use rita_common::http_client::Hello;
 use rita_common::peer_listener::Peer;
-use rita_common::port_emissary::free_ports;
 
 use settings::RitaCommonSettings;
 use SETTING;
