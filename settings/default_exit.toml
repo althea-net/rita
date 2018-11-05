@@ -47,3 +47,6 @@ test = true
 email_cooldown=60
 test_dir = "mail"
 from_address = "email-verif@example.com"
+
+[log]
+enabled = false

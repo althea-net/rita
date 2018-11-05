@@ -86,6 +86,14 @@ fn default_tunnel_timeout() -> u64 {
     900 // 15 minutes
 }
 
+fn default_local_fee() -> u32 {
+    500_000u32 // 500kWei per byte
+}
+
+fn default_metric_factor() -> u32 {
+    1_900u32
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
     /// The static IP used on mesh interfaces
@@ -349,6 +357,14 @@ pub struct RitaSettingsStruct {
     exit_client: ExitClientSettings,
     #[serde(skip)]
     future: bool,
+    /// What we charge other nodes
+    #[serde(default = "default_local_fee")]
+    local_fee: u32,
+    /// How much non-financial metrics matter compared to a route's cost. By default a 2x more
+    /// expensive route will only be chosen if it scores more than 2x better in other metrics. The
+    /// value is expressed in 1/1000 increments, i.e. 1000 = 1.0, 500 = 0.5 and 1 = 0.001
+    #[serde(default = "default_metric_factor")]
+    metric_factor: u32,
 }
 
 /// This is the network settings specific to rita_exit
@@ -450,6 +466,13 @@ pub struct RitaExitSettingsStruct {
     verif_settings: Option<ExitVerifSettings>, // mailer's successor with new verif methods readiness
     #[serde(skip)]
     future: bool,
+    /// What we charge other nodes
+    #[serde(default = "default_local_fee")]
+    local_fee: u32,
+    /// How much non-financial metrics matter compared to a route's cost. By default a 2x more
+    /// expensive route will only be chosen if it scores more than 2x better in other metrics
+    #[serde(default = "default_metric_factor")]
+    metric_factor: u32,
 }
 
 pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
@@ -476,6 +499,12 @@ pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
 
     fn get_future(&self) -> bool;
     fn set_future(&self, future: bool);
+
+    fn get_local_fee(&self) -> u32;
+    fn set_local_fee(&self, u32);
+
+    fn get_metric_factor(&self) -> u32;
+    fn set_metric_factor(&self, u32);
 }
 
 /// This merges 2 json objects, overwriting conflicting values in `a`
@@ -562,6 +591,22 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
     fn set_future(&self, future: bool) {
         self.write().unwrap().future = future
     }
+
+    fn get_local_fee(&self) -> u32 {
+        self.read().unwrap().local_fee
+    }
+
+    fn set_local_fee(&self, new_fee: u32) {
+        self.write().unwrap().local_fee = new_fee;
+    }
+
+    fn get_metric_factor(&self) -> u32 {
+        self.read().unwrap().metric_factor
+    }
+
+    fn set_metric_factor(&self, new_factor: u32) {
+        self.write().unwrap().metric_factor = new_factor;
+    }
 }
 
 impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsStruct>> {
@@ -633,6 +678,22 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
 
     fn set_future(&self, future: bool) {
         self.write().unwrap().future = future
+    }
+
+    fn get_local_fee(&self) -> u32 {
+        self.read().unwrap().local_fee
+    }
+
+    fn set_local_fee(&self, new_fee: u32) {
+        self.write().unwrap().local_fee = new_fee;
+    }
+
+    fn get_metric_factor(&self) -> u32 {
+        self.read().unwrap().metric_factor
+    }
+
+    fn set_metric_factor(&self, new_factor: u32) {
+        self.write().unwrap().metric_factor = new_factor;
     }
 }
 

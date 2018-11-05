@@ -7,8 +7,6 @@ extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 
-use std::net::IpAddr;
-
 extern crate settings;
 use settings::{ExitVerifSettings, RitaCommonSettings, RitaExitSettings};
 
@@ -27,11 +25,15 @@ use rand::distributions::Alphanumeric;
 use regex::Regex;
 use std::fs::File;
 use std::io::Read;
+use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
 extern crate althea_types;
+extern crate babel_monitor;
 extern crate regex;
+
+use babel_monitor::Babel;
 
 #[derive(Debug, Fail)]
 pub enum CluError {
@@ -188,6 +190,30 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
         &network_settings.wg_private_key,
     )?;
 
+    // Yield the mut lock
+    drop(network_settings);
+
+    let local_fee = config.get_local_fee();
+    let metric_factor = config.get_metric_factor();
+
+    let stream = TcpStream::connect::<SocketAddr>(
+        format!("[::1]:{}", config.get_network().babel_port).parse()?,
+    )?;
+
+    let mut babel = Babel::new(stream);
+
+    babel.start_connection()?;
+
+    babel.set_local_fee(local_fee)?;
+    if local_fee == 0 {
+        warn!("THIS NODE IS GIVING BANDWIDTH AWAY FOR FREE. PLEASE SET local_fee TO A NON-ZERO VALUE TO DISABLE THIS WARNING.");
+    }
+
+    babel.set_metric_factor(metric_factor)?;
+    if metric_factor == 0 {
+        warn!("THIS NODE DOESN'T PAY ATTENTION TO ROUTE QUALITY - IT'LL CHOOSE THE CHEAPEST ROUTE EVEN IF IT'S THE WORST LINK AROUND. PLEASE SET metric_factor TO A NON-ZERO VALUE TO DISABLE THIS WARNING.");
+    }
+
     Ok(())
 }
 
@@ -277,6 +303,27 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
             }
             None => {}
         },
+    }
+
+    let local_fee = config.get_local_fee();
+    let metric_factor = config.get_metric_factor();
+
+    let stream = TcpStream::connect::<SocketAddr>(
+        format!("[::1]:{}", config.get_network().babel_port).parse()?,
+    )?;
+
+    let mut babel = Babel::new(stream);
+
+    babel.start_connection()?;
+
+    babel.set_local_fee(local_fee)?;
+    if local_fee == 0 {
+        warn!("THIS NODE IS GIVING BANDWIDTH AWAY FOR FREE. PLEASE SET local_fee TO A NON-ZERO VALUE TO DISABLE THIS WARNING.");
+    }
+
+    babel.set_metric_factor(metric_factor)?;
+    if metric_factor == 0 {
+        warn!("THIS NODE DOESN'T PAY ATTENTION TO ROUTE QUALITY - IT'LL CHOOSE THE CHEAPEST ROUTE EVEN IF IT'S THE WORST LINK AROUND. PLEASE SET metric_factor TO A NON-ZERO VALUE TO DISABLE THIS WARNING.");
     }
 
     Ok(())

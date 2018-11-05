@@ -1,24 +1,24 @@
 use actix::registry::SystemService;
-use rita_common::debt_keeper::GetDebtsList;
-
+use actix_web::http::StatusCode;
+use actix_web::*;
 use althea_types::EthAddress;
-
-use futures::Future;
-
-use std::boxed::Box;
-
 use failure::Error;
-
+use futures::{future, Future};
 use serde_json;
 
-use settings::RitaCommonSettings;
-use SETTING;
+use std::{
+    boxed::Box,
+    collections::HashMap,
+    net::{SocketAddr, TcpStream},
+};
 
 use super::{Dashboard, GetOwnInfo, OwnInfo};
-use actix_web::*;
-
+use babel_monitor::Babel;
+use rita_common::debt_keeper::GetDebtsList;
 use rita_common::debt_keeper::{DebtKeeper, GetDebtsResult};
 use rita_common::network_endpoints::JsonStatusResponse;
+use settings::RitaCommonSettings;
+use SETTING;
 
 pub fn get_own_info(_req: HttpRequest) -> Box<Future<Item = Json<OwnInfo>, Error = Error>> {
     debug!("Get own info endpoint hit!");
@@ -148,4 +148,148 @@ pub fn remove_from_dao_list(path: Path<(EthAddress)>) -> Result<Json<()>, Error>
         SETTING.get_dao_mut().dao_addresses.remove(iter);
     }
     Ok(Json(()))
+}
+
+pub fn get_local_fee(_req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Error>> {
+    debug!("/local_fee GET hit");
+    let mut ret = HashMap::new();
+    ret.insert("local_fee", SETTING.get_local_fee());
+
+    Box::new(future::ok(HttpResponse::Ok().json(ret)))
+}
+
+pub fn get_metric_factor(_req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Error>> {
+    debug!("/local_fee GET hit");
+    let mut ret = HashMap::new();
+    ret.insert("metric_factor", SETTING.get_metric_factor());
+
+    Box::new(future::ok(HttpResponse::Ok().json(ret)))
+}
+
+pub fn set_local_fee(path: Path<u32>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+    let new_fee = path.into_inner();
+    debug!("/local_fee/{} POST hit", new_fee);
+    let mut ret = HashMap::<String, String>::new();
+
+    let stream = match TcpStream::connect::<SocketAddr>(
+        format!("[::1]:{}", SETTING.get_network().babel_port)
+            .parse()
+            .unwrap(),
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            ret.insert(
+                "error".to_owned(),
+                "Could not create a socket for connecting to Babel".to_owned(),
+            );
+            ret.insert("rust_error".to_owned(), format!("{:?}", e));
+
+            return Box::new(future::ok(
+                HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+                    .into_builder()
+                    .json(ret),
+            ));
+        }
+    };
+
+    let mut babel = Babel::new(stream);
+
+    if let Err(e) = babel.start_connection() {
+        ret.insert("error".to_owned(), "Could not connect to Babel".to_owned());
+        ret.insert("rust_error".to_owned(), format!("{:?}", e));
+
+        return Box::new(future::ok(
+            HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+                .into_builder()
+                .json(ret),
+        ));
+    }
+
+    if let Err(e) = babel.set_local_fee(new_fee) {
+        ret.insert(
+            "error".to_owned(),
+            "Failed to ask Babel to set the proposed fee".to_owned(),
+        );
+        ret.insert("rust_error".to_owned(), format!("{:?}", e));
+
+        return Box::new(future::ok(
+            HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+                .into_builder()
+                .json(ret),
+        ));
+    };
+
+    // Set the value in settings only after Babel successfuly accepts the passed value
+    SETTING.set_local_fee(new_fee);
+
+    if new_fee == 0 {
+        warn!("THIS NODE IS GIVING BANDWIDTH AWAY FOR FREE. PLEASE SET local_fee TO A NON-ZERO VALUE TO DISABLE THIS WARNING.");
+        ret.insert("warning".to_owned(), "THIS NODE IS GIVING BANDWIDTH AWAY FOR FREE. PLEASE SET local_fee TO A NON-ZERO VALUE TO DISABLE THIS WARNING.".to_owned());
+    }
+
+    Box::new(future::ok(HttpResponse::Ok().json(ret)))
+}
+
+pub fn set_metric_factor(path: Path<u32>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+    let new_factor = path.into_inner();
+    debug!("/metric_factor/{} POST hit", new_factor);
+    let mut ret = HashMap::<String, String>::new();
+
+    let stream = match TcpStream::connect::<SocketAddr>(
+        format!("[::1]:{}", SETTING.get_network().babel_port)
+            .parse()
+            .unwrap(),
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            ret.insert(
+                "error".to_owned(),
+                "Could not create a socket for connecting to Babel".to_owned(),
+            );
+            ret.insert("rust_error".to_owned(), format!("{:?}", e));
+
+            return Box::new(future::ok(
+                HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+                    .into_builder()
+                    .json(ret),
+            ));
+        }
+    };
+
+    let mut babel = Babel::new(stream);
+
+    if let Err(e) = babel.start_connection() {
+        ret.insert("error".to_owned(), "Could not connect to Babel".to_owned());
+        ret.insert("rust_error".to_owned(), format!("{:?}", e));
+
+        return Box::new(future::ok(
+            HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+                .into_builder()
+                .json(ret),
+        ));
+    }
+
+    if let Err(e) = babel.set_metric_factor(new_factor) {
+        ret.insert(
+            "error".to_owned(),
+            "Failed to ask Babel to set the proposed factor".to_owned(),
+        );
+        ret.insert("rust_error".to_owned(), format!("{:?}", e));
+
+        return Box::new(future::ok(
+            HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+                .into_builder()
+                .json(ret),
+        ));
+    };
+
+    // Set the value in settings only after Babel successfuly accepts the passed value
+    SETTING.set_metric_factor(new_factor);
+
+    if new_factor == 0 {
+        warn!("THIS NODE DOESN'T PAY ATTENTION TO ROUTE QUALITY - IT'LL CHOOSE THE CHEAPEST ROUTE EVEN IF IT'S THE WORST LINK AROUND. PLEASE SET metric_factor TO A NON-ZERO VALUE TO DISABLE THIS WARNING.");
+        ret.insert("warning".to_owned(), "THIS NODE DOESN'T PAY ATTENTION TO ROUTE QUALITY - IT'LL CHOOSE THE CHEAPEST ROUTE EVEN IF IT'S THE WORST LINK AROUND. PLEASE SET metric_factor TO A NON-ZERO VALUE TO DISABLE THIS WARNING.".to_owned());
+    }
+
+    Box::new(future::ok(HttpResponse::Ok().json(ret)))
 }
