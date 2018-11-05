@@ -1,23 +1,32 @@
+use failure::Error;
 use std::fs::File;
 use std::io::prelude::*;
 use std::u16;
 
+#[derive(Debug, Fail)]
+pub enum UdpTableError {
+    #[fail(display = "Parse Error: {:?}", _0)]
+    ParseError(String),
+}
+
 /// Helper function for parsing out port number from local_address column
-fn take_local_port(s: &str) -> Result<u16, &'static str> {
+fn parse_local_port(s: &str) -> Result<u16, &'static str> {
     // second column in table contains local_address
     let local_addr = match s.split_whitespace().nth(1) {
         Some(addr) => addr,
-        None => return Err("Error parsing local_address column!"),
+        None => return UdpTableError::ParseError("Error parsing local_address column!"),
     };
     // having a format like "00000000:14E9"
     let port = match local_addr.split(":").nth(1) {
         Some(port) => port,
-        None => return Err("Error parsing local_address column!"),
+        None => return UdpTableError::ParseError("Error parsing local_address column!"),
     };
 
     match u16::from_str_radix(port, 16) {
         Ok(port) => Ok(port),
-        Err(err) => return Err("Error parsing port from local_address column!"),
+        Err(err) => {
+            return UdpTableError::ParseError("Error parsing port from local_address column!")
+        }
     }
 }
 
@@ -25,12 +34,12 @@ fn take_local_port(s: &str) -> Result<u16, &'static str> {
 fn used_ports() -> Result<Vec<u16>, &'static str> {
     let mut f = match File::open("/proc/net/udp") {
         Ok(file) => file,
-        Err(err) => return Err("UDP socket table not found!"),
+        Err(err) => return Err(err),
     };
     let mut udp_sockets_table = String::new();
 
     if f.read_to_string(&mut udp_sockets_table).is_err() {
-        return Err("Error reading UDP socket table!");
+        return UdpTableError::ParseError("Error reading UDP socket table!");
     };
 
     let mut lines = udp_sockets_table.split("\n");
@@ -39,7 +48,7 @@ fn used_ports() -> Result<Vec<u16>, &'static str> {
 
     let ports: Vec<u16> = lines
         .take_while(|line| line.len() > 0)
-        .map(|line| take_local_port(line))
+        .map(|line| parse_local_port(line))
         .filter_map(Result::ok)
         .collect();
 
