@@ -14,7 +14,6 @@ use actix::prelude::*;
 
 use futures::Future;
 
-use althea_kernel_interface::udp_socket_table;
 use althea_types::Identity;
 use althea_types::LocalIdentity;
 use KI;
@@ -223,7 +222,10 @@ impl Handler<IdentityCallback> for TunnelManager {
         let our_port = match msg.our_port {
             Some(port) => port,
             _ => match self.port_query() {
-                Some(p) => p,
+                Some(port) => {
+                    self.ports.insert(port, false);
+                    port
+                }
                 None => {
                     warn!("Failed to allocate tunnel port! All tunnel opening will fail");
                     return None;
@@ -515,9 +517,9 @@ fn contact_neighbor(peer: &Peer, our_port: u16) -> Result<(), Error> {
 impl TunnelManager {
     pub fn new() -> Self {
         let start = SETTING.get_network().wg_start_port;
-        let udp_table = match udp_socket_table::used_ports() {
+        let udp_table = match KI.used_ports() {
             Ok(used_ports) => used_ports,
-            Err(err) => return Err(err),
+            Err(_) => vec![],
         };
 
         let ports: HashMap<u16, bool> = (start..65535)
@@ -531,17 +533,15 @@ impl TunnelManager {
     }
 
     /// Attempts to find a free unused UDP port by querying OS.
-    pub fn port_query() -> Option<u16> {
+    pub fn port_query(&mut self) -> Option<u16> {
         // find first port (in arbitrary order) that is free
-        match self.ports.iter().find(|port| *port.1) {
-            Some(port) => {
-                // if unused port found, mark it as in-use (i.e: false)
-                self.ports.insert(port, false);
-
-                Some(port)
+        for (&port, &is_free) in self.ports.iter() {
+            if is_free {
+                return Some(port);
             }
-            None => None, // all ports in use.
         }
+
+        None
     }
 
     /// This function generates a future and hands it off to the Actix arbiter to actually resolve
@@ -551,7 +551,10 @@ impl TunnelManager {
         trace!("Getting tunnel, inq");
 
         let our_port = match self.port_query() {
-            Some(p) => p,
+            Some(port) => {
+                self.ports.insert(port, false);
+                port
+            }
             None => {
                 warn!("Failed to allocate tunnel port! All tunnel opening will fail");
                 return Err(TunnelManagerError::PortError("No remaining ports!".to_string()).into());
@@ -604,7 +607,10 @@ impl TunnelManager {
     pub fn neighbor_inquiry(&mut self, peer: &Peer) -> Result<(), Error> {
         trace!("TunnelManager neigh inquiry for {:?}", peer);
         let our_port = match self.port_query() {
-            Some(p) => p,
+            Some(port) => {
+                self.ports.insert(port, false);
+                port
+            }
             None => {
                 warn!("Failed to allocate tunnel port! All tunnel opening will fail");
                 return Err(TunnelManagerError::PortError("No remaining ports!".to_string()).into());
