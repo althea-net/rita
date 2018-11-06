@@ -517,10 +517,9 @@ fn contact_neighbor(peer: &Peer, our_port: u16) -> Result<(), Error> {
 impl TunnelManager {
     pub fn new() -> Self {
         let start = SETTING.get_network().wg_start_port;
-        let udp_table = match KI.used_ports() {
-            Ok(used_ports) => used_ports,
-            Err(_) => vec![],
-        };
+        let udp_table = KI
+            .used_ports()
+            .expect("Error reading ports in UDP socket table!");
 
         let ports: HashMap<u16, bool> = (start..65535)
             .into_iter()
