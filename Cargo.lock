@@ -318,6 +318,7 @@ version = "0.0.1"
 dependencies = [
  "althea_kernel_interface 0.1.0",
  "althea_types 0.1.0",
+ "babel_monitor 0.1.0",
  "env_logger 0.5.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "ipgen 0.0.4 (registry+https://github.com/rust-lang/crates.io-index)",

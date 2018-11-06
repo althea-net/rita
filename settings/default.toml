@@ -33,3 +33,6 @@ dao_addresses = []
 [exit_client]
 wg_listen_port = 59999
 lan_nics = ["lo"]
+
+[log]
+enabled = false

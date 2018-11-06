@@ -49,6 +49,8 @@ enum OwnInfoError {
 #[derive(Serialize)]
 pub struct OwnInfo {
     pub balance: i64,
+    pub local_fee: u32,
+    pub metric_factor: u32,
     pub device: Option<String>,
     pub version: String,
 }
@@ -77,6 +79,8 @@ impl Handler<GetOwnInfo> for Dashboard {
                             balance: balance
                                 .to_i64()
                                 .ok_or(OwnInfoError::DownCastError(balance))?,
+                            local_fee: SETTING.get_local_fee(),
+                            metric_factor: SETTING.get_metric_factor(),
                             device: SETTING.get_network().device.clone(),
                             version: env!("CARGO_PKG_VERSION").to_string(),
                         })

@@ -850,3 +850,77 @@ somthing wrong with the input data.
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:4877/remote_logging/level/3`
+
+---
+
+## /local_fee
+
+- URL: `<rita ip>:<rita_dashboard_port>/local_fee`
+- Method: `GET`
+- URL Params: `None`
+- Success Response:
+```json
+{
+"local_fee": <current_fee>
+}
+```
+- Error Response: `500 Server Error`
+- Sample Call:
+
+`curl 127.0.0.1:4877/local_fee`
+
+---
+
+## /local_fee/{fee}
+
+- URL: `<rita ip>:<rita_dashboard_port>/local_fee/{fee}`
+- Method: `POST`
+- URL Params: `fee` - a u32 value representing the new local fee to set
+- Success Response:
+```json
+{}
+```
+**Note:** You'll get a status 200 OK JSON with a `warning` key if you set the
+fee value to 0 (which means essentially advertising your bandwidth as free).
+- Error Response: `500 Server Error`
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:4877/local_fee/5`
+
+---
+
+## /metric_factor
+
+- URL: `<rita ip>:<rita_dashboard_port>/metric_factor`
+- Method: `GET`
+- URL Params: `None`
+- Success Response:
+```json
+{
+"metric_factor": <current_factor>
+}
+```
+- Error Response: `500 Server Error`
+- Sample Call:
+
+`curl 127.0.0.1:4877/metric_factor`
+
+---
+
+## /metric_factor/{factor}
+
+- URL: `<rita ip>:<rita_dashboard_port>/metric_factor/{factor}`
+- Method: `POST`
+- URL Params: `factor` - a u32 value representing the new metric factor to set
+  (every 1000 means 1.0, i.e. metric_factor of 1337 effectively means 1.337 in
+Babel)
+- Success Response:
+```json
+{}
+```
+**Note:** You'll get a status 200 OK JSON with a `warning` key if you set the
+factor value to 0 (which means essentially advertising your bandwidth as free).
+- Error Response: `500 Server Error`
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:4877/metric_factor/5`

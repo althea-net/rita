@@ -107,14 +107,14 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
     }
 
     let mut destinations = HashMap::new();
-    let local_price = babel.local_fee().unwrap();
+    let local_fee = babel.get_local_fee().unwrap();
 
     for route in &routes {
         // Only ip6
         if let IpNetwork::V6(ref ip) = route.prefix {
             // Only host addresses and installed routes
             if ip.prefix() == 128 && route.installed {
-                destinations.insert(IpAddr::V6(ip.ip()), Int256::from(route.price + local_price));
+                destinations.insert(IpAddr::V6(ip.ip()), Int256::from(route.price + local_fee));
             }
         }
     }
@@ -259,7 +259,7 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
         match state {
             (Some(dest), Some(id_from_if)) => match debts.get_mut(&id_from_if) {
                 Some(debt) => {
-                    *debt += (dest.clone() - local_price) * bytes;
+                    *debt += (dest.clone() - local_fee) * bytes;
                 }
                 // debts is generated from identities, this should be impossible
                 None => warn!("No debts entry for input entry id {:?}", id_from_if),

@@ -104,3 +104,6 @@ dao_enforcement = false
 cache_timeout_seconds = 600
 node_list = []
 dao_addresses = []
+
+[log]
+enabled = false

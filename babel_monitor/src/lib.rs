@@ -36,7 +36,7 @@ pub enum BabelMonitorError {
 
 use BabelMonitorError::*;
 
-// If a function doesn't modify the state of the Babel object
+// If a function doesn't need internal state of the Babel object
 // we don't want to place it as a member function.
 fn find_babel_val(val: &str, line: &str) -> Result<String, Error> {
     let mut iter = line.split(" ");
@@ -145,7 +145,7 @@ impl<T: Read + Write> Babel<T> {
         }
     }
 
-    pub fn local_fee(&mut self) -> Result<u32, Error> {
+    pub fn get_local_fee(&mut self) -> Result<u32, Error> {
         let babel_output = self.command("dump")?;
         let fee_entry = match babel_output.split("\n").nth(0) {
             Some(entry) => entry,
@@ -160,6 +160,16 @@ impl<T: Read + Write> Babel<T> {
         }
 
         Err(LocalFeeNotFound(String::from(fee_entry)).into())
+    }
+
+    pub fn set_local_fee(&mut self, new_fee: u32) -> Result<(), Error> {
+        let _babel_output = self.command(&format!("fee {}", new_fee))?;
+        Ok(())
+    }
+
+    pub fn set_metric_factor(&mut self, new_factor: u32) -> Result<(), Error> {
+        let _babel_output = self.command(&format!("metric-factor {}", new_factor));
+        Ok(())
     }
 
     pub fn monitor(&mut self, iface: &str) -> Result<(), Error> {
@@ -552,7 +562,7 @@ ok\n";
         s.push_bytes_to_read(TABLE.as_bytes());
 
         let mut b = Babel::new(s);
-        assert_eq!(b.local_fee().unwrap(), 1024);
+        assert_eq!(b.get_local_fee().unwrap(), 1024);
     }
 
     #[test]
