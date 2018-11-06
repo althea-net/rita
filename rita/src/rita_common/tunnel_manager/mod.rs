@@ -222,10 +222,7 @@ impl Handler<IdentityCallback> for TunnelManager {
         let our_port = match msg.our_port {
             Some(port) => port,
             _ => match self.port_query() {
-                Some(port) => {
-                    self.ports.insert(port, false);
-                    port
-                }
+                Some(port) => port,
                 None => {
                     warn!("Failed to allocate tunnel port! All tunnel opening will fail");
                     return None;
@@ -534,9 +531,11 @@ impl TunnelManager {
     /// Attempts to find a free unused UDP port by querying OS.
     pub fn port_query(&mut self) -> Option<u16> {
         // find first port (in arbitrary order) that is free
-        for (&port, &is_free) in self.ports.iter() {
-            if is_free {
-                return Some(port);
+        for (port, is_free) in self.ports.iter_mut() {
+            if *(is_free) {
+                *is_free = false;
+
+                return Some(*port);
             }
         }
 
@@ -550,10 +549,7 @@ impl TunnelManager {
         trace!("Getting tunnel, inq");
 
         let our_port = match self.port_query() {
-            Some(port) => {
-                self.ports.insert(port, false);
-                port
-            }
+            Some(port) => port,
             None => {
                 warn!("Failed to allocate tunnel port! All tunnel opening will fail");
                 return Err(TunnelManagerError::PortError("No remaining ports!".to_string()).into());
@@ -606,10 +602,7 @@ impl TunnelManager {
     pub fn neighbor_inquiry(&mut self, peer: &Peer) -> Result<(), Error> {
         trace!("TunnelManager neigh inquiry for {:?}", peer);
         let our_port = match self.port_query() {
-            Some(port) => {
-                self.ports.insert(port, false);
-                port
-            }
+            Some(port) => port,
             None => {
                 warn!("Failed to allocate tunnel port! All tunnel opening will fail");
                 return Err(TunnelManagerError::PortError("No remaining ports!".to_string()).into());
@@ -821,6 +814,14 @@ impl Handler<TunnelStateChange> for TunnelManager {
         }
         Ok(())
     }
+}
+
+#[test]
+pub fn test_tunnel_manager_port_query_sets_found_port_as_in_use() {
+    let mut tunnel_manager = TunnelManager::new();
+
+    let port = tunnel_manager.port_query().unwrap();
+    assert_eq!(tunnel_manager.ports[&port], false);
 }
 
 #[test]
