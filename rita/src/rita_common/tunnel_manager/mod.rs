@@ -14,7 +14,7 @@ use actix::prelude::*;
 
 use futures::Future;
 
-use althea_kernel_interface::udp_socket_table::used_ports;
+use althea_kernel_interface::udp_socket_table;
 use althea_types::Identity;
 use althea_types::LocalIdentity;
 use KI;
@@ -166,7 +166,8 @@ impl Tunnel {
 pub struct TunnelManager {
     // maps a node's identity to their associated port and tunnel
     tunnels: HashMap<Identity, HashMap<u32, Tunnel>>,
-    ports: Vec<u16>, // maintained list of free UDP ports
+    // maintained UDP port list (maps to true if free, else false)
+    ports: HashMap<u16, bool>,
 }
 
 impl Actor for TunnelManager {
@@ -253,6 +254,7 @@ impl Handler<PortCallback> for TunnelManager {
 
     fn handle(&mut self, msg: PortCallback, _: &mut Context<Self>) -> Self::Result {
         let port = msg.0;
+        self.ports.insert(port, true);
     }
 }
 
@@ -418,6 +420,7 @@ impl Handler<TriggerGC> for TunnelManager {
                     warn!("Failed to unmonitor {} with {:?}", tunnel.iface_name, res);
                 }
                 KI.del_interface(&tunnel.iface_name)?;
+                self.ports.insert(tunnel.listen_port, true);
             }
         }
 
@@ -512,21 +515,32 @@ fn contact_neighbor(peer: &Peer, our_port: u16) -> Result<(), Error> {
 impl TunnelManager {
     pub fn new() -> Self {
         let start = SETTING.get_network().wg_start_port;
-        TunnelManager {
-            ports: (start..65535).collect(),
-            tunnels: HashMap::new(),
-        }
+        let udp_table = match udp_socket_table::used_ports() {
+            Ok(used_ports) => used_ports,
+            Err(err) => return Err(err),
+        };
+
+        let ports: HashMap<u16, bool> = (start..65535)
+            .into_iter()
+            .map(|port| (port, !udp_table.contains(&port)))
+            .collect();
+
+        let tunnels = HashMap::new();
+
+        TunnelManager { ports, tunnels }
     }
 
     /// Attempts to find a free unused UDP port by querying OS.
     pub fn port_query() -> Option<u16> {
-        match self.ports.find(|p| !(used_ports().contains(port))) {
-            Ok(port) => {
-                // if unused port found, remove it from maintained list
-                self.ports = self.ports.filter(|p| p != port).collect();
+        // find first port (in arbitrary order) that is free
+        match self.ports.iter().find(|port| *port.1) {
+            Some(port) => {
+                // if unused port found, mark it as in-use (i.e: false)
+                self.ports.insert(port, false);
+
                 Some(port)
             }
-            Err(_) => None, // all ports in use.
+            None => None, // all ports in use.
         }
     }
 
@@ -642,6 +656,7 @@ impl TunnelManager {
             }
 
             if they_have_tunnel {
+                self.ports.insert(our_port, true);
                 trace!("Looking up for a tunnels by {:?}", key);
                 // Unwrap is safe because we confirm membership
                 let tunnels = self.tunnels.get(&key).unwrap();
@@ -690,6 +705,7 @@ impl TunnelManager {
                     );
                 }
 
+                self.ports.insert(tunnel.listen_port, true);
                 return_bool = true;
             }
         }
