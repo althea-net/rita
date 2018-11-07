@@ -113,20 +113,22 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
 
         // Fall back and migrate from own_ip if possible, TODO: REMOVE IN ALPHA 11
         None => match own_ip_option {
-            Some(existing_own_ip) => if validate_mesh_ip(&existing_own_ip) {
-                info!(
-                    "Found existing compat own_ip field {}, migrating to mesh_ip",
-                    existing_own_ip
-                );
-                network_settings.mesh_ip = Some(existing_own_ip);
-            } else {
-                warn!(
+            Some(existing_own_ip) => {
+                if validate_mesh_ip(&existing_own_ip) {
+                    info!(
+                        "Found existing compat own_ip field {}, migrating to mesh_ip",
+                        existing_own_ip
+                    );
+                    network_settings.mesh_ip = Some(existing_own_ip);
+                } else {
+                    warn!(
                     "Existing compat own_ip value {} is invalid, generating a new mesh IP and migrating to mesh_ip",
                     existing_own_ip
                     );
-                network_settings.mesh_ip =
-                    Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
-            },
+                    network_settings.mesh_ip =
+                        Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
+                }
+            }
             None => {
                 info!("There's no mesh IP configured, generating");
                 network_settings.mesh_ip =
@@ -195,6 +197,15 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
 
     let local_fee = config.get_local_fee();
     let metric_factor = config.get_metric_factor();
+    if local_fee == 0 {
+        warn!("THIS NODE IS GIVING BANDWIDTH AWAY FOR FREE. PLEASE SET local_fee TO A NON-ZERO VALUE TO DISABLE THIS WARNING.");
+    }
+    if metric_factor == 0 {
+        warn!("THIS NODE DOESN'T PAY ATTENTION TO ROUTE QUALITY - IT'LL CHOOSE THE CHEAPEST ROUTE EVEN IF IT'S THE WORST LINK AROUND. PLEASE SET metric_factor TO A NON-ZERO VALUE TO DISABLE THIS WARNING.");
+    }
+    if metric_factor > 2000000 {
+        warn!("THIS NODE DOESN'T PAY ATTENTION TO ROUTE PRICE - IT'LL CHOOSE THE BEST ROUTE EVEN IF IT COSTS WAY TOO MUCH. PLEASE SET metric_factor TO A LOWER VALUE TO DISABLE THIS WARNING.");
+    }
 
     let stream = TcpStream::connect::<SocketAddr>(
         format!("[::1]:{}", config.get_network().babel_port).parse()?,
@@ -204,14 +215,14 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
 
     babel.start_connection()?;
 
-    babel.set_local_fee(local_fee)?;
-    if local_fee == 0 {
-        warn!("THIS NODE IS GIVING BANDWIDTH AWAY FOR FREE. PLEASE SET local_fee TO A NON-ZERO VALUE TO DISABLE THIS WARNING.");
+    match babel.set_local_fee(local_fee) {
+        Ok(()) => info!("Local fee set to {}", local_fee),
+        Err(e) => warn!("Could not set local fee! {:?}", e),
     }
 
-    babel.set_metric_factor(metric_factor)?;
-    if metric_factor == 0 {
-        warn!("THIS NODE DOESN'T PAY ATTENTION TO ROUTE QUALITY - IT'LL CHOOSE THE CHEAPEST ROUTE EVEN IF IT'S THE WORST LINK AROUND. PLEASE SET metric_factor TO A NON-ZERO VALUE TO DISABLE THIS WARNING.");
+    match babel.set_metric_factor(metric_factor) {
+        Ok(()) => info!("Metric factor set to {}", metric_factor),
+        Err(e) => warn!("Could not set metric factor! {:?}", e),
     }
 
     Ok(())
@@ -242,20 +253,22 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
 
         // Fall back and migrate from own_ip if possible, TODO: REMOVE IN ALPHA 11
         None => match own_ip_option {
-            Some(existing_own_ip) => if validate_mesh_ip(&existing_own_ip) {
-                info!(
-                    "Found existing compat own_ip field {}, migrating to mesh_ip",
-                    existing_own_ip
-                );
-                network_settings.mesh_ip = Some(existing_own_ip);
-            } else {
-                warn!(
+            Some(existing_own_ip) => {
+                if validate_mesh_ip(&existing_own_ip) {
+                    info!(
+                        "Found existing compat own_ip field {}, migrating to mesh_ip",
+                        existing_own_ip
+                    );
+                    network_settings.mesh_ip = Some(existing_own_ip);
+                } else {
+                    warn!(
                     "Existing compat own_ip value {} is invalid, generating a new mesh IP and migrating to mesh_ip",
                     existing_own_ip
                     );
-                network_settings.mesh_ip =
-                    Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
-            },
+                    network_settings.mesh_ip =
+                        Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
+                }
+            }
             None => {
                 info!("There's no mesh IP configured, generating");
                 network_settings.mesh_ip =
