@@ -168,7 +168,7 @@ impl<T: Read + Write> Babel<T> {
     }
 
     pub fn set_metric_factor(&mut self, new_factor: u32) -> Result<(), Error> {
-        let _babel_output = self.command(&format!("metric-factor {}", new_factor));
+        let _babel_output = self.command(&format!("metric-factor {}", new_factor))?;
         Ok(())
     }
 

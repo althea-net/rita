@@ -178,6 +178,7 @@ pub fn set_local_fee(path: Path<u32>) -> Box<Future<Item = HttpResponse, Error =
     ) {
         Ok(s) => s,
         Err(e) => {
+            error!("Failed to set local fee! {:?}", e);
             ret.insert(
                 "error".to_owned(),
                 "Could not create a socket for connecting to Babel".to_owned(),
@@ -195,6 +196,7 @@ pub fn set_local_fee(path: Path<u32>) -> Box<Future<Item = HttpResponse, Error =
     let mut babel = Babel::new(stream);
 
     if let Err(e) = babel.start_connection() {
+        error!("Failed to set local fee! {:?}", e);
         ret.insert("error".to_owned(), "Could not connect to Babel".to_owned());
         ret.insert("rust_error".to_owned(), format!("{:?}", e));
 
@@ -206,6 +208,7 @@ pub fn set_local_fee(path: Path<u32>) -> Box<Future<Item = HttpResponse, Error =
     }
 
     if let Err(e) = babel.set_local_fee(new_fee) {
+        error!("Failed to set local fee! {:?}", e);
         ret.insert(
             "error".to_owned(),
             "Failed to ask Babel to set the proposed fee".to_owned(),
@@ -242,6 +245,7 @@ pub fn set_metric_factor(path: Path<u32>) -> Box<Future<Item = HttpResponse, Err
     ) {
         Ok(s) => s,
         Err(e) => {
+            error!("Failed to set metric factor! {:?}", e);
             ret.insert(
                 "error".to_owned(),
                 "Could not create a socket for connecting to Babel".to_owned(),
@@ -259,6 +263,7 @@ pub fn set_metric_factor(path: Path<u32>) -> Box<Future<Item = HttpResponse, Err
     let mut babel = Babel::new(stream);
 
     if let Err(e) = babel.start_connection() {
+        error!("Failed to set metric factor! {:?}", e);
         ret.insert("error".to_owned(), "Could not connect to Babel".to_owned());
         ret.insert("rust_error".to_owned(), format!("{:?}", e));
 
@@ -270,6 +275,7 @@ pub fn set_metric_factor(path: Path<u32>) -> Box<Future<Item = HttpResponse, Err
     }
 
     if let Err(e) = babel.set_metric_factor(new_factor) {
+        error!("Failed to set metric factor! {:?}", e);
         ret.insert(
             "error".to_owned(),
             "Failed to ask Babel to set the proposed factor".to_owned(),
