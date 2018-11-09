@@ -220,7 +220,7 @@ impl Handler<IdentityCallback> for TunnelManager {
     fn handle(&mut self, msg: IdentityCallback, _: &mut Context<Self>) -> Self::Result {
         let our_port = match msg.our_port {
             Some(port) => port,
-            _ => match self.free_ports.pop() {
+            _ => match self.get_port() {
                 Some(p) => p,
                 None => {
                     warn!("Failed to allocate tunnel port! All tunnel opening will fail");
@@ -520,13 +520,44 @@ impl TunnelManager {
         }
     }
 
+    /// Gets a port off of the internal port list after checking that said port is free
+    /// with the operating system
+    fn get_port(&mut self) -> Option<u16> {
+        let udp_table = KI.used_ports();
+        let port = self.free_ports.pop();
+        match (port, udp_table) {
+            (Some(p), Ok(used_ports)) => {
+                if used_ports.contains(&p) {
+                    warn!("We tried to allocate a used port!");
+
+                    // don't use push here, you'll get that same
+                    // entry back in the next pop and recurse forever
+                    // hopefully the port will be free when we get
+                    // back to it in a few hours
+                    self.free_ports.insert(0, p);
+
+                    self.get_port()
+                } else {
+                    Some(p)
+                }
+            }
+            (Some(p), Err(e)) => {
+                // we can either crash for sure here or take the chance
+                // that the port is not actually used, we chose the latter
+                warn!("Failed to check if port was in use! {:?}", e);
+                Some(p)
+            }
+            (None, _) => None,
+        }
+    }
+
     /// This function generates a future and hands it off to the Actix arbiter to actually resolve
     /// in the case that the DNS request is successful the hello handler and eventually the Identity
     /// callback continue execution flow. But this function itself returns syncronously
     pub fn neighbor_inquiry_hostname(&mut self, their_hostname: String) -> Result<(), Error> {
         trace!("Getting tunnel, inq");
 
-        let our_port = match self.free_ports.pop() {
+        let our_port = match self.get_port() {
             Some(p) => p,
             None => {
                 warn!("Failed to allocate tunnel port! All tunnel opening will fail");
@@ -579,7 +610,7 @@ impl TunnelManager {
     /// interface name.
     pub fn neighbor_inquiry(&mut self, peer: &Peer) -> Result<(), Error> {
         trace!("TunnelManager neigh inquiry for {:?}", peer);
-        let our_port = match self.free_ports.pop() {
+        let our_port = match self.get_port() {
             Some(p) => p,
             None => {
                 warn!("Failed to allocate tunnel port! All tunnel opening will fail");

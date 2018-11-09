@@ -35,6 +35,7 @@ mod open_tunnel;
 mod openwrt_ubus;
 mod ping_check;
 mod setup_wg_if;
+mod udp_socket_table;
 pub mod wg_iface_counter;
 
 pub use counter::FilterTarget;
