@@ -110,7 +110,7 @@ pub fn watch<T: Read + Write>(
     let mut destinations = HashMap::new();
     destinations.insert(
         our_id.wg_public_key,
-        Int256::from(babel.local_fee().unwrap()),
+        Int256::from(babel.get_local_fee().unwrap()),
     );
 
     for route in &routes {

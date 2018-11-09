@@ -16,7 +16,6 @@ use futures::Future;
 
 use althea_types::Identity;
 use althea_types::LocalIdentity;
-
 use KI;
 
 use babel_monitor::{Babel, Route};
@@ -24,7 +23,6 @@ use babel_monitor::{Babel, Route};
 use rita_common;
 use rita_common::http_client::Hello;
 use rita_common::peer_listener::Peer;
-use rita_common::port_emissary::free_ports;
 
 use settings::RitaCommonSettings;
 use SETTING;
@@ -165,7 +163,10 @@ impl Tunnel {
 }
 
 pub struct TunnelManager {
+    // maps a node's identity to their associated port and tunnel
     tunnels: HashMap<Identity, HashMap<u32, Tunnel>>,
+    // maintained UDP port list (maps to true if free, else false)
+    ports: HashMap<u16, bool>,
 }
 
 impl Actor for TunnelManager {
@@ -220,8 +221,8 @@ impl Handler<IdentityCallback> for TunnelManager {
     fn handle(&mut self, msg: IdentityCallback, _: &mut Context<Self>) -> Self::Result {
         let our_port = match msg.our_port {
             Some(port) => port,
-            _ => match free_ports().pop() {
-                Some(p) => p,
+            _ => match self.port_query() {
+                Some(port) => port,
                 None => {
                     warn!("Failed to allocate tunnel port! All tunnel opening will fail");
                     return None;
@@ -252,6 +253,7 @@ impl Handler<PortCallback> for TunnelManager {
 
     fn handle(&mut self, msg: PortCallback, _: &mut Context<Self>) -> Self::Result {
         let port = msg.0;
+        self.ports.insert(port, true);
     }
 }
 
@@ -417,6 +419,7 @@ impl Handler<TriggerGC> for TunnelManager {
                     warn!("Failed to unmonitor {} with {:?}", tunnel.iface_name, res);
                 }
                 KI.del_interface(&tunnel.iface_name)?;
+                self.ports.insert(tunnel.listen_port, true);
             }
         }
 
@@ -510,9 +513,33 @@ fn contact_neighbor(peer: &Peer, our_port: u16) -> Result<(), Error> {
 
 impl TunnelManager {
     pub fn new() -> Self {
-        TunnelManager {
-            tunnels: HashMap::new(),
+        let start = SETTING.get_network().wg_start_port;
+        let udp_table = KI
+            .used_ports()
+            .expect("Error reading ports in UDP socket table!");
+
+        let ports: HashMap<u16, bool> = (start..65535)
+            .into_iter()
+            .map(|port| (port, !udp_table.contains(&port)))
+            .collect();
+
+        let tunnels = HashMap::new();
+
+        TunnelManager { ports, tunnels }
+    }
+
+    /// Attempts to find a free unused UDP port by querying OS.
+    pub fn port_query(&mut self) -> Option<u16> {
+        // find first port (in arbitrary order) that is free
+        for (port, is_free) in self.ports.iter_mut() {
+            if *(is_free) {
+                *is_free = false;
+
+                return Some(*port);
+            }
         }
+
+        None
     }
 
     /// This function generates a future and hands it off to the Actix arbiter to actually resolve
@@ -521,8 +548,8 @@ impl TunnelManager {
     pub fn neighbor_inquiry_hostname(&mut self, their_hostname: String) -> Result<(), Error> {
         trace!("Getting tunnel, inq");
 
-        let our_port = match free_ports().pop() {
-            Some(p) => p,
+        let our_port = match self.port_query() {
+            Some(port) => port,
             None => {
                 warn!("Failed to allocate tunnel port! All tunnel opening will fail");
                 return Err(TunnelManagerError::PortError("No remaining ports!".to_string()).into());
@@ -574,8 +601,8 @@ impl TunnelManager {
     /// interface name.
     pub fn neighbor_inquiry(&mut self, peer: &Peer) -> Result<(), Error> {
         trace!("TunnelManager neigh inquiry for {:?}", peer);
-        let our_port = match free_ports().pop() {
-            Some(p) => p,
+        let our_port = match self.port_query() {
+            Some(port) => port,
             None => {
                 warn!("Failed to allocate tunnel port! All tunnel opening will fail");
                 return Err(TunnelManagerError::PortError("No remaining ports!".to_string()).into());
@@ -627,6 +654,7 @@ impl TunnelManager {
             }
 
             if they_have_tunnel {
+                self.ports.insert(our_port, true);
                 trace!("Looking up for a tunnels by {:?}", key);
                 // Unwrap is safe because we confirm membership
                 let tunnels = self.tunnels.get(&key).unwrap();
@@ -675,6 +703,7 @@ impl TunnelManager {
                     );
                 }
 
+                self.ports.insert(tunnel.listen_port, true);
                 return_bool = true;
             }
         }
@@ -785,6 +814,14 @@ impl Handler<TunnelStateChange> for TunnelManager {
         }
         Ok(())
     }
+}
+
+#[test]
+pub fn test_tunnel_manager_port_query_sets_found_port_as_in_use() {
+    let mut tunnel_manager = TunnelManager::new();
+
+    let port = tunnel_manager.port_query().unwrap();
+    assert_eq!(tunnel_manager.ports[&port], false);
 }
 
 #[test]

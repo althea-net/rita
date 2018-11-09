@@ -237,6 +237,10 @@ fn main() {
             .route("/exits/{name}/register", Method::POST, register_to_exit)
             .route("/exits/{name}/reset", Method::POST, reset_exit)
             .route("/exits/{name}/select", Method::POST, select_exit)
+            .route("/local_fee", Method::GET, get_local_fee)
+            .route("/local_fee/{fee}", Method::POST, set_local_fee)
+            .route("/metric_factor", Method::GET, get_metric_factor)
+            .route("/metric_factor/{factor}", Method::POST, set_metric_factor)
             .route(
                 "/exits/{name}/verify/{code}",
                 Method::POST,

@@ -140,9 +140,9 @@ def teardown():
 
 
 class Node:
-    def __init__(self, id, fwd_price):
+    def __init__(self, id, local_fee):
         self.id = id
-        self.fwd_price = fwd_price
+        self.local_fee = local_fee
         self.neighbors = []
         self.revision = COMPAT_LAYOUTS[COMPAT_LAYOUT][self.id - 1]
 
@@ -197,7 +197,7 @@ class Node:
                                .format(
                                        d=dest.id,
                                        p=price,
-                                       f=self.fwd_price,
+                                       f=self.local_fee,
                                        nh=next_hop.id
                                        ))
 
@@ -239,13 +239,11 @@ def start_babel(node):
                 "-r " +
                 "-L babeld-n{id}.log " +
                 "-H 1 " +
-                "-F {price} " +
-                "-a 0 " +
                 "-G 6872 " +
                 '-C "default enable-timestamps true" ' +
                 '-C "default update-interval 1" ' +
                 "-w lo"
-            ).format(babeld_path=BABELD, ifaces=node.get_interfaces(), id=node.id, price=node.fwd_price),
+            ).format(babeld_path=BABELD, ifaces=node.get_interfaces(), id=node.id),
             blocking=False
         )
 
@@ -348,9 +346,10 @@ def start_rita(node):
     # the code migrating own_ip to mesh_ip is working
     del settings["network"]["mesh_ip"]
     settings["network"]["own_ip"] = "fd00::{}".format(id)
-
     settings["network"]["wg_private_key_path"] = "{pwd}/private-key-{id}".format(id=id, pwd=dname)
     settings["network"]["peer_interfaces"] = node.get_veth_interfaces()
+    settings["local_fee"] = node.local_fee
+    settings["metric_factor"] = 0 # We explicity want to disregard quality
     save_rita_settings(id, settings)
     time.sleep(0.2)
     os.system(
@@ -377,9 +376,10 @@ def start_rita_exit(node):
     # the code migrating own_ip to mesh_ip is working
     del settings["network"]["mesh_ip"]
     settings["network"]["own_ip"] = "fd00::{}".format(id)
-
     settings["network"]["wg_private_key_path"] = "{pwd}/private-key-{id}".format(id=id, pwd=dname)
     settings["network"]["peer_interfaces"] = node.get_veth_interfaces()
+    settings["local_fee"] = node.local_fee
+    settings["metric_factor"] = 0 # We explicity want to disregard quality
     save_rita_settings(id, settings)
     time.sleep(0.2)
     os.system(

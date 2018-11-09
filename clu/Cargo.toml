@@ -7,6 +7,7 @@ authors = ["Justin <kilpatrickjustin@protonmail.ch>"]
 settings = { path = "../settings" }
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 althea_types = { path = "../althea_types" }
+babel_monitor = { path = "../babel_monitor" }
 lazy_static = "1.1.0"
 log = "0.4.5"
 env_logger = "0.5.13"
