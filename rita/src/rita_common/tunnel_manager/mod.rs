@@ -16,7 +16,6 @@ use futures::Future;
 
 use althea_types::Identity;
 use althea_types::LocalIdentity;
-
 use KI;
 
 use babel_monitor::{Babel, Route};
@@ -164,8 +163,10 @@ impl Tunnel {
 }
 
 pub struct TunnelManager {
-    free_ports: Vec<u16>,
+    // maps a node's identity to their associated port and tunnel
     tunnels: HashMap<Identity, HashMap<u32, Tunnel>>,
+    // maintained UDP port list (maps to true if free, else false)
+    ports: HashMap<u16, bool>,
 }
 
 impl Actor for TunnelManager {
@@ -252,7 +253,7 @@ impl Handler<PortCallback> for TunnelManager {
 
     fn handle(&mut self, msg: PortCallback, _: &mut Context<Self>) -> Self::Result {
         let port = msg.0;
-        self.free_ports.push(port);
+        self.ports.insert(port, true);
     }
 }
 
@@ -418,7 +419,7 @@ impl Handler<TriggerGC> for TunnelManager {
                     warn!("Failed to unmonitor {} with {:?}", tunnel.iface_name, res);
                 }
                 KI.del_interface(&tunnel.iface_name)?;
-                self.free_ports.push(tunnel.listen_port);
+                self.ports.insert(tunnel.listen_port, true);
             }
         }
 
@@ -513,11 +514,32 @@ fn contact_neighbor(peer: &Peer, our_port: u16) -> Result<(), Error> {
 impl TunnelManager {
     pub fn new() -> Self {
         let start = SETTING.get_network().wg_start_port;
-        let ports = (start..65535).collect();
-        TunnelManager {
-            free_ports: ports,
-            tunnels: HashMap::new(),
+        let udp_table = KI
+            .used_ports()
+            .expect("Error reading ports in UDP socket table!");
+
+        let ports: HashMap<u16, bool> = (start..65535)
+            .into_iter()
+            .map(|port| (port, !udp_table.contains(&port)))
+            .collect();
+
+        let tunnels = HashMap::new();
+
+        TunnelManager { ports, tunnels }
+    }
+
+    /// Attempts to find a free unused UDP port by querying OS.
+    pub fn port_query(&mut self) -> Option<u16> {
+        // find first port (in arbitrary order) that is free
+        for (port, is_free) in self.ports.iter_mut() {
+            if *(is_free) {
+                *is_free = false;
+
+                return Some(*port);
+            }
         }
+
+        None
     }
 
     /// Gets a port off of the internal port list after checking that said port is free
@@ -663,8 +685,7 @@ impl TunnelManager {
             }
 
             if they_have_tunnel {
-                // return allocated port as it's not required
-                self.free_ports.push(our_port);
+                self.ports.insert(our_port, true);
                 trace!("Looking up for a tunnels by {:?}", key);
                 // Unwrap is safe because we confirm membership
                 let tunnels = self.tunnels.get(&key).unwrap();
@@ -713,7 +734,7 @@ impl TunnelManager {
                     );
                 }
 
-                self.free_ports.push(tunnel.listen_port);
+                self.ports.insert(tunnel.listen_port, true);
                 return_bool = true;
             }
         }
@@ -827,9 +848,11 @@ impl Handler<TunnelStateChange> for TunnelManager {
 }
 
 #[test]
-pub fn test_tunnel_manager() {
+pub fn test_tunnel_manager_port_query_sets_found_port_as_in_use() {
     let mut tunnel_manager = TunnelManager::new();
-    assert_eq!(tunnel_manager.free_ports.pop().unwrap(), 65534);
+
+    let port = tunnel_manager.port_query().unwrap();
+    assert_eq!(tunnel_manager.ports[&port], false);
 }
 
 #[test]

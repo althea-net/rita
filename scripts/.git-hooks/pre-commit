@@ -3,18 +3,18 @@
 inconsistent_files=()
 
 while read file; do
-    if [ ${file: -3} == ".rs" ]; then
-        rustfmt --check $file 1>/dev/null;
+    if [ "${file: -3}" == ".rs" ]; then
+        rustfmt --check "$file" 1>/dev/null;
         if [ $? != 0 ]; then
             inconsistent_files+=($file);
         fi
     fi
-done < <(git diff --name-only --cached)
+done < <(git diff --name-only --cached --diff-filter=ACMRTUXB)
 
 if [ ${#inconsistent_files[@]} != 0 ]; then
     printf "Detected inconsistent formatting in: \n"
-    for file in ${inconsistent_files[@]}; do
-        printf "    rustfmt $file\n";
+    for file in "${inconsistent_files[@]}"; do
+        printf "    rustfmt %s\n" "$file";
     done
     printf "Or run 'cargo fmt --all' to fix formatting across the codebase.\n";
     exit 1
