@@ -412,7 +412,7 @@ application/json" -d '\{"url": "https://somewhere.safe"\}'
       "apac.altheamesh.com",
       "aus.altheamesh.com"
     ],
-    "own_ip": "fde6:99d5:d181:3951:efb:6f36:e2c:762e",
+    "mesh_ip": "fde6:99d5:d181:3951:efb:6f36:e2c:762e",
     "peer_interfaces": [
       "eth0.5",
       "wlan1",
