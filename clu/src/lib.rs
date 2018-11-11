@@ -94,7 +94,6 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
     let privkey = network_settings.wg_private_key.clone();
     let pubkey = network_settings.wg_public_key.clone();
     let mesh_ip_option = network_settings.mesh_ip.clone();
-    let own_ip_option = network_settings.own_ip.clone(); // TODO: REMOVE IN ALPHA 11
     let device_option = network_settings.device.clone();
 
     match mesh_ip_option {
@@ -110,31 +109,11 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
                 info!("Mesh IP is {}", existing_mesh_ip);
             }
         }
-
-        // Fall back and migrate from own_ip if possible, TODO: REMOVE IN ALPHA 11
-        None => match own_ip_option {
-            Some(existing_own_ip) => {
-                if validate_mesh_ip(&existing_own_ip) {
-                    info!(
-                        "Found existing compat own_ip field {}, migrating to mesh_ip",
-                        existing_own_ip
-                    );
-                    network_settings.mesh_ip = Some(existing_own_ip);
-                } else {
-                    warn!(
-                    "Existing compat own_ip value {} is invalid, generating a new mesh IP and migrating to mesh_ip",
-                    existing_own_ip
-                    );
-                    network_settings.mesh_ip =
-                        Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
-                }
-            }
-            None => {
-                info!("There's no mesh IP configured, generating");
-                network_settings.mesh_ip =
-                    Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
-            }
-        },
+        None => {
+            info!("There's no mesh IP configured, generating");
+            network_settings.mesh_ip =
+                Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
+        }
     }
 
     match device_option {
@@ -174,10 +153,6 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
             }
         }
     }
-
-    // Setting the compat value to None prevents serde from putting it back in the config (thanks
-    // to the skip_serializing_if annotation)
-    network_settings.own_ip = None;
 
     if !validate_wg_key(&privkey) || !validate_wg_key(&pubkey) {
         info!("Existing wireguard keypair is invalid, generating from scratch");
@@ -235,7 +210,6 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
     let privkey = network_settings.wg_private_key.clone();
     let pubkey = network_settings.wg_public_key.clone();
     let mesh_ip_option = network_settings.mesh_ip.clone();
-    let own_ip_option = network_settings.own_ip.clone(); // TODO: REMOVE IN ALPHA 11
 
     match mesh_ip_option {
         Some(existing_mesh_ip) => {
@@ -251,30 +225,11 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
             }
         }
 
-        // Fall back and migrate from own_ip if possible, TODO: REMOVE IN ALPHA 11
-        None => match own_ip_option {
-            Some(existing_own_ip) => {
-                if validate_mesh_ip(&existing_own_ip) {
-                    info!(
-                        "Found existing compat own_ip field {}, migrating to mesh_ip",
-                        existing_own_ip
-                    );
-                    network_settings.mesh_ip = Some(existing_own_ip);
-                } else {
-                    warn!(
-                    "Existing compat own_ip value {} is invalid, generating a new mesh IP and migrating to mesh_ip",
-                    existing_own_ip
-                    );
-                    network_settings.mesh_ip =
-                        Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
-                }
-            }
-            None => {
-                info!("There's no mesh IP configured, generating");
-                network_settings.mesh_ip =
-                    Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
-            }
-        },
+        None => {
+            info!("There's no mesh IP configured, generating");
+            network_settings.mesh_ip =
+                Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
+        }
     }
 
     if !validate_wg_key(&privkey) || !validate_wg_key(&pubkey) {
