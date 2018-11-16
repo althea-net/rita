@@ -1,3 +1,4 @@
+#![feature(extern_prelude)]
 extern crate base64;
 extern crate ethereum_types;
 extern crate eui48;
@@ -14,11 +15,14 @@ extern crate actix;
 
 pub mod interop;
 pub mod rtt;
+pub mod wg_key;
 
 pub use ethereum_types::{Address, Public, Secret, Signature, H160, U256};
 
 pub use interop::*;
 pub use rtt::RTTimestamps;
+pub use std::str::FromStr;
+pub use wg_key::WgKey;
 
 pub type Bytes32 = U256;
 pub type EthAddress = Address;
@@ -71,7 +75,7 @@ mod tests {
         let y = x as u16;
         Identity {
             mesh_ip: IpAddr::V6(Ipv6Addr::new(y, y, y, y, y, y, y, y)),
-            wg_public_key: String::from("AAAAAAAAAAAAAAAAAAAA"),
+            wg_public_key: WgKey::from_str("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=").unwrap(),
             eth_address: new_addr(x),
         }
     }
@@ -162,10 +166,32 @@ mod tests {
 
         // Serialize it to a JSON string.
         let j = serde_json::to_string(&my_struct).unwrap();
-        let s = "{\"addr\":\"0x0000000000000000000000000000000000000001\",\"sig\":\"0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001\",\"key\":\"0x0000000000000000000000000000000000000000000000000000000000000001\",\"payment\":{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"0x1\"},\"identity\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"}}";
+        let s = "{\
+            \"addr\":\"0x0000000000000000000000000000000000000001\",\
+            \"sig\":\"0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001\",\
+            \"key\":\"0x0000000000000000000000000000000000000000000000000000000000000001\",\
+            \"payment\":{\
+                \"to\":{\
+                    \"mesh_ip\":\"1:1:1:1:1:1:1:1\",\
+                    \"eth_address\":\"0x0000000000000000000000000000000000000001\",\
+                    \"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\"\
+                },\
+                \"from\":{\
+                    \"mesh_ip\":\"1:1:1:1:1:1:1:1\",\
+                    \"eth_address\":\"0x0000000000000000000000000000000000000001\",\
+                    \"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\"\
+                },\
+                \"amount\":\"0x1\"\
+            },\
+            \"identity\":{\
+                \"mesh_ip\":\"1:1:1:1:1:1:1:1\",\
+                \"eth_address\":\"0x0000000000000000000000000000000000000001\",\
+                \"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\"\
+            }\
+        }";
+
         // Print, write to a file, or send to an HTTP server.
         assert_eq!(s, j);
-
         assert_eq!(serde_json::from_str::<MyStruct>(s).unwrap(), my_struct);
     }
 
