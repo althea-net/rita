@@ -1,7 +1,11 @@
+use serde::de::{Deserialize, Error, Unexpected, Visitor};
+use serde::ser::{Serialize, Serializer};
+use serde::Deserializer;
 use std::fmt;
 use std::str::FromStr;
 
-struct WgKey([u8; 32]);
+#[derive(Hash, Debug, Clone, Eq, PartialEq)]
+pub struct WgKey([u8; 32]);
 
 impl AsRef<[u8]> for WgKey {
     fn as_ref(&self) -> &[u8] {
@@ -23,11 +27,48 @@ impl FromStr for WgKey {
 
         match base64::decode_config_slice(s, base64::STANDARD, &mut output) {
             Ok(_) => Ok(WgKey(output)),
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
 }
 
+impl Serialize for WgKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+struct WgKeyVisitor;
+
+impl<'de> Visitor<'de> for WgKeyVisitor {
+    type Value = WgKey;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(formatter, "exects a valid base64-encoded string")
+    }
+
+    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        match WgKey::from_str(s) {
+            Ok(wg_key) => Ok(wg_key),
+            Err(_) => Err(Error::invalid_value(Unexpected::Str(s), &self)),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for WgKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(WgKeyVisitor)
+    }
+}
 
 #[test]
 fn test_wgkey_from_valid_string() {
@@ -35,7 +76,6 @@ fn test_wgkey_from_valid_string() {
 
     assert!(WgKey::from_str(valid_key).is_ok())
 }
-
 
 #[test]
 fn test_wgkey_from_invalid_string() {
@@ -49,7 +89,8 @@ fn test_wgkey_from_invalid_string() {
 #[test]
 fn test_wgkey_to_string() {
     let key = WgKey::from_str("8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk=").unwrap();
-
-    assert_eq!(key.to_string(), "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk=");
+    assert_eq!(
+        key.to_string(),
+        "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
+    );
 }
-
