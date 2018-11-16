@@ -47,7 +47,7 @@ impl<'de> Visitor<'de> for WgKeyVisitor {
     type Value = WgKey;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "exects a valid base64-encoded string")
+        write!(formatter, "expects a valid base64-encoded string")
     }
 
     fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
