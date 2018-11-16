@@ -1,139 +1,107 @@
-#![cfg_attr(
-    feature = "system_alloc",
-    feature(alloc_system, global_allocator, allocator_api)
-)]
-
-#[cfg(feature = "system_alloc")]
-extern crate alloc_system;
-
-#[cfg(feature = "system_alloc")]
-use alloc_system::System;
-
-#[cfg(feature = "system_alloc")]
-#[global_allocator]
-static A: System = System;
-
-#[macro_use]
-extern crate log;
-
-#[macro_use]
-extern crate rouille;
-use rouille::{Request, Response};
-
 #[macro_use]
 extern crate diesel;
-extern crate dotenv;
-extern crate env_logger;
-
-extern crate serde;
+#[macro_use]
+extern crate failure;
+#[macro_use]
+extern crate lazy_static;
+#[macro_use]
+extern crate log;
 #[macro_use]
 extern crate serde_derive;
+
+extern crate actix_web;
+extern crate clarity;
+extern crate dotenv;
+extern crate env_logger;
+extern crate futures;
+extern crate libc;
+extern crate num256;
+extern crate num_traits;
+extern crate openssl;
+extern crate serde;
 extern crate serde_json;
 
-extern crate num256;
-use num256::Int256;
+mod models;
+mod network_endpoints;
+mod schema;
 
-extern crate althea_types;
-use althea_types::{Identity, PaymentTx};
-
-use diesel::dsl::exists;
-use diesel::prelude::*;
-use diesel::select;
-use diesel::sqlite::SqliteConnection;
+use actix_web::{http::Method, server, App};
+use diesel::{connection::Connection, sqlite::SqliteConnection};
 use dotenv::dotenv;
+use env_logger::Builder;
+use log::LevelFilter;
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 
-use std::env;
-use std::io::Read;
-use std::sync::Mutex;
+use std::{env, path, process, sync::Mutex};
 
-pub mod models;
-pub mod schema;
-use self::models::*;
+use network_endpoints::{handle_get_channel_state, handle_upload_channel_state};
 
-use self::schema::status::dsl::*;
+lazy_static! {
+    static ref DB_CONN: Mutex<SqliteConnection> = {
+        dotenv().ok();
 
-pub fn establish_connection() -> SqliteConnection {
-    dotenv().ok();
-
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    SqliteConnection::establish(&database_url)
-        .expect(&format!("Error connecting to {}", database_url))
+        let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        let conn = SqliteConnection::establish(&database_url)
+            .expect(&format!("Error connecting to {}", database_url));
+        Mutex::new(conn)
+    };
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct BountyUpdate {
-    pub from: Identity,
-    pub balance: Int256,
-    pub tx: PaymentTx,
-}
+static BOUNTY_HUNTER_PORT: u16 = 4878u16;
 
 fn main() {
-    env_logger::init();
-    trace!("Starting");
-
-    let conn = Mutex::new(establish_connection());
-
-    rouille::start_server("[::0]:8888", move |request| {
-        // TODO: fix the port
-        router!(request,
-            (POST) (/update) => {
-                process_updates(request, &conn)
-            },
-            (GET) (/list) => {
-                list_status(request, &conn)
-            },
-            _ => rouille::Response::empty_404()
-        )
-    });
-}
-
-fn process_updates(request: &Request, conn: &Mutex<SqliteConnection>) -> Response {
-    let conn = conn.lock().unwrap();
-    if let Some(mut data) = request.data() {
-        let mut status_str = String::new();
-        data.read_to_string(&mut status_str).unwrap();
-        let update: BountyUpdate = serde_json::from_str(&status_str).unwrap();
-        trace!("Received update, status: {:?}", update);
-        trace!("Received update, balance: {}", update.balance);
-
-        let stat = Status {
-            ip: String::from(format!("{}", update.from.mesh_ip)),
-            mac: String::from(format!("{}", update.from.wg_public_key)),
-            balance: String::from(format!("{}", update.balance)),
-        };
-
-        trace!("Checking if record exists for {}", stat.ip);
-
-        let exists = select(exists(status.filter(ip.eq(stat.ip.clone()))))
-            .get_result(&*conn)
-            .expect("Error loading statuses");
-
-        if exists {
-            trace!("record exists, updating");
-            // updating
-            diesel::update(status.find(stat.ip))
-                .set(balance.eq(stat.balance))
-                .execute(&*conn)
-                .expect("Error saving");
-        } else {
-            trace!("record does not exist, creating");
-            // first time seeing
-            diesel::insert_into(status)
-                .values(&stat)
-                .execute(&*conn)
-                .expect("Error saving");
-        }
-        Response::text("Received Successfully")
-    } else {
-        panic!("Empty body")
+    match env::var("RUST_LOG") {
+        Ok(_) => env_logger::init(),
+        Err(_) => Builder::new().filter_level(LevelFilter::Info).init(),
     }
-}
 
-fn list_status(_request: &Request, conn: &Mutex<SqliteConnection>) -> Response {
-    let conn = conn.lock().unwrap();
-    let results = status
-        .load::<Status>(&*conn)
-        .expect("Error loading statuses");
-    trace!("Sending response: {:?}", results);
-    rouille::Response::text(serde_json::to_string(&results).unwrap())
+    info!("Althea Bounty Hunter {}", env!("CARGO_PKG_VERSION"));
+
+    let system = actix::System::new("main");
+
+    dotenv().ok();
+    let cert = env::var("BOUNTY_HUNTER_CERT").ok();
+    let key = env::var("BOUNTY_HUNTER_KEY").ok();
+
+    match (cert, key) {
+        (Some(cert), Some(key)) => {
+            if path::Path::new(&key).exists() && path::Path::new(&cert).exists() {
+                info!("Starting HTTP server (TLS: key {}, cert {})", key, cert);
+                let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+                builder
+                    .set_certificate_file(cert, SslFiletype::PEM)
+                    .unwrap();
+                builder.set_private_key_file(key, SslFiletype::PEM).unwrap();
+
+                // Serve over TLS
+                server::new(|| {
+                    App::new()
+                        .route(
+                            "/upload_channel_state",
+                            Method::POST,
+                            handle_upload_channel_state,
+                        ).route(
+                            "/get_channel_state/{ch_id}",
+                            Method::GET,
+                            handle_get_channel_state,
+                        )
+                }).workers(1)
+                .bind_ssl(format!("[::]:{}", BOUNTY_HUNTER_PORT), builder)
+                .unwrap()
+                .shutdown_timeout(0)
+                .start();
+            } else {
+                error!("TLS: cert and key paths configured (key {}, cert {}) but at least one is not present on disk, bailing out", key, cert);
+                process::exit(libc::EINVAL);
+            }
+        }
+        (other_key_state, other_cert_state) => {
+            error!(
+                "TLS: not configured, got key {:?} and cert {:?}, expected two defined paths, bailing out",
+                other_key_state, other_cert_state
+                );
+            process::exit(libc::EINVAL);
+        }
+    }
+    system.run();
 }
