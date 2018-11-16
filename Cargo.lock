@@ -110,6 +110,7 @@ dependencies = [
 name = "althea_kernel_interface"
 version = "0.1.0"
 dependencies = [
+ "althea_types 0.1.0",
  "eui48 0.4.0 (git+https://github.com/althea-mesh/eui48)",
  "failure 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "itertools 0.7.8 (registry+https://github.com/rust-lang/crates.io-index)",
