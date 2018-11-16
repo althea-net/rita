@@ -339,13 +339,8 @@ def start_rita(node):
     id = node.id
     settings = get_rita_defaults()
 
-    # TODO: MOVE ON TO mesh_ip IN ALPHA 11
-    # The mesh_ip option is new and defaults to fd00::1. At the same time, it
-    # takes precedence, therefore messing with the desired IP assignment layout.
-    # We're using the old own_ip one to keep A/B tests working and to test that
-    # the code migrating own_ip to mesh_ip is working
-    del settings["network"]["mesh_ip"]
-    settings["network"]["own_ip"] = "fd00::{}".format(id)
+    settings["network"]["mesh_ip"] = "fd00::{}".format(id)
+
     settings["network"]["wg_private_key_path"] = "{pwd}/private-key-{id}".format(id=id, pwd=dname)
     settings["network"]["peer_interfaces"] = node.get_veth_interfaces()
     settings["local_fee"] = node.local_fee
@@ -369,13 +364,8 @@ def start_rita_exit(node):
     id = node.id
     settings = get_rita_exit_defaults()
 
-    # TODO: MOVE ON TO mesh_ip IN ALPHA 11
-    # The mesh_ip option is new and defaults to fd00::1. At the same time, it
-    # takes precedence, therefore messing with the desired IP assignment layout.
-    # We're using the old own_ip one to keep A/B tests working and to test that
-    # the code migrating own_ip to mesh_ip is working
-    del settings["network"]["mesh_ip"]
-    settings["network"]["own_ip"] = "fd00::{}".format(id)
+    settings["network"]["mesh_ip"]= "fd00::{}".format(id)
+
     settings["network"]["wg_private_key_path"] = "{pwd}/private-key-{id}".format(id=id, pwd=dname)
     settings["network"]["peer_interfaces"] = node.get_veth_interfaces()
     settings["local_fee"] = node.local_fee

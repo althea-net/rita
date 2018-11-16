@@ -99,9 +99,6 @@ pub struct NetworkSettings {
     /// The static IP used on mesh interfaces
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mesh_ip: Option<IpAddr>,
-    /// Old name for mesh_ip, left in for back-compat, TODO: REMOVE IN ALPHA 11
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub own_ip: Option<IpAddr>,
     /// Mesh IP of bounty hunter (in fd00::/8)
     pub bounty_ip: IpAddr,
     /// Broadcast ip address used for peer discovery (in ff02::/8)
@@ -160,7 +157,6 @@ impl Default for NetworkSettings {
     fn default() -> Self {
         NetworkSettings {
             mesh_ip: None,
-            own_ip: None,
             bounty_ip: "fd00::3".parse().unwrap(),
             discovery_ip: default_discovery_ip(),
             babel_port: 6872,
