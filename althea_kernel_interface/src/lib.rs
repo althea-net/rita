@@ -9,6 +9,8 @@ extern crate eui48;
 extern crate itertools;
 extern crate regex;
 
+extern crate althea_types;
+
 use std::env;
 use std::io::ErrorKind;
 use std::process::{Command, Output};
