@@ -1,15 +1,20 @@
 [package]
+authors = ["Jehan <jehan.tremback@gmail.com>"]
 name = "althea_types"
 version = "0.1.0"
-authors = ["Jehan <jehan.tremback@gmail.com>"]
-
 [dependencies]
-num256 = "0.1"
-base64 = "0.9.3"
-serde_derive = "1.0.79"
-serde = "1.0.79"
-serde_json = "1.0.28"
-hex = "0.3.2"
-eui48 = { git = "https://github.com/althea-mesh/eui48", features = ["serde"] }
-actix = { version = "0.7.4", optional = true}
+base64 = "0.10.0"
 ethereum-types = "0.4.0"
+hex = "0.3.2"
+num256 = "0.1.1"
+serde = "1.0.80"
+serde_derive = "1.0.80"
+serde_json = "1.0.33"
+
+[dependencies.actix]
+optional = true
+version = "0.7.6"
+
+[dependencies.eui48]
+features = ["serde"]
+git = "https://github.com/althea-mesh/eui48"
