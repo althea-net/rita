@@ -156,7 +156,8 @@ pub fn watch<T: Read + Write>(
                         ));
                     }
                 }
-            )).send()?
+            ))
+            .send()?
             .json()?;
         let client_rx = SystemTime::now();
 
@@ -200,7 +201,7 @@ mod tests {
     extern crate env_logger;
 
     use super::*;
-    use althea_types::EthAddress;
+    use althea_types::{EthAddress, WgKey};
     use std::str::FromStr;
 
     #[test]
@@ -217,9 +218,10 @@ mod tests {
             Identity::new(
                 "0.0.0.0".parse().unwrap(),
                 EthAddress::from_str("abababababababababab").unwrap(),
-                String::from("abc0abc1abc2abc3abc4abc5abc6abc7abc8abc9"),
+                WgKey::from_str("abc0abc1abc2abc3abc4abc5abc6abc7abc8abc=").unwrap(),
             ),
             5,
-        ).unwrap();
+        )
+        .unwrap();
     }
 }

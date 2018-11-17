@@ -7,6 +7,8 @@ use regex::Regex;
 
 use std::collections::HashMap;
 
+use althea_types::WgKey;
+
 use super::{KernelInterface, KernelInterfaceError};
 
 #[derive(Clone, Debug)]
@@ -18,19 +20,21 @@ pub struct WgUsage {
 impl KernelInterface {
     /// Takes a wg interface name and provides upload and download since creation in bytes
     /// in a hashmap indexed by peer WireGuard key
-    pub fn read_wg_counters(&self, wg_name: &str) -> Result<HashMap<String, WgUsage>, Error> {
+    pub fn read_wg_counters(&self, wg_name: &str) -> Result<HashMap<WgKey, WgUsage>, Error> {
         let output = self.run_command("wg", &["show", wg_name, "transfer"])?;
         if !output.stderr.is_empty() {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error from wg command: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
 
         lazy_static! {
-            static ref RE: Regex =
-                Regex::new(r"(?P<key>[/=0-9a-zA-Z]+)\t(?P<download>[0-9]+)\t(?P<upload>[0-9]+)\n*")
-                    .expect("Unable to compile regular expression");
+            static ref RE: Regex = Regex::new(
+                r"(?P<key>[+/=0-9a-zA-Z]+)\t(?P<download>[0-9]+)\t(?P<upload>[0-9]+)\n*"
+            )
+            .expect("Unable to compile regular expression");
         }
 
         let mut result = HashMap::new();
@@ -39,7 +43,16 @@ impl KernelInterface {
                 upload: item["upload"].parse()?,
                 download: item["download"].parse()?,
             };
-            result.insert(item["key"].to_string(), usage);
+            match item["key"].parse() {
+                Ok(key) => {
+                    result.insert(key, usage);
+                }
+                Err(e) => warn!(
+                    "Failed to parse WgKey {} with {:?}",
+                    item["key"].to_string(),
+                    e
+                ),
+            }
         }
 
         Ok(result)
@@ -74,23 +87,14 @@ fn test_read_wg_counters() {
     let wg_counter = KI
         .read_wg_counters("wg_exit")
         .expect("Unable to parse wg counters");
+    let test_key = "jkIodvXKgij/rAEQXFEPJpls6ooxXJEC5XlWA1uUPUg="
+        .parse()
+        .unwrap();
 
     assert_eq!(wg_counter.len(), 1);
-    assert!(wg_counter.contains_key("jkIodvXKgij/rAEQXFEPJpls6ooxXJEC5XlWA1uUPUg="));
-    assert_eq!(
-        wg_counter
-            .get("jkIodvXKgij/rAEQXFEPJpls6ooxXJEC5XlWA1uUPUg=")
-            .unwrap()
-            .upload,
-        13592616000
-    );
-    assert_eq!(
-        wg_counter
-            .get("jkIodvXKgij/rAEQXFEPJpls6ooxXJEC5XlWA1uUPUg=")
-            .unwrap()
-            .download,
-        821519724
-    );
+    assert!(wg_counter.contains_key(&test_key));
+    assert_eq!(wg_counter.get(&test_key).unwrap().upload, 13592616000);
+    assert_eq!(wg_counter.get(&test_key).unwrap().download, 821519724);
 }
 
 #[test]
@@ -120,7 +124,8 @@ b6HGtuWLAIHyINOgL7euzrMsMfzHIie5kYDScSCT7Ds=\t67526804\t88741160
 RW1XPRn4nJQaDqqeDFRilPjtYOUBitXIuHwoKZAtKWw=\t480230868\t3531367092
 AJYeYn4R+I+Jc7xiKQ15ImruYFXybTiR6BB6Ip3/njs=\t1777907382\t2034640104
 jL+LlqHAM63Qd9/ynAuqqn4wrYO7Hp8cYMlnf2OoSH8=\t679969972\t6539417596
-".to_vec(),
+"
+                    .to_vec(),
                     stderr: b"".to_vec(),
                     status: ExitStatus::from_raw(0),
                 })
@@ -132,50 +137,24 @@ jL+LlqHAM63Qd9/ynAuqqn4wrYO7Hp8cYMlnf2OoSH8=\t679969972\t6539417596
         .read_wg_counters("wg_exit")
         .expect("Unable to parse wg counters");
 
+    let test_key = "Iz668/X70eo/PF9C94cKAZjrSjU961V8xndxTtk0FRM="
+        .parse()
+        .unwrap();
+    let test_key2 = "7fYutmH8iHIcuKjnzcgaDBNpVRw8ly0XMYFr7PtirDI="
+        .parse()
+        .unwrap();
+    let test_key3 = "fFGhz1faSAqNjTqT5rpBWLD/FLrP6P/P59Z2Eo3jQDo="
+        .parse()
+        .unwrap();
+
     assert_eq!(wg_counter.len(), 11);
-    assert!(wg_counter.contains_key("Iz668/X70eo/PF9C94cKAZjrSjU961V8xndxTtk0FRM="));
-    assert_eq!(
-        wg_counter
-            .get("Iz668/X70eo/PF9C94cKAZjrSjU961V8xndxTtk0FRM=")
-            .unwrap()
-            .upload,
-        15281630160
-    );
-    assert_eq!(
-        wg_counter
-            .get("Iz668/X70eo/PF9C94cKAZjrSjU961V8xndxTtk0FRM=")
-            .unwrap()
-            .download,
-        7088439728
-    );
-    assert!(wg_counter.contains_key("7fYutmH8iHIcuKjnzcgaDBNpVRw8ly0XMYFr7PtirDI="));
-    assert_eq!(
-        wg_counter
-            .get("7fYutmH8iHIcuKjnzcgaDBNpVRw8ly0XMYFr7PtirDI=")
-            .unwrap()
-            .upload,
-        0
-    );
-    assert_eq!(
-        wg_counter
-            .get("7fYutmH8iHIcuKjnzcgaDBNpVRw8ly0XMYFr7PtirDI=")
-            .unwrap()
-            .download,
-        0
-    );
-    assert!(wg_counter.contains_key("fFGhz1faSAqNjTqT5rpBWLD/FLrP6P/P59Z2Eo3jQDo="));
-    assert_eq!(
-        wg_counter
-            .get("fFGhz1faSAqNjTqT5rpBWLD/FLrP6P/P59Z2Eo3jQDo=")
-            .unwrap()
-            .upload,
-        3318456
-    );
-    assert_eq!(
-        wg_counter
-            .get("fFGhz1faSAqNjTqT5rpBWLD/FLrP6P/P59Z2Eo3jQDo=")
-            .unwrap()
-            .download,
-        0
-    );
+    assert!(wg_counter.contains_key(&test_key));
+    assert_eq!(wg_counter.get(&test_key).unwrap().upload, 15281630160);
+    assert_eq!(wg_counter.get(&test_key).unwrap().download, 7088439728);
+    assert!(wg_counter.contains_key(&test_key2));
+    assert_eq!(wg_counter.get(&test_key2).unwrap().upload, 0);
+    assert_eq!(wg_counter.get(&test_key2).unwrap().download, 0);
+    assert!(wg_counter.contains_key(&test_key3));
+    assert_eq!(wg_counter.get(&test_key3).unwrap().upload, 3318456);
+    assert_eq!(wg_counter.get(&test_key3).unwrap().download, 0);
 }

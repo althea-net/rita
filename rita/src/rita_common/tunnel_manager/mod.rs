@@ -843,7 +843,7 @@ pub fn test_tunnel_manager_lookup() {
     let id = Identity::new(
         "0.0.0.0".parse().unwrap(),
         EthAddress::from_str("ffffffffffffffffffffffffffffffffffffffff").unwrap(),
-        String::from("abc0abc1abc2abc3abc4abc5abc6abc7abc8abc9"),
+        "abc0abc1abc2abc3abc4abc5abc6abc7abc8abc9".parse().unwrap(),
     );
     assert!(tunnel_manager.tunnels.get(&id).is_none());
 

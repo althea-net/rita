@@ -343,6 +343,7 @@ impl Handler<GetDebtsList> for DebtKeeper {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use althea_types::WgKey;
 
     #[test]
     fn test_single_suspend() {
@@ -356,7 +357,7 @@ mod tests {
         let ident = Identity {
             eth_address: 1.into(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: String::from("AAAAAAAAAAA"),
+            wg_public_key: "AAAAAAAAAAA".parse().unwrap(),
         };
 
         d.traffic_update(&ident, Int256::from(-100));
@@ -376,7 +377,7 @@ mod tests {
         let ident = Identity {
             eth_address: 1.into(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: String::from("AAAAAAAAAAA"),
+            wg_public_key: "AAAAAAAAAAA".parse().unwrap(),
         };
 
         d.traffic_update(&ident, Int256::from(-100));
@@ -397,7 +398,7 @@ mod tests {
         let ident = Identity {
             eth_address: 1.into(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: String::from("AAAAAAAAAAA"),
+            wg_public_key: "AAAAAAAAAAA".parse().unwrap(),
         };
 
         d.traffic_update(&ident, Int256::from(-100));
@@ -419,7 +420,7 @@ mod tests {
         let ident = Identity {
             eth_address: 1.into(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: String::from("AAAAAAAAAAA"),
+            wg_public_key: "AAAAAAAAAAA".parse().unwrap(),
         };
 
         d.traffic_update(&ident, Int256::from(-100));
@@ -443,7 +444,7 @@ mod tests {
         let ident = Identity {
             eth_address: 1.into(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: String::from("AAAAAAAAAAA"),
+            wg_public_key: "AAAAAAAAAAA".parse().unwrap(),
         };
 
         d.traffic_update(&ident, Int256::from(-100));
@@ -467,7 +468,7 @@ mod tests {
         let ident = Identity {
             eth_address: 1.into(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: String::from("AAAAAAAAAAA"),
+            wg_public_key: "AAAAAAAAAAA".parse().unwrap(),
         };
 
         d.traffic_update(&ident, Int256::from(-100));
@@ -492,7 +493,7 @@ mod tests {
         let ident = Identity {
             eth_address: 1.into(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: String::from("AAAAAAAAAAA"),
+            wg_public_key: "AAAAAAAAAAA".parse().unwrap(),
         };
 
         d.traffic_update(&ident.clone(), Int256::from(-50));
@@ -526,7 +527,7 @@ mod tests {
         let ident = Identity {
             eth_address: 1.into(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: String::from("AAAAAAAAAAA"),
+            wg_public_key: "AAAAAAAAAAA".parse().unwrap(),
         };
 
         d.traffic_update(&ident, Int256::from(100));
@@ -552,7 +553,7 @@ mod tests {
         let ident = Identity {
             eth_address: 1.into(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: String::from("AAAAAAAAAAA"),
+            wg_public_key: "AAAAAAAAAAA".parse().unwrap(),
         };
 
         d.payment_received(&ident, Uint256::from(100000));
@@ -573,7 +574,7 @@ mod tests {
         let ident = Identity {
             eth_address: 1.into(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: String::from("AAAAAAAAAAA"),
+            wg_public_key: "AAAAAAAAAAA".parse().unwrap(),
         };
 
         d.traffic_update(&ident, Int256::from(-100));
@@ -597,7 +598,7 @@ mod tests {
         let ident = Identity {
             eth_address: 1.into(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: String::from("AAAAAAAAAAA"),
+            wg_public_key: "AAAAAAAAAAA".parse().unwrap(),
         };
 
         // send lots of payments
@@ -626,7 +627,7 @@ mod tests {
         let ident = Identity {
             eth_address: 1.into(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: String::from("AAAAAAAAAAA"),
+            wg_public_key: "AAAAAAAAAAA".parse().unwrap(),
         };
 
         // send lots of payments
@@ -651,7 +652,7 @@ mod tests {
         let ident = Identity {
             eth_address: 1.into(),
             mesh_ip: "2001::3".parse().unwrap(),
-            wg_public_key: String::from("AAAAAAAAAAA"),
+            wg_public_key: "AAAAAAAAAAA".parse().unwrap(),
         };
 
         for _ in 0..100 {

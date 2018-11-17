@@ -1,4 +1,5 @@
 use super::{KernelInterface, KernelInterfaceError};
+use althea_types::WgKey;
 use failure::err_msg;
 use std::str::from_utf8;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -6,7 +7,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use failure::Error;
 
 impl KernelInterface {
-    pub fn get_peers(&self, iface_name: &str) -> Result<Vec<String>, Error> {
+    pub fn get_peers(&self, iface_name: &str) -> Result<Vec<WgKey>, Error> {
         let output = self.run_command("wg", &["show", iface_name, "peers"])?;
 
         let output = from_utf8(&output.stdout)?;
@@ -14,7 +15,12 @@ impl KernelInterface {
         let mut peers = Vec::new();
 
         for l in output.lines() {
-            peers.push(l.to_string());
+            let parsed = l.parse();
+            if parsed.is_ok() {
+                peers.push(parsed.unwrap());
+            } else {
+                warn!("Could not parse peer! {}", l);
+            }
         }
 
         Ok(peers)
@@ -46,7 +52,8 @@ impl KernelInterface {
                 return Err(KernelInterfaceError::RuntimeError(format!(
                     "received error adding wg link: {}",
                     stderr
-                )).into());
+                ))
+                .into());
             }
         }
         Ok(())

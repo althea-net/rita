@@ -70,27 +70,32 @@ impl<'de> Deserialize<'de> for WgKey {
     }
 }
 
-#[test]
-fn test_wgkey_from_valid_string() {
-    let valid_key = "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk=";
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    assert!(WgKey::from_str(valid_key).is_ok())
-}
+    #[test]
+    fn test_wgkey_from_valid_string() {
+        let valid_key = "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk=";
 
-#[test]
-fn test_wgkey_from_invalid_string() {
-    let bad_key1 = "look at me, I'm the same length as a key but";
-    let bad_key2 = "8BeCExnthLe5ou0EYe 5jNqJ/PduZ1x2o7lpXJOpXkk=";
+        assert!(WgKey::from_str(valid_key).is_ok())
+    }
 
-    assert!(WgKey::from_str(bad_key1).is_err());
-    assert!(WgKey::from_str(bad_key2).is_err());
-}
+    #[test]
+    fn test_wgkey_from_invalid_string() {
+        let bad_key1 = "look at me, I'm the same length as a key but";
+        let bad_key2 = "8BeCExnthLe5ou0EYe 5jNqJ/PduZ1x2o7lpXJOpXkk=";
 
-#[test]
-fn test_wgkey_to_string() {
-    let key = WgKey::from_str("8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk=").unwrap();
-    assert_eq!(
-        key.to_string(),
-        "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
-    );
+        assert!(WgKey::from_str(bad_key1).is_err());
+        assert!(WgKey::from_str(bad_key2).is_err());
+    }
+
+    #[test]
+    fn test_wgkey_to_string() {
+        let key = WgKey::from_str("8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk=").unwrap();
+        assert_eq!(
+            key.to_string(),
+            "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
+        );
+    }
 }

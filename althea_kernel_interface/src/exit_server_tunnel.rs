@@ -54,7 +54,10 @@ impl KernelInterface {
 
         for i in self.get_peers("wg_exit")? {
             if !client_pubkeys.contains(&i.to_string()) {
-                self.run_command("wg", &["set", "wg_exit", "peer", &i, "remove"])?;
+                self.run_command(
+                    "wg",
+                    &["set", "wg_exit", "peer", &format!("{}", i), "remove"],
+                )?;
             }
         }
 
@@ -74,7 +77,8 @@ impl KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error adding wg link: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
 
         let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "up"])?;
@@ -82,7 +86,8 @@ impl KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error setting wg interface up: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
 
         Ok(())

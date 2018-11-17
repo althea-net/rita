@@ -4,11 +4,13 @@ use failure::Error;
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
+use althea_types::WgKey;
+
 impl KernelInterface {
     pub fn set_client_exit_tunnel_config(
         &self,
         endpoint: SocketAddr,
-        pubkey: String,
+        pubkey: WgKey,
         private_key_path: String,
         listen_port: u16,
         local_ip: IpAddr,
@@ -25,7 +27,7 @@ impl KernelInterface {
                 "private-key",
                 &private_key_path,
                 "peer",
-                &pubkey,
+                &format!("{}", &pubkey),
                 "endpoint",
                 &format!("[{}]:{}", endpoint.ip(), endpoint.port()),
                 "allowed-ips",
@@ -37,7 +39,10 @@ impl KernelInterface {
 
         for i in self.get_peers("wg_exit")? {
             if i != pubkey {
-                self.run_command("wg", &["set", "wg_exit", "peer", &i, "remove"])?;
+                self.run_command(
+                    "wg",
+                    &["set", "wg_exit", "peer", &format!("{}", i), "remove"],
+                )?;
             }
         }
 
@@ -106,7 +111,8 @@ impl KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error adding wg link: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
 
         let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "up"])?;
@@ -114,7 +120,8 @@ impl KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error setting wg interface up: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
 
         Ok(())
@@ -142,7 +149,8 @@ impl KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error setting ip route: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
 
         Ok(())

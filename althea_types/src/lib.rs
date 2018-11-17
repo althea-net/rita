@@ -1,4 +1,3 @@
-#![feature(extern_prelude)]
 extern crate base64;
 extern crate ethereum_types;
 extern crate eui48;

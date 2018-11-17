@@ -308,7 +308,7 @@ mod tests {
         let y = x as u16;
         Identity {
             mesh_ip: IpAddr::V6(Ipv6Addr::new(y, y, y, y, y, y, y, y)),
-            wg_public_key: String::from("AAAAAAAAAAAAAAAAAAAA"),
+            wg_public_key: "AAAAAAAAAAAAAAAAAAAA".parse().unwrap(),
             eth_address: new_addr(x),
         }
     }
@@ -333,7 +333,7 @@ mod tests {
         let id = new_identity(1);
         SETTING.get_network_mut().mesh_ip = Some(id.mesh_ip);
         SETTING.get_payment_mut().eth_address = id.eth_address;
-        SETTING.get_network_mut().wg_public_key = id.wg_public_key;
+        SETTING.get_network_mut().wg_public_key = Some(id.wg_public_key);
 
         let mut pc = PaymentController::new();
 
@@ -364,7 +364,7 @@ mod tests {
         let id = new_identity(1);
         SETTING.get_network_mut().mesh_ip = Some(id.mesh_ip);
         SETTING.get_payment_mut().eth_address = id.eth_address;
-        SETTING.get_network_mut().wg_public_key = id.wg_public_key;
+        SETTING.get_network_mut().wg_public_key = Some(id.wg_public_key);
 
         let mut pc = PaymentController::new();
 
@@ -390,7 +390,7 @@ mod tests {
         let id = new_identity(1);
         SETTING.get_network_mut().mesh_ip = Some(id.mesh_ip);
         SETTING.get_payment_mut().eth_address = id.eth_address;
-        SETTING.get_network_mut().wg_public_key = id.wg_public_key;
+        SETTING.get_network_mut().wg_public_key = Some(id.wg_public_key);
         let mut pc = PaymentController::new();
 
         let out = pc.payment_received(new_payment(1)).unwrap();
@@ -420,7 +420,7 @@ mod tests {
         let id = new_identity(1);
         SETTING.get_network_mut().mesh_ip = Some(id.mesh_ip);
         SETTING.get_payment_mut().eth_address = id.eth_address;
-        SETTING.get_network_mut().wg_public_key = id.wg_public_key;
+        SETTING.get_network_mut().wg_public_key = Some(id.wg_public_key);
         let mut pc = PaymentController::new();
 
         for i in 0..100 {

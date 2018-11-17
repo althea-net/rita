@@ -52,7 +52,7 @@ use althea_kernel_interface::TestCommandRunner;
 
 use config::Config;
 
-use althea_types::{EthAddress, ExitRegistrationDetails, ExitState, Identity};
+use althea_types::{EthAddress, ExitRegistrationDetails, ExitState, Identity, WgKey};
 
 use num256::Int256;
 
@@ -120,12 +120,12 @@ pub struct NetworkSettings {
     pub rita_tick_interval: u64,
     /// Our private key, encoded with Base64 (what the `wg` command outputs and takes by default)
     /// Note this is the canonical private key for the node
-    pub wg_private_key: String,
+    pub wg_private_key: Option<WgKey>,
     /// Where our private key is saved (written to the path on every start) because wireguard does
     /// not accept private keys via stdin or command line args
     pub wg_private_key_path: String,
     /// The our public key, Base64 encoded
-    pub wg_public_key: String,
+    pub wg_public_key: Option<WgKey>,
     /// The starting port for per hop tunnels, is a range as we need a different wg interface for
     /// each neighbor to enable billing, and each wg interface needs an unique port.
     pub wg_start_port: u16,
@@ -165,9 +165,9 @@ impl Default for NetworkSettings {
             rita_contact_port: 4875,
             bounty_port: 8888,
             rita_tick_interval: 5,
-            wg_private_key: String::new(),
+            wg_private_key: None,
             wg_private_key_path: String::new(),
-            wg_public_key: String::new(),
+            wg_public_key: None,
             wg_start_port: 60000,
             peer_interfaces: HashSet::new(),
             manual_peers: Vec::new(),
@@ -576,7 +576,7 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
         Some(Identity::new(
             self.get_network().mesh_ip?.clone(),
             self.get_payment().eth_address.clone(),
-            self.get_network().wg_public_key.clone(),
+            self.get_network().clone().wg_public_key?,
         ))
     }
 
@@ -664,7 +664,7 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
         Some(Identity::new(
             self.get_network().mesh_ip?.clone(),
             self.get_payment().eth_address.clone(),
-            self.get_network().wg_public_key.clone(),
+            self.get_network().clone().wg_public_key?,
         ))
     }
 
