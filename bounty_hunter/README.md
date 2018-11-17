@@ -49,7 +49,7 @@ The JSON object submitted to this endpoint is not specified here, please refer t
 
 ### /get_channel_states
 
-- URL: `<bounty_hunter_ip>:<bounty_hunter_port>/upload_channel_state`
+- URL: `<bounty_hunter_ip>:<bounty_hunter_port>/get_channel_state`
 - Method: `GET`
 - URL Params: `Ethereum public key`
 - Data Params: `None`
@@ -71,7 +71,7 @@ The JSON object submitted to this endpoint is not specified here, please refer t
 - Sample Call:
 
 ```
-curl -XPOST 127.0.0.1:<bounty_hunter_port>/get_channel_states/<Pubkey>
+curl -XGET 127.0.0.1:<bounty_hunter_port>/get_channel_states/<Pubkey>
 ```
 
 The JSON object submitted recieved from this endpoint is not specified here, please refer to the [Guac payment channel contract update function](https://github.com/althea-mesh/guac/blob/master/contracts/PaymentChannels.sol#L172). For the members of this struct. For the sake of consistency this data should be represented using types from [Clarity](https://github.com/althea-mesh/clarirty) or [Rust Web3](https://github.com/tomusdrw/rust-web3) where appropriate.
