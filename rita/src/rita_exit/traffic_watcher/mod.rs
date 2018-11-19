@@ -143,12 +143,20 @@ pub fn watch<T: Read + Write>(
 
     let mut total_in: u64 = 0;
     for entry in counters.iter() {
+        info!(
+            "Exit accounted {} uploaded {} bytes",
+            entry.0, entry.1.download
+        );
         let input = entry.1;
         total_in += input.download;
     }
     info!("Total Exit input of {} bytes this round", total_in);
     let mut total_out: u64 = 0;
     for entry in counters.iter() {
+        info!(
+            "Exit accounted {} downloaded {} bytes",
+            entry.0, entry.1.upload
+        );
         let output = entry.1;
         total_out += output.upload;
     }
@@ -241,7 +249,7 @@ pub fn watch<T: Read + Write>(
         }
     }
 
-    trace!("Collated total exit debts: {:?}", debts);
+    info!("Collated total exit debts: {:?}", debts);
 
     info!("Computed exit debts for {:?} clients", debts.len());
     let mut total_income = Int256::zero();
