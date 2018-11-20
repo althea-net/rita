@@ -18,9 +18,9 @@ import toml
 NETWORK_LAB = os.path.join(os.path.dirname(__file__), 'deps/network-lab/network-lab.sh')
 BABELD = os.path.join(os.path.dirname(__file__), 'deps/babeld/babeld')
 
-RITA_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/debug/rita')
-RITA_EXIT_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/debug/rita_exit')
-BOUNTY_HUNTER_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/debug/bounty_hunter')
+RITA_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/x86_64-unknown-linux-musl/debug/rita')
+RITA_EXIT_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/x86_64-unknown-linux-musl/debug/rita_exit')
+BOUNTY_HUNTER_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/x86_64-unknown-linux-musl/debug/bounty_hunter')
 
 # Envs for controlling compat testing
 RITA_A = os.getenv('RITA_A', RITA_DEFAULT)
