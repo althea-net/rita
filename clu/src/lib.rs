@@ -53,10 +53,6 @@ pub fn linux_generate_mesh_ip() -> Result<IpAddr, Error> {
     Ok(mesh_ip)
 }
 
-fn validate_wg_key(key: &str) -> bool {
-    key.len() == 44 && key.ends_with("=") && !key.contains(" ")
-}
-
 pub fn validate_mesh_ip(ip: &IpAddr) -> bool {
     ip.is_ipv6() && !ip.is_unspecified()
 }
@@ -91,8 +87,6 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
     KI.restore_default_route(&mut config.get_network_mut().default_route)?;
 
     let mut network_settings = config.get_network_mut();
-    let privkey = network_settings.wg_private_key.clone();
-    let pubkey = network_settings.wg_public_key.clone();
     let mesh_ip_option = network_settings.mesh_ip.clone();
     let device_option = network_settings.device.clone();
 
@@ -154,17 +148,20 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
         }
     }
 
-    if !validate_wg_key(&privkey) || !validate_wg_key(&pubkey) {
+    if network_settings.wg_public_key.is_none() {
         info!("Existing wireguard keypair is invalid, generating from scratch");
         let keypair = KI.create_wg_keypair().expect("failed to generate wg keys");
-        network_settings.wg_public_key = keypair.public;
-        network_settings.wg_private_key = keypair.private;
+        network_settings.wg_public_key = Some(keypair.public);
+        network_settings.wg_private_key = Some(keypair.private);
     }
 
     //Creates file on disk containing key
     KI.create_wg_key(
         &Path::new(&network_settings.wg_private_key_path),
-        &network_settings.wg_private_key,
+        &network_settings
+            .wg_private_key
+            .clone()
+            .expect("How did we get here without generating a key above?"),
     )?;
 
     // Yield the mut lock
@@ -207,8 +204,6 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
     cleanup()?;
 
     let mut network_settings = config.get_network_mut();
-    let privkey = network_settings.wg_private_key.clone();
-    let pubkey = network_settings.wg_public_key.clone();
     let mesh_ip_option = network_settings.mesh_ip.clone();
 
     match mesh_ip_option {
@@ -232,17 +227,20 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
         }
     }
 
-    if !validate_wg_key(&privkey) || !validate_wg_key(&pubkey) {
+    if network_settings.wg_public_key.is_none() {
         info!("Existing wireguard keypair is invalid, generating from scratch");
         let keypair = KI.create_wg_keypair().expect("failed to generate wg keys");
-        network_settings.wg_public_key = keypair.public;
-        network_settings.wg_private_key = keypair.private;
+        network_settings.wg_public_key = Some(keypair.public);
+        network_settings.wg_private_key = Some(keypair.private);
     }
 
     //Creates file on disk containing key
     KI.create_wg_key(
         &Path::new(&network_settings.wg_private_key_path),
-        &network_settings.wg_private_key,
+        &network_settings
+            .wg_private_key
+            .clone()
+            .expect("How did we get here without generating a key above?"),
     )?;
 
     drop(network_settings);
@@ -319,31 +317,8 @@ pub fn exit_init(platform: &str, settings: Arc<RwLock<settings::RitaExitSettings
     );
 }
 
-#[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_validate_wg_key() {
-        let good_key = "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk=";
-        let bad_key1 = "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpXk=";
-        let bad_key2 = "look at me, I'm the same length as a key but";
-        let bad_key3 = "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpXkk";
-        let bad_key4 = "8BeCExnthLe5ou0EYe 5jNqJ/PduZ1x2o7lpXJOpXkk";
-        assert_eq!(validate_wg_key(&good_key), true);
-        assert_eq!(validate_wg_key(&bad_key1), false);
-        assert_eq!(validate_wg_key(&bad_key2), false);
-        assert_eq!(validate_wg_key(&bad_key3), false);
-        assert_eq!(validate_wg_key(&bad_key4), false);
-    }
-
-    #[test]
-    #[ignore]
-    fn test_generate_wg_key() {
-        let keypair = KI.create_wg_keypair().unwrap();
-        assert_eq!(validate_wg_key(&keypair.public), true);
-        assert_eq!(validate_wg_key(&keypair.private), true);
-    }
 
     #[test]
     fn test_validate_mesh_ip() {

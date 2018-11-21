@@ -7,6 +7,7 @@
 //! must get paid for doing so.
 
 use actix::prelude::*;
+use althea_types::WgKey;
 
 use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_kernel_interface::KI;
@@ -32,7 +33,7 @@ use SETTING;
 use failure::Error;
 
 pub struct TrafficWatcher {
-    last_seen_bytes: HashMap<String, WgUsage>,
+    last_seen_bytes: HashMap<WgKey, WgUsage>,
 }
 
 impl Actor for TrafficWatcher {
@@ -79,7 +80,7 @@ impl Handler<Watch> for TrafficWatcher {
 
 /// This traffic watcher watches how much traffic each we send and receive from each client.
 pub fn watch<T: Read + Write>(
-    usage_history: &mut HashMap<String, WgUsage>,
+    usage_history: &mut HashMap<WgKey, WgUsage>,
     mut babel: Babel<T>,
     clients: Vec<Identity>,
 ) -> Result<(), Error> {
@@ -89,17 +90,21 @@ pub fn watch<T: Read + Write>(
     let routes = babel.parse_routes()?;
     info!("Got routes: {:?}", routes);
 
-    let mut identities: HashMap<String, Identity> = HashMap::new();
+    let mut identities: HashMap<WgKey, Identity> = HashMap::new();
     let mut id_from_ip: HashMap<IpAddr, Identity> = HashMap::new();
+    let our_settings = SETTING.get_network();
     let our_id = Identity {
-        mesh_ip: match SETTING.get_network().mesh_ip {
+        mesh_ip: match our_settings.mesh_ip {
             Some(ip) => ip.clone(),
             None => bail!("No mesh ip configured yet!"),
         },
         eth_address: SETTING.get_payment().eth_address.clone(),
-        wg_public_key: SETTING.get_network().wg_public_key.clone(),
+        wg_public_key: match our_settings.clone().wg_public_key {
+            Some(pub_key) => pub_key.clone(),
+            None => bail!("No WgKey configured yet!"),
+        },
     };
-    id_from_ip.insert(SETTING.get_network().mesh_ip.unwrap(), our_id.clone());
+    id_from_ip.insert(our_settings.mesh_ip.unwrap(), our_id.clone());
 
     for ident in &clients {
         identities.insert(ident.wg_public_key.clone(), ident.clone());

@@ -46,9 +46,9 @@ impl Message for Tick {
 
 fn to_identity(client: Client) -> Identity {
     Identity {
-        mesh_ip: client.mesh_ip.parse().unwrap(),
+        mesh_ip: client.mesh_ip.parse().expect("Corrupt database entry!"),
         eth_address: SETTING.get_payment().eth_address, // we should never be paying them, but if somehow we do, it goes back to us
-        wg_public_key: client.wg_pubkey,
+        wg_public_key: client.wg_pubkey.parse().expect("Corrupt database entry!"),
     }
 }
 

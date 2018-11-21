@@ -8,6 +8,11 @@ target-mac
 **/*.db
 test.db-journal
 *.log
+
+# Ignore VIM artifacts
+*.sw*
+*.orig
+
 /scripts/staging_dir/
 integration-tests/private-key*
 integration-tests/rita-settings*
