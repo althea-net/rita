@@ -97,6 +97,7 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
     let mut identities: HashMap<IpAddr, Identity> = HashMap::new();
     let mut if_to_id: HashMap<String, Identity> = HashMap::new();
     let mut ip_to_if: HashMap<IpAddr, String> = HashMap::new();
+
     for neigh in neighbors {
         // provides a lookup from mesh ip to identity
         identities.insert(neigh.identity.global.mesh_ip, neigh.identity.global.clone());
@@ -201,6 +202,7 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
 
     info!("Got final input counters: {:?}", total_input_counters);
     info!("Got final output counters: {:?}", total_output_counters);
+
     let mut total_in: u64 = 0;
     for entry in total_input_counters.iter() {
         let input = entry.1;

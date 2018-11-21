@@ -4,17 +4,19 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::str::FromStr;
 
+use althea_types::wg_key::WgKey;
 use failure::Error;
 
 #[derive(Debug)]
 pub struct WgKeypair {
-    pub public: String,
-    pub private: String,
+    pub public: WgKey,
+    pub private: WgKey,
 }
 
 impl KernelInterface {
-    pub fn create_wg_key(&self, path: &Path, private_key: &String) -> Result<(), Error> {
+    pub fn create_wg_key(&self, path: &Path, private_key: &WgKey) -> Result<(), Error> {
         trace!("Overwriting old private key file");
         let mut priv_key_file = File::create(path)?;
         write!(priv_key_file, "{}", private_key)?;
@@ -45,13 +47,14 @@ impl KernelInterface {
 
         let mut privkey_str = String::from_utf8(genkey.stdout)?;
         let mut pubkey_str = String::from_utf8(output.stdout)?;
+
         privkey_str.truncate(44);
         pubkey_str.truncate(44);
 
-        Ok(WgKeypair {
-            public: pubkey_str,
-            private: privkey_str,
-        })
+        let private = WgKey::from_str(&privkey_str).unwrap();
+        let public = WgKey::from_str(&pubkey_str).unwrap();
+
+        Ok(WgKeypair { public, private })
     }
 }
 
