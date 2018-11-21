@@ -308,41 +308,11 @@ mod tests {
         let y = x as u16;
         Identity {
             mesh_ip: IpAddr::V6(Ipv6Addr::new(y, y, y, y, y, y, y, y)),
-            wg_public_key: String::from("AAAAAAAAAAAAAAAAAAAA"),
+            wg_public_key: "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
+                .parse()
+                .unwrap(),
             eth_address: new_addr(x),
         }
-    }
-
-    #[test]
-    fn test_make_payments() {
-        // mock neighbor
-        let _m = mock("POST", "/make_payment")
-            .with_status(200)
-            .with_body("payment OK")
-            .match_body("{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"0x1\"}")
-            .create();
-
-        // mock bounty hunter
-        let __m = mock("POST", "/update")
-            .with_status(200)
-            .with_body("bounty OK")
-            .match_body("{\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\
-            \"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"balance\":\"-1\",\"tx\":{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"0x1\"}}")
-            .create();
-
-        let id = new_identity(1);
-        SETTING.get_network_mut().mesh_ip = Some(id.mesh_ip);
-        SETTING.get_payment_mut().eth_address = id.eth_address;
-        SETTING.get_network_mut().wg_public_key = id.wg_public_key;
-
-        let mut pc = PaymentController::new();
-
-        let _ = pc.make_payment(new_payment(1));
-
-        assert_eq!(pc.balance, Int256::from(-1));
-
-        _m.assert();
-        __m.assert();
     }
 
     #[test]
@@ -351,8 +321,21 @@ mod tests {
         let _m = mock("POST", "/make_payment")
             .with_status(200)
             .with_body("payment OK")
-            .match_body("{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"0x1\"}")
-            .expect(100)
+            .match_body(
+                "{\
+                 \"to\":{\
+                 \"mesh_ip\":\"1:1:1:1:1:1:1:1\",\
+                 \"eth_address\":\"0x0000000000000000000000000000000000000001\"\
+                 ,\"wg_public_key\":\"8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk=\"\
+                 },\
+                 \"from\":{\
+                 \"mesh_ip\":\"1:1:1:1:1:1:1:1\",\
+                 \"eth_address\":\"0x0000000000000000000000000000000000000001\",\
+                 \"wg_public_key\":\"8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk=\"\
+                 },\
+                 \"amount\":\"0x1\"\
+                 }",
+            ).expect(100)
             .create();
 
         // mock bounty hunter
@@ -364,7 +347,7 @@ mod tests {
         let id = new_identity(1);
         SETTING.get_network_mut().mesh_ip = Some(id.mesh_ip);
         SETTING.get_payment_mut().eth_address = id.eth_address;
-        SETTING.get_network_mut().wg_public_key = id.wg_public_key;
+        SETTING.get_network_mut().wg_public_key = Some(id.wg_public_key);
 
         let mut pc = PaymentController::new();
 
@@ -384,13 +367,34 @@ mod tests {
         let _m = mock("POST", "/update")
             .with_status(200)
             .with_body("bounty OK")
-            .match_body("{\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"balance\":\"1\",\"tx\":{\"to\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"from\":{\"mesh_ip\":\"1:1:1:1:1:1:1:1\",\"eth_address\":\"0x0000000000000000000000000000000000000001\",\"wg_public_key\":\"AAAAAAAAAAAAAAAAAAAA\"},\"amount\":\"0x1\"}}")
-            .create();
+            .match_body(
+                "{\
+                 \"from\":{\
+                 \"mesh_ip\":\"1:1:1:1:1:1:1:1\",\
+                 \"eth_address\":\"0x0000000000000000000000000000000000000001\",\
+                 \"wg_public_key\":\"8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk=\"\
+                 },\
+                 \"balance\":\"1\",\
+                 \"tx\":{\
+                 \"to\":{\
+                 \"mesh_ip\":\"1:1:1:1:1:1:1:1\",\
+                 \"eth_address\":\"0x0000000000000000000000000000000000000001\",\
+                 \"wg_public_key\":\"8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk=\"\
+                 },\
+                 \"from\":{\
+                 \"mesh_ip\":\"1:1:1:1:1:1:1:1\",\
+                 \"eth_address\":\"0x0000000000000000000000000000000000000001\",\
+                 \"wg_public_key\":\"8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk=\"\
+                 },\
+                 \"amount\":\"0x1\"\
+                 }\
+                 }",
+            ).create();
 
         let id = new_identity(1);
         SETTING.get_network_mut().mesh_ip = Some(id.mesh_ip);
         SETTING.get_payment_mut().eth_address = id.eth_address;
-        SETTING.get_network_mut().wg_public_key = id.wg_public_key;
+        SETTING.get_network_mut().wg_public_key = Some(id.wg_public_key);
         let mut pc = PaymentController::new();
 
         let out = pc.payment_received(new_payment(1)).unwrap();
@@ -420,7 +424,7 @@ mod tests {
         let id = new_identity(1);
         SETTING.get_network_mut().mesh_ip = Some(id.mesh_ip);
         SETTING.get_payment_mut().eth_address = id.eth_address;
-        SETTING.get_network_mut().wg_public_key = id.wg_public_key;
+        SETTING.get_network_mut().wg_public_key = Some(id.wg_public_key);
         let mut pc = PaymentController::new();
 
         for i in 0..100 {

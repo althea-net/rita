@@ -1,5 +1,6 @@
 use num256::Uint256;
 use std::net::IpAddr;
+use wg_key::WgKey;
 use EthAddress;
 
 #[cfg(feature = "actix")]
@@ -10,11 +11,11 @@ use actix::*;
 pub struct Identity {
     pub mesh_ip: IpAddr,
     pub eth_address: EthAddress,
-    pub wg_public_key: String,
+    pub wg_public_key: WgKey,
 }
 
 impl Identity {
-    pub fn new(mesh_ip: IpAddr, eth_address: EthAddress, wg_public_key: String) -> Identity {
+    pub fn new(mesh_ip: IpAddr, eth_address: EthAddress, wg_public_key: WgKey) -> Identity {
         Identity {
             mesh_ip,
             eth_address,
