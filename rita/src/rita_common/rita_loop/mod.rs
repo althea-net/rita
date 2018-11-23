@@ -105,7 +105,7 @@ impl Handler<Tick> for RitaLoop {
                 .then(move |res, act, _ctx| {
                     let res = res.unwrap().unwrap();
 
-                    info!("Currently open tunnels: {:?}", res);
+                    trace!("Currently open tunnels: {:?}", res);
 
                     let neigh = Instant::now();
                     info!(

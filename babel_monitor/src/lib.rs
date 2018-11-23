@@ -138,7 +138,7 @@ impl<T: Read + Write> Babel<T> {
         let preamble = self.read_babel()?;
         // Note you have changed the config interface, bump to 1.1 in babel
         if preamble.contains("ALTHEA 0.1") {
-            info!("Attached OK to Babel with preamble: {}", preamble);
+            trace!("Attached OK to Babel with preamble: {}", preamble);
             return Ok(());
         } else {
             return Err(InvalidPreamble(preamble).into());
@@ -174,7 +174,7 @@ impl<T: Read + Write> Babel<T> {
 
     pub fn monitor(&mut self, iface: &str) -> Result<(), Error> {
         let _ = self.command(&format!("interface {} enable-timestamps true", iface))?;
-        info!("Babel started monitoring: {}", iface);
+        trace!("Babel started monitoring: {}", iface);
         Ok(())
     }
 

@@ -403,10 +403,10 @@ impl Handler<Tick> for ExitManager {
                         move |res| {
                             match res {
                                 Ok(_) => {
-                                    info!("exit details request to {} was successful", k);
+                                    trace!("exit details request to {} was successful", k);
                                 }
                                 Err(e) => {
-                                    info!("exit details request to {} failed with {:?}", k, e);
+                                    trace!("exit details request to {} failed with {:?}", k, e);
                                 }
                             };
                             Ok(())
@@ -417,17 +417,17 @@ impl Handler<Tick> for ExitManager {
                     futs.push(Box::new(exit_status_request(k.clone()).then(move |res| {
                         match res {
                             Ok(_) => {
-                                info!("exit status request to {} was successful", k);
+                                trace!("exit status request to {} was successful", k);
                             }
                             Err(e) => {
-                                info!("exit status request to {} failed with {:?}", k, e);
+                                trace!("exit status request to {} failed with {:?}", k, e);
                             }
                         };
                         Ok(())
                     })));
                 }
                 state => {
-                    info!("Waiting on exit state {:?} for {}", state, k);
+                    trace!("Waiting on exit state {:?} for {}", state, k);
                 }
             }
         }

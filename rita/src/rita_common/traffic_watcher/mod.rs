@@ -92,7 +92,7 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
 
     trace!("Getting routes");
     let routes = babel.parse_routes()?;
-    info!("Got routes: {:?}", routes);
+    trace!("Got routes: {:?}", routes);
 
     let mut identities: HashMap<IpAddr, Identity> = HashMap::new();
     let mut if_to_id: HashMap<String, Identity> = HashMap::new();
