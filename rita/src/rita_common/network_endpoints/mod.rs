@@ -65,11 +65,8 @@ pub fn hello_response(
         .parse::<SocketAddr>()
         .unwrap();
 
-    info!("Got Hello from {:?}", req.1.connection_info().remote());
-
-    trace!("Received neighbour identity: {:?}", their_id);
-
-    info!("opening tunnel in hello_response for {:?}", their_id);
+    trace!("Got Hello from {:?}", req.1.connection_info().remote());
+    trace!("opening tunnel in hello_response for {:?}", their_id);
 
     let peer = Peer {
         contact_socket: socket,

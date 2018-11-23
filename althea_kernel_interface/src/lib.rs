@@ -86,9 +86,11 @@ impl CommandRunner for LinuxCommandRunner {
 
         trace!("Command {:?} {:?} returned: {:?}", program, args, output);
         if !output.status.success() {
-            info!(
+            trace!(
                 "Command {:?} {:?} returned: an error {:?}",
-                program, args, output
+                program,
+                args,
+                output
             );
         }
         trace!(
