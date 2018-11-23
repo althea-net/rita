@@ -23,6 +23,10 @@ sudo modprobe wireguard
 set +e
 cargo install cross
 set -e
+# sets up bounty hunter cers
+openssl req -newkey rsa:2048 -nodes -keyform pem -keyout bh_key.pem -x509 -days 365 -outform pem -out bh_cert.pem -subj "/C=US/ST=Althea/L=Althea/O=Althea/OU=Althea/CN=Althea"
+export BOUNTY_HUNTER_CERT=$PWD/bh_cert.pem
+export BOUNTY_HUNTER_KEY=$PWD/bh_key.pem
 
 
 build_rev() {
@@ -84,5 +88,6 @@ else
     cross build --target x86_64-unknown-linux-musl --verbose --all
   popd
 fi
+
 
 sudo -E PATH="$PATH:$HOME/.cargo/bin" python3 rita.py $@
