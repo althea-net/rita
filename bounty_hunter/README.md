@@ -2,9 +2,9 @@
 
 ## Motivation
 
-Bounty hunter is a binary crate designed to be used with Rita and the [Guac_rs](https://github.com/althea-mesh/guac_rs) blockchain light channel client. The goal of bounty hunters  to act as online watchdogs for bad channel behavior that a device out in the field may not be able to catch.
+Bounty hunter is a binary crate designed to be used with Rita and the [Guac_rs](https://github.com/althea-mesh/guac_rs) blockchain light channel client. The goal of bounty hunters to act as online watchdogs for bad channel behavior that a device out in the field may not be able to catch.
 
-In payment channels parties exchange 'updates' offline by creating a series of messages containing the agreed upon channel balance and an incrementing seqence number. By looking at the highest seqence number and balances signed by both parties the on chain code can eventually take an update and use to to settle the balance on the blockchain.
+In payment channels parties exchange 'updates' offline by creating a series of messages containing the agreed upon channel balance and an incrementing sequence number. By looking at the highest sequence number and balances signed by both parties the on chain code can eventually take an update and use to to settle the balance on the blockchain.
 
 In the ideal situation Alice and and Bob open a payment channel, both of them call out to the blockchain and make a deposit into the payment channel. They then make an arbitrary number of updates in which they agree on a new set of balances where Alice may pay Bob some of the money she has deposited in the channel and vice versa. At the end of this exchange the blockchain will be updated with the last agreed on channel state and that will become the new balance.
 
@@ -12,7 +12,7 @@ If Bob where to act in bad faith he may at some point notice that Alice has drop
 
 But since Alice is running on a consumer router out in the field and not a datacenter it's unreasonable to expect her to be online all the time. As a solution to this we present Bounty hunters.
 
-Bounty hunters are servers that Alice sends copies of her channel updates to. The bounty hunters observe the blockchain and submit these channel updates if they discover that Bob for example has submited an earlier update than they have.
+Bounty hunters are servers that Alice sends copies of her channel updates to. The bounty hunters observe the blockchain and submit these channel updates if they discover that Bob for example has submitted an earlier update than they have.
 
 Bounty hunters will also perform the the task of handing out stored channel updates to devices that may have lost them during a storage failure or unexpected reboot. Since channel states are not private and don't need to be secured this can be done easily.
 
