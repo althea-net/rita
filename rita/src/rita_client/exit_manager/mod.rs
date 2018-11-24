@@ -59,7 +59,11 @@ fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
         &format!("{}:{}", server_internal_ip, log.dest_port),
         format!(
             "{} {}",
-            SETTING.get_network().wg_public_key.clone(),
+            SETTING
+                .get_network()
+                .wg_public_key
+                .clone()
+                .expect("Tried to init remote logging without WgKey!"),
             env!("CARGO_PKG_VERSION")
         ),
         Facility::LOG_USER,

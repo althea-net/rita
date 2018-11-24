@@ -54,7 +54,10 @@ impl KernelInterface {
 
         for i in self.get_peers("wg_exit")? {
             if !client_pubkeys.contains(&i.to_string()) {
-                self.run_command("wg", &["set", "wg_exit", "peer", &i, "remove"])?;
+                self.run_command(
+                    "wg",
+                    &["set", "wg_exit", "peer", &format!("{}", i), "remove"],
+                )?;
             }
         }
 

@@ -3,6 +3,8 @@ use super::{KernelInterface, KernelInterfaceError};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::Path;
 
+use althea_types::WgKey;
+
 use failure::Error;
 
 fn to_wg_local(ip: &IpAddr) -> IpAddr {
@@ -58,7 +60,7 @@ impl KernelInterface {
         interface: &String,
         port: u16,
         endpoint: &SocketAddr,
-        remote_pub_key: &String,
+        remote_pub_key: &WgKey,
         private_key_path: &Path,
         own_ip: &IpAddr,
         external_nic: Option<String>,
@@ -204,7 +206,9 @@ fn test_open_tunnel_linux() {
     let endpoint_link_local_ip = Ipv6Addr::new(0xfe80, 0, 0, 0x12, 0x34, 0x56, 0x78, 0x90);
     let own_mesh_ip = "fd00::1".parse::<IpAddr>().unwrap();
     let endpoint = SocketAddr::V6(SocketAddrV6::new(endpoint_link_local_ip, 8088, 0, 123));
-    let remote_pub_key = String::from("x8AcR9wI4t97aowYFlis077BDBk9SLdq6khMiixuTsQ=");
+    let remote_pub_key = "x8AcR9wI4t97aowYFlis077BDBk9SLdq6khMiixuTsQ="
+        .parse()
+        .unwrap();
     let private_key_path = Path::new("private_key");
 
     let wg_args = &[
