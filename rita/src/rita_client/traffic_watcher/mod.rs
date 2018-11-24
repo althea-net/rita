@@ -79,7 +79,7 @@ pub fn watch<T: Read + Write>(
 
     trace!("Getting routes");
     let routes = babel.parse_routes()?;
-    info!("Got routes: {:?}", routes);
+    trace!("Got routes: {:?}", routes);
 
     let mut destinations = HashMap::new();
 
