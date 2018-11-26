@@ -98,7 +98,10 @@ pub fn watch<T: Read + Write>(
             Some(ip) => ip.clone(),
             None => bail!("No mesh ip configured yet!"),
         },
-        eth_address: SETTING.get_payment().eth_address.clone(),
+        eth_address: match SETTING.get_payment().eth_address.clone() {
+            Some(address) => address.clone(),
+            None => bail!("No EthAddress configured yet!"),
+        },
         wg_public_key: match our_settings.clone().wg_public_key {
             Some(pub_key) => pub_key.clone(),
             None => bail!("No WgKey configured yet!"),

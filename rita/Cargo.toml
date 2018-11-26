@@ -63,3 +63,4 @@ handlebars = "1.0.3"
 byteorder = { version = "1.2.6", features = ["i128"] }
 openssl-probe = "0.1.2"
 num-traits="0.2"
+clarity="0.1.13"

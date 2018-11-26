@@ -1,7 +1,7 @@
 use actix::registry::SystemService;
 use actix_web::http::StatusCode;
 use actix_web::*;
-use althea_types::EthAddress;
+use clarity::Address;
 use failure::Error;
 use futures::{future, Future};
 use serde_json;
@@ -115,12 +115,12 @@ pub fn get_debts(
         .responder()
 }
 
-pub fn get_dao_list(_req: HttpRequest) -> Result<Json<Vec<EthAddress>>, Error> {
+pub fn get_dao_list(_req: HttpRequest) -> Result<Json<Vec<Address>>, Error> {
     trace!("get dao list: Hit");
     Ok(Json(SETTING.get_dao().dao_addresses.clone()))
 }
 
-pub fn add_to_dao_list(path: Path<(EthAddress)>) -> Result<Json<()>, Error> {
+pub fn add_to_dao_list(path: Path<(Address)>) -> Result<Json<()>, Error> {
     trace!("Add to dao list: Hit");
     let provided_address = path.into_inner();
     for address in SETTING.get_dao().dao_addresses.iter() {
@@ -132,7 +132,7 @@ pub fn add_to_dao_list(path: Path<(EthAddress)>) -> Result<Json<()>, Error> {
     Ok(Json(()))
 }
 
-pub fn remove_from_dao_list(path: Path<(EthAddress)>) -> Result<Json<()>, Error> {
+pub fn remove_from_dao_list(path: Path<(Address)>) -> Result<Json<()>, Error> {
     trace!("Remove from dao list: Hit");
     let provided_address = path.into_inner();
     let mut iter = 0;
