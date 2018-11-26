@@ -264,6 +264,7 @@ fn client_to_new_db_client(
         wg_port: client.wg_port.to_string(),
         mesh_ip: client.global.mesh_ip.to_string(),
         wg_pubkey: client.global.wg_public_key.clone().to_string(),
+        eth_address: client.global.eth_address.clone().to_string(),
         internal_ip: new_ip.to_string(),
         email: client.reg_details.email.clone().unwrap_or("".to_string()),
         country,
@@ -297,7 +298,8 @@ fn send_mail(client: &models::Client) -> Result<(), Error> {
         .text(reg.render_template(
             &mailer.body,
             &json!({"email_code": client.email_code.to_string()}),
-        )?).build()?;
+        )?)
+        .build()?;
 
     if mailer.test {
         let mut mailer = FileTransport::new(&mailer.test_dir);

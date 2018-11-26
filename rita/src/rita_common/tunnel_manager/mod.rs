@@ -834,7 +834,7 @@ pub fn test_tunnel_manager() {
 
 #[test]
 pub fn test_tunnel_manager_lookup() {
-    use althea_types::EthAddress;
+    use clarity::Address;
     use std::str::FromStr;
 
     let mut tunnel_manager = TunnelManager::new();
@@ -842,7 +842,7 @@ pub fn test_tunnel_manager_lookup() {
     // Create dummy identity
     let id = Identity::new(
         "0.0.0.0".parse().unwrap(),
-        EthAddress::from_str("ffffffffffffffffffffffffffffffffffffffff").unwrap(),
+        Address::from_str("ffffffffffffffffffffffffffffffffffffffff").unwrap(),
         "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
             .parse()
             .unwrap(),
