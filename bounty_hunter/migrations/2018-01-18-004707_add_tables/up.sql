@@ -2,6 +2,8 @@
 CREATE TABLE states (
   id INTEGER NOT NULL PRIMARY KEY,
   channel_id BLOB NOT NULL UNIQUE,
+  address_a BLOB NOT NULL,
+  address_b BLOB NOT NULL,
   nonce BLOB NOT NULL,
   balance_a BLOB NOT NULL,
   balance_b BLOB NOT NULL,
@@ -13,4 +15,4 @@ CREATE TABLE states (
   sig_b_s BLOB
 );
 
-CREATE INDEX ch_id_idx ON states (channel_id);
+CREATE INDEX addresses_idx ON states (address_a, address_b);

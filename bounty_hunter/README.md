@@ -26,21 +26,36 @@ Bounty hunter should provide two endpoints
 - Method: `POST`
 - URL Params: `None`
 - Data Params: `Channel update JSON object`
-- Success Response:
-  - Code: 200 OK
-  - Contents:
-
+- Contents:
+`body.json`
 ```
 {
+	"channel_id":"0x0",
+	"address_a": "0x0000000000000000000000000000000000000000",
+	"address_b": "0x0000000000000000000000000000000000000000",
+	"nonce":"0x0",
+	"balance_a":"0x0",
+	"balance_b":"0x0",
+	"signature_a": {
+		"v":[],
+		"r":[2],
+		"s":[3]
+	},
+	"signature_b": {
+		"v":[3],
+		"r":[1],
+		"s":[4]
+	}
 }
+
 ```
 
 - Error Response: `500 Server Error`
 
 - Sample Call:
-
+Paste `body.json` into a file and reference it in curl with `@<file>` like so:
 ```
-curl -XPOST 127.0.0.1:<bounty_hunter_port>/upload_channel_state -H 'Content-Type: application/json' -i -d '{JSON object representing a Guac contract channel update}'
+curl -XPOST 127.0.0.1:<bounty_hunter_port>/upload_channel_state -H 'Content-Type: application/json' -i -d @body.json
 ```
 
 The JSON object submitted to this endpoint is not specified here, please refer to the [Guac payment channel contract update function](https://github.com/althea-mesh/guac/blob/master/contracts/PaymentChannels.sol#L172). For the members of this struct. For the sake of consistency this data should be represented using types from [Clarity](https://github.com/althea-mesh/clarirty) or [Rust Web3](https://github.com/tomusdrw/rust-web3) where appropriate.
@@ -55,7 +70,7 @@ The JSON object submitted to this endpoint is not specified here, please refer t
 - Data Params: `None`
 - Success Response:
   - Code: 200 OK
-  - Contents:
+  - Contents: see body.json defined above
 
 ```
 {

@@ -1,4 +1,5 @@
 use actix_web::{http::StatusCode, HttpRequest, HttpResponse, Json};
+use clarity::Address;
 use diesel::prelude::*;
 use failure::Error;
 use futures::{future, Future};
@@ -75,7 +76,7 @@ pub fn handle_upload_channel_state(
     /*
      * DO NOT "OPTIMIZE" `state_nonce_fixed` INTO A VEC. Fixed-length is critical for ordering to
      * work properly within the database (blob ordering in SQLite is analogous to string
-     * ordering - string "9" goes BEFORE string "10", but fixed-size would make this comparison
+     * ordering - string "9" goes AFTER string "10", but fixed-size would make this comparison
      * more like "09" vs. "10" which checks out).
      *
      * SCREWED UP ORDERING FOR NONCE/SEQNO VARIABLES MEANS HIDEOUS ERRORS AND REPLAY ATTACK
@@ -210,21 +211,24 @@ pub fn handle_upload_channel_state(
 /// Query for the bounty hunter channel state from a requested time period
 pub fn handle_get_channel_state(
     _req: HttpRequest,
-    ch_id: actix_web::Path<Uint256>,
+    address: actix_web::Path<Address>,
 ) -> Box<Future<Item = HttpResponse, Error = Error>> {
-    let ch_id = ch_id.into_inner();
-    trace!("Hit /get_channel_state/{}", ch_id);
+    let address = address.into_inner();
+    trace!("Hit /get_channel_state/{:#x}", address);
 
-    let matching_record = match states
-        .filter(channel_id.eq(ch_id.to_bytes_be()))
-        .load::<ChannelStateRecord>(&*DB_CONN.lock().unwrap())
+    let matching_records = match states
+        .filter(
+            address_a
+                .eq(address.as_bytes())
+                .or(address_b.eq(address.as_bytes())),
+        ).load::<ChannelStateRecord>(&*DB_CONN.lock().unwrap())
     {
-        Ok(value) => value,
+        Ok(values) => values,
         Err(e) => {
             let mut err_ret = HashMap::new();
             let msg = format!("Could not retrieve record from database");
 
-            warn!("Channel {}: {}: {}", ch_id, msg, e);
+            warn!("Address {:#x}: {}: {}", address, msg, e);
 
             err_ret.insert("error".to_owned(), msg);
 
@@ -236,12 +240,15 @@ pub fn handle_get_channel_state(
         }
     };
 
-    debug!("Channel {}: query result: {:#?}", ch_id, matching_record);
+    debug!(
+        "Address {:#x}: query result: {:#?}",
+        address, matching_records
+    );
 
     let mut ok_ret = HashMap::new();
     ok_ret.insert(
         "record".to_owned(),
-        matching_record
+        matching_records
             .into_iter()
             .map(|record| record.to_state().unwrap())
             .collect::<Vec<ChannelState>>(),
