@@ -63,7 +63,7 @@ impl Handler<Watch> for TrafficWatcher {
             format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
         )?;
 
-        watch(self, Babel::new(stream), msg.0, msg.1)
+        watch(self, Babel::new(stream), &msg.0, msg.1)
     }
 }
 
@@ -72,7 +72,7 @@ impl Handler<Watch> for TrafficWatcher {
 pub fn watch<T: Read + Write>(
     history: &mut TrafficWatcher,
     mut babel: Babel<T>,
-    exit: Identity,
+    exit: &Identity,
     exit_price: u64,
 ) -> Result<(), Error> {
     babel.start_connection()?;
@@ -97,7 +97,7 @@ pub fn watch<T: Read + Write>(
         Ok(res) => {
             if res.len() > 1 {
                 warn!("wg_exit client tunnel has multiple peers!");
-            } else if res.len() == 0 {
+            } else if res.is_empty() {
                 warn!("No peers on wg_exit why is client traffic watcher running?");
                 return Err(format_err!("No peers on wg_exit"));
             }
@@ -156,7 +156,8 @@ pub fn watch<T: Read + Write>(
                         ));
                     }
                 }
-            )).send()?
+            ))
+            .send()?
             .json()?;
         let client_rx = SystemTime::now();
 
@@ -214,12 +215,13 @@ mod tests {
                 last_read_output: 0u64,
             },
             Babel::new(bm_stream),
-            Identity::new(
+            &Identity::new(
                 "0.0.0.0".parse().unwrap(),
                 EthAddress::from_str("abababababababababab").unwrap(),
                 WgKey::from_str("abc0abc1abc2abc3abc4abc5abc6abc7abc8abc=").unwrap(),
             ),
             5,
-        ).unwrap();
+        )
+        .unwrap();
     }
 }

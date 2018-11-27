@@ -16,7 +16,7 @@ impl KernelInterface {
         let mut res = Vec::new();
         for line in contents.lines() {
             if line.starts_with("nameserver") {
-                let mut nameserver = line.split(" ");
+                let mut nameserver = line.split(' ');
                 nameserver.next();
                 match nameserver.next() {
                     Some(ip) => match ip.parse() {

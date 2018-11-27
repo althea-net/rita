@@ -9,6 +9,12 @@
 //! is released based on when the reference is dropped. Take care when using _mut to either
 //! namespace or clone quickly to avoid deadlocks.
 
+#![allow(unknown_lints)]
+#![warn(clippy::perf)]
+#![warn(clippy::style)]
+#![warn(clippy::correctness)]
+#![warn(clippy::complexity)]
+
 extern crate althea_types;
 extern crate config;
 extern crate eui48;

@@ -10,7 +10,7 @@ impl KernelInterface {
     pub fn set_client_exit_tunnel_config(
         &self,
         endpoint: SocketAddr,
-        pubkey: WgKey,
+        pubkey: &WgKey,
         private_key_path: String,
         listen_port: u16,
         local_ip: IpAddr,
@@ -38,7 +38,7 @@ impl KernelInterface {
         )?;
 
         for i in self.get_peers("wg_exit")? {
-            if i != pubkey {
+            if i != *pubkey {
                 self.run_command(
                     "wg",
                     &["set", "wg_exit", "peer", &format!("{}", i), "remove"],

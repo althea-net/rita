@@ -1,5 +1,5 @@
 /*
-A generalized interface for modifying networking interface assignments using UCI
+A generalized interface forfiltered_item.to_string() UCI
 */
 
 use actix::prelude::*;
@@ -67,8 +67,8 @@ pub fn get_interfaces() -> Result<HashMap<String, InterfaceMode>, Error> {
         // Only non-loopback non-bridge interface names should get past
         if setting_name.contains("ifname") && !value.contains("backhaul") && value != "lo" {
             // it's a list and we need to handle that
-            if value.contains(",") {
-                for list_member in value.split(",") {
+            if value.contains(',') {
+                for list_member in value.split(',') {
                     retval.insert(
                         list_member.replace(" ", "").to_string(),
                         ethernet2mode(&value, &setting_name)?,
@@ -218,9 +218,9 @@ impl Handler<InterfaceToSet> for Dashboard {
         // in theory you can have all sorts of wonky interface names, but we know
         // that we hardcode wlan0 and wlan0 as wlan iface names so we check for that
         if iface_name.contains("wlan") {
-            wlan_transform_mode(&iface_name, current_mode, target_mode)
+            wlan_transform_mode(&iface_name, &current_mode, &target_mode)
         } else {
-            ethernet_transform_mode(&iface_name, current_mode, target_mode)
+            ethernet_transform_mode(&iface_name, &current_mode, &target_mode)
         }
     }
 }
@@ -228,8 +228,8 @@ impl Handler<InterfaceToSet> for Dashboard {
 /// Transform a wired inteface from mode A to mode B
 pub fn ethernet_transform_mode(
     ifname: &str,
-    a: InterfaceMode,
-    b: InterfaceMode,
+    a: &InterfaceMode,
+    b: &InterfaceMode,
 ) -> Result<(), Error> {
     trace!(
         "Ethernet mode transform: ifname {:?}, a {:?}, b {:?}",
@@ -240,7 +240,7 @@ pub fn ethernet_transform_mode(
     if a == b {
         // noop that was easy!
         return Ok(());
-    } else if a == InterfaceMode::Unknown || b == InterfaceMode::Unknown {
+    } else if *a == InterfaceMode::Unknown || *b == InterfaceMode::Unknown {
         bail!("We can't change Unknown interfaces!");
     }
 
@@ -267,7 +267,7 @@ pub fn ethernet_transform_mode(
         // for mesh we need to send an unlisten so that Rita stops
         // listening then we can remove the section
         InterfaceMode::Mesh => {
-            PeerListener::from_registry().do_send(UnListen(ifname.clone().to_string()));
+            PeerListener::from_registry().do_send(UnListen(ifname.to_string()));
             let ret = KI.del_uci_var(&filtered_ifname);
             return_codes.push(ret);
         }
@@ -336,7 +336,7 @@ pub fn ethernet_transform_mode(
         bail!("Error running UCI commands! Revert attempted: {:?}", res);
     } else if mesh_add {
         let when = Instant::now() + Duration::from_millis(60000);
-        let locally_owned_ifname = ifname.clone().to_string();
+        let locally_owned_ifname = ifname.to_string();
 
         let fut = Delay::new(when)
             .map_err(|e| warn!("timer failed; err={:?}", e))
@@ -359,7 +359,11 @@ pub fn ethernet_transform_mode(
 }
 
 /// Transform a wireless interface from mode A to mode B
-pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> Result<(), Error> {
+pub fn wlan_transform_mode(
+    ifname: &str,
+    a: &InterfaceMode,
+    b: &InterfaceMode,
+) -> Result<(), Error> {
     trace!(
         "wlan mode transform: ifname {:?}, a {:?}, b {:?}",
         ifname,
@@ -369,9 +373,9 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
     if a == b {
         // noop that was easy!
         return Ok(());
-    } else if a == InterfaceMode::Unknown || b == InterfaceMode::Unknown {
+    } else if *a == InterfaceMode::Unknown || *b == InterfaceMode::Unknown {
         bail!("We can't change Unknown interfaces!");
-    } else if a == InterfaceMode::WAN || b == InterfaceMode::WAN {
+    } else if *a == InterfaceMode::WAN || *b == InterfaceMode::WAN {
         // possible in theory but not implemented
         bail!("WAN not supported for wlan interfaces!");
     }
@@ -473,7 +477,7 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
         );
     } else if mesh_add {
         let when = Instant::now() + Duration::from_millis(60000);
-        let locally_owned_ifname = mesh_wlan.clone().to_string();
+        let locally_owned_ifname = mesh_wlan.to_string();
 
         let fut = Delay::new(when)
             .map_err(|e| warn!("timer failed; err={:?}", e))
@@ -499,7 +503,7 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
 
 /// A helper function for adding entires to a comma deliminated list
 pub fn comma_list_add(list: &str, entry: &str) -> String {
-    if list.len() > 0 {
+    if !list.is_empty() {
         format!("{}, {}", list, entry)
     } else {
         entry.to_string()
@@ -508,8 +512,8 @@ pub fn comma_list_add(list: &str, entry: &str) -> String {
 
 /// A helper function for removing entires to a comma deliminated list
 pub fn comma_list_remove(list: &str, entry: &str) -> String {
-    if list.len() > 0 {
-        let split = list.split(",");
+    if !list.is_empty() {
+        let split = list.split(',');
         let mut new_list = "".to_string();
         let mut first = true;
         for item in split {
@@ -518,10 +522,10 @@ pub fn comma_list_remove(list: &str, entry: &str) -> String {
                 trace!("{} is not {} it's on the list!", filtered_item, entry);
                 let tmp_list = new_list.to_string();
                 if first {
-                    new_list = tmp_list + &format!("{}", filtered_item);
+                    new_list = tmp_list + &filtered_item.to_string();
                     first = false;
                 } else {
-                    new_list = tmp_list + &format!(", {}", filtered_item);
+                    new_list = tmp_list + &filtered_item.to_string();
                 }
             }
         }

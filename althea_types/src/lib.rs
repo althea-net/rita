@@ -1,3 +1,9 @@
+#![allow(unknown_lints)]
+#![warn(clippy::perf)]
+#![warn(clippy::style)]
+#![warn(clippy::correctness)]
+#![warn(clippy::complexity)]
+
 extern crate base64;
 extern crate ethereum_types;
 extern crate eui48;

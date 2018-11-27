@@ -84,7 +84,7 @@ fn linux_setup_exit_tunnel() -> Result<(), Error> {
     KI.setup_wg_if_named("wg_exit")?;
     KI.set_client_exit_tunnel_config(
         SocketAddr::new(current_exit.id.mesh_ip, general_details.wg_exit_port),
-        current_exit.id.wg_public_key.clone(),
+        &current_exit.id.wg_public_key.clone(),
         SETTING.get_network().wg_private_key_path.clone(),
         SETTING.get_exit_client().wg_listen_port,
         our_details.client_internal_ip,
@@ -228,7 +228,7 @@ pub fn exit_setup_request(
                 )))
             }
         },
-        wg_port: SETTING.get_exit_client().wg_listen_port.clone(),
+        wg_port: SETTING.get_exit_client().wg_listen_port,
         reg_details,
     };
 
@@ -270,12 +270,12 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
         global: match SETTING.get_identity() {
             Some(id) => id,
             None => {
-                return Box::new(future::err(
-                    format_err!("Identity has no mesh IP ready yet").into(),
-                ))
+                return Box::new(future::err(format_err!(
+                    "Identity has no mesh IP ready yet"
+                )))
             }
         },
-        wg_port: SETTING.get_exit_client().wg_listen_port.clone(),
+        wg_port: SETTING.get_exit_client().wg_listen_port,
         reg_details: SETTING.get_exit_client().reg_details.clone().unwrap(),
     };
 
@@ -354,10 +354,11 @@ impl Handler<Tick> for ExitManager {
                     linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
 
                     self.last_exit = Some(exit.clone());
-                } else if exit.info.our_details().is_some() && !KI
-                    .get_default_route()
-                    .unwrap_or(Vec::new())
-                    .contains(&String::from("wg_exit"))
+                } else if exit.info.our_details().is_some()
+                    && !KI
+                        .get_default_route()
+                        .unwrap_or(Vec::new())
+                        .contains(&String::from("wg_exit"))
                 {
                     trace!("DHCP overwrite setup exit tunnel again");
                     trace!("Exit change, setting up exit tunnel");
@@ -383,7 +384,8 @@ impl Handler<Tick> for ExitManager {
                                     error!("Client traffic watcher failed with {:?}", e);
                                     Err(e)
                                 }
-                            }).then(|_| Ok(())),
+                            })
+                            .then(|_| Ok(())),
                     );
                 }
             }

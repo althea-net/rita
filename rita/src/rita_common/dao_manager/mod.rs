@@ -196,14 +196,14 @@ fn send_membership_message(on_dao: bool, their_id: Identity) -> () {
 
 /// Checks if an identity is in at least one of the set of DAO's we are a member of.
 /// will check the cache first before going out and updating via web3
-fn check_cache(their_id: Identity, ident2dao: &HashMap<Identity, Vec<DAOEntry>>) -> () {
+fn check_cache(their_id: Identity, ident2dao: &HashMap<Identity, Vec<DAOEntry>>) {
     trace!("Checking the DAOManager Cache for {:?}", their_id);
     let dao_settings = SETTING.get_dao();
     // we don't care about subnet DAO's, short circuit.
-    if !dao_settings.dao_enforcement || dao_settings.dao_addresses.len() == 0 {
+    if !dao_settings.dao_enforcement || dao_settings.dao_addresses.is_empty() {
         trace!("DAO enforcement disabled DAOMAnager doing nothing!");
         send_membership_message(true, their_id);
-        return ();
+        return;
     }
     // TODO when we start enforcing dao state more strictly we will need
     // to detect when we are bootstrapping and explicitly allow everyone
@@ -230,7 +230,7 @@ fn check_cache(their_id: Identity, ident2dao: &HashMap<Identity, Vec<DAOEntry>>)
         // Cache miss, do a lookup for all DAO's
         None => {
             for dao in dao_settings.dao_addresses.iter() {
-                get_membership(dao.clone(), their_id.clone());
+                get_membership(*dao, their_id.clone());
             }
         }
     }
@@ -316,7 +316,8 @@ fn get_membership(dao_address: EthAddress, target: Identity) -> () {
                         }
                     }
                 })
-        }).then(|_err| Ok(()));
+        })
+        .then(|_err| Ok(()));
     Arbiter::spawn(res);
 }
 

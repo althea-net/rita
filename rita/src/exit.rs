@@ -9,12 +9,12 @@
 //! This file initilizes the dashboard endpoints for the exit as well as the common and exit
 //! specific actors.
 
-#![cfg_attr(
-    feature = "system_alloc",
-    feature(alloc_system, allocator_api)
-)]
-#![cfg_attr(feature = "clippy", feature(plugin))]
-#![cfg_attr(feature = "clippy", plugin(clippy))]
+#![cfg_attr(feature = "system_alloc", feature(alloc_system, allocator_api))]
+#![allow(unknown_lints)]
+#![warn(clippy::perf)]
+#![warn(clippy::style)]
+#![warn(clippy::correctness)]
+#![warn(clippy::complexity)]
 
 #[cfg(feature = "system_alloc")]
 extern crate alloc_system;
@@ -212,7 +212,8 @@ fn main() {
         App::new().resource("/make_payment", |r| {
             r.method(Method::POST).with(make_payments)
         })
-    }).workers(1)
+    })
+    .workers(1)
     .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
     .unwrap()
     .shutdown_timeout(0)
@@ -224,14 +225,18 @@ fn main() {
             .resource("/setup", |r| r.method(Method::POST).with(setup_request))
             .resource("/status", |r| {
                 r.method(Method::POST).with_async(status_request)
-            }).resource("/list", |r| r.method(Method::POST).with(list_clients))
+            })
+            .resource("/list", |r| r.method(Method::POST).with(list_clients))
             .resource("/exit_info", |r| {
                 r.method(Method::GET).with(get_exit_info_http)
-            }).resource("/rtt", |r| r.method(Method::GET).with(rtt))
-    }).bind(format!(
+            })
+            .resource("/rtt", |r| r.method(Method::GET).with(rtt))
+    })
+    .bind(format!(
         "[::0]:{}",
         SETTING.get_exit_network().exit_hello_port
-    )).unwrap()
+    ))
+    .unwrap()
     .shutdown_timeout(0)
     .start();
 
@@ -260,10 +265,12 @@ fn main() {
                 Method::POST,
                 remove_from_dao_list,
             )
-    }).bind(format!(
+    })
+    .bind(format!(
         "[::0]:{}",
         SETTING.get_network().rita_dashboard_port
-    )).unwrap()
+    ))
+    .unwrap()
     .shutdown_timeout(0)
     .start();
 

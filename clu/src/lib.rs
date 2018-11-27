@@ -1,3 +1,9 @@
+#![allow(unknown_lints)]
+#![warn(clippy::perf)]
+#![warn(clippy::style)]
+#![warn(clippy::correctness)]
+#![warn(clippy::complexity)]
+
 #[macro_use]
 extern crate log;
 

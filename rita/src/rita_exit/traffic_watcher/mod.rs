@@ -95,7 +95,7 @@ pub fn watch<T: Read + Write>(
     let our_settings = SETTING.get_network();
     let our_id = Identity {
         mesh_ip: match our_settings.mesh_ip {
-            Some(ip) => ip.clone(),
+            Some(ip) => ip,
             None => bail!("No mesh ip configured yet!"),
         },
         eth_address: SETTING.get_payment().eth_address.clone(),

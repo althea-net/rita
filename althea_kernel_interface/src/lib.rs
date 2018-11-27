@@ -1,3 +1,9 @@
+#![allow(unknown_lints)]
+#![warn(clippy::perf)]
+#![warn(clippy::style)]
+#![warn(clippy::correctness)]
+#![warn(clippy::complexity)]
+
 #[macro_use]
 extern crate failure;
 #[macro_use]
@@ -98,9 +104,9 @@ impl CommandRunner for LinuxCommandRunner {
         trace!(
             "command completed in {}s {}ms",
             start.elapsed().as_secs(),
-            start.elapsed().subsec_nanos() / 1000000
+            start.elapsed().subsec_nanos() / 1_000_000
         );
-        return Ok(output);
+        Ok(output)
     }
 
     fn set_mock(&self, _mock: Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>) {

@@ -75,9 +75,10 @@ impl Handler<GetExitInfo> for Dashboard {
 
             // failed pings block for one second, so we should be sure it's at least reasonable
             // to expect the pings to work before issuing them.
-            let reachable = match have_route {
-                true => KI.ping_check_v6(&exit.1.id.mesh_ip)?,
-                false => false,
+            let reachable = if have_route {
+                KI.ping_check_v6(&exit.1.id.mesh_ip)?
+            } else {
+                false
             };
             let tunnel_working = match (have_route, selected) {
                 (true, true) => is_tunnel_working(&exit.1, current_exit),

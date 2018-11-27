@@ -93,18 +93,18 @@ pub fn select_exit(path: Path<String>) -> Box<Future<Item = HttpResponse, Error 
     if exit_client.exits.contains_key(&exit_name) {
         info!("Selecting exit {:?}", exit_name);
         exit_client.current_exit = Some(exit_name);
-        return Box::new(future::ok(HttpResponse::Ok().json(ret)));
+        Box::new(future::ok(HttpResponse::Ok().json(ret)))
     } else {
         error!("Requested selection of an unknown exit {:?}", exit_name);
         ret.insert(
             "error".to_owned(),
             format!("Requested selection of an unknown exit {:?}", exit_name),
         );
-        return Box::new(future::ok(
+        Box::new(future::ok(
             HttpResponse::new(StatusCode::BAD_REQUEST)
                 .into_builder()
                 .json(ret),
-        ));
+        ))
     }
 }
 
@@ -256,7 +256,7 @@ pub fn get_mesh_ip(_req: HttpRequest) -> Box<Future<Item = HttpResponse, Error =
         }
     }
 
-    return Box::new(future::ok(HttpResponse::Ok().json(ret)));
+    Box::new(future::ok(HttpResponse::Ok().json(ret)))
 }
 
 pub fn set_mesh_ip(
@@ -268,16 +268,18 @@ pub fn set_mesh_ip(
 
     match mesh_ip_data.into_inner().get("mesh_ip") {
         Some(ip_str) => match ip_str.parse::<IpAddr>() {
-            Ok(parsed) => if parsed.is_ipv6() && !parsed.is_unspecified() {
-                SETTING.get_network_mut().mesh_ip = Some(parsed);
-            } else {
-                let error_msg = format!(
+            Ok(parsed) => {
+                if parsed.is_ipv6() && !parsed.is_unspecified() {
+                    SETTING.get_network_mut().mesh_ip = Some(parsed);
+                } else {
+                    let error_msg = format!(
                     "set_mesh_ip: Attempted to set a non-IPv6 or unsepcified address {} as mesh_ip",
                     parsed
                 );
-                info!("{}", error_msg);
-                ret.insert("error".to_owned(), error_msg);
-            },
+                    info!("{}", error_msg);
+                    ret.insert("error".to_owned(), error_msg);
+                }
+            }
             Err(e) => {
                 let error_msg = format!(
                     "set_mesh_ip: Failed to parse the address string {:?}",
@@ -289,7 +291,7 @@ pub fn set_mesh_ip(
             }
         },
         None => {
-            let error_msg = format!("set_mesh_ip: \"mesh_ip\" not found in supplied JSON");
+            let error_msg = "set_mesh_ip: \"mesh_ip\" not found in supplied JSON".to_string();
             info!("{}", error_msg);
             ret.insert("error".to_owned(), error_msg);
         }
@@ -307,7 +309,7 @@ pub fn set_mesh_ip(
 /// `FORBIDDEN_CHARS`. If everything's alright the string itself is moved and returned for
 /// convenience.
 fn validate_config_value(s: &str) -> Result<(), ValidationError> {
-    if s.len() == 0 {
+    if s.is_empty() {
         return Err(ValidationError::Empty);
     }
 
@@ -346,7 +348,7 @@ pub fn remote_logging(path: Path<bool>) -> Box<Future<Item = HttpResponse, Error
         return Box::new(future::err(e));
     }
 
-    return Box::new(future::ok(HttpResponse::Ok().json(())));
+    Box::new(future::ok(HttpResponse::Ok().json(())))
 }
 
 pub fn remote_logging_level(path: Path<String>) -> Box<Future<Item = HttpResponse, Error = Error>> {
@@ -370,7 +372,7 @@ pub fn remote_logging_level(path: Path<String>) -> Box<Future<Item = HttpRespons
         return Box::new(future::err(e));
     }
 
-    return Box::new(future::ok(HttpResponse::Ok().json(())));
+    Box::new(future::ok(HttpResponse::Ok().json(())))
 }
 
 pub fn add_exits(

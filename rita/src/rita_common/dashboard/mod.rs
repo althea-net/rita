@@ -39,10 +39,7 @@ impl Default for Dashboard {
 enum OwnInfoError {
     #[fail(display = "Unable to round balance of {} down to 1 ETH", _0)]
     RoundDownError(Int256),
-    #[fail(
-        display = "Unable to downcast value {} to signed 64 bits",
-        _0
-    )]
+    #[fail(display = "Unable to downcast value {} to signed 64 bits", _0)]
     DownCastError(Int256),
 }
 
@@ -73,12 +70,12 @@ impl Handler<GetOwnInfo> for Dashboard {
                     Ok(balance) => {
                         let balance = balance
                             .checked_div(&Int256::from(1_000_000_000i64))
-                            .ok_or(OwnInfoError::RoundDownError(balance.clone()))?;
+                            .ok_or_else(|| OwnInfoError::RoundDownError(balance.clone()))?;
 
                         Ok(OwnInfo {
                             balance: balance
                                 .to_i64()
-                                .ok_or(OwnInfoError::DownCastError(balance))?,
+                                .ok_or_else(|| OwnInfoError::DownCastError(balance))?,
                             local_fee: SETTING.get_local_fee(),
                             metric_factor: SETTING.get_metric_factor(),
                             device: SETTING.get_network().device.clone(),
