@@ -1,4 +1,4 @@
-use clarity::Signature;
+use clarity::{Address, Signature};
 use failure::Error;
 use num256::Uint256;
 use num_traits::Zero;
@@ -10,6 +10,8 @@ use schema::states;
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct ChannelState {
     pub channel_id: Uint256,
+    pub address_a: Address,
+    pub address_b: Address,
     pub nonce: Uint256,
 
     pub balance_a: Uint256,
@@ -25,6 +27,8 @@ pub struct ChannelState {
 pub struct ChannelStateRecord {
     pub id: i64,
     pub channel_id: Vec<u8>,
+    pub address_a: Vec<u8>,
+    pub address_b: Vec<u8>,
     pub nonce: Vec<u8>,
 
     pub balance_a: Vec<u8>,
@@ -43,6 +47,8 @@ pub struct ChannelStateRecord {
 #[table_name = "states"]
 pub struct NewChannelStateRecord {
     pub channel_id: Vec<u8>,
+    pub address_a: Vec<u8>,
+    pub address_b: Vec<u8>,
     pub nonce: Vec<u8>,
 
     pub balance_a: Vec<u8>,
@@ -61,6 +67,8 @@ impl Default for ChannelState {
     fn default() -> Self {
         Self {
             channel_id: Uint256::zero(),
+            address_a: [0u8; 20].into(),
+            address_b: [0u8; 20].into(),
             nonce: Uint256::zero(),
             balance_a: Uint256::zero(),
             balance_b: Uint256::zero(),
@@ -74,6 +82,8 @@ impl From<ChannelStateRecord> for NewChannelStateRecord {
     fn from(record: ChannelStateRecord) -> Self {
         NewChannelStateRecord {
             channel_id: record.channel_id,
+            address_a: record.address_a,
+            address_b: record.address_b,
             nonce: record.nonce,
 
             balance_a: record.balance_a,
@@ -102,6 +112,8 @@ impl ChannelStateRecord {
     pub fn to_state(self) -> Result<ChannelState, Error> {
         let mut state = ChannelState {
             channel_id: Uint256::from_bytes_be(&self.channel_id),
+            address_a: Address::from_slice(self.address_a.as_slice())?,
+            address_b: Address::from_slice(self.address_b.as_slice())?,
             nonce: Uint256::from_bytes_be(&self.nonce),
 
             balance_a: Uint256::from_bytes_be(&self.balance_a),
@@ -155,6 +167,8 @@ impl NewChannelStateRecord {
             id: 0, // Dummy value; Meaningless and wrong for most use cases of ChannelStateRecord
 
             channel_id: self.channel_id,
+            address_a: self.address_a,
+            address_b: self.address_b,
             nonce: self.nonce,
 
             balance_a: self.balance_a,
@@ -185,6 +199,8 @@ impl From<ChannelState> for NewChannelStateRecord {
         let nonce_fixed: [u8; 32] = state.nonce.into();
         let mut record = Self {
             channel_id: state.channel_id.to_bytes_be(),
+            address_a: state.address_a.as_bytes().to_vec(),
+            address_b: state.address_b.as_bytes().to_vec(),
             nonce: nonce_fixed.to_vec(),
             balance_a: state.balance_a.to_bytes_be(),
             balance_b: state.balance_b.to_bytes_be(),
@@ -226,6 +242,8 @@ mod tests {
 
         let expected_record = NewChannelStateRecord {
             channel_id: vec![0],
+            address_a: vec![0; 20],
+            address_b: vec![0; 20],
             nonce: vec![0u8; 32],
 
             balance_a: vec![0],
@@ -247,6 +265,8 @@ mod tests {
     fn test_record2state() {
         let example_record = NewChannelStateRecord {
             channel_id: Vec::new(),
+            address_a: vec![0; 20],
+            address_b: vec![0; 20],
             nonce: Vec::new(),
 
             balance_a: Vec::new(),
@@ -275,6 +295,8 @@ mod tests {
     fn test_inconsistent_record() {
         let inconsistent_record = NewChannelStateRecord {
             channel_id: vec![],
+            address_a: vec![0; 20],
+            address_b: vec![0; 20],
             nonce: vec![],
 
             balance_a: vec![],
@@ -297,6 +319,8 @@ mod tests {
     fn test_nonce_ordering_sanity() {
         let smaller_nonce = ChannelState {
             channel_id: 0.into(),
+            address_a: [0; 20].into(),
+            address_b: [0; 20].into(),
             nonce: 0xff.into(),
             balance_a: 0.into(),
             balance_b: 0.into(),

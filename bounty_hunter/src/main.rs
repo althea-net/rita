@@ -81,7 +81,7 @@ fn main() {
                             Method::POST,
                             handle_upload_channel_state,
                         ).route(
-                            "/get_channel_state/{ch_id}",
+                            "/get_channel_state/{address}",
                             Method::GET,
                             handle_get_channel_state,
                         )
