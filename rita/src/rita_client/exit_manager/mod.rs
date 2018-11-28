@@ -355,11 +355,10 @@ impl Handler<Tick> for ExitManager {
                     linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
 
                     self.last_exit = Some(exit.clone());
-                } else if exit.info.our_details().is_some()
-                    && !KI
-                        .get_default_route()
-                        .unwrap_or(Vec::new())
-                        .contains(&String::from("wg_exit"))
+                } else if exit.info.our_details().is_some() && !KI
+                    .get_default_route()
+                    .unwrap_or(Vec::new())
+                    .contains(&String::from("wg_exit"))
                 {
                     trace!("DHCP overwrite setup exit tunnel again");
                     trace!("Exit change, setting up exit tunnel");
@@ -389,16 +388,14 @@ impl Handler<Tick> for ExitManager {
                                         // this unwrap can't fail, go look at GetNeighbors, the 'bad' case is
                                         // that we get a empty list. But Actix insists on a result.
                                         neighbors: neighbors_list.unwrap(),
-                                    })
-                                    .then(|res| match res {
+                                    }).then(|res| match res {
                                         Ok(val) => Ok(val),
                                         Err(e) => {
                                             error!("Client traffic watcher failed with {:?}", e);
                                             Err(e)
                                         }
                                     })
-                            })
-                            .then(|_| Ok(())),
+                            }).then(|_| Ok(())),
                     );
                 }
             }
