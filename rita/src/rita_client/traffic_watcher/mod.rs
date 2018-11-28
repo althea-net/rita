@@ -209,8 +209,7 @@ pub fn watch<T: Read + Write>(
                     ));
                 }
             }
-        ))
-        .send()?
+        )).send()?
         .json()?;
     let client_rx = SystemTime::now();
 
@@ -282,7 +281,6 @@ mod tests {
             ),
             5,
             Vec::new(),
-        )
-        .unwrap();
+        ).unwrap();
     }
 }
