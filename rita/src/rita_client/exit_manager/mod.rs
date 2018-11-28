@@ -29,6 +29,7 @@ use SETTING;
 
 use rita_client::rita_loop::Tick;
 use rita_client::traffic_watcher::{TrafficWatcher, Watch};
+use rita_common::tunnel_manager::{GetNeighbors, TunnelManager};
 
 use futures::future;
 use futures::future::join_all;
@@ -373,16 +374,27 @@ impl Handler<Tick> for ExitManager {
 
                 // run billing at all times when an exit is setup
                 if self.last_exit.is_some() {
+                    let exit_price = general_details.exit_price.clone();
+                    let exit_id = exit.id.clone();
                     trace!("We are signed up for the selected exit!");
                     Arbiter::spawn(
-                        TrafficWatcher::from_registry()
-                            .send(Watch(exit.id.clone(), general_details.exit_price))
-                            .then(|res| match res {
-                                Ok(val) => Ok(val),
-                                Err(e) => {
-                                    error!("Client traffic watcher failed with {:?}", e);
-                                    Err(e)
-                                }
+                        TunnelManager::from_registry()
+                            .send(GetNeighbors)
+                            .and_then(move |neighbors_list| {
+                                TrafficWatcher::from_registry()
+                                    .send(Watch {
+                                        exit_id: exit_id,
+                                        exit_price: exit_price,
+                                        // this unwrap can't fail, go look at GetNeighbors, the 'bad' case is
+                                        // that we get a empty list. But Actix insists on a result.
+                                        neighbors: neighbors_list.unwrap(),
+                                    }).then(|res| match res {
+                                        Ok(val) => Ok(val),
+                                        Err(e) => {
+                                            error!("Client traffic watcher failed with {:?}", e);
+                                            Err(e)
+                                        }
+                                    })
                             }).then(|_| Ok(())),
                     );
                 }
