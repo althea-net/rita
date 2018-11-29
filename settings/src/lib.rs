@@ -242,9 +242,7 @@ pub struct PaymentSettings {
     pub close_fraction: Int256,
     /// The amount of billing cycles a node can fall behind without being subjected to the threshold
     pub buffer_period: u32,
-    /// Our own eth address, derived from eth_private_key and stored for ease of access
-    pub eth_address: Option<Address>,
-    /// Our own eth private key
+    /// Our own eth private key we do not store address, instead it is derived from here
     pub eth_private_key: Option<PrivateKey>,
 }
 
@@ -255,13 +253,8 @@ impl Default for PaymentSettings {
             close_threshold: (-10000).into(),
             close_fraction: 100.into(),
             buffer_period: 3,
-            eth_address: Some(
-                "0x0000000000000000000000000000000000000000"
-                    .parse()
-                    .expect("Failed to create default dummy Address"),
-            ),
             eth_private_key: Some(
-                "0000000000000000000000000000000000000000000000000000000000000000"
+                "0x0000000000000000000000000000000000000000000000000000000000000000"
                     .parse()
                     .expect("Failed to create default dummy PrivateKey"),
             ),
@@ -589,7 +582,12 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
     fn get_identity(&self) -> Option<Identity> {
         Some(Identity::new(
             self.get_network().mesh_ip?.clone(),
-            self.get_payment().clone().eth_address?,
+            self.get_payment()
+                .clone()
+                .eth_private_key
+                .expect("No Eth private key configured!")
+                .to_public_key()
+                .expect("Could not generate address from Eth key!"),
             self.get_network().clone().wg_public_key?,
         ))
     }
@@ -681,7 +679,12 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
     fn get_identity(&self) -> Option<Identity> {
         Some(Identity::new(
             self.get_network().mesh_ip?.clone(),
-            self.get_payment().clone().eth_address?,
+            self.get_payment()
+                .clone()
+                .eth_private_key
+                .expect("No Eth private key configured!")
+                .to_public_key()
+                .expect("Could not generate address from Eth key!"),
             self.get_network().clone().wg_public_key?,
         ))
     }

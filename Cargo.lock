@@ -132,7 +132,7 @@ version = "0.1.0"
 dependencies = [
  "actix 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "clarity 0.1.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clarity 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "ethereum-types 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "eui48 0.4.0 (git+https://github.com/althea-mesh/eui48)",
  "hex 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -327,7 +327,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "clarity"
-version = "0.1.13"
+version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "failure 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -358,7 +358,7 @@ dependencies = [
  "althea_kernel_interface 0.1.0",
  "althea_types 0.1.0",
  "babel_monitor 0.1.0",
- "clarity 0.1.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clarity 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.5.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "ipgen 0.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1799,7 +1799,7 @@ dependencies = [
  "babel_monitor 0.1.0",
  "byteorder 1.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "bytes 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "clarity 0.1.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clarity 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "clu 0.0.1",
  "config 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "diesel 1.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2069,7 +2069,7 @@ version = "0.1.0"
 dependencies = [
  "althea_kernel_interface 0.1.0",
  "althea_types 0.1.0",
- "clarity 0.1.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clarity 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "config 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "eui48 0.4.0 (git+https://github.com/althea-mesh/eui48)",
  "failure 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2818,7 +2818,7 @@ dependencies = [
 "checksum cfg-if 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "0c4e7bb64a8ebb0d856483e1e682ea3422f883c5f5615a90d51a2c82fe87fdd3"
 "checksum chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)" = "45912881121cb26fad7c38c17ba7daa18764771836b34fab7d3fbd93ed633878"
 "checksum chunked_transfer 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "498d20a7aaf62625b9bf26e637cf7736417cde1d0c99f1d04d1170229a85cf87"
-"checksum clarity 0.1.13 (registry+https://github.com/rust-lang/crates.io-index)" = "9e20eb98a611a06f42347f23a8fbb1a55c57ddfe6d21ee9947ebb4a70afb289f"
+"checksum clarity 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)" = "b57ff451a3fcb6ad4580054d35695aba899660c889f70530af1036be8da73c98"
 "checksum cloudabi 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)" = "ddfc5b9aa5d4507acaf872de71051dfd0e309860e88966e1051e462a077aac4f"
 "checksum colored 1.6.1 (registry+https://github.com/rust-lang/crates.io-index)" = "dc0a60679001b62fb628c4da80e574b9645ab4646056d7c9018885efffe45533"
 "checksum config 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)" = "b5379dd8b3e7f488a31107d2c9586ce2ddbee2bc839201b3b38dbdf550351c1e"

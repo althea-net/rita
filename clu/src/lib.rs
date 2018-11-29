@@ -61,26 +61,6 @@ pub fn validate_mesh_ip(ip: &IpAddr) -> bool {
     ip.is_ipv6() && !ip.is_unspecified()
 }
 
-/// Performs some quick validation of the Address, mostly to make sure it's not junk
-pub fn validate_eth_address(address: &Address) -> bool {
-    // Special list of obviously invalid addresses that might be floating around
-    let list_of_junk_addresses = [
-        "0x0000000000000000000000000000000000000000"
-            .parse()
-            .unwrap(),
-        "0x0000000000000000000000000000000000000001"
-            .parse()
-            .unwrap(),
-        "0x0101010101010101010101010101010101010101"
-            .parse()
-            .unwrap(),
-    ];
-    if list_of_junk_addresses.contains(address) {
-        return false;
-    }
-    true
-}
-
 /// Called before anything is started to delete existing wireguard per hop tunnels
 pub fn cleanup() -> Result<(), Error> {
     debug!("Cleaning up WireGuard tunnels");
@@ -195,49 +175,23 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
     drop(network_settings);
 
     let mut payment_settings = config.get_payment_mut();
-    let eth_address_option = payment_settings.eth_address.clone();
     let eth_private_key_option = payment_settings.eth_private_key.clone();
 
-    match (eth_address_option, eth_private_key_option) {
-        (Some(existing_eth_address), Some(existing_eth_private_key)) => {
-            let generated_address = existing_eth_private_key.to_public_key();
-            if !validate_eth_address(&existing_eth_address)
-                || (generated_address.is_ok() && generated_address.unwrap() == existing_eth_address)
-            {
-                warn!(
-                    "Existing eth address {:?} is invalid or does not match private key, generating new privkey and address",
-                    existing_eth_address
-                );
-                let mut key_buf: [u8; 32] = rand::random();
-                let new_private_key =
-                    PrivateKey::from_slice(&key_buf).expect("Failed to generate key!");
-                payment_settings.eth_private_key = Some(new_private_key);
-                payment_settings.eth_address = Some(
-                    new_private_key
-                        .to_public_key()
-                        .expect("Failed to derive address"),
-                );
-            }
-        }
-        (None, Some(existing_eth_private_key)) => {
-            warn!("Detected partially configured eth settings, attempting completion");
-            payment_settings.eth_address = Some(
+    match eth_private_key_option {
+        Some(existing_eth_private_key) => {
+            info!(
+                "Starting with Eth address {:?}",
                 existing_eth_private_key
                     .to_public_key()
-                    .expect("Failed to derive address, please check your config and delete eth_private_key it may be invalid"),
+                    .expect("Failed to derive address from Eth key!")
             );
         }
-        (_, _) => {
+        None => {
             info!("Eth key details not configured, generating");
             let mut key_buf: [u8; 32] = rand::random();
             let new_private_key =
                 PrivateKey::from_slice(&key_buf).expect("Failed to generate key!");
             payment_settings.eth_private_key = Some(new_private_key);
-            payment_settings.eth_address = Some(
-                new_private_key
-                    .to_public_key()
-                    .expect("Failed to derive address"),
-            );
         }
     }
 
@@ -325,49 +279,23 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
     drop(network_settings);
 
     let mut payment_settings = config.get_payment_mut();
-    let eth_address_option = payment_settings.eth_address.clone();
     let eth_private_key_option = payment_settings.eth_private_key.clone();
 
-    match (eth_address_option, eth_private_key_option) {
-        (Some(existing_eth_address), Some(existing_eth_private_key)) => {
-            let generated_address = existing_eth_private_key.to_public_key();
-            if !validate_eth_address(&existing_eth_address)
-                || (generated_address.is_ok() && generated_address.unwrap() == existing_eth_address)
-            {
-                warn!(
-                    "Existing eth address {:?} is invalid or does not match private key, generating new privkey and address",
-                    existing_eth_address
-                );
-                let mut key_buf: [u8; 32] = rand::random();
-                let new_private_key =
-                    PrivateKey::from_slice(&key_buf).expect("Failed to generate key!");
-                payment_settings.eth_private_key = Some(new_private_key);
-                payment_settings.eth_address = Some(
-                    new_private_key
-                        .to_public_key()
-                        .expect("Failed to derive address"),
-                );
-            }
-        }
-        (None, Some(existing_eth_private_key)) => {
-            warn!("Detected partially configured eth settings, attempting completion");
-            payment_settings.eth_address = Some(
+    match eth_private_key_option {
+        Some(existing_eth_private_key) => {
+            info!(
+                "Starting with Eth address {:?}",
                 existing_eth_private_key
                     .to_public_key()
-                    .expect("Failed to derive address, please check your config and delete eth_private_key it may be invalid"),
+                    .expect("Failed to derive address from Eth key!")
             );
         }
-        (_, _) => {
+        None => {
             info!("Eth key details not configured, generating");
             let mut key_buf: [u8; 32] = rand::random();
             let new_private_key =
                 PrivateKey::from_slice(&key_buf).expect("Failed to generate key!");
             payment_settings.eth_private_key = Some(new_private_key);
-            payment_settings.eth_address = Some(
-                new_private_key
-                    .to_public_key()
-                    .expect("Failed to derive address"),
-            );
         }
     }
 
