@@ -10,6 +10,7 @@
 //! namespace or clone quickly to avoid deadlocks.
 
 extern crate althea_types;
+extern crate clarity;
 extern crate config;
 extern crate eui48;
 extern crate failure;
@@ -43,6 +44,8 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 
+use clarity::{Address, PrivateKey};
+
 use althea_kernel_interface::KernelInterface;
 
 #[cfg(not(test))]
@@ -52,7 +55,7 @@ use althea_kernel_interface::TestCommandRunner;
 
 use config::Config;
 
-use althea_types::{EthAddress, ExitRegistrationDetails, ExitState, Identity, WgKey};
+use althea_types::{ExitRegistrationDetails, ExitState, Identity, WgKey};
 
 use num256::Int256;
 
@@ -239,8 +242,8 @@ pub struct PaymentSettings {
     pub close_fraction: Int256,
     /// The amount of billing cycles a node can fall behind without being subjected to the threshold
     pub buffer_period: u32,
-    /// Our own eth address
-    pub eth_address: EthAddress,
+    /// Our own eth private key we do not store address, instead it is derived from here
+    pub eth_private_key: Option<PrivateKey>,
 }
 
 impl Default for PaymentSettings {
@@ -250,7 +253,11 @@ impl Default for PaymentSettings {
             close_threshold: (-10000).into(),
             close_fraction: 100.into(),
             buffer_period: 3,
-            eth_address: 1.into(),
+            eth_private_key: Some(
+                "0x0000000000000000000000000000000000000000000000000000000000000000"
+                    .parse()
+                    .expect("Failed to create default dummy PrivateKey"),
+            ),
         }
     }
 }
@@ -321,7 +328,7 @@ fn default_node_list() -> Vec<String> {
     vec!["http://sasquatch.network:9545".to_string()]
 }
 
-fn default_dao_address() -> Vec<EthAddress> {
+fn default_dao_address() -> Vec<Address> {
     Vec::new()
 }
 
@@ -338,7 +345,7 @@ pub struct SubnetDAOSettings {
     pub node_list: Vec<String>,
     /// List of subnet DAO's to which we are a member
     #[serde(default = "default_dao_address")]
-    pub dao_addresses: Vec<EthAddress>,
+    pub dao_addresses: Vec<Address>,
 }
 
 /// This is the main struct for rita
@@ -575,7 +582,12 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
     fn get_identity(&self) -> Option<Identity> {
         Some(Identity::new(
             self.get_network().mesh_ip?.clone(),
-            self.get_payment().eth_address.clone(),
+            self.get_payment()
+                .clone()
+                .eth_private_key
+                .expect("No Eth private key configured!")
+                .to_public_key()
+                .expect("Could not generate address from Eth key!"),
             self.get_network().clone().wg_public_key?,
         ))
     }
@@ -609,37 +621,41 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
     fn get_payment<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, PaymentSettings> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.payment)
+        RwLockReadGuardRef::new(self.read().expect("Read payment settings!")).map(|g| &g.payment)
     }
 
     fn get_payment_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, PaymentSettings> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.payment)
+        RwLockWriteGuardRefMut::new(self.write().expect("Failed to write payment settings!"))
+            .map_mut(|g| &mut g.payment)
     }
 
     fn get_dao<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, SubnetDAOSettings> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.dao)
+        RwLockReadGuardRef::new(self.read().expect("Failed to read DAO settings!")).map(|g| &g.dao)
     }
 
     fn get_dao_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, SubnetDAOSettings> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.dao)
+        RwLockWriteGuardRefMut::new(self.write().expect("Failed to write dao settings!"))
+            .map_mut(|g| &mut g.dao)
     }
 
     fn get_network<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, NetworkSettings> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.network)
+        RwLockReadGuardRef::new(self.read().expect("Failed to read network settings!"))
+            .map(|g| &g.network)
     }
 
     fn get_network_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, NetworkSettings> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.network)
+        RwLockWriteGuardRefMut::new(self.write().expect("Failed to write network settings!"))
+            .map_mut(|g| &mut g.network)
     }
 
     fn merge(&self, changed_settings: serde_json::Value) -> Result<(), Error> {
@@ -663,7 +679,12 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
     fn get_identity(&self) -> Option<Identity> {
         Some(Identity::new(
             self.get_network().mesh_ip?.clone(),
-            self.get_payment().eth_address.clone(),
+            self.get_payment()
+                .clone()
+                .eth_private_key
+                .expect("No Eth private key configured!")
+                .to_public_key()
+                .expect("Could not generate address from Eth key!"),
             self.get_network().clone().wg_public_key?,
         ))
     }

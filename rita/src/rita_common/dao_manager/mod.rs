@@ -23,8 +23,8 @@ use std::time::Duration;
 use std::time::Instant;
 use tokio::net::TcpStream as TokioTcpStream;
 
-use althea_types::EthAddress;
 use althea_types::Identity;
+use clarity::Address;
 use num256::Uint256;
 use rita_common::tunnel_manager::TunnelAction;
 use rita_common::tunnel_manager::TunnelManager;
@@ -73,7 +73,7 @@ impl DAOManager {
 #[derive(Debug)]
 pub struct DAOEntry {
     on_list: bool,
-    dao_address: EthAddress,
+    dao_address: Address,
     id: Identity,
     last_updated: Instant,
 }
@@ -95,7 +95,7 @@ impl Handler<DAOCheck> for DAOManager {
 /// Called by returning DAO requests, sends a message to TunnelManager
 pub struct CacheCallback {
     id: Identity,
-    dao_address: EthAddress,
+    dao_address: Address,
     response: Web3Response,
 }
 
@@ -221,7 +221,7 @@ fn check_cache(their_id: Identity, ident2dao: &HashMap<Identity, Vec<DAOEntry>>)
                     send_membership_message(true, their_id.clone());
                 } else if !timer_check(entry.last_updated) {
                     trace!("Cache entry has expired, updating");
-                    get_membership(entry.dao_address, entry.id.clone());
+                    get_membership(entry.dao_address.clone(), entry.id.clone());
                 }
             }
             trace!("{:?} is not on any SubnetDAO", their_id);
@@ -236,7 +236,7 @@ fn check_cache(their_id: Identity, ident2dao: &HashMap<Identity, Vec<DAOEntry>>)
     }
 }
 
-fn get_membership(dao_address: EthAddress, target: Identity) -> () {
+fn get_membership(dao_address: Address, target: Identity) -> () {
     let url = get_web3_server();
     let endpoint = format!("http://{}/", url);
     trace!("Getting DAO membership from {}", url);

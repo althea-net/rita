@@ -1,7 +1,7 @@
+use clarity::Address;
 use num256::Uint256;
 use std::net::IpAddr;
 use wg_key::WgKey;
-use EthAddress;
 
 #[cfg(feature = "actix")]
 use actix::*;
@@ -10,12 +10,12 @@ use actix::*;
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct Identity {
     pub mesh_ip: IpAddr,
-    pub eth_address: EthAddress,
+    pub eth_address: Address,
     pub wg_public_key: WgKey,
 }
 
 impl Identity {
-    pub fn new(mesh_ip: IpAddr, eth_address: EthAddress, wg_public_key: WgKey) -> Identity {
+    pub fn new(mesh_ip: IpAddr, eth_address: Address, wg_public_key: WgKey) -> Identity {
         Identity {
             mesh_ip,
             eth_address,
@@ -175,15 +175,4 @@ pub struct PaymentTx {
     pub to: Identity,
     pub from: Identity,
     pub amount: Uint256,
-}
-
-/// This contains all the info we need to send the the stats server
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Stats {
-    pub proc_stat: String,
-    pub proc_load_avg: String,
-    pub devices: String,
-    pub routes: String,
-    pub meminfo: String,
-    pub cpuinfo: String,
 }

@@ -74,6 +74,8 @@ use actix::*;
 use actix_web::http::Method;
 use actix_web::*;
 
+extern crate clarity;
+
 extern crate althea_kernel_interface;
 extern crate althea_types;
 extern crate babel_monitor;

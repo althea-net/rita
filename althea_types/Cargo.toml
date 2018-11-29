@@ -13,3 +13,4 @@ hex = "0.3.2"
 eui48 = { git = "https://github.com/althea-mesh/eui48", features = ["serde"] }
 actix = { version = "0.7.4", optional = true}
 ethereum-types = "0.4.0"
+clarity = "0.1.14"

@@ -354,7 +354,9 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: "0x0000000000000000000000000000000000000001"
+                .parse()
+                .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
                 .parse()
@@ -376,7 +378,9 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: "0x0000000000000000000000000000000000000001"
+                .parse()
+                .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
                 .parse()
@@ -399,7 +403,9 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: "0x0000000000000000000000000000000000000001"
+                .parse()
+                .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
                 .parse()
@@ -421,9 +427,10 @@ mod tests {
         SETTING.get_payment_mut().buffer_period = 2;
 
         let mut d = DebtKeeper::new();
-
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: "0x0000000000000000000000000000000000000001"
+                .parse()
+                .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
                 .parse()
@@ -449,7 +456,9 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: "0x0000000000000000000000000000000000000001"
+                .parse()
+                .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
                 .parse()
@@ -475,7 +484,9 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: "0x0000000000000000000000000000000000000001"
+                .parse()
+                .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
                 .parse()
@@ -502,7 +513,9 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: "0x0000000000000000000000000000000000000001"
+                .parse()
+                .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
                 .parse()
@@ -538,7 +551,9 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: "0x0000000000000000000000000000000000000001"
+                .parse()
+                .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
                 .parse()
@@ -566,7 +581,9 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: "0x0000000000000000000000000000000000000001"
+                .parse()
+                .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
                 .parse()
@@ -589,7 +606,9 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: "0x0000000000000000000000000000000000000001"
+                .parse()
+                .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
                 .parse()
@@ -615,7 +634,9 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: "0x0000000000000000000000000000000000000001"
+                .parse()
+                .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
                 .parse()
@@ -646,7 +667,9 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: "0x0000000000000000000000000000000000000001"
+                .parse()
+                .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
                 .parse()
@@ -673,7 +696,9 @@ mod tests {
         let mut d = DebtKeeper::new();
 
         let ident = Identity {
-            eth_address: 1.into(),
+            eth_address: "0x0000000000000000000000000000000000000001"
+                .parse()
+                .unwrap(),
             mesh_ip: "2001::3".parse().unwrap(),
             wg_public_key: "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
                 .parse()

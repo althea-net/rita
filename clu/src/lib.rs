@@ -12,6 +12,11 @@ use settings::{ExitVerifSettings, RitaCommonSettings, RitaExitSettings};
 
 extern crate ipgen;
 extern crate rand;
+extern crate regex;
+
+extern crate clarity;
+use clarity::{Address, PrivateKey};
+
 use rand::{thread_rng, Rng};
 
 use std::str;
@@ -20,7 +25,6 @@ use failure::Error;
 
 use althea_kernel_interface::KI;
 
-extern crate althea_kernel_interface;
 use rand::distributions::Alphanumeric;
 use regex::Regex;
 use std::fs::File;
@@ -29,9 +33,9 @@ use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
+extern crate althea_kernel_interface;
 extern crate althea_types;
 extern crate babel_monitor;
-extern crate regex;
 
 use babel_monitor::Babel;
 
@@ -86,8 +90,11 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
     cleanup()?;
     KI.restore_default_route(&mut config.get_network_mut().default_route)?;
 
+    // handle things we need to generate at runtime
     let mut network_settings = config.get_network_mut();
     let mesh_ip_option = network_settings.mesh_ip.clone();
+    let wg_pubkey_option = network_settings.wg_public_key.clone();
+    let wg_privkey_option = network_settings.wg_private_key.clone();
     let device_option = network_settings.device.clone();
 
     match mesh_ip_option {
@@ -148,7 +155,7 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
         }
     }
 
-    if network_settings.wg_public_key.is_none() {
+    if wg_privkey_option.is_none() || wg_pubkey_option.is_none() {
         info!("Existing wireguard keypair is invalid, generating from scratch");
         let keypair = KI.create_wg_keypair().expect("failed to generate wg keys");
         network_settings.wg_public_key = Some(keypair.public);
@@ -166,6 +173,30 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
 
     // Yield the mut lock
     drop(network_settings);
+
+    let mut payment_settings = config.get_payment_mut();
+    let eth_private_key_option = payment_settings.eth_private_key.clone();
+
+    match eth_private_key_option {
+        Some(existing_eth_private_key) => {
+            info!(
+                "Starting with Eth address {:?}",
+                existing_eth_private_key
+                    .to_public_key()
+                    .expect("Failed to derive address from Eth key!")
+            );
+        }
+        None => {
+            info!("Eth key details not configured, generating");
+            let mut key_buf: [u8; 32] = rand::random();
+            let new_private_key =
+                PrivateKey::from_slice(&key_buf).expect("Failed to generate key!");
+            payment_settings.eth_private_key = Some(new_private_key);
+        }
+    }
+
+    // Yield the mut lock
+    drop(payment_settings);
 
     let local_fee = config.get_local_fee();
     let metric_factor = config.get_metric_factor();
@@ -205,6 +236,8 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
 
     let mut network_settings = config.get_network_mut();
     let mesh_ip_option = network_settings.mesh_ip.clone();
+    let wg_pubkey_option = network_settings.wg_public_key.clone();
+    let wg_privkey_option = network_settings.wg_private_key.clone();
 
     match mesh_ip_option {
         Some(existing_mesh_ip) => {
@@ -227,7 +260,7 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
         }
     }
 
-    if network_settings.wg_public_key.is_none() {
+    if wg_privkey_option.is_none() || wg_pubkey_option.is_none() {
         info!("Existing wireguard keypair is invalid, generating from scratch");
         let keypair = KI.create_wg_keypair().expect("failed to generate wg keys");
         network_settings.wg_public_key = Some(keypair.public);
@@ -244,6 +277,30 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
     )?;
 
     drop(network_settings);
+
+    let mut payment_settings = config.get_payment_mut();
+    let eth_private_key_option = payment_settings.eth_private_key.clone();
+
+    match eth_private_key_option {
+        Some(existing_eth_private_key) => {
+            info!(
+                "Starting with Eth address {:?}",
+                existing_eth_private_key
+                    .to_public_key()
+                    .expect("Failed to derive address from Eth key!")
+            );
+        }
+        None => {
+            info!("Eth key details not configured, generating");
+            let mut key_buf: [u8; 32] = rand::random();
+            let new_private_key =
+                PrivateKey::from_slice(&key_buf).expect("Failed to generate key!");
+            payment_settings.eth_private_key = Some(new_private_key);
+        }
+    }
+
+    // Yield the mut lock
+    drop(payment_settings);
 
     // Migrate compat mailer settings. This is put in this particular spot so that the network
     // settings lock can be dropped beforehand.

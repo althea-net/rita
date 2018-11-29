@@ -93,16 +93,12 @@ pub fn watch<T: Read + Write>(
     let mut identities: HashMap<WgKey, Identity> = HashMap::new();
     let mut id_from_ip: HashMap<IpAddr, Identity> = HashMap::new();
     let our_settings = SETTING.get_network();
-    let our_id = Identity {
-        mesh_ip: match our_settings.mesh_ip {
-            Some(ip) => ip.clone(),
-            None => bail!("No mesh ip configured yet!"),
-        },
-        eth_address: SETTING.get_payment().eth_address.clone(),
-        wg_public_key: match our_settings.clone().wg_public_key {
-            Some(pub_key) => pub_key.clone(),
-            None => bail!("No WgKey configured yet!"),
-        },
+    let our_id = match SETTING.get_identity(){
+        Some(id) => id,
+        None => {
+            warn!("Our identity is not ready!");
+            bail!("Identity is not ready");
+        }
     };
     id_from_ip.insert(our_settings.mesh_ip.unwrap(), our_id.clone());
 

@@ -18,6 +18,8 @@ rita_dashboard_port = 4877
 rita_tick_interval = 5
 bounty_port = 8888
 wg_private_key_path = "/tmp/priv"
+wg_public_key = "H/ABwzXk834OwGYU8CZGfFxNZOd+BAJEaVDHiEiWWhU="
+wg_private_key = "ALxcZm2r58gY0sB4vIfnjShc86qBoVK3f32H9VrwqWU="
 wg_start_port = 60000
 tunnel_timeout_seconds = 900
 peer_interfaces = []
