@@ -1,20 +1,4 @@
-/*
-The nodeinfo endpoint gathers info about neighbors for the dashbaord
-*/
-
-use actix::prelude::*;
-use failure::Error;
-use futures::Future;
-use serde_json;
-use std::net::{SocketAddr, TcpStream};
-
-use babel_monitor::Babel;
-use num256::Int256;
-use rita_common::dashboard::Dashboard;
-use rita_common::debt_keeper::{DebtKeeper, Dump};
-use settings::RitaClientSettings;
-use settings::RitaCommonSettings;
-use SETTING;
+use super::*;
 
 #[derive(Serialize)]
 pub struct NodeInfo {
@@ -96,4 +80,13 @@ impl Handler<GetNodeInfo> for Dashboard {
                 }),
         )
     }
+}
+
+pub fn get_node_info(_req: HttpRequest) -> Box<Future<Item = Json<Vec<NodeInfo>>, Error = Error>> {
+    debug!("Neighbors endpoint hit!");
+    Dashboard::from_registry()
+        .send(GetNodeInfo {})
+        .from_err()
+        .and_then(move |reply| Ok(Json(reply?)))
+        .responder()
 }

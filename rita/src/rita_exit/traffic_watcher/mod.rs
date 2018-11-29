@@ -93,7 +93,7 @@ pub fn watch<T: Read + Write>(
     let mut identities: HashMap<WgKey, Identity> = HashMap::new();
     let mut id_from_ip: HashMap<IpAddr, Identity> = HashMap::new();
     let our_settings = SETTING.get_network();
-    let our_id = match SETTING.get_identity(){
+    let our_id = match SETTING.get_identity() {
         Some(id) => id,
         None => {
             warn!("Our identity is not ready!");
