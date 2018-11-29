@@ -87,7 +87,13 @@ mod middleware;
 mod rita_common;
 mod rita_exit;
 
-use rita_common::dashboard::network_endpoints::*;
+use rita_common::dashboard::babel::*;
+use rita_common::dashboard::dao::*;
+use rita_common::dashboard::debts::*;
+use rita_common::dashboard::development::*;
+use rita_common::dashboard::own_info::*;
+use rita_common::dashboard::settings::*;
+
 use rita_common::network_endpoints::*;
 use rita_exit::network_endpoints::*;
 
