@@ -2,7 +2,7 @@
 
 ## Motivation
 
-Bounty hunter is a binary crate designed to be used with Rita and the [Guac_rs](https://github.com/althea-mesh/guac_rs) blockchain light channel client. The goal of bounty hunters to to act as online watchdogs for bad channel behavior that a device out in the field may not be able to catch.
+Bounty hunter is a binary crate designed to be used with Rita and the [Guac_rs](https://github.com/althea-mesh/guac_rs) blockchain light channel client. The goal of bounty hunters  to act as online watchdogs for bad channel behavior that a device out in the field may not be able to catch.
 
 In payment channels parties exchange 'updates' offline by creating a series of messages containing the agreed upon channel balance and an incrementing seqence number. By looking at the highest seqence number and balances signed by both parties the on chain code can eventually take an update and use to to settle the balance on the blockchain.
 
@@ -51,7 +51,7 @@ The JSON object submitted to this endpoint is not specified here, please refer t
 
 - URL: `<bounty_hunter_ip>:<bounty_hunter_port>/get_channel_state`
 - Method: `GET`
-- URL Params: `Ethereum public key`
+- URL Params: `Channel ID`
 - Data Params: `None`
 - Success Response:
   - Code: 200 OK
@@ -71,7 +71,7 @@ The JSON object submitted to this endpoint is not specified here, please refer t
 - Sample Call:
 
 ```
-curl -XGET 127.0.0.1:<bounty_hunter_port>/get_channel_states/<Pubkey>
+curl -XGET 127.0.0.1:<bounty_hunter_port>/get_channel_states/<channel_id_decimal_or_big_endian_hex>
 ```
 
 The JSON object submitted recieved from this endpoint is not specified here, please refer to the [Guac payment channel contract update function](https://github.com/althea-mesh/guac/blob/master/contracts/PaymentChannels.sol#L172). For the members of this struct. For the sake of consistency this data should be represented using types from [Clarity](https://github.com/althea-mesh/clarirty) or [Rust Web3](https://github.com/tomusdrw/rust-web3) where appropriate.
