@@ -244,6 +244,15 @@ pub struct PaymentSettings {
     pub buffer_period: u32,
     /// Our own eth private key we do not store address, instead it is derived from here
     pub eth_private_key: Option<PrivateKey>,
+    // Our own eth Address, derived from the private key on startup and not stored
+    #[serde(skip_serializing, skip_deserializing)]
+    pub eth_address: Address,
+    /// A list of nodes to query for blockchain data
+    /// this is kept seperate from the version for DAO settings node
+    /// list in order to allow for the DAO and payments to exist on different
+    /// chains, provided in name:port format
+    #[serde(default = "default_node_list")]
+    pub node_list: Vec<String>,
 }
 
 impl Default for PaymentSettings {
@@ -258,6 +267,10 @@ impl Default for PaymentSettings {
                     .parse()
                     .expect("Failed to create default dummy PrivateKey"),
             ),
+            eth_address: "0x0000000000000000000000000000000000000000"
+                .parse()
+                .expect("Failed to parse default dummy address"),
+            node_list: Vec::new(),
         }
     }
 }
@@ -325,7 +338,7 @@ fn default_dao_enforcement() -> bool {
 }
 
 fn default_node_list() -> Vec<String> {
-    vec!["http://sasquatch.network:9545".to_string()]
+    vec!["http://sasquatch.network:19545".to_string()]
 }
 
 fn default_dao_address() -> Vec<Address> {
@@ -341,6 +354,9 @@ pub struct SubnetDAOSettings {
     #[serde(default = "default_cache_timeout")]
     pub cache_timeout_seconds: u64,
     /// A list of nodes to query for blockchain data
+    /// this is kept seperate from the version for payment settings node
+    /// list in order to allow for the DAO and payments to exist on different
+    /// chains, provided in name:port format
     #[serde(default = "default_node_list")]
     pub node_list: Vec<String>,
     /// List of subnet DAO's to which we are a member
@@ -582,12 +598,7 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
     fn get_identity(&self) -> Option<Identity> {
         Some(Identity::new(
             self.get_network().mesh_ip?.clone(),
-            self.get_payment()
-                .clone()
-                .eth_private_key
-                .expect("No Eth private key configured!")
-                .to_public_key()
-                .expect("Could not generate address from Eth key!"),
+            self.get_payment().clone().eth_address,
             self.get_network().clone().wg_public_key?,
         ))
     }

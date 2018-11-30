@@ -3,16 +3,14 @@ use super::*;
 #[derive(Debug, Fail)]
 enum OwnInfoError {
     #[fail(display = "Unable to round balance of {} down to 1 ETH", _0)]
-    RoundDownError(Int256),
-    #[fail(
-        display = "Unable to downcast value {} to signed 64 bits",
-        _0
-    )]
-    DownCastError(Int256),
+    RoundDownError(Uint256),
+    #[fail(display = "Unable to downcast value {} to signed 64 bits", _0)]
+    DownCastError(Uint256),
 }
 
 #[derive(Serialize)]
 pub struct OwnInfo {
+    pub address: Address,
     pub balance: i64,
     pub local_fee: u32,
     pub metric_factor: u32,
@@ -37,10 +35,11 @@ impl Handler<GetOwnInfo> for Dashboard {
                 .and_then(|own_balance| match own_balance {
                     Ok(balance) => {
                         let balance = balance
-                            .checked_div(&Int256::from(1_000_000_000i64))
+                            .checked_div(&Uint256::from(1_000_000_000u64))
                             .ok_or(OwnInfoError::RoundDownError(balance.clone()))?;
 
                         Ok(OwnInfo {
+                            address: SETTING.get_payment().eth_address,
                             balance: balance
                                 .to_i64()
                                 .ok_or(OwnInfoError::DownCastError(balance))?,

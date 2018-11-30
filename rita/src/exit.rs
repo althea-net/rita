@@ -9,10 +9,7 @@
 //! This file initilizes the dashboard endpoints for the exit as well as the common and exit
 //! specific actors.
 
-#![cfg_attr(
-    feature = "system_alloc",
-    feature(alloc_system, allocator_api)
-)]
+#![cfg_attr(feature = "system_alloc", feature(alloc_system, allocator_api))]
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
@@ -75,12 +72,13 @@ use actix_web::http::Method;
 use actix_web::*;
 
 extern crate clarity;
+extern crate guac_core;
+extern crate num256;
 
 extern crate althea_kernel_interface;
 extern crate althea_types;
 extern crate babel_monitor;
 extern crate exit_db;
-extern crate num256;
 
 pub mod actix_utils;
 mod middleware;
@@ -93,6 +91,7 @@ use rita_common::dashboard::debts::*;
 use rita_common::dashboard::development::*;
 use rita_common::dashboard::own_info::*;
 use rita_common::dashboard::settings::*;
+use rita_common::dashboard::wallet::*;
 
 use rita_common::network_endpoints::*;
 use rita_exit::network_endpoints::*;
@@ -220,7 +219,8 @@ fn main() {
         App::new().resource("/make_payment", |r| {
             r.method(Method::POST).with(make_payments)
         })
-    }).workers(1)
+    })
+    .workers(1)
     .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
     .unwrap()
     .shutdown_timeout(0)
@@ -232,14 +232,18 @@ fn main() {
             .resource("/setup", |r| r.method(Method::POST).with(setup_request))
             .resource("/status", |r| {
                 r.method(Method::POST).with_async(status_request)
-            }).resource("/list", |r| r.method(Method::POST).with(list_clients))
+            })
+            .resource("/list", |r| r.method(Method::POST).with(list_clients))
             .resource("/exit_info", |r| {
                 r.method(Method::GET).with(get_exit_info_http)
-            }).resource("/rtt", |r| r.method(Method::GET).with(rtt))
-    }).bind(format!(
+            })
+            .resource("/rtt", |r| r.method(Method::GET).with(rtt))
+    })
+    .bind(format!(
         "[::0]:{}",
         SETTING.get_exit_network().exit_hello_port
-    )).unwrap()
+    ))
+    .unwrap()
     .shutdown_timeout(0)
     .start();
 
@@ -268,10 +272,13 @@ fn main() {
                 Method::POST,
                 remove_from_dao_list,
             )
-    }).bind(format!(
+            .route("/withdraw/{address}/{amount}", Method::POST, withdraw)
+    })
+    .bind(format!(
         "[::0]:{}",
         SETTING.get_network().rita_dashboard_port
-    )).unwrap()
+    ))
+    .unwrap()
     .shutdown_timeout(0)
     .start();
 

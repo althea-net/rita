@@ -30,7 +30,7 @@ pub enum PaymentControllerError {
 
 pub struct PaymentController {
     pub reqwest_client: Client,
-    pub balance: Int256,
+    pub balance: Uint256,
 }
 
 impl Actor for PaymentController {
@@ -88,14 +88,29 @@ impl Handler<PaymentControllerUpdate> for PaymentController {
     }
 }
 
+pub struct UpdateBalance {
+    pub balance: Uint256,
+}
+
+impl Message for UpdateBalance {
+    type Result = ();
+}
+
+impl Handler<UpdateBalance> for PaymentController {
+    type Result = ();
+    fn handle(&mut self, msg: UpdateBalance, _: &mut Context<Self>) -> Self::Result {
+        self.balance = msg.balance;
+    }
+}
+
 pub struct GetOwnBalance;
 
 impl Message for GetOwnBalance {
-    type Result = Result<Int256, Error>;
+    type Result = Result<Uint256, Error>;
 }
 
 impl Handler<GetOwnBalance> for PaymentController {
-    type Result = Result<Int256, Error>;
+    type Result = Result<Uint256, Error>;
     fn handle(&mut self, _msg: GetOwnBalance, _: &mut Context<Self>) -> Self::Result {
         Ok(self.balance.clone())
     }
@@ -128,7 +143,7 @@ impl PaymentController {
                 .timeout(Duration::from_secs(5))
                 .build()
                 .unwrap(),
-            balance: Int256::from(0i64),
+            balance: Uint256::from(0u64),
         }
     }
 
@@ -198,7 +213,7 @@ impl PaymentController {
                 .get_identity()
                 .ok_or(format_err!("No mesh IP available for Identity yet"))?,
             tx: pmt.clone(),
-            balance: self.balance.clone(),
+            balance: self.balance.clone().into(),
         })?;
         Ok(debt_keeper::PaymentReceived {
             from: pmt.from,
@@ -219,7 +234,7 @@ impl PaymentController {
                 to: our_id.clone(),
                 amount: Uint256::from(0u32),
             },
-            balance: self.balance.clone(),
+            balance: self.balance.clone().into(),
         })?;
         info!("Balance update: {:?}", self.balance);
         Ok(())
@@ -252,13 +267,20 @@ impl PaymentController {
         let mut r = self.reqwest_client.post(&neighbor_url).json(&pmt).send()?;
 
         if r.status() == StatusCode::OK {
-            self.balance = self.balance.clone() - Int256::from(pmt.amount.clone());
+            let payment_amount = Uint256::from(pmt.amount.clone());
+            if payment_amount < self.balance {
+                self.balance = self.balance.clone() - payment_amount;
+            } else {
+                warn!("We're spending more money than we have!");
+                self.balance = Uint256::from(0u32);
+            }
+
             self.update_bounty(BountyUpdate {
                 from: SETTING
                     .get_identity()
                     .ok_or(format_err!("No mesh IP available for Identity yet"))?,
                 tx: pmt,
-                balance: self.balance.clone(),
+                balance: self.balance.clone().into(),
             })?;
             Ok(())
         } else {
