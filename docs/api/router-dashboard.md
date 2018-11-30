@@ -14,7 +14,10 @@ This file documents the dashboard API found in Rita client.
 
 ```
 {
-    "balance": -1029470595,
+    "address": "0xe5ccee253d929f400ad7fd1ea89eceb2f760fb5a"
+    "balance": 1979000000,
+    "local_fee"	500000,
+    "metric_factor"	1900,
     "device": "mynet-n750",
     "version": "v0.1.1"
 }
@@ -75,6 +78,7 @@ This file documents the dashboard API found in Rita client.
 - Method: `POST`
 - URL Params: `None`
 - Data Params: A JSON object containing the exits we want to add, e.g.:
+
 ```json
 {
 	"exit_other": {
@@ -124,6 +128,7 @@ This file documents the dashboard API found in Rita client.
 	}
 }
 ```
+
 - Success Response:
   - Code: 200 OK
   - Contents: The complete current exit list containing the result of adding the
@@ -132,8 +137,7 @@ This file documents the dashboard API found in Rita client.
 
 - Sample Call:
 
-`curl 127.0.0.1:4877/exits -XPOST -H "Content-Type: application/json" -d
-$(exit_list_of_format_listed_above)`
+`curl 127.0.0.1:4877/exits -XPOST -H "Content-Type: application/json" -d $(exit_list_of_format_listed_above)`
 
 ---
 
@@ -177,6 +181,7 @@ $(exit_list_of_format_listed_above)`
 `curl 127.0.0.1:4877/exits`
 
 ---
+
 ## /exits/sync
 
 - URL: `<rita ip>:<rita_dashboard_port>/exits/sync'
@@ -185,25 +190,29 @@ $(exit_list_of_format_listed_above)`
 - Method: `GET`
 - URL Params: `None`
 - Data Params:
+
 ```
 {
   "url": "https://wherever.the/json/list/is.json"
 }
 ```
+
 - Success Response:
   - Code: 200 OK
   - Contents: Updated exit list (see POST `/exits` for example)
-- Error Response: `400 Bad Request` for unparsable response JSON, `500 Internal Server
-  Error` when the request itself fails for whatever reason
+- Error Response: `400 Bad Request` for unparsable response JSON, `500 Internal Server Error` when the request itself fails for whatever reason
 - Error Contents:
   - `400 Bad Request` when the JSON is unparsable
+
 ```json
 {
   "error": "<description>"
 }
 ```
-  - `500 Internal Server Error` when the request fails
-```json
+
+- `500 Internal Server Error` when the request fails
+
+````json
 {
   "error": "<description>",
   "rust_error": "<stringified_rust_error>"
@@ -234,7 +243,7 @@ application/json" -d '\{"url": "https://somewhere.safe"\}'
 {
   "error": "<description>"
 }
-```
+````
 
 - Sample Call:
 
@@ -859,11 +868,13 @@ somthing wrong with the input data.
 - Method: `GET`
 - URL Params: `None`
 - Success Response:
+
 ```json
 {
 "local_fee": <current_fee>
 }
 ```
+
 - Error Response: `500 Server Error`
 - Sample Call:
 
@@ -877,11 +888,14 @@ somthing wrong with the input data.
 - Method: `POST`
 - URL Params: `fee` - a u32 value representing the new local fee to set
 - Success Response:
+
 ```json
 {}
 ```
+
 **Note:** You'll get a status 200 OK JSON with a `warning` key if you set the
 fee value to 0 (which means essentially advertising your bandwidth as free).
+
 - Error Response: `500 Server Error`
 - Sample Call:
 
@@ -895,11 +909,13 @@ fee value to 0 (which means essentially advertising your bandwidth as free).
 - Method: `GET`
 - URL Params: `None`
 - Success Response:
+
 ```json
 {
 "metric_factor": <current_factor>
 }
 ```
+
 - Error Response: `500 Server Error`
 - Sample Call:
 
@@ -913,14 +929,43 @@ fee value to 0 (which means essentially advertising your bandwidth as free).
 - Method: `POST`
 - URL Params: `factor` - a u32 value representing the new metric factor to set
   (every 1000 means 1.0, i.e. metric_factor of 1337 effectively means 1.337 in
-Babel)
+  Babel)
 - Success Response:
+
 ```json
 {}
 ```
+
 **Note:** You'll get a status 200 OK JSON with a `warning` key if you set the
 factor value to 0 (which means essentially advertising your bandwidth as free).
+
 - Error Response: `500 Server Error`
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:4877/metric_factor/5`
+
+---
+
+## /withdraw/{address}/{amount}
+
+Withdraws the given amount in wei to the provided address.
+
+- URL: `<rita ip>:<rita_dashboard_port>/withdraw{address}/{amount}`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+{
+  tx-id: 0x0000000000
+}
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl -v -XPOST http://192.168.10.1:4877/withdraw/0x31B98D14007bDEe637298086988A0bBd31184523/1000000000000000000`

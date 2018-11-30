@@ -185,6 +185,10 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
                     .to_public_key()
                     .expect("Failed to derive address from Eth key!")
             );
+
+            payment_settings.eth_address = existing_eth_private_key
+                .to_public_key()
+                .expect("Failed to convert Private Key to address!");
         }
         None => {
             info!("Eth key details not configured, generating");
@@ -192,6 +196,10 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
             let new_private_key =
                 PrivateKey::from_slice(&key_buf).expect("Failed to generate key!");
             payment_settings.eth_private_key = Some(new_private_key);
+
+            payment_settings.eth_address = new_private_key
+                .to_public_key()
+                .expect("Failed to convert Private Key to address!");
         }
     }
 
@@ -289,6 +297,10 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
                     .to_public_key()
                     .expect("Failed to derive address from Eth key!")
             );
+
+            payment_settings.eth_address = existing_eth_private_key
+                .to_public_key()
+                .expect("Failed to convert Private Key to address!");
         }
         None => {
             info!("Eth key details not configured, generating");
@@ -296,6 +308,10 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
             let new_private_key =
                 PrivateKey::from_slice(&key_buf).expect("Failed to generate key!");
             payment_settings.eth_private_key = Some(new_private_key);
+
+            payment_settings.eth_address = new_private_key
+                .to_public_key()
+                .expect("Failed to convert Private Key to address!");
         }
     }
 

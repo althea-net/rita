@@ -7,11 +7,16 @@
 
 use std::time::{Duration, Instant};
 
+use rand::thread_rng;
+use rand::Rng;
+
 use actix::prelude::*;
 use actix::registry::SystemService;
 use actix_utils::KillActor;
 
 use actix_utils::ResolverWrapper;
+
+use guac_core::web3::client::{Web3, Web3Client};
 
 use KI;
 
@@ -23,7 +28,7 @@ use rita_common::peer_listener::PeerListener;
 
 use rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 
-use rita_common::payment_controller::{PaymentController, PaymentControllerUpdate};
+use rita_common::payment_controller::{PaymentController, PaymentControllerUpdate, UpdateBalance};
 
 use rita_common::peer_listener::GetPeers;
 
@@ -159,7 +164,8 @@ impl Handler<Tick> for RitaLoop {
             TunnelManager::from_registry()
                 .send(TriggerGC(Duration::from_secs(
                     SETTING.get_network().tunnel_timeout_seconds,
-                ))).then(move |res| {
+                )))
+                .then(move |res| {
                     info!(
                         "TunnelManager GC pass completed in {}s {}ms, with result {:?}",
                         start.elapsed().as_secs(),
@@ -167,7 +173,8 @@ impl Handler<Tick> for RitaLoop {
                         res
                     );
                     res
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
         );
 
         let start = Instant::now();
@@ -183,7 +190,8 @@ impl Handler<Tick> for RitaLoop {
                         res
                     );
                     res
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
         );
 
         let start = Instant::now();
@@ -198,9 +206,49 @@ impl Handler<Tick> for RitaLoop {
                         start.elapsed().subsec_nanos() / 1000000
                     );
                     TunnelManager::from_registry().send(PeersToContact::new(peers.unwrap())) // GetPeers never fails so unwrap is safe
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
+        );
+
+        let full_node = get_web3_server();
+        let web3 = Web3Client::new(&full_node);
+        let our_address = SETTING.get_payment().eth_address;
+        Arbiter::spawn(
+            web3.eth_get_balance(our_address)
+                .then(move |balance| match balance {
+                    Ok(value) => {
+                        trace!(
+                            "Got response from balance request to {}! {:?}",
+                            full_node,
+                            value
+                        );
+                        PaymentController::from_registry().do_send(UpdateBalance {
+                            balance: value.clone(),
+                        });
+                        Ok(value)
+                    }
+                    Err(e) => {
+                        warn!("Balance request to {} failed with {:?}", full_node, e);
+                        Err(e)
+                    }
+                })
+                .then(|_| Ok(())),
         );
 
         Ok(())
     }
+}
+
+/// Checks the list of full nodes, panics if none exist, if there exist
+/// one or more a random entry from the list is returned in an attempt
+/// to load balance across fullnodes
+pub fn get_web3_server() -> String {
+    if SETTING.get_payment().node_list.len() == 0 {
+        panic!("no full nodes configured!");
+    }
+    let node_list = SETTING.get_payment().node_list.clone();
+    let mut rng = thread_rng();
+    let val = rng.gen_range(0, node_list.len());
+
+    node_list[val].clone()
 }
