@@ -211,7 +211,7 @@ fn main() {
     assert!(rita_common::debt_keeper::DebtKeeper::from_registry().connected());
     assert!(rita_common::payment_controller::PaymentController::from_registry().connected());
     assert!(rita_common::tunnel_manager::TunnelManager::from_registry().connected());
-    assert!(rita_common::http_client::HTTPClient::from_registry().connected());
+    assert!(rita_common::hello_handler::HelloHandler::from_registry().connected());
     assert!(rita_common::traffic_watcher::TrafficWatcher::from_registry().connected());
     assert!(rita_common::peer_listener::PeerListener::from_registry().connected());
     assert!(rita_client::exit_manager::ExitManager::from_registry().connected());
