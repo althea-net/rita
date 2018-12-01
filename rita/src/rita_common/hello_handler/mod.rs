@@ -1,9 +1,9 @@
-//! Actor used for handling the dispatch of http messages, right now just hello messages
+//! Actor used for handling the dispatch of hello messages
 //!
 //! The call path goes like this
 //!
 //! peer listener gets udp ImHere -> TunnelManager tries to contact peer with hello
-//! -> http_client actually manages that request -> http_client calls back to tunnel manager
+//! -> hello manager actually manages that request -> hello manager calls back to tunnel manager
 
 use tokio::net::TcpStream as TokioTcpStream;
 
@@ -23,14 +23,14 @@ use actix_web::client::Connection;
 use failure::Error;
 
 #[derive(Default)]
-pub struct HTTPClient;
+pub struct HelloHandler;
 
-impl Actor for HTTPClient {
+impl Actor for HelloHandler {
     type Context = Context<Self>;
 }
 
-impl Supervised for HTTPClient {}
-impl SystemService for HTTPClient {
+impl Supervised for HelloHandler {}
+impl SystemService for HelloHandler {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("HTTP Client started");
     }
@@ -49,7 +49,7 @@ impl Message for Hello {
 /// Handler for sending hello messages, it's important that any path by which this handler
 /// may crash is handled such that ports are returned to tunnel manager, otherwise we end
 /// up with a port leak which will eventually crash the program
-impl Handler<Hello> for HTTPClient {
+impl Handler<Hello> for HelloHandler {
     type Result = ResponseFuture<(), Error>;
     fn handle(&mut self, msg: Hello, _: &mut Self::Context) -> Self::Result {
         trace!("Sending Hello {:?}", msg);

@@ -22,7 +22,7 @@ use KI;
 use babel_monitor::{Babel, Route};
 
 use rita_common;
-use rita_common::http_client::Hello;
+use rita_common::hello_handler::Hello;
 use rita_common::peer_listener::Peer;
 
 use settings::RitaCommonSettings;
@@ -37,10 +37,10 @@ use std::fmt;
 use std::io::{Read, Write};
 
 #[cfg(test)]
-type HTTPClient = Mocker<rita_common::http_client::HTTPClient>;
+type HTTPClient = Mocker<rita_common::hello_handler::HelloHandler>;
 
 #[cfg(not(test))]
-type HTTPClient = rita_common::http_client::HTTPClient;
+type HTTPClient = rita_common::hello_handler::HelloHandler;
 
 #[cfg(test)]
 type Resolver = Mocker<resolver::Resolver>;
