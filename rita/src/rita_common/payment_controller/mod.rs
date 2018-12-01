@@ -14,8 +14,11 @@ use settings::RitaCommonSettings;
 use SETTING;
 
 use reqwest;
+
 use rita_common::debt_keeper;
 use rita_common::debt_keeper::DebtKeeper;
+use rita_common::rita_loop::get_web3_server;
+
 use serde_json;
 
 use failure::Error;
@@ -71,23 +74,6 @@ impl Handler<MakePayment> for PaymentController {
     }
 }
 
-#[derive(Message)]
-pub struct PaymentControllerUpdate;
-
-impl Handler<PaymentControllerUpdate> for PaymentController {
-    type Result = ();
-
-    fn handle(&mut self, _msg: PaymentControllerUpdate, _ctx: &mut Context<Self>) -> Self::Result {
-        match self.update() {
-            Ok(()) => {}
-            Err(err) => {
-                warn!("got error from update {:?}, retrying", err);
-                // ctx.notify_later(msg, Duration::from_secs(5));
-            }
-        }
-    }
-}
-
 pub struct UpdateBalance {
     pub balance: Uint256,
 }
@@ -116,17 +102,6 @@ impl Handler<GetOwnBalance> for PaymentController {
     }
 }
 
-/// This updates a "bounty hunter" with the current balance and the last `PaymentTx`.
-/// Bounty hunters are servers which store and possibly enforce the current state of
-/// a channel. Currently they are actually just showing a completely insecure
-/// "fake" balance as a stand-in for the real thing.
-#[derive(Serialize, Deserialize, Debug)]
-pub struct BountyUpdate {
-    pub from: Identity,
-    pub balance: Int256,
-    pub tx: PaymentTx,
-}
-
 #[cfg(test)]
 extern crate mockito;
 
@@ -147,49 +122,6 @@ impl PaymentController {
         }
     }
 
-    fn update_bounty_actual(&self, update: BountyUpdate) -> Result<(), Error> {
-        trace!("Sending bounty hunter update: {:?}", update);
-        let bounty_url = if cfg!(not(test)) {
-            format!(
-                "http://[{}]:{}/update",
-                SETTING.get_network().bounty_ip,
-                SETTING.get_network().bounty_port
-            )
-        } else {
-            String::from("http://127.0.0.1:1234/update") //TODO: This is mockito::SERVER_URL, but don't want to include the crate in a non-test build just for that string
-        };
-
-        let mut r = self
-            .reqwest_client
-            .post(&bounty_url)
-            .body(serde_json::to_string(&update)?)
-            .send()?;
-
-        if r.status() == StatusCode::OK {
-            Ok(())
-        } else {
-            trace!("Unsuccessfully in sending update to bounty hunter");
-            trace!(
-                "Received error from bounty hunter: {:?}",
-                r.text().unwrap_or(String::from("No message received"))
-            );
-            Err(Error::from(PaymentControllerError::BountyError(
-                String::from(format!(
-                    "Received error from bounty hunter: {:?}",
-                    r.text().unwrap_or(String::from("No message received"))
-                )),
-            )))
-        }
-    }
-
-    fn update_bounty(&self, update: BountyUpdate) -> Result<(), Error> {
-        match self.update_bounty_actual(update) {
-            Ok(()) => {}
-            Err(err) => warn!("Bounty hunter returned error {:?}, ignoring", err),
-        };
-        Ok(())
-    }
-
     /// This gets called when a payment from a counterparty has arrived, and updates
     /// the balance in memory and sends an update to the "bounty hunter".
     pub fn payment_received(
@@ -208,36 +140,10 @@ impl PaymentController {
 
         trace!("current balance: {:?}", self.balance);
 
-        self.update_bounty(BountyUpdate {
-            from: SETTING
-                .get_identity()
-                .ok_or(format_err!("No mesh IP available for Identity yet"))?,
-            tx: pmt.clone(),
-            balance: self.balance.clone().into(),
-        })?;
         Ok(debt_keeper::PaymentReceived {
             from: pmt.from,
             amount: pmt.amount.clone(),
         })
-    }
-
-    /// This should be called on a regular interval to update the bounty hunter of a node's current
-    /// balance as well as to log the current balance
-    pub fn update(&mut self) -> Result<(), Error> {
-        let our_id = SETTING
-            .get_identity()
-            .ok_or(format_err!("No mesh IP available for Identity yet"))?;
-        self.update_bounty(BountyUpdate {
-            from: our_id.clone(),
-            tx: PaymentTx {
-                from: our_id.clone(),
-                to: our_id.clone(),
-                amount: Uint256::from(0u32),
-            },
-            balance: self.balance.clone().into(),
-        })?;
-        info!("Balance update: {:?}", self.balance);
-        Ok(())
     }
 
     /// This is called by the other modules in Rita to make payments. It sends a
@@ -274,14 +180,6 @@ impl PaymentController {
                 warn!("We're spending more money than we have!");
                 self.balance = Uint256::from(0u32);
             }
-
-            self.update_bounty(BountyUpdate {
-                from: SETTING
-                    .get_identity()
-                    .ok_or(format_err!("No mesh IP available for Identity yet"))?,
-                tx: pmt,
-                balance: self.balance.clone().into(),
-            })?;
             Ok(())
         } else {
             trace!("Unsuccessfully paid");

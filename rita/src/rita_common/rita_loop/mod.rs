@@ -28,7 +28,7 @@ use rita_common::peer_listener::PeerListener;
 
 use rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 
-use rita_common::payment_controller::{PaymentController, PaymentControllerUpdate, UpdateBalance};
+use rita_common::payment_controller::{PaymentController, UpdateBalance};
 
 use rita_common::peer_listener::GetPeers;
 
@@ -129,7 +129,6 @@ impl Handler<Tick> for RitaLoop {
                                 neigh.elapsed().subsec_nanos() / 1000000
                             );
                             DebtKeeper::from_registry().do_send(SendUpdate {});
-                            PaymentController::from_registry().do_send(PaymentControllerUpdate {});
                             actix::fut::ok(())
                         })
                 }),
