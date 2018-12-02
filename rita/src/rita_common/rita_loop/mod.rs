@@ -5,6 +5,7 @@
 //! all system functions. Anything that blocks will eventually filter up to block this loop and
 //! halt essential functions like opening tunnels and managing peers
 
+use num256::Int256;
 use std::time::{Duration, Instant};
 
 use rand::thread_rng;
@@ -27,8 +28,6 @@ use rita_common::traffic_watcher::{TrafficWatcher, Watch};
 use rita_common::peer_listener::PeerListener;
 
 use rita_common::debt_keeper::{DebtKeeper, SendUpdate};
-
-use rita_common::payment_controller::{PaymentController, UpdateBalance};
 
 use rita_common::peer_listener::GetPeers;
 
@@ -212,22 +211,60 @@ impl Handler<Tick> for RitaLoop {
         let full_node = get_web3_server();
         let web3 = Web3Client::new(&full_node);
         let our_address = SETTING.get_payment().eth_address;
+        trace!("About to make web3 requests to {}", full_node);
         Arbiter::spawn(
             web3.eth_get_balance(our_address)
                 .then(move |balance| match balance {
                     Ok(value) => {
-                        trace!(
-                            "Got response from balance request to {}! {:?}",
-                            full_node,
-                            value
-                        );
-                        PaymentController::from_registry().do_send(UpdateBalance {
-                            balance: value.clone(),
-                        });
-                        Ok(value)
+                        trace!("Got response from balance request {:?}", value);
+                        SETTING.get_payment_mut().balance = value;
+                        Ok(())
                     }
                     Err(e) => {
-                        warn!("Balance request to {} failed with {:?}", full_node, e);
+                        warn!("Balance request failed with {:?}", e);
+                        Err(e)
+                    }
+                })
+                .then(|_| Ok(())),
+        );
+        Arbiter::spawn(
+            web3.eth_get_transaction_count(our_address)
+                .then(move |transaction_count| match transaction_count {
+                    Ok(value) => {
+                        trace!("Got response from nonce request {:?}", value);
+                        SETTING.get_payment_mut().nonce = value;
+                        Ok(())
+                    }
+                    Err(e) => {
+                        warn!("Balance request failed with {:?}", e);
+                        Err(e)
+                    }
+                })
+                .then(|_| Ok(())),
+        );
+        Arbiter::spawn(
+            web3.eth_gas_price()
+                .then(move |gas_price| match gas_price {
+                    Ok(value) => {
+                        trace!("Got response from gas price request {:?}", value);
+                        // Dynamic fee computation
+                        let mut payment_settings = SETTING.get_payment_mut();
+
+                        let dyanmic_fee_factor: Int256 =
+                            payment_settings.dynamic_fee_multiplier.into();
+                        let transaction_gas: Int256 = 21000.into();
+
+                        payment_settings.pay_threshold =
+                            transaction_gas * value.clone() * dyanmic_fee_factor.clone();
+
+                        payment_settings.close_threshold =
+                            dyanmic_fee_factor * payment_settings.pay_threshold.clone();
+
+                        payment_settings.gas_price = value;
+                        Ok(())
+                    }
+                    Err(e) => {
+                        warn!("Balance request failed with {:?}", e);
                         Err(e)
                     }
                 })

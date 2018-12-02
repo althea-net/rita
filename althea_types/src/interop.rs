@@ -1,4 +1,4 @@
-use clarity::Address;
+use clarity::{Address, Transaction};
 use num256::Uint256;
 use std::net::IpAddr;
 use wg_key::WgKey;

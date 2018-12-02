@@ -1,25 +1,24 @@
 //! Placehodler payment manager, to be removed with Gauc integration
 
 use actix::prelude::*;
+use actix_web::client;
 
-use althea_types::{Identity, PaymentTx};
+use futures::future::Either;
+use futures::{future, Future};
 
-use num256::{Int256, Uint256};
+use althea_types::PaymentTx;
 
-use reqwest::{Client, StatusCode};
-
-use std::time::Duration;
+use clarity::Transaction;
 
 use settings::RitaCommonSettings;
 use SETTING;
 
-use reqwest;
-
 use rita_common::debt_keeper;
 use rita_common::debt_keeper::DebtKeeper;
+use rita_common::debt_keeper::PaymentFailed;
 use rita_common::rita_loop::get_web3_server;
 
-use serde_json;
+use guac_core::web3::client::{Web3, Web3Client};
 
 use failure::Error;
 
@@ -31,10 +30,7 @@ pub enum PaymentControllerError {
     BountyError(String),
 }
 
-pub struct PaymentController {
-    pub reqwest_client: Client,
-    pub balance: Uint256,
-}
+pub struct PaymentController();
 
 impl Actor for PaymentController {
     type Context = Context<Self>;
@@ -57,48 +53,20 @@ impl Handler<PaymentReceived> for PaymentController {
     }
 }
 
-#[derive(Message, Clone)]
+#[derive(Message)]
 pub struct MakePayment(pub PaymentTx);
 
 impl Handler<MakePayment> for PaymentController {
     type Result = ();
 
     fn handle(&mut self, msg: MakePayment, _ctx: &mut Context<Self>) -> Self::Result {
-        match self.make_payment(msg.clone().0) {
-            Ok(()) => {}
-            Err(err) => {
-                warn!("got error from make payment {:?}, retrying", err);
-                // ctx.notify_later(msg, Duration::from_secs(5));
-            }
+        let res = self.make_payment(msg.0.clone());
+        if res.is_err() {
+            DebtKeeper::from_registry().do_send(PaymentFailed {
+                to: msg.0.to,
+                amount: msg.0.amount,
+            });
         }
-    }
-}
-
-pub struct UpdateBalance {
-    pub balance: Uint256,
-}
-
-impl Message for UpdateBalance {
-    type Result = ();
-}
-
-impl Handler<UpdateBalance> for PaymentController {
-    type Result = ();
-    fn handle(&mut self, msg: UpdateBalance, _: &mut Context<Self>) -> Self::Result {
-        self.balance = msg.balance;
-    }
-}
-
-pub struct GetOwnBalance;
-
-impl Message for GetOwnBalance {
-    type Result = Result<Uint256, Error>;
-}
-
-impl Handler<GetOwnBalance> for PaymentController {
-    type Result = Result<Uint256, Error>;
-    fn handle(&mut self, _msg: GetOwnBalance, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.balance.clone())
     }
 }
 
@@ -113,13 +81,7 @@ impl Default for PaymentController {
 
 impl PaymentController {
     pub fn new() -> Self {
-        PaymentController {
-            reqwest_client: reqwest::Client::builder()
-                .timeout(Duration::from_secs(5))
-                .build()
-                .unwrap(),
-            balance: Uint256::from(0u64),
-        }
+        PaymentController {}
     }
 
     /// This gets called when a payment from a counterparty has arrived, and updates
@@ -128,17 +90,12 @@ impl PaymentController {
         &mut self,
         pmt: PaymentTx,
     ) -> Result<debt_keeper::PaymentReceived, Error> {
-        trace!("current balance: {:?}", self.balance);
         trace!(
             "payment of {:?} received from {:?}: {:?}",
             pmt.amount,
             pmt.from.mesh_ip,
             pmt
         );
-
-        self.balance = self.balance.clone() + Int256::from(pmt.amount.clone());
-
-        trace!("current balance: {:?}", self.balance);
 
         Ok(debt_keeper::PaymentReceived {
             from: pmt.from,
@@ -149,7 +106,19 @@ impl PaymentController {
     /// This is called by the other modules in Rita to make payments. It sends a
     /// PaymentTx to the `mesh_ip` in its `to` field.
     pub fn make_payment(&mut self, pmt: PaymentTx) -> Result<(), Error> {
-        trace!("current balance: {:?}", self.balance);
+        let payment_settings = SETTING.get_payment();
+        let balance = payment_settings.balance.clone();
+        let nonce = payment_settings.nonce.clone();
+        let gas_price = payment_settings.gas_price.clone();
+        trace!(
+            "current balance: {:?}, payment of {:?}",
+            balance,
+            pmt.amount
+        );
+        if balance < pmt.amount {
+            warn!("Not enough money to pay debts! Cutoff immenient");
+            bail!("Not enough money!")
+        }
 
         trace!(
             "sending payment of {:?} to {:?}: {:?}",
@@ -158,6 +127,7 @@ impl PaymentController {
             pmt
         );
 
+        // testing hack
         let neighbor_url = if cfg!(not(test)) {
             format!(
                 "http://[{}]:{}/make_payment",
@@ -168,31 +138,65 @@ impl PaymentController {
             String::from("http://127.0.0.1:1234/make_payment")
         };
 
-        trace!("current balance: {:?}", self.balance);
+        let full_node = get_web3_server();
+        let web3 = Web3Client::new(&full_node);
 
-        let mut r = self.reqwest_client.post(&neighbor_url).json(&pmt).send()?;
+        let tx = Transaction {
+            nonce: nonce,
+            // TODO: replace with sane defaults
+            gas_price: gas_price,
+            gas_limit: "21000".parse().unwrap(),
+            to: pmt.to.eth_address.clone(),
+            value: pmt.amount.clone(),
+            data: Vec::new(),
+            signature: None,
+        };
+        // TODO figure out the whole network id thing
+        let transaction_signed = tx.sign(
+            &SETTING
+                .get_payment()
+                .eth_private_key
+                .expect("No private key configured!"),
+            None,
+        );
 
-        if r.status() == StatusCode::OK {
-            let payment_amount = Uint256::from(pmt.amount.clone());
-            if payment_amount < self.balance {
-                self.balance = self.balance.clone() - payment_amount;
-            } else {
-                warn!("We're spending more money than we have!");
-                self.balance = Uint256::from(0u32);
+        let transaction_bytes = match transaction_signed.to_bytes() {
+            Ok(bytes) => bytes,
+            Err(e) => bail!("Failed to generate transaction, {:?}", e),
+        };
+
+        let transaction_status = web3.eth_send_raw_transaction(transaction_bytes);
+
+        let futures_chain = Box::new(transaction_status.then(move |outcome| {
+            match outcome {
+                Ok(_tx_id) => {
+                    Either::A(
+                        client::post(&neighbor_url)
+                            .json(&pmt)
+                            .expect("Failed to serialize payment!")
+                            .send()
+                            .then(|neigh_ack| match neigh_ack {
+                                // return emtpy result, we're using messages anyways
+                                Ok(_) => Ok(()) as Result<(), ()>,
+                                Err(e) => {
+                                    warn!("Failed to notify our neighbor of payment {:?}", e);
+                                    Ok(())
+                                }
+                            }),
+                    )
+                }
+
+                Err(e) => {
+                    warn!("Failed to send bandwidth payment {:?}", e);
+                    DebtKeeper::from_registry().do_send(PaymentFailed {
+                        to: pmt.to,
+                        amount: pmt.amount,
+                    });
+                    Either::B(future::ok(()))
+                }
             }
-            Ok(())
-        } else {
-            trace!("Unsuccessfully paid");
-            trace!(
-                "Received error from payee: {:?}",
-                r.text().unwrap_or(String::from("No message received"))
-            );
-            Err(Error::from(PaymentControllerError::PaymentSendingError(
-                String::from(format!(
-                    "Received error from payee: {:?}",
-                    r.text().unwrap_or(String::from("No message received"))
-                )),
-            )))
-        }
+        }));
+        Arbiter::spawn(futures_chain);
+        Ok(())
     }
 }
