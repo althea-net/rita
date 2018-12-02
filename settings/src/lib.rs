@@ -229,21 +229,46 @@ impl Default for LoggingSettings {
     }
 }
 
+fn default_close_fraction() -> Int256 {
+    100.into()
+}
+
+fn default_close_threshold() -> Int256 {
+    (-8400000000000000i64).into()
+}
+
+fn default_pay_threshold() -> Int256 {
+    840000000000000u64.into()
+}
+
 /// This struct is used by both rita and rita_exit to configure the dummy payment controller and
 /// debt keeper
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct PaymentSettings {
     /// For non-channel payments only, determines how much to multiply the nominal gas price
     /// to get the pay_threshold values and then again for the close_threshold
+    #[serde(default)]
     pub dynamic_fee_multiplier: u16,
     /// The threshold above which we will kick off a payment
-    #[serde(skip_serializing, skip_deserializing)]
+    #[serde(
+        skip_serializing,
+        skip_deserializing,
+        default = "default_pay_threshold"
+    )]
     pub pay_threshold: Int256,
     /// The threshold below which we will kick another node off (not implemented yet)
-    #[serde(skip_serializing, skip_deserializing)]
+    #[serde(
+        skip_serializing,
+        skip_deserializing,
+        default = "default_close_threshold"
+    )]
     pub close_threshold: Int256,
     /// The amount of 'grace' to give a long term neighbor
-    #[serde(skip_serializing, skip_deserializing)]
+    #[serde(
+        skip_serializing,
+        skip_deserializing,
+        default = "default_close_fraction"
+    )]
     pub close_fraction: Int256,
     /// The amount of billing cycles a node can fall behind without being subjected to the threshold
     pub buffer_period: u32,
