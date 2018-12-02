@@ -7,11 +7,11 @@ pub fn withdraw(path: Path<(Address, u64)>) -> Box<Future<Item = HttpResponse, E
 
     let full_node = get_web3_server();
     let web3 = Web3Client::new(&full_node);
+    let payment_settings = SETTING.get_payment();
 
     let tx = Transaction {
-        nonce: Uint256::from_str_radix("00", 16).unwrap(),
-        // TODO: replace with sane defaults
-        gas_price: "1000000000000".parse().unwrap(),
+        nonce: payment_settings.nonce.clone(),
+        gas_price: payment_settings.gas_price.clone(),
         gas_limit: "21000".parse().unwrap(),
         to: address,
         value: amount.into(),

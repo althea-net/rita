@@ -17,7 +17,7 @@ althea_types = { path = "../althea_types", features = ["actix"]}
 babel_monitor = { path = "../babel_monitor" }
 clu = { path = "../clu" }
 exit_db = { path = "../exit_db" }
-num256 = "0.1"
+num256 = {path = "../../num256_rs"}
 settings = { path = "../settings" }
 
 guac_core = {path = "/home/justin/repos/guac_rs/guac_core"}
@@ -42,18 +42,5 @@ minihttpse = "0.1.6"
 mockito = "0.13.0"
 num-traits = "0.2.6"
 openssl-probe = "0.1.2"
-rand = "0.6.0"
-regex = "1.0.6"
-reqwest = "0.9.5"
-serde = "1.0.80"
-serde_derive = "1.0.80"
-serde_json = "1.0.33"
-tokio = "0.1.11"
-tokio-codec = "0.1.1"
-tokio-io = "0.1.10"
-trust-dns-resolver = "0.10.0"
-
-[features]
-default = []
-development = []
-system_alloc = []
+num-traits="0.2"
+clarity= {path = "../../clarity"}

@@ -35,7 +35,6 @@ use guac_core::web3::client::{Web3, Web3Client};
 use rita_common::debt_keeper::GetDebtsList;
 use rita_common::debt_keeper::{DebtKeeper, GetDebtsResult};
 use rita_common::network_endpoints::JsonStatusResponse;
-use rita_common::payment_controller::{GetOwnBalance, PaymentController};
 use rita_common::rita_loop::get_web3_server;
 
 pub mod babel;
