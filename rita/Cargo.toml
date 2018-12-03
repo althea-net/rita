@@ -20,10 +20,10 @@ exit_db = { path = "../exit_db" }
 num256 = "0.1"
 settings = { path = "../settings" }
 
-guac_core = {path = "/home/justin/repos/guac_rs/guac_core"}
+guac_core = {git = "https://github.com/althea-mesh/guac_rs"}
 syslog = "4.0"
-actix = "0.7.4"
-actix-web = { version = "0.7.4", default_features = false }
+actix = "0.7.7"
+actix-web = { version = "0.7.14", default_features = false }
 actix_derive = "0.3.0"
 bytes = "0.4.10"
 config = "0.9.0"
@@ -51,7 +51,15 @@ tokio-io = "0.1.8"
 tokio-codec = "0.1.0"
 regex = "1.0.5"
 trust-dns-resolver = "0.10.0"
-byteorder = { version = "1.2.6", features = ["i128"] }
+byteorder = { version = "1.2.7", features = ["i128"] }
 openssl-probe = "0.1.2"
 num-traits="0.2"
 clarity = "0.1"
+eui48 = "0.4.1"
+lettre = {git="https://github.com/lettre/lettre.git"}
+lettre_email = {git="https://github.com/lettre/lettre.git"}
+
+[features]
+default = []
+development = []
+system_alloc = []
