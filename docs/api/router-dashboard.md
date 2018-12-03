@@ -18,6 +18,8 @@ This file documents the dashboard API found in Rita client.
     "balance": 1979000000,
     "local_fee"	500000,
     "metric_factor"	1900,
+    "pay_threshold" 97000000,
+    "close_threshold" "970000000"
     "device": "mynet-n750",
     "version": "v0.1.1"
 }

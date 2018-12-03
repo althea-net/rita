@@ -5,7 +5,7 @@ pub struct NodeInfo {
     pub nickname: String,
     pub route_metric_to_exit: u16,
     pub total_payments: Int256,
-    pub debt: i64,
+    pub debt: i128,
     pub link_cost: u16,
     pub price_to_exit: u32,
 }

@@ -256,9 +256,17 @@ impl Handler<Tick> for RitaLoop {
 
                         payment_settings.pay_threshold =
                             transaction_gas * value.clone() * dyanmic_fee_factor.clone();
+                        trace!(
+                            "Dynamically set pay threshold to {:?}",
+                            payment_settings.pay_threshold
+                        );
 
                         payment_settings.close_threshold =
                             dyanmic_fee_factor * payment_settings.pay_threshold.clone();
+                        trace!(
+                            "Dynamically set close threshold to {:?}",
+                            payment_settings.close_threshold
+                        );
 
                         payment_settings.gas_price = value;
                         Ok(())

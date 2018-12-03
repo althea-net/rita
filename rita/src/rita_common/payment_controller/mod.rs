@@ -22,14 +22,6 @@ use guac_core::web3::client::{Web3, Web3Client};
 
 use failure::Error;
 
-#[derive(Debug, Fail)]
-pub enum PaymentControllerError {
-    #[fail(display = "Payment Sending Error: {:?}", _0)]
-    PaymentSendingError(String),
-    #[fail(display = "Bounty Error: {:?}", _0)]
-    BountyError(String),
-}
-
 pub struct PaymentController();
 
 impl Actor for PaymentController {

@@ -11,8 +11,6 @@ use failure::Error;
 use num_traits::ops::checked::CheckedDiv;
 use num_traits::ToPrimitive;
 
-use num256::{Int256, Uint256};
-
 use futures::{future, Future};
 
 use serde_json;
