@@ -43,7 +43,7 @@ pub fn withdraw(path: Path<(Address, u64)>) -> Box<Future<Item = HttpResponse, E
         match result {
             Ok(tx_id) => Box::new(future::ok({
                 SETTING.get_payment_mut().nonce += 1;
-                HttpResponse::Ok().json(format!("tx-id:{}", tx_id))
+                HttpResponse::Ok().json(format!("txid:{}", tx_id))
             })),
             Err(e) => Box::new(future::ok(
                 HttpResponse::new(StatusCode::from_u16(504u16).unwrap())
