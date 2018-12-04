@@ -227,11 +227,16 @@ impl Handler<Tick> for RitaLoop {
                 .then(move |transaction_count| match transaction_count {
                     Ok(value) => {
                         trace!("Got response from nonce request {:?}", value);
-                        SETTING.get_payment_mut().nonce = value;
+                        let mut payment_settings = SETTING.get_payment_mut();
+                        // if we increased our nonce locally we're probably
+                        // right and should ignore the full node telling us otherwise
+                        if payment_settings.nonce < value {
+                            payment_settings.nonce = value;
+                        }
                         Ok(())
                     }
                     Err(e) => {
-                        warn!("Balance request failed with {:?}", e);
+                        warn!("nonce request failed with {:?}", e);
                         Err(e)
                     }
                 }).then(|_| Ok(())),

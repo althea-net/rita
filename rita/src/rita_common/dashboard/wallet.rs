@@ -20,8 +20,7 @@ pub fn withdraw(path: Path<(Address, u64)>) -> Box<Future<Item = HttpResponse, E
     };
     // TODO figure out the whole network id thing
     let transaction_signed = tx.sign(
-        &SETTING
-            .get_payment()
+        &payment_settings
             .eth_private_key
             .expect("No private key configured!"),
         None,
@@ -42,9 +41,10 @@ pub fn withdraw(path: Path<(Address, u64)>) -> Box<Future<Item = HttpResponse, E
 
     Box::new(transaction_status.then(|result| {
         match result {
-            Ok(tx_id) => Box::new(future::ok(
-                HttpResponse::Ok().json(format!("tx-id:{}", tx_id)),
-            )),
+            Ok(tx_id) => Box::new(future::ok({
+                SETTING.get_payment_mut().nonce += 1;
+                HttpResponse::Ok().json(format!("tx-id:{}", tx_id))
+            })),
             Err(e) => Box::new(future::ok(
                 HttpResponse::new(StatusCode::from_u16(504u16).unwrap())
                     .into_builder()

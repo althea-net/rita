@@ -169,7 +169,10 @@ impl PaymentController {
                             .send()
                             .then(|neigh_ack| match neigh_ack {
                                 // return emtpy result, we're using messages anyways
-                                Ok(_) => Ok(()) as Result<(), ()>,
+                                Ok(_) => {
+                                    SETTING.get_payment_mut().nonce += 1;
+                                    Ok(()) as Result<(), ()>
+                                }
                                 Err(e) => {
                                     warn!("Failed to notify our neighbor of payment {:?}", e);
                                     Ok(())
