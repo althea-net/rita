@@ -168,11 +168,14 @@ impl Message for LocalIdentity {
     type Result = ();
 }
 
-/// This is a stand-in for channel updates. Completely insecure, but allows us to
-/// track how much people would be paying each other if channels were implemented.
+/// This is a stand-in for channel updates. representing a payment
+/// when completed it contains a txid from a published transaction
+/// that should be validated against the blockchain
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
 pub struct PaymentTx {
     pub to: Identity,
     pub from: Identity,
     pub amount: Uint256,
+    // populated when transaction is published
+    pub txid: Option<Uint256>,
 }

@@ -97,7 +97,7 @@ impl PaymentController {
 
     /// This is called by the other modules in Rita to make payments. It sends a
     /// PaymentTx to the `mesh_ip` in its `to` field.
-    pub fn make_payment(&mut self, pmt: PaymentTx) -> Result<(), Error> {
+    pub fn make_payment(&mut self, mut pmt: PaymentTx) -> Result<(), Error> {
         let payment_settings = SETTING.get_payment();
         let balance = payment_settings.balance.clone();
         let nonce = payment_settings.nonce.clone();
@@ -153,7 +153,9 @@ impl PaymentController {
 
         let futures_chain = Box::new(transaction_status.then(move |outcome| {
             match outcome {
-                Ok(_tx_id) => {
+                Ok(tx_id) => {
+                    // add published txid to submission
+                    pmt.txid = Some(tx_id);
                     Either::A(
                         client::post(&neighbor_url)
                             .json(&pmt)
