@@ -18,12 +18,11 @@ pub fn withdraw(path: Path<(Address, u64)>) -> Box<Future<Item = HttpResponse, E
         data: Vec::new(),
         signature: None,
     };
-    // TODO figure out the whole network id thing
     let transaction_signed = tx.sign(
         &payment_settings
             .eth_private_key
             .expect("No private key configured!"),
-        None,
+        payment_settings.net_version,
     );
 
     let transaction_bytes = match transaction_signed.to_bytes() {
