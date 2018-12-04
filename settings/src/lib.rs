@@ -241,14 +241,18 @@ fn default_pay_threshold() -> Int256 {
     840000000000000u64.into()
 }
 
+fn default_dynamic_fee_multiplier() -> u32 {
+    10
+}
+
 /// This struct is used by both rita and rita_exit to configure the dummy payment controller and
 /// debt keeper
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct PaymentSettings {
     /// For non-channel payments only, determines how much to multiply the nominal gas price
     /// to get the pay_threshold values and then again for the close_threshold
-    #[serde(default)]
-    pub dynamic_fee_multiplier: u16,
+    #[serde(default = "default_dynamic_fee_multiplier")]
+    pub dynamic_fee_multiplier: u32,
     /// The threshold above which we will kick off a payment
     #[serde(
         skip_serializing,
@@ -283,6 +287,8 @@ pub struct PaymentSettings {
     pub nonce: Uint256,
     #[serde(skip_serializing, skip_deserializing)]
     pub gas_price: Uint256,
+    #[serde(skip_serializing, skip_deserializing)]
+    pub net_version: Option<u64>,
     /// A list of nodes to query for blockchain data
     /// this is kept seperate from the version for DAO settings node
     /// list in order to allow for the DAO and payments to exist on different
@@ -312,6 +318,7 @@ impl Default for PaymentSettings {
             balance: 0.into(),
             nonce: 0.into(),
             gas_price: 10000000000u64.into(), // 10 gwei
+            net_version: None,
             node_list: Vec::new(),
         }
     }

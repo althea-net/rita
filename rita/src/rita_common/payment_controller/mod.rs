@@ -130,7 +130,6 @@ impl PaymentController {
 
         let tx = Transaction {
             nonce: nonce,
-            // TODO: replace with sane defaults
             gas_price: gas_price,
             gas_limit: "21000".parse().unwrap(),
             to: pmt.to.eth_address.clone(),
@@ -138,12 +137,11 @@ impl PaymentController {
             data: Vec::new(),
             signature: None,
         };
-        // TODO figure out the whole network id thing
         let transaction_signed = tx.sign(
             &payment_settings
                 .eth_private_key
                 .expect("No private key configured!"),
-            None,
+            payment_settings.net_version,
         );
 
         let transaction_bytes = match transaction_signed.to_bytes() {
