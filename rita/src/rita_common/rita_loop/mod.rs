@@ -210,7 +210,7 @@ impl Handler<Tick> for RitaLoop {
         trace!("About to make web3 requests to {}", full_node);
         Arbiter::spawn(
             web3.eth_get_balance(our_address)
-                .then(move |balance| match balance {
+                .then(|balance| match balance {
                     Ok(value) => {
                         trace!("Got response from balance request {:?}", value);
                         SETTING.get_payment_mut().balance = value;
@@ -223,8 +223,37 @@ impl Handler<Tick> for RitaLoop {
                 }).then(|_| Ok(())),
         );
         Arbiter::spawn(
+            web3.net_version()
+                .then(|net_version| match net_version {
+                    Ok(value) => {
+                        trace!("Got response from net_version request {:?}", value);
+                        match value.parse::<u64>() {
+                            Ok(net_id_num) => {
+                                let mut payment_settings = SETTING.get_payment_mut();
+                                let net_version = payment_settings.net_version;
+                                // we could just take the first value and keept it but for now
+                                // lets check that all nodes always agree on net version constantly
+                                if net_version.is_some() && net_version.unwrap() != net_id_num {
+                                    error!("GOT A DIFFERENT NETWORK ID VALUE, IT IS CRITICAL THAT YOU REVIEW YOUR NODE LIST FOR HOSTILE/MISCONFIGURED NODES");
+                                }
+                                else if net_version.is_none() {
+                                    payment_settings.net_version = Some(net_id_num);
+                                }
+                            }
+                            Err(e) => warn!("Failed to parse ETH network ID {:?}", e),
+                        }
+
+                        Ok(())
+                    }
+                    Err(e) => {
+                        warn!("Balance request failed with {:?}", e);
+                        Err(e)
+                    }
+                }).then(|_| Ok(())),
+        );
+        Arbiter::spawn(
             web3.eth_get_transaction_count(our_address)
-                .then(move |transaction_count| match transaction_count {
+                .then(|transaction_count| match transaction_count {
                     Ok(value) => {
                         trace!("Got response from nonce request {:?}", value);
                         let mut payment_settings = SETTING.get_payment_mut();
@@ -243,7 +272,7 @@ impl Handler<Tick> for RitaLoop {
         );
         Arbiter::spawn(
             web3.eth_gas_price()
-                .then(move |gas_price| match gas_price {
+                .then(|gas_price| match gas_price {
                     Ok(value) => {
                         trace!("Got response from gas price request {:?}", value);
                         // Dynamic fee computation
