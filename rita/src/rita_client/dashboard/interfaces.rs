@@ -1,6 +1,4 @@
-/*
-A generalized interface for modifying networking interface assignments using UCI
-*/
+//! A generalized interface for modifying networking interface assignments using UCI
 
 use super::*;
 

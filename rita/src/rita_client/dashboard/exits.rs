@@ -1,6 +1,4 @@
-/*
-The Exit info endpoint gathers infromation about exit status and presents it to the dashbaord.
-*/
+//! The Exit info endpoint gathers infromation about exit status and presents it to the dashbaord.
 
 use super::*;
 

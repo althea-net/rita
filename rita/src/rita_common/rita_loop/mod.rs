@@ -249,19 +249,19 @@ impl Handler<Tick> for RitaLoop {
                         // Dynamic fee computation
                         let mut payment_settings = SETTING.get_payment_mut();
 
-                        let dyanmic_fee_factor: Int256 =
+                        let dynamic_fee_factor: Int256 =
                             payment_settings.dynamic_fee_multiplier.into();
                         let transaction_gas: Int256 = 21000.into();
 
                         payment_settings.pay_threshold =
-                            transaction_gas * value.clone() * dyanmic_fee_factor.clone();
+                            transaction_gas * value.clone() * dynamic_fee_factor.clone();
                         trace!(
                             "Dynamically set pay threshold to {:?}",
                             payment_settings.pay_threshold
                         );
 
                         payment_settings.close_threshold =
-                            dyanmic_fee_factor * payment_settings.pay_threshold.clone();
+                            dynamic_fee_factor * payment_settings.pay_threshold.clone();
                         trace!(
                             "Dynamically set close threshold to {:?}",
                             payment_settings.close_threshold

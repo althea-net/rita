@@ -1,6 +1,4 @@
-/*
-These endpoints are used to modify mundane wireless settings
-*/
+//! These endpoints are used to modify mundane wireless settings
 
 use super::*;
 
@@ -182,7 +180,7 @@ pub fn set_wifi_pass(wifi_pass: Json<WifiPass>) -> Box<Future<Item = HttpRespons
     debug!("/wifi_settings/pass hit with {:?}", wifi_pass);
 
     let wifi_pass = wifi_pass.into_inner();
-    let mut ret: HashMap<String, String> = HashMap::new();
+    let mut ret = HashMap::new();
 
     let wifi_pass_len = wifi_pass.pass.len();
     if wifi_pass_len < MINIMUM_PASS_CHARS {
@@ -219,7 +217,7 @@ pub fn set_wifi_pass(wifi_pass: Json<WifiPass>) -> Box<Future<Item = HttpRespons
 /// `FORBIDDEN_CHARS`. If everything's alright the string itself is moved and returned for
 /// convenience.
 fn validate_config_value(s: &str) -> Result<(), ValidationError> {
-    if s.len() == 0 {
+    if s.is_empty() {
         return Err(ValidationError::Empty);
     }
 
