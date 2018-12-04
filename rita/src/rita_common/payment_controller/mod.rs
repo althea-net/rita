@@ -102,22 +102,17 @@ impl PaymentController {
         let balance = payment_settings.balance.clone();
         let nonce = payment_settings.nonce.clone();
         let gas_price = payment_settings.gas_price.clone();
-        trace!(
-            "current balance: {:?}, payment of {:?}",
+        info!(
+            "current balance: {:?}, payment of {:?}, from address {:#x} to address {:#x}",
             balance,
-            pmt.amount
+            pmt.amount,
+            payment_settings.eth_address,
+            pmt.to.eth_address.clone()
         );
         if balance < pmt.amount {
             warn!("Not enough money to pay debts! Cutoff immenient");
             bail!("Not enough money!")
         }
-
-        trace!(
-            "sending payment of {:?} to {:?}: {:?}",
-            pmt.amount,
-            pmt.to.mesh_ip,
-            pmt
-        );
 
         // testing hack
         let neighbor_url = if cfg!(not(test)) {
@@ -145,8 +140,7 @@ impl PaymentController {
         };
         // TODO figure out the whole network id thing
         let transaction_signed = tx.sign(
-            &SETTING
-                .get_payment()
+            &payment_settings
                 .eth_private_key
                 .expect("No private key configured!"),
             None,
