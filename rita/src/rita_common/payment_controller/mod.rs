@@ -1,37 +1,28 @@
 //! Placehodler payment manager, to be removed with Gauc integration
 
 use actix::prelude::*;
+use actix_web::client;
 
-use althea_types::{Identity, PaymentTx};
+use futures::future::Either;
+use futures::{future, Future};
 
-use num256::{Int256, Uint256};
+use althea_types::PaymentTx;
 
-use reqwest::{Client, StatusCode};
-
-use std::time::Duration;
+use clarity::Transaction;
 
 use settings::RitaCommonSettings;
 use SETTING;
 
-use reqwest;
 use rita_common::debt_keeper;
 use rita_common::debt_keeper::DebtKeeper;
-use serde_json;
+use rita_common::debt_keeper::PaymentFailed;
+use rita_common::rita_loop::get_web3_server;
+
+use guac_core::web3::client::{Web3, Web3Client};
 
 use failure::Error;
 
-#[derive(Debug, Fail)]
-pub enum PaymentControllerError {
-    #[fail(display = "Payment Sending Error: {:?}", _0)]
-    PaymentSendingError(String),
-    #[fail(display = "Bounty Error: {:?}", _0)]
-    BountyError(String),
-}
-
-pub struct PaymentController {
-    pub reqwest_client: Client,
-    pub balance: Int256,
-}
+pub struct PaymentController();
 
 impl Actor for PaymentController {
     type Context = Context<Self>;
@@ -54,62 +45,21 @@ impl Handler<PaymentReceived> for PaymentController {
     }
 }
 
-#[derive(Message, Clone)]
+#[derive(Message)]
 pub struct MakePayment(pub PaymentTx);
 
 impl Handler<MakePayment> for PaymentController {
     type Result = ();
 
     fn handle(&mut self, msg: MakePayment, _ctx: &mut Context<Self>) -> Self::Result {
-        match self.make_payment(msg.clone().0) {
-            Ok(()) => {}
-            Err(err) => {
-                warn!("got error from make payment {:?}, retrying", err);
-                // ctx.notify_later(msg, Duration::from_secs(5));
-            }
+        let res = self.make_payment(msg.0.clone());
+        if res.is_err() {
+            DebtKeeper::from_registry().do_send(PaymentFailed {
+                to: msg.0.to,
+                amount: msg.0.amount,
+            });
         }
     }
-}
-
-#[derive(Message)]
-pub struct PaymentControllerUpdate;
-
-impl Handler<PaymentControllerUpdate> for PaymentController {
-    type Result = ();
-
-    fn handle(&mut self, _msg: PaymentControllerUpdate, _ctx: &mut Context<Self>) -> Self::Result {
-        match self.update() {
-            Ok(()) => {}
-            Err(err) => {
-                warn!("got error from update {:?}, retrying", err);
-                // ctx.notify_later(msg, Duration::from_secs(5));
-            }
-        }
-    }
-}
-
-pub struct GetOwnBalance;
-
-impl Message for GetOwnBalance {
-    type Result = Result<Int256, Error>;
-}
-
-impl Handler<GetOwnBalance> for PaymentController {
-    type Result = Result<Int256, Error>;
-    fn handle(&mut self, _msg: GetOwnBalance, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.balance.clone())
-    }
-}
-
-/// This updates a "bounty hunter" with the current balance and the last `PaymentTx`.
-/// Bounty hunters are servers which store and possibly enforce the current state of
-/// a channel. Currently they are actually just showing a completely insecure
-/// "fake" balance as a stand-in for the real thing.
-#[derive(Serialize, Deserialize, Debug)]
-pub struct BountyUpdate {
-    pub from: Identity,
-    pub balance: Int256,
-    pub tx: PaymentTx,
 }
 
 #[cfg(test)]
@@ -123,56 +73,7 @@ impl Default for PaymentController {
 
 impl PaymentController {
     pub fn new() -> Self {
-        PaymentController {
-            reqwest_client: reqwest::Client::builder()
-                .timeout(Duration::from_secs(5))
-                .build()
-                .unwrap(),
-            balance: Int256::from(0i64),
-        }
-    }
-
-    fn update_bounty_actual(&self, update: BountyUpdate) -> Result<(), Error> {
-        trace!("Sending bounty hunter update: {:?}", update);
-        let bounty_url = if cfg!(not(test)) {
-            format!(
-                "http://[{}]:{}/update",
-                SETTING.get_network().bounty_ip,
-                SETTING.get_network().bounty_port
-            )
-        } else {
-            String::from("http://127.0.0.1:1234/update") //TODO: This is mockito::SERVER_URL, but don't want to include the crate in a non-test build just for that string
-        };
-
-        let mut r = self
-            .reqwest_client
-            .post(&bounty_url)
-            .body(serde_json::to_string(&update)?)
-            .send()?;
-
-        if r.status() == StatusCode::OK {
-            Ok(())
-        } else {
-            trace!("Unsuccessfully in sending update to bounty hunter");
-            trace!(
-                "Received error from bounty hunter: {:?}",
-                r.text().unwrap_or(String::from("No message received"))
-            );
-            Err(Error::from(PaymentControllerError::BountyError(
-                String::from(format!(
-                    "Received error from bounty hunter: {:?}",
-                    r.text().unwrap_or(String::from("No message received"))
-                )),
-            )))
-        }
-    }
-
-    fn update_bounty(&self, update: BountyUpdate) -> Result<(), Error> {
-        match self.update_bounty_actual(update) {
-            Ok(()) => {}
-            Err(err) => warn!("Bounty hunter returned error {:?}, ignoring", err),
-        };
-        Ok(())
+        PaymentController {}
     }
 
     /// This gets called when a payment from a counterparty has arrived, and updates
@@ -181,7 +82,6 @@ impl PaymentController {
         &mut self,
         pmt: PaymentTx,
     ) -> Result<debt_keeper::PaymentReceived, Error> {
-        trace!("current balance: {:?}", self.balance);
         trace!(
             "payment of {:?} received from {:?}: {:?}",
             pmt.amount,
@@ -189,54 +89,32 @@ impl PaymentController {
             pmt
         );
 
-        self.balance = self.balance.clone() + Int256::from(pmt.amount.clone());
-
-        trace!("current balance: {:?}", self.balance);
-
-        self.update_bounty(BountyUpdate {
-            from: SETTING
-                .get_identity()
-                .ok_or(format_err!("No mesh IP available for Identity yet"))?,
-            tx: pmt.clone(),
-            balance: self.balance.clone(),
-        })?;
         Ok(debt_keeper::PaymentReceived {
             from: pmt.from,
             amount: pmt.amount.clone(),
         })
     }
 
-    /// This should be called on a regular interval to update the bounty hunter of a node's current
-    /// balance as well as to log the current balance
-    pub fn update(&mut self) -> Result<(), Error> {
-        let our_id = SETTING
-            .get_identity()
-            .ok_or(format_err!("No mesh IP available for Identity yet"))?;
-        self.update_bounty(BountyUpdate {
-            from: our_id.clone(),
-            tx: PaymentTx {
-                from: our_id.clone(),
-                to: our_id.clone(),
-                amount: Uint256::from(0u32),
-            },
-            balance: self.balance.clone(),
-        })?;
-        info!("Balance update: {:?}", self.balance);
-        Ok(())
-    }
-
     /// This is called by the other modules in Rita to make payments. It sends a
     /// PaymentTx to the `mesh_ip` in its `to` field.
     pub fn make_payment(&mut self, pmt: PaymentTx) -> Result<(), Error> {
-        trace!("current balance: {:?}", self.balance);
-
-        trace!(
-            "sending payment of {:?} to {:?}: {:?}",
+        let payment_settings = SETTING.get_payment();
+        let balance = payment_settings.balance.clone();
+        let nonce = payment_settings.nonce.clone();
+        let gas_price = payment_settings.gas_price.clone();
+        info!(
+            "current balance: {:?}, payment of {:?}, from address {:#x} to address {:#x}",
+            balance,
             pmt.amount,
-            pmt.to.mesh_ip,
-            pmt
+            payment_settings.eth_address,
+            pmt.to.eth_address.clone()
         );
+        if balance < pmt.amount {
+            warn!("Not enough money to pay debts! Cutoff immenient");
+            bail!("Not enough money!")
+        }
 
+        // testing hack
         let neighbor_url = if cfg!(not(test)) {
             format!(
                 "http://[{}]:{}/make_payment",
@@ -247,32 +125,67 @@ impl PaymentController {
             String::from("http://127.0.0.1:1234/make_payment")
         };
 
-        trace!("current balance: {:?}", self.balance);
+        let full_node = get_web3_server();
+        let web3 = Web3Client::new(&full_node);
 
-        let mut r = self.reqwest_client.post(&neighbor_url).json(&pmt).send()?;
+        let tx = Transaction {
+            nonce: nonce,
+            // TODO: replace with sane defaults
+            gas_price: gas_price,
+            gas_limit: "21000".parse().unwrap(),
+            to: pmt.to.eth_address.clone(),
+            value: pmt.amount.clone(),
+            data: Vec::new(),
+            signature: None,
+        };
+        // TODO figure out the whole network id thing
+        let transaction_signed = tx.sign(
+            &payment_settings
+                .eth_private_key
+                .expect("No private key configured!"),
+            None,
+        );
 
-        if r.status() == StatusCode::OK {
-            self.balance = self.balance.clone() - Int256::from(pmt.amount.clone());
-            self.update_bounty(BountyUpdate {
-                from: SETTING
-                    .get_identity()
-                    .ok_or(format_err!("No mesh IP available for Identity yet"))?,
-                tx: pmt,
-                balance: self.balance.clone(),
-            })?;
-            Ok(())
-        } else {
-            trace!("Unsuccessfully paid");
-            trace!(
-                "Received error from payee: {:?}",
-                r.text().unwrap_or(String::from("No message received"))
-            );
-            Err(Error::from(PaymentControllerError::PaymentSendingError(
-                String::from(format!(
-                    "Received error from payee: {:?}",
-                    r.text().unwrap_or(String::from("No message received"))
-                )),
-            )))
-        }
+        let transaction_bytes = match transaction_signed.to_bytes() {
+            Ok(bytes) => bytes,
+            Err(e) => bail!("Failed to generate transaction, {:?}", e),
+        };
+
+        let transaction_status = web3.eth_send_raw_transaction(transaction_bytes);
+
+        let futures_chain = Box::new(transaction_status.then(move |outcome| {
+            match outcome {
+                Ok(_tx_id) => {
+                    Either::A(
+                        client::post(&neighbor_url)
+                            .json(&pmt)
+                            .expect("Failed to serialize payment!")
+                            .send()
+                            .then(|neigh_ack| match neigh_ack {
+                                // return emtpy result, we're using messages anyways
+                                Ok(_) => {
+                                    SETTING.get_payment_mut().nonce += 1;
+                                    Ok(()) as Result<(), ()>
+                                }
+                                Err(e) => {
+                                    warn!("Failed to notify our neighbor of payment {:?}", e);
+                                    Ok(())
+                                }
+                            }),
+                    )
+                }
+
+                Err(e) => {
+                    warn!("Failed to send bandwidth payment {:?}", e);
+                    DebtKeeper::from_registry().do_send(PaymentFailed {
+                        to: pmt.to,
+                        amount: pmt.amount,
+                    });
+                    Either::B(future::ok(()))
+                }
+            }
+        }));
+        Arbiter::spawn(futures_chain);
+        Ok(())
     }
 }

@@ -3,19 +3,46 @@
 //! from the outside world for obvious security reasons.
 
 use actix::prelude::*;
+use actix::registry::SystemService;
+use actix_web::http::StatusCode;
+use actix_web::*;
 
 use failure::Error;
-use futures::Future;
+use num_traits::ops::checked::CheckedDiv;
+use num_traits::ToPrimitive;
 
-use rita_common::payment_controller::{GetOwnBalance, PaymentController};
+use futures::{future, Future};
 
-use num256::Int256;
+use serde_json;
+
+use std::{
+    boxed::Box,
+    collections::HashMap,
+    net::{SocketAddr, TcpStream},
+};
+
 use settings::RitaCommonSettings;
 use SETTING;
 
-pub mod network_endpoints;
-use num_traits::ops::checked::CheckedDiv;
-use num_traits::ToPrimitive;
+use babel_monitor::Babel;
+
+use clarity::{Address, Transaction};
+
+use guac_core::web3::client::{Web3, Web3Client};
+
+use rita_common::debt_keeper::GetDebtsList;
+use rita_common::debt_keeper::{DebtKeeper, GetDebtsResult};
+use rita_common::network_endpoints::JsonStatusResponse;
+use rita_common::rita_loop::get_web3_server;
+
+pub mod babel;
+pub mod dao;
+pub mod debts;
+pub mod development;
+pub mod own_info;
+pub mod settings;
+pub mod wallet;
+
 pub struct Dashboard;
 
 impl Actor for Dashboard {
@@ -32,61 +59,5 @@ impl SystemService for Dashboard {
 impl Default for Dashboard {
     fn default() -> Dashboard {
         Dashboard {}
-    }
-}
-
-#[derive(Debug, Fail)]
-enum OwnInfoError {
-    #[fail(display = "Unable to round balance of {} down to 1 ETH", _0)]
-    RoundDownError(Int256),
-    #[fail(
-        display = "Unable to downcast value {} to signed 64 bits",
-        _0
-    )]
-    DownCastError(Int256),
-}
-
-#[derive(Serialize)]
-pub struct OwnInfo {
-    pub balance: i64,
-    pub local_fee: u32,
-    pub metric_factor: u32,
-    pub device: Option<String>,
-    pub version: String,
-}
-
-pub struct GetOwnInfo;
-
-impl Message for GetOwnInfo {
-    type Result = Result<OwnInfo, Error>;
-}
-
-impl Handler<GetOwnInfo> for Dashboard {
-    type Result = ResponseFuture<OwnInfo, Error>;
-
-    fn handle(&mut self, _msg: GetOwnInfo, _ctx: &mut Self::Context) -> Self::Result {
-        Box::new(
-            PaymentController::from_registry()
-                .send(GetOwnBalance {})
-                .from_err()
-                .and_then(|own_balance| match own_balance {
-                    Ok(balance) => {
-                        let balance = balance
-                            .checked_div(&Int256::from(1_000_000_000i64))
-                            .ok_or(OwnInfoError::RoundDownError(balance.clone()))?;
-
-                        Ok(OwnInfo {
-                            balance: balance
-                                .to_i64()
-                                .ok_or(OwnInfoError::DownCastError(balance))?,
-                            local_fee: SETTING.get_local_fee(),
-                            metric_factor: SETTING.get_metric_factor(),
-                            device: SETTING.get_network().device.clone(),
-                            version: env!("CARGO_PKG_VERSION").to_string(),
-                        })
-                    }
-                    Err(e) => Err(e),
-                }),
-        )
     }
 }

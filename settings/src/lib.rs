@@ -57,7 +57,7 @@ use config::Config;
 
 use althea_types::{ExitRegistrationDetails, ExitState, Identity, WgKey};
 
-use num256::Int256;
+use num256::{Int256, Uint256};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -229,28 +229,76 @@ impl Default for LoggingSettings {
     }
 }
 
+fn default_close_fraction() -> Int256 {
+    100.into()
+}
+
+fn default_close_threshold() -> Int256 {
+    (-8400000000000000i64).into()
+}
+
+fn default_pay_threshold() -> Int256 {
+    840000000000000u64.into()
+}
+
 /// This struct is used by both rita and rita_exit to configure the dummy payment controller and
 /// debt keeper
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct PaymentSettings {
+    /// For non-channel payments only, determines how much to multiply the nominal gas price
+    /// to get the pay_threshold values and then again for the close_threshold
+    #[serde(default)]
+    pub dynamic_fee_multiplier: u16,
     /// The threshold above which we will kick off a payment
+    #[serde(
+        skip_serializing,
+        skip_deserializing,
+        default = "default_pay_threshold"
+    )]
     pub pay_threshold: Int256,
     /// The threshold below which we will kick another node off (not implemented yet)
+    #[serde(
+        skip_serializing,
+        skip_deserializing,
+        default = "default_close_threshold"
+    )]
     pub close_threshold: Int256,
-    /// This is used to control the amount of grace, as `total_payment/close_fraction` which we will
-    /// give to a node
+    /// The amount of 'grace' to give a long term neighbor
+    #[serde(
+        skip_serializing,
+        skip_deserializing,
+        default = "default_close_fraction"
+    )]
     pub close_fraction: Int256,
     /// The amount of billing cycles a node can fall behind without being subjected to the threshold
     pub buffer_period: u32,
     /// Our own eth private key we do not store address, instead it is derived from here
     pub eth_private_key: Option<PrivateKey>,
+    // Our own eth Address, derived from the private key on startup and not stored
+    #[serde(skip_serializing, skip_deserializing)]
+    pub eth_address: Address,
+    #[serde(skip_serializing, skip_deserializing)]
+    pub balance: Uint256,
+    #[serde(skip_serializing, skip_deserializing)]
+    pub nonce: Uint256,
+    #[serde(skip_serializing, skip_deserializing)]
+    pub gas_price: Uint256,
+    /// A list of nodes to query for blockchain data
+    /// this is kept seperate from the version for DAO settings node
+    /// list in order to allow for the DAO and payments to exist on different
+    /// chains, provided in name:port format
+    #[serde(default = "default_node_list")]
+    pub node_list: Vec<String>,
 }
 
 impl Default for PaymentSettings {
     fn default() -> Self {
         PaymentSettings {
-            pay_threshold: 0.into(),
-            close_threshold: (-10000).into(),
+            dynamic_fee_multiplier: 10,
+            // computed as 10x the standard transaction cost on 12/2/18
+            pay_threshold: 840000000000000u64.into(),
+            // computed as 10x the pay threshold
+            close_threshold: (-8400000000000000i64).into(),
             close_fraction: 100.into(),
             buffer_period: 3,
             eth_private_key: Some(
@@ -258,6 +306,13 @@ impl Default for PaymentSettings {
                     .parse()
                     .expect("Failed to create default dummy PrivateKey"),
             ),
+            eth_address: "0x0000000000000000000000000000000000000000"
+                .parse()
+                .expect("Failed to parse default dummy address"),
+            balance: 0.into(),
+            nonce: 0.into(),
+            gas_price: 10000000000u64.into(), // 10 gwei
+            node_list: Vec::new(),
         }
     }
 }
@@ -325,7 +380,7 @@ fn default_dao_enforcement() -> bool {
 }
 
 fn default_node_list() -> Vec<String> {
-    vec!["http://sasquatch.network:9545".to_string()]
+    vec!["http://sasquatch.network:19545".to_string()]
 }
 
 fn default_dao_address() -> Vec<Address> {
@@ -341,6 +396,9 @@ pub struct SubnetDAOSettings {
     #[serde(default = "default_cache_timeout")]
     pub cache_timeout_seconds: u64,
     /// A list of nodes to query for blockchain data
+    /// this is kept seperate from the version for payment settings node
+    /// list in order to allow for the DAO and payments to exist on different
+    /// chains, provided in name:port format
     #[serde(default = "default_node_list")]
     pub node_list: Vec<String>,
     /// List of subnet DAO's to which we are a member
@@ -582,12 +640,7 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
     fn get_identity(&self) -> Option<Identity> {
         Some(Identity::new(
             self.get_network().mesh_ip?.clone(),
-            self.get_payment()
-                .clone()
-                .eth_private_key
-                .expect("No Eth private key configured!")
-                .to_public_key()
-                .expect("Could not generate address from Eth key!"),
+            self.get_payment().clone().eth_address,
             self.get_network().clone().wg_public_key?,
         ))
     }

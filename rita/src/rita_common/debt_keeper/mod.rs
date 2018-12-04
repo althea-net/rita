@@ -95,6 +95,30 @@ impl Handler<PaymentReceived> for DebtKeeper {
     }
 }
 
+#[derive(Message, PartialEq, Eq, Debug)]
+/// This is called when a payment fails and needs to be retried, the debt
+/// state is restored with the failed debt as it's top priority to immediately
+/// be retried
+pub struct PaymentFailed {
+    pub to: Identity,
+    pub amount: Uint256,
+}
+
+impl Handler<PaymentFailed> for DebtKeeper {
+    type Result = ();
+
+    fn handle(&mut self, msg: PaymentFailed, _: &mut Context<Self>) -> Self::Result {
+        match self.debt_data.get_mut(&msg.to) {
+            Some(entry) => {
+                entry.debt += msg.amount.clone();
+                entry.total_payment_sent -= msg.amount.clone();
+                entry.debt_buffer.push_front(msg.amount.into());
+            }
+            None => warn!("Payment failed but no debt! Somthing Must have gone wrong!"),
+        }
+    }
+}
+
 #[derive(Message)]
 pub struct TrafficUpdate {
     pub from: Identity,

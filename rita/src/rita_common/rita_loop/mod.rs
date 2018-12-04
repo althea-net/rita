@@ -5,13 +5,19 @@
 //! all system functions. Anything that blocks will eventually filter up to block this loop and
 //! halt essential functions like opening tunnels and managing peers
 
+use num256::Int256;
 use std::time::{Duration, Instant};
+
+use rand::thread_rng;
+use rand::Rng;
 
 use actix::prelude::*;
 use actix::registry::SystemService;
 use actix_utils::KillActor;
 
 use actix_utils::ResolverWrapper;
+
+use guac_core::web3::client::{Web3, Web3Client};
 
 use KI;
 
@@ -22,8 +28,6 @@ use rita_common::traffic_watcher::{TrafficWatcher, Watch};
 use rita_common::peer_listener::PeerListener;
 
 use rita_common::debt_keeper::{DebtKeeper, SendUpdate};
-
-use rita_common::payment_controller::{PaymentController, PaymentControllerUpdate};
 
 use rita_common::peer_listener::GetPeers;
 
@@ -124,7 +128,6 @@ impl Handler<Tick> for RitaLoop {
                                 neigh.elapsed().subsec_nanos() / 1000000
                             );
                             DebtKeeper::from_registry().do_send(SendUpdate {});
-                            PaymentController::from_registry().do_send(PaymentControllerUpdate {});
                             actix::fut::ok(())
                         })
                 }),
@@ -201,6 +204,93 @@ impl Handler<Tick> for RitaLoop {
                 }).then(|_| Ok(())),
         );
 
+        let full_node = get_web3_server();
+        let web3 = Web3Client::new(&full_node);
+        let our_address = SETTING.get_payment().eth_address;
+        trace!("About to make web3 requests to {}", full_node);
+        Arbiter::spawn(
+            web3.eth_get_balance(our_address)
+                .then(move |balance| match balance {
+                    Ok(value) => {
+                        trace!("Got response from balance request {:?}", value);
+                        SETTING.get_payment_mut().balance = value;
+                        Ok(())
+                    }
+                    Err(e) => {
+                        warn!("Balance request failed with {:?}", e);
+                        Err(e)
+                    }
+                }).then(|_| Ok(())),
+        );
+        Arbiter::spawn(
+            web3.eth_get_transaction_count(our_address)
+                .then(move |transaction_count| match transaction_count {
+                    Ok(value) => {
+                        trace!("Got response from nonce request {:?}", value);
+                        let mut payment_settings = SETTING.get_payment_mut();
+                        // if we increased our nonce locally we're probably
+                        // right and should ignore the full node telling us otherwise
+                        if payment_settings.nonce < value {
+                            payment_settings.nonce = value;
+                        }
+                        Ok(())
+                    }
+                    Err(e) => {
+                        warn!("nonce request failed with {:?}", e);
+                        Err(e)
+                    }
+                }).then(|_| Ok(())),
+        );
+        Arbiter::spawn(
+            web3.eth_gas_price()
+                .then(move |gas_price| match gas_price {
+                    Ok(value) => {
+                        trace!("Got response from gas price request {:?}", value);
+                        // Dynamic fee computation
+                        let mut payment_settings = SETTING.get_payment_mut();
+
+                        let dynamic_fee_factor: Int256 =
+                            payment_settings.dynamic_fee_multiplier.into();
+                        let transaction_gas: Int256 = 21000.into();
+
+                        payment_settings.pay_threshold =
+                            transaction_gas * value.clone() * dynamic_fee_factor.clone();
+                        trace!(
+                            "Dynamically set pay threshold to {:?}",
+                            payment_settings.pay_threshold
+                        );
+
+                        payment_settings.close_threshold =
+                            dynamic_fee_factor * payment_settings.pay_threshold.clone();
+                        trace!(
+                            "Dynamically set close threshold to {:?}",
+                            payment_settings.close_threshold
+                        );
+
+                        payment_settings.gas_price = value;
+                        Ok(())
+                    }
+                    Err(e) => {
+                        warn!("Balance request failed with {:?}", e);
+                        Err(e)
+                    }
+                }).then(|_| Ok(())),
+        );
+
         Ok(())
     }
+}
+
+/// Checks the list of full nodes, panics if none exist, if there exist
+/// one or more a random entry from the list is returned in an attempt
+/// to load balance across fullnodes
+pub fn get_web3_server() -> String {
+    if SETTING.get_payment().node_list.len() == 0 {
+        panic!("no full nodes configured!");
+    }
+    let node_list = SETTING.get_payment().node_list.clone();
+    let mut rng = thread_rng();
+    let val = rng.gen_range(0, node_list.len());
+
+    node_list[val].clone()
 }

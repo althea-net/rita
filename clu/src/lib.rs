@@ -181,17 +181,18 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
         Some(existing_eth_private_key) => {
             info!(
                 "Starting with Eth address {:?}",
-                existing_eth_private_key
-                    .to_public_key()
-                    .expect("Failed to derive address from Eth key!")
+                existing_eth_private_key.to_public_key()?
             );
+
+            payment_settings.eth_address = existing_eth_private_key.to_public_key()?;
         }
         None => {
             info!("Eth key details not configured, generating");
             let mut key_buf: [u8; 32] = rand::random();
-            let new_private_key =
-                PrivateKey::from_slice(&key_buf).expect("Failed to generate key!");
+            let new_private_key = PrivateKey::from_slice(&key_buf)?;
             payment_settings.eth_private_key = Some(new_private_key);
+
+            payment_settings.eth_address = new_private_key.to_public_key()?
         }
     }
 
@@ -285,17 +286,18 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
         Some(existing_eth_private_key) => {
             info!(
                 "Starting with Eth address {:?}",
-                existing_eth_private_key
-                    .to_public_key()
-                    .expect("Failed to derive address from Eth key!")
+                existing_eth_private_key.to_public_key()?
             );
+
+            payment_settings.eth_address = existing_eth_private_key.to_public_key()?;
         }
         None => {
             info!("Eth key details not configured, generating");
             let mut key_buf: [u8; 32] = rand::random();
-            let new_private_key =
-                PrivateKey::from_slice(&key_buf).expect("Failed to generate key!");
+            let new_private_key = PrivateKey::from_slice(&key_buf)?;
             payment_settings.eth_private_key = Some(new_private_key);
+
+            payment_settings.eth_address = new_private_key.to_public_key()?
         }
     }
 

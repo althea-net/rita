@@ -1,21 +1,6 @@
-/*
-A generalized interface for modifying networking interface assignments using UCI
-*/
+//! A generalized interface for modifying networking interface assignments using UCI
 
-use actix::prelude::*;
-use failure::Error;
-use futures::Future;
-use std::collections::HashMap;
-use std::string::ToString;
-use std::time::{Duration, Instant};
-use tokio::timer::Delay;
-
-use rita_common::dashboard::Dashboard;
-use rita_common::peer_listener::PeerListener;
-use rita_common::peer_listener::{Listen, UnListen};
-use settings::RitaCommonSettings;
-use KI;
-use SETTING;
+use super::*;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InterfaceToSet {
@@ -582,4 +567,27 @@ mod tests {
         let b = comma_list_add(&b, "eth4");
         assert_eq!(b, "eth1, eth0.3, eth4");
     }
+}
+
+pub fn get_interfaces_endpoint(
+    _req: HttpRequest,
+) -> Box<Future<Item = Json<HashMap<String, InterfaceMode>>, Error = Error>> {
+    debug!("get /interfaces hit");
+    Dashboard::from_registry()
+        .send(GetInterfaces)
+        .from_err()
+        .and_then(move |reply| Ok(Json(reply?)))
+        .responder()
+}
+
+pub fn set_interfaces_endpoint(
+    interface: Json<InterfaceToSet>,
+) -> Box<Future<Item = Json<()>, Error = Error>> {
+    debug!("set /interfaces hit");
+    let to_set = interface.into_inner();
+    Dashboard::from_registry()
+        .send(to_set)
+        .from_err()
+        .and_then(move |reply| Ok(Json(reply?)))
+        .responder()
 }

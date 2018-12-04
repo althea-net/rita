@@ -75,19 +75,27 @@ use actix_web::http::Method;
 use actix_web::*;
 
 extern crate clarity;
+extern crate guac_core;
+extern crate num256;
 
 extern crate althea_kernel_interface;
 extern crate althea_types;
 extern crate babel_monitor;
 extern crate exit_db;
-extern crate num256;
 
 pub mod actix_utils;
 mod middleware;
 mod rita_common;
 mod rita_exit;
 
-use rita_common::dashboard::network_endpoints::*;
+use rita_common::dashboard::babel::*;
+use rita_common::dashboard::dao::*;
+use rita_common::dashboard::debts::*;
+use rita_common::dashboard::development::*;
+use rita_common::dashboard::own_info::*;
+use rita_common::dashboard::settings::*;
+use rita_common::dashboard::wallet::*;
+
 use rita_common::network_endpoints::*;
 use rita_exit::network_endpoints::*;
 
@@ -198,7 +206,7 @@ fn main() {
     assert!(rita_common::debt_keeper::DebtKeeper::from_registry().connected());
     assert!(rita_common::payment_controller::PaymentController::from_registry().connected());
     assert!(rita_common::tunnel_manager::TunnelManager::from_registry().connected());
-    assert!(rita_common::http_client::HTTPClient::from_registry().connected());
+    assert!(rita_common::hello_handler::HelloHandler::from_registry().connected());
     assert!(rita_common::traffic_watcher::TrafficWatcher::from_registry().connected());
     assert!(rita_common::peer_listener::PeerListener::from_registry().connected());
 
@@ -261,7 +269,7 @@ fn main() {
                 "/dao_list/remove/{address}",
                 Method::POST,
                 remove_from_dao_list,
-            )
+            ).route("/withdraw/{address}/{amount}", Method::POST, withdraw)
     }).bind(format!(
         "[::0]:{}",
         SETTING.get_network().rita_dashboard_port
