@@ -952,7 +952,7 @@ factor value to 0 (which means essentially advertising your bandwidth as free).
 
 Withdraws the given amount in wei to the provided address.
 
-- URL: `<rita ip>:<rita_dashboard_port>/withdraw{address}/{amount}`
+- URL: `<rita ip>:<rita_dashboard_port>/withdraw/{address}/{amount}`
 - Method: `GET`
 - URL Params: `None`
 - Data Params: `None`
@@ -962,7 +962,7 @@ Withdraws the given amount in wei to the provided address.
 
 ```
 {
-  tx-id: 0x0000000000
+  txid: 0x0000000000
 }
 ```
 
