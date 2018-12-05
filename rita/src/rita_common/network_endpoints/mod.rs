@@ -45,6 +45,7 @@ impl JsonStatusResponse {
     }
 }
 
+/// The recieve side of the make payments call
 pub fn make_payments(
     pmt: (Json<PaymentTx>, HttpRequest),
 ) -> Box<Future<Item = HttpResponse, Error = Error>> {
