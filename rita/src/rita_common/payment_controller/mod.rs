@@ -123,8 +123,7 @@ impl PaymentController {
             "[{}]:{}",
             pmt.to.mesh_ip,
             SETTING.get_network().rita_contact_port
-        )
-        .parse()
+        ).parse()
         {
             Ok(socket) => socket,
             Err(e) => {
