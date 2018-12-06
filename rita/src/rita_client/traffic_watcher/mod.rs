@@ -52,7 +52,6 @@ impl Default for TrafficWatcher {
 pub struct Watch {
     pub exit_id: Identity,
     pub exit_price: u64,
-    pub neighbors: Vec<Neighbor>,
 }
 
 impl Message for Watch {
@@ -67,13 +66,7 @@ impl Handler<Watch> for TrafficWatcher {
             format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
         )?;
 
-        watch(
-            self,
-            Babel::new(stream),
-            msg.exit_id,
-            msg.exit_price,
-            msg.neighbors,
-        )
+        watch(self, Babel::new(stream), msg.exit_id, msg.exit_price)
     }
 }
 
@@ -84,7 +77,6 @@ pub fn watch<T: Read + Write>(
     mut babel: Babel<T>,
     exit: Identity,
     exit_price: u64,
-    neighbors: Vec<Neighbor>,
 ) -> Result<(), Error> {
     babel.start_connection()?;
 
@@ -111,40 +103,6 @@ pub fn watch<T: Read + Write>(
         bail!("No route to exit, therefore we can't be sending traffic to it");
     }
     let exit_route = exit_route.unwrap();
-
-    // This performs three different fairly complicated lookups, first we figure out
-    // the Babel neighbor we use to route over the exit, then we must find the mesh_ip
-    // of this neighbor and use that to find the Identity of the Rita instance attached
-    // to the Babel instance that's making the Babel_neigh
-    let mut exit_neigh = None;
-    for neighbor in babel_neighs.iter() {
-        // we found the linklocal address of the neighbor we're using to talk to the exit
-        // this is the linklocal ip inside of the tunnel so don't get any clever ideas
-        // about using tunnel_ip which is from the outside
-        if neighbor.address == exit_route.neigh_ip {
-            for route in routes.iter() {
-                // this will find all other routes from that neighbor
-                if route.installed && route.neigh_ip == neighbor.address {
-                    // we then check all of these routes against the Rita neighbors as
-                    // identities list, when we find a route from a babel neighbor that's
-                    // also on this list is MUST be the Identity of the neighbor we're routing over
-                    for id_neigh in neighbors.iter() {
-                        if let IpNetwork::V6(ref ip) = route.prefix {
-                            if ip.ip() == id_neigh.identity.global.mesh_ip {
-                                exit_neigh = Some(id_neigh);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            break;
-        }
-    }
-    if exit_neigh.is_none() {
-        bail!("No neighbor to get to exit? How can we possibly have a route?");
-    }
-    let exit_neigh = exit_neigh.unwrap();
 
     let counter = match KI.read_wg_counters("wg_exit") {
         Ok(res) => {
@@ -234,23 +192,14 @@ pub fn watch<T: Read + Write>(
     // pay our neighbor to send data back to us.
     let owes_exit = Int256::from(exit_price * output) + exit_dest_price * input;
 
-    // we owe our neighbor their route price to get upload traffic to the exit, nothing
-    // fancy here.
-    let owes_neighbor = Int256::from(exit_route_price * output);
-
     info!("Total client debt of {} this round", owes_exit);
 
     let exit_update = TrafficUpdate {
         from: exit.clone(),
         amount: owes_exit,
     };
-    let neighbor_update = TrafficUpdate {
-        from: exit_neigh.identity.global.clone(),
-        amount: owes_neighbor,
-    };
 
     DebtKeeper::from_registry().do_send(exit_update);
-    DebtKeeper::from_registry().do_send(neighbor_update);
 
     Ok(())
 }
@@ -281,7 +230,6 @@ mod tests {
                 WgKey::from_str("abc0abc1abc2abc3abc4abc5abc6abc7abc8abc=").unwrap(),
             ),
             5,
-            Vec::new(),
         ).unwrap();
     }
 }

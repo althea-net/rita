@@ -37,10 +37,10 @@ use std::fmt;
 use std::io::{Read, Write};
 
 #[cfg(test)]
-type HTTPClient = Mocker<rita_common::hello_handler::HelloHandler>;
+type HelloHandler = Mocker<rita_common::hello_handler::HelloHandler>;
 
 #[cfg(not(test))]
-type HTTPClient = rita_common::hello_handler::HelloHandler;
+type HelloHandler = rita_common::hello_handler::HelloHandler;
 
 #[cfg(test)]
 type Resolver = Mocker<resolver::Resolver>;
@@ -496,7 +496,7 @@ fn contact_neighbor(peer: &Peer, our_port: u16) -> Result<(), Error> {
         &mut SETTING.get_network_mut().default_route,
     )?;
 
-    let _res = HTTPClient::from_registry().do_send(Hello {
+    let _res = HelloHandler::from_registry().do_send(Hello {
         my_id: LocalIdentity {
             global: SETTING
                 .get_identity()

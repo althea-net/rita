@@ -135,8 +135,9 @@ impl KernelInterface {
             "ip6tables",
             &[
                 "-w",
-                "-A",
+                "-I",
                 target.table(),
+                "1",
                 "-m",
                 "set",
                 "!",

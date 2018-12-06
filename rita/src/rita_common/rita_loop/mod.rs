@@ -281,6 +281,8 @@ impl Handler<Tick> for RitaLoop {
                         let dynamic_fee_factor: Int256 =
                             payment_settings.dynamic_fee_multiplier.into();
                         let transaction_gas: Int256 = 21000.into();
+                        let neg_one = -1i32;
+                        let sign_flip: Int256 = neg_one.into();
 
                         payment_settings.pay_threshold =
                             transaction_gas * value.clone() * dynamic_fee_factor.clone();
@@ -290,7 +292,7 @@ impl Handler<Tick> for RitaLoop {
                         );
 
                         payment_settings.close_threshold =
-                            dynamic_fee_factor * payment_settings.pay_threshold.clone();
+                            sign_flip * dynamic_fee_factor * payment_settings.pay_threshold.clone();
                         trace!(
                             "Dynamically set close threshold to {:?}",
                             payment_settings.close_threshold
