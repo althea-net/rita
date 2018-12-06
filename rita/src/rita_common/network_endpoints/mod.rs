@@ -91,7 +91,9 @@ pub fn make_payments(
                                     pmt.0.clone(),
                                 ))
                                 .from_err()
-                                .and_then(|_| Ok(HttpResponse::Ok().into()))
+                                .and_then(|_| {
+                                    Ok(HttpResponse::Ok().json("Payment Successful!").into())
+                                })
                                 .responder(),
                         )
                     } else {

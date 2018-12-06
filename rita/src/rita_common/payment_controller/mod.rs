@@ -2,9 +2,14 @@
 
 use actix::prelude::*;
 use actix_web::client;
+use actix_web::client::Connection;
 
 use futures::future::Either;
 use futures::{future, Future};
+
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+use tokio::net::TcpStream as TokioTcpStream;
 
 use althea_types::PaymentTx;
 
@@ -114,12 +119,26 @@ impl PaymentController {
             bail!("Not enough money!")
         }
 
+        let contact_socket: SocketAddr = match format!(
+            "[{}]:{}",
+            pmt.to.mesh_ip,
+            SETTING.get_network().rita_contact_port
+        )
+        .parse()
+        {
+            Ok(socket) => socket,
+            Err(e) => {
+                bail!("Failed to make socket for payment message! {:?}", e);
+            }
+        };
+        let stream = TokioTcpStream::connect(&contact_socket);
+
         // testing hack
         let neighbor_url = if cfg!(not(test)) {
             format!(
                 "http://[{}]:{}/make_payment",
-                pmt.to.mesh_ip,
-                SETTING.get_network().rita_contact_port
+                contact_socket.ip(),
+                contact_socket.port(),
             )
         } else {
             String::from("http://127.0.0.1:1234/make_payment")
@@ -151,40 +170,58 @@ impl PaymentController {
 
         let transaction_status = web3.eth_send_raw_transaction(transaction_bytes);
 
-        let futures_chain = Box::new(transaction_status.then(move |outcome| {
-            match outcome {
-                Ok(tx_id) => {
-                    // add published txid to submission
-                    pmt.txid = Some(tx_id);
-                    Either::A(
-                        client::post(&neighbor_url)
-                            .json(&pmt)
-                            .expect("Failed to serialize payment!")
-                            .send()
-                            .then(|neigh_ack| match neigh_ack {
-                                // return emtpy result, we're using messages anyways
-                                Ok(_) => {
-                                    SETTING.get_payment_mut().nonce += 1;
-                                    Ok(()) as Result<(), ()>
-                                }
-                                Err(e) => {
-                                    warn!("Failed to notify our neighbor of payment {:?}", e);
-                                    Ok(())
-                                }
-                            }),
-                    )
-                }
+        let futures_chain = Box::new(stream.then(move |open_stream| match open_stream {
+            Ok(open_stream) => Either::A(transaction_status.then(move |transaction_outcome| {
+                match transaction_outcome {
+                    Ok(tx_id) => {
+                        // add published txid to submission
+                        pmt.txid = Some(tx_id);
+                        Either::A(
+                            client::post(&neighbor_url)
+                                .with_connection(Connection::from_stream(open_stream))
+                                .json(&pmt)
+                                .expect("Failed to serialize payment!")
+                                .send()
+                                .then(|neigh_ack| match neigh_ack {
+                                    // return emtpy result, we're using messages anyways
+                                    Ok(msg) => {
+                                        trace!("Payment successful with {:?}", msg);
+                                        SETTING.get_payment_mut().nonce += 1;
+                                        Ok(()) as Result<(), ()>
+                                    }
+                                    Err(e) => {
+                                        warn!("Failed to notify our neighbor of payment {:?}", e);
+                                        Ok(())
+                                    }
+                                }),
+                        )
+                    }
 
-                Err(e) => {
-                    warn!("Failed to send bandwidth payment {:?}", e);
-                    DebtKeeper::from_registry().do_send(PaymentFailed {
-                        to: pmt.to,
-                        amount: pmt.amount,
-                    });
-                    Either::B(future::ok(()))
+                    Err(e) => {
+                        warn!("Failed to send bandwidth payment {:?}", e);
+                        DebtKeeper::from_registry().do_send(PaymentFailed {
+                            to: pmt.to,
+                            amount: pmt.amount,
+                        });
+                        Either::B(future::ok(()))
+                    }
                 }
+            })),
+            Err(e) => {
+                // if we don't notify the neighbor they can't validate our payment
+                // so if we can't talk to them we abort our payment to retry later
+                warn!(
+                    "Failed to connect to neighbor for bandwidth payment {:?}",
+                    e
+                );
+                DebtKeeper::from_registry().do_send(PaymentFailed {
+                    to: pmt.to,
+                    amount: pmt.amount,
+                });
+                Either::B(future::ok(()))
             }
         }));
+
         Arbiter::spawn(futures_chain);
         Ok(())
     }
