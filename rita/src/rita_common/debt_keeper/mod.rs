@@ -276,6 +276,8 @@ impl DebtKeeper {
             traffic
         );
 
+        // TODO signed logic is an accident waiting to happen, refactor to use ABS then
+        // change over to uints
         if debt_data.incoming_payments > -traffic.clone() {
             // we have enough to pay off the traffic from just the payment balance
             debt_data.incoming_payments += traffic.clone();
