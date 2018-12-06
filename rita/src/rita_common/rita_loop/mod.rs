@@ -162,7 +162,8 @@ impl Handler<Tick> for RitaLoop {
             TunnelManager::from_registry()
                 .send(TriggerGC(Duration::from_secs(
                     SETTING.get_network().tunnel_timeout_seconds,
-                ))).then(move |res| {
+                )))
+                .then(move |res| {
                     info!(
                         "TunnelManager GC pass completed in {}s {}ms, with result {:?}",
                         start.elapsed().as_secs(),
@@ -170,7 +171,8 @@ impl Handler<Tick> for RitaLoop {
                         res
                     );
                     res
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
         );
 
         let start = Instant::now();
@@ -186,7 +188,8 @@ impl Handler<Tick> for RitaLoop {
                         res
                     );
                     res
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
         );
 
         let start = Instant::now();
@@ -201,7 +204,8 @@ impl Handler<Tick> for RitaLoop {
                         start.elapsed().subsec_nanos() / 1000000
                     );
                     TunnelManager::from_registry().send(PeersToContact::new(peers.unwrap())) // GetPeers never fails so unwrap is safe
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
         );
 
         let full_node = get_web3_server();
@@ -220,7 +224,8 @@ impl Handler<Tick> for RitaLoop {
                         warn!("Balance request failed with {:?}", e);
                         Err(e)
                     }
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
         );
         Arbiter::spawn(
             web3.net_version()
@@ -268,7 +273,8 @@ impl Handler<Tick> for RitaLoop {
                         warn!("nonce request failed with {:?}", e);
                         Err(e)
                     }
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
         );
         Arbiter::spawn(
             web3.eth_gas_price()
@@ -281,6 +287,8 @@ impl Handler<Tick> for RitaLoop {
                         let dynamic_fee_factor: Int256 =
                             payment_settings.dynamic_fee_multiplier.into();
                         let transaction_gas: Int256 = 21000.into();
+                        let neg_one = -1i32;
+                        let sign_flip: Int256 = neg_one.into();
 
                         payment_settings.pay_threshold =
                             transaction_gas * value.clone() * dynamic_fee_factor.clone();
@@ -290,7 +298,7 @@ impl Handler<Tick> for RitaLoop {
                         );
 
                         payment_settings.close_threshold =
-                            dynamic_fee_factor * payment_settings.pay_threshold.clone();
+                            sign_flip * dynamic_fee_factor * payment_settings.pay_threshold.clone();
                         trace!(
                             "Dynamically set close threshold to {:?}",
                             payment_settings.close_threshold
@@ -303,7 +311,8 @@ impl Handler<Tick> for RitaLoop {
                         warn!("Balance request failed with {:?}", e);
                         Err(e)
                     }
-                }).then(|_| Ok(())),
+                })
+                .then(|_| Ok(())),
         );
 
         Ok(())
