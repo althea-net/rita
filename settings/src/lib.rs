@@ -739,12 +739,7 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
     fn get_identity(&self) -> Option<Identity> {
         Some(Identity::new(
             self.get_network().mesh_ip?.clone(),
-            self.get_payment()
-                .clone()
-                .eth_private_key
-                .expect("No Eth private key configured!")
-                .to_public_key()
-                .expect("Could not generate address from Eth key!"),
+            self.get_payment().eth_address.clone(),
             self.get_network().clone().wg_public_key?,
         ))
     }
