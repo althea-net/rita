@@ -153,7 +153,7 @@ pub fn watch<T: Read + Write>(
     let exit_route_price: u64 = exit_route.price.into();
     // the total price for the exit returning traffic to us, in the future we should ask
     // the exit for this because TODO assumes symetric route
-    let exit_dest_price: Int256 = Int256::from(exit_route_price) + exit_price;
+    let exit_dest_price: Int256 = Int256::from(exit_route_price) + exit_price.into();
     let client_tx = SystemTime::now();
     let RTTimestamps { exit_rx, exit_tx } = client
         .get(&format!(
@@ -191,7 +191,7 @@ pub fn watch<T: Read + Write>(
     // remember pay per *forward* so we pay our neighbor for what we
     // send to the exit while we pay the exit to pay it's neighbor to eventually
     // pay our neighbor to send data back to us.
-    let owes_exit = Int256::from(exit_price * output) + exit_dest_price * input;
+    let owes_exit = Int256::from(exit_price * output) + exit_dest_price * input.into();
 
     info!("Total client debt of {} this round", owes_exit);
 

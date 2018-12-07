@@ -1,11 +1,12 @@
 use super::*;
+use num256::Uint256;
 
 #[derive(Serialize)]
 pub struct NodeInfo {
     pub nickname: String,
     pub route_metric_to_exit: u16,
-    pub total_payments: Int256,
-    pub debt: i128,
+    pub total_payments: Uint256,
+    pub debt: Int256,
     pub link_cost: u16,
     pub price_to_exit: u32,
 }
@@ -59,7 +60,7 @@ impl Handler<GetNodeInfo> for Dashboard {
                             output.push(NodeInfo {
                                 nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
                                 route_metric_to_exit: route.metric,
-                                total_payments: debt_info.total_payment_received.clone().into(),
+                                total_payments: debt_info.total_payment_received.clone(),
                                 debt: debt_info.debt.clone().into(),
                                 link_cost: route.refmetric,
                                 price_to_exit: route.price,
@@ -68,7 +69,7 @@ impl Handler<GetNodeInfo> for Dashboard {
                             output.push(NodeInfo {
                                 nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
                                 route_metric_to_exit: u16::max_value(),
-                                total_payments: debt_info.total_payment_received.clone().into(),
+                                total_payments: debt_info.total_payment_received.clone(),
                                 debt: debt_info.debt.clone().into(),
                                 link_cost: u16::max_value(),
                                 price_to_exit: u32::max_value(),
