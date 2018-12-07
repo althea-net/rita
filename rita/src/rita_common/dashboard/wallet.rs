@@ -41,7 +41,7 @@ pub fn withdraw(path: Path<(Address, u64)>) -> Box<dyn Future<Item = HttpRespons
     Box::new(transaction_status.then(|result| {
         match result {
             Ok(tx_id) => Box::new(future::ok({
-                SETTING.get_payment_mut().nonce += 1;
+                SETTING.get_payment_mut().nonce += 1u64.into();
                 HttpResponse::Ok().json(format!("txid:{}", tx_id))
             })),
             Err(e) => Box::new(future::ok(

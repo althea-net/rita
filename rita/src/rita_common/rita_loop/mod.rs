@@ -290,8 +290,11 @@ impl Handler<Tick> for RitaLoop {
                         let neg_one = -1i32;
                         let sign_flip: Int256 = neg_one.into();
 
-                        payment_settings.pay_threshold =
-                            transaction_gas * value.clone() * dynamic_fee_factor.clone();
+                        payment_settings.pay_threshold = transaction_gas
+                            * value.clone().to_int256().ok_or(format_err!(
+                                "Gas price is too high to fit into 256 signed bit integer"
+                            ))?
+                            * dynamic_fee_factor.clone();
                         trace!(
                             "Dynamically set pay threshold to {:?}",
                             payment_settings.pay_threshold

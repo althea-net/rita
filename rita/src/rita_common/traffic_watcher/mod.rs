@@ -28,6 +28,8 @@ use settings::RitaCommonSettings;
 
 use failure::Error;
 
+use num_traits::Zero;
+
 pub struct TrafficWatcher;
 
 impl Actor for TrafficWatcher {
@@ -235,7 +237,7 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
             (Some(dest), Some(id_from_if)) => {
                 match debts.get_mut(&id_from_if) {
                     Some(debt) => {
-                        *debt -= (dest.clone()) * bytes;
+                        *debt -= (dest.clone()) * bytes.into();
                     }
                     // debts is generated from identities, this should be impossible
                     None => warn!("No debts entry for input entry id {:?}", id_from_if),
@@ -261,7 +263,7 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
         match state {
             (Some(dest), Some(id_from_if)) => match debts.get_mut(&id_from_if) {
                 Some(debt) => {
-                    *debt += (dest.clone() - local_fee) * bytes;
+                    *debt += (dest.clone() - local_fee.into()) * bytes.into();
                 }
                 // debts is generated from identities, this should be impossible
                 None => warn!("No debts entry for input entry id {:?}", id_from_if),
@@ -281,7 +283,7 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
     let mut total_income = Int256::zero();
     for entry in debts.iter() {
         let income = entry.1;
-        total_income += income;
+        total_income += income.clone();
     }
     info!(
         "Total intermediary debts of {:?} Wei this round",

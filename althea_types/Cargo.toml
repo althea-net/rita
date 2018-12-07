@@ -5,7 +5,7 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
-num256 = "0.1"
+num256 = "0.2"
 base64 = "0.9.3"
 serde_derive = "1.0.79"
 serde = "1.0.79"
