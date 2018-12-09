@@ -52,7 +52,8 @@ impl KernelInterface {
                 return Err(KernelInterfaceError::RuntimeError(format!(
                     "received error adding wg link: {}",
                     stderr
-                )).into());
+                ))
+                .into());
             }
         }
         Ok(())

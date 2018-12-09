@@ -48,7 +48,7 @@ impl KernelInterface {
         lines.next(); // advance iterator to skip header
 
         let ports: Vec<u16> = lines
-            .take_while(|line| line.len() > 0)  // until end of the table is reached,
+            .take_while(|line| line.len() > 0) // until end of the table is reached,
             .map(|line| parse_local_port(line)) // parse each udp port,
             .filter_map(Result::ok) // only taking those which parsed successfully
             .collect();

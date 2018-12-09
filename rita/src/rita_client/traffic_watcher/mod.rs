@@ -167,7 +167,8 @@ pub fn watch<T: Read + Write>(
                     ));
                 }
             }
-        )).send()?
+        ))
+        .send()?
         .json()?;
     let client_rx = SystemTime::now();
 
@@ -230,6 +231,7 @@ mod tests {
                 WgKey::from_str("abc0abc1abc2abc3abc4abc5abc6abc7abc8abc=").unwrap(),
             ),
             5,
-        ).unwrap();
+        )
+        .unwrap();
     }
 }

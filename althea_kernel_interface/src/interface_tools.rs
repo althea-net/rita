@@ -123,7 +123,8 @@ fn test_get_wg_remote_ip() {
         assert_eq!(args, &["show", "wg0", "endpoints"]);
         Ok(Output {
             stdout: b"fvLYbeMV+RYbzJEc4lNEPuK8ulva/5wcSJBz0W5t3hM=	71.8.186.226:60000\
-".to_vec(),
+"
+            .to_vec(),
             stderr: b"".to_vec(),
             status: ExitStatus::from_raw(0),
         })

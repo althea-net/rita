@@ -12,7 +12,8 @@ impl KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error while setting UCI: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
         Ok(())
     }
@@ -55,7 +56,8 @@ impl KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error while getting UCI: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
         let clean_string = String::from_utf8(output.stdout)?.trim().to_string();
         Ok(clean_string)
@@ -68,7 +70,8 @@ impl KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error while commiting UCI: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
         Ok(true)
     }
@@ -80,7 +83,8 @@ impl KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error while reverting UCI: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
         Ok(())
     }
@@ -92,7 +96,8 @@ impl KernelInterface {
                 "received error while refreshing {}: {}",
                 program,
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
         Ok(())
     }
@@ -114,7 +119,8 @@ impl KernelInterface {
                 "`uci show` experienced a problem:\nstdout:\n{:?}\nstderr:\n{:?}",
                 String::from_utf8(output.stdout)?,
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
 
         let stdout = String::from_utf8(output.stdout)?;

@@ -80,12 +80,14 @@ fn main() {
                             "/upload_channel_state",
                             Method::POST,
                             handle_upload_channel_state,
-                        ).route(
+                        )
+                        .route(
                             "/get_channel_state/{address}",
                             Method::GET,
                             handle_get_channel_state,
                         )
-                }).workers(1)
+                })
+                .workers(1)
                 .bind_ssl(format!("[::]:{}", BOUNTY_HUNTER_PORT), builder)
                 .unwrap()
                 .shutdown_timeout(0)
