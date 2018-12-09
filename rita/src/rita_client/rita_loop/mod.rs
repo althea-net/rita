@@ -15,11 +15,15 @@ use failure::Error;
 
 pub struct RitaLoop;
 
+
+// the speed in seconds for the client loop
+pub const CLIENT_LOOP_SPEED: u64 = 5;
+
 impl Actor for RitaLoop {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        ctx.run_interval(Duration::from_secs(5), |_act, ctx| {
+        ctx.run_interval(Duration::from_secs(CLIENT_LOOP_SPEED), |_act, ctx| {
             let addr: Addr<Self> = ctx.address();
             addr.do_send(Tick);
         });

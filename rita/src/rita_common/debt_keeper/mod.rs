@@ -16,6 +16,9 @@ use settings::RitaCommonSettings;
 
 use crate::rita_common::payment_controller;
 use crate::rita_common::payment_controller::PaymentController;
+use crate::rita_common::tunnel_manager::TunnelAction;
+use crate::rita_common::tunnel_manager::TunnelManager;
+use crate::rita_common::tunnel_manager::TunnelStateChange;
 
 use failure::Error;
 
@@ -174,8 +177,18 @@ impl Handler<SendUpdate> for DebtKeeper {
         trace!("sending debt keeper update");
         for (k, _) in self.debt_data.clone() {
             match self.send_update(&k)? {
-                DebtAction::SuspendTunnel => {}
-                DebtAction::OpenTunnel => {}
+                DebtAction::SuspendTunnel => {
+                    TunnelManager::from_registry().do_send(TunnelStateChange {
+                        identity: k,
+                        action: TunnelAction::PaymentOverdue,
+                    });
+                }
+                DebtAction::OpenTunnel => {
+                    TunnelManager::from_registry().do_send(TunnelStateChange {
+                        identity: k,
+                        action: TunnelAction::PaidOnTime,
+                    });
+                }
                 DebtAction::MakePayment { to, amount } => PaymentController::from_registry()
                     .do_send(payment_controller::MakePayment(PaymentTx {
                         to,

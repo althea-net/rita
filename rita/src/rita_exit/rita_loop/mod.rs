@@ -26,12 +26,15 @@ use althea_types::Identity;
 
 pub struct RitaLoop;
 
+// the speed in seconds for the exit loop
+pub const EXIT_LOOP_SPEED: u64 = 5;
+
 impl Actor for RitaLoop {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
         info!("exit loop started");
-        ctx.run_interval(Duration::from_secs(5), |_act, ctx| {
+        ctx.run_interval(Duration::from_secs(EXIT_LOOP_SPEED), |_act, ctx| {
             let addr: Addr<Self> = ctx.address();
             addr.do_send(Tick);
         });

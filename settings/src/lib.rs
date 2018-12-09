@@ -238,6 +238,10 @@ fn default_dynamic_fee_multiplier() -> u32 {
     10
 }
 
+fn default_free_tier_throughput() -> u32 {
+    1000
+}
+
 /// This struct is used by both rita and rita_exit to configure the dummy payment controller and
 /// debt keeper
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -246,6 +250,9 @@ pub struct PaymentSettings {
     /// to get the pay_threshold values and then again for the close_threshold
     #[serde(default = "default_dynamic_fee_multiplier")]
     pub dynamic_fee_multiplier: u32,
+    /// Throughput of the free tier that this node provides in kbit/s
+    #[serde(default = "default_free_tier_throughput")]
+    pub free_tier_throughput: u32,
     /// The threshold above which we will kick off a payment
     #[serde(
         skip_serializing,
@@ -294,6 +301,7 @@ impl Default for PaymentSettings {
     fn default() -> Self {
         PaymentSettings {
             dynamic_fee_multiplier: 10,
+            free_tier_throughput: 1000,
             // computed as 10x the standard transaction cost on 12/2/18
             pay_threshold: 840_000_000_000_000i64.into(),
             // computed as 10x the pay threshold

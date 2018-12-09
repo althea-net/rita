@@ -16,6 +16,8 @@ use crate::rita_common::debt_keeper;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::Traffic;
 
+use crate::rita_common::rita_loop::COMMON_LOOP_SPEED;
+
 use num256::Int256;
 
 use std::collections::HashMap;
@@ -228,6 +230,10 @@ pub fn get_output_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
 /// This first time this is run, it will create the rules and then immediately read and zero them.
 /// (should return 0)
 pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result<(), Error> {
+    // the number of bytes provided under the free tier, (kbps * seconds) * 1000 = bytes
+    let free_tier_threshold: u64 =
+        u64::from(SETTING.get_payment().free_tier_throughput) * COMMON_LOOP_SPEED * 1000u64;
+
     let (identities, if_to_id) = prepare_helper_maps(neighbors);
 
     let (destinations, local_fee) = get_babel_info(babel)?;
@@ -254,7 +260,11 @@ pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result
             (Some(dest), Some(id_from_if)) => {
                 match debts.get_mut(&id_from_if) {
                     Some(debt) => {
-                        *debt -= (dest.clone()) * bytes.into();
+                        if bytes < free_tier_threshold {
+                            trace!("Throughput for {:?} discounted under free tier", id_from_if)
+                        } else {
+                            *debt -= (dest.clone()) * bytes.into();
+                        }
                     }
                     // debts is generated from identities, this should be impossible
                     None => warn!("No debts entry for input entry id {:?}", id_from_if),
@@ -280,7 +290,11 @@ pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result
         match state {
             (Some(dest), Some(id_from_if)) => match debts.get_mut(&id_from_if) {
                 Some(debt) => {
-                    *debt += (dest.clone() - local_fee.into()) * bytes.into();
+                    if bytes < free_tier_threshold {
+                        trace!("Throughput for {:?} discounted under free tier", id_from_if)
+                    } else {
+                        *debt += (dest.clone() - local_fee.into()) * bytes.into();
+                    }
                 }
                 // debts is generated from identities, this should be impossible
                 None => warn!("No debts entry for input entry id {:?}", id_from_if),
