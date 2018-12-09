@@ -20,6 +20,8 @@ use crate::rita_common::debt_keeper;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::Traffic;
 
+use crate::rita_exit::rita_loop::EXIT_LOOP_SPEED;
+
 use num256::Int256;
 
 use std::collections::HashMap;
@@ -195,6 +197,10 @@ pub fn watch<T: Read + Write>(
     babel: Babel<T>,
     clients: Vec<Identity>,
 ) -> Result<(), Error> {
+    // the number of bytes provided under the free tier, (kbps * seconds) * 1000 = bytes
+    let free_tier_threshold: u64 =
+        u64::from(SETTING.get_payment().free_tier_throughput) * EXIT_LOOP_SPEED * 1000u64;
+
     let our_price = SETTING.get_exit_network().exit_price;
     let our_id = match SETTING.get_identity() {
         Some(id) => id,
@@ -242,7 +248,12 @@ pub fn watch<T: Read + Write>(
                     if history.download > bytes.download {
                         history.download = 0;
                     }
-                    *debt -= our_price * (bytes.download - history.download);
+                    let used = bytes.download - history.download;
+                    if free_tier_threshold < used {
+                        *debt -= our_price * used;
+                    } else {
+                        trace!("{:?} not billed under free tier rules", id);
+                    }
                     // update history so that we know what was used from previous cycles
                     history.download = bytes.download;
                 }
@@ -275,7 +286,12 @@ pub fn watch<T: Read + Write>(
                     if history.upload > bytes.upload {
                         history.upload = 0;
                     }
-                    *debt -= (dest + our_price) * (bytes.upload - history.upload);
+                    let used = bytes.upload - history.upload;
+                    if free_tier_threshold < used {
+                        *debt -= (dest + our_price) * used;
+                    } else {
+                        trace!("{:?} not billed under free tier rules", id);
+                    }
                     history.upload = bytes.upload;
                 }
                 // debts is generated from identities, this should be impossible

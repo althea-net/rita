@@ -15,6 +15,7 @@ use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::time::{Duration, SystemTime};
 
+use crate::rita_client::rita_loop::CLIENT_LOOP_SPEED;
 use crate::rita_common::debt_keeper::{DebtKeeper, Traffic, TrafficUpdate};
 use crate::KI;
 use crate::SETTING;
@@ -77,6 +78,10 @@ pub fn watch<T: Read + Write>(
     exit: Identity,
     exit_price: u64,
 ) -> Result<(), Error> {
+    // the number of bytes provided under the free tier, (kbps * seconds) * 1000 = bytes
+    let free_tier_threshold: u64 =
+        u64::from(SETTING.get_payment().free_tier_throughput) * CLIENT_LOOP_SPEED * 1000u64;
+
     babel.start_connection()?;
 
     trace!("Getting routes");
@@ -183,23 +188,27 @@ pub fn watch<T: Read + Write>(
     trace!("Exit ip: {:?}", exit.mesh_ip);
     trace!("Exit destination:\n{:#?}", exit_route);
 
-    // accounts for what we owe the exit for return data and sent data
-    // we have to pay our neighbor for what we send over them
-    // remember pay per *forward* so we pay our neighbor for what we
-    // send to the exit while we pay the exit to pay it's neighbor to eventually
-    // pay our neighbor to send data back to us.
-    let owes_exit = Int256::from(exit_price * output) + exit_dest_price * input.into();
+    if (input + output) > free_tier_threshold {
+        // accounts for what we owe the exit for return data and sent data
+        // we have to pay our neighbor for what we send over them
+        // remember pay per *forward* so we pay our neighbor for what we
+        // send to the exit while we pay the exit to pay it's neighbor to eventually
+        // pay our neighbor to send data back to us.
+        let owes_exit = Int256::from(exit_price * output) + exit_dest_price * input.into();
 
-    info!("Total client debt of {} this round", owes_exit);
+        info!("Total client debt of {} this round", owes_exit);
 
-    let exit_update = TrafficUpdate {
-        traffic: vec![Traffic {
-            from: exit.clone(),
-            amount: owes_exit,
-        }],
-    };
+        let exit_update = TrafficUpdate {
+            traffic: vec![Traffic {
+                from: exit.clone(),
+                amount: owes_exit,
+            }],
+        };
 
-    DebtKeeper::from_registry().do_send(exit_update);
+        DebtKeeper::from_registry().do_send(exit_update);
+    } else {
+        trace!("Exit bandwidth did not exceed free tier, no bill");
+    }
 
     Ok(())
 }
