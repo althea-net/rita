@@ -1,7 +1,7 @@
 use clarity::{Address, Transaction};
 use num256::Uint256;
 use std::net::IpAddr;
-use wg_key::WgKey;
+use crate::wg_key::WgKey;
 
 #[cfg(feature = "actix")]
 use actix::*;

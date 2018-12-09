@@ -15,7 +15,7 @@ pub struct WgKeypair {
     pub private: WgKey,
 }
 
-impl KernelInterface {
+impl dyn KernelInterface {
     pub fn create_wg_key(&self, path: &Path, private_key: &WgKey) -> Result<(), Error> {
         trace!("Overwriting old private key file");
         let mut priv_key_file = File::create(path)?;

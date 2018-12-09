@@ -6,19 +6,19 @@
 
 use std::time::{Duration, Instant};
 
-use actix::prelude::*;
-use actix::registry::SystemService;
+use ::actix::prelude::*;
+use ::actix::registry::SystemService;
 
-use rita_exit::db_client::{DbClient, ListClients};
+use crate::rita_exit::db_client::{DbClient, ListClients};
 
-use rita_exit::traffic_watcher::{TrafficWatcher, Watch};
+use crate::rita_exit::traffic_watcher::{TrafficWatcher, Watch};
 
 use exit_db::models::Client;
 
 use failure::Error;
 
+use crate::SETTING;
 use settings::{RitaCommonSettings, RitaExitSettings};
-use SETTING;
 
 use althea_kernel_interface::{ExitClient, KI};
 

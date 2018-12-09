@@ -1,10 +1,10 @@
-extern crate bufstream;
+
 #[macro_use]
 extern crate failure;
-extern crate ipnetwork;
+
 #[macro_use]
 extern crate log;
-extern crate mockstream;
+
 
 use std::collections::VecDeque;
 use std::io::{BufRead, Read, Write};
@@ -34,7 +34,7 @@ pub enum BabelMonitorError {
     NoNeighbor(String),
 }
 
-use BabelMonitorError::*;
+use crate::BabelMonitorError::*;
 
 // If a function doesn't need internal state of the Babel object
 // we don't want to place it as a member function.

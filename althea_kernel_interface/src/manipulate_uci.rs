@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use super::{KernelInterface, KernelInterfaceError};
 
-impl KernelInterface {
+impl dyn KernelInterface {
     fn run_uci(&self, command: &str, args: &[&str]) -> Result<(), Error> {
         let output = self.run_command(command, args)?;
         if !output.stderr.is_empty() {

@@ -2,7 +2,7 @@
 
 use althea_types::{LocalIdentity, PaymentTx};
 
-use actix::registry::SystemService;
+use ::actix::registry::SystemService;
 use actix_web::http::StatusCode;
 use actix_web::*;
 
@@ -12,16 +12,16 @@ use futures::future::Either;
 
 use failure::Error;
 
+use crate::SETTING;
 use settings::RitaCommonSettings;
-use SETTING;
 
 use std::net::SocketAddr;
 
-use rita_common;
-use rita_common::payment_controller::PaymentController;
-use rita_common::peer_listener::Peer;
-use rita_common::rita_loop::get_web3_server;
-use rita_common::tunnel_manager::{IdentityCallback, TunnelManager};
+use crate::rita_common;
+use crate::rita_common::payment_controller::PaymentController;
+use crate::rita_common::peer_listener::Peer;
+use crate::rita_common::rita_loop::get_web3_server;
+use crate::rita_common::tunnel_manager::{IdentityCallback, TunnelManager};
 
 use guac_core::web3::client::{Web3, Web3Client};
 
@@ -48,7 +48,7 @@ impl JsonStatusResponse {
 /// The recieve side of the make payments call
 pub fn make_payments(
     pmt: (Json<PaymentTx>, HttpRequest),
-) -> Box<Future<Item = HttpResponse, Error = Error>> {
+) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     info!(
         "Got Payment from {:?} for {} with txid {:?}",
         pmt.1.connection_info().remote(),
@@ -128,7 +128,7 @@ pub fn make_payments(
 
 pub fn hello_response(
     req: (Json<LocalIdentity>, HttpRequest),
-) -> Box<Future<Item = Json<LocalIdentity>, Error = Error>> {
+) -> Box<dyn Future<Item = Json<LocalIdentity>, Error = Error>> {
     let their_id = req.0.clone();
 
     let socket = req

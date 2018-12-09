@@ -16,19 +16,19 @@
 //!
 //! Signup is complete and the user may use the connection
 
-use actix::prelude::*;
-use actix::registry::SystemService;
-use actix_web::client::Connection;
-use actix_web::*;
+use ::actix::prelude::*;
+use ::actix::registry::SystemService;
+use ::actix_web::client::Connection;
+use ::actix_web::*;
 use std::net::IpAddr;
 
 use althea_types::{ExitClientIdentity, ExitState};
 
+use crate::SETTING;
 use settings::{ExitServer, RitaClientSettings, RitaCommonSettings};
-use SETTING;
 
-use rita_client::rita_loop::Tick;
-use rita_client::traffic_watcher::{TrafficWatcher, Watch};
+use crate::rita_client::rita_loop::Tick;
+use crate::rita_client::traffic_watcher::{TrafficWatcher, Watch};
 
 use futures::future;
 use futures::future::join_all;
@@ -40,10 +40,10 @@ use log::LevelFilter;
 use syslog::Error as LogError;
 use syslog::{init_udp, Facility};
 
+use crate::KI;
 use failure::Error;
 use std::net::SocketAddr;
 use std::time::Duration;
-use KI;
 
 /// enables remote logging if the user has configured it
 fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
@@ -176,7 +176,7 @@ fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = 
         Some(current_exit) => current_exit.clone(),
         None => {
             return Box::new(future::err(format_err!("No valid exit for {}", exit)))
-                as Box<Future<Item = (), Error = Error>>;
+                as Box<dyn Future<Item = (), Error = Error>>;
         }
     };
 
@@ -210,7 +210,7 @@ fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = 
 pub fn exit_setup_request(
     exit: String,
     code: Option<String>,
-) -> Box<Future<Item = (), Error = Error>> {
+) -> Box<dyn Future<Item = (), Error = Error>> {
     let current_exit = match SETTING.get_exits().get(&exit) {
         Some(exit_struct) => exit_struct.clone(),
         None => return Box::new(future::err(format_err!("Could not find exit {:?}", exit))),
@@ -261,7 +261,7 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
         Some(current_exit) => current_exit.clone(),
         None => {
             return Box::new(future::err(format_err!("No valid exit for {}", exit)))
-                as Box<Future<Item = (), Error = Error>>;
+                as Box<dyn Future<Item = (), Error = Error>>;
         }
     };
 
@@ -399,7 +399,7 @@ impl Handler<Tick> for ExitManager {
         // code that manages requesting details to exits
         let servers = { SETTING.get_exits().clone() };
 
-        let mut futs: Vec<Box<Future<Item = (), Error = Error>>> = Vec::new();
+        let mut futs: Vec<Box<dyn Future<Item = (), Error = Error>>> = Vec::new();
 
         for (k, s) in servers {
             match s.info {

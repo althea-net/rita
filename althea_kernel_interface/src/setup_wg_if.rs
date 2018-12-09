@@ -6,7 +6,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use failure::Error;
 
-impl KernelInterface {
+impl dyn KernelInterface {
     pub fn get_peers(&self, iface_name: &str) -> Result<Vec<WgKey>, Error> {
         let output = self.run_command("wg", &["show", iface_name, "peers"])?;
 
@@ -83,7 +83,7 @@ impl KernelInterface {
 
 #[test]
 fn test_setup_wg_if_linux() {
-    use KI;
+    use crate::KI;
 
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
@@ -123,7 +123,7 @@ fn test_setup_wg_if_linux() {
 
 #[test]
 fn test_get_wg_exit_clients_online() {
-    use KI;
+    use crate::KI;
 
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;

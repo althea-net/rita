@@ -11,37 +11,37 @@ use std::time::{Duration, Instant};
 use rand::thread_rng;
 use rand::Rng;
 
-use actix::prelude::*;
-use actix::registry::SystemService;
-use actix_utils::KillActor;
+use crate::actix_utils::KillActor;
+use ::actix::prelude::*;
+use ::actix::registry::SystemService;
 
-use actix_utils::ResolverWrapper;
+use crate::actix_utils::ResolverWrapper;
 
 use guac_core::web3::client::{Web3, Web3Client};
 
-use KI;
+use crate::KI;
 
-use rita_common::tunnel_manager::{GetNeighbors, TriggerGC, TunnelManager};
+use crate::rita_common::tunnel_manager::{GetNeighbors, TriggerGC, TunnelManager};
 
-use rita_common::traffic_watcher::{TrafficWatcher, Watch};
+use crate::rita_common::traffic_watcher::{TrafficWatcher, Watch};
 
-use rita_common::peer_listener::PeerListener;
+use crate::rita_common::peer_listener::PeerListener;
 
-use rita_common::debt_keeper::{DebtKeeper, SendUpdate};
+use crate::rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 
-use rita_common::peer_listener::GetPeers;
+use crate::rita_common::peer_listener::GetPeers;
 
-use rita_common::dao_manager::DAOCheck;
-use rita_common::dao_manager::DAOManager;
+use crate::rita_common::dao_manager::DAOCheck;
+use crate::rita_common::dao_manager::DAOManager;
 
-use rita_common::tunnel_manager::PeersToContact;
+use crate::rita_common::tunnel_manager::PeersToContact;
 
 use failure::Error;
 
 use futures::Future;
 
+use crate::SETTING;
 use settings::RitaCommonSettings;
-use SETTING;
 
 pub struct RitaLoop {
     was_gateway: bool,

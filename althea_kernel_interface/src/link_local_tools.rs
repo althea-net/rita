@@ -6,7 +6,7 @@ use regex::Regex;
 
 use failure::Error;
 
-impl KernelInterface {
+impl dyn KernelInterface {
     /// This gets our link local ip for a given device
     pub fn get_link_local_device_ip(&self, dev: &str) -> Result<Ipv6Addr, Error> {
         let output = self.run_command("ip", &["addr", "show", "dev", dev, "scope", "link"])?;
@@ -139,7 +139,7 @@ impl KernelInterface {
 
 #[test]
 fn test_get_device_name_linux() {
-    use KI;
+    use crate::KI;
 
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
@@ -172,7 +172,7 @@ fe80::433:25ff:fe8c:e1ea dev eth2 lladdr 1a:32:06:78:05:0a STALE
 
 #[test]
 fn test_get_link_local_device_ip_linux() {
-    use KI;
+    use crate::KI;
 
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
@@ -200,7 +200,7 @@ fn test_get_link_local_device_ip_linux() {
 
 #[test]
 fn test_get_link_local_reply_ip_linux() {
-    use KI;
+    use crate::KI;
 
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;

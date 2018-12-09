@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn get_mesh_ip(_req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Error>> {
+pub fn get_mesh_ip(_req: HttpRequest) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     debug!("/mesh_ip GET hit");
 
     let mut ret = HashMap::new();
@@ -21,7 +21,7 @@ pub fn get_mesh_ip(_req: HttpRequest) -> Box<Future<Item = HttpResponse, Error =
 
 pub fn set_mesh_ip(
     mesh_ip_data: Json<HashMap<String, String>>,
-) -> Box<Future<Item = HttpResponse, Error = Error>> {
+) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     debug!("/mesh_ip POST hit");
 
     let mut ret = HashMap::new();

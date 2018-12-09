@@ -30,7 +30,7 @@ fn parse_local_port(s: &str) -> Result<u16, Error> {
     }
 }
 
-impl KernelInterface {
+impl dyn KernelInterface {
     fn read_udp_socket_table(&self) -> Result<String, Error> {
         let mut f = File::open("/proc/net/udp")?;
         let mut contents = String::new();

@@ -5,8 +5,8 @@
 //! This 'abstraction' layer is pretty closely tied to the signup process for exits and contains
 //! too much sign up logic.
 
-use actix::prelude::*;
-use actix_web::*;
+use ::actix::prelude::*;
+use ::actix_web::*;
 use diesel;
 use diesel::dsl::*;
 use diesel::prelude::*;
@@ -35,8 +35,8 @@ use rand::Rng;
 
 use exit_db::{models, schema};
 
+use crate::SETTING;
 use settings::{ExitVerifSettings, RitaExitSettings};
-use SETTING;
 
 use ipnetwork::IpNetwork;
 
@@ -542,7 +542,7 @@ impl Handler<TruncateTables> for DbClient {
                 bail!("Could not connect to database file!")
             }
         };
-        try!(delete(clients).execute(&connection));
+        r#try!(delete(clients).execute(&connection));
         Ok(())
     }
 }

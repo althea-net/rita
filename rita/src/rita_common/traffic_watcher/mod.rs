@@ -2,18 +2,18 @@
 //! iptables and ipset counters on each per hop tunnel (the WireGuard tunnel between two devices). These counts
 //! are then stored and used to compute amounts for bills.
 
-use actix::prelude::*;
-use rita_common::tunnel_manager::Neighbor;
+use crate::rita_common::tunnel_manager::Neighbor;
+use ::actix::prelude::*;
 
+use crate::KI;
 use althea_kernel_interface::FilterTarget;
-use KI;
 
 use althea_types::Identity;
 
 use babel_monitor::Babel;
 
-use rita_common::debt_keeper;
-use rita_common::debt_keeper::DebtKeeper;
+use crate::rita_common::debt_keeper;
+use crate::rita_common::debt_keeper::DebtKeeper;
 
 use num256::Int256;
 
@@ -23,8 +23,8 @@ use std::net::{IpAddr, SocketAddr, TcpStream};
 
 use ipnetwork::IpNetwork;
 
+use crate::SETTING;
 use settings::RitaCommonSettings;
-use SETTING;
 
 use failure::Error;
 
@@ -316,7 +316,7 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
 
 #[cfg(test)]
 mod tests {
-    extern crate env_logger;
+    use env_logger;
 
     use super::*;
 

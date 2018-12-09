@@ -5,10 +5,10 @@
 //! Entires from the DAO are cached for a configurable amount of time, this may of course
 //! have the effect of adding someone to the DAO taking time to kick in.
 
-use actix::prelude::*;
-use actix_web::client::Connection;
-use actix_web::error::JsonPayloadError;
-use actix_web::*;
+use ::actix::prelude::*;
+use ::actix_web::client::Connection;
+use ::actix_web::error::JsonPayloadError;
+use ::actix_web::*;
 use futures::future::ok;
 use futures::Future;
 use num_traits::Zero;
@@ -23,15 +23,15 @@ use std::time::Duration;
 use std::time::Instant;
 use tokio::net::TcpStream as TokioTcpStream;
 
+use crate::rita_common::tunnel_manager::TunnelAction;
+use crate::rita_common::tunnel_manager::TunnelManager;
+use crate::rita_common::tunnel_manager::TunnelStateChange;
 use althea_types::Identity;
 use clarity::Address;
 use num256::Uint256;
-use rita_common::tunnel_manager::TunnelAction;
-use rita_common::tunnel_manager::TunnelManager;
-use rita_common::tunnel_manager::TunnelStateChange;
 use settings::RitaCommonSettings;
 
-use SETTING;
+use crate::SETTING;
 
 // A json object specifcally for the web3 function
 // call response we expect from the SubnetDAO contract
@@ -309,7 +309,7 @@ fn get_membership(dao_address: Address, target: Identity) -> () {
                                 }
                             },
                         ))
-                            as Box<Future<Item = (), Error = JsonPayloadError>>,
+                            as Box<dyn Future<Item = (), Error = JsonPayloadError>>,
                         Err(e) => {
                             warn!("Got error from full node {:?}", e);
                             Box::new(ok(()))

@@ -1,6 +1,6 @@
 use super::KernelInterface;
 
-impl KernelInterface {
+impl dyn KernelInterface {
     /// Returns a bool based on device state, "UP" or "DOWN", "UNKNOWN" is
     /// interpreted as DOWN
     pub fn is_iface_up(&self, dev: &str) -> Option<bool> {
@@ -21,7 +21,7 @@ impl KernelInterface {
 
 #[test]
 fn test_is_interface_up() {
-    use KI;
+    use crate::KI;
 
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;

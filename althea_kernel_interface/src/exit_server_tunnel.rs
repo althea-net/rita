@@ -14,7 +14,7 @@ pub struct ExitClient {
     pub port: u16,
 }
 
-impl KernelInterface {
+impl dyn KernelInterface {
     pub fn set_exit_wg_config(
         &self,
         clients: Vec<ExitClient>,
