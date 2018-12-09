@@ -3,7 +3,7 @@
 
 use actix_web::middleware::{Middleware, Response, Started};
 use actix_web::{HttpRequest, HttpResponse, Result};
-use http::{header, HttpTryFrom, Method, StatusCode};
+use crate::http::{header, HttpTryFrom, Method, StatusCode};
 use regex::Regex;
 
 pub struct Headers;

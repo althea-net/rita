@@ -8,7 +8,7 @@ use regex::Regex;
 
 use failure::Error;
 
-impl KernelInterface {
+impl dyn KernelInterface {
     /// Returns a vector of neighbors reachable over layer 2, giving IP address of each.
     /// Implemented with `ip neighbor` on Linux.
     pub fn get_neighbors(&self) -> Result<Vec<(IpAddr, String)>, Error> {
@@ -36,7 +36,7 @@ impl KernelInterface {
 
 #[test]
 fn test_get_neighbors_linux() {
-    use KI;
+    use crate::KI;
 
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;

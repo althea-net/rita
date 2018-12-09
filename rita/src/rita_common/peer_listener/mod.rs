@@ -7,17 +7,17 @@
 //! off the queue. These are turned into Peer structs which are passed to TunnelManager to do
 //! whatever remaining work there may be.
 
-use actix::prelude::*;
-use actix::{Actor, Context};
+use ::actix::prelude::*;
+use ::actix::{Actor, Context};
 use failure::Error;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
 
-use rita_common::rita_loop::Tick;
+use crate::rita_common::rita_loop::Tick;
 
-use KI;
-use SETTING;
+use crate::KI;
+use crate::SETTING;
 
 mod message;
 use self::message::PeerMessage;

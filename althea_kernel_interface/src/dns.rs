@@ -5,7 +5,7 @@ use std::io::Error;
 use std::io::Read;
 use std::net::IpAddr;
 
-impl KernelInterface {
+impl dyn KernelInterface {
     /// Gets a list of IP addresses of nameservers from /etc/resolv.conf, may be v6, v4 or both
     /// generally ignores malformed lines but produces IO errors
     pub fn get_resolv_servers(&self) -> Result<Vec<IpAddr>, Error> {

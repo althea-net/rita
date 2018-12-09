@@ -2,10 +2,10 @@
 //! management and automation. They exist on port 4877 by default and should be firewalled
 //! from the outside world for obvious security reasons.
 
-use actix::prelude::*;
-use actix::registry::SystemService;
-use actix_web::http::StatusCode;
-use actix_web::*;
+use ::actix::prelude::*;
+use ::actix::registry::SystemService;
+use ::actix_web::http::StatusCode;
+use ::actix_web::*;
 
 use failure::Error;
 use num_traits::ops::checked::CheckedDiv;
@@ -21,8 +21,8 @@ use std::{
     net::{SocketAddr, TcpStream},
 };
 
-use settings::RitaCommonSettings;
-use SETTING;
+use crate::SETTING;
+use ::settings::RitaCommonSettings;
 
 use babel_monitor::Babel;
 
@@ -30,10 +30,10 @@ use clarity::{Address, Transaction};
 
 use guac_core::web3::client::{Web3, Web3Client};
 
-use rita_common::debt_keeper::GetDebtsList;
-use rita_common::debt_keeper::{DebtKeeper, GetDebtsResult};
-use rita_common::network_endpoints::JsonStatusResponse;
-use rita_common::rita_loop::get_web3_server;
+use crate::rita_common::debt_keeper::GetDebtsList;
+use crate::rita_common::debt_keeper::{DebtKeeper, GetDebtsResult};
+use crate::rita_common::network_endpoints::JsonStatusResponse;
+use crate::rita_common::rita_loop::get_web3_server;
 
 pub mod babel;
 pub mod dao;

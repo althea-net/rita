@@ -7,14 +7,14 @@ use num256::Uint256;
 
 use std::collections::HashMap;
 
-use models::{ChannelState, ChannelStateRecord, NewChannelStateRecord};
-use schema::states::dsl::*;
-use DB_CONN;
+use crate::models::{ChannelState, ChannelStateRecord, NewChannelStateRecord};
+use crate::schema::states::dsl::*;
+use crate::DB_CONN;
 
 /// Pass channel state to the bounty hunter
 pub fn handle_upload_channel_state(
     state_obj: Json<ChannelState>,
-) -> Box<Future<Item = HttpResponse, Error = Error>> {
+) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     trace!("Hit /upload_channel_state");
 
     let mut ret = HashMap::new();
@@ -212,7 +212,7 @@ pub fn handle_upload_channel_state(
 pub fn handle_get_channel_state(
     _req: HttpRequest,
     address: actix_web::Path<Address>,
-) -> Box<Future<Item = HttpResponse, Error = Error>> {
+) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let address = address.into_inner();
     trace!("Hit /get_channel_state/{:#x}", address);
 

@@ -2,7 +2,7 @@ use super::*;
 
 pub fn get_debts(
     _req: HttpRequest,
-) -> Box<Future<Item = Json<Vec<GetDebtsResult>>, Error = Error>> {
+) -> Box<dyn Future<Item = Json<Vec<GetDebtsResult>>, Error = Error>> {
     trace!("get_debts: Hit");
     DebtKeeper::from_registry()
         .send(GetDebtsList {})

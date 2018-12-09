@@ -82,7 +82,7 @@ impl Handler<GetNodeInfo> for Dashboard {
     }
 }
 
-pub fn get_node_info(_req: HttpRequest) -> Box<Future<Item = Json<Vec<NodeInfo>>, Error = Error>> {
+pub fn get_node_info(_req: HttpRequest) -> Box<dyn Future<Item = Json<Vec<NodeInfo>>, Error = Error>> {
     debug!("Neighbors endpoint hit!");
     Dashboard::from_registry()
         .send(GetNodeInfo {})

@@ -118,7 +118,7 @@ add zxcv 1234:5678:9801:2345:6789:0123:4567:8902,wg0 packets 123456789 bytes 987
     }
 }
 
-impl KernelInterface {
+impl dyn KernelInterface {
     pub fn init_counter(&self, target: &FilterTarget) -> Result<(), Error> {
         self.run_command(
             "ipset",
@@ -194,7 +194,7 @@ fn test_init_counter() {
     use std::process::ExitStatus;
     use std::process::Output;
 
-    use KI;
+    use crate::KI;
 
     let mut counter = 0;
 
@@ -261,7 +261,7 @@ fn test_read_counters() {
     use std::process::ExitStatus;
     use std::process::Output;
 
-    use KI;
+    use crate::KI;
 
     let mut counter = 0;
 

@@ -6,10 +6,10 @@
 
 use std::time::{Duration, Instant};
 
-use actix::prelude::*;
-use actix::registry::SystemService;
+use ::actix::prelude::*;
+use ::actix::registry::SystemService;
 
-use rita_client::exit_manager::ExitManager;
+use crate::rita_client::exit_manager::ExitManager;
 
 use failure::Error;
 

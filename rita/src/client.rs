@@ -30,33 +30,33 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
-extern crate actix;
-extern crate actix_web;
-extern crate byteorder;
-extern crate bytes;
-extern crate clu;
-extern crate docopt;
-extern crate env_logger;
-extern crate eui48;
-extern crate futures;
-extern crate handlebars;
-extern crate ipnetwork;
-extern crate lettre;
-extern crate lettre_email;
-extern crate minihttpse;
-extern crate num_traits;
-extern crate openssl_probe;
-extern crate rand;
-extern crate regex;
-extern crate reqwest;
-extern crate serde;
-extern crate serde_json;
-extern crate settings;
-extern crate syslog;
-extern crate tokio;
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate trust_dns_resolver;
+use actix;
+
+
+
+
+
+use env_logger;
+
+
+
+
+
+
+
+
+use openssl_probe;
+
+
+use reqwest;
+
+use serde_json;
+
+
+
+
+
+
 
 use docopt::Docopt;
 #[cfg(not(test))]
@@ -74,35 +74,35 @@ use std::sync::{Arc, RwLock};
 #[cfg(test)]
 use std::sync::Mutex;
 
-extern crate clarity;
-extern crate guac_core;
-extern crate num256;
 
-extern crate althea_kernel_interface;
-extern crate althea_types;
-extern crate babel_monitor;
+
+
+
+
+
+
 
 pub mod actix_utils;
 mod middleware;
 mod rita_client;
 mod rita_common;
 
-use rita_client::dashboard::exits::*;
-use rita_client::dashboard::interfaces::*;
-use rita_client::dashboard::logging::*;
-use rita_client::dashboard::mesh_ip::*;
-use rita_client::dashboard::neighbors::*;
-use rita_client::dashboard::wifi::*;
+use crate::rita_client::dashboard::exits::*;
+use crate::rita_client::dashboard::interfaces::*;
+use crate::rita_client::dashboard::logging::*;
+use crate::rita_client::dashboard::mesh_ip::*;
+use crate::rita_client::dashboard::neighbors::*;
+use crate::rita_client::dashboard::wifi::*;
 
-use rita_common::dashboard::babel::*;
-use rita_common::dashboard::dao::*;
-use rita_common::dashboard::debts::*;
-use rita_common::dashboard::development::*;
-use rita_common::dashboard::own_info::*;
-use rita_common::dashboard::settings::*;
-use rita_common::dashboard::wallet::*;
+use crate::rita_common::dashboard::babel::*;
+use crate::rita_common::dashboard::dao::*;
+use crate::rita_common::dashboard::debts::*;
+use crate::rita_common::dashboard::development::*;
+use crate::rita_common::dashboard::own_info::*;
+use crate::rita_common::dashboard::settings::*;
+use crate::rita_common::dashboard::wallet::*;
 
-use rita_common::network_endpoints::*;
+use crate::rita_common::network_endpoints::*;
 
 #[derive(Debug, Deserialize)]
 struct Args {
@@ -135,7 +135,7 @@ use althea_kernel_interface::TestCommandRunner;
 
 #[cfg(test)]
 lazy_static! {
-    pub static ref KI: Box<KernelInterface> = Box::new(TestCommandRunner {
+    pub static ref KI: Box<dyn KernelInterface> = Box::new(TestCommandRunner {
         run_command: Arc::new(Mutex::new(Box::new(|_program, _args| {
             panic!("kernel interface used before initialized");
         })))
@@ -144,7 +144,7 @@ lazy_static! {
 
 #[cfg(not(test))]
 lazy_static! {
-    pub static ref KI: Box<KernelInterface> = Box::new(LinuxCommandRunner {});
+    pub static ref KI: Box<dyn KernelInterface> = Box::new(LinuxCommandRunner {});
 }
 
 #[cfg(not(test))]

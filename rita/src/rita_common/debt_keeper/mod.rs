@@ -2,7 +2,7 @@
 //! maintains the long term memory of who owes whow what so that it may later be quiered and paid
 //! by payment manager in the current implementation or guac in the more final one
 
-use actix::prelude::*;
+use ::actix::prelude::*;
 
 use std::collections::{HashMap, VecDeque};
 
@@ -10,11 +10,11 @@ use althea_types::{Identity, PaymentTx};
 
 use num256::{Int256, Uint256};
 
+use crate::SETTING;
 use settings::RitaCommonSettings;
-use SETTING;
 
-use rita_common::payment_controller;
-use rita_common::payment_controller::PaymentController;
+use crate::rita_common::payment_controller;
+use crate::rita_common::payment_controller::PaymentController;
 
 use failure::Error;
 

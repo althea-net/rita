@@ -20,7 +20,7 @@ impl ToString for IpRoute {
     }
 }
 
-impl KernelInterface {
+impl dyn KernelInterface {
     pub fn get_default_route(&self) -> Option<Vec<String>> {
         let output = self
             .run_command("ip", &["route", "list", "default"])
@@ -108,7 +108,7 @@ fn test_get_default_route_invalid() {
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
     use std::process::Output;
-    use KI;
+    use crate::KI;
     let mut counter = 0;
 
     // This will mock `run_command` to run a real output of `ip route`
@@ -141,7 +141,7 @@ fn test_get_default_route() {
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
     use std::process::Output;
-    use KI;
+    use crate::KI;
     let mut counter = 0;
 
     // This will mock `run_command` to run a real output of `ip route`
@@ -194,7 +194,7 @@ fn test_set_route() {
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
     use std::process::Output;
-    use KI;
+    use crate::KI;
     let mut counter = 0;
 
     KI.set_mock(Box::new(move |program, args| {
@@ -226,7 +226,7 @@ fn test_set_default_route() {
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
     use std::process::Output;
-    use KI;
+    use crate::KI;
     let mut counter = 0;
 
     KI.set_mock(Box::new(move |program, args| {

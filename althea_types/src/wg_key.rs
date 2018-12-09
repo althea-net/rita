@@ -15,7 +15,7 @@ impl AsRef<[u8]> for WgKey {
 }
 
 impl fmt::Display for WgKey {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", base64::encode(&self))
     }
 }
@@ -51,7 +51,7 @@ struct WgKeyVisitor;
 impl<'de> Visitor<'de> for WgKeyVisitor {
     type Value = WgKey;
 
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
             "expects a valid base64-encoded string with length of 44"

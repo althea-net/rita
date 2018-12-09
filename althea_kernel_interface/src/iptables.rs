@@ -2,7 +2,7 @@ use super::KernelInterface;
 
 use failure::Error;
 
-impl KernelInterface {
+impl dyn KernelInterface {
     pub fn add_iptables_rule(&self, command: &str, rule: &[&str]) -> Result<(), Error> {
         assert!(rule.contains(&"-A") || rule.contains(&"-I"));
 

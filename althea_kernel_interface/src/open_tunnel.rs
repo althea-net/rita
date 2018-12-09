@@ -10,7 +10,7 @@ use failure::Error;
 fn to_wg_local(ip: &IpAddr) -> IpAddr {
     match ip {
         &IpAddr::V6(ip) => {
-            let mut seg = ip.segments();
+            let seg = ip.segments();
             assert_eq!((seg[0] & 0xfd00), 0xfd00);
             IpAddr::V6(Ipv6Addr::new(
                 0xfe80, 0x0, 0x0, 0x0, seg[4], seg[5], seg[6], seg[7],
@@ -54,7 +54,7 @@ fn socket_to_string(endpoint: &SocketAddr, interface_name: Option<String>) -> St
     }
 }
 
-impl KernelInterface {
+impl dyn KernelInterface {
     pub fn open_tunnel(
         &self,
         interface: &String,
@@ -201,7 +201,7 @@ impl KernelInterface {
 
 #[test]
 fn test_open_tunnel_linux() {
-    use KI;
+    use crate::KI;
 
     use std::net::SocketAddrV6;
     use std::os::unix::process::ExitStatusExt;

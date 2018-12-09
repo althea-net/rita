@@ -1,13 +1,13 @@
 //! Placehodler payment manager, to be removed with Gauc integration
 
-use actix::prelude::*;
-use actix_web::client;
-use actix_web::client::Connection;
+use ::actix::prelude::*;
+use ::actix_web::client;
+use ::actix_web::client::Connection;
 
 use futures::future::Either;
 use futures::{future, Future};
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 
 use tokio::net::TcpStream as TokioTcpStream;
 
@@ -15,13 +15,13 @@ use althea_types::PaymentTx;
 
 use clarity::Transaction;
 
+use crate::SETTING;
 use settings::RitaCommonSettings;
-use SETTING;
 
-use rita_common::debt_keeper;
-use rita_common::debt_keeper::DebtKeeper;
-use rita_common::debt_keeper::PaymentFailed;
-use rita_common::rita_loop::get_web3_server;
+use crate::rita_common::debt_keeper;
+use crate::rita_common::debt_keeper::DebtKeeper;
+use crate::rita_common::debt_keeper::PaymentFailed;
+use crate::rita_common::rita_loop::get_web3_server;
 
 use guac_core::web3::client::{Web3, Web3Client};
 
@@ -66,9 +66,6 @@ impl Handler<MakePayment> for PaymentController {
         }
     }
 }
-
-#[cfg(test)]
-extern crate mockito;
 
 impl Default for PaymentController {
     fn default() -> PaymentController {

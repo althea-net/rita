@@ -6,7 +6,7 @@ use failure::Error;
 use std::net::IpAddr;
 use std::str::from_utf8;
 
-impl KernelInterface {
+impl dyn KernelInterface {
     /// Returns all existing interfaces
     pub fn get_interfaces(&self) -> Result<Vec<String>, Error> {
         let links = String::from_utf8(self.run_command("ip", &["link"])?.stdout)?;
@@ -76,7 +76,7 @@ impl KernelInterface {
 
 #[test]
 fn test_get_interfaces_linux() {
-    use KI;
+    use crate::KI;
 
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
@@ -112,7 +112,7 @@ fn test_get_interfaces_linux() {
 
 #[test]
 fn test_get_wg_remote_ip() {
-    use KI;
+    use crate::KI;
 
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;

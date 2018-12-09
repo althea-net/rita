@@ -571,7 +571,7 @@ mod tests {
 
 pub fn get_interfaces_endpoint(
     _req: HttpRequest,
-) -> Box<Future<Item = Json<HashMap<String, InterfaceMode>>, Error = Error>> {
+) -> Box<dyn Future<Item = Json<HashMap<String, InterfaceMode>>, Error = Error>> {
     debug!("get /interfaces hit");
     Dashboard::from_registry()
         .send(GetInterfaces)
@@ -582,7 +582,7 @@ pub fn get_interfaces_endpoint(
 
 pub fn set_interfaces_endpoint(
     interface: Json<InterfaceToSet>,
-) -> Box<Future<Item = Json<()>, Error = Error>> {
+) -> Box<dyn Future<Item = Json<()>, Error = Error>> {
     debug!("set /interfaces hit");
     let to_set = interface.into_inner();
     Dashboard::from_registry()
