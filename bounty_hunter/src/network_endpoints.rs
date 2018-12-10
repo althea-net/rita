@@ -221,7 +221,8 @@ pub fn handle_get_channel_state(
             address_a
                 .eq(address.as_bytes())
                 .or(address_b.eq(address.as_bytes())),
-        ).load::<ChannelStateRecord>(&*DB_CONN.lock().unwrap())
+        )
+        .load::<ChannelStateRecord>(&*DB_CONN.lock().unwrap())
     {
         Ok(values) => values,
         Err(e) => {

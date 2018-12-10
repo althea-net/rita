@@ -26,13 +26,15 @@ impl KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error from wg command: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
 
         lazy_static! {
             static ref RE: Regex = Regex::new(
                 r"(?P<key>[+/=0-9a-zA-Z]+)\t(?P<download>[0-9]+)\t(?P<upload>[0-9]+)\n*"
-            ).expect("Unable to compile regular expression");
+            )
+            .expect("Unable to compile regular expression");
         }
 
         let mut result = HashMap::new();
@@ -122,7 +124,8 @@ b6HGtuWLAIHyINOgL7euzrMsMfzHIie5kYDScSCT7Ds=\t67526804\t88741160
 RW1XPRn4nJQaDqqeDFRilPjtYOUBitXIuHwoKZAtKWw=\t480230868\t3531367092
 AJYeYn4R+I+Jc7xiKQ15ImruYFXybTiR6BB6Ip3/njs=\t1777907382\t2034640104
 jL+LlqHAM63Qd9/ynAuqqn4wrYO7Hp8cYMlnf2OoSH8=\t679969972\t6539417596
-".to_vec(),
+"
+                    .to_vec(),
                     stderr: b"".to_vec(),
                     status: ExitStatus::from_raw(0),
                 })

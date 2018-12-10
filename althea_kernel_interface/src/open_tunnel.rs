@@ -103,7 +103,8 @@ impl KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error from wg command: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
         let _output = self.run_command(
             "ip",
@@ -132,7 +133,8 @@ impl KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error setting wg interface up: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
         Ok(())
     }
@@ -166,7 +168,8 @@ impl KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error from wg command: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
         let _output = self.run_command(
             "ip",
@@ -189,7 +192,8 @@ impl KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error setting wg interface up: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
         Ok(())
     }
@@ -305,6 +309,7 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
         &private_key_path,
         &own_mesh_ip,
         None,
-        true,
-    ).unwrap();
+        &mut vec![],
+    )
+    .unwrap();
 }

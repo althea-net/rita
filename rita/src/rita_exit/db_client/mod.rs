@@ -298,7 +298,8 @@ fn send_mail(client: &models::Client) -> Result<(), Error> {
         .text(reg.render_template(
             &mailer.body,
             &json!({"email_code": client.email_code.to_string()}),
-        )?).build()?;
+        )?)
+        .build()?;
 
     if mailer.test {
         let mut mailer = FileTransport::new(&mailer.test_dir);
