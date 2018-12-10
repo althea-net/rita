@@ -7,10 +7,7 @@
 //! This file initilizes the dashboard endpoints for the client as well as the common and client
 //! specific actors.
 
-#![cfg_attr(
-    feature = "system_alloc",
-    feature(alloc_system, allocator_api)
-)]
+#![cfg_attr(feature = "system_alloc", feature(alloc_system, allocator_api))]
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
@@ -230,7 +227,8 @@ fn main() {
         App::new().resource("/make_payment", |r| {
             r.method(Method::POST).with(make_payments)
         })
-    }).workers(1)
+    })
+    .workers(1)
     .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
     .unwrap()
     .shutdown_timeout(0)
@@ -246,7 +244,8 @@ fn main() {
                 "/dao_list/remove/{address}",
                 Method::POST,
                 remove_from_dao_list,
-            ).route("/debts", Method::GET, get_debts)
+            )
+            .route("/debts", Method::GET, get_debts)
             .route("/exits/sync", Method::GET, exits_sync)
             .route("/exits", Method::GET, get_exit_info)
             .route("/exits", Method::POST, add_exits)
@@ -261,7 +260,8 @@ fn main() {
                 "/exits/{name}/verify/{code}",
                 Method::POST,
                 verify_on_exit_with_code,
-            ).route("/info", Method::GET, get_own_info)
+            )
+            .route("/info", Method::GET, get_own_info)
             .route("/interfaces", Method::GET, get_interfaces_endpoint)
             .route("/interfaces", Method::POST, set_interfaces_endpoint)
             .route("/mesh_ip", Method::GET, get_mesh_ip)
@@ -271,11 +271,13 @@ fn main() {
                 "/remote_logging/enabled/{enabled}",
                 Method::POST,
                 remote_logging,
-            ).route(
+            )
+            .route(
                 "/remote_logging/level/{level}",
                 Method::POST,
                 remote_logging_level,
-            ).route("/settings", Method::GET, get_settings)
+            )
+            .route("/settings", Method::GET, get_settings)
             .route("/settings", Method::POST, set_settings)
             .route("/version", Method::GET, version)
             .route("/wifi_settings/pass", Method::POST, set_wifi_pass)
@@ -283,11 +285,13 @@ fn main() {
             .route("/wifi_settings", Method::GET, get_wifi_config)
             .route("/withdraw/{address}/{amount}", Method::POST, withdraw)
             .route("/wipe", Method::POST, wipe)
-    }).workers(1)
+    })
+    .workers(1)
     .bind(format!(
         "[::0]:{}",
         SETTING.get_network().rita_dashboard_port
-    )).unwrap()
+    ))
+    .unwrap()
     .shutdown_timeout(0)
     .start();
 

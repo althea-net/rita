@@ -111,7 +111,8 @@ impl KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error adding wg link: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
 
         let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "up"])?;
@@ -119,7 +120,8 @@ impl KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error setting wg interface up: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
 
         Ok(())
@@ -147,7 +149,8 @@ impl KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error setting ip route: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
 
         Ok(())

@@ -181,7 +181,8 @@ impl NewChannelStateRecord {
             sig_b_v: self.sig_b_v,
             sig_b_r: self.sig_b_r,
             sig_b_s: self.sig_b_s,
-        }).to_state()
+        })
+        .to_state()
     }
 }
 

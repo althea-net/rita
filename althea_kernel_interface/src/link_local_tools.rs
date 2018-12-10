@@ -25,7 +25,8 @@ impl KernelInterface {
         } else {
             Err(KernelInterfaceError::RuntimeError(
                 "No link local addresses found or no interface found".to_string(),
-            ).into())
+            )
+            .into())
         }
     }
 
@@ -47,7 +48,8 @@ impl KernelInterface {
         } else {
             Err(KernelInterfaceError::RuntimeError(
                 "No global found or no interface found".to_string(),
-            ).into())
+            )
+            .into())
         }
     }
 
@@ -68,7 +70,8 @@ impl KernelInterface {
         } else {
             Err(KernelInterfaceError::RuntimeError(
                 "No global found or no interface found".to_string(),
-            ).into())
+            )
+            .into())
         }
     }
 

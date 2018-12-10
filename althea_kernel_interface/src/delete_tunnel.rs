@@ -9,7 +9,8 @@ impl KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error deleting wireguard interface: {}",
                 String::from_utf8(output.stderr)?
-            )).into());
+            ))
+            .into());
         }
         Ok(())
     }

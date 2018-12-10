@@ -217,7 +217,8 @@ fn test_set_route() {
     KI.set_route(
         &IpRoute::ToAddr(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
         &vec!["token1".into(), "token2".into(), "token3".into()],
-    ).expect("Unable to set route");
+    )
+    .expect("Unable to set route");
 }
 
 #[test]
