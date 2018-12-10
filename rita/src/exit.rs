@@ -37,28 +37,14 @@ extern crate serde_json;
 
 use actix;
 
-
-
-
-
-
 use env_logger;
 
 use futures;
-
-
-
-
-
 
 use openssl_probe;
 use rand;
 
 use reqwest;
-
-
-
-
 
 use settings::{RitaCommonSettings, RitaExitSettings, RitaExitSettingsStruct};
 
@@ -70,15 +56,6 @@ use actix::registry::SystemService;
 use actix::*;
 use actix_web::http::Method;
 use actix_web::*;
-
-
-
-
-
-
-
-
-
 
 pub mod actix_utils;
 mod middleware;

@@ -32,31 +32,13 @@ extern crate serde_derive;
 
 use actix;
 
-
-
-
-
 use env_logger;
 
-
-
-
-
-
-
-
 use openssl_probe;
-
 
 use reqwest;
 
 use serde_json;
-
-
-
-
-
-
 
 use docopt::Docopt;
 #[cfg(not(test))]
@@ -73,14 +55,6 @@ use std::sync::{Arc, RwLock};
 
 #[cfg(test)]
 use std::sync::Mutex;
-
-
-
-
-
-
-
-
 
 pub mod actix_utils;
 mod middleware;

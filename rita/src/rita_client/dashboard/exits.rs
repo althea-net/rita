@@ -185,7 +185,9 @@ pub fn exits_sync(
     Box::new(future::ok(HttpResponse::Ok().json(exits.clone())))
 }
 
-pub fn get_exit_info(_req: HttpRequest) -> Box<dyn Future<Item = Json<Vec<ExitInfo>>, Error = Error>> {
+pub fn get_exit_info(
+    _req: HttpRequest,
+) -> Box<dyn Future<Item = Json<Vec<ExitInfo>>, Error = Error>> {
     debug!("Exit endpoint hit!");
     Dashboard::from_registry()
         .send(GetExitInfo {})

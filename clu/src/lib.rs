@@ -13,8 +13,6 @@ use settings::{ExitVerifSettings, RitaCommonSettings, RitaExitSettings};
 use ipgen;
 use rand;
 
-
-
 use clarity::{Address, PrivateKey};
 
 use rand::{thread_rng, Rng};
@@ -32,10 +30,6 @@ use std::io::Read;
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
-
-
-
-
 
 use babel_monitor::Babel;
 
