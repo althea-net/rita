@@ -61,10 +61,10 @@ impl dyn KernelInterface {
 
 #[test]
 fn test_read_wg_counters() {
+    use crate::KI;
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
     use std::process::Output;
-    use crate::KI;
 
     let mut counter = 0;
 
@@ -99,10 +99,10 @@ fn test_read_wg_counters() {
 
 #[test]
 fn test_read_wg_exit_counters() {
+    use crate::KI;
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
     use std::process::Output;
-    use crate::KI;
 
     let mut counter = 0;
 

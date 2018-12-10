@@ -16,9 +16,9 @@ use althea_types::{ExitClientIdentity, ExitState, RTTimestamps};
 
 use crate::rita_common::tunnel_manager::{GetPhyIpFromMeshIp, TunnelManager};
 
+use crate::rita_exit::db_client::ListClients;
 use exit_db::models::Client;
 use failure::Error;
-use crate::rita_exit::db_client::ListClients;
 use std::net::SocketAddr;
 
 pub fn setup_request(

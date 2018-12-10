@@ -9,12 +9,7 @@
 //! is released based on when the reference is dropped. Take care when using _mut to either
 //! namespace or clone quickly to avoid deadlocks.
 
-
-
 use config;
-
-
-
 
 use toml;
 
@@ -31,8 +26,6 @@ use std::sync::Mutex;
 
 use serde;
 use serde_json;
-
-
 
 use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
 

@@ -1,10 +1,8 @@
-
 #[macro_use]
 extern crate failure;
 
 #[macro_use]
 extern crate log;
-
 
 use std::collections::VecDeque;
 use std::io::{BufRead, Read, Write};

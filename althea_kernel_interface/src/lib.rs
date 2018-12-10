@@ -5,12 +5,6 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
-
-
-
-
-
-
 use std::env;
 use std::io::ErrorKind;
 use std::process::{Command, Output};
@@ -109,7 +103,8 @@ impl CommandRunner for LinuxCommandRunner {
 }
 
 pub struct TestCommandRunner {
-    pub run_command: Arc<Mutex<Box<dyn FnMut(String, Vec<String>) -> Result<Output, Error> + Send>>>,
+    pub run_command:
+        Arc<Mutex<Box<dyn FnMut(String, Vec<String>) -> Result<Output, Error> + Send>>>,
 }
 
 impl CommandRunner for TestCommandRunner {

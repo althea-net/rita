@@ -9,17 +9,9 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
-
-
-
 use env_logger;
 
 use libc;
-
-
-
-
-
 
 mod models;
 mod network_endpoints;
