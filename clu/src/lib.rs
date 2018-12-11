@@ -7,14 +7,12 @@ extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 
-extern crate settings;
+use settings;
 use settings::{ExitVerifSettings, RitaCommonSettings, RitaExitSettings};
 
-extern crate ipgen;
-extern crate rand;
-extern crate regex;
+use ipgen;
+use rand;
 
-extern crate clarity;
 use clarity::{Address, PrivateKey};
 
 use rand::{thread_rng, Rng};
@@ -32,10 +30,6 @@ use std::io::Read;
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
-
-extern crate althea_kernel_interface;
-extern crate althea_types;
-extern crate babel_monitor;
 
 use babel_monitor::Babel;
 
@@ -188,7 +182,7 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
         }
         None => {
             info!("Eth key details not configured, generating");
-            let mut key_buf: [u8; 32] = rand::random();
+            let key_buf: [u8; 32] = rand::random();
             let new_private_key = PrivateKey::from_slice(&key_buf)?;
             payment_settings.eth_private_key = Some(new_private_key);
 
@@ -293,7 +287,7 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
         }
         None => {
             info!("Eth key details not configured, generating");
-            let mut key_buf: [u8; 32] = rand::random();
+            let key_buf: [u8; 32] = rand::random();
             let new_private_key = PrivateKey::from_slice(&key_buf)?;
             payment_settings.eth_private_key = Some(new_private_key);
 

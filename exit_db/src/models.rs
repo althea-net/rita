@@ -1,4 +1,4 @@
-use schema::clients;
+use crate::schema::clients;
 
 #[derive(Queryable, Serialize, Deserialize, Debug, Insertable, Clone, AsChangeset, Default)]
 #[table_name = "clients"]

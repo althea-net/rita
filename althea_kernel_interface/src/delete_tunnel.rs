@@ -2,7 +2,7 @@ use super::{KernelInterface, KernelInterfaceError};
 
 use failure::Error;
 
-impl KernelInterface {
+impl dyn KernelInterface {
     pub fn delete_tunnel(&self, interface: &String) -> Result<(), Error> {
         let output = self.run_command("ip", &["link", "del", &interface])?;
         if !output.stderr.is_empty() {
@@ -22,7 +22,7 @@ fn test_delete_tunnel_linux() {
     use std::process::ExitStatus;
     use std::process::Output;
 
-    use KI;
+    use crate::KI;
 
     let ip_args = &["link", "del", "wg1"];
 

@@ -9,29 +9,29 @@ use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use actix::actors::resolver;
-use actix::prelude::*;
+use ::actix::actors::resolver;
+use ::actix::prelude::*;
 
 use futures::Future;
 
 use althea_types::Identity;
 use althea_types::LocalIdentity;
 
-use KI;
+use crate::KI;
 
 use babel_monitor::{Babel, Route};
 
-use rita_common;
-use rita_common::hello_handler::Hello;
-use rita_common::peer_listener::Peer;
+use crate::rita_common;
+use crate::rita_common::hello_handler::Hello;
+use crate::rita_common::peer_listener::Peer;
 
+use crate::SETTING;
 use settings::RitaCommonSettings;
-use SETTING;
 
 use failure::Error;
 
 #[cfg(test)]
-use actix::actors::mocker::Mocker;
+use ::actix::actors::mocker::Mocker;
 use ipnetwork::IpNetwork;
 use std::fmt;
 use std::io::{Read, Write};
@@ -66,7 +66,7 @@ pub enum TunnelAction {
 }
 
 impl fmt::Display for TunnelAction {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
@@ -85,7 +85,7 @@ pub enum TunnelState {
 }
 
 impl fmt::Display for TunnelState {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }

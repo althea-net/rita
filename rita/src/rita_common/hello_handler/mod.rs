@@ -7,8 +7,8 @@
 
 use tokio::net::TcpStream as TokioTcpStream;
 
-use actix::prelude::*;
-use actix::registry::SystemService;
+use ::actix::prelude::*;
+use ::actix::registry::SystemService;
 use actix_web::*;
 
 use futures::future::ok as future_ok;
@@ -16,8 +16,8 @@ use futures::Future;
 
 use althea_types::LocalIdentity;
 
-use rita_common::peer_listener::Peer;
-use rita_common::tunnel_manager::{IdentityCallback, PortCallback, TunnelManager};
+use crate::rita_common::peer_listener::Peer;
+use crate::rita_common::tunnel_manager::{IdentityCallback, PortCallback, TunnelManager};
 
 use actix_web::client::Connection;
 use failure::Error;
@@ -73,7 +73,7 @@ impl Handler<Hello> for HelloHandler {
                 Err(e) => {
                     trace!("Error getting stream from hello {:?}", e);
                     TunnelManager::from_registry().do_send(PortCallback(wg_port));
-                    return Box::new(future_ok(())) as Box<Future<Item = (), Error = Error>>;
+                    return Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = Error>>;
                 }
             };
 
@@ -86,7 +86,7 @@ impl Handler<Hello> for HelloHandler {
                 Err(e) => {
                     trace!("Error serializing our request {:?}", e);
                     TunnelManager::from_registry().do_send(PortCallback(wg_port));
-                    return Box::new(future_ok(())) as Box<Future<Item = (), Error = Error>>;
+                    return Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = Error>>;
                 }
             };
 
@@ -110,16 +110,16 @@ impl Handler<Hello> for HelloHandler {
                             Ok(())
                         }
                     }))
-                        as Box<Future<Item = (), Error = Error>>,
+                        as Box<dyn Future<Item = (), Error = Error>>,
                     Err(e) => {
                         trace!("Got error getting Hello response {:?}", e);
                         TunnelManager::from_registry().do_send(PortCallback(wg_port));
-                        Box::new(future_ok(())) as Box<Future<Item = (), Error = Error>>
+                        Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = Error>>
                     }
                 }
             });
 
-            Box::new(http_result) as Box<Future<Item = (), Error = Error>>
+            Box::new(http_result) as Box<dyn Future<Item = (), Error = Error>>
         }))
     }
 }

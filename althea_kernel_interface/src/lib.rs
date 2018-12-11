@@ -5,12 +5,6 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
-extern crate eui48;
-extern crate itertools;
-extern crate regex;
-
-extern crate althea_types;
-
 use std::env;
 use std::io::ErrorKind;
 use std::process::{Command, Output};
@@ -40,9 +34,9 @@ mod setup_wg_if;
 mod udp_socket_table;
 pub mod wg_iface_counter;
 
-pub use counter::FilterTarget;
-pub use create_wg_key::WgKeypair;
-pub use exit_server_tunnel::ExitClient;
+pub use crate::counter::FilterTarget;
+pub use crate::create_wg_key::WgKeypair;
+pub use crate::exit_server_tunnel::ExitClient;
 
 use failure::Error;
 
@@ -54,7 +48,7 @@ pub enum KernelInterfaceError {
 
 #[cfg(test)]
 lazy_static! {
-    pub static ref KI: Box<KernelInterface> = Box::new(TestCommandRunner {
+    pub static ref KI: Box<dyn KernelInterface> = Box::new(TestCommandRunner {
         run_command: Arc::new(Mutex::new(Box::new(|_program, _args| {
             panic!("kernel interface used before initialized");
         })))
@@ -63,12 +57,12 @@ lazy_static! {
 
 #[cfg(not(test))]
 lazy_static! {
-    pub static ref KI: Box<KernelInterface> = Box::new(LinuxCommandRunner {});
+    pub static ref KI: Box<dyn KernelInterface> = Box::new(LinuxCommandRunner {});
 }
 
 pub trait CommandRunner {
     fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, Error>;
-    fn set_mock(&self, mock: Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>);
+    fn set_mock(&self, mock: Box<dyn FnMut(String, Vec<String>) -> Result<Output, Error> + Send>);
 }
 
 pub struct LinuxCommandRunner;
@@ -103,13 +97,14 @@ impl CommandRunner for LinuxCommandRunner {
         return Ok(output);
     }
 
-    fn set_mock(&self, _mock: Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>) {
+    fn set_mock(&self, _mock: Box<dyn FnMut(String, Vec<String>) -> Result<Output, Error> + Send>) {
         unimplemented!()
     }
 }
 
 pub struct TestCommandRunner {
-    pub run_command: Arc<Mutex<Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>>>,
+    pub run_command:
+        Arc<Mutex<Box<dyn FnMut(String, Vec<String>) -> Result<Output, Error> + Send>>>,
 }
 
 impl CommandRunner for TestCommandRunner {
@@ -122,7 +117,7 @@ impl CommandRunner for TestCommandRunner {
         (&mut *self.run_command.lock().unwrap())(program.to_string(), args_owned)
     }
 
-    fn set_mock(&self, mock: Box<FnMut(String, Vec<String>) -> Result<Output, Error> + Send>) {
+    fn set_mock(&self, mock: Box<dyn FnMut(String, Vec<String>) -> Result<Output, Error> + Send>) {
         *self.run_command.lock().unwrap() = mock
     }
 }

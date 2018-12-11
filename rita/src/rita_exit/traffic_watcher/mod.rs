@@ -6,7 +6,7 @@
 //! different in that mesh nodes are paid by forwarding traffic, but exits have to return traffic and
 //! must get paid for doing so.
 
-use actix::prelude::*;
+use ::actix::prelude::*;
 use althea_types::WgKey;
 
 use althea_kernel_interface::wg_iface_counter::WgUsage;
@@ -16,8 +16,8 @@ use althea_types::Identity;
 
 use babel_monitor::Babel;
 
-use rita_common::debt_keeper;
-use rita_common::debt_keeper::DebtKeeper;
+use crate::rita_common::debt_keeper;
+use crate::rita_common::debt_keeper::DebtKeeper;
 
 use num256::Int256;
 
@@ -27,8 +27,8 @@ use std::net::{IpAddr, SocketAddr, TcpStream};
 
 use ipnetwork::IpNetwork;
 
+use crate::SETTING;
 use settings::{RitaCommonSettings, RitaExitSettings};
-use SETTING;
 
 use failure::Error;
 
@@ -279,7 +279,7 @@ pub fn watch<T: Read + Write>(
 
 #[cfg(test)]
 mod tests {
-    extern crate env_logger;
+    use env_logger;
 
     use super::*;
 

@@ -5,7 +5,7 @@ use num_traits::Zero;
 
 use std::convert::{From, Into};
 
-use schema::states;
+use crate::schema::states;
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct ChannelState {

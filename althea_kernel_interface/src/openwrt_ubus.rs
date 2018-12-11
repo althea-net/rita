@@ -2,7 +2,7 @@ use super::KernelInterface;
 
 use failure::Error;
 
-impl KernelInterface {
+impl dyn KernelInterface {
     /// calls a ubus rpc
     pub fn ubus_call(
         &self,

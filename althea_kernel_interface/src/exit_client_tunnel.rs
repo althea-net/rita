@@ -6,7 +6,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use althea_types::WgKey;
 
-impl KernelInterface {
+impl dyn KernelInterface {
     pub fn set_client_exit_tunnel_config(
         &self,
         endpoint: SocketAddr,

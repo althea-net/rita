@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn get_local_fee(_req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Error>> {
+pub fn get_local_fee(_req: HttpRequest) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     debug!("/local_fee GET hit");
     let mut ret = HashMap::new();
     ret.insert("local_fee", SETTING.get_local_fee());
@@ -8,7 +8,7 @@ pub fn get_local_fee(_req: HttpRequest) -> Box<Future<Item = HttpResponse, Error
     Box::new(future::ok(HttpResponse::Ok().json(ret)))
 }
 
-pub fn get_metric_factor(_req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Error>> {
+pub fn get_metric_factor(_req: HttpRequest) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     debug!("/local_fee GET hit");
     let mut ret = HashMap::new();
     ret.insert("metric_factor", SETTING.get_metric_factor());
@@ -16,7 +16,7 @@ pub fn get_metric_factor(_req: HttpRequest) -> Box<Future<Item = HttpResponse, E
     Box::new(future::ok(HttpResponse::Ok().json(ret)))
 }
 
-pub fn set_local_fee(path: Path<u32>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+pub fn set_local_fee(path: Path<u32>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let new_fee = path.into_inner();
     debug!("/local_fee/{} POST hit", new_fee);
     let mut ret = HashMap::<String, String>::new();
@@ -83,7 +83,7 @@ pub fn set_local_fee(path: Path<u32>) -> Box<Future<Item = HttpResponse, Error =
     Box::new(future::ok(HttpResponse::Ok().json(ret)))
 }
 
-pub fn set_metric_factor(path: Path<u32>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+pub fn set_metric_factor(path: Path<u32>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let new_factor = path.into_inner();
     debug!("/metric_factor/{} POST hit", new_factor);
     let mut ret = HashMap::<String, String>::new();

@@ -17,7 +17,7 @@ pub struct WgUsage {
     pub download: u64,
 }
 
-impl KernelInterface {
+impl dyn KernelInterface {
     /// Takes a wg interface name and provides upload and download since creation in bytes
     /// in a hashmap indexed by peer WireGuard key
     pub fn read_wg_counters(&self, wg_name: &str) -> Result<HashMap<WgKey, WgUsage>, Error> {
@@ -61,10 +61,10 @@ impl KernelInterface {
 
 #[test]
 fn test_read_wg_counters() {
+    use crate::KI;
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
     use std::process::Output;
-    use KI;
 
     let mut counter = 0;
 
@@ -99,10 +99,10 @@ fn test_read_wg_counters() {
 
 #[test]
 fn test_read_wg_exit_counters() {
+    use crate::KI;
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
     use std::process::Output;
-    use KI;
 
     let mut counter = 0;
 

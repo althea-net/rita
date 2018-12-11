@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn withdraw(path: Path<(Address, u64)>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+pub fn withdraw(path: Path<(Address, u64)>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let address = path.0;
     let amount = path.1;
     debug!("/withdraw/{:#x}/{} hit", address, amount);

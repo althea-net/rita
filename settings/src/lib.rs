@@ -9,14 +9,9 @@
 //! is released based on when the reference is dropped. Take care when using _mut to either
 //! namespace or clone quickly to avoid deadlocks.
 
-extern crate althea_types;
-extern crate clarity;
-extern crate config;
-extern crate eui48;
-extern crate failure;
-extern crate num256;
-extern crate owning_ref;
-extern crate toml;
+use config;
+
+use toml;
 
 #[macro_use]
 extern crate lazy_static;
@@ -29,10 +24,8 @@ extern crate log;
 #[cfg(test)]
 use std::sync::Mutex;
 
-extern crate serde;
-extern crate serde_json;
-
-extern crate althea_kernel_interface;
+use serde;
+use serde_json;
 
 use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
 
@@ -68,7 +61,7 @@ use failure::Error;
 /// _within_ the mesh or setting up pre hop tunnels (so nothing on exits)
 #[cfg(test)]
 lazy_static! {
-    static ref KI: Box<KernelInterface> = Box::new(TestCommandRunner {
+    static ref KI: Box<dyn KernelInterface> = Box::new(TestCommandRunner {
         run_command: Arc::new(Mutex::new(Box::new(|_program, _args| {
             panic!("kernel interface used before initialized");
         })))
@@ -77,7 +70,7 @@ lazy_static! {
 
 #[cfg(not(test))]
 lazy_static! {
-    static ref KI: Box<KernelInterface> = Box::new(LinuxCommandRunner {});
+    static ref KI: Box<dyn KernelInterface> = Box::new(LinuxCommandRunner {});
 }
 
 fn default_discovery_ip() -> Ipv6Addr {
@@ -569,10 +562,10 @@ pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
     fn set_future(&self, future: bool);
 
     fn get_local_fee(&self) -> u32;
-    fn set_local_fee(&self, u32);
+    fn set_local_fee(&self, _: u32);
 
     fn get_metric_factor(&self) -> u32;
-    fn set_metric_factor(&self, u32);
+    fn set_metric_factor(&self, _: u32);
 }
 
 /// This merges 2 json objects, overwriting conflicting values in `a`

@@ -152,7 +152,9 @@ impl Handler<GetWifiConfig> for Dashboard {
     }
 }
 
-pub fn set_wifi_ssid(wifi_ssid: Json<WifiSSID>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+pub fn set_wifi_ssid(
+    wifi_ssid: Json<WifiSSID>,
+) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     debug!("/wifi_settings/ssid hit with {:?}", wifi_ssid);
 
     let wifi_ssid = wifi_ssid.into_inner();
@@ -176,7 +178,9 @@ pub fn set_wifi_ssid(wifi_ssid: Json<WifiSSID>) -> Box<Future<Item = HttpRespons
     )
 }
 
-pub fn set_wifi_pass(wifi_pass: Json<WifiPass>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+pub fn set_wifi_pass(
+    wifi_pass: Json<WifiPass>,
+) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     debug!("/wifi_settings/pass hit with {:?}", wifi_pass);
 
     let wifi_pass = wifi_pass.into_inner();
@@ -237,7 +241,7 @@ fn validate_config_value(s: &str) -> Result<(), ValidationError> {
 
 pub fn get_wifi_config(
     _req: HttpRequest,
-) -> Box<Future<Item = Json<Vec<WifiInterface>>, Error = Error>> {
+) -> Box<dyn Future<Item = Json<Vec<WifiInterface>>, Error = Error>> {
     debug!("Get wificonfig hit!");
     Dashboard::from_registry()
         .send(GetWifiConfig {})

@@ -23,7 +23,7 @@ use alloc_system::System;
 #[global_allocator]
 static A: System = System;
 
-extern crate diesel;
+use diesel;
 #[macro_use]
 extern crate failure;
 #[macro_use]
@@ -35,30 +35,16 @@ extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 
-extern crate actix;
-extern crate actix_web;
-extern crate byteorder;
-extern crate bytes;
-extern crate clu;
-extern crate docopt;
-extern crate dotenv;
-extern crate env_logger;
-extern crate eui48;
-extern crate futures;
-extern crate handlebars;
-extern crate ipnetwork;
-extern crate lettre;
-extern crate lettre_email;
-extern crate minihttpse;
-extern crate num_traits;
-extern crate openssl_probe;
-extern crate rand;
-extern crate regex;
-extern crate reqwest;
-extern crate serde;
-extern crate settings;
-extern crate tokio;
-extern crate trust_dns_resolver;
+use actix;
+
+use env_logger;
+
+use futures;
+
+use openssl_probe;
+use rand;
+
+use reqwest;
 
 use settings::{RitaCommonSettings, RitaExitSettings, RitaExitSettingsStruct};
 
@@ -71,30 +57,21 @@ use actix::*;
 use actix_web::http::Method;
 use actix_web::*;
 
-extern crate clarity;
-extern crate guac_core;
-extern crate num256;
-
-extern crate althea_kernel_interface;
-extern crate althea_types;
-extern crate babel_monitor;
-extern crate exit_db;
-
 pub mod actix_utils;
 mod middleware;
 mod rita_common;
 mod rita_exit;
 
-use rita_common::dashboard::babel::*;
-use rita_common::dashboard::dao::*;
-use rita_common::dashboard::debts::*;
-use rita_common::dashboard::development::*;
-use rita_common::dashboard::own_info::*;
-use rita_common::dashboard::settings::*;
-use rita_common::dashboard::wallet::*;
+use crate::rita_common::dashboard::babel::*;
+use crate::rita_common::dashboard::dao::*;
+use crate::rita_common::dashboard::debts::*;
+use crate::rita_common::dashboard::development::*;
+use crate::rita_common::dashboard::own_info::*;
+use crate::rita_common::dashboard::settings::*;
+use crate::rita_common::dashboard::wallet::*;
 
-use rita_common::network_endpoints::*;
-use rita_exit::network_endpoints::*;
+use crate::rita_common::network_endpoints::*;
+use crate::rita_exit::network_endpoints::*;
 
 use std::sync::{Arc, RwLock};
 
@@ -130,7 +107,7 @@ use althea_kernel_interface::TestCommandRunner;
 
 #[cfg(test)]
 lazy_static! {
-    pub static ref KI: Box<KernelInterface> = Box::new(TestCommandRunner {
+    pub static ref KI: Box<dyn KernelInterface> = Box::new(TestCommandRunner {
         run_command: Arc::new(Mutex::new(Box::new(|_program, _args| {
             panic!("kernel interface used before initialized");
         })))
@@ -139,7 +116,7 @@ lazy_static! {
 
 #[cfg(not(test))]
 lazy_static! {
-    pub static ref KI: Box<KernelInterface> = Box::new(LinuxCommandRunner {});
+    pub static ref KI: Box<dyn KernelInterface> = Box::new(LinuxCommandRunner {});
 }
 
 #[cfg(not(test))]

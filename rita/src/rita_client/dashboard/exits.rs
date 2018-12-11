@@ -88,7 +88,7 @@ impl Handler<GetExitInfo> for Dashboard {
 
 pub fn add_exits(
     new_exits: Json<HashMap<String, ExitServer>>,
-) -> Box<Future<Item = HttpResponse, Error = Error>> {
+) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     debug!("/exits POST hit with {:?}", new_exits);
     let exits = &mut SETTING.get_exit_client_mut().exits;
     exits.extend(new_exits.into_inner());
@@ -98,7 +98,7 @@ pub fn add_exits(
 
 pub fn exits_sync(
     list_url_json: Json<HashMap<String, String>>,
-) -> Box<Future<Item = HttpResponse, Error = Error>> {
+) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     debug!("/exits/sync hit with {:?}", list_url_json);
 
     let list_url = match list_url_json.get("url") {
@@ -185,7 +185,9 @@ pub fn exits_sync(
     Box::new(future::ok(HttpResponse::Ok().json(exits.clone())))
 }
 
-pub fn get_exit_info(_req: HttpRequest) -> Box<Future<Item = Json<Vec<ExitInfo>>, Error = Error>> {
+pub fn get_exit_info(
+    _req: HttpRequest,
+) -> Box<dyn Future<Item = Json<Vec<ExitInfo>>, Error = Error>> {
     debug!("Exit endpoint hit!");
     Dashboard::from_registry()
         .send(GetExitInfo {})
@@ -194,7 +196,7 @@ pub fn get_exit_info(_req: HttpRequest) -> Box<Future<Item = Json<Vec<ExitInfo>>
         .responder()
 }
 
-pub fn reset_exit(path: Path<String>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+pub fn reset_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let exit_name = path.into_inner();
     debug!("/exits/{}/reset hit", exit_name);
 
@@ -219,7 +221,7 @@ pub fn reset_exit(path: Path<String>) -> Box<Future<Item = HttpResponse, Error =
     }
 }
 
-pub fn select_exit(path: Path<String>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+pub fn select_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let exit_name = path.into_inner();
     debug!("/exits/{}/select hit", exit_name);
 
@@ -244,7 +246,7 @@ pub fn select_exit(path: Path<String>) -> Box<Future<Item = HttpResponse, Error 
     }
 }
 
-pub fn register_to_exit(path: Path<String>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+pub fn register_to_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let exit_name = path.into_inner();
     debug!("/exits/{}/register hit", exit_name);
 
@@ -270,7 +272,7 @@ pub fn register_to_exit(path: Path<String>) -> Box<Future<Item = HttpResponse, E
 
 pub fn verify_on_exit_with_code(
     path: Path<(String, String)>,
-) -> Box<Future<Item = HttpResponse, Error = Error>> {
+) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let (exit_name, code) = path.into_inner();
     debug!("/exits/{}/verify/{} hit", exit_name, code);
 

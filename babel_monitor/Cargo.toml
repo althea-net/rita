@@ -2,6 +2,8 @@
 authors = ["jkilpatr <jkilpatr@redhat.com>"]
 name = "babel_monitor"
 version = "0.1.0"
+edition = "2018"
+
 [dependencies]
 ascii = "0.9.1"
 bufstream = "0.1.4"

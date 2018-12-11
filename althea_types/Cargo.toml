@@ -2,6 +2,8 @@
 authors = ["Jehan <jehan.tremback@gmail.com>"]
 name = "althea_types"
 version = "0.1.0"
+edition = "2018"
+
 [dependencies]
 num256 = "0.1"
 base64 = "0.9.3"

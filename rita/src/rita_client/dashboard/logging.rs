@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn remote_logging(path: Path<bool>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+pub fn remote_logging(path: Path<bool>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let enabled = path.into_inner();
     debug!("/loging/enable/{} hit", enabled);
 
@@ -13,7 +13,9 @@ pub fn remote_logging(path: Path<bool>) -> Box<Future<Item = HttpResponse, Error
     return Box::new(future::ok(HttpResponse::Ok().json(())));
 }
 
-pub fn remote_logging_level(path: Path<String>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+pub fn remote_logging_level(
+    path: Path<String>,
+) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let level = path.into_inner();
     debug!("/loging/level/{}", level);
 
