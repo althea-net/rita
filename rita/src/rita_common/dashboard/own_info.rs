@@ -1,13 +1,14 @@
 use super::*;
+use num256::{Int256, Uint256};
 
 #[derive(Serialize)]
 pub struct OwnInfo {
     pub address: Address,
-    pub balance: u128,
+    pub balance: Uint256,
     pub local_fee: u32,
     pub metric_factor: u32,
-    pub pay_threshold: i128,
-    pub close_threshold: i128,
+    pub pay_threshold: Int256,
+    pub close_threshold: Int256,
     pub device: Option<String>,
     pub version: String,
 }
@@ -27,10 +28,10 @@ pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
 
     let reply = OwnInfo {
         address: eth_address,
-        balance: balance.into(),
+        balance: balance,
         local_fee: local_fee.into(),
         metric_factor: metric_factor,
-        pay_threshold: pay_threshold.into(),
+        pay_threshold: pay_threshold,
         close_threshold: close_threshold.into(),
         device: device,
         version: env!("CARGO_PKG_VERSION").to_string(),

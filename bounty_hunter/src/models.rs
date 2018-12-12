@@ -238,8 +238,9 @@ mod tests {
     #[test]
     fn test_state2record() {
         let mut example_state = ChannelState::default();
-        example_state.signature_a = Some(Signature::new(15000.into(), 200.into(), 35.into()));
-        example_state.signature_b = Some(Signature::new(42.into(), 2001.into(), 1.into()));
+        example_state.signature_a =
+            Some(Signature::new(15000u64.into(), 200u64.into(), 35u64.into()));
+        example_state.signature_b = Some(Signature::new(42u64.into(), 2001u64.into(), 1u64.into()));
 
         let expected_record = NewChannelStateRecord {
             channel_id: vec![0],
@@ -283,8 +284,10 @@ mod tests {
         };
 
         let mut expected_state = ChannelState::default();
-        expected_state.signature_a = Some(Signature::new(15000.into(), 200.into(), 35.into()));
-        expected_state.signature_b = Some(Signature::new(42.into(), 2001.into(), 1.into()));
+        expected_state.signature_a =
+            Some(Signature::new(15000u64.into(), 200u64.into(), 35u64.into()));
+        expected_state.signature_b =
+            Some(Signature::new(42u64.into(), 2001u64.into(), 1u64.into()));
 
         assert_eq!(example_record.to_state().unwrap(), expected_state);
     }
@@ -319,19 +322,19 @@ mod tests {
     #[test]
     fn test_nonce_ordering_sanity() {
         let smaller_nonce = ChannelState {
-            channel_id: 0.into(),
+            channel_id: 0u64.into(),
             address_a: [0; 20].into(),
             address_b: [0; 20].into(),
-            nonce: 0xff.into(),
-            balance_a: 0.into(),
-            balance_b: 0.into(),
+            nonce: 0xffu64.into(),
+            balance_a: 0u64.into(),
+            balance_b: 0u64.into(),
 
-            signature_a: Some(Signature::new(0.into(), 0.into(), 0.into())),
-            signature_b: Some(Signature::new(0.into(), 0.into(), 0.into())),
+            signature_a: Some(Signature::new(0u64.into(), 0u64.into(), 0u64.into())),
+            signature_b: Some(Signature::new(0u64.into(), 0u64.into(), 0u64.into())),
         };
 
         let mut bigger_nonce = smaller_nonce.clone();
-        bigger_nonce.nonce = 0x100.into();
+        bigger_nonce.nonce = 0x100u64.into();
 
         let record_smaller = NewChannelStateRecord::from(smaller_nonce);
         let record_bigger = NewChannelStateRecord::from(bigger_nonce);

@@ -32,6 +32,8 @@ use settings::{RitaCommonSettings, RitaExitSettings};
 
 use failure::Error;
 
+use num_traits::Zero;
+
 pub struct TrafficWatcher {
     last_seen_bytes: HashMap<WgKey, WgUsage>,
 }
@@ -201,7 +203,7 @@ pub fn watch<T: Read + Write>(
                     if history.download > bytes.download {
                         history.download = 0;
                     }
-                    *debt -= price * (bytes.download - history.download);
+                    *debt -= Int256::from(price) * Int256::from(bytes.download - history.download);
                     // update history so that we know what was used from previous cycles
                     history.download = bytes.download;
                 }
@@ -234,7 +236,8 @@ pub fn watch<T: Read + Write>(
                     if history.upload > bytes.upload {
                         history.upload = 0;
                     }
-                    *debt -= (dest.clone() + price) * (bytes.upload - history.upload);
+                    *debt -=
+                        (dest.clone() + price.into()) * Int256::from(bytes.upload - history.upload);
                     history.upload = bytes.upload;
                 }
                 // debts is generated from identities, this should be impossible
@@ -254,9 +257,8 @@ pub fn watch<T: Read + Write>(
 
     info!("Computed exit debts for {:?} clients", debts.len());
     let mut total_income = Int256::zero();
-    for entry in debts.iter() {
-        let income = entry.1;
-        total_income += income;
+    for (_identity, income) in debts.iter() {
+        total_income += income.clone();
     }
     info!("Total exit income of {:?} Wei this round", total_income);
 

@@ -51,19 +51,23 @@ impl Handler<PaymentReceived> for PaymentController {
 }
 
 #[derive(Message)]
+#[rtype(result = "Result<(), Error>")]
 pub struct MakePayment(pub PaymentTx);
 
 impl Handler<MakePayment> for PaymentController {
-    type Result = ();
+    type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: MakePayment, _ctx: &mut Context<Self>) -> Self::Result {
         let res = self.make_payment(msg.0.clone());
         if res.is_err() {
             DebtKeeper::from_registry().do_send(PaymentFailed {
                 to: msg.0.to,
-                amount: msg.0.amount,
+                amount: msg.0.amount.to_int256().ok_or(format_err!(
+                    "Unable to convert amount to 256 bit signed integer"
+                ))?,
             });
         }
+        Ok(())
     }
 }
 
@@ -165,6 +169,11 @@ impl PaymentController {
             Err(e) => bail!("Failed to generate transaction, {:?}", e),
         };
 
+        // XXX: How to do it better? Shouldn't PaymentFailed store unsigned ints?
+        let signed_amount = pmt.amount.to_int256().ok_or(format_err!(
+            "Unable to convert payment amount into 256 signed integer"
+        ))?;
+
         let transaction_status = web3.eth_send_raw_transaction(transaction_bytes);
 
         let futures_chain = Box::new(stream.then(move |open_stream| match open_stream {
@@ -183,7 +192,7 @@ impl PaymentController {
                                     // return emtpy result, we're using messages anyways
                                     Ok(msg) => {
                                         trace!("Payment successful with {:?}", msg);
-                                        SETTING.get_payment_mut().nonce += 1;
+                                        SETTING.get_payment_mut().nonce += 1u64.into();
                                         Ok(()) as Result<(), ()>
                                     }
                                     Err(e) => {
@@ -198,7 +207,7 @@ impl PaymentController {
                         warn!("Failed to send bandwidth payment {:?}", e);
                         DebtKeeper::from_registry().do_send(PaymentFailed {
                             to: pmt.to,
-                            amount: pmt.amount,
+                            amount: signed_amount.clone(),
                         });
                         Either::B(future::ok(()))
                     }
@@ -213,7 +222,7 @@ impl PaymentController {
                 );
                 DebtKeeper::from_registry().do_send(PaymentFailed {
                     to: pmt.to,
-                    amount: pmt.amount,
+                    amount: signed_amount.clone(),
                 });
                 Either::B(future::ok(()))
             }
