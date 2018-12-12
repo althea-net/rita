@@ -35,6 +35,7 @@ pub struct NodeDebtData {
     /// Only push to back
     #[serde(skip_serializing)]
     pub debt_buffer: VecDeque<Int256>,
+    pub action: DebtAction,
 }
 
 impl NodeDebtData {
@@ -51,6 +52,7 @@ impl NodeDebtData {
                 }
                 buf
             },
+            action: DebtAction::None,
         }
     }
 }
@@ -162,7 +164,7 @@ impl Message for SendUpdate {
 
 /// Actions to be taken upon a neighbor's debt reaching either a negative or positive
 /// threshold.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum DebtAction {
     SuspendTunnel,
     OpenTunnel,
@@ -226,7 +228,7 @@ impl DebtKeeper {
         self.debt_data.clone()
     }
 
-    fn get_debt_data(&mut self, ident: &Identity) -> &mut NodeDebtData {
+    fn get_debt_data_mut(&mut self, ident: &Identity) -> &mut NodeDebtData {
         let buffer = SETTING.get_payment().buffer_period;
         self.debt_data
             .entry(ident.clone())
@@ -234,7 +236,7 @@ impl DebtKeeper {
     }
 
     fn payment_received(&mut self, ident: &Identity, amount: Uint256) -> Result<(), Error> {
-        let debt_data = self.get_debt_data(ident);
+        let debt_data = self.get_debt_data_mut(ident);
 
         let old_balance = debt_data.incoming_payments.clone();
         trace!(
@@ -259,7 +261,7 @@ impl DebtKeeper {
     fn traffic_update(&mut self, ident: &Identity, mut amount: Int256) {
         {
             trace!("traffic update for {} is {}", ident.mesh_ip, amount);
-            let debt_data = self.get_debt_data(ident);
+            let debt_data = self.get_debt_data_mut(ident);
 
             if amount < Int256::from(0) {
                 if debt_data.incoming_payments > -amount.clone() {
@@ -292,7 +294,7 @@ impl DebtKeeper {
     /// This updates a neighbor's debt and outputs a DebtAction if one is necessary.
     fn send_update(&mut self, ident: &Identity) -> Result<DebtAction, Error> {
         trace!("debt data: {:?}", self.debt_data);
-        let debt_data = self.get_debt_data(ident);
+        let debt_data = self.get_debt_data_mut(ident);
         let debt = debt_data.debt.clone();
 
         let traffic = debt_data.debt_buffer.pop_front().unwrap();
@@ -344,9 +346,11 @@ impl DebtKeeper {
                 "debt is below close threshold for {}. suspending forwarding",
                 ident.mesh_ip
             );
+            debt_data.action = DebtAction::SuspendTunnel;
             Ok(DebtAction::SuspendTunnel)
         } else if (close_threshold < debt_data.debt) && (debt < close_threshold) {
             trace!("debt is above close threshold. resuming forwarding");
+            debt_data.action = DebtAction::OpenTunnel;
             Ok(DebtAction::OpenTunnel)
         } else if debt_data.debt > SETTING.get_payment().pay_threshold {
             let d: Uint256 = debt_data.debt.to_uint256().ok_or_else(|| {
@@ -359,11 +363,18 @@ impl DebtKeeper {
             );
             debt_data.total_payment_sent += d.clone();
             debt_data.debt = Int256::from(0);
+
+            debt_data.action = DebtAction::MakePayment {
+                to: ident.clone(),
+                amount: Uint256::from(d.clone()),
+            };
+
             Ok(DebtAction::MakePayment {
                 to: ident.clone(),
                 amount: d,
             })
         } else {
+            debt_data.action = DebtAction::None;
             Ok(DebtAction::None)
         }
     }
@@ -377,8 +388,8 @@ impl Message for GetDebtsList {
 
 #[derive(Serialize)]
 pub struct GetDebtsResult {
-    identity: Identity,
-    payment_details: NodeDebtData,
+    pub identity: Identity,
+    pub payment_details: NodeDebtData,
 }
 
 impl GetDebtsResult {

@@ -5,6 +5,8 @@
 //! This is the exit specific billing code used to determine how exits should be compensted. Which is
 //! different in that mesh nodes are paid by forwarding traffic, but exits have to return traffic and
 //! must get paid for doing so.
+//!
+//! Also handles enforcement of nonpayment, since there's no need for a complicated TunnelManager for exits
 
 use ::actix::prelude::*;
 use althea_types::WgKey;
@@ -17,6 +19,7 @@ use althea_types::Identity;
 use babel_monitor::Babel;
 
 use crate::rita_common::debt_keeper;
+use crate::rita_common::debt_keeper::DebtAction;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::Traffic;
 
@@ -44,6 +47,7 @@ pub struct TrafficWatcher {
 impl Actor for TrafficWatcher {
     type Context = Context<Self>;
 }
+
 impl Supervised for TrafficWatcher {}
 impl SystemService for TrafficWatcher {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
@@ -51,6 +55,11 @@ impl SystemService for TrafficWatcher {
             warn!("exit setup returned {}", e)
         }
         KI.setup_nat(&SETTING.get_network().external_nic.clone().unwrap())
+            .unwrap();
+        // we need a parent qdisc but don't want to really limit, so 100gbps it is
+        KI.create_limit("wg_exit", 100000000).unwrap();
+        // this is the class we'll actually use to limit people.
+        KI.create_class_limit("wg_exit", SETTING.get_payment().free_tier_throughput)
             .unwrap();
 
         info!("Traffic Watcher started");

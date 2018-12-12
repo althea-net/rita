@@ -15,7 +15,6 @@ use failure::Error;
 
 pub struct RitaLoop;
 
-
 // the speed in seconds for the client loop
 pub const CLIENT_LOOP_SPEED: u64 = 5;
 
