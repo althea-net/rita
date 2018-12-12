@@ -4,6 +4,8 @@
 //! In this loop the exit checks it's database for registered users and deploys the endpoint for
 //! their exit tunnel
 
+use std::collections::HashMap;
+use std::net::Ipv4Addr;
 use std::time::{Duration, Instant};
 
 use ::actix::prelude::*;
@@ -11,6 +13,12 @@ use ::actix::registry::SystemService;
 
 use crate::rita_exit::db_client::{DbClient, ListClients};
 
+use futures::future::Either;
+use futures::{future, Future};
+
+use crate::rita_common::debt_keeper::DebtAction;
+use crate::rita_common::debt_keeper::DebtKeeper;
+use crate::rita_common::debt_keeper::GetDebtsList;
 use crate::rita_exit::traffic_watcher::{TrafficWatcher, Watch};
 
 use exit_db::models::Client;
@@ -70,11 +78,11 @@ impl Handler<Tick> for RitaLoop {
         let start = Instant::now();
         trace!("Exit tick!");
 
-        ctx.spawn(
+        // Create and update client tunnels
+        Arbiter::spawn(
             DbClient::from_registry()
                 .send(ListClients {})
-                .into_actor(self)
-                .then(move |res, _act, _ctx| {
+                .then(move |res| {
                     let clients = res.unwrap().unwrap();
                     let ids = clients
                         .clone()
@@ -113,8 +121,87 @@ impl Handler<Tick> for RitaLoop {
                         start.elapsed().as_secs(),
                         start.elapsed().subsec_millis()
                     );
-                    actix::fut::ok(())
+                    Ok(())
                 }),
+        );
+
+        // handle enforcement on client tunnels by querying debt keeper
+        Arbiter::spawn(
+            DebtKeeper::from_registry()
+                .send(GetDebtsList)
+                .and_then(|debts_list| match debts_list {
+                    Ok(list) => Either::A(DbClient::from_registry().send(ListClients {}).and_then(
+                        move |res| {
+                            let clients = res.unwrap();
+                            let mut clients_by_id = HashMap::new();
+                            for client in clients.iter() {
+                                let id = to_identity(client.clone());
+                                clients_by_id.insert(id, client);
+                            }
+
+                            for debt_entry in list.iter() {
+                                if debt_entry.payment_details.action == DebtAction::SuspendTunnel {
+                                    match clients_by_id.get(&debt_entry.identity) {
+                                        Some(client) => {
+                                            let _ = match client.internal_ip.parse() {
+                                                Ok(ip_addr) => {
+                                                    let res =
+                                                        KI.create_limit_by_ip("wg_exit", ip_addr);
+                                                    warn!(
+                                                        "Failed to limit {} with {:?}",
+                                                        ip_addr, res
+                                                    );
+                                                }
+                                                Err(e) => warn!(
+                                                    "Can't parse Ipv4Addr to create limit! {:?}",
+                                                    e
+                                                ),
+                                            };
+                                        }
+                                        None => {
+                                            warn!(
+                                                "Could not find {:?} to suspend!",
+                                                debt_entry.identity
+                                            );
+                                        }
+                                    }
+                                } else {
+                                    match clients_by_id.get(&debt_entry.identity) {
+                                        Some(client) => {
+                                            let _ = match client.internal_ip.parse() {
+                                                Ok(ip_addr) => {
+                                                    let res =
+                                                        KI.delete_limit_by_ip("wg_exit", ip_addr);
+                                                    warn!(
+                                                        "Failed to limit {} with {:?}",
+                                                        ip_addr, res
+                                                    );
+                                                }
+                                                Err(e) => warn!(
+                                                    "Can't parse Ipv4Addr to create limit! {:?}",
+                                                    e
+                                                ),
+                                            };
+                                        }
+                                        None => {
+                                            warn!(
+                                                "Could not find {:?} to suspend!",
+                                                debt_entry.identity
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+
+                            Ok(())
+                        },
+                    )),
+                    Err(e) => {
+                        warn!("Failed to get debts from DebtKeeper! {:?}", e);
+                        Either::B(future::ok(()))
+                    }
+                })
+                .then(|_| Ok(())),
         );
 
         Ok(())
