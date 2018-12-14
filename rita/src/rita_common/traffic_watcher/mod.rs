@@ -230,9 +230,9 @@ pub fn get_output_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
 /// This first time this is run, it will create the rules and then immediately read and zero them.
 /// (should return 0)
 pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result<(), Error> {
-    // the number of bytes provided under the free tier, (kbps * seconds) * 1000 = bytes
+    // the number of bytes provided under the free tier, (kbps * seconds) * 125 = bytes
     let free_tier_threshold: u64 =
-        u64::from(SETTING.get_payment().free_tier_throughput) * COMMON_LOOP_SPEED * 1000u64;
+        u64::from(SETTING.get_payment().free_tier_throughput) * COMMON_LOOP_SPEED * 125u64;
 
     let (identities, if_to_id) = prepare_helper_maps(neighbors);
 

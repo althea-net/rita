@@ -78,9 +78,9 @@ pub fn watch<T: Read + Write>(
     exit: Identity,
     exit_price: u64,
 ) -> Result<(), Error> {
-    // the number of bytes provided under the free tier, (kbps * seconds) * 1000 = bytes
+    // the number of bytes provided under the free tier, (kbps * seconds) * (1000/8) = bytes
     let free_tier_threshold: u64 =
-        u64::from(SETTING.get_payment().free_tier_throughput) * CLIENT_LOOP_SPEED * 1000u64;
+        u64::from(SETTING.get_payment().free_tier_throughput) * CLIENT_LOOP_SPEED * 125u64;
 
     babel.start_connection()?;
 

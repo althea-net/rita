@@ -57,7 +57,7 @@ impl SystemService for TrafficWatcher {
         KI.setup_nat(&SETTING.get_network().external_nic.clone().unwrap())
             .unwrap();
         // we need a parent qdisc but don't want to really limit, so 100gbps it is
-        KI.create_limit("wg_exit", 100000000).unwrap();
+        KI.create_limit("wg_exit", 100_000_000).unwrap();
         // this is the class we'll actually use to limit people.
         KI.create_class_limit("wg_exit", SETTING.get_payment().free_tier_throughput)
             .unwrap();
@@ -206,9 +206,9 @@ pub fn watch<T: Read + Write>(
     babel: Babel<T>,
     clients: Vec<Identity>,
 ) -> Result<(), Error> {
-    // the number of bytes provided under the free tier, (kbps * seconds) * 1000 = bytes
+    // the number of bytes provided under the free tier, (kbps * seconds) * 125 = bytes
     let free_tier_threshold: u64 =
-        u64::from(SETTING.get_payment().free_tier_throughput) * EXIT_LOOP_SPEED * 1000u64;
+        u64::from(SETTING.get_payment().free_tier_throughput) * EXIT_LOOP_SPEED * 125u64;
 
     let our_price = SETTING.get_exit_network().exit_price;
     let our_id = match SETTING.get_identity() {
