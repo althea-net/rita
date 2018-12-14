@@ -104,29 +104,30 @@ impl Handler<PaymentReceived> for DebtKeeper {
 /// be retried
 pub struct PaymentFailed {
     pub to: Identity,
-    pub amount: Int256,
+    pub amount: Uint256,
 }
 
 impl Handler<PaymentFailed> for DebtKeeper {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: PaymentFailed, _: &mut Context<Self>) -> Self::Result {
-        match self.debt_data.get_mut(&msg.to) {
-            Some(entry) => {
-                entry.debt += msg.amount.clone();
-                entry.total_payment_sent = entry
-                    .total_payment_sent
-                    .checked_sub(&msg.amount.to_uint256().ok_or(format_err!(
-                        "Unable to convert amount to unsigned 256 bit integer"
-                    ))?)
-                    .ok_or(format_err!(
-                        "Unable to subtract amount from total payments sent"
-                    ))?;
-                entry.debt_buffer.push_front(msg.amount);
+        match msg.amount.to_int256() {
+            Some(amount_int) => {
+                match self.debt_data.get_mut(&msg.to) {
+                    Some(entry) => {
+                        entry.debt += amount_int.clone();
+                        entry.total_payment_sent =
+                            entry.total_payment_sent.checked_sub(&msg.amount).ok_or(
+                                format_err!("Unable to subtract amount from total payments sent"),
+                            )?;
+                        entry.debt_buffer.push_front(amount_int);
+                        Ok(())
+                    }
+                    None => bail!("Payment failed but no debt! Somthing Must have gone wrong!"),
+                }
             }
-            None => warn!("Payment failed but no debt! Somthing Must have gone wrong!"),
+            None => bail!("Unsable to convert amount to integer256 bit"),
         }
-        Ok(())
     }
 }
 
