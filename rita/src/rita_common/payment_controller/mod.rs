@@ -62,9 +62,7 @@ impl Handler<MakePayment> for PaymentController {
         if res.is_err() {
             DebtKeeper::from_registry().do_send(PaymentFailed {
                 to: msg.0.to,
-                amount: msg.0.amount.to_int256().ok_or(format_err!(
-                    "Unable to convert amount to 256 bit signed integer"
-                ))?,
+                amount: msg.0.amount,
             });
         }
         Ok(())
@@ -169,11 +167,6 @@ impl PaymentController {
             Err(e) => bail!("Failed to generate transaction, {:?}", e),
         };
 
-        // XXX: How to do it better? Shouldn't PaymentFailed store unsigned ints?
-        let signed_amount = pmt.amount.to_int256().ok_or(format_err!(
-            "Unable to convert payment amount into 256 signed integer"
-        ))?;
-
         let transaction_status = web3.eth_send_raw_transaction(transaction_bytes);
 
         let futures_chain = Box::new(stream.then(move |open_stream| match open_stream {
@@ -207,7 +200,7 @@ impl PaymentController {
                         warn!("Failed to send bandwidth payment {:?}", e);
                         DebtKeeper::from_registry().do_send(PaymentFailed {
                             to: pmt.to,
-                            amount: signed_amount.clone(),
+                            amount: pmt.amount,
                         });
                         Either::B(future::ok(()))
                     }
@@ -222,7 +215,7 @@ impl PaymentController {
                 );
                 DebtKeeper::from_registry().do_send(PaymentFailed {
                     to: pmt.to,
-                    amount: signed_amount.clone(),
+                    amount: pmt.amount,
                 });
                 Either::B(future::ok(()))
             }
