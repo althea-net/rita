@@ -56,11 +56,9 @@ impl SystemService for TrafficWatcher {
         }
         KI.setup_nat(&SETTING.get_network().external_nic.clone().unwrap())
             .unwrap();
-        // we need a parent qdisc but don't want to really limit, so 100gbps it is
-        KI.create_limit("wg_exit", 100_000_000).unwrap();
-        // this is the class we'll actually use to limit people.
-        KI.create_class_limit("wg_exit", SETTING.get_payment().free_tier_throughput)
-            .unwrap();
+        // this creates the root classful htb limit for which we will make
+        // subclasses to enforce payment
+        KI.create_root_classful_limit("wg_exit").unwrap();
 
         info!("Traffic Watcher started");
     }
