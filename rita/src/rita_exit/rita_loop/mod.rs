@@ -5,7 +5,7 @@
 //! their exit tunnel
 
 use std::collections::HashMap;
-use std::net::Ipv4Addr;
+use std::net::IpAddr;
 use std::time::{Duration, Instant};
 
 use ::actix::prelude::*;
@@ -56,6 +56,7 @@ impl Message for Tick {
 }
 
 fn to_identity(client: Client) -> Identity {
+    trace!("Converting client {:?}", client);
     Identity {
         mesh_ip: client.mesh_ip.parse().expect("Corrupt database entry!"),
         eth_address: client.eth_address.parse().expect("Corrupt database entry!"),
@@ -74,7 +75,7 @@ fn to_exit_client(client: Client) -> Result<ExitClient, Error> {
 
 impl Handler<Tick> for RitaLoop {
     type Result = Result<(), Error>;
-    fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
         let start = Instant::now();
         trace!("Exit tick!");
 
@@ -134,61 +135,46 @@ impl Handler<Tick> for RitaLoop {
                         move |res| {
                             let clients = res.unwrap();
                             let mut clients_by_id = HashMap::new();
+                            let free_tier_limit = SETTING.get_payment().free_tier_throughput;
                             for client in clients.iter() {
                                 let id = to_identity(client.clone());
                                 clients_by_id.insert(id, client);
                             }
 
                             for debt_entry in list.iter() {
-                                if debt_entry.payment_details.action == DebtAction::SuspendTunnel {
-                                    match clients_by_id.get(&debt_entry.identity) {
-                                        Some(client) => {
-                                            let _ = match client.internal_ip.parse() {
-                                                Ok(ip_addr) => {
-                                                    let res =
-                                                        KI.create_limit_by_ip("wg_exit", ip_addr);
-                                                    warn!(
-                                                        "Failed to limit {} with {:?}",
-                                                        ip_addr, res
-                                                    );
+                                match clients_by_id.get(&debt_entry.identity) {
+                                    Some(client) => {
+                                        let _ = match client.internal_ip.parse() {
+                                            Ok(IpAddr::V4(ip)) => {
+                                                let class_id = KI.get_class_id(&ip);
+                                                let res = if debt_entry.payment_details.action
+                                                    == DebtAction::SuspendTunnel
+                                                {
+                                                    KI.set_class_limit(
+                                                        "wg_exit",
+                                                        free_tier_limit,
+                                                        free_tier_limit,
+                                                        class_id,
+                                                    )
+                                                } else {
+                                                    // set to 50mbps garunteed bandwidth and 5gbps
+                                                    // absolute max
+                                                    KI.set_class_limit(
+                                                        "wg_exit", 50000, 5000000, class_id,
+                                                    )
+                                                };
+                                                if res.is_err() {
+                                                    warn!("Failed to limit {} with {:?}", ip, res);
                                                 }
-                                                Err(e) => warn!(
-                                                    "Can't parse Ipv4Addr to create limit! {:?}",
-                                                    e
-                                                ),
-                                            };
-                                        }
-                                        None => {
-                                            warn!(
-                                                "Could not find {:?} to suspend!",
-                                                debt_entry.identity
-                                            );
-                                        }
+                                            }
+                                            _ => warn!("Can't parse Ipv4Addr to create limit!"),
+                                        };
                                     }
-                                } else {
-                                    match clients_by_id.get(&debt_entry.identity) {
-                                        Some(client) => {
-                                            let _ = match client.internal_ip.parse() {
-                                                Ok(ip_addr) => {
-                                                    let res =
-                                                        KI.delete_limit_by_ip("wg_exit", ip_addr);
-                                                    warn!(
-                                                        "Failed to limit {} with {:?}",
-                                                        ip_addr, res
-                                                    );
-                                                }
-                                                Err(e) => warn!(
-                                                    "Can't parse Ipv4Addr to create limit! {:?}",
-                                                    e
-                                                ),
-                                            };
-                                        }
-                                        None => {
-                                            warn!(
-                                                "Could not find {:?} to suspend!",
-                                                debt_entry.identity
-                                            );
-                                        }
+                                    None => {
+                                        warn!(
+                                            "Could not find {:?} to suspend!",
+                                            debt_entry.identity
+                                        );
                                     }
                                 }
                             }

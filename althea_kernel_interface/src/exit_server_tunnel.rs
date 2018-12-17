@@ -23,6 +23,14 @@ impl dyn KernelInterface {
         local_ip: &IpAddr,
         netmask: u8,
     ) -> Result<(), Error> {
+        // setup traffic classes for enforcement with flow id's derived from the last two octets of the ip
+        for c in clients.iter() {
+            match c.internal_ip {
+                IpAddr::V4(addr) => self.create_classifier_by_ip("wg_exit", &addr)?,
+                _ => panic!("Could not derive ipv4 addr for client! Corrupt DB!"),
+            }
+        }
+
         let command = "wg".to_string();
 
         let mut args = Vec::new();
@@ -35,7 +43,7 @@ impl dyn KernelInterface {
 
         let mut client_pubkeys = HashSet::new();
 
-        for c in clients {
+        for c in clients.iter() {
             args.push("peer".into());
             args.push(format!("{}", c.public_key));
             args.push("endpoint".into());

@@ -163,7 +163,7 @@ impl Tunnel {
         }
     }
 
-    /// Open physical tunnel
+    /// Open a real tunnel to match the virtual tunnel we store in memory
     pub fn open(&self) -> Result<(), Error> {
         let network = SETTING.get_network().clone();
         KI.open_tunnel(
@@ -178,7 +178,8 @@ impl Tunnel {
             },
             network.external_nic.clone(),
             &mut SETTING.get_network_mut().default_route,
-        )
+        )?;
+        KI.set_codel_shaping(&self.iface_name)
     }
 
     /// Register this tunnel into Babel monitor
@@ -914,13 +915,9 @@ fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, HashMap<u32, Tunnel>>) -> 
             let has_limit = KI.has_limit(iface_name)?;
 
             if *payment_state == PaymentState::Overdue {
-                if has_limit {
-                    KI.update_limit(iface_name, bw_per_iface)?;
-                } else {
-                    KI.create_limit(iface_name, bw_per_iface)?;
-                }
+                KI.set_classless_limit(iface_name, bw_per_iface)?;
             } else if *payment_state == PaymentState::Paid && has_limit {
-                KI.delete_limit(iface_name)?;
+                KI.set_codel_shaping(iface_name)?;
             }
         }
     }
