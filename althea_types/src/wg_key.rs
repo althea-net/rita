@@ -27,7 +27,7 @@ impl FromStr for WgKey {
         let mut output = [0u8; 32];
 
         if s.len() != 44 {
-            panic!("Invalid base64 key! Expected length of 44 (for 32 byte key)")
+            return Err(base64::DecodeError::InvalidLength);
         }
 
         match base64::decode_config_slice(s, base64::STANDARD, &mut output) {
