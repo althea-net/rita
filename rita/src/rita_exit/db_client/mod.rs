@@ -83,13 +83,75 @@ impl Handler<ListClients> for DbClient {
     }
 }
 
-fn increment(address: IpAddr) -> Result<IpAddr, Error> {
-    if let IpAddr::V4(address) = address {
-        let mut oct = address.octets();
-        oct[3] += 1;
-        return Ok(oct.into());
+/// adds one to whole netmask ip addresses
+fn increment(address: IpAddr, netmask: u8) -> Result<IpAddr, Error> {
+    assert_eq!(netmask % 8, 0);
+    // same algorithm for either path, couldn't converge the codepaths
+    // without having to play with slices for oct
+    match address {
+        IpAddr::V4(address) => {
+            // the number of bytes we can cover using this netmask
+            let bytes_to_modify = ((32 - netmask) + 7) / 8;
+            assert!(netmask <= 32);
+            assert!(bytes_to_modify <= 4);
+            assert!(bytes_to_modify > 0);
+
+            let mut carry = false;
+            let mut oct = address.octets();
+            for i in (3 - (bytes_to_modify)..4).rev() {
+                let index = i as usize;
+                if i == (4 - bytes_to_modify) && oct[index] == 255 && carry {
+                    bail!("Ip space in the netmask has been exhausted!");
+                }
+
+                if oct[index] == 255 {
+                    oct[index] = 0;
+                    carry = true;
+                    continue;
+                }
+
+                if carry {
+                    oct[index] += 1;
+                    return Ok(oct.into());
+                }
+
+                oct[index] += 1;
+                return Ok(oct.into());
+            }
+            bail!("No more ip address space!")
+        }
+        IpAddr::V6(address) => {
+            // the number of bytes we can cover using this netmask
+            let bytes_to_modify = ((128 - netmask) + 7) / 8;
+            assert!(netmask <= 128);
+            assert!(bytes_to_modify <= 16);
+            assert!(bytes_to_modify > 0);
+
+            let mut carry = false;
+            let mut oct = address.octets();
+            for i in ((16 - bytes_to_modify)..16).rev() {
+                let index = i as usize;
+                if i == (15 - bytes_to_modify) && oct[index] == 255 && carry {
+                    bail!("Ip space in the netmask has been exhausted!");
+                }
+
+                if oct[index] == 255 {
+                    oct[index] = 0;
+                    carry = true;
+                    continue;
+                }
+
+                if carry {
+                    oct[index] += 1;
+                    return Ok(oct.into());
+                }
+
+                oct[index] += 1;
+                return Ok(oct.into());
+            }
+            bail!("No more ip address space!")
+        }
     }
-    bail!("Not ipv4 addr")
 }
 
 #[derive(Deserialize, Debug)]
@@ -160,8 +222,8 @@ fn add_dummy(conn: &SqliteConnection) -> Result<(), Error> {
     dummy.mesh_ip = "0.0.0.0".to_string();
 
     match diesel::insert_into(clients).values(&dummy).execute(&*conn) {
-        Err(e) => trace!("Not inserting dummy: {:?}", e),
-        _ => {}
+        Err(_e) => {}
+        _ => warn!("Inserted dummy, this should only happen once"),
     }
     Ok(())
 }
@@ -176,9 +238,10 @@ fn incr_dummy(conn: &SqliteConnection) -> Result<IpAddr, Error> {
         .expect("failed loading dummy")[0]
         .clone();
 
-    trace!("dummy: {:?}", dummy);
+    trace!("incrementing dummy: {:?}", dummy);
+    let netmask = SETTING.get_exit_network().netmask as u8;
 
-    let new_ip = increment(dummy.internal_ip.parse()?)?;
+    let new_ip = increment(dummy.internal_ip.parse()?, netmask)?;
 
     diesel::update(clients.filter(mesh_ip.eq("0.0.0.0")))
         .set(internal_ip.eq(&new_ip.to_string()))
@@ -342,100 +405,95 @@ impl Handler<SetupClient> for DbClient {
         trace!("got setup request {:?}", client);
 
         match verify_ip(&msg.1) {
-            Ok(_) => {
-                conn.transaction::<_, Error, _>(|| {
-                    add_dummy(&conn)?;
+            Ok(_) => conn.transaction::<_, Error, _>(|| {
+                add_dummy(&conn)?;
 
-                    trace!("Checking if record exists for {:?}", client.global.mesh_ip);
+                trace!("Checking if record exists for {:?}", client.global.mesh_ip);
 
-                    if client_exists(&client.global.mesh_ip, &conn)? {
-                        update_client(&msg.0, &conn)?;
-                        let mut their_record: models::Client = match clients
-                            .filter(mesh_ip.eq(&client.global.mesh_ip.to_string()))
-                            .load::<models::Client>(&conn)
-                        {
-                            Ok(entry) => entry[0].clone(),
-                            Err(e) => {
-                                error!("We failed to lookup the client {:?} with{:?}", mesh_ip, e);
-                                bail!("We failed to lookup the client!")
-                            }
-                        };
-
-                        info!(
-                            "expected code {}, got code {:?}",
-                            their_record.email_code, client.reg_details.email_code
-                        );
-
-                        if client.reg_details.email_code == Some(their_record.email_code.clone()) {
-                            info!("email verification complete for {:?}", client);
-                            verify_client(&client, true, &conn)?;
-                            their_record.verified = true;
+                if client_exists(&client.global.mesh_ip, &conn)? {
+                    update_client(&msg.0, &conn)?;
+                    let mut their_record: models::Client = match clients
+                        .filter(mesh_ip.eq(&client.global.mesh_ip.to_string()))
+                        .load::<models::Client>(&conn)
+                    {
+                        Ok(entry) => entry[0].clone(),
+                        Err(e) => {
+                            error!("We failed to lookup the client {:?} with{:?}", mesh_ip, e);
+                            bail!("We failed to lookup the client!")
                         }
+                    };
 
-                        if verif_done(&their_record)? {
-                            info!("{:?} is now registered", client);
-                            Ok(ExitState::Registered {
-                                our_details: ExitClientDetails {
-                                    client_internal_ip: their_record.internal_ip.parse()?,
-                                },
+                    info!(
+                        "expected code {}, got code {:?}",
+                        their_record.email_code, client.reg_details.email_code
+                    );
+
+                    if client.reg_details.email_code == Some(their_record.email_code.clone()) {
+                        info!("email verification complete for {:?}", client);
+                        verify_client(&client, true, &conn)?;
+                        their_record.verified = true;
+                    }
+
+                    if verif_done(&their_record)? {
+                        info!("{:?} is now registered", client);
+                        Ok(ExitState::Registered {
+                            our_details: ExitClientDetails {
+                                client_internal_ip: their_record.internal_ip.parse()?,
+                            },
+                            general_details: get_exit_info(),
+                            message: "Registration OK".to_string(),
+                        })
+                    } else {
+                        let cooldown = match SETTING.get_verif_settings() {
+                            Some(ExitVerifSettings::Email(mailer)) => mailer.email_cooldown as i32,
+                            None => bail!("There is no verification configured!"),
+                        };
+                        let time_since_last_email =
+                            secs_since_unix_epoch() - their_record.email_sent_time;
+
+                        if time_since_last_email < cooldown {
+                            Ok(ExitState::GotInfo {
                                 general_details: get_exit_info(),
-                                message: "Registration OK".to_string(),
+                                message: format!(
+                                    "Wait {} more seconds for verification cooldown",
+                                    cooldown - time_since_last_email
+                                ),
+                                auto_register: true,
                             })
                         } else {
-                            let cooldown = match SETTING.get_verif_settings() {
-                                Some(ExitVerifSettings::Email(mailer)) => {
-                                    mailer.email_cooldown as i32
-                                }
-                                None => bail!("There is no verification configured!"),
-                            };
-                            let time_since_last_email =
-                                secs_since_unix_epoch() - their_record.email_sent_time;
-
-                            if time_since_last_email < cooldown {
-                                Ok(ExitState::GotInfo {
-                                    general_details: get_exit_info(),
-                                    message: format!(
-                                        "Wait {} more seconds for verification cooldown",
-                                        cooldown - time_since_last_email
-                                    ),
-                                    auto_register: true,
-                                })
-                            } else {
-                                update_mail_sent_time(&client, &conn)?;
-                                send_mail(&their_record)?;
-                                Ok(ExitState::Pending {
-                                    general_details: get_exit_info(),
-                                    message: "awaiting email verification".to_string(),
-                                    email_code: None,
-                                })
-                            }
+                            update_mail_sent_time(&client, &conn)?;
+                            send_mail(&their_record)?;
+                            Ok(ExitState::Pending {
+                                general_details: get_exit_info(),
+                                message: "awaiting email verification".to_string(),
+                                email_code: None,
+                            })
                         }
-                    } else {
-                        trace!("record does not exist, creating");
-                        // first time seeing
-
-                        let new_ip = incr_dummy(&conn)?;
-
-                        let user_country = if SETTING.get_allowed_countries().is_empty() {
-                            String::new()
-                        } else {
-                            get_country(&msg.1)?
-                        };
-
-                        let c = client_to_new_db_client(client, new_ip, user_country);
-
-                        diesel::insert_into(clients).values(&c).execute(&conn)?;
-
-                        send_mail(&c)?;
-
-                        Ok(ExitState::Pending {
-                            general_details: get_exit_info(),
-                            message: "awaiting email verification".to_string(),
-                            email_code: None,
-                        })
                     }
-                })
-            }
+                } else {
+                    trace!("record does not exist, creating");
+
+                    let new_ip = incr_dummy(&conn)?;
+
+                    let user_country = if SETTING.get_allowed_countries().is_empty() {
+                        String::new()
+                    } else {
+                        get_country(&msg.1)?
+                    };
+
+                    let c = client_to_new_db_client(client, new_ip, user_country);
+
+                    diesel::insert_into(clients).values(&c).execute(&conn)?;
+
+                    send_mail(&c)?;
+
+                    Ok(ExitState::Pending {
+                        general_details: get_exit_info(),
+                        message: "awaiting email verification".to_string(),
+                        email_code: None,
+                    })
+                }
+            }),
             Err(e) => Ok(ExitState::Denied {
                 message: format!(
                     "This exit only accepts connections from {:?}\n verbose error: {}",
@@ -544,5 +602,47 @@ impl Handler<TruncateTables> for DbClient {
         };
         r#try!(delete(clients).execute(&connection));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn increment_basic_v4() {
+        let addr1: IpAddr = [0, 0, 0, 0].into();
+        let addr2: IpAddr = [0, 0, 0, 1].into();
+        assert_eq!(increment(addr1, 16).unwrap(), addr2);
+    }
+
+    #[test]
+    fn increment_overflow_v4() {
+        let addr1: IpAddr = [0, 0, 0, 255].into();
+        let addr2: IpAddr = [0, 0, 1, 0].into();
+        assert_eq!(increment(addr1, 16).unwrap(), addr2);
+    }
+    #[test]
+    fn increment_out_of_bounds_simple_v4() {
+        let addr1: IpAddr = [0, 0, 255, 255].into();
+        assert!(increment(addr1, 16).is_err());
+    }
+
+    #[test]
+    fn increment_basic_v6() {
+        let addr1: IpAddr = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].into();
+        let addr2: IpAddr = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1].into();
+        assert_eq!(increment(addr1, 112).unwrap(), addr2);
+    }
+
+    #[test]
+    fn increment_overflow_v6() {
+        let addr1: IpAddr = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255].into();
+        let addr2: IpAddr = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0].into();
+        assert_eq!(increment(addr1, 112).unwrap(), addr2);
+    }
+    #[test]
+    fn increment_out_of_bounds_simple_v6() {
+        let addr1: IpAddr = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255].into();
+        assert!(increment(addr1, 112).is_err());
     }
 }

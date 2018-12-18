@@ -172,9 +172,7 @@ impl Handler<SendUpdate> for DebtKeeper {
 
     fn handle(&mut self, _msg: SendUpdate, _ctx: &mut Context<Self>) -> Self::Result {
         trace!("sending debt keeper update");
-        trace!("total debt data: {:?}", self.debt_data);
         for (k, _) in self.debt_data.clone() {
-            trace!("sending update for {:?}", k);
             match self.send_update(&k)? {
                 DebtAction::SuspendTunnel => {}
                 DebtAction::OpenTunnel => {}
