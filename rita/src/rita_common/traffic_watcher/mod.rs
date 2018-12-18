@@ -14,6 +14,7 @@ use babel_monitor::Babel;
 
 use crate::rita_common::debt_keeper;
 use crate::rita_common::debt_keeper::DebtKeeper;
+use crate::rita_common::debt_keeper::Traffic;
 
 use num256::Int256;
 
@@ -290,16 +291,18 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) ->
         total_income
     );
 
+    let mut traffic_vec = Vec::new();
     for (from, amount) in debts {
         trace!("collated debt for {} is {}", from.mesh_ip, amount);
-
-        let update = debt_keeper::TrafficUpdate {
-            from: from.clone(),
-            amount,
-        };
-
-        DebtKeeper::from_registry().do_send(update);
+        traffic_vec.push(Traffic {
+            from: from,
+            amount: amount,
+        });
     }
+    let update = debt_keeper::TrafficUpdate {
+        traffic: traffic_vec,
+    };
+    DebtKeeper::from_registry().do_send(update);
 
     // check if we are a gateway
     let gateway = match SETTING.get_network().external_nic {

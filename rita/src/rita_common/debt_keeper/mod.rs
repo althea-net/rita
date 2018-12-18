@@ -131,17 +131,23 @@ impl Handler<PaymentFailed> for DebtKeeper {
     }
 }
 
-#[derive(Message)]
-pub struct TrafficUpdate {
+pub struct Traffic {
     pub from: Identity,
     pub amount: Int256,
+}
+
+#[derive(Message)]
+pub struct TrafficUpdate {
+    pub traffic: Vec<Traffic>,
 }
 
 impl Handler<TrafficUpdate> for DebtKeeper {
     type Result = ();
 
     fn handle(&mut self, msg: TrafficUpdate, _: &mut Context<Self>) -> Self::Result {
-        self.traffic_update(&msg.from, msg.amount)
+        for t in msg.traffic.iter() {
+            self.traffic_update(&t.from, t.amount.clone());
+        }
     }
 }
 
