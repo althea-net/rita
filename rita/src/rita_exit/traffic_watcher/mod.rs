@@ -18,6 +18,7 @@ use babel_monitor::Babel;
 
 use crate::rita_common::debt_keeper;
 use crate::rita_common::debt_keeper::DebtKeeper;
+use crate::rita_common::debt_keeper::Traffic;
 
 use num256::Int256;
 
@@ -267,14 +268,17 @@ pub fn watch<T: Read + Write>(
         Err(e) => warn!("Getting clients failed with {:?}", e),
     }
 
+    let mut traffic_vec = Vec::new();
     for (from, amount) in debts {
-        let update = debt_keeper::TrafficUpdate {
-            from: from.clone(),
-            amount,
-        };
-
-        DebtKeeper::from_registry().do_send(update);
+        traffic_vec.push(Traffic {
+            from: from,
+            amount: amount,
+        })
     }
+    let update = debt_keeper::TrafficUpdate {
+        traffic: traffic_vec,
+    };
+    DebtKeeper::from_registry().do_send(update);
 
     Ok(())
 }
