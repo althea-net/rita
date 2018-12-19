@@ -131,17 +131,23 @@ impl Handler<PaymentFailed> for DebtKeeper {
     }
 }
 
-#[derive(Message)]
-pub struct TrafficUpdate {
+pub struct Traffic {
     pub from: Identity,
     pub amount: Int256,
+}
+
+#[derive(Message)]
+pub struct TrafficUpdate {
+    pub traffic: Vec<Traffic>,
 }
 
 impl Handler<TrafficUpdate> for DebtKeeper {
     type Result = ();
 
     fn handle(&mut self, msg: TrafficUpdate, _: &mut Context<Self>) -> Self::Result {
-        self.traffic_update(&msg.from, msg.amount)
+        for t in msg.traffic.iter() {
+            self.traffic_update(&t.from, t.amount.clone());
+        }
     }
 }
 
@@ -166,9 +172,7 @@ impl Handler<SendUpdate> for DebtKeeper {
 
     fn handle(&mut self, _msg: SendUpdate, _ctx: &mut Context<Self>) -> Self::Result {
         trace!("sending debt keeper update");
-        trace!("total debt data: {:?}", self.debt_data);
         for (k, _) in self.debt_data.clone() {
-            trace!("sending update for {:?}", k);
             match self.send_update(&k)? {
                 DebtAction::SuspendTunnel => {}
                 DebtAction::OpenTunnel => {}

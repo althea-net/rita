@@ -15,7 +15,7 @@ use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::time::{Duration, SystemTime};
 
-use crate::rita_common::debt_keeper::{DebtKeeper, TrafficUpdate};
+use crate::rita_common::debt_keeper::{DebtKeeper, Traffic, TrafficUpdate};
 use crate::rita_common::tunnel_manager::Neighbor;
 use crate::KI;
 use crate::SETTING;
@@ -196,8 +196,10 @@ pub fn watch<T: Read + Write>(
     info!("Total client debt of {} this round", owes_exit);
 
     let exit_update = TrafficUpdate {
-        from: exit.clone(),
-        amount: owes_exit,
+        traffic: vec![Traffic {
+            from: exit.clone(),
+            amount: owes_exit,
+        }],
     };
 
     DebtKeeper::from_registry().do_send(exit_update);
