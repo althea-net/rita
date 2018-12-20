@@ -65,6 +65,7 @@ r2d2 = "0.8"
 sha3 = "0.8"
 hex-literal = "0.2"
 sodiumoxide = "0.2"
+compressed_log = { path = "../../compressed_log"}
 
 [dependencies.regex]
 version = "1.3"

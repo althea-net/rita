@@ -45,6 +45,7 @@ mod middleware;
 mod rita_client;
 mod rita_common;
 
+use crate::rita_client::enable_remote_logging;
 use crate::rita_client::rita_loop::check_rita_client_actors;
 use crate::rita_common::rita_loop::check_rita_common_actors;
 use crate::rita_common::rita_loop::start_core_rita_endpoints;
@@ -172,6 +173,9 @@ fn main() {
 
     if !SETTING.get_log().enabled || env_vars_contains("NO_REMOTE_LOG") {
         env_logger::init();
+    } else {
+        let res = enable_remote_logging();
+        info!("logging status {:?}", res);
     }
 
     // remove in beta 9 where this info will be imported from the dao address oracle.
