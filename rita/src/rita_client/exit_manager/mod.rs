@@ -36,9 +36,9 @@ use futures::Future;
 
 use tokio::net::TcpStream as TokioTcpStream;
 
+use compressed_log::builder::LoggerBuilder;
+use compressed_log::lz4::Compression;
 use log::LevelFilter;
-use syslog::Error as LogError;
-use syslog::{init_udp, Facility};
 
 use crate::KI;
 use failure::Error;
@@ -46,7 +46,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 /// enables remote logging if the user has configured it
-fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
+fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), Error> {
     // now that the exit tunnel is up we can start logging over it
     let log = SETTING.get_log();
     trace!("About to enable remote logging");
@@ -54,23 +54,24 @@ fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
         Ok(level) => level,
         Err(_) => LevelFilter::Error,
     };
-    let res = init_udp(
-        &format!("0.0.0.0:{}", log.send_port),
-        &format!("{}:{}", server_internal_ip, log.dest_port),
-        format!(
-            "{} {}",
-            SETTING
-                .get_network()
-                .wg_public_key
-                .clone()
-                .expect("Tried to init remote logging without WgKey!"),
-            env!("CARGO_PKG_VERSION")
-        ),
-        Facility::LOG_USER,
-        level,
-    );
-    info!("Remote logging enabled with {:?}", res);
-    return res;
+
+    let logger = LoggerBuilder::new()
+        .set_level(
+            level
+                .to_level()
+                .ok_or(format_err!("Unable to convert level filter to a level"))?,
+        )
+        .set_compression_level(Compression::Fast)
+        // TODO: It would good idea to have this configurable
+        .set_sink_url(&format!("http://{}:9999/sink/", server_internal_ip))
+        .set_threshold(16384)
+        .build()?;
+
+    log::set_boxed_logger(Box::new(logger))?;
+    log::set_max_level(level);
+
+    info!("Remote compressed logging enabled");
+    Ok(())
 }
 
 fn linux_setup_exit_tunnel() -> Result<(), Error> {
