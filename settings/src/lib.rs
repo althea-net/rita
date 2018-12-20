@@ -19,8 +19,6 @@ extern crate log;
 #[cfg(test)]
 use std::sync::Mutex;
 
-use config;
-
 use toml;
 
 use serde;

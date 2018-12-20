@@ -20,7 +20,6 @@ use ::actix::prelude::*;
 use ::actix::registry::SystemService;
 use ::actix_web::client::Connection;
 use ::actix_web::*;
-use std::net::IpAddr;
 
 use althea_types::{ExitClientIdentity, ExitState};
 
@@ -38,9 +37,9 @@ use futures::Future;
 
 use tokio::net::TcpStream as TokioTcpStream;
 
+use compressed_log::builder::LoggerBuilder;
+use compressed_log::lz4::Compression;
 use log::LevelFilter;
-use syslog::Error as LogError;
-use syslog::{init_udp, Facility};
 
 use crate::KI;
 use failure::Error;
@@ -48,7 +47,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 /// enables remote logging if the user has configured it
-fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
+fn enable_remote_logging(logging_url: &str) -> Result<(), Error> {
     // now that the exit tunnel is up we can start logging over it
     let log = SETTING.get_log();
     trace!("About to enable remote logging");
@@ -56,23 +55,24 @@ fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
         Ok(level) => level,
         Err(_) => LevelFilter::Error,
     };
-    let res = init_udp(
-        &format!("0.0.0.0:{}", log.send_port),
-        &format!("{}:{}", server_internal_ip, log.dest_port),
-        format!(
-            "{} {}",
-            SETTING
-                .get_network()
-                .wg_public_key
-                .clone()
-                .expect("Tried to init remote logging without WgKey!"),
-            env!("CARGO_PKG_VERSION")
-        ),
-        Facility::LOG_USER,
-        level,
-    );
-    info!("Remote logging enabled with {:?}", res);
-    res
+
+    let logger = LoggerBuilder::default()
+        .set_level(
+            level
+                .to_level()
+                .ok_or(format_err!("Unable to convert level filter to a level"))?,
+        )
+        .set_compression_level(Compression::Fast)
+        // TODO: It would good idea to have this configurable
+        .set_sink_url(logging_url)
+        .set_threshold(16384)
+        .build()?;
+
+    log::set_boxed_logger(Box::new(logger))?;
+    log::set_max_level(level);
+
+    info!("Remote compressed logging enabled");
+    Ok(())
 }
 
 fn linux_setup_exit_tunnel() -> Result<(), Error> {
@@ -309,6 +309,8 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
 pub struct ExitManager {
     // used to determine if we need to change the logging state
     last_exit: Option<ExitServer>,
+    // the logging destination
+    dest_url: String,
     // used to store the logging state on startup so we don't double init logging
     // as that would cause a panic
     remote_logging_setting: bool,
@@ -325,6 +327,7 @@ impl SystemService for ExitManager {
         info!("Exit Manager started");
         self.last_exit = None;
         self.remote_logging_setting = SETTING.get_log().enabled;
+        self.dest_url = SETTING.get_log().dest_url.clone();
         self.remote_logging_already_started = false;
     }
 }
@@ -364,7 +367,7 @@ impl Handler<Tick> for ExitManager {
 
                 // enable remote logging only if it has not already been started
                 if !self.remote_logging_already_started && self.remote_logging_setting {
-                    let res = enable_remote_logging(general_details.server_internal_ip);
+                    let res = enable_remote_logging(&self.dest_url);
                     self.remote_logging_already_started = true;
                     info!("logging status {:?}", res);
                 }
