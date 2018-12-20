@@ -135,7 +135,7 @@ pub fn exits_sync(
         .build()
         .unwrap();
 
-    let new_exits: HashMap<String, ExitServer> = match client.get(list_url).send() {
+    let mut new_exits: HashMap<String, ExitServer> = match client.get(list_url).send() {
         Ok(mut response) => match response.json() {
             Ok(deserialized) => deserialized,
             Err(e) => {
@@ -147,7 +147,10 @@ pub fn exits_sync(
                 );
                 ret.insert(
                     "error".to_owned(),
-                    format!("Could not deserialize exit list at URL {:?}", list_url),
+                    format!(
+                        "Could not deserialize exit list at URL {:?} because of error {:?}",
+                        list_url, e
+                    ),
                 );
 
                 return Box::new(future::ok(
@@ -180,6 +183,15 @@ pub fn exits_sync(
     info!("exit_sync list: {:#?}", new_exits);
 
     let exits = &mut SETTING.get_exit_client_mut().exits;
+
+    // if the entry already exists copy the registration info over
+    for new_exit in new_exits.iter_mut() {
+        let nick = new_exit.0;
+        let new_settings = new_exit.1;
+        if let Some(old_exit) = exits.get(nick) {
+            new_settings.info = old_exit.info.clone();
+        }
+    }
     exits.extend(new_exits);
 
     Box::new(future::ok(HttpResponse::Ok().json(exits.clone())))
