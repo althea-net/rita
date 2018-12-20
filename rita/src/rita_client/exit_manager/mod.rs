@@ -37,44 +37,16 @@ use failure::Error;
 use futures::future;
 use futures::future::join_all;
 use futures::Future;
-use log::LevelFilter;
 use settings::client::ExitServer;
 use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;
 use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
-use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::time::Duration;
-use syslog::Error as LogError;
-use syslog::{init_udp, Facility};
 use tokio::net::TcpStream as TokioTcpStream;
 use tokio::util::FutureExt;
-
-/// enables remote logging if the user has configured it
-fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
-    // now that the exit tunnel is up we can start logging over it
-    let log = SETTING.get_log();
-    let key = SETTING
-        .get_network()
-        .wg_public_key
-        .expect("Tried to init remove logging without WgKey!");
-    trace!("About to enable remote logging");
-    let level: LevelFilter = match log.level.parse() {
-        Ok(level) => level,
-        Err(_) => LevelFilter::Error,
-    };
-    let res = init_udp(
-        &format!("0.0.0.0:{}", log.send_port),
-        &format!("{}:{}", server_internal_ip, log.dest_port),
-        format!("{} {}", key, env!("CARGO_PKG_VERSION")),
-        Facility::LOG_USER,
-        level,
-    );
-    info!("Remote logging enabled with {:?}", res);
-    res
-}
 
 fn linux_setup_exit_tunnel(
     current_exit: &ExitServer,
@@ -400,6 +372,8 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
 pub struct ExitManager {
     // used to determine if we need to change the logging state
     last_exit: Option<ExitServer>,
+    // the logging destination
+    dest_url: String,
     // used to store the logging state on startup so we don't double init logging
     // as that would cause a panic
     remote_logging_setting: bool,
@@ -418,6 +392,7 @@ impl SystemService for ExitManager {
         info!("Exit Manager started");
         self.last_exit = None;
         self.remote_logging_setting = SETTING.get_log().enabled;
+        self.dest_url = SETTING.get_log().dest_url.clone();
         self.remote_logging_already_started = false;
         self.local_limiting = false;
     }
@@ -466,16 +441,6 @@ impl Handler<Tick> for ExitManager {
                         &exit.info.our_details().unwrap(),
                     )
                     .expect("failure setting up exit tunnel");
-                }
-
-                // enable remote logging only if it has not already been started
-                if !self.remote_logging_already_started
-                    && self.remote_logging_setting
-                    && option_env!("NO_REMOTE_LOG").is_none()
-                {
-                    let res = enable_remote_logging(general_details.server_internal_ip);
-                    self.remote_logging_already_started = true;
-                    info!("logging status {:?}", res);
                 }
 
                 // run billing at all times when an exit is setup
