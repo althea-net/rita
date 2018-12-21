@@ -505,7 +505,7 @@ pub fn comma_list_remove(list: &str, entry: &str) -> String {
                     new_list = tmp_list + &filtered_item.to_string();
                     first = false;
                 } else {
-                    new_list = tmp_list + &filtered_item.to_string();
+                    new_list = tmp_list + &format!(", {}", filtered_item);
                 }
             }
         }
