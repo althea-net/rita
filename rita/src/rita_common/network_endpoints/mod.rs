@@ -64,7 +64,7 @@ pub fn make_payments(
         return Box::new(future::ok(
             HttpResponse::new(StatusCode::from_u16(400u16).unwrap())
                 .into_builder()
-                .json(format!("txid not provided! Invalid payment!")),
+                .json("txid not provided! Invalid payment!"),
         ));
     }
 
@@ -91,23 +91,21 @@ pub fn make_payments(
                                     pmt.0.clone(),
                                 ))
                                 .from_err()
-                                .and_then(|_| {
-                                    Ok(HttpResponse::Ok().json("Payment Successful!").into())
-                                })
+                                .and_then(|_| Ok(HttpResponse::Ok().json("Payment Successful!")))
                                 .responder(),
                         )
                     } else {
                         Either::B(future::ok(
                             HttpResponse::new(StatusCode::from_u16(400u16).unwrap())
                                 .into_builder()
-                                .json(format!("Transaction parameters invalid!")),
+                                .json("Transaction parameters invalid!"),
                         ))
                     }
                 }
                 None => Either::B(future::ok(
                     HttpResponse::new(StatusCode::from_u16(400u16).unwrap())
                         .into_builder()
-                        .json(format!("Could not find txid on the blockchain!")),
+                        .json("Could not find txid on the blockchain!"),
                 )),
             },
             Err(e) => {
@@ -119,7 +117,7 @@ pub fn make_payments(
                 Either::B(future::ok(
                     HttpResponse::new(StatusCode::from_u16(504u16).unwrap())
                         .into_builder()
-                        .json(format!("Could not talk to our fullnode!")),
+                        .json("Could not talk to our fullnode!"),
                 ))
             }
         });
@@ -159,7 +157,7 @@ pub fn hello_response(
                 Ok(Json(LocalIdentity {
                     global: match SETTING.get_identity() {
                         Some(id) => id,
-                        None => return Err(format_err!("Identity has no mesh IP ready yet").into()),
+                        None => return Err(format_err!("Identity has no mesh IP ready yet")),
                     },
                     wg_port: tunnel.0.listen_port,
                     have_tunnel: Some(tunnel.1),

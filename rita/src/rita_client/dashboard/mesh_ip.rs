@@ -16,7 +16,7 @@ pub fn get_mesh_ip(_req: HttpRequest) -> Box<dyn Future<Item = HttpResponse, Err
         }
     }
 
-    return Box::new(future::ok(HttpResponse::Ok().json(ret)));
+    Box::new(future::ok(HttpResponse::Ok().json(ret)))
 }
 
 pub fn set_mesh_ip(
@@ -51,9 +51,9 @@ pub fn set_mesh_ip(
             }
         },
         None => {
-            let error_msg = format!("set_mesh_ip: \"mesh_ip\" not found in supplied JSON");
+            let error_msg = "set_mesh_ip: \"mesh_ip\" not found in supplied JSON";
             info!("{}", error_msg);
-            ret.insert("error".to_owned(), error_msg);
+            ret.insert("error".to_owned(), error_msg.to_string());
         }
     }
 

@@ -61,7 +61,7 @@ impl Handler<GetNodeInfo> for Dashboard {
                                 nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
                                 route_metric_to_exit: route.metric,
                                 total_payments: debt_info.total_payment_received.clone(),
-                                debt: debt_info.debt.clone().into(),
+                                debt: debt_info.debt.clone(),
                                 link_cost: route.refmetric,
                                 price_to_exit: route.price,
                             })
@@ -70,7 +70,7 @@ impl Handler<GetNodeInfo> for Dashboard {
                                 nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
                                 route_metric_to_exit: u16::max_value(),
                                 total_payments: debt_info.total_payment_received.clone(),
-                                debt: debt_info.debt.clone().into(),
+                                debt: debt_info.debt.clone(),
                                 link_cost: u16::max_value(),
                                 price_to_exit: u32::max_value(),
                             })

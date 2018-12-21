@@ -27,7 +27,7 @@ pub fn remove_from_dao_list(path: Path<(Address)>) -> Result<Json<()>, Error> {
             found = true;
             break;
         }
-        iter = iter + 1;
+        iter += 1;
     }
     if found {
         SETTING.get_dao_mut().dao_addresses.remove(iter);

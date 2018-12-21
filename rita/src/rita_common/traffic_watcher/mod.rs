@@ -90,7 +90,7 @@ impl Handler<Watch> for TrafficWatcher {
 ///
 /// This first time this is run, it will create the rules and then immediately read and zero them.
 /// (should return 0)
-pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &Vec<Neighbor>) -> Result<(), Error> {
+pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &[Neighbor]) -> Result<(), Error> {
     babel.start_connection()?;
 
     trace!("Getting routes");

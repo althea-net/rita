@@ -37,7 +37,7 @@ pub struct Peer {
 impl Peer {
     pub fn new(ip: Ipv6Addr, idx: u32) -> Peer {
         let port = SETTING.get_network().rita_hello_port;
-        let socket = SocketAddrV6::new(ip, port.into(), 0, idx);
+        let socket = SocketAddrV6::new(ip, port, 0, idx);
         Peer {
             ifidx: idx,
             contact_socket: socket.into(),
@@ -122,7 +122,7 @@ impl Handler<Listen> for PeerListener {
 
         if self.interfaces.contains_key(&new_iface_name) {
             error!("Someone attempted a double listen!");
-            return ();
+            return;
         }
 
         let new_iface = ListenInterface::new(&new_iface_name);
@@ -205,7 +205,7 @@ impl ListenInterface {
             Err(_) => 0,
         };
         // Bond to multicast discovery address on each listen port
-        let multicast_socketaddr = SocketAddrV6::new(disc_ip, port.into(), 0, iface_index);
+        let multicast_socketaddr = SocketAddrV6::new(disc_ip, port, 0, iface_index);
         let multicast_socket = UdpSocket::bind(multicast_socketaddr)
             .expect("Failed to bind to peer discovery address!");
         let res = multicast_socket.join_multicast_v6(&disc_ip, iface_index);
@@ -216,7 +216,7 @@ impl ListenInterface {
             res
         );
 
-        let linklocal_socketaddr = SocketAddrV6::new(link_ip, port.into(), 0, iface_index);
+        let linklocal_socketaddr = SocketAddrV6::new(link_ip, port, 0, iface_index);
         let linklocal_socket = UdpSocket::bind(linklocal_socketaddr).expect(&format!(
             "ListenInterface Failed to bind to link local address {:?} on {:?} with iface_index {:?} ",
             link_ip, ifname, iface_index
@@ -247,7 +247,7 @@ fn send_im_here(interfaces: &mut HashMap<String, ListenInterface>) -> Result<(),
             listen_interface.ifname,
             listen_interface.linklocal_ip
         );
-        let message = PeerMessage::ImHere(listen_interface.linklocal_ip.clone());
+        let message = PeerMessage::ImHere(listen_interface.linklocal_ip);
         let result = listen_interface
             .linklocal_socket
             .send_to(&message.encode(), listen_interface.multicast_socketaddr);

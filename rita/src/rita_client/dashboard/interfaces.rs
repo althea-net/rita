@@ -1,5 +1,4 @@
 //! A generalized interface for modifying networking interface assignments using UCI
-
 use super::*;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -52,8 +51,8 @@ pub fn get_interfaces() -> Result<HashMap<String, InterfaceMode>, Error> {
         // Only non-loopback non-bridge interface names should get past
         if setting_name.contains("ifname") && !value.contains("backhaul") && value != "lo" {
             // it's a list and we need to handle that
-            if value.contains(",") {
-                for list_member in value.split(",") {
+            if value.contains(',') {
+                for list_member in value.split(',') {
                     retval.insert(
                         list_member.replace(" ", "").to_string(),
                         ethernet2mode(&value, &setting_name)?,
@@ -252,7 +251,7 @@ pub fn ethernet_transform_mode(
         // for mesh we need to send an unlisten so that Rita stops
         // listening then we can remove the section
         InterfaceMode::Mesh => {
-            PeerListener::from_registry().do_send(UnListen(ifname.clone().to_string()));
+            PeerListener::from_registry().do_send(UnListen(ifname.to_string()));
             let ret = KI.del_uci_var(&filtered_ifname);
             return_codes.push(ret);
         }
@@ -321,7 +320,7 @@ pub fn ethernet_transform_mode(
         bail!("Error running UCI commands! Revert attempted: {:?}", res);
     } else if mesh_add {
         let when = Instant::now() + Duration::from_millis(60000);
-        let locally_owned_ifname = ifname.clone().to_string();
+        let locally_owned_ifname = ifname.to_string();
 
         let fut = Delay::new(when)
             .map_err(|e| warn!("timer failed; err={:?}", e))
@@ -458,7 +457,7 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
         );
     } else if mesh_add {
         let when = Instant::now() + Duration::from_millis(60000);
-        let locally_owned_ifname = mesh_wlan.clone().to_string();
+        let locally_owned_ifname = mesh_wlan.to_string();
 
         let fut = Delay::new(when)
             .map_err(|e| warn!("timer failed; err={:?}", e))
@@ -484,7 +483,7 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
 
 /// A helper function for adding entires to a comma deliminated list
 pub fn comma_list_add(list: &str, entry: &str) -> String {
-    if list.len() > 0 {
+    if !list.is_empty() {
         format!("{}, {}", list, entry)
     } else {
         entry.to_string()
@@ -493,8 +492,8 @@ pub fn comma_list_add(list: &str, entry: &str) -> String {
 
 /// A helper function for removing entires to a comma deliminated list
 pub fn comma_list_remove(list: &str, entry: &str) -> String {
-    if list.len() > 0 {
-        let split = list.split(",");
+    if !list.is_empty() {
+        let split = list.split(',');
         let mut new_list = "".to_string();
         let mut first = true;
         for item in split {
@@ -503,10 +502,10 @@ pub fn comma_list_remove(list: &str, entry: &str) -> String {
                 trace!("{} is not {} it's on the list!", filtered_item, entry);
                 let tmp_list = new_list.to_string();
                 if first {
-                    new_list = tmp_list + &format!("{}", filtered_item);
+                    new_list = tmp_list + &filtered_item.to_string();
                     first = false;
                 } else {
-                    new_list = tmp_list + &format!(", {}", filtered_item);
+                    new_list = tmp_list + &filtered_item.to_string();
                 }
             }
         }
@@ -588,6 +587,6 @@ pub fn set_interfaces_endpoint(
     Dashboard::from_registry()
         .send(to_set)
         .from_err()
-        .and_then(move |reply| Ok(Json(reply?)))
+        .and_then(move |_| Ok(Json(())))
         .responder()
 }

@@ -115,7 +115,7 @@ impl Handler<Tick> for RitaLoop {
                     info!(
                         "GetNeighbors completed in {}s {}ms",
                         start.elapsed().as_secs(),
-                        start.elapsed().subsec_nanos() / 1000000
+                        start.elapsed().subsec_millis()
                     );
 
                     TrafficWatcher::from_registry()
@@ -125,7 +125,7 @@ impl Handler<Tick> for RitaLoop {
                             info!(
                                 "TrafficWatcher completed in {}s {}ms",
                                 neigh.elapsed().as_secs(),
-                                neigh.elapsed().subsec_nanos() / 1000000
+                                neigh.elapsed().subsec_millis()
                             );
                             DebtKeeper::from_registry().do_send(SendUpdate {});
                             actix::fut::ok(())
@@ -167,7 +167,7 @@ impl Handler<Tick> for RitaLoop {
                     info!(
                         "TunnelManager GC pass completed in {}s {}ms, with result {:?}",
                         start.elapsed().as_secs(),
-                        start.elapsed().subsec_nanos() / 1000000,
+                        start.elapsed().subsec_millis(),
                         res
                     );
                     res
@@ -184,7 +184,7 @@ impl Handler<Tick> for RitaLoop {
                     info!(
                         "PeerListener tick completed in {}s {}ms, with result {:?}",
                         start.elapsed().as_secs(),
-                        start.elapsed().subsec_nanos() / 1000000,
+                        start.elapsed().subsec_millis(),
                         res
                     );
                     res
@@ -201,7 +201,7 @@ impl Handler<Tick> for RitaLoop {
                     info!(
                         "PeerListener get peers completed in {}s {}ms",
                         start.elapsed().as_secs(),
-                        start.elapsed().subsec_nanos() / 1000000
+                        start.elapsed().subsec_millis(),
                     );
                     TunnelManager::from_registry().send(PeersToContact::new(peers.unwrap())) // GetPeers never fails so unwrap is safe
                 })
@@ -291,9 +291,11 @@ impl Handler<Tick> for RitaLoop {
                         let sign_flip: Int256 = neg_one.into();
 
                         payment_settings.pay_threshold = transaction_gas
-                            * value.clone().to_int256().ok_or(format_err!(
-                                "Gas price is too high to fit into 256 signed bit integer"
-                            ))?
+                            * value.clone().to_int256().ok_or_else(|| {
+                                format_err!(
+                                    "Gas price is too high to fit into 256 signed bit integer"
+                                )
+                            })?
                             * dynamic_fee_factor.clone();
                         trace!(
                             "Dynamically set pay threshold to {:?}",
@@ -326,7 +328,7 @@ impl Handler<Tick> for RitaLoop {
 /// one or more a random entry from the list is returned in an attempt
 /// to load balance across fullnodes
 pub fn get_web3_server() -> String {
-    if SETTING.get_payment().node_list.len() == 0 {
+    if SETTING.get_payment().node_list.is_empty() {
         panic!("no full nodes configured!");
     }
     let node_list = SETTING.get_payment().node_list.clone();

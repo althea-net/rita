@@ -234,7 +234,7 @@ impl Handler<IdentityCallback> for TunnelManager {
             Ok(res) => Some(res),
             Err(e) => {
                 warn!("Open Tunnel failed with {:?}", e);
-                return None;
+                None
             }
         }
     }
@@ -283,10 +283,8 @@ impl Handler<GetPhyIpFromMeshIp> for TunnelManager {
             // Only ip6
             if let IpNetwork::V6(ref ip) = route.prefix {
                 // Only host addresses and installed routes
-                if ip.prefix() == 128 && route.installed {
-                    if IpAddr::V6(ip.ip()) == mesh_ip.0 {
-                        route_to_des = Some(route.clone());
-                    }
+                if ip.prefix() == 128 && route.installed && IpAddr::V6(ip.ip()) == mesh_ip.0 {
+                    route_to_des = Some(route.clone());
                 }
             }
         }
@@ -380,19 +378,17 @@ impl Handler<TriggerGC> for TunnelManager {
                             .unwrap()
                             .insert(ifidx.clone(), tunnel.clone());
                     }
+                } else if timed_out.contains_key(identity) {
+                    timed_out
+                        .get_mut(identity)
+                        .unwrap()
+                        .insert(ifidx.clone(), tunnel.clone());
                 } else {
-                    if timed_out.contains_key(identity) {
-                        timed_out
-                            .get_mut(identity)
-                            .unwrap()
-                            .insert(ifidx.clone(), tunnel.clone());
-                    } else {
-                        timed_out.insert(identity.clone(), HashMap::new());
-                        timed_out
-                            .get_mut(identity)
-                            .unwrap()
-                            .insert(ifidx.clone(), tunnel.clone());
-                    }
+                    timed_out.insert(identity.clone(), HashMap::new());
+                    timed_out
+                        .get_mut(identity)
+                        .unwrap()
+                        .insert(ifidx.clone(), tunnel.clone());
                 }
             }
         }
@@ -496,11 +492,11 @@ fn contact_neighbor(peer: &Peer, our_port: u16) -> Result<(), Error> {
         &mut SETTING.get_network_mut().default_route,
     )?;
 
-    let _res = HelloHandler::from_registry().do_send(Hello {
+    HelloHandler::from_registry().do_send(Hello {
         my_id: LocalIdentity {
             global: SETTING
                 .get_identity()
-                .ok_or(format_err!("Identity has no mesh IP ready yet"))?,
+                .ok_or_else(|| format_err!("Identity has no mesh IP ready yet"))?,
             wg_port: our_port,
             have_tunnel: None,
         },
@@ -572,7 +568,7 @@ impl TunnelManager {
                     let port = SETTING.get_network().rita_hello_port;
                     let url = format!("http://[{}]:{}/hello", their_hostname, port);
                     trace!("Saying hello to: {:?} at ip {:?}", url, dnsresult);
-                    if dnsresult.len() > 0 && SETTING.get_network().is_gateway {
+                    if !dnsresult.is_empty() && SETTING.get_network().is_gateway {
                         let their_ip = dnsresult[0].ip();
                         let socket = SocketAddr::new(their_ip, port);
                         let man_peer = Peer {
@@ -667,7 +663,7 @@ impl TunnelManager {
                 self.free_ports.push(our_port);
                 trace!("Looking up for a tunnels by {:?}", key);
                 // Unwrap is safe because we confirm membership
-                let tunnels = self.tunnels.get(&key).unwrap();
+                let tunnels = &self.tunnels[&key];
                 // Filter by Tunnel::ifidx
                 trace!(
                     "Got tunnels by key {:?}: {:?}. Ifidx is {}",
@@ -744,8 +740,8 @@ impl TunnelManager {
                 // Add a tunnel to internal map based on identity, and interface index.
                 self.tunnels
                     .entry(new_key)
-                    .or_insert(HashMap::new())
-                    .insert(tunnel.listen_ifidx.clone(), tunnel.clone());
+                    .or_insert_with(HashMap::new)
+                    .insert(tunnel.listen_ifidx, tunnel.clone());
                 Ok((tunnel, return_bool))
             }
             Err(e) => {
@@ -853,7 +849,7 @@ pub fn test_tunnel_manager_lookup() {
     tunnel_manager
         .tunnels
         .entry(id.clone())
-        .or_insert(HashMap::new())
+        .or_insert_with(HashMap::new)
         .insert(
             0,
             Tunnel::new(

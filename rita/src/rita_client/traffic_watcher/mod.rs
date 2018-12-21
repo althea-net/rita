@@ -16,7 +16,6 @@ use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::time::{Duration, SystemTime};
 
 use crate::rita_common::debt_keeper::{DebtKeeper, Traffic, TrafficUpdate};
-use crate::rita_common::tunnel_manager::Neighbor;
 use crate::KI;
 use crate::SETTING;
 use althea_types::{Identity, RTTimestamps};
@@ -91,11 +90,9 @@ pub fn watch<T: Read + Write>(
         // Only ip6
         if let IpNetwork::V6(ref ip) = route.prefix {
             // Only host addresses and installed routes
-            if ip.prefix() == 128 && route.installed {
-                if IpAddr::V6(ip.ip()) == exit.mesh_ip {
-                    exit_route = Some(route);
-                    break;
-                }
+            if ip.prefix() == 128 && route.installed && IpAddr::V6(ip.ip()) == exit.mesh_ip {
+                exit_route = Some(route);
+                break;
             }
         }
     }
@@ -108,7 +105,7 @@ pub fn watch<T: Read + Write>(
         Ok(res) => {
             if res.len() > 1 {
                 warn!("wg_exit client tunnel has multiple peers!");
-            } else if res.len() == 0 {
+            } else if res.is_empty() {
                 warn!("No peers on wg_exit why is client traffic watcher running?");
                 return Err(format_err!("No peers on wg_exit"));
             }
