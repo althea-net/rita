@@ -80,41 +80,20 @@ impl Handler<Watch> for TrafficWatcher {
     }
 }
 
-/// This traffic watcher watches how much traffic each we send and receive from each client.
-pub fn watch<T: Read + Write>(
-    usage_history: &mut HashMap<WgKey, WgUsage>,
+fn get_babel_info<T: Read + Write>(
     mut babel: Babel<T>,
-    clients: Vec<Identity>,
-) -> Result<(), Error> {
+    our_id: Identity,
+    id_from_ip: HashMap<IpAddr, Identity>,
+) -> Result<HashMap<WgKey, u64>, Error> {
     babel.start_connection()?;
 
     trace!("Getting routes");
     let routes = babel.parse_routes()?;
     info!("Got routes: {:?}", routes);
 
-    let mut identities: HashMap<WgKey, Identity> = HashMap::new();
-    let mut id_from_ip: HashMap<IpAddr, Identity> = HashMap::new();
-    let our_settings = SETTING.get_network();
-    let our_id = match SETTING.get_identity() {
-        Some(id) => id,
-        None => {
-            warn!("Our identity is not ready!");
-            bail!("Identity is not ready");
-        }
-    };
-    id_from_ip.insert(our_settings.mesh_ip.unwrap(), our_id.clone());
-
-    for ident in &clients {
-        identities.insert(ident.wg_public_key.clone(), ident.clone());
-        id_from_ip.insert(ident.mesh_ip, ident.clone());
-    }
-
     // insert ourselves as a destination, don't think this is actually needed
     let mut destinations = HashMap::new();
-    destinations.insert(
-        our_id.wg_public_key,
-        Int256::from(babel.get_local_fee().unwrap()),
-    );
+    destinations.insert(our_id.wg_public_key, babel.get_local_fee().unwrap() as u64);
 
     for route in &routes {
         // Only ip6
@@ -123,25 +102,34 @@ pub fn watch<T: Read + Write>(
             if ip.prefix() == 128 && route.installed {
                 match id_from_ip.get(&IpAddr::V6(ip.ip())) {
                     Some(id) => {
-                        destinations.insert(id.wg_public_key.clone(), Int256::from(route.price));
+                        destinations.insert(id.wg_public_key.clone(), route.price as u64);
                     }
                     None => warn!("Can't find destinatoin for client {:?}", ip.ip()),
                 }
             }
         }
     }
+    Ok(destinations)
+}
 
-    let counters = match KI.read_wg_counters("wg_exit") {
-        Ok(res) => res,
-        Err(e) => {
-            warn!(
-                "Error getting input counters {:?} traffic has gone unaccounted!",
-                e
-            );
-            return Err(e);
-        }
-    };
+fn generate_helper_maps(
+    our_id: Identity,
+    clients: Vec<Identity>,
+) -> Result<(HashMap<WgKey, Identity>, HashMap<IpAddr, Identity>), Error> {
+    let mut identities: HashMap<WgKey, Identity> = HashMap::new();
+    let mut id_from_ip: HashMap<IpAddr, Identity> = HashMap::new();
+    let our_settings = SETTING.get_network();
+    id_from_ip.insert(our_settings.mesh_ip.unwrap(), our_id.clone());
 
+    for ident in &clients {
+        identities.insert(ident.wg_public_key.clone(), ident.clone());
+        id_from_ip.insert(ident.mesh_ip, ident.clone());
+    }
+
+    Ok((identities, id_from_ip))
+}
+
+fn counters_logging(counters: &HashMap<WgKey, WgUsage>) {
     trace!("exit counters: {:?}", counters);
 
     let mut total_in: u64 = 0;
@@ -164,18 +152,29 @@ pub fn watch<T: Read + Write>(
         total_out += output.upload;
     }
     info!("Total Exit output of {} bytes this round", total_out);
+}
 
-    let mut debts = HashMap::new();
+fn debts_logging(debts: &HashMap<Identity, u64>) {
+    info!("Collated total exit debts: {:?}", debts);
 
-    // Setup the debts table
-    for (_, ident) in identities.clone() {
-        debts.insert(ident, Int256::from(0));
+    info!("Computed exit debts for {:?} clients", debts.len());
+    let mut total_income = 0u64;
+    for (_identity, income) in debts.iter() {
+        total_income += income;
     }
+    info!("Total exit income of {:?} Wei this round", total_income);
 
-    let price = SETTING.get_exit_network().exit_price;
+    match KI.get_wg_exit_clients_online() {
+        Ok(users) => info!("Total of {} users online", users),
+        Err(e) => warn!("Getting clients failed with {:?}", e),
+    }
+}
 
-    // setup bandwidth history
-    for (wg_key, bytes) in counters.clone() {
+pub fn update_usage_history(
+    counters: &HashMap<WgKey, WgUsage>,
+    usage_history: &mut HashMap<WgKey, WgUsage>,
+) {
+    for (wg_key, bytes) in counters.iter() {
         match usage_history.get(&wg_key) {
             Some(_) => (),
             None => {
@@ -184,9 +183,49 @@ pub fn watch<T: Read + Write>(
                     wg_key,
                     bytes
                 );
-                usage_history.insert(wg_key, bytes);
+                usage_history.insert(wg_key.clone(), bytes.clone());
             }
         }
+    }
+}
+
+/// This traffic watcher watches how much traffic each we send and receive from each client.
+pub fn watch<T: Read + Write>(
+    usage_history: &mut HashMap<WgKey, WgUsage>,
+    babel: Babel<T>,
+    clients: Vec<Identity>,
+) -> Result<(), Error> {
+    let our_price = SETTING.get_exit_network().exit_price;
+    let our_id = match SETTING.get_identity() {
+        Some(id) => id,
+        None => {
+            warn!("Our identity is not ready!");
+            bail!("Identity is not ready");
+        }
+    };
+
+    let (identities, id_from_ip) = generate_helper_maps(our_id.clone(), clients)?;
+    let destinations = get_babel_info(babel, our_id.clone(), id_from_ip)?;
+
+    let counters = match KI.read_wg_counters("wg_exit") {
+        Ok(res) => res,
+        Err(e) => {
+            warn!(
+                "Error getting input counters {:?} traffic has gone unaccounted!",
+                e
+            );
+            return Err(e);
+        }
+    };
+    counters_logging(&counters);
+
+    update_usage_history(&counters, usage_history);
+
+    let mut debts = HashMap::new();
+
+    // Setup the debts table
+    for (_, ident) in identities.clone() {
+        debts.insert(ident, 0 as u64);
     }
 
     // accounting for 'input'
@@ -203,7 +242,7 @@ pub fn watch<T: Read + Write>(
                     if history.download > bytes.download {
                         history.download = 0;
                     }
-                    *debt -= Int256::from(price) * Int256::from(bytes.download - history.download);
+                    *debt -= our_price * (bytes.download - history.download);
                     // update history so that we know what was used from previous cycles
                     history.download = bytes.download;
                 }
@@ -236,8 +275,7 @@ pub fn watch<T: Read + Write>(
                     if history.upload > bytes.upload {
                         history.upload = 0;
                     }
-                    *debt -=
-                        (dest.clone() + price.into()) * Int256::from(bytes.upload - history.upload);
+                    *debt -= (dest + our_price) * (bytes.upload - history.upload);
                     history.upload = bytes.upload;
                 }
                 // debts is generated from identities, this should be impossible
@@ -253,25 +291,13 @@ pub fn watch<T: Read + Write>(
         }
     }
 
-    info!("Collated total exit debts: {:?}", debts);
-
-    info!("Computed exit debts for {:?} clients", debts.len());
-    let mut total_income = Int256::zero();
-    for (_identity, income) in debts.iter() {
-        total_income += income.clone();
-    }
-    info!("Total exit income of {:?} Wei this round", total_income);
-
-    match KI.get_wg_exit_clients_online() {
-        Ok(users) => info!("Total of {} users online", users),
-        Err(e) => warn!("Getting clients failed with {:?}", e),
-    }
+    debts_logging(&debts);
 
     let mut traffic_vec = Vec::new();
     for (from, amount) in debts {
         traffic_vec.push(Traffic {
             from: from,
-            amount: amount,
+            amount: amount.into(),
         })
     }
     let update = debt_keeper::TrafficUpdate {
