@@ -121,7 +121,7 @@ impl Handler<GetWifiConfig> for Dashboard {
             Some(i) => i,
             None => {
                 error!("No \"values\" key in parsed wifi config!");
-                return Err(format_err!("No \"values\" key parsed wifi config")).into();
+                return Err(format_err!("No \"values\" key parsed wifi config"));
             }
         };
         for (k, v) in items {

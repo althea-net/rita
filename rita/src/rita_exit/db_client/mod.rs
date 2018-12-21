@@ -174,7 +174,7 @@ fn get_country(ip: &IpAddr) -> Result<String, Error> {
     let res: GeoIPRet = client.get(&geo_ip_url).send()?.json()?;
     info!("Got {:?} from GeoIP request", res);
 
-    return Ok(res.country.code);
+    Ok(res.country.code)
 }
 
 #[test]
@@ -322,14 +322,14 @@ fn client_to_new_db_client(
     country: String,
 ) -> models::Client {
     let mut rng = rand::thread_rng();
-    let rand_code: u64 = rng.gen_range(0, 999999);
+    let rand_code: u64 = rng.gen_range(0, 999_999);
     models::Client {
         wg_port: client.wg_port.to_string(),
         mesh_ip: client.global.mesh_ip.to_string(),
         wg_pubkey: client.global.wg_public_key.clone().to_string(),
-        eth_address: client.global.eth_address.clone().to_string(),
+        eth_address: client.global.eth_address.to_string(),
         internal_ip: new_ip.to_string(),
-        email: client.reg_details.email.clone().unwrap_or("".to_string()),
+        email: client.reg_details.email.clone().unwrap_or_default(),
         country,
         email_code: format!("{:06}", rand_code),
         verified: false,
@@ -345,9 +345,7 @@ fn send_mail(client: &models::Client) -> Result<(), Error> {
     if SETTING.get_verif_settings().is_none() {
         return Ok(());
     };
-    let mailer = match SETTING.get_verif_settings().unwrap() {
-        ExitVerifSettings::Email(mailer) => mailer,
-    };
+    let ExitVerifSettings::Email(mailer) = SETTING.get_verif_settings().unwrap();
 
     info!("Sending exit signup email for client");
 

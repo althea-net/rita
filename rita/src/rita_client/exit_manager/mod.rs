@@ -228,7 +228,7 @@ pub fn exit_setup_request(
                 )));
             }
         },
-        wg_port: SETTING.get_exit_client().wg_listen_port.clone(),
+        wg_port: SETTING.get_exit_client().wg_listen_port,
         reg_details,
     };
 
@@ -270,12 +270,12 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
         global: match SETTING.get_identity() {
             Some(id) => id,
             None => {
-                return Box::new(future::err(
-                    format_err!("Identity has no mesh IP ready yet").into(),
-                ));
+                return Box::new(future::err(format_err!(
+                    "Identity has no mesh IP ready yet"
+                )));
             }
         },
-        wg_port: SETTING.get_exit_client().wg_listen_port.clone(),
+        wg_port: SETTING.get_exit_client().wg_listen_port,
         reg_details: SETTING.get_exit_client().reg_details.clone().unwrap(),
     };
 
@@ -331,12 +331,7 @@ impl Handler<Tick> for ExitManager {
     type Result = ResponseFuture<(), Error>;
 
     fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
-        let exit_server = {
-            SETTING
-                .get_exit_client()
-                .get_current_exit()
-                .map(|c| c.clone())
-        };
+        let exit_server = { SETTING.get_exit_client().get_current_exit().cloned() };
 
         // code that connects to the current exit server
         trace!("About to setup exit tunnel!");
@@ -357,7 +352,7 @@ impl Handler<Tick> for ExitManager {
                 } else if exit.info.our_details().is_some()
                     && !KI
                         .get_default_route()
-                        .unwrap_or(Vec::new())
+                        .unwrap_or_default()
                         .contains(&String::from("wg_exit"))
                 {
                     trace!("DHCP overwrite setup exit tunnel again");
@@ -374,7 +369,7 @@ impl Handler<Tick> for ExitManager {
 
                 // run billing at all times when an exit is setup
                 if self.last_exit.is_some() {
-                    let exit_price = general_details.exit_price.clone();
+                    let exit_price = general_details.exit_price;
                     let exit_id = exit.id.clone();
                     trace!("We are signed up for the selected exit!");
                     Arbiter::spawn(

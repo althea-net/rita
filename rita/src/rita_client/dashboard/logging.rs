@@ -10,7 +10,7 @@ pub fn remote_logging(path: Path<bool>) -> Box<dyn Future<Item = HttpResponse, E
         return Box::new(future::err(e));
     }
 
-    return Box::new(future::ok(HttpResponse::Ok().json(())));
+    Box::new(future::ok(HttpResponse::Ok().json(())))
 }
 
 pub fn remote_logging_level(
@@ -26,7 +26,7 @@ pub fn remote_logging_level(
                 HttpResponse::new(StatusCode::BAD_REQUEST)
                     .into_builder()
                     .json(format!("Could not parse loglevel {:?}", e)),
-            ))
+            ));
         }
     };
 
@@ -36,5 +36,5 @@ pub fn remote_logging_level(
         return Box::new(future::err(e));
     }
 
-    return Box::new(future::ok(HttpResponse::Ok().json(())));
+    Box::new(future::ok(HttpResponse::Ok().json(())))
 }
