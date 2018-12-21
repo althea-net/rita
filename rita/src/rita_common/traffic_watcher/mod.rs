@@ -83,33 +83,29 @@ impl Handler<Watch> for TrafficWatcher {
     }
 }
 
-/// This traffic watcher watches how much traffic each neighbor sends to each destination
-/// between the last time watch was run, (This does _not_ block the thread)
-/// It also gathers the price to each destination from Babel and uses this information
-/// to calculate how much each neighbor owes. It returns a list of how much each neighbor owes.
-///
-/// This first time this is run, it will create the rules and then immediately read and zero them.
-/// (should return 0)
-pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &[Neighbor]) -> Result<(), Error> {
-    babel.start_connection()?;
-
-    trace!("Getting routes");
-    let routes = babel.parse_routes()?;
-    trace!("Got routes: {:?}", routes);
-
+pub fn prepare_helper_maps(
+    neighbors: &[Neighbor],
+) -> (HashMap<IpAddr, Identity>, HashMap<String, Identity>) {
     let mut identities: HashMap<IpAddr, Identity> = HashMap::new();
     let mut if_to_id: HashMap<String, Identity> = HashMap::new();
-    let mut ip_to_if: HashMap<IpAddr, String> = HashMap::new();
 
     for neigh in neighbors {
         // provides a lookup from mesh ip to identity
         identities.insert(neigh.identity.global.mesh_ip, neigh.identity.global.clone());
         // provides a lookup from wireguard interface to mesh ip
         if_to_id.insert(neigh.iface_name.clone(), neigh.identity.global.clone());
-        // provides a lookup from mesh ip to wireguard interface
-        ip_to_if.insert(neigh.identity.global.mesh_ip, neigh.iface_name.clone());
     }
+    (identities, if_to_id)
+}
 
+pub fn get_babel_info<T: Read + Write>(
+    mut babel: Babel<T>,
+) -> Result<(HashMap<IpAddr, Int256>, u32), Error> {
+    babel.start_connection()?;
+
+    trace!("Getting routes");
+    let routes = babel.parse_routes()?;
+    trace!("Got routes: {:?}", routes);
     let mut destinations = HashMap::new();
     let local_fee = babel.get_local_fee().unwrap();
 
@@ -131,6 +127,11 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &[Neighbor]) -> Re
         Int256::from(0),
     );
 
+    Ok((destinations, local_fee))
+}
+
+pub fn get_input_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
+    let mut total_input_counters = HashMap::new();
     trace!("Getting input counters");
     let input_counters = match KI.read_counters(&FilterTarget::Input) {
         Ok(res) => res,
@@ -143,7 +144,39 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &[Neighbor]) -> Re
         }
     };
     trace!("Got input counters: {:?}", input_counters);
+    trace!("Getting fwd counters");
+    let fwd_input_counters = match KI.read_counters(&FilterTarget::ForwardInput) {
+        Ok(res) => res,
+        Err(e) => {
+            warn!(
+                "Error getting input counters {:?} traffic has gone unaccounted!",
+                e
+            );
+            return Err(e);
+        }
+    };
 
+    for (k, v) in input_counters {
+        *total_input_counters.entry(k).or_insert(0) += v
+    }
+
+    for (k, v) in fwd_input_counters {
+        *total_input_counters.entry(k).or_insert(0) += v
+    }
+    info!("Got final input counters: {:?}", total_input_counters);
+
+    let mut total_in: u64 = 0;
+    for entry in total_input_counters.iter() {
+        let input = entry.1;
+        total_in += input;
+    }
+    info!("Total input of {} bytes this round", total_in);
+
+    Ok(total_input_counters)
+}
+
+pub fn get_output_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
+    let mut total_output_counters = HashMap::new();
     trace!("Getting ouput counters");
     let output_counters = match KI.read_counters(&FilterTarget::Output) {
         Ok(res) => res,
@@ -157,17 +190,6 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &[Neighbor]) -> Re
     };
     trace!("Got output counters: {:?}", output_counters);
 
-    trace!("Getting fwd counters");
-    let fwd_input_counters = match KI.read_counters(&FilterTarget::ForwardInput) {
-        Ok(res) => res,
-        Err(e) => {
-            warn!(
-                "Error getting input counters {:?} traffic has gone unaccounted!",
-                e
-            );
-            return Err(e);
-        }
-    };
     let fwd_output_counters = match KI.read_counters(&FilterTarget::ForwardOutput) {
         Ok(res) => res,
         Err(e) => {
@@ -179,22 +201,6 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &[Neighbor]) -> Re
         }
     };
 
-    info!(
-        "Got fwd counters: {:?}",
-        (&fwd_input_counters, &fwd_output_counters)
-    );
-
-    let mut total_input_counters = HashMap::new();
-    let mut total_output_counters = HashMap::new();
-
-    for (k, v) in input_counters {
-        *total_input_counters.entry(k).or_insert(0) += v
-    }
-
-    for (k, v) in fwd_input_counters {
-        *total_input_counters.entry(k).or_insert(0) += v
-    }
-
     for (k, v) in output_counters {
         *total_output_counters.entry(k).or_insert(0) += v
     }
@@ -202,22 +208,32 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &[Neighbor]) -> Re
     for (k, v) in fwd_output_counters {
         *total_output_counters.entry(k).or_insert(0) += v
     }
-
-    info!("Got final input counters: {:?}", total_input_counters);
     info!("Got final output counters: {:?}", total_output_counters);
 
-    let mut total_in: u64 = 0;
-    for entry in total_input_counters.iter() {
-        let input = entry.1;
-        total_in += input;
-    }
-    info!("Total input of {} bytes this round", total_in);
     let mut total_out: u64 = 0;
     for entry in total_output_counters.iter() {
         let output = entry.1;
         total_out += output;
     }
     info!("Total output of {} bytes this round", total_out);
+
+    Ok(total_output_counters)
+}
+
+/// This traffic watcher watches how much traffic each neighbor sends to each destination
+/// between the last time watch was run, (This does _not_ block the thread)
+/// It also gathers the price to each destination from Babel and uses this information
+/// to calculate how much each neighbor owes. It returns a list of how much each neighbor owes.
+///
+/// This first time this is run, it will create the rules and then immediately read and zero them.
+/// (should return 0)
+pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result<(), Error> {
+    let (identities, if_to_id) = prepare_helper_maps(neighbors);
+
+    let (destinations, local_fee) = get_babel_info(babel)?;
+
+    let total_input_counters = get_input_counters()?;
+    let total_output_counters = get_output_counters()?;
 
     // Flow counters should debit your neighbor which you received the packet from
     // Destination counters should credit your neighbor which you sent the packet to
@@ -303,18 +319,6 @@ pub fn watch<T: Read + Write>(mut babel: Babel<T>, neighbors: &[Neighbor]) -> Re
         traffic: traffic_vec,
     };
     DebtKeeper::from_registry().do_send(update);
-
-    // check if we are a gateway
-    let gateway = match SETTING.get_network().external_nic {
-        Some(ref external_nic) => match KI.is_iface_up(external_nic) {
-            Some(val) => val,
-            None => false,
-        },
-        None => false,
-    };
-
-    trace!("We are a Gateway: {}", gateway);
-    SETTING.get_network_mut().is_gateway = gateway;
 
     Ok(())
 }
