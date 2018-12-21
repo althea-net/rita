@@ -77,29 +77,7 @@ impl Handler<Tick> for RitaLoop {
     fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
         trace!("Common tick!");
 
-        // Resolves the gateway client corner case
-        // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
-        if SETTING.get_network().is_gateway {
-            if !self.was_gateway {
-                let resolver_addr: Addr<ResolverWrapper> = System::current().registry().get();
-                resolver_addr.do_send(KillActor);
-
-                self.was_gateway = true
-            }
-
-            match KI.get_resolv_servers() {
-                Ok(s) => {
-                    for ip in s.iter() {
-                        trace!("Resolv route {:?}", ip);
-                        KI.manual_peers_route(&ip, &mut SETTING.get_network_mut().default_route)
-                            .unwrap();
-                    }
-                }
-                Err(e) => warn!("Failed to add DNS routes with {:?}", e),
-            }
-        } else {
-            self.was_gateway = false
-        }
+        self.was_gateway = manage_gateway(self.was_gateway);
 
         let start = Instant::now();
         ctx.spawn(
@@ -322,6 +300,46 @@ impl Handler<Tick> for RitaLoop {
 
         Ok(())
     }
+}
+
+/// Manages gateway functionaltiy and maintains the was_gateway parameter
+/// for Rita loop
+fn manage_gateway(mut was_gateway: bool) -> bool {
+    // Resolves the gateway client corner case
+    // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
+    let gateway = match SETTING.get_network().external_nic {
+        Some(ref external_nic) => match KI.is_iface_up(external_nic) {
+            Some(val) => val,
+            None => false,
+        },
+        None => false,
+    };
+
+    trace!("We are a Gateway: {}", gateway);
+    SETTING.get_network_mut().is_gateway = gateway;
+
+    if SETTING.get_network().is_gateway {
+        if was_gateway {
+            let resolver_addr: Addr<ResolverWrapper> = System::current().registry().get();
+            resolver_addr.do_send(KillActor);
+
+            was_gateway = true
+        }
+
+        match KI.get_resolv_servers() {
+            Ok(s) => {
+                for ip in s.iter() {
+                    trace!("Resolv route {:?}", ip);
+                    KI.manual_peers_route(&ip, &mut SETTING.get_network_mut().default_route)
+                        .unwrap();
+                }
+            }
+            Err(e) => warn!("Failed to add DNS routes with {:?}", e),
+        }
+    } else {
+        was_gateway = false
+    }
+    was_gateway
 }
 
 /// Checks the list of full nodes, panics if none exist, if there exist
