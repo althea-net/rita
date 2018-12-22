@@ -16,7 +16,7 @@ pub struct OwnInfo {
 pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
     debug!("Get own info endpoint hit!");
     let payment_settings = SETTING.get_payment();
-    let eth_address = payment_settings.eth_address.clone();
+    let eth_address = payment_settings.eth_address;
     let balance = payment_settings.balance.clone();
     let pay_threshold = payment_settings.pay_threshold.clone();
     let close_threshold = payment_settings.close_threshold.clone();
@@ -29,10 +29,10 @@ pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
     let reply = OwnInfo {
         address: eth_address,
         balance: balance,
-        local_fee: local_fee.into(),
+        local_fee: local_fee,
         metric_factor: metric_factor,
         pay_threshold: pay_threshold,
-        close_threshold: close_threshold.into(),
+        close_threshold: close_threshold,
         device: device,
         version: env!("CARGO_PKG_VERSION").to_string(),
     };

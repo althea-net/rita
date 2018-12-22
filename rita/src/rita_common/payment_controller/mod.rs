@@ -108,10 +108,7 @@ impl PaymentController {
         let gas_price = payment_settings.gas_price.clone();
         info!(
             "current balance: {:?}, payment of {:?}, from address {:#x} to address {:#x}",
-            balance,
-            pmt.amount,
-            payment_settings.eth_address,
-            pmt.to.eth_address.clone()
+            balance, pmt.amount, payment_settings.eth_address, pmt.to.eth_address
         );
         if balance < pmt.amount {
             warn!("Not enough money to pay debts! Cutoff immenient");
@@ -150,7 +147,7 @@ impl PaymentController {
             nonce: nonce,
             gas_price: gas_price,
             gas_limit: "21000".parse().unwrap(),
-            to: pmt.to.eth_address.clone(),
+            to: pmt.to.eth_address,
             value: pmt.amount.clone(),
             data: Vec::new(),
             signature: None,

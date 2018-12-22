@@ -17,7 +17,7 @@ impl<S> Middleware<S> for Headers {
         let url = req.connection_info().host().to_owned();
         let re = Regex::new(r"^(.*):").unwrap();
         let url_no_port = re.captures(&url).unwrap()[1].to_string();
-        if req.method() == &Method::OPTIONS {
+        if req.method() == Method::OPTIONS {
             *resp.status_mut() = StatusCode::OK;
         }
         resp.headers_mut().insert(

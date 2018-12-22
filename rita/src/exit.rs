@@ -1,8 +1,8 @@
 //! This is the main source file for the Rita exit binary, by 'exit' we mean 'a vpn server, not a
 //! mesh router out in the field'.
 //!
-//! All meshing and billing functionaltiy is contained in rita_common and is common to both rita and
-//! rita_exit. The major difference is billing and connection code for the 'exit', the mandatory
+//! All meshing and billing functionaltiy is contained in `rita_common` and is common to both rita and
+//! `rita_exit`. The major difference is billing and connection code for the 'exit', the mandatory
 //! vpn system integrated into the Althea network design, as well as API endpoints for a management
 //! dashboard of router functions like wifi, which the exit is not expected to have.
 //!
@@ -10,8 +10,8 @@
 //! specific actors.
 
 #![cfg_attr(feature = "system_alloc", feature(alloc_system, allocator_api))]
-#![cfg_attr(feature = "clippy", feature(plugin))]
-#![cfg_attr(feature = "clippy", plugin(clippy))]
+#![warn(clippy::all)]
+#![allow(clippy::pedantic)]
 
 #[cfg(feature = "system_alloc")]
 extern crate alloc_system;
@@ -23,7 +23,6 @@ use alloc_system::System;
 #[global_allocator]
 static A: System = System;
 
-use diesel;
 #[macro_use]
 extern crate failure;
 #[macro_use]
@@ -39,12 +38,7 @@ use actix;
 
 use env_logger;
 
-use futures;
-
 use openssl_probe;
-use rand;
-
-use reqwest;
 
 use settings::{RitaCommonSettings, RitaExitSettings, RitaExitSettingsStruct};
 

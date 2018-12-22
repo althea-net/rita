@@ -77,11 +77,11 @@ impl PeerMessage {
                 buf.put_u8(MSG_IM_HERE);
                 buf.put_u16_be(MSG_IM_HERE_LEN);
                 let ipaddr_bytes: [u8; 16] = addr.octets();
-                for i in 0..16 {
-                    buf.put_u8(ipaddr_bytes[i]);
+                for i in ipaddr_bytes.iter() {
+                    buf.put_u8(*i);
                 }
                 trace!("Encoded ImHere packet {:x?}", buf);
-                return buf;
+                buf
             }
         }
     }
@@ -90,7 +90,7 @@ impl PeerMessage {
      * Message format is very simple
      * Magic <u8>, Size <u16>, Ipaddr &[u16; 8]
      */
-    pub fn decode(buf: &Vec<u8>) -> Result<PeerMessage, MessageError> {
+    pub fn decode(buf: &[u8]) -> Result<PeerMessage, MessageError> {
         trace!("Starting ImHere packet decode!");
         // Check if buffer is empty
         if buf.is_empty() {
@@ -142,7 +142,7 @@ impl PeerMessage {
             }
             _ => {
                 trace!("Received packet with an unknown magic: {:X?}", packet_magic);
-                return Err(MessageError::InvalidMagic);
+                Err(MessageError::InvalidMagic)
             }
         }
     }
@@ -159,7 +159,7 @@ fn test_encode_im_here() {
 
 #[test]
 fn test_decode_imhere() {
-    let result = PeerMessage::decode(&vec![
+    let result = PeerMessage::decode(&[
         91, 0, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 192, 10, 2, 255,
     ]);
     match result {
@@ -182,7 +182,7 @@ fn test_decode_imhere_with_empty_buf() {
 
 #[test]
 fn test_decode_imhere_with_wrong_magic() {
-    match PeerMessage::decode(&vec![1, 2, 3, 4]) {
+    match PeerMessage::decode(&[1, 2, 3, 4]) {
         Ok(msg) => assert!(false, "Unexpected success {:?}", msg),
         Err(MessageError::InvalidMagic) => assert!(true),
         Err(_) => panic!("Invalid error"),

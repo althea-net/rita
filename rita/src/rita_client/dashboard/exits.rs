@@ -63,9 +63,10 @@ impl Handler<GetExitInfo> for Dashboard {
 
             // failed pings block for one second, so we should be sure it's at least reasonable
             // to expect the pings to work before issuing them.
-            let reachable = match have_route {
-                true => KI.ping_check_v6(&exit.1.id.mesh_ip)?,
-                false => false,
+            let reachable = if have_route {
+                KI.ping_check_v6(&exit.1.id.mesh_ip)?
+            } else {
+                false
             };
             let tunnel_working = match (have_route, selected) {
                 (true, true) => is_tunnel_working(&exit.1, current_exit),
@@ -243,18 +244,18 @@ pub fn select_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Er
     if exit_client.exits.contains_key(&exit_name) {
         info!("Selecting exit {:?}", exit_name);
         exit_client.current_exit = Some(exit_name);
-        return Box::new(future::ok(HttpResponse::Ok().json(ret)));
+        Box::new(future::ok(HttpResponse::Ok().json(ret)))
     } else {
         error!("Requested selection of an unknown exit {:?}", exit_name);
         ret.insert(
             "error".to_owned(),
             format!("Requested selection of an unknown exit {:?}", exit_name),
         );
-        return Box::new(future::ok(
+        Box::new(future::ok(
             HttpResponse::new(StatusCode::BAD_REQUEST)
                 .into_builder()
                 .json(ret),
-        ));
+        ))
     }
 }
 

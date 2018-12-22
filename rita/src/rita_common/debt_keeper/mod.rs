@@ -112,20 +112,20 @@ impl Handler<PaymentFailed> for DebtKeeper {
 
     fn handle(&mut self, msg: PaymentFailed, _: &mut Context<Self>) -> Self::Result {
         match msg.amount.to_int256() {
-            Some(amount_int) => {
-                match self.debt_data.get_mut(&msg.to) {
-                    Some(entry) => {
-                        entry.debt += amount_int.clone();
-                        entry.total_payment_sent =
-                            entry.total_payment_sent.checked_sub(&msg.amount).ok_or(
-                                format_err!("Unable to subtract amount from total payments sent"),
-                            )?;
-                        entry.debt_buffer.push_front(amount_int);
-                        Ok(())
-                    }
-                    None => bail!("Payment failed but no debt! Somthing Must have gone wrong!"),
+            Some(amount_int) => match self.debt_data.get_mut(&msg.to) {
+                Some(entry) => {
+                    entry.debt += amount_int.clone();
+                    entry.total_payment_sent = entry
+                        .total_payment_sent
+                        .checked_sub(&msg.amount)
+                        .ok_or_else(|| {
+                            format_err!("Unable to subtract amount from total payments sent")
+                        })?;
+                    entry.debt_buffer.push_front(amount_int);
+                    Ok(())
                 }
-            }
+                None => bail!("Payment failed but no debt! Somthing Must have gone wrong!"),
+            },
             None => bail!("Unsable to convert amount to integer256 bit"),
         }
     }
@@ -229,11 +229,10 @@ impl DebtKeeper {
             ident.mesh_ip,
             old_balance
         );
-        // TODO: Refactor with BigInt/BigUint
         debt_data.incoming_payments = old_balance.clone()
-            + amount.to_int256().ok_or(format_err!(
-                "Unable to convert amount to 256 bit unsigned integer"
-            ))?;
+            + amount.to_int256().ok_or_else(|| {
+                format_err!("Unable to convert amount to 256 bit unsigned integer")
+            })?;
         debt_data.total_payment_received += amount.clone();
 
         trace!(
@@ -322,9 +321,9 @@ impl DebtKeeper {
             - (debt_data
                 .total_payment_received
                 .to_int256()
-                .ok_or(format_err!(
-                    "Unable to cast total payment received to signed 256 bit integer"
-                ))?
+                .ok_or_else(|| {
+                    format_err!("Unable to cast total payment received to signed 256 bit integer")
+                })?
                 / SETTING.get_payment().close_fraction.clone());
 
         if debt_data.debt < close_threshold {
@@ -337,9 +336,9 @@ impl DebtKeeper {
             trace!("debt is above close threshold. resuming forwarding");
             Ok(DebtAction::OpenTunnel)
         } else if debt_data.debt > SETTING.get_payment().pay_threshold {
-            let d: Uint256 = debt_data.debt.to_uint256().ok_or(format_err!(
-                "Unable to convert debt data into unsigned 256 bit integer"
-            ))?;
+            let d: Uint256 = debt_data.debt.to_uint256().ok_or_else(|| {
+                format_err!("Unable to convert debt data into unsigned 256 bit integer")
+            })?;
             trace!(
                 "debt is above payment threshold for {}. making payment of {}",
                 ident.mesh_ip,
@@ -440,7 +439,7 @@ mod tests {
         };
 
         d.traffic_update(&ident, Int256::from(-100i64));
-        d.payment_received(&ident, Uint256::from(1000u64));
+        let _ = d.payment_received(&ident, Uint256::from(1000u64));
 
         assert_eq!(d.send_update(&ident).unwrap(), DebtAction::None,);
     }
@@ -642,9 +641,9 @@ mod tests {
                 .unwrap(),
         };
 
-        d.payment_received(&ident, Uint256::from(100000u64))
+        d.payment_received(&ident, Uint256::from(100_000u64))
             .unwrap();
-        d.traffic_update(&ident, Int256::from(-100100));
+        d.traffic_update(&ident, Int256::from(-100_100));
 
         assert_eq!(d.send_update(&ident).unwrap(), DebtAction::None,);
     }

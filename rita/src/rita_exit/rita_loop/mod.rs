@@ -108,7 +108,7 @@ impl Handler<Tick> for RitaLoop {
                     info!(
                         "Rita Exit loop completed in {}s {}ms",
                         start.elapsed().as_secs(),
-                        start.elapsed().subsec_nanos() / 1000000
+                        start.elapsed().subsec_millis()
                     );
                     actix::fut::ok(())
                 }),

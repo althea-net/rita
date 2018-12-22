@@ -116,33 +116,30 @@ impl Handler<CacheCallback> for DAOManager {
                 Ok(parsed) => parsed,
                 Err(e) => {
                     trace!("Parsing error {:?}", e);
-                    return ();
+                    return;
                 }
             },
             None => {
                 trace!("Full node request got errror {:?}", response);
-                return ();
+                return;
             }
         };
 
         let has_vec = self.ident2dao.contains_key(&their_id);
-        let on_dao = !(num == Uint256::zero());
+        let on_dao = num != Uint256::zero();
 
         if has_vec {
             let entry_vec = self.ident2dao.get_mut(&their_id).unwrap();
             let mut found_entry = false;
-            match entry_vec
+            if let Some(entry) = entry_vec
                 .iter_mut()
                 .find(|ref i| dao_address == i.dao_address)
             {
-                Some(entry) => {
-                    entry.on_list = on_dao;
-                    entry.last_updated = Instant::now();
-                    found_entry = true;
-                    trace!("Updating exising entry {:?}", entry);
-                    send_membership_message(on_dao, their_id.clone());
-                }
-                None => (),
+                entry.on_list = on_dao;
+                entry.last_updated = Instant::now();
+                found_entry = true;
+                trace!("Updating exising entry {:?}", entry);
+                send_membership_message(on_dao, their_id.clone());
             }
 
             // We can't place this into the match because the mutable ref lives even
@@ -183,7 +180,7 @@ fn timer_check(timestamp: Instant) -> bool {
 }
 
 /// Sends off a message to TunnelManager about the dao state
-fn send_membership_message(on_dao: bool, their_id: Identity) -> () {
+fn send_membership_message(on_dao: bool, their_id: Identity) {
     TunnelManager::from_registry().do_send(TunnelStateChange {
         identity: their_id.clone(),
         action: if on_dao {
@@ -196,14 +193,14 @@ fn send_membership_message(on_dao: bool, their_id: Identity) -> () {
 
 /// Checks if an identity is in at least one of the set of DAO's we are a member of.
 /// will check the cache first before going out and updating via web3
-fn check_cache(their_id: Identity, ident2dao: &HashMap<Identity, Vec<DAOEntry>>) -> () {
+fn check_cache(their_id: Identity, ident2dao: &HashMap<Identity, Vec<DAOEntry>>) {
     trace!("Checking the DAOManager Cache for {:?}", their_id);
     let dao_settings = SETTING.get_dao();
     // we don't care about subnet DAO's, short circuit.
-    if !dao_settings.dao_enforcement || dao_settings.dao_addresses.len() == 0 {
+    if !dao_settings.dao_enforcement || dao_settings.dao_addresses.is_empty() {
         trace!("DAO enforcement disabled DAOMAnager doing nothing!");
         send_membership_message(true, their_id);
-        return ();
+        return;
     }
     // TODO when we start enforcing dao state more strictly we will need
     // to detect when we are bootstrapping and explicitly allow everyone
@@ -221,7 +218,7 @@ fn check_cache(their_id: Identity, ident2dao: &HashMap<Identity, Vec<DAOEntry>>)
                     send_membership_message(true, their_id.clone());
                 } else if !timer_check(entry.last_updated) {
                     trace!("Cache entry has expired, updating");
-                    get_membership(entry.dao_address.clone(), entry.id.clone());
+                    get_membership(entry.dao_address, entry.id.clone());
                 }
             }
             trace!("{:?} is not on any SubnetDAO", their_id);
@@ -230,13 +227,13 @@ fn check_cache(their_id: Identity, ident2dao: &HashMap<Identity, Vec<DAOEntry>>)
         // Cache miss, do a lookup for all DAO's
         None => {
             for dao in dao_settings.dao_addresses.iter() {
-                get_membership(dao.clone(), their_id.clone());
+                get_membership(*dao, their_id.clone());
             }
         }
     }
 }
 
-fn get_membership(dao_address: Address, target: Identity) -> () {
+fn get_membership(dao_address: Address, target: Identity) {
     let url = get_web3_server();
     let endpoint = format!("http://{}/", url);
     trace!("Getting DAO membership from {}", url);
@@ -245,12 +242,12 @@ fn get_membership(dao_address: Address, target: Identity) -> () {
             Some(socket) => socket,
             None => {
                 trace!("No ip found for domain name!");
-                return ();
+                return;
             }
         },
         Err(e) => {
             trace!("Could not resolve full node domain name {:?}", e);
-            return ();
+            return;
         }
     };
     trace!("Got IP {:?}", socket);
@@ -264,12 +261,12 @@ fn get_membership(dao_address: Address, target: Identity) -> () {
     let mut i = 0;
     let func_magic = [0x37, 0x66, 0x79, 0xb0];
     for byte in func_magic.iter() {
-        full_bytes[i] = byte.clone();
-        i = i + 1;
+        full_bytes[i] = *byte;
+        i += 1;
     }
     for byte in ip_bytes.iter() {
-        full_bytes[i] = byte.clone();
-        i = i + 1;
+        full_bytes[i] = *byte;
+        i += 1;
     }
 
     let call_args: Uint256 = full_bytes.into();
@@ -298,14 +295,14 @@ fn get_membership(dao_address: Address, target: Identity) -> () {
                                 Ok(val) => {
                                     DAOManager::from_registry().do_send(CacheCallback {
                                         id: target,
-                                        dao_address: dao_address.clone(),
+                                        dao_address: dao_address,
                                         response: val,
                                     });
                                     Ok(())
                                 }
                                 Err(e) => {
                                     trace!("Got bad Web3Response {:?}", e);
-                                    return Ok(());
+                                    Ok(())
                                 }
                             },
                         ))
@@ -325,7 +322,7 @@ fn get_membership(dao_address: Address, target: Identity) -> () {
 /// one or more a random entry from the list is returned in an attempt
 /// to load balance across fullnodes
 fn get_web3_server() -> String {
-    if SETTING.get_dao().node_list.len() == 0 {
+    if SETTING.get_dao().node_list.is_empty() {
         panic!("DAO enforcement enabled but not DAO's configured!");
     }
     let node_list = SETTING.get_dao().node_list.clone();
