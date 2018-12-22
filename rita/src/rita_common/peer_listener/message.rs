@@ -159,7 +159,9 @@ fn test_encode_im_here() {
 
 #[test]
 fn test_decode_imhere() {
-    let result = PeerMessage::decode(&[91, 0, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 192, 10, 2, 255]);
+    let result = PeerMessage::decode(&[
+        91, 0, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 192, 10, 2, 255,
+    ]);
     match result {
         Ok(PeerMessage::ImHere(addr)) => {
             assert_eq!(addr, Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0xc00a, 0x2ff))
