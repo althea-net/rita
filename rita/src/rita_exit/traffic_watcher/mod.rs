@@ -56,9 +56,6 @@ impl SystemService for TrafficWatcher {
         }
         KI.setup_nat(&SETTING.get_network().external_nic.clone().unwrap())
             .unwrap();
-        // this creates the root classful htb limit for which we will make
-        // subclasses to enforce payment
-        KI.create_root_classful_limit("wg_exit").unwrap();
 
         info!("Traffic Watcher started");
     }

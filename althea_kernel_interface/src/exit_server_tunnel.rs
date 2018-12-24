@@ -23,14 +23,6 @@ impl dyn KernelInterface {
         local_ip: &IpAddr,
         netmask: u8,
     ) -> Result<(), Error> {
-        // setup traffic classes for enforcement with flow id's derived from the last two octets of the ip
-        for c in clients.iter() {
-            match c.internal_ip {
-                IpAddr::V4(addr) => self.create_classifier_by_ip("wg_exit", &addr)?,
-                _ => panic!("Could not derive ipv4 addr for client! Corrupt DB!"),
-            }
-        }
-
         let command = "wg".to_string();
 
         let mut args = Vec::new();
@@ -96,6 +88,25 @@ impl dyn KernelInterface {
                 String::from_utf8(output.stderr)?
             ))
             .into());
+        }
+
+        // this creates the root classful htb limit for which we will make
+        // subclasses to enforce payment
+        if !self.has_limit("wg_exit")? {
+            info!("Setting up root HTB qdisc, this should only run once");
+            self.create_root_classful_limit("wg_exit")
+                .expect("Failed to setup root HTB qdisc!");
+        }
+        // setup traffic classes for enforcement with flow id's derived from the ip
+        for c in clients.iter() {
+            match c.internal_ip {
+                IpAddr::V4(addr) => {
+                    if !self.has_flow(&addr, "wg_exit")? {
+                        self.create_flow_by_ip("wg_exit", &addr)?
+                    }
+                }
+                _ => panic!("Could not derive ipv4 addr for client! Corrupt DB!"),
+            }
         }
 
         Ok(())

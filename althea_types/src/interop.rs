@@ -1,5 +1,5 @@
 use crate::wg_key::WgKey;
-use clarity::{Address, Transaction};
+use clarity::Address;
 use num256::Uint256;
 use std::net::IpAddr;
 

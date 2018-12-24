@@ -11,22 +11,70 @@ use std::net::Ipv4Addr;
 impl KernelInterface {
     /// Determines if the provided interface has a configured qdisc
     pub fn has_qdisc(&self, iface_name: &str) -> Result<bool, Error> {
-        let result = self.run_command("tc", &["qdisc", "show", iface_name]);
-        let stdout = &String::from_utf8(result?.stdout)?;
+        let result = self.run_command("tc", &["qdisc", "show", "dev", iface_name])?;
+
+        if !result.status.success() {
+            let res = String::from_utf8(result.stderr)?;
+            bail!("Failed to check qdisc for {}! {:?}", iface_name, res);
+        }
+
+        let stdout = &String::from_utf8(result.stdout)?;
+
+        trace!("has_qdisc: {} {}", stdout, !stdout.contains("noqueue"));
         Ok(!stdout.contains("noqueue"))
+    }
+
+    /// Determines if the provided flow is assigned
+    pub fn has_flow(&self, ip: &Ipv4Addr, iface_name: &str) -> Result<bool, Error> {
+        let class_id = self.get_class_id(&ip);
+        let result = self.run_command("tc", &["filter", "show", "dev", iface_name])?;
+
+        if !result.status.success() {
+            let res = String::from_utf8(result.stderr)?;
+            bail!("Failed to check filter for {}! {:?}", class_id, res);
+        }
+
+        let stdout = &String::from_utf8(result.stdout)?;
+        Ok(stdout.contains(&format!("1:{}", class_id)))
+    }
+
+    /// Determines if the provided flow is assigned
+    pub fn has_class(&self, ip: &Ipv4Addr, iface_name: &str) -> Result<bool, Error> {
+        let class_id = self.get_class_id(ip);
+        let result = self.run_command("tc", &["class", "show", "dev", iface_name])?;
+
+        if !result.status.success() {
+            let res = String::from_utf8(result.stderr)?;
+            bail!("Failed to check filter for {}! {:?}", class_id, res);
+        }
+
+        let stdout = &String::from_utf8(result.stdout)?;
+        Ok(stdout.contains(&format!("1:{}", class_id)))
     }
 
     /// Determines if the provided interface has a configured qdisc
     pub fn has_limit(&self, iface_name: &str) -> Result<bool, Error> {
-        let result = self.run_command("tc", &["qdisc", "show", iface_name]);
-        let stdout = &String::from_utf8(result?.stdout)?;
-        Ok(stdout.contains("tbf") && !stdout.contains("codel") && !stdout.contains("noqueue"))
+        let result = self.run_command("tc", &["qdisc", "show", "dev", iface_name])?;
+
+        if !result.status.success() {
+            let res = String::from_utf8(result.stderr)?;
+            bail!("Failed to check limit for {}! {:?}", iface_name, res);
+        }
+
+        let stdout = &String::from_utf8(result.stdout)?;
+        Ok(stdout.contains("htb") && !stdout.contains("codel") && !stdout.contains("noqueue"))
     }
 
     /// Determines if the provided interface has a configured qdisc
     pub fn has_cake(&self, iface_name: &str) -> Result<bool, Error> {
-        let result = self.run_command("tc", &["qdisc", "show", iface_name]);
-        let stdout = &String::from_utf8(result?.stdout)?;
+        let result = self.run_command("tc", &["qdisc", "show", "dev", iface_name])?;
+
+        if !result.status.success() {
+            let res = String::from_utf8(result.stderr)?;
+            bail!("Failed to check limit for {}! {:?}", iface_name, res);
+        }
+
+        let stdout = &String::from_utf8(result.stdout)?;
         Ok((stdout.contains("codel") || stdout.contains("cake"))
             && !stdout.contains("tbf")
             && !stdout.contains("noqueue")
@@ -48,7 +96,7 @@ impl KernelInterface {
         )?;
 
         if !output.status.success() {
-            warn!("No support for the cake qdisc as detected, falling back to fq_codel");
+            warn!("No support for the cake qdisc is detected, falling back to fq_codel");
             warn!("Cake is strongly recomended, you should install it");
             let output = self.run_command(
                 "tc",
@@ -131,17 +179,21 @@ impl KernelInterface {
         iface_name: &str,
         min_bw: u32,
         max_bw: u32,
-        class_id: u32,
+        ip: &Ipv4Addr,
     ) -> Result<(), Error> {
-        if self.has_qdisc(iface_name)? {
-            self.delete_qdisc(iface_name)?;
+        let class_id = self.get_class_id(ip);
+        let modifier;
+        if self.has_class(ip, iface_name)? {
+            modifier = "change";
+        } else {
+            modifier = "add";
         }
 
         let output = self.run_command(
             "tc",
             &[
                 "class",
-                "add",
+                modifier,
                 "dev",
                 iface_name,
                 "parent",
@@ -166,14 +218,23 @@ impl KernelInterface {
 
     /// Generates a unique traffic class id for a exit user, essentially a really dumb hashing function
     pub fn get_class_id(&self, ip: &Ipv4Addr) -> u32 {
-        ip.octets()[3] as u32 + ip.octets()[2] as u32
+        format!(
+            "{}{}{}{}",
+            ip.octets()[3],
+            ip.octets()[2],
+            ip.octets()[1],
+            ip.octets()[0]
+        )
+        .parse::<u32>()
+        .unwrap()
+            % 9999 //9999 is the maximum flow id value allowed
     }
 
     /// Filters traffic from a given ipv4 address into the class that we are using
     /// to shape that traffic on the exit side, uses the last two octets of the ip
     /// to generate a class id.
     /// TODO when ipv6 exit support is added this will need to be revisited
-    pub fn create_classifier_by_ip(&self, iface_name: &str, ip: &Ipv4Addr) -> Result<(), Error> {
+    pub fn create_flow_by_ip(&self, iface_name: &str, ip: &Ipv4Addr) -> Result<(), Error> {
         let class_id = self.get_class_id(ip);
 
         let output = self.run_command(
@@ -187,12 +248,11 @@ impl KernelInterface {
                 "1:",
                 "protocol",
                 "ip",
-                "prio 1",
                 "u32",
                 "match",
                 "ip",
                 "dst",
-                &ip.to_string(),
+                &format!("{}/32", ip.to_string()),
                 "flowid",
                 &format!("1:{}", class_id),
             ],
