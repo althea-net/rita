@@ -33,7 +33,7 @@ impl dyn KernelInterface {
 
         let output = from_utf8(&output.stdout)?;
 
-        Ok(output.trim_right().to_string())
+        Ok(output.trim_end().to_string())
     }
 
     pub fn get_wg_remote_ip(&self, name: &str) -> Result<IpAddr, Error> {

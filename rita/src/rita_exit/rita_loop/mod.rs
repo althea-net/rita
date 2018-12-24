@@ -55,13 +55,13 @@ impl Message for Tick {
     type Result = Result<(), Error>;
 }
 
-fn to_identity(client: Client) -> Identity {
+fn to_identity(client: &Client) -> Result<Identity, Error> {
     trace!("Converting client {:?}", client);
-    Identity {
-        mesh_ip: client.mesh_ip.parse().expect("Corrupt database entry!"),
-        eth_address: client.eth_address.parse().expect("Corrupt database entry!"),
-        wg_public_key: client.wg_pubkey.parse().expect("Corrupt database entry!"),
-    }
+    Ok(Identity {
+        mesh_ip: client.mesh_ip.clone().parse()?,
+        eth_address: client.eth_address.clone().parse()?,
+        wg_public_key: client.wg_pubkey.clone().parse()?,
+    })
 }
 
 fn to_exit_client(client: Client) -> Result<ExitClient, Error> {
@@ -71,6 +71,18 @@ fn to_exit_client(client: Client) -> Result<ExitClient, Error> {
         port: client.wg_port.parse()?,
         public_key: client.wg_pubkey,
     })
+}
+
+fn clients_to_ids(clients: Vec<Client>) -> Vec<Identity> {
+    let mut ids: Vec<Identity> = Vec::new();
+    for client in clients.iter() {
+        match (client.verified, to_identity(client)) {
+            (true, Ok(id)) => ids.push(id),
+            (true, Err(e)) => warn!("Corrupt database entry {:?}", e),
+            (false, _) => trace!("{:?} is not registered", client),
+        }
+    }
+    ids
 }
 
 impl Handler<Tick> for RitaLoop {
@@ -85,12 +97,8 @@ impl Handler<Tick> for RitaLoop {
                 .send(ListClients {})
                 .then(move |res| {
                     let clients = res.unwrap().unwrap();
-                    let ids = clients
-                        .clone()
-                        .into_iter()
-                        .filter(|c| c.verified)
-                        .map(to_identity)
-                        .collect();
+                    let ids = clients_to_ids(clients.clone());
+
                     TrafficWatcher::from_registry().do_send(Watch(ids));
 
                     let mut wg_clients = Vec::new();
@@ -137,16 +145,16 @@ impl Handler<Tick> for RitaLoop {
                             let mut clients_by_id = HashMap::new();
                             let free_tier_limit = SETTING.get_payment().free_tier_throughput;
                             for client in clients.iter() {
-                                let id = to_identity(client.clone());
-                                clients_by_id.insert(id, client);
+                                if let Ok(id) = to_identity(client) {
+                                    clients_by_id.insert(id, client);
+                                }
                             }
 
                             for debt_entry in list.iter() {
                                 match clients_by_id.get(&debt_entry.identity) {
                                     Some(client) => {
-                                        let _ = match client.internal_ip.parse() {
+                                        match client.internal_ip.parse() {
                                             Ok(IpAddr::V4(ip)) => {
-                                                let class_id = KI.get_class_id(&ip);
                                                 let res = if debt_entry.payment_details.action
                                                     == DebtAction::SuspendTunnel
                                                 {
@@ -154,13 +162,13 @@ impl Handler<Tick> for RitaLoop {
                                                         "wg_exit",
                                                         free_tier_limit,
                                                         free_tier_limit,
-                                                        class_id,
+                                                        &ip,
                                                     )
                                                 } else {
                                                     // set to 50mbps garunteed bandwidth and 5gbps
                                                     // absolute max
                                                     KI.set_class_limit(
-                                                        "wg_exit", 50000, 5000000, class_id,
+                                                        "wg_exit", 50000, 5_000_000, &ip,
                                                     )
                                                 };
                                                 if res.is_err() {
