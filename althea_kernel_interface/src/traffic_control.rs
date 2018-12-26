@@ -202,9 +202,9 @@ impl KernelInterface {
                 &format!("1:{}", class_id),
                 "htb",
                 "rate",
-                &format!("{}kbps", min_bw),
+                &format!("{}kbit", min_bw),
                 "ceil",
-                &format!("{}kbps", max_bw),
+                &format!("{}kbit", max_bw),
             ],
         )?;
 
