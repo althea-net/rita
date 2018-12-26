@@ -255,7 +255,7 @@ pub fn watch<T: Read + Write>(
                     }
                     let used = bytes.download - history.download;
                     if free_tier_threshold < used {
-                        *debt -= i128::from(our_price) * i128::from(used);
+                        *debt -= i128::from(our_price) * i128::from(used - free_tier_threshold);
                     } else {
                         trace!("{:?} not billed under free tier rules", id);
                     }
@@ -293,7 +293,7 @@ pub fn watch<T: Read + Write>(
                     }
                     let used = bytes.upload - history.upload;
                     if free_tier_threshold < used {
-                        *debt -= i128::from(dest + our_price) * i128::from(used);
+                        *debt -= i128::from(dest + our_price) * i128::from(used - free_tier_threshold);
                     } else {
                         trace!("{:?} not billed under free tier rules", id);
                     }

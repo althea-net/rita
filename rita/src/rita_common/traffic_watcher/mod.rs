@@ -264,7 +264,7 @@ pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result
                         if bytes < free_tier_threshold {
                             trace!("Throughput for {:?} discounted under free tier", id_from_if)
                         } else {
-                            *debt -= dest * i128::from(bytes);
+                            *debt -= dest * i128::from(bytes - free_tier_threshold);
                         }
                     }
                     // debts is generated from identities, this should be impossible
@@ -294,7 +294,8 @@ pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result
                     if bytes < free_tier_threshold {
                         trace!("Throughput for {:?} discounted under free tier", id_from_if)
                     } else {
-                        *debt += (dest - i128::from(local_fee)) * i128::from(bytes);
+                        *debt += (dest - i128::from(local_fee))
+                            * i128::from(bytes - free_tier_threshold);
                     }
                 }
                 // debts is generated from identities, this should be impossible

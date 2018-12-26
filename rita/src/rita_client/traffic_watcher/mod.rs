@@ -187,14 +187,20 @@ pub fn watch<T: Read + Write>(
     trace!("Exit ip: {:?}", exit.mesh_ip);
     trace!("Exit destination:\n{:#?}", exit_route);
 
-    if (input + output) > free_tier_threshold {
-        // accounts for what we owe the exit for return data and sent data
-        // we have to pay our neighbor for what we send over them
-        // remember pay per *forward* so we pay our neighbor for what we
-        // send to the exit while we pay the exit to pay it's neighbor to eventually
-        // pay our neighbor to send data back to us.
-        let owes_exit = i128::from(exit_price * output) + exit_dest_price * i128::from(input);
+    // accounts for what we owe the exit for return data and sent data
+    // we have to pay our neighbor for what we send over them
+    // remember pay per *forward* so we pay our neighbor for what we
+    // send to the exit while we pay the exit to pay it's neighbor to eventually
+    // pay our neighbor to send data back to us.
+    let mut owes_exit = 0i128;
+    if input > free_tier_threshold {
+        owes_exit += i128::from(input - free_tier_threshold) * exit_dest_price;
+    }
+    if output > free_tier_threshold {
+        owes_exit += i128::from(exit_price * (output - free_tier_threshold));
+    }
 
+    if owes_exit > 0 {
         info!("Total client debt of {} this round", owes_exit);
 
         let exit_update = TrafficUpdate {
