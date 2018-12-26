@@ -102,7 +102,7 @@ pub fn prepare_helper_maps(
 
 pub fn get_babel_info<T: Read + Write>(
     mut babel: Babel<T>,
-) -> Result<(HashMap<IpAddr, Int256>, u32), Error> {
+) -> Result<(HashMap<IpAddr, i128>, u32), Error> {
     babel.start_connection()?;
 
     trace!("Getting routes");
@@ -116,7 +116,7 @@ pub fn get_babel_info<T: Read + Write>(
         if let IpNetwork::V6(ref ip) = route.prefix {
             // Only host addresses and installed routes
             if ip.prefix() == 128 && route.installed {
-                destinations.insert(IpAddr::V6(ip.ip()), Int256::from(route.price + local_fee));
+                destinations.insert(IpAddr::V6(ip.ip()), i128::from(route.price + local_fee));
             }
         }
     }
@@ -126,7 +126,7 @@ pub fn get_babel_info<T: Read + Write>(
             Some(ip) => ip,
             None => bail!("No mesh IP configured yet"),
         },
-        Int256::from(0),
+        i128::from(0),
     );
 
     Ok((destinations, local_fee))
@@ -248,7 +248,7 @@ pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result
 
     // Setup the debts table
     for (_, ident) in identities.clone() {
-        debts.insert(ident, Int256::from(0));
+        debts.insert(ident, 0i128);
     }
 
     // We take the destination ip and input interface and then look up what local neighbor
@@ -263,7 +263,7 @@ pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result
                         if bytes < free_tier_threshold {
                             trace!("Throughput for {:?} discounted under free tier", id_from_if)
                         } else {
-                            *debt -= (dest.clone()) * bytes.into();
+                            *debt -= dest * i128::from(bytes);
                         }
                     }
                     // debts is generated from identities, this should be impossible
@@ -293,7 +293,7 @@ pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result
                     if bytes < free_tier_threshold {
                         trace!("Throughput for {:?} discounted under free tier", id_from_if)
                     } else {
-                        *debt += (dest.clone() - local_fee.into()) * bytes.into();
+                        *debt += (dest - i128::from(local_fee)) * i128::from(bytes);
                     }
                 }
                 // debts is generated from identities, this should be impossible
@@ -311,10 +311,10 @@ pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result
 
     trace!("Collated total Intermediary debts: {:?}", debts);
     info!("Computed Intermediary debts for {:?} peers", debts.len());
-    let mut total_income = Int256::zero();
+    let mut total_income = 0i128;
     for entry in debts.iter() {
         let income = entry.1;
-        total_income += income.clone();
+        total_income += income;
     }
     info!(
         "Total intermediary debts of {:?} Wei this round",
@@ -326,7 +326,7 @@ pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result
         trace!("collated debt for {} is {}", from.mesh_ip, amount);
         traffic_vec.push(Traffic {
             from: from,
-            amount: amount,
+            amount: amount.into(),
         });
     }
     let update = debt_keeper::TrafficUpdate {
