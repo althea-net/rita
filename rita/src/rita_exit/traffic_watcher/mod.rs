@@ -202,8 +202,9 @@ pub fn watch<T: Read + Write>(
     clients: Vec<Identity>,
 ) -> Result<(), Error> {
     // the number of bytes provided under the free tier, (kbps * seconds) * 125 = bytes
+    // plus a 20% fudge factor to deal with bursty traffic
     let free_tier_threshold: u64 =
-        u64::from(SETTING.get_payment().free_tier_throughput) * EXIT_LOOP_SPEED * 125u64;
+        u64::from(SETTING.get_payment().free_tier_throughput) * EXIT_LOOP_SPEED * 150u64;
 
     let our_price = SETTING.get_exit_network().exit_price;
     let our_id = match SETTING.get_identity() {
