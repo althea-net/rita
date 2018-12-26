@@ -21,7 +21,6 @@ use crate::KI;
 use crate::SETTING;
 use althea_types::{Identity, RTTimestamps};
 use babel_monitor::Babel;
-use num256::Int256;
 use settings::{RitaClientSettings, RitaCommonSettings};
 
 pub struct TrafficWatcher {
@@ -152,10 +151,10 @@ pub fn watch<T: Read + Write>(
         .build()?;
 
     // price to get traffic to the exit as a u64 to make the type rules for math easy
-    let exit_route_price: u64 = exit_route.price.into();
+    let exit_route_price: i128 = exit_route.price.into();
     // the total price for the exit returning traffic to us, in the future we should ask
     // the exit for this because TODO assumes symetric route
-    let exit_dest_price: Int256 = Int256::from(exit_route_price) + exit_price.into();
+    let exit_dest_price: i128 = exit_route_price + i128::from(exit_price);
     let client_tx = SystemTime::now();
     let RTTimestamps { exit_rx, exit_tx } = client
         .get(&format!(
@@ -194,14 +193,14 @@ pub fn watch<T: Read + Write>(
         // remember pay per *forward* so we pay our neighbor for what we
         // send to the exit while we pay the exit to pay it's neighbor to eventually
         // pay our neighbor to send data back to us.
-        let owes_exit = Int256::from(exit_price * output) + exit_dest_price * input.into();
+        let owes_exit = i128::from(exit_price * output) + exit_dest_price * i128::from(input);
 
         info!("Total client debt of {} this round", owes_exit);
 
         let exit_update = TrafficUpdate {
             traffic: vec![Traffic {
                 from: exit.clone(),
-                amount: owes_exit,
+                amount: owes_exit.into(),
             }],
         };
 

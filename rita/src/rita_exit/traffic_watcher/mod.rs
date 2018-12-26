@@ -19,13 +19,10 @@ use althea_types::Identity;
 use babel_monitor::Babel;
 
 use crate::rita_common::debt_keeper;
-use crate::rita_common::debt_keeper::DebtAction;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::Traffic;
 
 use crate::rita_exit::rita_loop::EXIT_LOOP_SPEED;
-
-use num256::Int256;
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -99,7 +96,10 @@ fn get_babel_info<T: Read + Write>(
 
     // insert ourselves as a destination, don't think this is actually needed
     let mut destinations = HashMap::new();
-    destinations.insert(our_id.wg_public_key, babel.get_local_fee().unwrap() as u64);
+    destinations.insert(
+        our_id.wg_public_key,
+        u64::from(babel.get_local_fee().unwrap()),
+    );
 
     for route in &routes {
         // Only ip6
@@ -108,7 +108,7 @@ fn get_babel_info<T: Read + Write>(
             if ip.prefix() == 128 && route.installed {
                 match id_from_ip.get(&IpAddr::V6(ip.ip())) {
                     Some(id) => {
-                        destinations.insert(id.wg_public_key.clone(), route.price as u64);
+                        destinations.insert(id.wg_public_key.clone(), u64::from(route.price));
                     }
                     None => warn!("Can't find destinatoin for client {:?}", ip.ip()),
                 }
@@ -160,11 +160,11 @@ fn counters_logging(counters: &HashMap<WgKey, WgUsage>) {
     info!("Total Exit output of {} bytes this round", total_out);
 }
 
-fn debts_logging(debts: &HashMap<Identity, u64>) {
+fn debts_logging(debts: &HashMap<Identity, i128>) {
     info!("Collated total exit debts: {:?}", debts);
 
     info!("Computed exit debts for {:?} clients", debts.len());
-    let mut total_income = 0u64;
+    let mut total_income = 0i128;
     for (_identity, income) in debts.iter() {
         total_income += income;
     }
@@ -235,7 +235,7 @@ pub fn watch<T: Read + Write>(
 
     // Setup the debts table
     for (_, ident) in identities.clone() {
-        debts.insert(ident, 0 as u64);
+        debts.insert(ident, 0 as i128);
     }
 
     // accounting for 'input'
@@ -254,7 +254,7 @@ pub fn watch<T: Read + Write>(
                     }
                     let used = bytes.download - history.download;
                     if free_tier_threshold < used {
-                        *debt -= our_price * used;
+                        *debt -= i128::from(our_price) * i128::from(used);
                     } else {
                         trace!("{:?} not billed under free tier rules", id);
                     }
@@ -292,7 +292,7 @@ pub fn watch<T: Read + Write>(
                     }
                     let used = bytes.upload - history.upload;
                     if free_tier_threshold < used {
-                        *debt -= (dest + our_price) * used;
+                        *debt -= i128::from(dest + our_price) * i128::from(used);
                     } else {
                         trace!("{:?} not billed under free tier rules", id);
                     }
