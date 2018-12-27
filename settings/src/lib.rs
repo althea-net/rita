@@ -254,40 +254,27 @@ pub struct PaymentSettings {
     #[serde(default = "default_free_tier_throughput")]
     pub free_tier_throughput: u32,
     /// The threshold above which we will kick off a payment
-    #[serde(
-        skip_serializing,
-        skip_deserializing,
-        default = "default_pay_threshold"
-    )]
+    #[serde(default = "default_pay_threshold")]
     pub pay_threshold: Int256,
     /// The threshold below which we will kick another node off (not implemented yet)
-    #[serde(
-        skip_serializing,
-        skip_deserializing,
-        default = "default_close_threshold"
-    )]
+    #[serde(default = "default_close_threshold")]
     pub close_threshold: Int256,
     /// The amount of 'grace' to give a long term neighbor
-    #[serde(
-        skip_serializing,
-        skip_deserializing,
-        default = "default_close_fraction"
-    )]
+    #[serde(default = "default_close_fraction")]
     pub close_fraction: Int256,
     /// The amount of billing cycles a node can fall behind without being subjected to the threshold
     pub buffer_period: u32,
     /// Our own eth private key we do not store address, instead it is derived from here
     pub eth_private_key: Option<PrivateKey>,
     // Our own eth Address, derived from the private key on startup and not stored
-    #[serde(skip_serializing, skip_deserializing)]
-    pub eth_address: Address,
-    #[serde(skip_serializing, skip_deserializing)]
+    pub eth_address: Option<Address>,
+    #[serde(default)]
     pub balance: Uint256,
-    #[serde(skip_serializing, skip_deserializing)]
+    #[serde(default)]
     pub nonce: Uint256,
-    #[serde(skip_serializing, skip_deserializing)]
+    #[serde(default)]
     pub gas_price: Uint256,
-    #[serde(skip_serializing, skip_deserializing)]
+    #[serde(default)]
     pub net_version: Option<u64>,
     /// A list of nodes to query for blockchain data
     /// this is kept seperate from the version for DAO settings node
@@ -308,14 +295,8 @@ impl Default for PaymentSettings {
             close_threshold: (-8_400_000_000_000_000i64).into(),
             close_fraction: 100.into(),
             buffer_period: 3,
-            eth_private_key: Some(
-                "0x0000000000000000000000000000000000000000000000000000000000000000"
-                    .parse()
-                    .expect("Failed to create default dummy PrivateKey"),
-            ),
-            eth_address: "0x0000000000000000000000000000000000000000"
-                .parse()
-                .expect("Failed to parse default dummy address"),
+            eth_private_key: None,
+            eth_address: None,
             balance: 0u64.into(),
             nonce: 0u64.into(),
             gas_price: 10000000000u64.into(), // 10 gwei
@@ -648,7 +629,7 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
     fn get_identity(&self) -> Option<Identity> {
         Some(Identity::new(
             self.get_network().mesh_ip?.clone(),
-            self.get_payment().clone().eth_address,
+            self.get_payment().clone().eth_address?,
             self.get_network().clone().wg_public_key?,
         ))
     }
@@ -739,8 +720,8 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
 
     fn get_identity(&self) -> Option<Identity> {
         Some(Identity::new(
-            self.get_network().mesh_ip?.clone(),
-            self.get_payment().eth_address.clone(),
+            self.get_network().clone().mesh_ip?,
+            self.get_payment().clone().eth_address?,
             self.get_network().clone().wg_public_key?,
         ))
     }
@@ -898,7 +879,7 @@ where
     thread::spawn(move || {
         let old_settings = settings.read().unwrap().clone();
         loop {
-            thread::sleep(Duration::from_secs(5));
+            thread::sleep(Duration::from_secs(600));
 
             let new_settings = settings.read().unwrap().clone();
 

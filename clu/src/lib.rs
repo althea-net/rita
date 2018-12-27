@@ -178,7 +178,7 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
                 existing_eth_private_key.to_public_key()?
             );
 
-            payment_settings.eth_address = existing_eth_private_key.to_public_key()?;
+            payment_settings.eth_address = Some(existing_eth_private_key.to_public_key()?);
         }
         None => {
             info!("Eth key details not configured, generating");
@@ -186,7 +186,7 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
             let new_private_key = PrivateKey::from_slice(&key_buf)?;
             payment_settings.eth_private_key = Some(new_private_key);
 
-            payment_settings.eth_address = new_private_key.to_public_key()?
+            payment_settings.eth_address = Some(new_private_key.to_public_key()?)
         }
     }
 
@@ -283,7 +283,7 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
                 existing_eth_private_key.to_public_key()?
             );
 
-            payment_settings.eth_address = existing_eth_private_key.to_public_key()?;
+            payment_settings.eth_address = Some(existing_eth_private_key.to_public_key()?);
         }
         None => {
             info!("Eth key details not configured, generating");
@@ -291,7 +291,7 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
             let new_private_key = PrivateKey::from_slice(&key_buf)?;
             payment_settings.eth_private_key = Some(new_private_key);
 
-            payment_settings.eth_address = new_private_key.to_public_key()?
+            payment_settings.eth_address = Some(new_private_key.to_public_key()?)
         }
     }
 
