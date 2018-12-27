@@ -83,7 +83,7 @@ pub fn make_payments(
                 Some(transaction) => {
                     if transaction.from == pmt.0.from.eth_address
                         && transaction.value == pmt.0.amount
-                        && transaction.to == SETTING.get_payment().eth_address
+                        && transaction.to == SETTING.get_payment().eth_address.expect("No Address!")
                     {
                         Either::A(
                             PaymentController::from_registry()

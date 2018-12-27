@@ -191,7 +191,7 @@ impl Handler<Tick> for RitaLoop {
 
         let full_node = get_web3_server();
         let web3 = Web3Client::new(&full_node);
-        let our_address = SETTING.get_payment().eth_address;
+        let our_address = SETTING.get_payment().eth_address.expect("No address!");
         trace!("About to make web3 requests to {}", full_node);
         Arbiter::spawn(
             web3.eth_get_balance(our_address)

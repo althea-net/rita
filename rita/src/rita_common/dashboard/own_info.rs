@@ -16,7 +16,7 @@ pub struct OwnInfo {
 pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
     debug!("Get own info endpoint hit!");
     let payment_settings = SETTING.get_payment();
-    let eth_address = payment_settings.eth_address;
+    let eth_address = payment_settings.eth_address.unwrap();
     let balance = payment_settings.balance.clone();
     let pay_threshold = payment_settings.pay_threshold.clone();
     let close_threshold = payment_settings.close_threshold.clone();
