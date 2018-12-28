@@ -8,8 +8,6 @@ use actix_web::*;
 
 use futures::{future, Future};
 
-use futures::future::Either;
-
 use failure::Error;
 
 use crate::SETTING;
@@ -17,13 +15,11 @@ use settings::RitaCommonSettings;
 
 use std::net::SocketAddr;
 
-use crate::rita_common;
-use crate::rita_common::payment_controller::PaymentController;
+use crate::rita_common::payment_validator::{PaymentValidator, ToValidate, ValidateLater};
 use crate::rita_common::peer_listener::Peer;
-use crate::rita_common::rita_loop::get_web3_server;
 use crate::rita_common::tunnel_manager::{IdentityCallback, TunnelManager};
 
-use guac_core::web3::client::{Web3, Web3Client};
+use std::time::Instant;
 
 use std::boxed::Box;
 
@@ -49,79 +45,34 @@ impl JsonStatusResponse {
 pub fn make_payments(
     pmt: (Json<PaymentTx>, HttpRequest),
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+    let txid = pmt.0.txid.clone();
+
     info!(
         "Got Payment from {:?} for {} with txid {:?}",
         pmt.1.connection_info().remote(),
         pmt.0.amount,
-        pmt.0.txid
+        txid,
     );
-    let full_node = get_web3_server();
-    let web3 = Web3Client::new(&full_node);
 
     // we didn't get a txid, probably an old client.
     // why don't we need an Either up here? Because the types ultimately match?
-    if pmt.0.txid.is_none() {
+    if txid.is_none() {
+        trace!("Did not find txid, payment failed!");
         return Box::new(future::ok(
             HttpResponse::new(StatusCode::from_u16(400u16).unwrap())
                 .into_builder()
                 .json("txid not provided! Invalid payment!"),
         ));
     }
+    let txid = txid.unwrap();
+    trace!("Payment txid is {:#x}", txid);
+    let ts = ToValidate {
+        payment: pmt.0.into_inner(),
+        recieved: Instant::now(),
+    };
+    PaymentValidator::from_registry().do_send(ValidateLater(ts));
 
-    // check the blockchain for the hash and let the neighbor know if
-    // we where able to verify the payment or if it has gone unaccounted
-    // once things have gone unaccounted it will become a delta in debts
-    // that will remain until both nodes are rebooted since there's no
-    // convergence system yet.
-    let res = web3
-        .eth_get_transaction_by_hash(pmt.0.txid.clone().unwrap())
-        .then(move |tx_status| match tx_status {
-            // first level is our success/failure at talking to the full node
-            Ok(status) => match status {
-                // this level handles the actual response about the transaction
-                // and checking if it's good.
-                Some(transaction) => {
-                    if transaction.from == pmt.0.from.eth_address
-                        && transaction.value == pmt.0.amount
-                        && transaction.to == SETTING.get_payment().eth_address.expect("No Address!")
-                    {
-                        Either::A(
-                            PaymentController::from_registry()
-                                .send(rita_common::payment_controller::PaymentReceived(
-                                    pmt.0.clone(),
-                                ))
-                                .from_err()
-                                .and_then(|_| Ok(HttpResponse::Ok().json("Payment Successful!")))
-                                .responder(),
-                        )
-                    } else {
-                        Either::B(future::ok(
-                            HttpResponse::new(StatusCode::from_u16(400u16).unwrap())
-                                .into_builder()
-                                .json("Transaction parameters invalid!"),
-                        ))
-                    }
-                }
-                None => Either::B(future::ok(
-                    HttpResponse::new(StatusCode::from_u16(400u16).unwrap())
-                        .into_builder()
-                        .json("Could not find txid on the blockchain!"),
-                )),
-            },
-            Err(e) => {
-                // full node failure, we don't actually know anything about the transaction
-                warn!(
-                    "Failed to validate {:?} transaction with {:?}",
-                    pmt.0.from, e
-                );
-                Either::B(future::ok(
-                    HttpResponse::new(StatusCode::from_u16(504u16).unwrap())
-                        .into_builder()
-                        .json("Could not talk to our fullnode!"),
-                ))
-            }
-        });
-    Box::new(res)
+    Box::new(future::ok(HttpResponse::Ok().json("Payment Received!")))
 }
 
 pub fn hello_response(

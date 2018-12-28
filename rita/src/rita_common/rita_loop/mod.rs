@@ -36,6 +36,8 @@ use crate::rita_common::dao_manager::DAOManager;
 
 use crate::rita_common::tunnel_manager::PeersToContact;
 
+use crate::rita_common::payment_validator::{PaymentValidator, Validate};
+
 use failure::Error;
 
 use futures::Future;
@@ -137,6 +139,9 @@ impl Handler<Tick> for RitaLoop {
                     Ok(())
                 }),
         );
+
+        // Check payments
+        PaymentValidator::from_registry().do_send(Validate());
 
         let start = Instant::now();
         Arbiter::spawn(
