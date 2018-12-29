@@ -35,8 +35,6 @@ use settings::{RitaCommonSettings, RitaExitSettings};
 
 use failure::Error;
 
-use num_traits::Zero;
-
 pub struct TrafficWatcher {
     last_seen_bytes: HashMap<WgKey, WgUsage>,
 }
@@ -293,7 +291,8 @@ pub fn watch<T: Read + Write>(
                     }
                     let used = bytes.upload - history.upload;
                     if free_tier_threshold < used {
-                        *debt -= i128::from(dest + our_price) * i128::from(used - free_tier_threshold);
+                        *debt -=
+                            i128::from(dest + our_price) * i128::from(used - free_tier_threshold);
                     } else {
                         trace!("{:?} not billed under free tier rules", id);
                     }

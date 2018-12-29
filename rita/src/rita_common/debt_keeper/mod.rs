@@ -22,8 +22,6 @@ use crate::rita_common::tunnel_manager::TunnelStateChange;
 
 use failure::Error;
 
-use std::ops::Add;
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodeDebtData {
     pub total_payment_received: Uint256,
@@ -366,7 +364,7 @@ impl DebtKeeper {
 
             debt_data.action = DebtAction::MakePayment {
                 to: ident.clone(),
-                amount: Uint256::from(d.clone()),
+                amount: d.clone(),
             };
 
             Ok(DebtAction::MakePayment {
