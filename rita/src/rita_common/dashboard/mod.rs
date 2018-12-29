@@ -8,8 +8,6 @@ use ::actix_web::http::StatusCode;
 use ::actix_web::*;
 
 use failure::Error;
-use num_traits::ops::checked::CheckedDiv;
-use num_traits::ToPrimitive;
 
 use futures::{future, Future};
 

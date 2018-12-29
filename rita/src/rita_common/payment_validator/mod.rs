@@ -101,7 +101,7 @@ impl Handler<Validate> for PaymentValidator {
         let mut to_delete = Vec::new();
         for item in self.unvalidated_transactions.iter() {
             if item.recieved.elapsed() > PAYMENT_TIMEOUT {
-                trace!("Transaction {:?} has timed out, ayment failed!", item);
+                trace!("Transaction {:?} has timed out, payment failed!", item);
                 to_delete.push(item.clone());
             } else {
                 validate_transaction(item);
@@ -115,6 +115,7 @@ impl Handler<Validate> for PaymentValidator {
 }
 
 pub fn validate_transaction(ts: &ToValidate) {
+    trace!("validating transaction");
     // we validate that a txid is present before adding to the validation list
     let txid = ts.payment.clone().txid.unwrap();
     let from_address = ts.payment.from.eth_address;

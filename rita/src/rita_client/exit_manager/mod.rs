@@ -70,7 +70,7 @@ fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
         level,
     );
     info!("Remote logging enabled with {:?}", res);
-    return res;
+    res
 }
 
 fn linux_setup_exit_tunnel() -> Result<(), Error> {

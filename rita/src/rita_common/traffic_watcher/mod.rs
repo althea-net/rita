@@ -18,8 +18,6 @@ use crate::rita_common::debt_keeper::Traffic;
 
 use crate::rita_common::rita_loop::COMMON_LOOP_SPEED;
 
-use num256::Int256;
-
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
@@ -30,8 +28,6 @@ use crate::SETTING;
 use settings::RitaCommonSettings;
 
 use failure::Error;
-
-use num_traits::Zero;
 
 pub struct TrafficWatcher;
 
