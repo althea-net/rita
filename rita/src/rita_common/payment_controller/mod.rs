@@ -1,4 +1,7 @@
-//! Placehodler payment manager, to be removed with Gauc integration
+//! Placehodler payment manager, handles single transaction payments as well as
+//! managing the retry flow for failed payment attempts. We will retry a payment
+//! so long as we have not published it to a full node, once the payment is on
+//! the blockchain it's up to the reciever to validate that it's correct
 
 use ::actix::prelude::*;
 use ::actix_web::client;
@@ -51,11 +54,10 @@ impl Handler<PaymentReceived> for PaymentController {
 }
 
 #[derive(Message)]
-#[rtype(result = "Result<(), Error>")]
 pub struct MakePayment(pub PaymentTx);
 
 impl Handler<MakePayment> for PaymentController {
-    type Result = Result<(), Error>;
+    type Result = ();
 
     fn handle(&mut self, msg: MakePayment, _ctx: &mut Context<Self>) -> Self::Result {
         let res = self.make_payment(msg.0.clone());
@@ -65,7 +67,6 @@ impl Handler<MakePayment> for PaymentController {
                 amount: msg.0.amount,
             });
         }
-        Ok(())
     }
 }
 
@@ -108,7 +109,10 @@ impl PaymentController {
         let gas_price = payment_settings.gas_price.clone();
         info!(
             "current balance: {:?}, payment of {:?}, from address {:#x} to address {:#x}",
-            balance, pmt.amount, payment_settings.eth_address, pmt.to.eth_address
+            balance,
+            pmt.amount,
+            payment_settings.eth_address.unwrap(),
+            pmt.to.eth_address
         );
         if balance < pmt.amount {
             warn!("Not enough money to pay debts! Cutoff immenient");
@@ -182,6 +186,9 @@ impl PaymentController {
                                     // return emtpy result, we're using messages anyways
                                     Ok(msg) => {
                                         trace!("Payment successful with {:?}", msg);
+                                        // this is questionably useful, we will upadte this value on our
+                                        // next full node request, the increment is on the off chance we
+                                        // try to send another payment before we update the nonce again
                                         SETTING.get_payment_mut().nonce += 1u64.into();
                                         Ok(()) as Result<(), ()>
                                     }

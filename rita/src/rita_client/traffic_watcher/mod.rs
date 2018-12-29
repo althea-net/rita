@@ -15,12 +15,12 @@ use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::time::{Duration, SystemTime};
 
+use crate::rita_client::rita_loop::CLIENT_LOOP_SPEED;
 use crate::rita_common::debt_keeper::{DebtKeeper, Traffic, TrafficUpdate};
 use crate::KI;
 use crate::SETTING;
 use althea_types::{Identity, RTTimestamps};
 use babel_monitor::Babel;
-use num256::Int256;
 use settings::{RitaClientSettings, RitaCommonSettings};
 
 pub struct TrafficWatcher {
@@ -77,6 +77,10 @@ pub fn watch<T: Read + Write>(
     exit: Identity,
     exit_price: u64,
 ) -> Result<(), Error> {
+    // the number of bytes provided under the free tier, (kbps * seconds) * (1000/8) = bytes
+    let free_tier_threshold: u64 =
+        u64::from(SETTING.get_payment().free_tier_throughput) * CLIENT_LOOP_SPEED * 125u64;
+
     babel.start_connection()?;
 
     trace!("Getting routes");
@@ -147,10 +151,10 @@ pub fn watch<T: Read + Write>(
         .build()?;
 
     // price to get traffic to the exit as a u64 to make the type rules for math easy
-    let exit_route_price: u64 = exit_route.price.into();
+    let exit_route_price: i128 = exit_route.price.into();
     // the total price for the exit returning traffic to us, in the future we should ask
     // the exit for this because TODO assumes symetric route
-    let exit_dest_price: Int256 = Int256::from(exit_route_price) + exit_price.into();
+    let exit_dest_price: i128 = exit_route_price + i128::from(exit_price);
     let client_tx = SystemTime::now();
     let RTTimestamps { exit_rx, exit_tx } = client
         .get(&format!(
@@ -188,18 +192,28 @@ pub fn watch<T: Read + Write>(
     // remember pay per *forward* so we pay our neighbor for what we
     // send to the exit while we pay the exit to pay it's neighbor to eventually
     // pay our neighbor to send data back to us.
-    let owes_exit = Int256::from(exit_price * output) + exit_dest_price * input.into();
+    let mut owes_exit = 0i128;
+    if input > free_tier_threshold {
+        owes_exit += i128::from(input - free_tier_threshold) * exit_dest_price;
+    }
+    if output > free_tier_threshold {
+        owes_exit += i128::from(exit_price * (output - free_tier_threshold));
+    }
 
-    info!("Total client debt of {} this round", owes_exit);
+    if owes_exit > 0 {
+        info!("Total client debt of {} this round", owes_exit);
 
-    let exit_update = TrafficUpdate {
-        traffic: vec![Traffic {
-            from: exit.clone(),
-            amount: owes_exit,
-        }],
-    };
+        let exit_update = TrafficUpdate {
+            traffic: vec![Traffic {
+                from: exit.clone(),
+                amount: owes_exit.into(),
+            }],
+        };
 
-    DebtKeeper::from_registry().do_send(exit_update);
+        DebtKeeper::from_registry().do_send(exit_update);
+    } else {
+        trace!("Exit bandwidth did not exceed free tier, no bill");
+    }
 
     Ok(())
 }

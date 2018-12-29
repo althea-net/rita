@@ -5,6 +5,8 @@
 //! This is the exit specific billing code used to determine how exits should be compensted. Which is
 //! different in that mesh nodes are paid by forwarding traffic, but exits have to return traffic and
 //! must get paid for doing so.
+//!
+//! Also handles enforcement of nonpayment, since there's no need for a complicated TunnelManager for exits
 
 use ::actix::prelude::*;
 use althea_types::WgKey;
@@ -20,7 +22,7 @@ use crate::rita_common::debt_keeper;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::Traffic;
 
-use num256::Int256;
+use crate::rita_exit::rita_loop::EXIT_LOOP_SPEED;
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -33,8 +35,6 @@ use settings::{RitaCommonSettings, RitaExitSettings};
 
 use failure::Error;
 
-use num_traits::Zero;
-
 pub struct TrafficWatcher {
     last_seen_bytes: HashMap<WgKey, WgUsage>,
 }
@@ -42,6 +42,7 @@ pub struct TrafficWatcher {
 impl Actor for TrafficWatcher {
     type Context = Context<Self>;
 }
+
 impl Supervised for TrafficWatcher {}
 impl SystemService for TrafficWatcher {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
@@ -93,7 +94,10 @@ fn get_babel_info<T: Read + Write>(
 
     // insert ourselves as a destination, don't think this is actually needed
     let mut destinations = HashMap::new();
-    destinations.insert(our_id.wg_public_key, babel.get_local_fee().unwrap() as u64);
+    destinations.insert(
+        our_id.wg_public_key,
+        u64::from(babel.get_local_fee().unwrap()),
+    );
 
     for route in &routes {
         // Only ip6
@@ -102,7 +106,7 @@ fn get_babel_info<T: Read + Write>(
             if ip.prefix() == 128 && route.installed {
                 match id_from_ip.get(&IpAddr::V6(ip.ip())) {
                     Some(id) => {
-                        destinations.insert(id.wg_public_key.clone(), route.price as u64);
+                        destinations.insert(id.wg_public_key.clone(), u64::from(route.price));
                     }
                     None => warn!("Can't find destinatoin for client {:?}", ip.ip()),
                 }
@@ -154,11 +158,11 @@ fn counters_logging(counters: &HashMap<WgKey, WgUsage>) {
     info!("Total Exit output of {} bytes this round", total_out);
 }
 
-fn debts_logging(debts: &HashMap<Identity, u64>) {
+fn debts_logging(debts: &HashMap<Identity, i128>) {
     info!("Collated total exit debts: {:?}", debts);
 
     info!("Computed exit debts for {:?} clients", debts.len());
-    let mut total_income = 0u64;
+    let mut total_income = 0i128;
     for (_identity, income) in debts.iter() {
         total_income += income;
     }
@@ -195,6 +199,11 @@ pub fn watch<T: Read + Write>(
     babel: Babel<T>,
     clients: Vec<Identity>,
 ) -> Result<(), Error> {
+    // the number of bytes provided under the free tier, (kbps * seconds) * 125 = bytes
+    // plus a 20% fudge factor to deal with bursty traffic
+    let free_tier_threshold: u64 =
+        u64::from(SETTING.get_payment().free_tier_throughput) * EXIT_LOOP_SPEED * 150u64;
+
     let our_price = SETTING.get_exit_network().exit_price;
     let our_id = match SETTING.get_identity() {
         Some(id) => id,
@@ -225,7 +234,7 @@ pub fn watch<T: Read + Write>(
 
     // Setup the debts table
     for (_, ident) in identities.clone() {
-        debts.insert(ident, 0 as u64);
+        debts.insert(ident, 0 as i128);
     }
 
     // accounting for 'input'
@@ -242,7 +251,12 @@ pub fn watch<T: Read + Write>(
                     if history.download > bytes.download {
                         history.download = 0;
                     }
-                    *debt -= our_price * (bytes.download - history.download);
+                    let used = bytes.download - history.download;
+                    if free_tier_threshold < used {
+                        *debt -= i128::from(our_price) * i128::from(used - free_tier_threshold);
+                    } else {
+                        trace!("{:?} not billed under free tier rules", id);
+                    }
                     // update history so that we know what was used from previous cycles
                     history.download = bytes.download;
                 }
@@ -275,7 +289,13 @@ pub fn watch<T: Read + Write>(
                     if history.upload > bytes.upload {
                         history.upload = 0;
                     }
-                    *debt -= (dest + our_price) * (bytes.upload - history.upload);
+                    let used = bytes.upload - history.upload;
+                    if free_tier_threshold < used {
+                        *debt -=
+                            i128::from(dest + our_price) * i128::from(used - free_tier_threshold);
+                    } else {
+                        trace!("{:?} not billed under free tier rules", id);
+                    }
                     history.upload = bytes.upload;
                 }
                 // debts is generated from identities, this should be impossible

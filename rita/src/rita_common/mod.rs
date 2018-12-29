@@ -4,6 +4,7 @@ pub mod debt_keeper;
 pub mod hello_handler;
 pub mod network_endpoints;
 pub mod payment_controller;
+pub mod payment_validator;
 pub mod peer_listener;
 pub mod rita_loop;
 pub mod traffic_watcher;

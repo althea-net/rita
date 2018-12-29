@@ -5,12 +5,12 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
-ascii = "0.9.1"
-bufstream = "0.1.4"
+ascii = "0.9"
+bufstream = "0.1"
 env_logger = "0.6.0"
-failure = "0.1.3"
-ipnetwork = "0.13.1"
-log = "0.4.6"
+failure = "0.1"
+ipnetwork = "0.13"
+log = "0.4"
 
 [dependencies.mockstream]
 git = "https://github.com/lazy-bitfield/rust-mockstream.git"

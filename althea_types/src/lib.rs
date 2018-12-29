@@ -1,5 +1,3 @@
-use base64;
-
 #[macro_use]
 extern crate serde_derive;
 

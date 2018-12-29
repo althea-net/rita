@@ -8,7 +8,7 @@ impl dyn KernelInterface {
         let result = self.run_command("ping6", &["-w1", "-W1", "-c1", &ip.to_string()]);
         Ok(result?.status.success())
     }
-    //Pings a ipv4 address to determine if it's online
+    /// Pings a ipv4 address to determine if it's online
     pub fn ping_check_v4(&self, ip: &IpAddr) -> Result<bool, Error> {
         let result = self.run_command("ping", &["-w1", "-W1", "-c1", &ip.to_string()]);
         Ok(result?.status.success())

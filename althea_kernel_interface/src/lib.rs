@@ -31,6 +31,7 @@ mod open_tunnel;
 mod openwrt_ubus;
 mod ping_check;
 mod setup_wg_if;
+mod traffic_control;
 mod udp_socket_table;
 pub mod wg_iface_counter;
 

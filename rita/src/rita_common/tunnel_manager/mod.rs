@@ -63,6 +63,10 @@ pub enum TunnelAction {
     MembershipConfirmed,
     /// Membership expired for an identity
     MembershipExpired,
+    /// Payment is not up to date for identity
+    PaymentOverdue,
+    /// Payment has resumed
+    PaidOnTime,
 }
 
 impl fmt::Display for TunnelAction {
@@ -77,23 +81,52 @@ impl fmt::Display for TunnelAction {
 /// State changes:
 /// NotRegistered -> MembershipConfirmed(not implemented therefore not added) -> Registered
 #[derive(PartialEq, Debug, Clone)]
-pub enum TunnelState {
+pub struct TunnelState {
+    payment_state: PaymentState,
+    registration_state: RegistrationState,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum RegistrationState {
     /// Tunnel is not registered
     NotRegistered,
     /// Tunnel is registered (default)
     Registered,
 }
 
-impl fmt::Display for TunnelState {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+#[derive(PartialEq, Debug, Clone)]
+pub enum PaymentState {
+    /// Tunnel is paid (default)
+    Paid,
+    /// Tunnel is not paid
+    Overdue,
+}
+
+impl fmt::Display for RegistrationState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl fmt::Display for PaymentState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
 #[test]
-fn test_tunnel_state() {
-    assert_eq!(TunnelState::NotRegistered.to_string(), "NotRegistered");
-    assert_eq!(TunnelState::Registered.to_string(), "Registered");
+fn test_registration_state() {
+    assert_eq!(
+        RegistrationState::NotRegistered.to_string(),
+        "NotRegistered"
+    );
+    assert_eq!(RegistrationState::Registered.to_string(), "Registered");
+}
+
+#[test]
+fn test_payment_state() {
+    assert_eq!(PaymentState::Paid.to_string(), "Paid");
+    assert_eq!(PaymentState::Overdue.to_string(), "Overdue");
 }
 
 #[derive(Debug, Clone)]
@@ -123,11 +156,14 @@ impl Tunnel {
             neigh_id: their_id.clone(),
             last_contact: Instant::now(),
             // By default new tunnels are in Registered state
-            state: TunnelState::Registered,
+            state: TunnelState {
+                payment_state: PaymentState::Paid,
+                registration_state: RegistrationState::Registered,
+            },
         }
     }
 
-    /// Open physical tunnel
+    /// Open a real tunnel to match the virtual tunnel we store in memory
     pub fn open(&self) -> Result<(), Error> {
         let network = SETTING.get_network().clone();
         KI.open_tunnel(
@@ -142,7 +178,8 @@ impl Tunnel {
             },
             network.external_nic.clone(),
             &mut SETTING.get_network_mut().default_route,
-        )
+        )?;
+        KI.set_codel_shaping(&self.iface_name)
     }
 
     /// Register this tunnel into Babel monitor
@@ -765,6 +802,7 @@ impl Message for TunnelStateChange {
 }
 
 // Called by DAOManager to notify TunnelManager about the registration state of a given peer
+// also called by DebtKeeper when someone doesn't pay their bill
 impl Handler<TunnelStateChange> for TunnelManager {
     type Result = Result<(), Error>;
 
@@ -774,6 +812,8 @@ impl Handler<TunnelStateChange> for TunnelManager {
             msg.identity,
             msg.action
         );
+        let mut tunnel_bw_limits_need_change = false;
+
         // Find a tunnel
         match self.tunnels.get_mut(&msg.identity) {
             Some(tunnels) => {
@@ -786,26 +826,51 @@ impl Handler<TunnelStateChange> for TunnelManager {
                                 msg.identity,
                                 tunnel
                             );
-                            match tunnel.state {
-                                TunnelState::NotRegistered => {
+                            match tunnel.state.registration_state {
+                                RegistrationState::NotRegistered => {
                                     tunnel.monitor(make_babel_stream()?)?;
-                                    tunnel.state = TunnelState::Registered;
+                                    tunnel.state.registration_state = RegistrationState::Registered;
                                 }
-                                TunnelState::Registered => {
-                                    trace!("Tunnel {:?} already in registered state", tunnel);
+                                RegistrationState::Registered => {
                                     continue;
                                 }
                             }
                         }
                         TunnelAction::MembershipExpired => {
                             trace!("Membership for identity {:?} is expired", msg.identity);
-                            match tunnel.state {
-                                TunnelState::Registered => {
+                            match tunnel.state.registration_state {
+                                RegistrationState::Registered => {
                                     tunnel.unmonitor(make_babel_stream()?)?;
-                                    tunnel.state = TunnelState::NotRegistered;
+                                    tunnel.state.registration_state =
+                                        RegistrationState::NotRegistered;
                                 }
-                                TunnelState::NotRegistered => {
-                                    trace!("Tunnel {:?} already in not registered state.", tunnel);
+                                RegistrationState::NotRegistered => {
+                                    continue;
+                                }
+                            }
+                        }
+                        TunnelAction::PaidOnTime => {
+                            trace!("identity {:?} has paid!", msg.identity);
+                            match tunnel.state.payment_state {
+                                PaymentState::Paid => {
+                                    continue;
+                                }
+                                PaymentState::Overdue => {
+                                    trace!("Tunnel {:?} has returned to a paid state.", tunnel);
+                                    tunnel.state.payment_state = PaymentState::Paid;
+                                    tunnel_bw_limits_need_change = true;
+                                }
+                            }
+                        }
+                        TunnelAction::PaymentOverdue => {
+                            trace!("No payment from identity {:?}", msg.identity);
+                            match tunnel.state.payment_state {
+                                PaymentState::Paid => {
+                                    trace!("Tunnel {:?} has entered an overdue state.", tunnel);
+                                    tunnel.state.payment_state = PaymentState::Overdue;
+                                    tunnel_bw_limits_need_change = true;
+                                }
+                                PaymentState::Overdue => {
                                     continue;
                                 }
                             }
@@ -818,8 +883,45 @@ impl Handler<TunnelStateChange> for TunnelManager {
                 warn!("Couldn't find tunnel for identity {:?}", msg.identity);
             }
         }
+
+        // this is done ouside of the match to make the borrow checker happy
+        if tunnel_bw_limits_need_change {
+            tunnel_bw_limit_update(&self.tunnels)?;
+        }
+
         Ok(())
     }
+}
+
+/// Takes the tunnels list and iterates over it to update all of the traffic control settings
+/// since we can't figure out how to combine interfaces badnwidth budgets we're subdividing it
+/// here with manual terminal commands whenever there is a change
+fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, HashMap<u32, Tunnel>>) -> Result<(), Error> {
+    // number of interfaces over which we will have to divide free tier BW
+    let mut limited_interfaces = 0u16;
+    for sublist in tunnels.iter() {
+        for tunnel in sublist.1.iter() {
+            if tunnel.1.state.payment_state == PaymentState::Overdue {
+                limited_interfaces += 1;
+            }
+        }
+    }
+    let bw_per_iface = SETTING.get_payment().free_tier_throughput / limited_interfaces as u32;
+
+    for sublist in tunnels.iter() {
+        for tunnel in sublist.1.iter() {
+            let payment_state = &tunnel.1.state.payment_state;
+            let iface_name = &tunnel.1.iface_name;
+            let has_limit = KI.has_limit(iface_name)?;
+
+            if *payment_state == PaymentState::Overdue {
+                KI.set_classless_limit(iface_name, bw_per_iface)?;
+            } else if *payment_state == PaymentState::Paid && has_limit {
+                KI.set_codel_shaping(iface_name)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 #[test]
@@ -871,9 +973,12 @@ pub fn test_tunnel_manager_lookup() {
             .unwrap()
             .get_mut(&0u32)
             .expect("Unable to find existing tunnel");
-        assert_eq!(existing_tunnel.state, TunnelState::Registered);
+        assert_eq!(
+            existing_tunnel.state.registration_state,
+            RegistrationState::Registered
+        );
         // Verify mutability - manual modifications shouldn't happen elsewhere
-        existing_tunnel.state = TunnelState::NotRegistered;
+        existing_tunnel.state.registration_state = RegistrationState::NotRegistered;
     }
 
     // Verify if object is modified
@@ -884,6 +989,9 @@ pub fn test_tunnel_manager_lookup() {
             .unwrap()
             .get_mut(&0u32)
             .expect("Unable to find existing tunnel");
-        assert_eq!(existing_tunnel.state, TunnelState::NotRegistered);
+        assert_eq!(
+            existing_tunnel.state.registration_state,
+            RegistrationState::NotRegistered
+        );
     }
 }
