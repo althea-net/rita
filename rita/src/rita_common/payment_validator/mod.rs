@@ -13,7 +13,7 @@ use althea_types::PaymentTx;
 
 use std::time::{Duration, Instant};
 
-use guac_core::web3::client::{Web3, Web3Client};
+use web3::client::Web3;
 
 use settings::RitaCommonSettings;
 
@@ -122,7 +122,7 @@ pub fn validate_transaction(ts: &ToValidate) {
     let amount = ts.payment.amount.clone();
     let pmt = ts.payment.clone();
     let full_node = get_web3_server();
-    let web3 = Web3Client::new(&full_node);
+    let web3 = Web3::new(&full_node);
     let our_address = SETTING.get_payment().eth_address.expect("No Address!");
 
     let long_life_ts = ts.clone();

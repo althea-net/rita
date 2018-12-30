@@ -9,7 +9,7 @@ ascii = "0.9"
 bufstream = "0.1"
 env_logger = "0.6.0"
 failure = "0.1"
-ipnetwork = "0.13"
+ipnetwork = "0.12.8"
 log = "0.4"
 
 [dependencies.mockstream]

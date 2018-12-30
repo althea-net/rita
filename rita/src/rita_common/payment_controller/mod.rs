@@ -26,7 +26,7 @@ use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::PaymentFailed;
 use crate::rita_common::rita_loop::get_web3_server;
 
-use guac_core::web3::client::{Web3, Web3Client};
+use web3::client::Web3;
 
 use failure::Error;
 
@@ -145,7 +145,7 @@ impl PaymentController {
         };
 
         let full_node = get_web3_server();
-        let web3 = Web3Client::new(&full_node);
+        let web3 = Web3::new(&full_node);
 
         let tx = Transaction {
             nonce: nonce,
@@ -174,6 +174,7 @@ impl PaymentController {
             Ok(open_stream) => Either::A(transaction_status.then(move |transaction_outcome| {
                 match transaction_outcome {
                     Ok(tx_id) => {
+                        trace!("Sending bw payment with txid: {:#66x}", tx_id);
                         // add published txid to submission
                         pmt.txid = Some(tx_id);
                         Either::A(
