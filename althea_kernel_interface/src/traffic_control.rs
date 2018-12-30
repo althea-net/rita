@@ -142,7 +142,7 @@ impl KernelInterface {
                 "latency",
                 &format!("{}ms", latency),
                 "burst",
-                &format!("{}kbyte", burst),
+                &format!("{}", burst),
                 "rate",
                 &format!("{}kbit", bw),
             ],
