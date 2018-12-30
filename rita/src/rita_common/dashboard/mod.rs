@@ -26,7 +26,7 @@ use babel_monitor::Babel;
 
 use clarity::{Address, Transaction};
 
-use guac_core::web3::client::{Web3, Web3Client};
+use web3::client::Web3;
 
 use crate::rita_common::debt_keeper::GetDebtsList;
 use crate::rita_common::debt_keeper::{DebtKeeper, GetDebtsResult};

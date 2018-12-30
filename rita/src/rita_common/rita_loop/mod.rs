@@ -17,7 +17,7 @@ use ::actix::registry::SystemService;
 
 use crate::actix_utils::ResolverWrapper;
 
-use guac_core::web3::client::{Web3, Web3Client};
+use web3::client::Web3;
 
 use crate::KI;
 
@@ -195,7 +195,7 @@ impl Handler<Tick> for RitaLoop {
         );
 
         let full_node = get_web3_server();
-        let web3 = Web3Client::new(&full_node);
+        let web3 = Web3::new(&full_node);
         let our_address = SETTING.get_payment().eth_address.expect("No address!");
         trace!("About to make web3 requests to {}", full_node);
         Arbiter::spawn(

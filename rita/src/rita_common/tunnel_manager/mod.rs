@@ -886,7 +886,12 @@ impl Handler<TunnelStateChange> for TunnelManager {
 
         // this is done ouside of the match to make the borrow checker happy
         if tunnel_bw_limits_need_change {
-            tunnel_bw_limit_update(&self.tunnels)?;
+            let res = tunnel_bw_limit_update(&self.tunnels);
+            // if this fails consistently it could be a wallet draining attack
+            // TODO check for that case
+            if res.is_err() {
+                error!("Bandwidth limiting failed with {:?}", res);
+            }
         }
 
         Ok(())
@@ -906,7 +911,7 @@ fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, HashMap<u32, Tunnel>>) -> 
             }
         }
     }
-    let bw_per_iface = SETTING.get_payment().free_tier_throughput / limited_interfaces as u32;
+    let bw_per_iface = SETTING.get_payment().free_tier_throughput / u32::from(limited_interfaces);
 
     for sublist in tunnels.iter() {
         for tunnel in sublist.1.iter() {

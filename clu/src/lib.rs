@@ -13,7 +13,7 @@ use settings::{ExitVerifSettings, RitaCommonSettings, RitaExitSettings};
 use ipgen;
 use rand;
 
-use clarity::{Address, PrivateKey};
+use clarity::PrivateKey;
 
 use rand::{thread_rng, Rng};
 

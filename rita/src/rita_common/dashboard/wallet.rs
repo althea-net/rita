@@ -6,7 +6,7 @@ pub fn withdraw(path: Path<(Address, u64)>) -> Box<dyn Future<Item = HttpRespons
     debug!("/withdraw/{:#x}/{} hit", address, amount);
 
     let full_node = get_web3_server();
-    let web3 = Web3Client::new(&full_node);
+    let web3 = Web3::new(&full_node);
     let payment_settings = SETTING.get_payment();
 
     let tx = Transaction {
@@ -32,7 +32,7 @@ pub fn withdraw(path: Path<(Address, u64)>) -> Box<dyn Future<Item = HttpRespons
                 HttpResponse::new(StatusCode::from_u16(504u16).unwrap())
                     .into_builder()
                     .json(format!("Transaction to bytes failed! {:?}", e)),
-            ))
+            ));
         }
     };
 
