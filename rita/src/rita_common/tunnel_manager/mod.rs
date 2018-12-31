@@ -911,7 +911,11 @@ fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, HashMap<u32, Tunnel>>) -> 
             }
         }
     }
-    let bw_per_iface = SETTING.get_payment().free_tier_throughput / u32::from(limited_interfaces);
+    let bw_per_iface = if limited_interfaces > 0 {
+        SETTING.get_payment().free_tier_throughput / u32::from(limited_interfaces)
+    } else {
+        SETTING.get_payment().free_tier_throughput
+    };
 
     for sublist in tunnels.iter() {
         for tunnel in sublist.1.iter() {
