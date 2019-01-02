@@ -122,9 +122,9 @@ impl KernelInterface {
             self.delete_qdisc(iface_name)?;
         }
 
-        // we need 1kbyte of burst cache per mbit of bandwidth to actually
-        // reach the shaped rate
-        let burst = bw / 1000 as u32;
+        // we need 1kbyte of burst cache per mbit of bandwidth to actually keep things
+        // moving
+        let burst = bw * 1000 as u32;
         // amount of time a packet can spend in the burst cache, 40ms
         let latency = 40u32;
 
