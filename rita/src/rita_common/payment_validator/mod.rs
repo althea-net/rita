@@ -139,10 +139,14 @@ pub fn validate_transaction(ts: &ToValidate) {
                         && transaction.value == amount
                         && transaction.to == our_address
                     {
-                        trace!("payment successfully validated!");
-                        PaymentController::from_registry()
-                            .do_send(rita_common::payment_controller::PaymentReceived(pmt));
-                        PaymentValidator::from_registry().do_send(Remove(long_life_ts));
+                        if transaction.block_number.is_some() {
+                            trace!("payment successfully validated!");
+                            PaymentController::from_registry()
+                                .do_send(rita_common::payment_controller::PaymentReceived(pmt));
+                            PaymentValidator::from_registry().do_send(Remove(long_life_ts));
+                        } else {
+                            trace!("transaction is vaild but not in a block yet");
+                        }
                         Ok(())
                     } else {
                         trace!("payment failed, transaction invalid");
