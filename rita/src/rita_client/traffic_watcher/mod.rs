@@ -210,9 +210,6 @@ pub fn watch<T: Read + Write>(
     if owes_exit > 0 {
         info!("Total client debt of {} this round", owes_exit);
 
-        // Provides a 10% increase to encourage convergence
-        let owes_exit = ((owes_exit as f64) * 1.05) as i128;
-
         let exit_update = TrafficUpdate {
             traffic: vec![Traffic {
                 from: exit.clone(),
