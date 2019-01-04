@@ -237,7 +237,7 @@ impl Handler<Tick> for RitaLoop {
                         Ok(())
                     }
                     Err(e) => {
-                        warn!("Balance request failed with {:?}", e);
+                        warn!("net_version request failed with {:?}", e);
                         Err(e)
                     }
                 }).then(|_| Ok(())),
@@ -279,7 +279,7 @@ impl Handler<Tick> for RitaLoop {
                         payment_settings.pay_threshold = transaction_gas
                             * value.clone().to_int256().ok_or_else(|| {
                                 format_err!(
-                                    "Gas price is too high to fit into 256 signed bit integer"
+                                    "gas price is too high to fit into 256 signed bit integer"
                                 )
                             })?
                             * dynamic_fee_factor.clone();
@@ -299,7 +299,7 @@ impl Handler<Tick> for RitaLoop {
                         Ok(())
                     }
                     Err(e) => {
-                        warn!("Balance request failed with {:?}", e);
+                        warn!("gas price request failed with {:?}", e);
                         Err(e)
                     }
                 })
