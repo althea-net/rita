@@ -318,7 +318,7 @@ pub fn watch<T: Read + Write>(
     let mut traffic_vec = Vec::new();
     for (from, amount) in debts {
         // Provides a 10% discount to encourage convergence
-        let discounted_amount = ((amount as f64) * 0.95 ) as i128;
+        let discounted_amount = ((amount as f64) * 0.95) as i128;
         trace!("discounted {} to {}", amount, discounted_amount);
         traffic_vec.push(Traffic {
             from: from,
