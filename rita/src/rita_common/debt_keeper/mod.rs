@@ -20,6 +20,8 @@ use crate::rita_common::tunnel_manager::TunnelAction;
 use crate::rita_common::tunnel_manager::TunnelManager;
 use crate::rita_common::tunnel_manager::TunnelStateChange;
 
+use crate::rita_common::rita_loop::COMMON_LOOP_SPEED;
+
 use failure::Error;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -292,6 +294,10 @@ impl DebtKeeper {
     /// This updates a neighbor's debt and outputs a DebtAction if one is necessary.
     fn send_update(&mut self, ident: &Identity) -> Result<DebtAction, Error> {
         trace!("debt data: {:?}", self.debt_data);
+        // the number of bytes provided under the free tier, (kbps * seconds) * 125 = bytes
+        // plus a 20% fudge factor to deal with bursty traffic
+        let free_tier_threshold: u64 =
+            u64::from(SETTING.get_payment().free_tier_throughput) * COMMON_LOOP_SPEED * 150u64;
         let debt_data = self.get_debt_data_mut(ident);
         let debt = debt_data.debt.clone();
 
@@ -328,6 +334,11 @@ impl DebtKeeper {
             // rack up debt
             debt_data.debt += debt_data.incoming_payments.clone() + traffic;
             debt_data.incoming_payments = Int256::from(0);
+
+            // reduce debt by free tier amount if it's negative to try and trend to zero
+            if debt_data.debt < Int256::from(0) {
+                debt_data.debt += free_tier_threshold.into();
+            }
         }
 
         let close_threshold = SETTING.get_payment().close_threshold.clone()
