@@ -77,7 +77,7 @@ impl Handler<Watch> for TrafficWatcher {
             format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
         )?;
 
-        watch(&mut self.last_seen_bytes, Babel::new(stream), msg.0)
+        watch(&mut self.last_seen_bytes, Babel::new(stream), &msg.0)
     }
 }
 
@@ -117,15 +117,15 @@ fn get_babel_info<T: Read + Write>(
 }
 
 fn generate_helper_maps(
-    our_id: Identity,
-    clients: Vec<Identity>,
+    our_id: &Identity,
+    clients: &[Identity],
 ) -> Result<(HashMap<WgKey, Identity>, HashMap<IpAddr, Identity>), Error> {
     let mut identities: HashMap<WgKey, Identity> = HashMap::new();
     let mut id_from_ip: HashMap<IpAddr, Identity> = HashMap::new();
     let our_settings = SETTING.get_network();
     id_from_ip.insert(our_settings.mesh_ip.unwrap(), our_id.clone());
 
-    for ident in &clients {
+    for ident in clients.iter() {
         identities.insert(ident.wg_public_key.clone(), ident.clone());
         id_from_ip.insert(ident.mesh_ip, ident.clone());
     }
@@ -179,8 +179,16 @@ pub fn update_usage_history(
     usage_history: &mut HashMap<WgKey, WgUsage>,
 ) {
     for (wg_key, bytes) in counters.iter() {
-        match usage_history.get(&wg_key) {
-            Some(_) => (),
+        match usage_history.get_mut(&wg_key) {
+            Some(history) => {
+                // tunnel has been reset somehow, reset usage
+                if history.download > bytes.download {
+                    history.download = 0;
+                }
+                if history.upload > bytes.upload {
+                    history.download = 0;
+                }
+            }
             None => {
                 trace!(
                     "We have not seen {:?} before, starting counter off at {:?}",
@@ -197,12 +205,11 @@ pub fn update_usage_history(
 pub fn watch<T: Read + Write>(
     usage_history: &mut HashMap<WgKey, WgUsage>,
     babel: Babel<T>,
-    clients: Vec<Identity>,
+    clients: &[Identity],
 ) -> Result<(), Error> {
     // the number of bytes provided under the free tier, (kbps * seconds) * 125 = bytes
-    // plus a 20% fudge factor to deal with bursty traffic
     let free_tier_threshold: u64 =
-        u64::from(SETTING.get_payment().free_tier_throughput) * EXIT_LOOP_SPEED * 150u64;
+        u64::from(SETTING.get_payment().free_tier_throughput) * EXIT_LOOP_SPEED * 125u64;
 
     let our_price = SETTING.get_exit_network().exit_price;
     let our_id = match SETTING.get_identity() {
@@ -213,7 +220,7 @@ pub fn watch<T: Read + Write>(
         }
     };
 
-    let (identities, id_from_ip) = generate_helper_maps(our_id.clone(), clients)?;
+    let (identities, id_from_ip) = generate_helper_maps(&our_id, clients)?;
     let destinations = get_babel_info(babel, our_id.clone(), id_from_ip)?;
 
     let counters = match KI.read_wg_counters("wg_exit") {
@@ -228,6 +235,7 @@ pub fn watch<T: Read + Write>(
     };
     counters_logging(&counters);
 
+    // creates new usage entires does not actualy update the values
     update_usage_history(&counters, usage_history);
 
     let mut debts = HashMap::new();
@@ -247,13 +255,11 @@ pub fn watch<T: Read + Write>(
         match state {
             (Some(id), Some(_dest), Some(history)) => match debts.get_mut(&id) {
                 Some(debt) => {
-                    // tunnel has been reset somehow, reset usage
-                    if history.download > bytes.download {
-                        history.download = 0;
-                    }
                     let used = bytes.download - history.download;
                     if free_tier_threshold < used {
-                        *debt -= i128::from(our_price) * i128::from(used - free_tier_threshold);
+                        let value = i128::from(our_price) * i128::from(used - free_tier_threshold);
+                        trace!("We are billing for {} bytes input (client output) subtracted from {} byte free tier times a exit price of {} for a total of -{}", used, free_tier_threshold, our_price, value);
+                        *debt -= value;
                     } else {
                         trace!("{:?} not billed under free tier rules", id);
                     }
@@ -273,8 +279,6 @@ pub fn watch<T: Read + Write>(
         }
     }
 
-    trace!("Collated input exit debts: {:?}", debts);
-
     // accounting for 'output'
     for (wg_key, bytes) in counters {
         let state = (
@@ -285,14 +289,12 @@ pub fn watch<T: Read + Write>(
         match state {
             (Some(id), Some(dest), Some(history)) => match debts.get_mut(&id) {
                 Some(debt) => {
-                    // tunnel has been reset somehow, reset usage
-                    if history.upload > bytes.upload {
-                        history.upload = 0;
-                    }
                     let used = bytes.upload - history.upload;
                     if free_tier_threshold < used {
-                        *debt -=
+                        let value =
                             i128::from(dest + our_price) * i128::from(used - free_tier_threshold);
+                        trace!("We are billing for {} bytes output (client input) subtracted from {} byte free tier times a exit dest price of {} for a total of -{}", used, free_tier_threshold, dest + our_price, value);
+                        *debt -= value;
                     } else {
                         trace!("{:?} not billed under free tier rules", id);
                     }
@@ -315,9 +317,12 @@ pub fn watch<T: Read + Write>(
 
     let mut traffic_vec = Vec::new();
     for (from, amount) in debts {
+        // Provides a 10% discount to encourage convergence
+        let discounted_amount = ((amount as f64) * 0.95 ) as i128;
+        trace!("discounted {} to {}", amount, discounted_amount);
         traffic_vec.push(Traffic {
             from: from,
-            amount: amount.into(),
+            amount: discounted_amount.into(),
         })
     }
     let update = debt_keeper::TrafficUpdate {
@@ -339,6 +344,6 @@ mod tests {
     fn debug_babel_socket_client() {
         env_logger::init();
         let bm_stream = TcpStream::connect::<SocketAddr>("[::1]:9001".parse().unwrap()).unwrap();
-        watch(&mut HashMap::new(), Babel::new(bm_stream), Vec::new()).unwrap();
+        watch(&mut HashMap::new(), Babel::new(bm_stream), &[]).unwrap();
     }
 }

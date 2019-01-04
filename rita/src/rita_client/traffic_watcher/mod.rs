@@ -65,7 +65,7 @@ impl Handler<Watch> for TrafficWatcher {
             format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
         )?;
 
-        watch(self, Babel::new(stream), msg.exit_id, msg.exit_price)
+        watch(self, Babel::new(stream), &msg.exit_id, msg.exit_price)
     }
 }
 
@@ -74,10 +74,10 @@ impl Handler<Watch> for TrafficWatcher {
 pub fn watch<T: Read + Write>(
     history: &mut TrafficWatcher,
     mut babel: Babel<T>,
-    exit: Identity,
+    exit: &Identity,
     exit_price: u64,
 ) -> Result<(), Error> {
-    // the number of bytes provided under the free tier, (kbps * seconds) * (1000/8) = bytes
+    // the number of bytes provided under the free tier, (kbps * seconds) * 125 = bytes
     let free_tier_threshold: u64 =
         u64::from(SETTING.get_payment().free_tier_throughput) * CLIENT_LOOP_SPEED * 125u64;
 
@@ -191,17 +191,27 @@ pub fn watch<T: Read + Write>(
     // we have to pay our neighbor for what we send over them
     // remember pay per *forward* so we pay our neighbor for what we
     // send to the exit while we pay the exit to pay it's neighbor to eventually
-    // pay our neighbor to send data back to us.
+    // pay our neighbor to send data back to us. Here we only pay the exit the exit
+    // fee for traffic we send to it since our neighbors billing should be handled in
+    // rita_common but we do pay for return traffic here since it doesn't make sense
+    // to handle in the general case
     let mut owes_exit = 0i128;
     if input > free_tier_threshold {
-        owes_exit += i128::from(input - free_tier_threshold) * exit_dest_price;
+        let value = i128::from(input - free_tier_threshold) * exit_dest_price;
+        trace!("We are billing for {} bytes input subtracted from {} byte free tier times a exit dest price of {} for a total of {}", input, free_tier_threshold, exit_dest_price, value);
+        owes_exit += value;
     }
     if output > free_tier_threshold {
-        owes_exit += i128::from(exit_price * (output - free_tier_threshold));
+        let value = i128::from(exit_price * (output - free_tier_threshold));
+        trace!("We are billing for {} bytes output subtracted from {} byte free tier times a exit price of {} for a total of {}", output, free_tier_threshold, exit_price, value);
+        owes_exit += value;
     }
 
     if owes_exit > 0 {
         info!("Total client debt of {} this round", owes_exit);
+
+        // Provides a 10% increase to encourage convergence
+        let owes_exit = ((owes_exit as f64) * 1.05) as i128;
 
         let exit_update = TrafficUpdate {
             traffic: vec![Traffic {
@@ -238,7 +248,7 @@ mod tests {
                 last_read_output: 0u64,
             },
             Babel::new(bm_stream),
-            Identity::new(
+            &Identity::new(
                 "0.0.0.0".parse().unwrap(),
                 Address::from_str("abababababababababab").unwrap(),
                 WgKey::from_str("abc0abc1abc2abc3abc4abc5abc6abc7abc8abc=").unwrap(),
