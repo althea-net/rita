@@ -108,11 +108,12 @@ impl PaymentController {
         let nonce = payment_settings.nonce.clone();
         let gas_price = payment_settings.gas_price.clone();
         info!(
-            "current balance: {:?}, payment of {:?}, from address {:#x} to address {:#x}",
+            "current balance: {:?}, payment of {:?}, from address {:#x} to address {:#x} with nonce {}",
             balance,
             pmt.amount,
             payment_settings.eth_address.unwrap(),
-            pmt.to.eth_address
+            pmt.to.eth_address,
+            nonce
         );
         if balance < pmt.amount {
             warn!("Not enough money to pay debts! Cutoff immenient");
@@ -174,7 +175,7 @@ impl PaymentController {
             Ok(open_stream) => Either::A(transaction_status.then(move |transaction_outcome| {
                 match transaction_outcome {
                     Ok(tx_id) => {
-                        trace!("Sending bw payment with txid: {:#66x}", tx_id);
+                        trace!("Sending bw payment with txid: {:#066x}", tx_id);
                         // add published txid to submission
                         pmt.txid = Some(tx_id);
                         Either::A(
