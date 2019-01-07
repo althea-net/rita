@@ -3,6 +3,7 @@ pub mod dashboard;
 pub mod debt_keeper;
 pub mod hello_handler;
 pub mod network_endpoints;
+pub mod oracle;
 pub mod payment_controller;
 pub mod payment_validator;
 pub mod peer_listener;

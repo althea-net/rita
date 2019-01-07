@@ -69,6 +69,7 @@ use crate::rita_common::dashboard::dao::*;
 use crate::rita_common::dashboard::debts::*;
 use crate::rita_common::dashboard::development::*;
 use crate::rita_common::dashboard::own_info::*;
+use crate::rita_common::dashboard::pricing::*;
 use crate::rita_common::dashboard::settings::*;
 use crate::rita_common::dashboard::wallet::*;
 
@@ -255,6 +256,12 @@ fn main() {
             .route("/wifi_settings/ssid", Method::POST, set_wifi_ssid)
             .route("/wifi_settings", Method::GET, get_wifi_config)
             .route("/withdraw/{address}/{amount}", Method::POST, withdraw)
+            .route(
+                "/auto_price/enabled/{status}",
+                Method::POST,
+                set_auto_pricing,
+            )
+            .route("/auto_price/enabled", Method::GET, auto_pricing_status)
             .route("/wipe", Method::POST, wipe)
     })
     .workers(1)

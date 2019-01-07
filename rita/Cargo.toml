@@ -26,7 +26,7 @@ guac_core = {git = "https://github.com/althea-mesh/guac_rs"}
 web3 = {git = "https://github.com/althea-mesh/guac_rs"}
 syslog = "4"
 actix = "0.7"
-actix-web = { version = "0.7", default_features = false }
+actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
 actix_derive = "0.3"
 bytes = "0.4"
 config = "0.9"
