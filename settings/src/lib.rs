@@ -242,6 +242,14 @@ fn default_free_tier_throughput() -> u32 {
     1000
 }
 
+fn default_price_oracle() -> bool {
+    true
+}
+
+fn default_oracle_url() -> String {
+    "https://updates.altheamesh.com/prices".to_string()
+}
+
 /// This struct is used by both rita and rita_exit to configure the dummy payment controller and
 /// debt keeper
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -282,6 +290,10 @@ pub struct PaymentSettings {
     /// chains, provided in name:port format
     #[serde(default = "default_node_list")]
     pub node_list: Vec<String>,
+    #[serde(default = "default_price_oracle")]
+    pub price_oracle_enabled: bool,
+    #[serde(default = "default_oracle_url")]
+    pub price_oracle_url: String,
 }
 
 impl Default for PaymentSettings {
@@ -302,6 +314,8 @@ impl Default for PaymentSettings {
             gas_price: 10000000000u64.into(), // 10 gwei
             net_version: None,
             node_list: Vec::new(),
+            price_oracle_enabled: true,
+            price_oracle_url: "https://updates.altheamesh.com/prices".to_string(),
         }
     }
 }

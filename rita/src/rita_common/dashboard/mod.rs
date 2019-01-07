@@ -5,6 +5,7 @@
 use ::actix::prelude::*;
 use ::actix::registry::SystemService;
 use ::actix_web::http::StatusCode;
+use ::actix_web::Path;
 use ::actix_web::*;
 
 use failure::Error;
@@ -38,6 +39,7 @@ pub mod dao;
 pub mod debts;
 pub mod development;
 pub mod own_info;
+pub mod pricing;
 pub mod settings;
 pub mod wallet;
 

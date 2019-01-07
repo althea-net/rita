@@ -38,6 +38,8 @@ use crate::rita_common::tunnel_manager::PeersToContact;
 
 use crate::rita_common::payment_validator::{PaymentValidator, Validate};
 
+use crate::rita_common::oracle::{Oracle, Update};
+
 use failure::Error;
 
 use futures::Future;
@@ -142,6 +144,8 @@ impl Handler<Tick> for RitaLoop {
 
         // Check payments
         PaymentValidator::from_registry().do_send(Validate());
+        // Update blockchain info
+        Oracle::from_registry().do_send(Update());
 
         let start = Instant::now();
         Arbiter::spawn(
@@ -190,118 +194,6 @@ impl Handler<Tick> for RitaLoop {
                         start.elapsed().subsec_millis(),
                     );
                     TunnelManager::from_registry().send(PeersToContact::new(peers.unwrap())) // GetPeers never fails so unwrap is safe
-                })
-                .then(|_| Ok(())),
-        );
-
-        let full_node = get_web3_server();
-        let web3 = Web3::new(&full_node);
-        let our_address = SETTING.get_payment().eth_address.expect("No address!");
-        trace!("About to make web3 requests to {}", full_node);
-        Arbiter::spawn(
-            web3.eth_get_balance(our_address)
-                .then(|balance| match balance {
-                    Ok(value) => {
-                        trace!("Got response from balance request {:?}", value);
-                        SETTING.get_payment_mut().balance = value;
-                        Ok(())
-                    }
-                    Err(e) => {
-                        warn!("Balance request failed with {:?}", e);
-                        Err(e)
-                    }
-                })
-                .then(|_| Ok(())),
-        );
-        Arbiter::spawn(
-            web3.net_version()
-                .then(|net_version| match net_version {
-                    Ok(value) => {
-                        trace!("Got response from net_version request {:?}", value);
-                        match value.parse::<u64>() {
-                            Ok(net_id_num) => {
-                                let mut payment_settings = SETTING.get_payment_mut();
-                                let net_version = payment_settings.net_version;
-                                // we could just take the first value and keept it but for now
-                                // lets check that all nodes always agree on net version constantly
-                                if net_version.is_some() && net_version.unwrap() != net_id_num {
-                                    error!("GOT A DIFFERENT NETWORK ID VALUE, IT IS CRITICAL THAT YOU REVIEW YOUR NODE LIST FOR HOSTILE/MISCONFIGURED NODES");
-                                }
-                                else if net_version.is_none() {
-                                    payment_settings.net_version = Some(net_id_num);
-                                }
-                            }
-                            Err(e) => warn!("Failed to parse ETH network ID {:?}", e),
-                        }
-
-                        Ok(())
-                    }
-                    Err(e) => {
-                        warn!("net_version request failed with {:?}", e);
-                        Err(e)
-                    }
-                }).then(|_| Ok(())),
-        );
-        Arbiter::spawn(
-            web3.eth_get_transaction_count(our_address)
-                .then(|transaction_count| match transaction_count {
-                    Ok(value) => {
-                        trace!("Got response from nonce request {:?}", value);
-                        let mut payment_settings = SETTING.get_payment_mut();
-                        // if we increased our nonce locally we're probably
-                        // right and should ignore the full node telling us otherwise
-                        if payment_settings.nonce < value {
-                            payment_settings.nonce = value;
-                        }
-                        Ok(())
-                    }
-                    Err(e) => {
-                        warn!("nonce request failed with {:?}", e);
-                        Err(e)
-                    }
-                })
-                .then(|_| Ok(())),
-        );
-        Arbiter::spawn(
-            web3.eth_gas_price()
-                .then(|gas_price| match gas_price {
-                    Ok(value) => {
-                        trace!("Got response from gas price request {:?}", value);
-                        // Dynamic fee computation
-                        let mut payment_settings = SETTING.get_payment_mut();
-
-                        let dynamic_fee_factor: Int256 =
-                            payment_settings.dynamic_fee_multiplier.into();
-                        let transaction_gas: Int256 = 21000.into();
-                        let neg_one = -1i32;
-                        let sign_flip: Int256 = neg_one.into();
-
-                        payment_settings.pay_threshold = transaction_gas
-                            * value.clone().to_int256().ok_or_else(|| {
-                                format_err!(
-                                    "gas price is too high to fit into 256 signed bit integer"
-                                )
-                            })?
-                            * dynamic_fee_factor.clone();
-                        trace!(
-                            "Dynamically set pay threshold to {:?}",
-                            payment_settings.pay_threshold
-                        );
-
-                        payment_settings.close_threshold =
-                            sign_flip * dynamic_fee_factor * payment_settings.pay_threshold.clone();
-                        trace!(
-                            "Dynamically set close threshold to {:?}",
-                            payment_settings.close_threshold
-                        );
-
-                        payment_settings.gas_price = value;
-                        Ok(())
-                    }
-                    Err(e) => {
-                        warn!("gas price request failed with {:?}", e);
-                        Err(e)
-                    }
                 })
                 .then(|_| Ok(())),
         );
