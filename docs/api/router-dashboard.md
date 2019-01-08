@@ -971,3 +971,53 @@ Withdraws the given amount in wei to the provided address.
 - Sample Call:
 
 `curl -v -XPOST http://192.168.10.1:4877/withdraw/0x31B98D14007bDEe637298086988A0bBd31184523/1000000000000000000`
+
+---
+
+## /auto_price/enabled
+
+Returns if auto pricing is enabled or not
+
+- URL: `<rita ip>:<rita_dashboard_port>/auto_price/enabled`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+{
+  true
+}
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl -v http://192.168.10.1:4877/auto_price/enabled`
+
+---
+
+## /auto_price/enabled/{status}
+
+Sets auto pricing value
+
+- URL: `<rita ip>:<rita_dashboard_port>/auto_price/enabled/true`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+()
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl -v -XPOST http://192.168.10.1:4877/auto_price/enabled/true`
