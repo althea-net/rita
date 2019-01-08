@@ -8,10 +8,11 @@
 //! to match. More advanced pricing systems may be broken out into their own file some day
 
 use ::actix::prelude::*;
-use actix_web::error::JsonPayloadError;
 use actix_web::error::PayloadError;
 use actix_web::*;
 use bytes::Bytes;
+use num256::Uint256;
+use num_traits::Zero;
 
 use futures::{future, Future};
 
@@ -88,7 +89,12 @@ fn update_balance(our_address: Address, web3: &Web3) {
         .then(|balance| match balance {
             Ok(value) => {
                 trace!("Got response from balance request {:?}", value);
-                SETTING.get_payment_mut().balance = value;
+                let our_balance = &mut SETTING.get_payment_mut().balance;
+                // if our balance is not zero and the response we get from the full node
+                // is zero either we very carefully emptied our wallet or it's that annoying Geth bug
+                if !(*our_balance != Uint256::zero() && value == Uint256::zero()) {
+                    *our_balance = value;
+                }
                 Ok(())
             }
             Err(e) => {
