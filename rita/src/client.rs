@@ -75,8 +75,8 @@ use crate::rita_common::dashboard::wallet::*;
 
 use crate::rita_common::network_endpoints::*;
 
-#[derive(Debug, Deserialize)]
-struct Args {
+#[derive(Debug, Deserialize, Default)]
+pub struct Args {
     flag_config: String,
     flag_platform: String,
     flag_future: bool,
@@ -113,6 +113,11 @@ lazy_static! {
     });
 }
 
+#[cfg(test)]
+lazy_static! {
+    pub static ref ARGS: Args = Args::default();
+}
+
 #[cfg(not(test))]
 lazy_static! {
     pub static ref KI: Box<dyn KernelInterface> = Box::new(LinuxCommandRunner {});
@@ -120,21 +125,24 @@ lazy_static! {
 
 #[cfg(not(test))]
 lazy_static! {
+    pub static ref ARGS: Args = Docopt::new((*USAGE).as_str())
+        .and_then(|d| d.deserialize())
+        .unwrap_or_else(|e| e.exit());
+}
+
+#[cfg(not(test))]
+lazy_static! {
     pub static ref SETTING: Arc<RwLock<RitaSettingsStruct>> = {
-        let args: Args = Docopt::new((*USAGE).as_str())
-            .and_then(|d| d.deserialize())
-            .unwrap_or_else(|e| e.exit());
+        let settings_file = &ARGS.flag_config;
+        let platform = &ARGS.flag_platform;
 
-        let settings_file = args.flag_config;
-        let platform = args.flag_platform;
+        let s = RitaSettingsStruct::new_watched(settings_file).unwrap();
 
-        let s = RitaSettingsStruct::new_watched(&settings_file).unwrap();
+        s.set_future(ARGS.flag_future);
 
-        s.set_future(args.flag_future);
+        clu::init(platform, s.clone());
 
-        clu::init(&platform, s.clone());
-
-        s.read().unwrap().write(&settings_file).unwrap();
+        s.read().unwrap().write(settings_file).unwrap();
         s
     };
 }

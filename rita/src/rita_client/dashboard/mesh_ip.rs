@@ -1,4 +1,6 @@
 use super::*;
+use crate::ARGS;
+use settings::FileWrite;
 
 pub fn get_mesh_ip(_req: HttpRequest) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     debug!("/mesh_ip GET hit");
@@ -57,6 +59,11 @@ pub fn set_mesh_ip(
         }
     }
 
+    // try and save the config and fail if we can't
+    if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+        return Box::new(future::err(e));
+    }
+    // it's now safe to restart the process, return an error if that fails somehow
     if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
         return Box::new(future::err(e));
     }
