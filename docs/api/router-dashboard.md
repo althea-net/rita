@@ -1021,3 +1021,27 @@ Sets auto pricing value
 - Sample Call:
 
 `curl -v -XPOST http://192.168.10.1:4877/auto_price/enabled/true`
+
+---
+
+## /blockchain/set/{chain}
+
+Sets the blockchain being used by the router, either 'eth' or 'rinkeby' currently
+
+- URL: `<rita ip>:<rita_dashboard_port>/blockchain/set/eth`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+()
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl -v -XPOST http://192.168.10.1:4877/blockchain/set/eth`
