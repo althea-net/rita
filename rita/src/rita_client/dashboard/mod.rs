@@ -52,4 +52,5 @@ pub mod interfaces;
 pub mod logging;
 pub mod mesh_ip;
 pub mod neighbors;
+pub mod system_chain;
 pub mod wifi;
