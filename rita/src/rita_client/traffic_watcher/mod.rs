@@ -90,13 +90,20 @@ pub fn watch<T: Read + Write>(
     let babel_neighs = babel.parse_neighs()?;
     trace!("Got neighs: {:?}", babel_neighs);
 
+    let max_fee = SETTING.get_payment().max_fee;
     let mut exit_route = None;
     for route in routes.iter() {
         // Only ip6
         if let IpNetwork::V6(ref ip) = route.prefix {
             // Only host addresses and installed routes
             if ip.prefix() == 128 && route.installed && IpAddr::V6(ip.ip()) == exit.mesh_ip {
-                exit_route = Some(route);
+                if route.price > max_fee {
+                    let mut capped_route = route.clone();
+                    capped_route.price = max_fee;
+                    exit_route = Some(capped_route);
+                } else {
+                    exit_route = Some(route.clone());
+                }
                 break;
             }
         }

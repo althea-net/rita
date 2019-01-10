@@ -13,7 +13,7 @@ fn default_local_fee() -> u32 {
     300_000u32 // 300kWei per byte
 }
 fn default_max_fee() -> u32 {
-    73333333u32 // 300kWei per byte
+    20_000_000u32 // $3/gb at $150 eth
 }
 
 fn default_close_fraction() -> Int256 {
