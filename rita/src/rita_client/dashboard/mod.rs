@@ -36,8 +36,8 @@ use crate::rita_common::peer_listener::PeerListener;
 use crate::rita_common::peer_listener::{Listen, UnListen};
 
 use crate::SETTING;
-use settings::ExitServer;
-use settings::RitaClientSettings;
+use settings::client::ExitServer;
+use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;
 
 use crate::KI;

@@ -31,7 +31,8 @@ use std::net::{IpAddr, SocketAddr, TcpStream};
 use ipnetwork::IpNetwork;
 
 use crate::SETTING;
-use settings::{RitaCommonSettings, RitaExitSettings};
+use settings::exit::RitaExitSettings;
+use settings::RitaCommonSettings;
 
 use failure::Error;
 
@@ -99,6 +100,7 @@ fn get_babel_info<T: Read + Write>(
         u64::from(babel.get_local_fee().unwrap()),
     );
 
+    let max_fee = SETTING.get_payment().max_fee;
     for route in &routes {
         // Only ip6
         if let IpNetwork::V6(ref ip) = route.prefix {
@@ -106,7 +108,13 @@ fn get_babel_info<T: Read + Write>(
             if ip.prefix() == 128 && route.installed {
                 match id_from_ip.get(&IpAddr::V6(ip.ip())) {
                     Some(id) => {
-                        destinations.insert(id.wg_public_key.clone(), u64::from(route.price));
+                        let price = if route.price > max_fee {
+                            max_fee
+                        } else {
+                            route.price
+                        };
+
+                        destinations.insert(id.wg_public_key.clone(), u64::from(price));
                     }
                     None => warn!("Can't find destinatoin for client {:?}", ip.ip()),
                 }

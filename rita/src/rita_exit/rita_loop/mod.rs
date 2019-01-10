@@ -26,7 +26,8 @@ use exit_db::models::Client;
 use failure::Error;
 
 use crate::SETTING;
-use settings::{RitaCommonSettings, RitaExitSettings};
+use settings::exit::RitaExitSettings;
+use settings::RitaCommonSettings;
 
 use althea_kernel_interface::{ExitClient, KI};
 

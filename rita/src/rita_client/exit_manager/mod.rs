@@ -25,7 +25,9 @@ use std::net::IpAddr;
 use althea_types::{ExitClientIdentity, ExitState};
 
 use crate::SETTING;
-use settings::{ExitServer, RitaClientSettings, RitaCommonSettings};
+use settings::RitaCommonSettings;
+use settings::client::ExitServer;
+use settings::client::RitaClientSettings;
 
 use crate::rita_client::rita_loop::Tick;
 use crate::rita_client::traffic_watcher::{TrafficWatcher, Watch};

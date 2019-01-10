@@ -232,6 +232,7 @@ fn update_gas_price(web3: &Web3) {
 struct PriceUpdate {
     client: u32,
     gateway: u32,
+    max: u32,
 }
 
 /// This is a very simple and early version of an automated pricing system
@@ -265,13 +266,16 @@ fn update_our_price() {
                                     // an explicit fashion
                                     match serde_json::from_slice::<PriceUpdate>(&new_prices) {
                                         Ok(new_prices) => {
-                                            // todo this always seemed to have a lot of false positives, bet that
+                                            // TODO this always seemed to have a lot of false positives, bet that
                                             // causes intermediaries to get priced like gateways
+
+                                            let mut payment = SETTING.get_payment_mut();
                                             if is_gateway {
-                                                SETTING.set_local_fee(new_prices.gateway);
+                                                payment.local_fee = new_prices.gateway;
                                             } else {
-                                                SETTING.set_local_fee(new_prices.client);
+                                                payment.local_fee = new_prices.client;
                                             }
+                                            payment.max_fee = new_prices.max;
 
                                             trace!("Successfully updated prices");
                                         }
