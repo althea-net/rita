@@ -22,8 +22,8 @@ pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
     let close_threshold = payment_settings.close_threshold.clone();
 
     let network_settings = SETTING.get_network();
-    let local_fee = SETTING.get_local_fee();
-    let metric_factor = SETTING.get_metric_factor();
+    let local_fee = SETTING.get_payment().local_fee;
+    let metric_factor = SETTING.get_network().metric_factor;
     let device = network_settings.device.clone();
 
     let reply = OwnInfo {

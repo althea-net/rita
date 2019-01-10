@@ -8,7 +8,8 @@ extern crate failure;
 extern crate lazy_static;
 
 use settings;
-use settings::{ExitVerifSettings, RitaCommonSettings, RitaExitSettings};
+use settings::exit::{ExitVerifSettings, RitaExitSettings};
+use settings::RitaCommonSettings;
 
 use ipgen;
 use rand;
@@ -80,7 +81,7 @@ pub fn cleanup() -> Result<(), Error> {
     Ok(())
 }
 
-fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), Error> {
+fn linux_init(config: Arc<RwLock<settings::client::RitaSettingsStruct>>) -> Result<(), Error> {
     cleanup()?;
     KI.restore_default_route(&mut config.get_network_mut().default_route)?;
 
@@ -193,8 +194,8 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
     // Yield the mut lock
     drop(payment_settings);
 
-    let local_fee = config.get_local_fee();
-    let metric_factor = config.get_metric_factor();
+    let local_fee = config.get_payment().local_fee;
+    let metric_factor = config.get_network().metric_factor;
     if local_fee == 0 {
         warn!("THIS NODE IS GIVING BANDWIDTH AWAY FOR FREE. PLEASE SET local_fee TO A NON-ZERO VALUE TO DISABLE THIS WARNING.");
     }
@@ -226,7 +227,9 @@ fn linux_init(config: Arc<RwLock<settings::RitaSettingsStruct>>) -> Result<(), E
     Ok(())
 }
 
-fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Result<(), Error> {
+fn linux_exit_init(
+    config: Arc<RwLock<settings::exit::RitaExitSettingsStruct>>,
+) -> Result<(), Error> {
     cleanup()?;
 
     let mut network_settings = config.get_network_mut();
@@ -324,8 +327,8 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
         },
     }
 
-    let local_fee = config.get_local_fee();
-    let metric_factor = config.get_metric_factor();
+    let local_fee = config.get_payment().local_fee;
+    let metric_factor = config.get_network().metric_factor;
 
     let stream = TcpStream::connect::<SocketAddr>(
         format!("[::1]:{}", config.get_network().babel_port).parse()?,
@@ -348,7 +351,7 @@ fn linux_exit_init(config: Arc<RwLock<settings::RitaExitSettingsStruct>>) -> Res
     Ok(())
 }
 
-pub fn init(platform: &str, settings: Arc<RwLock<settings::RitaSettingsStruct>>) {
+pub fn init(platform: &str, settings: Arc<RwLock<settings::client::RitaSettingsStruct>>) {
     match platform {
         "linux" => linux_init(settings.clone()).unwrap(),
         _ => unimplemented!(),
@@ -359,7 +362,7 @@ pub fn init(platform: &str, settings: Arc<RwLock<settings::RitaSettingsStruct>>)
     );
 }
 
-pub fn exit_init(platform: &str, settings: Arc<RwLock<settings::RitaExitSettingsStruct>>) {
+pub fn exit_init(platform: &str, settings: Arc<RwLock<settings::exit::RitaExitSettingsStruct>>) {
     match platform {
         "linux" => linux_exit_init(settings.clone()).unwrap(),
         _ => unimplemented!(),

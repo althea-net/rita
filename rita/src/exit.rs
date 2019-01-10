@@ -40,7 +40,8 @@ use env_logger;
 
 use openssl_probe;
 
-use settings::{RitaCommonSettings, RitaExitSettings, RitaExitSettingsStruct};
+use settings::exit::{RitaExitSettings, RitaExitSettingsStruct};
+use settings::RitaCommonSettings;
 
 use docopt::Docopt;
 #[cfg(not(test))]

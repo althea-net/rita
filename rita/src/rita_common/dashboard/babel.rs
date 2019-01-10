@@ -3,7 +3,7 @@ use super::*;
 pub fn get_local_fee(_req: HttpRequest) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     debug!("/local_fee GET hit");
     let mut ret = HashMap::new();
-    ret.insert("local_fee", SETTING.get_local_fee());
+    ret.insert("local_fee", SETTING.get_payment().local_fee);
 
     Box::new(future::ok(HttpResponse::Ok().json(ret)))
 }
@@ -11,7 +11,7 @@ pub fn get_local_fee(_req: HttpRequest) -> Box<dyn Future<Item = HttpResponse, E
 pub fn get_metric_factor(_req: HttpRequest) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     debug!("/local_fee GET hit");
     let mut ret = HashMap::new();
-    ret.insert("metric_factor", SETTING.get_metric_factor());
+    ret.insert("metric_factor", SETTING.get_network().metric_factor);
 
     Box::new(future::ok(HttpResponse::Ok().json(ret)))
 }
@@ -73,7 +73,7 @@ pub fn set_local_fee(path: Path<u32>) -> Box<dyn Future<Item = HttpResponse, Err
     };
 
     // Set the value in settings only after Babel successfuly accepts the passed value
-    SETTING.set_local_fee(new_fee);
+    SETTING.get_payment_mut().local_fee = new_fee;
 
     if new_fee == 0 {
         warn!("THIS NODE IS GIVING BANDWIDTH AWAY FOR FREE. PLEASE SET local_fee TO A NON-ZERO VALUE TO DISABLE THIS WARNING.");
@@ -140,7 +140,7 @@ pub fn set_metric_factor(path: Path<u32>) -> Box<dyn Future<Item = HttpResponse,
     };
 
     // Set the value in settings only after Babel successfuly accepts the passed value
-    SETTING.set_metric_factor(new_factor);
+    SETTING.get_network_mut().metric_factor = new_factor;
 
     if new_factor == 0 {
         warn!("THIS NODE DOESN'T PAY ATTENTION TO ROUTE QUALITY - IT'LL CHOOSE THE CHEAPEST ROUTE EVEN IF IT'S THE WORST LINK AROUND. PLEASE SET metric_factor TO A NON-ZERO VALUE TO DISABLE THIS WARNING.");

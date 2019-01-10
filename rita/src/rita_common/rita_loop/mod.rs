@@ -5,7 +5,6 @@
 //! all system functions. Anything that blocks will eventually filter up to block this loop and
 //! halt essential functions like opening tunnels and managing peers
 
-use num256::Int256;
 use std::time::{Duration, Instant};
 
 use rand::thread_rng;

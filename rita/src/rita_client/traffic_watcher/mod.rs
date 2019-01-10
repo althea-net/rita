@@ -21,7 +21,8 @@ use crate::KI;
 use crate::SETTING;
 use althea_types::{Identity, RTTimestamps};
 use babel_monitor::Babel;
-use settings::{RitaClientSettings, RitaCommonSettings};
+use settings::client::RitaClientSettings;
+use settings::RitaCommonSettings;
 
 pub struct TrafficWatcher {
     last_read_input: u64,

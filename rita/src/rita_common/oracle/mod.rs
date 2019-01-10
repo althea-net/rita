@@ -265,12 +265,14 @@ fn update_our_price() {
                                     // an explicit fashion
                                     match serde_json::from_slice::<PriceUpdate>(&new_prices) {
                                         Ok(new_prices) => {
-                                            // todo this always seemed to have a lot of false positives, bet that
+                                            // TODO this always seemed to have a lot of false positives, bet that
                                             // causes intermediaries to get priced like gateways
                                             if is_gateway {
-                                                SETTING.set_local_fee(new_prices.gateway);
+                                                SETTING.get_payment_mut().local_fee =
+                                                    new_prices.gateway;
                                             } else {
-                                                SETTING.set_local_fee(new_prices.client);
+                                                SETTING.get_payment_mut().local_fee =
+                                                    new_prices.client;
                                             }
 
                                             trace!("Successfully updated prices");
