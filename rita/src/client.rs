@@ -62,6 +62,7 @@ use crate::rita_client::dashboard::interfaces::*;
 use crate::rita_client::dashboard::logging::*;
 use crate::rita_client::dashboard::mesh_ip::*;
 use crate::rita_client::dashboard::neighbors::*;
+use crate::rita_client::dashboard::system_chain::*;
 use crate::rita_client::dashboard::wifi::*;
 
 use crate::rita_common::dashboard::babel::*;
@@ -146,6 +147,10 @@ lazy_static! {
 }
 
 fn main() {
+    // TODO remove in Beta 2
+    SETTING.get_payment_mut().node_list = vec!["https://eth.althea.org:443".to_string()];
+    SETTING.get_dao_mut().node_list = vec!["https://eth.althea.org:443".to_string()];
+
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
     openssl_probe::init_ssl_cert_env_vars();
@@ -262,6 +267,11 @@ fn main() {
                 set_auto_pricing,
             )
             .route("/auto_price/enabled", Method::GET, auto_pricing_status)
+            .route(
+                "/blockchain/set/{chain_id}",
+                Method::POST,
+                set_system_blockchain,
+            )
             .route("/wipe", Method::POST, wipe)
     })
     .workers(1)

@@ -315,7 +315,7 @@ impl Default for PaymentSettings {
             net_version: None,
             node_list: Vec::new(),
             price_oracle_enabled: true,
-            price_oracle_url: "https://updates.altheamesh.com/prices".to_string(),
+            price_oracle_url: String::new(),
         }
     }
 }
@@ -383,7 +383,7 @@ fn default_dao_enforcement() -> bool {
 }
 
 fn default_node_list() -> Vec<String> {
-    vec!["http://sasquatch.network:19545".to_string()]
+    vec!["https://eth.althea.org:443".to_string()]
 }
 
 fn default_dao_address() -> Vec<Address> {
