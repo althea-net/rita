@@ -40,7 +40,8 @@ use docopt::Docopt;
 #[cfg(not(test))]
 use settings::FileWrite;
 
-use settings::{RitaClientSettings, RitaCommonSettings, RitaSettingsStruct};
+use settings::client::{RitaClientSettings, RitaSettingsStruct};
+use settings::RitaCommonSettings;
 
 use actix::registry::SystemService;
 use actix::*;

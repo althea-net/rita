@@ -36,7 +36,8 @@ use rand::Rng;
 use exit_db::{models, schema};
 
 use crate::SETTING;
-use settings::{ExitVerifSettings, RitaExitSettings};
+use settings::exit::ExitVerifSettings;
+use settings::exit::RitaExitSettings;
 
 use ipnetwork::IpNetwork;
 

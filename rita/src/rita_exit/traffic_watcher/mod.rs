@@ -31,7 +31,8 @@ use std::net::{IpAddr, SocketAddr, TcpStream};
 use ipnetwork::IpNetwork;
 
 use crate::SETTING;
-use settings::{RitaCommonSettings, RitaExitSettings};
+use settings::exit::RitaExitSettings;
+use settings::RitaCommonSettings;
 
 use failure::Error;
 
