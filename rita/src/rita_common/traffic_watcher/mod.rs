@@ -107,12 +107,20 @@ pub fn get_babel_info<T: Read + Write>(
     let mut destinations = HashMap::new();
     let local_fee = babel.get_local_fee().unwrap();
 
+    let max_fee = SETTING.get_payment().max_fee;
     for route in &routes {
         // Only ip6
         if let IpNetwork::V6(ref ip) = route.prefix {
             // Only host addresses and installed routes
             if ip.prefix() == 128 && route.installed {
-                destinations.insert(IpAddr::V6(ip.ip()), i128::from(route.price + local_fee));
+                let price = if route.price > max_fee {
+                    max_fee
+                } else {
+                    route.price
+                };
+
+                //TODO gracefully handle exceeding max price
+                destinations.insert(IpAddr::V6(ip.ip()), i128::from(price + local_fee));
             }
         }
     }
