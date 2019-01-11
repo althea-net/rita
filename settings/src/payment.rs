@@ -29,7 +29,7 @@ fn default_pay_threshold() -> Int256 {
 }
 
 fn default_dynamic_fee_multiplier() -> u32 {
-    10
+    20
 }
 
 fn default_free_tier_throughput() -> u32 {
@@ -105,7 +105,7 @@ impl Default for PaymentSettings {
         PaymentSettings {
             local_fee: 3000000,
             max_fee: 73333333,
-            dynamic_fee_multiplier: 10,
+            dynamic_fee_multiplier: 20,
             free_tier_throughput: 1000,
             // computed as 10x the standard transaction cost on 12/2/18
             pay_threshold: 840_000_000_000_000i64.into(),
