@@ -30,7 +30,7 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
-use actix;
+use ::actix;
 
 use env_logger;
 
