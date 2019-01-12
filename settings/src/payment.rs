@@ -9,6 +9,13 @@ use clarity::{Address, PrivateKey};
 
 use num256::{Int256, Uint256};
 
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub enum SystemChain {
+    Ethereum,
+    Rinkeby,
+    Xdai,
+}
+
 fn default_local_fee() -> u32 {
     300_000u32 // 300kWei per byte
 }
@@ -46,6 +53,10 @@ fn default_oracle_url() -> String {
 
 fn default_node_list() -> Vec<String> {
     vec!["https://eth.althea.org:443".to_string()]
+}
+
+fn default_system_chain() -> SystemChain {
+    SystemChain::Ethereum
 }
 
 /// This struct is used by both rita and rita_exit to configure the dummy payment controller and
@@ -98,6 +109,8 @@ pub struct PaymentSettings {
     pub price_oracle_enabled: bool,
     #[serde(default = "default_oracle_url")]
     pub price_oracle_url: String,
+    #[serde(default = "default_system_chain")]
+    pub system_chain: SystemChain,
 }
 
 impl Default for PaymentSettings {
@@ -122,6 +135,7 @@ impl Default for PaymentSettings {
             node_list: Vec::new(),
             price_oracle_enabled: true,
             price_oracle_url: "https://updates.altheamesh.com/prices".to_string(),
+            system_chain: SystemChain::Ethereum,
         }
     }
 }

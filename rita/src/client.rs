@@ -30,8 +30,6 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
-use ::actix;
-
 use env_logger;
 
 use openssl_probe;
@@ -46,7 +44,7 @@ use settings::RitaCommonSettings;
 use actix::registry::SystemService;
 use actix::*;
 use actix_web::http::Method;
-use actix_web::*;
+use actix_web::{http, server, App};
 
 use std::sync::{Arc, RwLock};
 
@@ -281,6 +279,7 @@ fn main() {
                 Method::POST,
                 set_system_blockchain,
             )
+            .route("/blockchain/get/", Method::GET, get_system_blockchain)
             .route("/wipe", Method::POST, wipe)
     })
     .workers(1)
