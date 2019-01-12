@@ -1026,9 +1026,33 @@ Sets auto pricing value
 
 ## /blockchain/set/{chain}
 
-Sets the blockchain being used by the router, either 'eth' or 'rinkeby' currently
+Sets the blockchain being used by the router, either 'ethereum' or 'rinkeby' currently
 
 - URL: `<rita ip>:<rita_dashboard_port>/blockchain/set/eth`
+- Method: `POST`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+()
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl -v -XPOST http://192.168.10.1:4877/blockchain/set/ethereum`
+
+---
+
+## /blockchain/get
+
+Sets the blockchain being used by the router
+
+- URL: `<rita ip>:<rita_dashboard_port>/blockchain/get/`
 - Method: `GET`
 - URL Params: `None`
 - Data Params: `None`
@@ -1044,4 +1068,4 @@ Sets the blockchain being used by the router, either 'eth' or 'rinkeby' currentl
 
 - Sample Call:
 
-`curl -v -XPOST http://192.168.10.1:4877/blockchain/set/eth`
+`curl http://192.168.10.1:4877/blockchain/get/`

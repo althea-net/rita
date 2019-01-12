@@ -34,8 +34,6 @@ extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 
-use ::actix;
-
 use env_logger;
 
 use openssl_probe;
@@ -50,7 +48,7 @@ use settings::FileWrite;
 use actix::registry::SystemService;
 use actix::*;
 use actix_web::http::Method;
-use actix_web::*;
+use actix_web::{http, server, App};
 
 pub mod actix_utils;
 mod middleware;
