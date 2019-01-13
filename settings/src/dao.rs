@@ -17,7 +17,10 @@ fn default_dao_enforcement() -> bool {
 }
 
 fn default_node_list() -> Vec<String> {
-    vec!["https://eth.althea.org:443".to_string()]
+    vec![
+        "https://eth.althea.org:443".to_string(),
+        "https://mainnet.infura.io/v3/6b080f02d7004a8394444cdf232a7081".to_string(),
+    ]
 }
 
 fn default_dao_address() -> Vec<Address> {

@@ -52,7 +52,10 @@ fn default_oracle_url() -> String {
 }
 
 fn default_node_list() -> Vec<String> {
-    vec!["https://eth.althea.org:443".to_string()]
+    vec![
+        "https://eth.althea.org:443".to_string(),
+        "https://mainnet.infura.io/v3/6b080f02d7004a8394444cdf232a7081".to_string(),
+    ]
 }
 
 fn default_system_chain() -> SystemChain {

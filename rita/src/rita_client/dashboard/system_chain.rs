@@ -12,10 +12,16 @@ pub fn set_system_blockchain(
     let mut dao = SETTING.get_dao_mut();
 
     if id == SystemChain::Ethereum {
-        payment.node_list = vec!["https://eth.althea.org:443".to_string()];
+        payment.node_list = vec![
+            "https://eth.althea.org:443".to_string(),
+            "https://mainnet.infura.io/v3/6b080f02d7004a8394444cdf232a7081".to_string(),
+        ];
         payment.net_version = Some(2);
         payment.system_chain = SystemChain::Ethereum;
-        dao.node_list = vec!["https://eth.althea.org:443".to_string()];
+        dao.node_list = vec![
+            "https://eth.althea.org:443".to_string(),
+            "https://mainnet.infura.io/v3/6b080f02d7004a8394444cdf232a7081".to_string(),
+        ];
     } else if id == SystemChain::Rinkeby {
         payment.node_list = vec!["http://rinkeby.althea.org:8545".to_string()];
         payment.net_version = Some(4);
