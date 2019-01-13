@@ -16,7 +16,7 @@ pub fn set_system_blockchain(
             "https://eth.althea.org:443".to_string(),
             "https://mainnet.infura.io/v3/6b080f02d7004a8394444cdf232a7081".to_string(),
         ];
-        payment.net_version = Some(2);
+        payment.net_version = Some(1);
         payment.system_chain = SystemChain::Ethereum;
         dao.node_list = vec![
             "https://eth.althea.org:443".to_string(),
