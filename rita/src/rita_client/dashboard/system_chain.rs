@@ -22,6 +22,7 @@ pub fn set_system_blockchain(
             "https://eth.althea.org:443".to_string(),
             "https://mainnet.infura.io/v3/6b080f02d7004a8394444cdf232a7081".to_string(),
         ];
+        payment.price_oracle_url = "https://updates.altheamesh.com/prices".to_string();
     } else if id == SystemChain::Xdai {
         payment.node_list = vec!["https://dai.poa.network/".to_string()];
         payment.net_version = Some(100);
@@ -33,6 +34,7 @@ pub fn set_system_blockchain(
         payment.net_version = Some(4);
         payment.system_chain = SystemChain::Rinkeby;
         dao.node_list = vec!["http://rinkeby.althea.org:8545".to_string()];
+        payment.price_oracle_url = "https://updates.altheamesh.com/prices".to_string();
     } else {
         return Box::new(future::ok(
             HttpResponse::new(StatusCode::BAD_REQUEST)
