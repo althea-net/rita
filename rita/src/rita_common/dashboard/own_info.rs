@@ -1,6 +1,8 @@
 use super::*;
 use num256::{Int256, Uint256};
 
+pub static READABLE_VERSION: &str = "Beta 1";
+
 #[derive(Serialize)]
 pub struct OwnInfo {
     pub address: Address,
@@ -10,6 +12,7 @@ pub struct OwnInfo {
     pub pay_threshold: Int256,
     pub close_threshold: Int256,
     pub device: Option<String>,
+    pub rita_version: String,
     pub version: String,
 }
 
@@ -34,7 +37,8 @@ pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
         pay_threshold: pay_threshold,
         close_threshold: close_threshold,
         device: device,
-        version: env!("CARGO_PKG_VERSION").to_string(),
+        rita_version: env!("CARGO_PKG_VERSION").to_string(),
+        version: READABLE_VERSION.to_string(),
     };
     Ok(Json(reply))
 }

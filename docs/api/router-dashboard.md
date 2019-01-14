@@ -21,7 +21,8 @@ This file documents the dashboard API found in Rita client.
     "pay_threshold" 97000000,
     "close_threshold" "970000000"
     "device": "mynet-n750",
-    "version": "v0.1.1"
+    "rita_version": "v0.1.1",
+    "version": "Alpha 9",
 }
 ```
 
