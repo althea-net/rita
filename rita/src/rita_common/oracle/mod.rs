@@ -209,7 +209,7 @@ fn update_gas_price(web3: &Web3) {
                 );
 
                 payment_settings.close_threshold =
-                    sign_flip * dynamic_fee_factor * payment_settings.pay_threshold.clone();
+                    sign_flip * 4u32.into() * payment_settings.pay_threshold.clone();
                 trace!(
                     "Dynamically set close threshold to {:?}",
                     payment_settings.close_threshold
