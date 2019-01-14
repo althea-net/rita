@@ -1,8 +1,5 @@
 use config;
 
-use toml;
-
-use serde;
 use serde_json;
 
 use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
