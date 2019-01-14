@@ -1,4 +1,5 @@
 use clarity::{Address, PrivateKey};
+use std::str::FromStr;
 
 use num256::{Int256, Uint256};
 
@@ -7,6 +8,18 @@ pub enum SystemChain {
     Ethereum,
     Rinkeby,
     Xdai,
+}
+
+impl FromStr for SystemChain {
+    type Err = ();
+    fn from_str(s: &str) -> Result<SystemChain, ()> {
+        match s {
+            "Ethereum" => Ok(SystemChain::Ethereum),
+            "Rinkeby" => Ok(SystemChain::Rinkeby),
+            "Xdai" => Ok(SystemChain::Xdai),
+            _ => Err(()),
+        }
+    }
 }
 
 fn default_local_fee() -> u32 {
