@@ -126,7 +126,9 @@ impl Handler<CacheCallback> for DAOManager {
         };
 
         let has_vec = self.ident2dao.contains_key(&their_id);
-        let on_dao = num != Uint256::zero();
+        //let on_dao = num != Uint256::zero();
+        // everyone is always on the dao right now
+        let on_dao = true;
 
         if has_vec {
             let entry_vec = self.ident2dao.get_mut(&their_id).unwrap();
