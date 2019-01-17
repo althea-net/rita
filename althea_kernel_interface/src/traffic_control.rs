@@ -62,7 +62,9 @@ impl KernelInterface {
         }
 
         let stdout = &String::from_utf8(result.stdout)?;
-        Ok(stdout.contains("htb") && !stdout.contains("codel") && !stdout.contains("noqueue"))
+        Ok((stdout.contains("htb") || stdout.contains("tbf"))
+            && !stdout.contains("codel")
+            && !stdout.contains("noqueue"))
     }
 
     /// Determines if the provided interface has a configured qdisc

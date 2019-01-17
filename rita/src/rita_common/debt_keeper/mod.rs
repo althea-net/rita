@@ -119,6 +119,8 @@ impl Handler<PaymentFailed> for DebtKeeper {
         match msg.amount.to_int256() {
             Some(amount_int) => match self.debt_data.get_mut(&msg.to) {
                 Some(entry) => {
+                    // no need to check for negative amount_int because we're converting
+                    // from a uint256
                     entry.debt += amount_int.clone();
                     entry.total_payment_sent = entry
                         .total_payment_sent
@@ -126,7 +128,6 @@ impl Handler<PaymentFailed> for DebtKeeper {
                         .ok_or_else(|| {
                             format_err!("Unable to subtract amount from total payments sent")
                         })?;
-                    entry.debt_buffer.push_front(amount_int);
                     Ok(())
                 }
                 None => bail!("Payment failed but no debt! Somthing Must have gone wrong!"),
@@ -294,12 +295,9 @@ impl DebtKeeper {
     /// This updates a neighbor's debt and outputs a DebtAction if one is necessary.
     fn send_update(&mut self, ident: &Identity) -> Result<DebtAction, Error> {
         trace!("debt data: {:?}", self.debt_data);
-        // the number of bytes provided under the free tier, (kbps * seconds) * 125 = bytes
-        // plus a 20% fudge factor to deal with bursty traffic
-        let free_tier_threshold: u64 =
-            u64::from(SETTING.get_payment().free_tier_throughput) * COMMON_LOOP_SPEED * 150u64;
         let debt_data = self.get_debt_data_mut(ident);
-        let debt = debt_data.debt.clone();
+        // the debt we started this round with
+        let starting_debt = debt_data.debt.clone();
 
         let traffic = debt_data.debt_buffer.pop_front().unwrap();
         debt_data.debt_buffer.push_back(Int256::from(0));
@@ -307,7 +305,7 @@ impl DebtKeeper {
         trace!(
             "send_update for {:?}: debt: {:?}, payment balance: {:?}, traffic: {:?}",
             ident.mesh_ip,
-            debt,
+            starting_debt,
             debt_data.incoming_payments,
             traffic
         );
@@ -335,10 +333,15 @@ impl DebtKeeper {
             debt_data.debt += debt_data.incoming_payments.clone() + traffic;
             debt_data.incoming_payments = Int256::from(0);
 
-            // reduce debt by free tier amount if it's negative to try and trend to zero
-            // but not during tests to ease testing
+            // reduce debt if it's negative to try and trend to zero
+            // the edge case this is supposed to handle is if a node ran out of money and then
+            // crashed so it doesn't know what it owes the exit and it may come back hours later
+            // the other side of this coin is that we're causing a node running on the free tier
+            // to bounce in and out of it, this value is hand tuned to take the average round overrun
+            // and bring it below the close treshold once every 3 hours. If the client router has been
+            // refilled it should return to full function then
             if debt_data.debt < Int256::from(0) && cfg!(not(test)) {
-                debt_data.debt += free_tier_threshold.into();
+                debt_data.debt += 300_000_000u64.into();
             }
         }
 
@@ -358,7 +361,7 @@ impl DebtKeeper {
             );
             debt_data.action = DebtAction::SuspendTunnel;
             Ok(DebtAction::SuspendTunnel)
-        } else if (close_threshold < debt_data.debt) && (debt < close_threshold) {
+        } else if (close_threshold < debt_data.debt) && (starting_debt < close_threshold) {
             trace!("debt is above close threshold. resuming forwarding");
             debt_data.action = DebtAction::OpenTunnel;
             Ok(DebtAction::OpenTunnel)
