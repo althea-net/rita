@@ -2,6 +2,9 @@
 
 use super::*;
 
+use crate::ARGS;
+use settings::FileWrite;
+
 #[derive(Serialize)]
 pub struct ExitInfo {
     nickname: String,
@@ -244,6 +247,14 @@ pub fn select_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Er
     if exit_client.exits.contains_key(&exit_name) {
         info!("Selecting exit {:?}", exit_name);
         exit_client.current_exit = Some(exit_name);
+
+        // try and save the config and fail if we can't, this way we can run the save
+        // loop less often and not lose exit configs
+        drop(exit_client);
+        if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+            return Box::new(future::err(e));
+        }
+
         Box::new(future::ok(HttpResponse::Ok().json(ret)))
     } else {
         error!("Requested selection of an unknown exit {:?}", exit_name);
