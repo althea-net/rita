@@ -28,20 +28,6 @@ impl ToString for InterfaceMode {
     }
 }
 
-#[derive(Debug)]
-pub struct GetInterfaces;
-
-impl Message for GetInterfaces {
-    type Result = Result<HashMap<String, InterfaceMode>, Error>;
-}
-
-impl Handler<GetInterfaces> for Dashboard {
-    type Result = Result<HashMap<String, InterfaceMode>, Error>;
-    fn handle(&mut self, _msg: GetInterfaces, _ctx: &mut Self::Context) -> Self::Result {
-        get_interfaces()
-    }
-}
-
 /// Gets a list of interfaces and their modes by parsing UCI
 pub fn get_interfaces() -> Result<HashMap<String, InterfaceMode>, Error> {
     let mut retval = HashMap::new();
@@ -168,44 +154,41 @@ pub fn wlan2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, Erro
     })
 }
 
-impl Message for InterfaceToSet {
-    type Result = Result<(), Error>;
-}
-
-impl Handler<InterfaceToSet> for Dashboard {
-    type Result = Result<(), Error>;
-    fn handle(&mut self, msg: InterfaceToSet, _ctx: &mut Self::Context) -> Self::Result {
-        let iface_name = msg.interface;
-        let target_mode = msg.mode;
-        let interfaces = get_interfaces()?;
-        let current_mode = get_current_interface_mode(&interfaces, &iface_name);
-        if !interfaces.contains_key(&iface_name) {
-            bail!("Attempted to configure non-existant or unavailable itnerface!");
-        } else if target_mode == InterfaceMode::WAN {
-            // we can only have one WAN interface, check for others
-            for entry in interfaces {
-                let mode = entry.1;
-                if mode == InterfaceMode::WAN {
-                    bail!("There can only be one WAN interface!");
-                }
-            }
-        } else if target_mode == InterfaceMode::LAN && !iface_name.contains("wlan") {
-            // we can only have one LAN ethernet interface, check for others
-            for entry in interfaces {
-                let mode = entry.1;
-                if mode == InterfaceMode::LAN {
-                    bail!("There can only be one LAN ethernet interface!");
-                }
+fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), Error> {
+    trace!("InterfaceToSet recieved");
+    let iface_name = iface_name;
+    let target_mode = mode;
+    let interfaces = get_interfaces()?;
+    let current_mode = get_current_interface_mode(&interfaces, iface_name);
+    if !interfaces.contains_key(iface_name) {
+        bail!("Attempted to configure non-existant or unavailable itnerface!");
+    } else if target_mode == InterfaceMode::WAN {
+        // we can only have one WAN interface, check for others
+        for entry in interfaces {
+            let mode = entry.1;
+            if mode == InterfaceMode::WAN {
+                bail!("There can only be one WAN interface!");
             }
         }
-
-        // in theory you can have all sorts of wonky interface names, but we know
-        // that we hardcode wlan0 and wlan0 as wlan iface names so we check for that
-        if iface_name.contains("wlan") {
-            wlan_transform_mode(&iface_name, current_mode, target_mode)
-        } else {
-            ethernet_transform_mode(&iface_name, current_mode, target_mode)
+    } else if target_mode == InterfaceMode::LAN && !iface_name.contains("wlan") {
+        // we can only have one LAN ethernet interface, check for others
+        for entry in interfaces {
+            let name = entry.0;
+            let mode = entry.1;
+            if mode == InterfaceMode::LAN && !name.contains("wlan") {
+                bail!("There can only be one LAN ethernet interface!");
+            }
         }
+    }
+
+    // in theory you can have all sorts of wonky interface names, but we know
+    // that we hardcode wlan0 and wlan0 as wlan iface names so we check for that
+    if iface_name.contains("wlan") {
+        trace!("Transforming wlan");
+        wlan_transform_mode(iface_name, current_mode, target_mode)
+    } else {
+        trace!("Transforming ethernet");
+        ethernet_transform_mode(iface_name, current_mode, target_mode)
     }
 }
 
@@ -570,23 +553,23 @@ mod tests {
 
 pub fn get_interfaces_endpoint(
     _req: HttpRequest,
-) -> Box<dyn Future<Item = Json<HashMap<String, InterfaceMode>>, Error = Error>> {
+) -> Result<Json<HashMap<String, InterfaceMode>>, Error> {
     debug!("get /interfaces hit");
-    Dashboard::from_registry()
-        .send(GetInterfaces)
-        .from_err()
-        .and_then(move |reply| Ok(Json(reply?)))
-        .responder()
+    match get_interfaces() {
+        Ok(val) => Ok(Json(val)),
+        Err(e) => Err(e),
+    }
 }
 
-pub fn set_interfaces_endpoint(
-    interface: Json<InterfaceToSet>,
-) -> Box<dyn Future<Item = Json<()>, Error = Error>> {
+pub fn set_interfaces_endpoint(interface: Json<InterfaceToSet>) -> HttpResponse {
+    let interface = interface.into_inner();
     debug!("set /interfaces hit");
-    let to_set = interface.into_inner();
-    Dashboard::from_registry()
-        .send(to_set)
-        .from_err()
-        .and_then(move |_| Ok(Json(())))
-        .responder()
+
+    match set_interface_mode(&interface.interface, interface.mode) {
+        Ok(_) => HttpResponse::Ok().into(),
+        Err(e) => {
+            error!("Set interfaces failed with {:?}", e);
+            HttpResponse::InternalServerError().into()
+        }
+    }
 }
