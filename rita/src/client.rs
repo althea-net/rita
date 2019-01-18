@@ -30,6 +30,11 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
+extern crate guac_http;
+
+use guac_core::Guac;
+use guac_http::init_guac;
+
 use env_logger;
 
 use openssl_probe;
@@ -151,6 +156,18 @@ lazy_static! {
 lazy_static! {
     pub static ref SETTING: Arc<RwLock<RitaSettingsStruct>> =
         { Arc::new(RwLock::new(RitaSettingsStruct::default())) };
+}
+
+lazy_static! {
+    pub static ref GUAC: Arc<Guac> = {
+        Arc::new(init_guac(
+            SETTING.get_network().guac_contact_port,
+            SETTING.get_payment().channel_contract_address,
+            SETTING.get_payment().eth_address.unwrap(),
+            SETTING.get_payment().eth_private_key.unwrap(),
+            SETTING.get_payment().node_list[0].clone(),
+        ))
+    };
 }
 
 fn main() {

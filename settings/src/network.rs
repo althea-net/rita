@@ -16,6 +16,10 @@ fn default_metric_factor() -> u32 {
     1_900u32
 }
 
+fn default_guac_contact_port() -> u16 {
+    4875
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
     /// How much non-financial metrics matter compared to a route's cost. By default a 2x more
@@ -39,6 +43,9 @@ pub struct NetworkSettings {
     /// Port on which rita contacts other althea nodes over the mesh (needs to be constant across an
     /// entire althea deployment)
     pub rita_contact_port: u16,
+    /// Port on which Guac instances communicate about channels
+    #[serde(default = "default_guac_contact_port")]
+    pub guac_contact_port: u16,
     /// Port over which the dashboard will be accessible upon
     pub rita_dashboard_port: u16,
     /// Port over which the bounty hunter will be contacted
@@ -90,7 +97,8 @@ impl Default for NetworkSettings {
             babel_port: 6872,
             rita_hello_port: 4876,
             rita_dashboard_port: 4877,
-            rita_contact_port: 4875,
+            rita_contact_port: 4874,
+            guac_contact_port: default_guac_contact_port(),
             bounty_port: 8888,
             rita_tick_interval: 5,
             wg_private_key: None,

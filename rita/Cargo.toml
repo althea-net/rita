@@ -23,6 +23,7 @@ num256 = "0.2"
 settings = { path = "../settings" }
 
 guac_core = {git = "https://github.com/althea-mesh/guac_rs"}
+guac_http = {git = "https://github.com/althea-mesh/guac_rs"}
 web3 = {git = "https://github.com/althea-mesh/guac_rs"}
 syslog = "4"
 actix = "0.7"

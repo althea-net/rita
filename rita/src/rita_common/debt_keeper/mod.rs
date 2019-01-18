@@ -20,8 +20,6 @@ use crate::rita_common::tunnel_manager::TunnelAction;
 use crate::rita_common::tunnel_manager::TunnelManager;
 use crate::rita_common::tunnel_manager::TunnelStateChange;
 
-use crate::rita_common::rita_loop::COMMON_LOOP_SPEED;
-
 use failure::Error;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -25,6 +25,7 @@ use std::collections::HashSet;
 
 use futures::Future;
 
+use crate::GUAC;
 use crate::SETTING;
 
 // Discard payments after 30 minutes of failing to find txid
