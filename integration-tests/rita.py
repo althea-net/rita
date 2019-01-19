@@ -343,7 +343,7 @@ def start_rita(node):
 
     settings["network"]["wg_private_key_path"] = "{pwd}/private-key-{id}".format(id=id, pwd=dname)
     settings["network"]["peer_interfaces"] = node.get_veth_interfaces()
-    settings["local_fee"] = node.local_fee
+    settings["payment"]["local_fee"] = node.local_fee
     settings["metric_factor"] = 0 # We explicity want to disregard quality
     save_rita_settings(id, settings)
     time.sleep(0.2)
@@ -368,7 +368,7 @@ def start_rita_exit(node):
 
     settings["network"]["wg_private_key_path"] = "{pwd}/private-key-{id}".format(id=id, pwd=dname)
     settings["network"]["peer_interfaces"] = node.get_veth_interfaces()
-    settings["local_fee"] = node.local_fee
+    settings["payment"]["local_fee"] = node.local_fee
     settings["metric_factor"] = 0 # We explicity want to disregard quality
     save_rita_settings(id, settings)
     time.sleep(0.2)
