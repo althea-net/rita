@@ -166,10 +166,10 @@ impl Handler<Tick> for RitaLoop {
                                                         &ip,
                                                     )
                                                 } else {
-                                                    // set to 50mbps garunteed bandwidth and 5gbps
+                                                    // set to 1gbps garunteed bandwidth and 5gbps
                                                     // absolute max
                                                     KI.set_class_limit(
-                                                        "wg_exit", 50000, 5_000_000, &ip,
+                                                        "wg_exit", 1_000_000, 5_000_000, &ip,
                                                     )
                                                 };
                                                 if res.is_err() {
