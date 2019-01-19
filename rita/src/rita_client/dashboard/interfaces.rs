@@ -1,5 +1,7 @@
 //! A generalized interface for modifying networking interface assignments using UCI
 use super::*;
+use crate::ARGS;
+use settings::FileWrite;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InterfaceToSet {
@@ -318,6 +320,7 @@ pub fn ethernet_transform_mode(
 
     KI.uci_commit(&"network")?;
     KI.openwrt_reset_network()?;
+    SETTING.write().unwrap().write(&ARGS.flag_config)?;
 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
@@ -457,6 +460,7 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
     KI.uci_commit(&"network")?;
     KI.openwrt_reset_network()?;
     KI.openwrt_reset_wireless()?;
+    SETTING.write().unwrap().write(&ARGS.flag_config)?;
 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
