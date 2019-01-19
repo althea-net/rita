@@ -198,6 +198,7 @@ fn main() {
             payment.dynamic_fee_multiplier = XDAI_FEE_MULTIPLIER;
         }
     }
+    warn!("THIS VERSION OF RITA IS A SPECIAL TRANSITION BETA 1 IF YOU WHERE NOT SPECIFICALLY GIVEN THIS FIRMWARE DO NOT USE!");
 
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.

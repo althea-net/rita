@@ -1178,7 +1178,9 @@ fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, Vec<Tunnel>>) -> Result<()
             let has_limit = KI.has_limit(iface_name)?;
 
             if *payment_state == PaymentState::Overdue {
-                KI.set_classless_limit(iface_name, bw_per_iface)?;
+                // CHANGED FOR SPECIAL BUILD!
+                //KI.set_classless_limit(iface_name, bw_per_iface)?;
+                KI.set_codel_shaping(iface_name, None)?;
             } else if *payment_state == PaymentState::Paid && has_limit {
                 KI.set_codel_shaping(iface_name, None)?;
             }

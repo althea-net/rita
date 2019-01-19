@@ -502,12 +502,14 @@ pub fn enforce_exit_clients(
                                             == DebtAction::SuspendTunnel
                                         {
                                             info!("Exit is enforcing on {} because their debt of {} is greater than the limit of {}", client.wg_pubkey, debt_entry.payment_details.debt, close_threshold);
-                                            KI.set_class_limit(
-                                                "wg_exit",
-                                                free_tier_limit,
-                                                free_tier_limit,
-                                                &ip,
-                                            )
+                                            // KI.set_class_limit(
+                                            //     "wg_exit",
+                                            //     free_tier_limit,
+                                            //     free_tier_limit,
+                                            //     &ip,
+                                            // )
+                                            // changed for no-enforcement build
+                                            KI.set_class_limit("wg_exit", 100_000, 1_000_000, &ip)
                                         } else {
                                             // set to 500mbps garunteed bandwidth and 1gbps
                                             // absolute max
