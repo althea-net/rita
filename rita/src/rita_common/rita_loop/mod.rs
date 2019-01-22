@@ -16,8 +16,6 @@ use ::actix::registry::SystemService;
 
 use crate::actix_utils::ResolverWrapper;
 
-use web3::client::Web3;
-
 use crate::KI;
 
 use crate::rita_common::tunnel_manager::{GetNeighbors, TriggerGC, TunnelManager};
@@ -30,8 +28,8 @@ use crate::rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 
 use crate::rita_common::peer_listener::GetPeers;
 
-use crate::rita_common::dao_manager::DAOCheck;
 use crate::rita_common::dao_manager::DAOManager;
+use crate::rita_common::dao_manager::DAOUpdate;
 
 use crate::rita_common::tunnel_manager::PeersToContact;
 
@@ -117,18 +115,19 @@ impl Handler<Tick> for RitaLoop {
                 }),
         );
 
-        trace!("Starting DAOManager loop");
         Arbiter::spawn(
             TunnelManager::from_registry()
                 .send(GetNeighbors)
                 .then(move |neighbors| {
                     match neighbors {
                         Ok(Ok(neighbors)) => {
-                            trace!("Sending DAOCheck");
+                            trace!("Sending DAOUpdate");
+                            let mut neighbor_ids = Vec::new();
                             for neigh in neighbors.iter() {
                                 let their_id = neigh.identity.global;
-                                DAOManager::from_registry().do_send(DAOCheck(their_id));
+                                neighbor_ids.push(their_id);
                             }
+                            DAOManager::from_registry().do_send(DAOUpdate(neighbor_ids));
                         }
                         Ok(Err(e)) => {
                             trace!("Failed to get neighbors from tunnel manager {:?}", e);
