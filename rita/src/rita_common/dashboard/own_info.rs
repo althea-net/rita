@@ -1,7 +1,7 @@
 use super::*;
 use num256::{Int256, Uint256};
 
-pub static READABLE_VERSION: &str = "Beta 1 RC4";
+pub static READABLE_VERSION: &str = "Beta 2 RC0";
 
 #[derive(Serialize)]
 pub struct OwnInfo {
