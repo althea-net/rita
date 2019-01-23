@@ -154,16 +154,6 @@ lazy_static! {
 }
 
 fn main() {
-    // TODO remove in Beta 2
-    SETTING.get_payment_mut().node_list = vec![
-        "https://eth.althea.org:443".to_string(),
-        "https://mainnet.infura.io/v3/6b080f02d7004a8394444cdf232a7081".to_string(),
-    ];
-    SETTING.get_dao_mut().node_list = vec![
-        "https://eth.althea.org:443".to_string(),
-        "https://mainnet.infura.io/v3/6b080f02d7004a8394444cdf232a7081".to_string(),
-    ];
-
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
     openssl_probe::init_ssl_cert_env_vars();
