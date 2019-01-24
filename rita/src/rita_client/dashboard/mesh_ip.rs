@@ -1,6 +1,4 @@
 use super::*;
-use crate::ARGS;
-use settings::FileWrite;
 
 pub fn get_mesh_ip(_req: HttpRequest) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     debug!("/mesh_ip GET hit");

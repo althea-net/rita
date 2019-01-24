@@ -32,6 +32,11 @@ pub fn remote_logging_level(
 
     SETTING.get_log_mut().level = log_level.to_string();
 
+    // try and save the config and fail if we can't
+    if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+        return Box::new(future::err(e));
+    }
+
     if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
         return Box::new(future::err(e));
     }
