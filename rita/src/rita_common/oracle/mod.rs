@@ -192,6 +192,12 @@ fn update_gas_price(web3: &Web3) {
                 trace!("Got response from gas price request {:?}", value);
                 // Dynamic fee computation
                 let mut payment_settings = SETTING.get_payment_mut();
+                if value > 0u16.into() {
+                    payment_settings.gas_price = value;
+                } else {
+                    // minimum gas price, for xdai where gas is free
+                    payment_settings.gas_price = 1_000_000u128.into();
+                }
 
                 let dynamic_fee_factor: Int256 = payment_settings.dynamic_fee_multiplier.into();
                 let transaction_gas: Int256 = 21000.into();
@@ -199,9 +205,13 @@ fn update_gas_price(web3: &Web3) {
                 let sign_flip: Int256 = neg_one.into();
 
                 payment_settings.pay_threshold = transaction_gas
-                    * value.clone().to_int256().ok_or_else(|| {
-                        format_err!("gas price is too high to fit into 256 signed bit integer")
-                    })?
+                    * payment_settings
+                        .gas_price
+                        .clone()
+                        .to_int256()
+                        .ok_or_else(|| {
+                            format_err!("gas price is too high to fit into 256 signed bit integer")
+                        })?
                     * dynamic_fee_factor.clone();
                 trace!(
                     "Dynamically set pay threshold to {:?}",
@@ -215,7 +225,6 @@ fn update_gas_price(web3: &Web3) {
                     payment_settings.close_threshold
                 );
 
-                payment_settings.gas_price = value;
                 Ok(())
             }
             Err(e) => {
