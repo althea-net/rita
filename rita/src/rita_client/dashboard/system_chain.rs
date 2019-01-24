@@ -27,7 +27,7 @@ pub fn set_system_blockchain(
         payment.system_chain = SystemChain::Ethereum;
         payment.price_oracle_url = "https://updates.altheamesh.com/prices".to_string();
     } else if id == SystemChain::Xdai {
-        payment.node_list = vec!["https://dai.poa.network/".to_string()];
+        payment.node_list = vec!["https://dai.althea.org/".to_string()];
         payment.net_version = Some(100);
         payment.system_chain = SystemChain::Xdai;
         payment.price_oracle_url = "https://updates.altheamesh.com/xdaiprices".to_string();
