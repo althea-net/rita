@@ -198,6 +198,11 @@ pub fn exits_sync(
     }
     exits.extend(new_exits);
 
+    // try and save the config and fail if we can't
+    if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+        return Box::new(future::err(e));
+    }
+
     Box::new(future::ok(HttpResponse::Ok().json(exits.clone())))
 }
 

@@ -75,6 +75,11 @@ pub fn set_local_fee(path: Path<u32>) -> Box<dyn Future<Item = HttpResponse, Err
     // Set the value in settings only after Babel successfuly accepts the passed value
     SETTING.get_payment_mut().local_fee = new_fee;
 
+    // try and save the config and fail if we can't
+    if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+        return Box::new(future::err(e));
+    }
+
     if new_fee == 0 {
         warn!("THIS NODE IS GIVING BANDWIDTH AWAY FOR FREE. PLEASE SET local_fee TO A NON-ZERO VALUE TO DISABLE THIS WARNING.");
         ret.insert("warning".to_owned(), "THIS NODE IS GIVING BANDWIDTH AWAY FOR FREE. PLEASE SET local_fee TO A NON-ZERO VALUE TO DISABLE THIS WARNING.".to_owned());
@@ -141,6 +146,11 @@ pub fn set_metric_factor(path: Path<u32>) -> Box<dyn Future<Item = HttpResponse,
 
     // Set the value in settings only after Babel successfuly accepts the passed value
     SETTING.get_network_mut().metric_factor = new_factor;
+
+    // try and save the config and fail if we can't
+    if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+        return Box::new(future::err(e));
+    }
 
     if new_factor == 0 {
         warn!("THIS NODE DOESN'T PAY ATTENTION TO ROUTE QUALITY - IT'LL CHOOSE THE CHEAPEST ROUTE EVEN IF IT'S THE WORST LINK AROUND. PLEASE SET metric_factor TO A NON-ZERO VALUE TO DISABLE THIS WARNING.");

@@ -14,6 +14,11 @@ pub fn add_to_dao_list(path: Path<(Address)>) -> Result<Json<()>, Error> {
         }
     }
     SETTING.get_dao_mut().dao_addresses.push(provided_address);
+
+    // try and save the config and fail if we can't
+    if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+        return Err(e);
+    }
     Ok(Json(()))
 }
 
@@ -31,6 +36,11 @@ pub fn remove_from_dao_list(path: Path<(Address)>) -> Result<Json<()>, Error> {
     }
     if found {
         SETTING.get_dao_mut().dao_addresses.remove(iter);
+    }
+
+    // try and save the config and fail if we can't
+    if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+        return Err(e);
     }
     Ok(Json(()))
 }
