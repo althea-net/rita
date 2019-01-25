@@ -378,12 +378,12 @@ impl DebtKeeper {
             debt_data.debt = Int256::from(0);
 
             debt_data.action = DebtAction::MakePayment {
-                to: ident.clone(),
+                to: *ident,
                 amount: d.clone(),
             };
 
             Ok(DebtAction::MakePayment {
-                to: ident.clone(),
+                to: *ident,
                 amount: d,
             })
         } else {
@@ -408,7 +408,7 @@ pub struct GetDebtsResult {
 impl GetDebtsResult {
     pub fn new(identity: &Identity, payment_details: &NodeDebtData) -> GetDebtsResult {
         GetDebtsResult {
-            identity: identity.clone(),
+            identity: *identity,
             payment_details: payment_details.clone(),
         }
     }
@@ -610,7 +610,7 @@ mod tests {
                 .unwrap(),
         };
 
-        d.traffic_update(&ident.clone(), Int256::from(-50));
+        d.traffic_update(&ident, Int256::from(-50));
 
         assert_eq!(d.send_update(&ident).unwrap(), DebtAction::None,);
 

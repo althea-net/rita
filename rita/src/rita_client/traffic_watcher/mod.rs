@@ -220,7 +220,7 @@ pub fn watch<T: Read + Write>(
 
         let exit_update = TrafficUpdate {
             traffic: vec![Traffic {
-                from: exit.clone(),
+                from: *exit,
                 amount: owes_exit.into(),
             }],
         };

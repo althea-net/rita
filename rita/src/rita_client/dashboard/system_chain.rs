@@ -79,6 +79,6 @@ pub fn get_system_blockchain(
     debug!("/blockchain/ GET hit");
 
     Box::new(future::ok(
-        HttpResponse::Ok().json(SETTING.get_payment().system_chain.clone()),
+        HttpResponse::Ok().json(SETTING.get_payment().system_chain),
     ))
 }
