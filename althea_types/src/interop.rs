@@ -2,6 +2,7 @@ use crate::wg_key::WgKey;
 use clarity::Address;
 use num256::Uint256;
 use std::net::IpAddr;
+use std::str::FromStr;
 
 #[cfg(feature = "actix")]
 use actix::*;
@@ -20,6 +21,31 @@ impl Identity {
             mesh_ip,
             eth_address,
             wg_public_key,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Hash, Clone, Eq, PartialEq, Copy)]
+pub enum SystemChain {
+    Ethereum,
+    Rinkeby,
+    Xdai,
+}
+
+impl Default for SystemChain {
+    fn default() -> SystemChain {
+        SystemChain::Ethereum
+    }
+}
+
+impl FromStr for SystemChain {
+    type Err = ();
+    fn from_str(s: &str) -> Result<SystemChain, ()> {
+        match s {
+            "Ethereum" => Ok(SystemChain::Ethereum),
+            "Rinkeby" => Ok(SystemChain::Rinkeby),
+            "Xdai" => Ok(SystemChain::Xdai),
+            _ => Err(()),
         }
     }
 }
@@ -140,6 +166,7 @@ pub struct ExitDetails {
     pub netmask: u8,
     pub wg_exit_port: u16,
     pub exit_price: u64,
+    pub exit_currency: SystemChain,
     pub description: String,
     #[serde(default = "default_verif_mode")]
     pub verif_mode: ExitVerifMode,

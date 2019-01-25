@@ -38,6 +38,7 @@ use exit_db::{models, schema};
 use crate::SETTING;
 use settings::exit::ExitVerifSettings;
 use settings::exit::RitaExitSettings;
+use settings::RitaCommonSettings;
 
 use ipnetwork::IpNetwork;
 
@@ -205,6 +206,7 @@ pub fn get_exit_info() -> ExitDetails {
         server_internal_ip: SETTING.get_exit_network().own_internal_ip,
         wg_exit_port: SETTING.get_exit_network().wg_tunnel_port,
         exit_price: SETTING.get_exit_network().exit_price,
+        exit_currency: SETTING.get_payment().system_chain,
         netmask: SETTING.get_exit_network().netmask,
         description: SETTING.get_description(),
         verif_mode: match SETTING.get_verif_settings() {
