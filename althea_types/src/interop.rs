@@ -38,6 +38,10 @@ impl Default for SystemChain {
     }
 }
 
+fn default_system_chain() -> SystemChain {
+   SystemChain::default()
+}
+
 impl FromStr for SystemChain {
     type Err = ();
     fn from_str(s: &str) -> Result<SystemChain, ()> {
@@ -166,6 +170,8 @@ pub struct ExitDetails {
     pub netmask: u8,
     pub wg_exit_port: u16,
     pub exit_price: u64,
+    // TODO remove this in Beta 3
+    #[serde(default = "default_system_chain")]
     pub exit_currency: SystemChain,
     pub description: String,
     #[serde(default = "default_verif_mode")]

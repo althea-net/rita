@@ -1,6 +1,5 @@
 use althea_types::SystemChain;
 use clarity::{Address, PrivateKey};
-use std::str::FromStr;
 
 use num256::{Int256, Uint256};
 
