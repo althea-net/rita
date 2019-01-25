@@ -8,7 +8,7 @@ use std::str::FromStr;
 use actix::*;
 
 /// This is how nodes are identified.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct Identity {
     pub mesh_ip: IpAddr,
     pub eth_address: Address,

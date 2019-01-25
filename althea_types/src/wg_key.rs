@@ -5,7 +5,7 @@ use serde::Deserializer;
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Hash, Debug, Clone, Eq, PartialEq)]
+#[derive(Hash, Debug, Copy, Clone, Eq, PartialEq)]
 pub struct WgKey([u8; 32]);
 
 impl AsRef<[u8]> for WgKey {
