@@ -1,6 +1,6 @@
 use super::*;
 
-use settings::payment::SystemChain;
+use althea_types::SystemChain;
 
 /// Changes the full node configuration value between test/prod and other networks
 pub fn set_system_blockchain(
