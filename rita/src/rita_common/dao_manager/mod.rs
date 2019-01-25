@@ -141,7 +141,7 @@ impl Handler<CacheCallback> for DAOManager {
                 entry.last_updated = Instant::now();
                 found_entry = true;
                 trace!("Updating exising entry {:?}", entry);
-                send_membership_message(on_dao, their_id.clone());
+                send_membership_message(on_dao, their_id);
             }
 
             // We can't place this into the match because the mutable ref lives even
@@ -153,7 +153,7 @@ impl Handler<CacheCallback> for DAOManager {
                 let entry = DAOEntry {
                     on_list: on_dao,
                     dao_address: dao_address,
-                    id: their_id.clone(),
+                    id: their_id,
                     last_updated: Instant::now(),
                 };
                 trace!("Adding new cache entry to existing ID {:?}", entry);
@@ -165,11 +165,11 @@ impl Handler<CacheCallback> for DAOManager {
             let entry = DAOEntry {
                 on_list: on_dao,
                 dao_address: dao_address,
-                id: their_id.clone(),
+                id: their_id,
                 last_updated: Instant::now(),
             };
             trace!("Creating new ID in cache {:?}", entry);
-            self.ident2dao.insert(their_id.clone(), vec![entry]);
+            self.ident2dao.insert(their_id, vec![entry]);
 
             send_membership_message(on_dao, their_id);
         }
@@ -184,7 +184,7 @@ fn timer_check(timestamp: Instant) -> bool {
 /// Sends off a message to TunnelManager about the dao state
 fn send_membership_message(on_dao: bool, their_id: Identity) {
     TunnelManager::from_registry().do_send(TunnelStateChange {
-        identity: their_id.clone(),
+        identity: their_id,
         action: if on_dao {
             TunnelAction::MembershipConfirmed
         } else {
@@ -212,15 +212,11 @@ fn check_cache(their_id: Identity, ident2dao: &HashMap<Identity, Vec<DAOEntry>>)
         Some(membership_list) => {
             for entry in membership_list.iter() {
                 if entry.on_list && timer_check(entry.last_updated) {
-                    trace!(
-                        "{:?} is on the SubnetDAO {:?}",
-                        their_id.clone(),
-                        entry.dao_address
-                    );
-                    send_membership_message(true, their_id.clone());
+                    trace!("{:?} is on the SubnetDAO {:?}", their_id, entry.dao_address);
+                    send_membership_message(true, their_id);
                 } else if !timer_check(entry.last_updated) {
                     trace!("Cache entry has expired, updating");
-                    get_membership(entry.dao_address, entry.id.clone());
+                    get_membership(entry.dao_address, entry.id);
                 }
             }
             trace!("{:?} is not on any SubnetDAO", their_id);
@@ -229,7 +225,7 @@ fn check_cache(their_id: Identity, ident2dao: &HashMap<Identity, Vec<DAOEntry>>)
         // Cache miss, do a lookup for all DAO's
         None => {
             for dao in dao_settings.dao_addresses.iter() {
-                get_membership(*dao, their_id.clone());
+                get_membership(*dao, their_id);
             }
         }
     }

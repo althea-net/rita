@@ -39,7 +39,7 @@ impl Default for SystemChain {
 }
 
 fn default_system_chain() -> SystemChain {
-   SystemChain::default()
+    SystemChain::default()
 }
 
 impl FromStr for SystemChain {

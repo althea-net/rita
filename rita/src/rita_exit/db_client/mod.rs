@@ -265,7 +265,7 @@ fn update_client(client: &ExitClientIdentity, conn: &SqliteConnection) -> Result
         .execute(&*conn)?;
 
     diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-        .set(wg_pubkey.eq(&client.global.wg_public_key.clone().to_string()))
+        .set(wg_pubkey.eq(&client.global.wg_public_key.to_string()))
         .execute(&*conn)?;
 
     diesel::update(clients.find(&client.global.mesh_ip.to_string()))
@@ -329,7 +329,7 @@ fn client_to_new_db_client(
     models::Client {
         wg_port: client.wg_port.to_string(),
         mesh_ip: client.global.mesh_ip.to_string(),
-        wg_pubkey: client.global.wg_public_key.clone().to_string(),
+        wg_pubkey: client.global.wg_public_key.to_string(),
         eth_address: client.global.eth_address.to_string(),
         internal_ip: new_ip.to_string(),
         email: client.reg_details.email.clone().unwrap_or_default(),

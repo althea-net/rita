@@ -89,9 +89,9 @@ pub fn prepare_helper_maps(
 
     for neigh in neighbors {
         // provides a lookup from mesh ip to identity
-        identities.insert(neigh.identity.global.mesh_ip, neigh.identity.global.clone());
+        identities.insert(neigh.identity.global.mesh_ip, neigh.identity.global);
         // provides a lookup from wireguard interface to mesh ip
-        if_to_id.insert(neigh.iface_name.clone(), neigh.identity.global.clone());
+        if_to_id.insert(neigh.iface_name.clone(), neigh.identity.global);
     }
     (identities, if_to_id)
 }

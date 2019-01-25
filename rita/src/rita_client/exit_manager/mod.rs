@@ -54,7 +54,6 @@ fn enable_remote_logging(logging_url: &str) -> Result<(), Error> {
     let key = SETTING
         .get_network()
         .wg_public_key
-        .clone()
         .expect("Tried to init remove logging without WgKey!");
     trace!("About to enable remote logging");
     let level: LevelFilter = match log.level.parse() {
@@ -99,7 +98,7 @@ fn linux_setup_exit_tunnel() -> Result<(), Error> {
     KI.setup_wg_if_named("wg_exit")?;
     KI.set_client_exit_tunnel_config(
         SocketAddr::new(current_exit.id.mesh_ip, general_details.wg_exit_port),
-        current_exit.id.wg_public_key.clone(),
+        current_exit.id.wg_public_key,
         SETTING.get_network().wg_private_key_path.clone(),
         SETTING.get_exit_client().wg_listen_port,
         our_details.client_internal_ip,
@@ -388,7 +387,7 @@ impl Handler<Tick> for ExitManager {
                 // run billing at all times when an exit is setup
                 if self.last_exit.is_some() {
                     let exit_price = general_details.exit_price;
-                    let exit_id = exit.id.clone();
+                    let exit_id = exit.id;
                     trace!("We are signed up for the selected exit!");
                     Arbiter::spawn(
                         TrafficWatcher::from_registry()

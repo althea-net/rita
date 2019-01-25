@@ -665,7 +665,7 @@ impl TunnelManager {
         trace!("getting existing tunnel or opening a new one");
         // ifidx must be a part of the key so that we can open multiple tunnels
         // if we have more than one physical connection to the same peer
-        let key = their_localid.global.clone();
+        let key = their_localid.global;
         let we_have_tunnel = self
             .tunnels
             .get(&key)
@@ -773,7 +773,7 @@ impl TunnelManager {
         }
         match tunnel.monitor(make_babel_stream()?) {
             Ok(_) => {
-                let new_key = tunnel.neigh_id.global.clone();
+                let new_key = tunnel.neigh_id.global;
                 // Add a tunnel to internal map based on identity, and interface index.
                 self.tunnels
                     .entry(new_key)
@@ -959,7 +959,7 @@ pub fn test_tunnel_manager_lookup() {
     // Create dummy tunnel
     tunnel_manager
         .tunnels
-        .entry(id.clone())
+        .entry(id)
         .or_insert_with(HashMap::new)
         .insert(
             0,
@@ -971,7 +971,7 @@ pub fn test_tunnel_manager_lookup() {
                 LocalIdentity {
                     wg_port: 65535,
                     have_tunnel: Some(true),
-                    global: id.clone(),
+                    global: id,
                 },
             ),
         );

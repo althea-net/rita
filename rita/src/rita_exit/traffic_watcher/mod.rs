@@ -114,7 +114,7 @@ fn get_babel_info<T: Read + Write>(
                             route.price
                         };
 
-                        destinations.insert(id.wg_public_key.clone(), u64::from(price));
+                        destinations.insert(id.wg_public_key, u64::from(price));
                     }
                     None => warn!("Can't find destinatoin for client {:?}", ip.ip()),
                 }
@@ -134,8 +134,8 @@ fn generate_helper_maps(
     id_from_ip.insert(our_settings.mesh_ip.unwrap(), our_id.clone());
 
     for ident in clients.iter() {
-        identities.insert(ident.wg_public_key.clone(), ident.clone());
-        id_from_ip.insert(ident.mesh_ip, ident.clone());
+        identities.insert(ident.wg_public_key, *ident);
+        id_from_ip.insert(ident.mesh_ip, *ident);
     }
 
     Ok((identities, id_from_ip))
@@ -229,7 +229,7 @@ pub fn watch<T: Read + Write>(
     };
 
     let (identities, id_from_ip) = generate_helper_maps(&our_id, clients)?;
-    let destinations = get_babel_info(babel, our_id.clone(), id_from_ip)?;
+    let destinations = get_babel_info(babel, our_id, id_from_ip)?;
 
     let counters = match KI.read_wg_counters("wg_exit") {
         Ok(res) => res,
