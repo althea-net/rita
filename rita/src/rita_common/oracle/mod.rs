@@ -161,11 +161,7 @@ fn update_nonce(our_address: Address, web3: &Web3) {
             Ok(value) => {
                 trace!("Got response from nonce request {:?}", value);
                 let mut payment_settings = SETTING.get_payment_mut();
-                // if we increased our nonce locally we're probably
-                // right and should ignore the full node telling us otherwise
-                if payment_settings.nonce < value {
-                    payment_settings.nonce = value;
-                }
+                payment_settings.nonce = value;
                 Ok(())
             }
             Err(e) => {
