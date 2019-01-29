@@ -13,10 +13,10 @@ use actix_web::*;
 use bytes::Bytes;
 use num256::Uint256;
 use num_traits::Zero;
+use std::time::Duration;
+use std::time::Instant;
 
 use futures::{future, Future};
-
-use std::time::Duration;
 
 use num256::Int256;
 
@@ -30,7 +30,9 @@ use crate::rita_common::rita_loop::get_web3_server;
 
 use crate::SETTING;
 
-pub struct Oracle {}
+pub struct Oracle {
+    last_updated: Instant,
+}
 
 impl Actor for Oracle {
     type Context = Context<Self>;
@@ -45,7 +47,9 @@ impl SystemService for Oracle {
 
 impl Oracle {
     pub fn new() -> Self {
-        Oracle {}
+        Oracle {
+            last_updated: Instant::now(),
+        }
     }
 }
 
@@ -55,6 +59,14 @@ impl Default for Oracle {
     }
 }
 
+/// How often we update all the Oracle values, currently every 1 minute
+pub const ORACLE_UPDATE_RATE: Duration = Duration::from_secs(60);
+
+/// True if an update should occur
+fn timer_check(timestamp: Instant) -> bool {
+    Instant::now() - timestamp > ORACLE_UPDATE_RATE
+}
+
 #[derive(Message)]
 pub struct Update();
 
@@ -62,20 +74,23 @@ impl Handler<Update> for Oracle {
     type Result = ();
 
     fn handle(&mut self, _msg: Update, _ctx: &mut Context<Self>) -> Self::Result {
-        let payment_settings = SETTING.get_payment();
-        let full_node = get_web3_server();
-        let web3 = Web3::new(&full_node);
-        let our_address = payment_settings.eth_address.expect("No address!");
-        let oracle_enabled = payment_settings.price_oracle_enabled;
-        drop(payment_settings);
+        if timer_check(self.last_updated) {
+            let payment_settings = SETTING.get_payment();
+            let full_node = get_web3_server();
+            let web3 = Web3::new(&full_node);
+            let our_address = payment_settings.eth_address.expect("No address!");
+            let oracle_enabled = payment_settings.price_oracle_enabled;
+            drop(payment_settings);
 
-        trace!("About to make web3 requests to {}", full_node);
-        update_balance(our_address, &web3);
-        update_nonce(our_address, &web3);
-        update_gas_price(&web3);
-        get_net_version(&web3);
-        if oracle_enabled {
-            update_our_price();
+            trace!("About to make web3 requests to {}", full_node);
+            update_balance(our_address, &web3);
+            update_nonce(our_address, &web3);
+            update_gas_price(&web3);
+            get_net_version(&web3);
+            if oracle_enabled {
+                update_our_price();
+            }
+            self.last_updated = Instant::now();
         }
     }
 }
