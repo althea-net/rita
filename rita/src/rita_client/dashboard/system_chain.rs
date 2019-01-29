@@ -53,9 +53,10 @@ pub fn set_system_blockchain(
             "https://mainnet.infura.io/v3/6b080f02d7004a8394444cdf232a7081".to_string(),
         ];
     } else if id == SystemChain::Xdai {
-        dao.node_list = vec!["https://dai.poa.network/".to_string()];
+        dao.node_list = vec!["https://dai.althea.org/".to_string()];
     } else if id == SystemChain::Rinkeby {
-        dao.node_list = vec!["http://rinkeby.althea.org:8545".to_string()];
+        dao.node_list =
+            vec!["https://rinkeby.infura.io/v3/174d2ebf288a452fab8a8f90eab57be7".to_string()];
     } else {
         return Box::new(future::ok(
             HttpResponse::new(StatusCode::BAD_REQUEST)
