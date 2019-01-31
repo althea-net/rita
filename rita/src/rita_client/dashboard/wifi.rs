@@ -2,6 +2,24 @@
 
 use super::*;
 
+// legal in the US and around the world, don't allow odd channels
+pub const ALLOWED_TWO: [u16; 3] = [1, 6, 11];
+// list of nonoverlapping 20mhz channels generally legal in NA, SA, EU, AU
+pub const ALLOWED_FIVE_20: [u16; 22] = [
+    36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 132, 136, 140, 144, 149, 153, 157,
+    161, 165,
+];
+// Note: all channels wider than 20mhz are specified using the first channel they overlap
+//       rather than the center value, no idea who though that was a good idea
+// list of nonoverlapping 40mhz channels generally legal in NA, SA, EU, AU
+pub const ALLOWED_FIVE_40: [u16; 12] = [36, 44, 52, 60, 100, 108, 116, 124, 132, 140, 149, 157];
+// list of nonoverlapping 80mhz channels generally legal in NA, SA, EU, AU
+pub const ALLOWED_FIVE_80: [u16; 6] = [36, 52, 100, 116, 132, 149];
+// list of nonoverlapping 80mhz channels for the GLB1300
+pub const ALLOWED_FIVE_80_B1300: [u16; 2] = [36, 149];
+// list of nonoverlapping 160mhz channels generally legal in NA, SA, EU, AU
+pub const ALLOWED_FIVE_160: [u16; 2] = [36, 100];
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct WifiInterface {
     #[serde(default)]
@@ -44,18 +62,31 @@ pub struct WifiPass {
     pub pass: String,
 }
 
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+pub struct WifiChannel {
+    pub radio: String,
+    pub channel: u16,
+}
+
 /// A string of characters which we don't let users use because of corrupted UCI configs
 static FORBIDDEN_CHARS: &'static str = "'/\"\\";
 
 static MINIMUM_PASS_CHARS: usize = 8;
 
 /// A helper error type for displaying UCI config value validation problems human-readably.
-#[derive(Debug, Fail)]
+#[derive(Debug, Fail, Serialize)]
 pub enum ValidationError {
     #[fail(display = "Illegal character {} at position {}", c, pos)]
     IllegalCharacter { pos: usize, c: char },
     #[fail(display = "Empty value")]
     Empty,
+    #[fail(
+        display = "Incorrect channel! Your radio has a channel width of {} please select one of {}",
+        _0, _1
+    )]
+    BadChannel(String, String),
+    #[fail(display = "Trying to set a 5ghz channel on a 2.4ghz radio or vice versa!")]
+    WrongRadio,
     #[fail(display = "Value too short ({} required)", _0)]
     TooShort(usize),
 }
@@ -127,6 +158,129 @@ pub fn set_wifi_pass(wifi_pass: Json<WifiPass>) -> Result<HttpResponse, Error> {
     KI.fs_sync()?;
 
     Ok(HttpResponse::Ok().json(ret))
+}
+
+pub fn set_wifi_channel(wifi_channel: Json<WifiChannel>) -> Result<HttpResponse, Error> {
+    debug!("/wifi_settings/channel hit with {:?}", wifi_channel);
+
+    let wifi_channel = wifi_channel.into_inner();
+    let current_channel: u16 = KI
+        .get_uci_var(&format!("wireless.{}.channel", wifi_channel.radio))?
+        .parse()?;
+    let five_channel_width = KI.get_uci_var(&format!("wireless.{}.htmode", wifi_channel.radio))?;
+
+    if let Err(e) = validate_channel(current_channel, wifi_channel.channel, &five_channel_width) {
+        return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
+            .into_builder()
+            .json(e));
+    }
+
+    KI.set_uci_var(
+        &format!("wireless.{}.channel", wifi_channel.radio),
+        &wifi_channel.channel.to_string(),
+    )?;
+    KI.uci_commit(&"wireless")?;
+    KI.openwrt_reset_wireless()?;
+
+    // We edited disk contents, force global sync
+    KI.fs_sync()?;
+
+    Ok(HttpResponse::Ok().json(()))
+}
+
+/// Validates that the channel is both correct and legal
+fn validate_channel(
+    old_val: u16,
+    new_val: u16,
+    five_channel_width: &str,
+) -> Result<(), ValidationError> {
+    let old_is_two = old_val < 20;
+    let old_is_five = !old_is_two;
+    let new_is_two = new_val < 20;
+    let new_is_five = !new_is_two;
+    let five_channel_width_is_20 = five_channel_width.contains("20");
+    let five_channel_width_is_40 = five_channel_width.contains("40");
+    let five_channel_width_is_80 = five_channel_width.contains("80");
+    let five_channel_width_is_160 = five_channel_width.contains("160");
+    let model = SETTING.get_network().device.clone();
+    // trying to swap from 5ghz to 2.4ghz or vice versa, usually this
+    // is impossible, although some multifunction cards allow it
+    if (old_is_two && new_is_five) || (old_is_five && new_is_two) {
+        Err(ValidationError::WrongRadio)
+    } else if new_is_two && !ALLOWED_TWO.contains(&new_val) {
+        Err(ValidationError::BadChannel(
+            "20".to_string(),
+            format!("{:?}", ALLOWED_TWO).to_string(),
+        ))
+    } else if five_channel_width_is_20 && !ALLOWED_FIVE_20.contains(&new_val) {
+        Err(ValidationError::BadChannel(
+            "20".to_string(),
+            format!("{:?}", ALLOWED_FIVE_20).to_string(),
+        ))
+    } else if five_channel_width_is_40 && !ALLOWED_FIVE_40.contains(&new_val) {
+        Err(ValidationError::BadChannel(
+            "40".to_string(),
+            format!("{:?}", ALLOWED_FIVE_40).to_string(),
+        ))
+    } else if five_channel_width_is_80 && !ALLOWED_FIVE_80.contains(&new_val) {
+        Err(ValidationError::BadChannel(
+            "80".to_string(),
+            format!("{:?}", ALLOWED_FIVE_80).to_string(),
+        ))
+    } else if five_channel_width_is_160 && !ALLOWED_FIVE_160.contains(&new_val) {
+        Err(ValidationError::BadChannel(
+            "160".to_string(),
+            format!("{:?}", ALLOWED_FIVE_160).to_string(),
+        ))
+    // model specific restrictions below this point
+    } else if model.is_some()
+        && model.unwrap().contains("gl-b1300")
+        && five_channel_width_is_80
+        && !ALLOWED_FIVE_80_B1300.contains(&new_val)
+    {
+        Err(ValidationError::BadChannel(
+            "80".to_string(),
+            format!("{:?}", ALLOWED_FIVE_80_B1300).to_string(),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+// returns what channels are allowed for the provided radio value
+pub fn get_allowed_wifi_channels(radio: Path<String>) -> Result<HttpResponse, Error> {
+    debug!("/wifi_settings/get_channels hit with {:?}", radio);
+    let radio = radio.into_inner();
+
+    let current_channel: u16 = KI
+        .get_uci_var(&format!("wireless.{}.channel", radio))?
+        .parse()?;
+    let five_channel_width = KI.get_uci_var(&format!("wireless.{}.htmode", radio))?;
+    let model = SETTING.get_network().device.clone();
+
+    if current_channel < 20 {
+        Ok(HttpResponse::Ok().json(ALLOWED_TWO))
+
+    // model specific values start here
+    } else if model.is_some()
+        && model.unwrap().contains("gl-b1300")
+        && five_channel_width.contains("80")
+    {
+        Ok(HttpResponse::Ok().json(ALLOWED_FIVE_80_B1300))
+    // model specific values end here
+    } else if five_channel_width.contains("20") {
+        Ok(HttpResponse::Ok().json(ALLOWED_FIVE_20))
+    } else if five_channel_width.contains("40") {
+        Ok(HttpResponse::Ok().json(ALLOWED_FIVE_40))
+    } else if five_channel_width.contains("80") {
+        Ok(HttpResponse::Ok().json(ALLOWED_FIVE_80))
+    } else if five_channel_width.contains("160") {
+        Ok(HttpResponse::Ok().json(ALLOWED_FIVE_160))
+    } else {
+        Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
+            .into_builder()
+            .json("Can't identify Radio!"))
+    }
 }
 
 /// This function checks that a supplied string is non-empty and doesn't contain any of the
