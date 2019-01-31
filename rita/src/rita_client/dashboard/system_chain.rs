@@ -3,17 +3,13 @@ use super::*;
 use althea_types::SystemChain;
 
 /// Changes the full node configuration value between test/prod and other networks
-pub fn set_system_blockchain(
-    path: Path<String>,
-) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+pub fn set_system_blockchain(path: Path<String>) -> Result<HttpResponse, Error> {
     info!("Blockchain change endpoint hit!");
     let id: Result<SystemChain, ()> = path.into_inner().parse();
     if id.is_err() {
-        return Box::new(future::ok(
-            HttpResponse::new(StatusCode::BAD_REQUEST)
-                .into_builder()
-                .json(format!("Could not parse {:?} into a SystemChain enum!", id)),
-        ));
+        return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
+            .into_builder()
+            .json(format!("Could not parse {:?} into a SystemChain enum!", id)));
     }
     let id = id.unwrap();
 
@@ -38,11 +34,9 @@ pub fn set_system_blockchain(
         payment.system_chain = SystemChain::Rinkeby;
         payment.price_oracle_url = "https://updates.altheamesh.com/prices".to_string();
     } else {
-        return Box::new(future::ok(
-            HttpResponse::new(StatusCode::BAD_REQUEST)
-                .into_builder()
-                .json(format!("No known chain by the identifier {:?}", id)),
-        ));
+        return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
+            .into_builder()
+            .json(format!("No known chain by the identifier {:?}", id)));
     }
     drop(payment);
 
@@ -58,28 +52,22 @@ pub fn set_system_blockchain(
         dao.node_list =
             vec!["https://rinkeby.infura.io/v3/174d2ebf288a452fab8a8f90eab57be7".to_string()];
     } else {
-        return Box::new(future::ok(
-            HttpResponse::new(StatusCode::BAD_REQUEST)
-                .into_builder()
-                .json(format!("No known chain by the identifier {:?}", id)),
-        ));
+        return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
+            .into_builder()
+            .json(format!("No known chain by the identifier {:?}", id)));
     }
     drop(dao);
 
     // try and save the config and fail if we can't
     if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
-        return Box::new(future::err(e));
+        return Err(e);
     }
 
-    Box::new(future::ok(HttpResponse::Ok().json(())))
+    Ok(HttpResponse::Ok().json(()))
 }
 
-pub fn get_system_blockchain(
-    _req: HttpRequest,
-) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+pub fn get_system_blockchain(_req: HttpRequest) -> Result<HttpResponse, Error> {
     debug!("/blockchain/ GET hit");
 
-    Box::new(future::ok(
-        HttpResponse::Ok().json(SETTING.get_payment().system_chain),
-    ))
+    Ok(HttpResponse::Ok().json(SETTING.get_payment().system_chain))
 }
