@@ -59,8 +59,8 @@ impl Default for Oracle {
     }
 }
 
-/// How often we update all the Oracle values, currently every 1 minute
-pub const ORACLE_UPDATE_RATE: Duration = Duration::from_secs(60);
+/// How often we update all the Oracle values, currently every eth block
+pub const ORACLE_UPDATE_RATE: Duration = Duration::from_secs(15);
 
 /// True if an update should occur
 fn timer_check(timestamp: Instant) -> bool {
