@@ -118,6 +118,9 @@ impl PaymentController {
         if balance < pmt.amount {
             warn!("Not enough money to pay debts! Cutoff immenient");
             bail!("Not enough money!")
+        } else if pmt.amount == 0u32.into() {
+            error!("Trying to pay nothing!");
+            bail!("Zero payment!");
         }
 
         let contact_socket: SocketAddr = match format!(
@@ -175,7 +178,7 @@ impl PaymentController {
             Ok(open_stream) => Either::A(transaction_status.then(move |transaction_outcome| {
                 match transaction_outcome {
                     Ok(tx_id) => {
-                        trace!("Sending bw payment with txid: {:#066x}", tx_id);
+                        info!("Sending bw payment with txid: {:#066x}", tx_id);
                         // add published txid to submission
                         pmt.txid = Some(tx_id);
                         Either::A(
