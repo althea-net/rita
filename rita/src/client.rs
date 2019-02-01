@@ -265,7 +265,7 @@ fn main() {
             .route("/wifi_settings/channel", Method::POST, set_wifi_channel)
             .route(
                 "/wifi_settings/get_channels/{radio}",
-                Method::POST,
+                Method::GET,
                 get_allowed_wifi_channels,
             )
             .route("/wifi_settings", Method::GET, get_wifi_config)
