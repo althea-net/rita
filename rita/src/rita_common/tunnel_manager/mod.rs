@@ -543,6 +543,16 @@ fn contact_neighbor(peer: &Peer, our_port: u16) -> Result<(), Error> {
     Ok(())
 }
 
+/// determines if the list contains a tunnel with the given target ip
+fn have_tunnel_by_ip(ip: IpAddr, tunnels: &HashMap<u32, Tunnel>) -> bool {
+    for tunnel in tunnels.iter() {
+        if tunnel.1.ip == ip {
+            return true;
+        }
+    }
+    false
+}
+
 impl TunnelManager {
     pub fn new() -> Self {
         let start = SETTING.get_network().wg_start_port;
@@ -666,11 +676,14 @@ impl TunnelManager {
         // ifidx must be a part of the key so that we can open multiple tunnels
         // if we have more than one physical connection to the same peer
         let key = their_localid.global;
-        let we_have_tunnel = self
-            .tunnels
-            .get(&key)
-            .unwrap_or(&HashMap::new())
-            .contains_key(&peer.ifidx);
+
+        let we_have_tunnel = match self.tunnels.get(&key) {
+            Some(tunnels) => {
+                tunnels.contains_key(&peer.ifidx)
+                    && have_tunnel_by_ip(peer.contact_socket.ip(), tunnels)
+            }
+            None => false,
+        };
 
         let they_have_tunnel = match their_localid.have_tunnel {
             Some(v) => v,
