@@ -594,7 +594,7 @@ application/json" -d '\{"url": "https://somewhere.safe"\}'
 ## /wifi_settings/get_channels
 
 - URL: `<rita ip>:<rita_dashboard_port>/wifi_settings/get_channels/{radio}`
-- Method: `POST`
+- Method: `GET`
 - URL Params: `Content-Type: application/json`
 - Data Params: `Radio you wish to know the allowed channels of`
 - Success Response:
