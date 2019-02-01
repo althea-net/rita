@@ -561,6 +561,66 @@ application/json" -d '\{"url": "https://somewhere.safe"\}'
 
 ---
 
+## /wifi_settings/channel
+
+- URL: `<rita ip>:<rita_dashboard_port>/wifi_settings/channel`
+- Method: `POST`
+- URL Params: `Content-Type: application/json`
+- Data Params: `Radio to change the channel and and the channel`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+{}
+```
+
+- Error Response:
+  - Code: `400 Bad Request`
+  - Contents:
+
+```json
+{
+  "error": "<human-readable description>"
+}
+```
+
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:<rita_dashboard_port>/wifi_settings/channel -H 'Content-Type: application/json' -i -d '{"radio":"radio1", "channel": 34}'`
+
+---
+
+## /wifi_settings/get_channels
+
+- URL: `<rita ip>:<rita_dashboard_port>/wifi_settings/get_channels/{radio}`
+- Method: `GET`
+- URL Params: `Content-Type: application/json`
+- Data Params: `Radio you wish to know the allowed channels of`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+{[1,6,11]}
+```
+
+- Error Response:
+  - Code: `400 Bad Request`
+  - Contents:
+
+```json
+{
+  "error": "<human-readable description>"
+}
+```
+
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:<rita_dashboard_port>/wifi_settings/get_channels/radio0 -H 'Content-Type: application/json' -i -d ''`
+
+---
+
 ## /wipe
 
 **This endpoint works only on development builds and is meant only for development purposes**

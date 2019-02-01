@@ -19,9 +19,7 @@ pub fn get_mesh_ip(_req: HttpRequest) -> Box<dyn Future<Item = HttpResponse, Err
     Box::new(future::ok(HttpResponse::Ok().json(ret)))
 }
 
-pub fn set_mesh_ip(
-    mesh_ip_data: Json<HashMap<String, String>>,
-) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+pub fn set_mesh_ip(mesh_ip_data: Json<HashMap<String, String>>) -> Result<HttpResponse, Error> {
     debug!("/mesh_ip POST hit");
 
     let mut ret = HashMap::new();
@@ -59,13 +57,13 @@ pub fn set_mesh_ip(
 
     // try and save the config and fail if we can't
     if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
-        return Box::new(future::err(e));
+        return Err(e);
     }
     // it's now safe to restart the process, return an error if that fails somehow
     if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
-        return Box::new(future::err(e));
+        return Err(e);
     }
 
     // Note: This will never be reached
-    Box::new(future::ok(HttpResponse::Ok().json(ret)))
+    Ok(HttpResponse::Ok().json(ret))
 }

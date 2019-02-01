@@ -262,6 +262,12 @@ fn main() {
             .route("/version", Method::GET, version)
             .route("/wifi_settings/pass", Method::POST, set_wifi_pass)
             .route("/wifi_settings/ssid", Method::POST, set_wifi_ssid)
+            .route("/wifi_settings/channel", Method::POST, set_wifi_channel)
+            .route(
+                "/wifi_settings/get_channels/{radio}",
+                Method::GET,
+                get_allowed_wifi_channels,
+            )
             .route("/wifi_settings", Method::GET, get_wifi_config)
             .route("/withdraw/{address}/{amount}", Method::POST, withdraw)
             .route(
