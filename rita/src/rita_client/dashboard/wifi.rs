@@ -167,9 +167,9 @@ pub fn set_wifi_channel(wifi_channel: Json<WifiChannel>) -> Result<HttpResponse,
     let current_channel: u16 = KI
         .get_uci_var(&format!("wireless.{}.channel", wifi_channel.radio))?
         .parse()?;
-    let five_channel_width = KI.get_uci_var(&format!("wireless.{}.htmode", wifi_channel.radio))?;
+    let channel_width = KI.get_uci_var(&format!("wireless.{}.htmode", wifi_channel.radio))?;
 
-    if let Err(e) = validate_channel(current_channel, wifi_channel.channel, &five_channel_width) {
+    if let Err(e) = validate_channel(current_channel, wifi_channel.channel, &channel_width) {
         return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
             .into_builder()
             .json(e));
@@ -192,16 +192,16 @@ pub fn set_wifi_channel(wifi_channel: Json<WifiChannel>) -> Result<HttpResponse,
 fn validate_channel(
     old_val: u16,
     new_val: u16,
-    five_channel_width: &str,
+    channel_width: &str,
 ) -> Result<(), ValidationError> {
     let old_is_two = old_val < 20;
     let old_is_five = !old_is_two;
     let new_is_two = new_val < 20;
     let new_is_five = !new_is_two;
-    let five_channel_width_is_20 = five_channel_width.contains("20");
-    let five_channel_width_is_40 = five_channel_width.contains("40");
-    let five_channel_width_is_80 = five_channel_width.contains("80");
-    let five_channel_width_is_160 = five_channel_width.contains("160");
+    let channel_width_is_20 = channel_width.contains("20");
+    let channel_width_is_40 = channel_width.contains("40");
+    let channel_width_is_80 = channel_width.contains("80");
+    let channel_width_is_160 = channel_width.contains("160");
     let model = SETTING.get_network().device.clone();
     // trying to swap from 5ghz to 2.4ghz or vice versa, usually this
     // is impossible, although some multifunction cards allow it
@@ -212,22 +212,22 @@ fn validate_channel(
             "20".to_string(),
             format!("{:?}", ALLOWED_TWO).to_string(),
         ))
-    } else if five_channel_width_is_20 && !ALLOWED_FIVE_20.contains(&new_val) {
+    } else if new_is_five && channel_width_is_20 && !ALLOWED_FIVE_20.contains(&new_val) {
         Err(ValidationError::BadChannel(
             "20".to_string(),
             format!("{:?}", ALLOWED_FIVE_20).to_string(),
         ))
-    } else if five_channel_width_is_40 && !ALLOWED_FIVE_40.contains(&new_val) {
+    } else if new_is_five && channel_width_is_40 && !ALLOWED_FIVE_40.contains(&new_val) {
         Err(ValidationError::BadChannel(
             "40".to_string(),
             format!("{:?}", ALLOWED_FIVE_40).to_string(),
         ))
-    } else if five_channel_width_is_80 && !ALLOWED_FIVE_80.contains(&new_val) {
+    } else if new_is_five && channel_width_is_80 && !ALLOWED_FIVE_80.contains(&new_val) {
         Err(ValidationError::BadChannel(
             "80".to_string(),
             format!("{:?}", ALLOWED_FIVE_80).to_string(),
         ))
-    } else if five_channel_width_is_160 && !ALLOWED_FIVE_160.contains(&new_val) {
+    } else if new_is_five && channel_width_is_160 && !ALLOWED_FIVE_160.contains(&new_val) {
         Err(ValidationError::BadChannel(
             "160".to_string(),
             format!("{:?}", ALLOWED_FIVE_160).to_string(),
@@ -235,7 +235,8 @@ fn validate_channel(
     // model specific restrictions below this point
     } else if model.is_some()
         && model.unwrap().contains("gl-b1300")
-        && five_channel_width_is_80
+        && new_is_five
+        && channel_width_is_80
         && !ALLOWED_FIVE_80_B1300.contains(&new_val)
     {
         Err(ValidationError::BadChannel(
