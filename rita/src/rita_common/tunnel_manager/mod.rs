@@ -153,7 +153,7 @@ impl Tunnel {
             iface_name: iface_name,
             listen_ifidx: ifidx,
             listen_port: our_listen_port,
-            neigh_id: their_id.clone(),
+            neigh_id: their_id,
             last_contact: Instant::now(),
             // By default new tunnels are in Registered state
             state: TunnelState {
@@ -363,7 +363,7 @@ impl Handler<GetNeighbors> for TunnelManager {
         for (_, tunnels) in self.tunnels.iter() {
             for (_, tunnel) in tunnels.iter() {
                 res.push(Neighbor::new(
-                    tunnel.neigh_id.clone(),
+                    tunnel.neigh_id,
                     tunnel.iface_name.clone(),
                     tunnel.ip,
                 ));
@@ -774,7 +774,7 @@ impl TunnelManager {
             KI.setup_wg_if().unwrap(),
             our_port,
             peer.ifidx,
-            their_localid.clone(),
+            their_localid,
         );
         // Open tunnel
         match tunnel.open() {
