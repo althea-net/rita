@@ -22,17 +22,23 @@ pub fn set_system_blockchain(path: Path<String>) -> Result<HttpResponse, Error> 
         payment.net_version = Some(1);
         payment.system_chain = SystemChain::Ethereum;
         payment.price_oracle_url = "https://updates.altheamesh.com/prices".to_string();
+        // reset balance so that things take effect immediatley in the UI
+        payment.balance = 0u32.into();
     } else if id == SystemChain::Xdai {
         payment.node_list = vec!["https://dai.althea.org/".to_string()];
         payment.net_version = Some(100);
         payment.system_chain = SystemChain::Xdai;
         payment.price_oracle_url = "https://updates.altheamesh.com/xdaiprices".to_string();
+        // reset balance so that things take effect immediatley in the UI
+        payment.balance = 0u32.into();
     } else if id == SystemChain::Rinkeby {
         payment.node_list =
             vec!["https://rinkeby.infura.io/v3/174d2ebf288a452fab8a8f90eab57be7".to_string()];
         payment.net_version = Some(4);
         payment.system_chain = SystemChain::Rinkeby;
         payment.price_oracle_url = "https://updates.altheamesh.com/prices".to_string();
+        // reset balance so that things take effect immediatley in the UI
+        payment.balance = 0u32.into();
     } else {
         return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
             .into_builder()

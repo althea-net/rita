@@ -11,7 +11,6 @@ use ::actix_web::error::JsonPayloadError;
 use ::actix_web::*;
 use futures::future::ok;
 use futures::Future;
-use num_traits::Zero;
 use rand::thread_rng;
 use rand::Rng;
 use serde_json::Value;

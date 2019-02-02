@@ -178,7 +178,7 @@ pub struct ExitDetails {
     pub verif_mode: ExitVerifMode,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct ExitClientDetails {
     pub client_internal_ip: IpAddr,
 }
@@ -189,7 +189,7 @@ impl Message for Identity {
 }
 
 /// This is all the data we need to give a neighbor to open a wg connection
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct LocalIdentity {
     pub wg_port: u16,
     pub have_tunnel: Option<bool>, // If we have an existing tunnel, None if we don't know
