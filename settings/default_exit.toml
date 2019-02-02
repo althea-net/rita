@@ -35,6 +35,7 @@ exit_price = 50
 own_internal_ip = "172.168.1.254"
 exit_start_ip = "172.168.1.100"
 netmask = 24
+entry_timeout = 7776000
 
 [dao]
 dao_enforcement = false
