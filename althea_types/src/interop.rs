@@ -178,7 +178,7 @@ pub struct ExitDetails {
     pub verif_mode: ExitVerifMode,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct ExitClientDetails {
     pub client_internal_ip: IpAddr,
 }

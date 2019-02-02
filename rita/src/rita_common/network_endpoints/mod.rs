@@ -78,7 +78,7 @@ pub fn make_payments(
 pub fn hello_response(
     req: (Json<LocalIdentity>, HttpRequest),
 ) -> Box<dyn Future<Item = Json<LocalIdentity>, Error = Error>> {
-    let their_id = req.0.clone();
+    let their_id = *req.0;
 
     let socket = req
         .1
