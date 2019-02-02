@@ -35,6 +35,8 @@ use rand::Rng;
 
 use exit_db::{models, schema};
 
+use althea_kernel_interface::ExitClient;
+
 use crate::SETTING;
 use settings::exit::ExitVerifSettings;
 use settings::exit::RitaExitSettings;
@@ -254,7 +256,7 @@ fn incr_dummy(conn: &SqliteConnection) -> Result<IpAddr, Error> {
 }
 
 fn update_client(client: &ExitClientIdentity, conn: &SqliteConnection) -> Result<(), Error> {
-    use self::schema::clients::dsl::{clients, email, wg_port, wg_pubkey};
+    use self::schema::clients::dsl::{clients, email, last_seen, wg_port, wg_pubkey};
     let mail_addr = match client.clone().reg_details.email {
         Some(mail) => mail.clone(),
         None => bail!("Cloud not find email for {:?}", client.clone()),
@@ -270,6 +272,10 @@ fn update_client(client: &ExitClientIdentity, conn: &SqliteConnection) -> Result
 
     diesel::update(clients.find(&client.global.mesh_ip.to_string()))
         .set(email.eq(&mail_addr))
+        .execute(&*conn)?;
+
+    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
+        .set(last_seen.eq(secs_since_unix_epoch() as i32))
         .execute(&*conn)?;
 
     Ok(())
@@ -289,7 +295,7 @@ fn verify_client(
     Ok(())
 }
 
-fn secs_since_unix_epoch() -> i32 {
+pub fn secs_since_unix_epoch() -> i32 {
     let start = SystemTime::now();
     let since_the_epoch = start
         .duration_since(UNIX_EPOCH)
@@ -297,6 +303,8 @@ fn secs_since_unix_epoch() -> i32 {
     since_the_epoch.as_secs() as i32
 }
 
+// we match on email not key? that has interesting implications for
+// shared emails
 fn update_mail_sent_time(
     client: &ExitClientIdentity,
     conn: &SqliteConnection,
@@ -337,6 +345,7 @@ fn client_to_new_db_client(
         email_code: format!("{:06}", rand_code),
         verified: false,
         email_sent_time: 0,
+        last_seen: 0,
     }
 }
 
@@ -580,6 +589,60 @@ impl Handler<ClientStatus> for DbClient {
                 Ok(ExitState::New)
             }
         })
+    }
+}
+
+pub struct DeleteClient(pub ExitClient);
+impl Message for DeleteClient {
+    type Result = Result<(), Error>;
+}
+
+impl Handler<DeleteClient> for DbClient {
+    type Result = Result<(), Error>;
+
+    fn handle(&mut self, client: DeleteClient, _: &mut Self::Context) -> Self::Result {
+        use self::schema::clients::dsl::*;
+        let client = client.0;
+        info!("Deleting all clients in {:?}", &SETTING.get_db_file());
+        let connection = match SqliteConnection::establish(&SETTING.get_db_file()) {
+            Ok(connection) => connection,
+            Err(e) => {
+                error!("We could not connect to the database file! {:?}", e);
+                bail!("Could not connect to database file!")
+            }
+        };
+        let mesh_ip_string = client.mesh_ip.to_string();
+        let statement = clients.find(&mesh_ip_string);
+        r#try!(delete(statement).execute(&connection));
+        Ok(())
+    }
+}
+
+// for backwards compatibility with entires that do not have a timestamp
+// new entires will be initialized and updated as part of the normal flow
+pub struct SetClientTimestamp(pub ExitClient);
+impl Message for SetClientTimestamp {
+    type Result = Result<(), Error>;
+}
+
+impl Handler<SetClientTimestamp> for DbClient {
+    type Result = Result<(), Error>;
+
+    fn handle(&mut self, client: SetClientTimestamp, _: &mut Self::Context) -> Self::Result {
+        use self::schema::clients::dsl::*;
+        let client = client.0;
+        info!("Deleting all clients in {:?}", &SETTING.get_db_file());
+        let connection = match SqliteConnection::establish(&SETTING.get_db_file()) {
+            Ok(connection) => connection,
+            Err(e) => {
+                error!("We could not connect to the database file! {:?}", e);
+                bail!("Could not connect to database file!")
+            }
+        };
+        diesel::update(clients.find(&client.mesh_ip.to_string()))
+            .set(last_seen.eq(secs_since_unix_epoch() as i32))
+            .execute(&connection)?;
+        Ok(())
     }
 }
 

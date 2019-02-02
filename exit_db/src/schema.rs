@@ -10,5 +10,6 @@ table! {
         email_code -> Text,
         verified -> Bool,
         email_sent_time -> Integer,
+        last_seen -> Integer,
     }
 }

@@ -14,4 +14,5 @@ pub struct Client {
     pub verified: bool,
     // TODO change before 2038; it's left that way because diesel cannot do `Insertable` for i64
     pub email_sent_time: i32,
+    pub last_seen: i32,
 }
