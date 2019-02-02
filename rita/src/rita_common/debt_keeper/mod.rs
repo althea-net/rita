@@ -779,7 +779,7 @@ mod tests {
     fn test_multi_reopen() {
         SETTING.get_payment_mut().pay_threshold = Int256::from(5);
         SETTING.get_payment_mut().close_threshold = Int256::from(-10);
-        SETTING.get_payment_mut().close_fraction = Int256::from(1000000000);
+        SETTING.get_payment_mut().close_fraction = Int256::from(1_000_000_000);
         SETTING.get_payment_mut().buffer_period = 1;
 
         let mut d = DebtKeeper::new();
