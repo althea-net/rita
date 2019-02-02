@@ -190,7 +190,11 @@ fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), Error
         wlan_transform_mode(iface_name, current_mode, target_mode)
     } else {
         trace!("Transforming ethernet");
-        ethernet_transform_mode(iface_name, current_mode, target_mode)
+        ethernet_transform_mode(iface_name, current_mode, target_mode)?;
+        if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
+            return Err(e);
+        }
+        Ok(())
     }
 }
 
