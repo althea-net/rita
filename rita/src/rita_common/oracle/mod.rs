@@ -26,6 +26,8 @@ use clarity::Address;
 
 use settings::RitaCommonSettings;
 
+use althea_types::SystemChain;
+
 use crate::rita_common::rita_loop::get_web3_server;
 
 use crate::SETTING;
@@ -203,15 +205,15 @@ fn update_gas_price(web3: &Web3) {
                 trace!("Got response from gas price request {:?}", value);
                 // Dynamic fee computation
                 let mut payment_settings = SETTING.get_payment_mut();
-                let minimum_gas_price: Uint256 = 250_000_000_000u128.into();
-                if value < minimum_gas_price {
-                    // minimum gas price, for xdai where gas is free
-                    // since we use gas to adjust the payment limit
-                    payment_settings.gas_price = minimum_gas_price;
-                } else {
-                    payment_settings.gas_price = value;
+
+                if payment_settings.system_chain == SystemChain::Xdai {
+                    payment_settings.pay_threshold = 105_000_000_000_000_000u128.into();
+                    payment_settings.close_threshold = (420_000_000_000_000_000i128 * -1).into();
+                    payment_settings.gas_price = 250_000_000_000u128.into();
+                    return Ok(());
                 }
 
+                payment_settings.gas_price = value;
                 let dynamic_fee_factor: Int256 = payment_settings.dynamic_fee_multiplier.into();
                 let transaction_gas: Int256 = 21000.into();
                 let neg_one = -1i32;
