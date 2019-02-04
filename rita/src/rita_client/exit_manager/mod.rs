@@ -378,7 +378,10 @@ impl Handler<Tick> for ExitManager {
                 }
 
                 // enable remote logging only if it has not already been started
-                if !self.remote_logging_already_started && self.remote_logging_setting {
+                if !self.remote_logging_already_started
+                    && self.remote_logging_setting
+                    && option_env!("NO_REMOTE_LOG").is_none()
+                {
                     let res = enable_remote_logging(&self.dest_url);
                     self.remote_logging_already_started = true;
                     info!("logging status {:?}", res);
