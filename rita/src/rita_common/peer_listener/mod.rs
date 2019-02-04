@@ -7,9 +7,11 @@
 //! off the queue. These are turned into Peer structs which are passed to TunnelManager to do
 //! whatever remaining work there may be.
 
+use crate::ARGS;
 use ::actix::prelude::*;
 use ::actix::{Actor, Context};
 use failure::Error;
+use settings::FileWrite;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
@@ -133,6 +135,11 @@ impl Handler<Listen> for PeerListener {
                     .get_network_mut()
                     .peer_interfaces
                     .insert(new_iface_name);
+                SETTING
+                    .write()
+                    .unwrap()
+                    .write(&ARGS.flag_config)
+                    .expect("Failed to save config!");
             }
             Err(e) => {
                 error!("Peer listener failed to listen on {:?}", e);

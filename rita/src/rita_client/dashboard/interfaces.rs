@@ -191,9 +191,6 @@ fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), Error
     } else {
         trace!("Transforming ethernet");
         ethernet_transform_mode(iface_name, current_mode, target_mode)?;
-        if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
-            return Err(e);
-        }
         Ok(())
     }
 }
@@ -308,7 +305,8 @@ pub fn ethernet_transform_mode(
         let res = KI.uci_revert("network");
         bail!("Error running UCI commands! Revert attempted: {:?}", res);
     } else if mesh_add {
-        let when = Instant::now() + Duration::from_millis(60000);
+        trace!("Mesh add! going to sleep for 60 seconds to get a local fe80 address");
+        let when = Instant::now() + Duration::from_secs(60);
         let locally_owned_ifname = ifname.to_string();
 
         let fut = Delay::new(when)
@@ -328,6 +326,7 @@ pub fn ethernet_transform_mode(
 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
+    trace!("Successsfully transformed ethernet mode");
 
     Ok(())
 }
