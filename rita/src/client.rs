@@ -158,7 +158,7 @@ fn main() {
     // do TLS stuff.
     openssl_probe::init_ssl_cert_env_vars();
 
-    if !SETTING.get_log().enabled {
+    if !SETTING.get_log().enabled || option_env!("NO_REMOTE_LOG").is_some() {
         env_logger::init();
     }
 
