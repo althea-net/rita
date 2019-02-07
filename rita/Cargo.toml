@@ -61,7 +61,6 @@ clarity = "0.1"
 eui48 = "0.4"
 lettre = {git="https://github.com/lettre/lettre.git"}
 lettre_email = {git="https://github.com/lettre/lettre.git"}
-compressed_log = "0.1"
 
 [features]
 default = []
