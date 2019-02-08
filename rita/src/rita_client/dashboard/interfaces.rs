@@ -309,6 +309,12 @@ pub fn ethernet_transform_mode(
         let when = Instant::now() + Duration::from_secs(60);
         let locally_owned_ifname = ifname.to_string();
 
+        // repeated in Listen added here to prevent config inconsistency
+        SETTING
+            .get_network_mut()
+            .peer_interfaces
+            .insert(locally_owned_ifname.clone());
+
         let fut = Delay::new(when)
             .map_err(|e| warn!("timer failed; err={:?}", e))
             .and_then(move |_| {
