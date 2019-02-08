@@ -300,7 +300,7 @@ fn receive_im_here(
                 );
                 continue;
             }
-            trace!("ImHere with {:?}", ipaddr);
+            info!("ImHere with {:?}", ipaddr);
             let peer = Peer::new(ipaddr, listen_interface.ifidx);
             output.insert(peer.contact_socket.ip(), peer);
         }

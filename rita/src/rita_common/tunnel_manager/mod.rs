@@ -723,7 +723,7 @@ impl TunnelManager {
                 for tunnel in tunnels.iter_mut() {
                     if tunnel.listen_ifidx == peer.ifidx && tunnel.ip == peer.contact_socket.ip() {
                         trace!("We already have a tunnel for {:?}", tunnel);
-                        trace!(
+                        info!(
                             "Bumping timestamp after {}s for tunnel: {:?}",
                             tunnel.last_contact.elapsed().as_secs(),
                             tunnel

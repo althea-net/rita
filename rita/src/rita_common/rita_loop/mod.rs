@@ -16,8 +16,6 @@ use ::actix::registry::SystemService;
 
 use crate::actix_utils::ResolverWrapper;
 
-use web3::client::Web3;
-
 use crate::KI;
 
 use crate::rita_common::tunnel_manager::{GetNeighbors, TriggerGC, TunnelManager};
@@ -187,12 +185,15 @@ impl Handler<Tick> for RitaLoop {
             PeerListener::from_registry()
                 .send(GetPeers {})
                 .and_then(move |peers| {
+                    // GetPeers never fails so unwrap is safe
+                    let peers = peers.unwrap();
                     info!(
-                        "PeerListener get peers completed in {}s {}ms",
+                        "PeerListener get {} peers completed in {}s {}ms",
+                        peers.len(),
                         start.elapsed().as_secs(),
                         start.elapsed().subsec_millis(),
                     );
-                    TunnelManager::from_registry().send(PeersToContact::new(peers.unwrap())) // GetPeers never fails so unwrap is safe
+                    TunnelManager::from_registry().send(PeersToContact::new(peers))
                 })
                 .then(|_| Ok(())),
         );
