@@ -31,9 +31,11 @@ use reqwest;
 use babel_monitor::Babel;
 
 use crate::rita_common::dashboard::Dashboard;
-use crate::rita_common::debt_keeper::{DebtKeeper, Dump};
+use crate::rita_common::debt_keeper::{DebtKeeper, Dump, NodeDebtData};
 use crate::rita_common::peer_listener::PeerListener;
 use crate::rita_common::peer_listener::{Listen, UnListen};
+use crate::rita_common::tunnel_manager::{GetNeighbors, Neighbor, TunnelManager};
+use althea_types::Identity;
 
 use crate::SETTING;
 use settings::client::ExitServer;

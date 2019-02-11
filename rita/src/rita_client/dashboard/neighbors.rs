@@ -11,85 +11,127 @@ pub struct NodeInfo {
     pub price_to_exit: u32,
 }
 
-pub struct GetNodeInfo;
+pub struct GetNeighborInfo;
 
-impl Message for GetNodeInfo {
+impl Message for GetNeighborInfo {
     type Result = Result<Vec<NodeInfo>, Error>;
 }
 
-impl Handler<GetNodeInfo> for Dashboard {
+/// Gets info about neighbors, including interested data about what their route
+/// price is to the exit and how much we may owe them. The debt data is now legacy
+/// since the /debts endpoint was introduced, and should be removed when it can be
+/// coordinated with the frontend.
+/// The routes info might also belong in /exits or a dedicated /routes endpoint
+impl Handler<GetNeighborInfo> for Dashboard {
     type Result = ResponseFuture<Vec<NodeInfo>, Error>;
 
-    fn handle(&mut self, _msg: GetNodeInfo, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, _msg: GetNeighborInfo, _ctx: &mut Self::Context) -> Self::Result {
         Box::new(
             DebtKeeper::from_registry()
                 .send(Dump {})
                 .from_err()
-                .and_then(|res| {
-                    let res = res?;
-                    let stream = TcpStream::connect::<SocketAddr>(
-                        format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
-                    )?;
-                    let mut babel = Babel::new(stream);
-                    babel.start_connection()?;
-                    let route_table_sample = babel.parse_routes()?;
-
-                    let mut output = Vec::new();
-
-                    let exit_client = SETTING.get_exit_client();
-                    let current_exit = exit_client.get_current_exit();
-
-                    for (identity, debt_info) in res.iter() {
-                        if current_exit.is_some() {
-                            let exit_ip = current_exit.unwrap().id.mesh_ip;
-                            let maybe_route = babel.get_route_via_neigh(
-                                identity.mesh_ip,
-                                exit_ip,
-                                &route_table_sample,
-                            );
-
-                            // We have a peer that is an exit, so we can't find a route
-                            // from them to our selected exit. Other errors can also get
-                            // caught here
-                            if maybe_route.is_err() {
-                                continue;
+                .and_then(|debts| {
+                    TunnelManager::from_registry()
+                        .send(GetNeighbors {})
+                        .from_err()
+                        .and_then(|neighbors| {
+                            let mut debts = debts?;
+                            if neighbors.is_ok() {
+                                let neighbors = neighbors?;
+                                merge_debts_and_neighbors(neighbors, &mut debts);
                             }
-                            // we check that this is safe above
-                            let route = maybe_route.unwrap();
 
-                            output.push(NodeInfo {
-                                nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
-                                route_metric_to_exit: route.metric,
-                                total_payments: debt_info.total_payment_received.clone(),
-                                debt: debt_info.debt.clone(),
-                                link_cost: route.refmetric,
-                                price_to_exit: route.price,
-                            })
-                        } else {
-                            output.push(NodeInfo {
-                                nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
-                                route_metric_to_exit: u16::max_value(),
-                                total_payments: debt_info.total_payment_received.clone(),
-                                debt: debt_info.debt.clone(),
-                                link_cost: u16::max_value(),
-                                price_to_exit: u32::max_value(),
-                            })
-                        }
-                    }
+                            let stream = TcpStream::connect::<SocketAddr>(
+                                format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
+                            )?;
+                            let mut babel = Babel::new(stream);
+                            babel.start_connection()?;
+                            let route_table_sample = babel.parse_routes()?;
 
-                    Ok(output)
+                            let mut output = Vec::new();
+
+                            let exit_client = SETTING.get_exit_client();
+                            let current_exit = exit_client.get_current_exit();
+
+                            for (identity, debt_info) in debts.iter() {
+                                if current_exit.is_some() {
+                                    let exit_ip = current_exit.unwrap().id.mesh_ip;
+                                    let maybe_route = babel.get_route_via_neigh(
+                                        identity.mesh_ip,
+                                        exit_ip,
+                                        &route_table_sample,
+                                    );
+
+                                    // We have a peer that is an exit, so we can't find a route
+                                    // from them to our selected exit. Other errors can also get
+                                    // caught here
+                                    if maybe_route.is_err() {
+                                        output.push(nonviable_node_info(
+                                            identity.mesh_ip.to_string(),
+                                        ));
+                                        continue;
+                                    }
+                                    // we check that this is safe above
+                                    let route = maybe_route.unwrap();
+
+                                    output.push(NodeInfo {
+                                        nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
+                                        route_metric_to_exit: route.metric,
+                                        total_payments: debt_info.total_payment_received.clone(),
+                                        debt: debt_info.debt.clone(),
+                                        link_cost: route.refmetric,
+                                        price_to_exit: route.price,
+                                    })
+                                } else {
+                                    output.push(NodeInfo {
+                                        nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
+                                        route_metric_to_exit: u16::max_value(),
+                                        total_payments: debt_info.total_payment_received.clone(),
+                                        debt: debt_info.debt.clone(),
+                                        link_cost: u16::max_value(),
+                                        price_to_exit: u32::max_value(),
+                                    })
+                                }
+                            }
+
+                            Ok(output)
+                        })
                 }),
         )
     }
 }
 
-pub fn get_node_info(
+pub fn get_neighbor_info(
     _req: HttpRequest,
 ) -> Box<dyn Future<Item = Json<Vec<NodeInfo>>, Error = Error>> {
     debug!("Neighbors endpoint hit!");
     Dashboard::from_registry()
-        .send(GetNodeInfo {})
+        .send(GetNeighborInfo {})
         .from_err()
         .and_then(move |reply| Ok(Json(reply?)))
         .responder()
+}
+
+/// Takes a list of neighbors and debts, if an entry
+/// is found in the neighbors list that is not in the debts list
+/// the debts list is extended to include it
+fn merge_debts_and_neighbors(
+    neighbors: Vec<Neighbor>,
+    debts: &mut HashMap<Identity, NodeDebtData>,
+) {
+    for neighbor in neighbors {
+        let id = neighbor.identity.global;
+        debts.entry(id).or_insert_with(|| NodeDebtData::new(0));
+    }
+}
+
+fn nonviable_node_info(nickname: String) -> NodeInfo {
+    NodeInfo {
+        nickname: nickname,
+        route_metric_to_exit: u16::max_value(),
+        total_payments: 0u32.into(),
+        debt: 0.into(),
+        link_cost: 0,
+        price_to_exit: 0,
+    }
 }
