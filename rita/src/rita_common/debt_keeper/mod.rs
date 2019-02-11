@@ -20,8 +20,6 @@ use crate::rita_common::tunnel_manager::TunnelAction;
 use crate::rita_common::tunnel_manager::TunnelManager;
 use crate::rita_common::tunnel_manager::TunnelStateChange;
 
-use crate::rita_common::rita_loop::COMMON_LOOP_SPEED;
-
 use failure::Error;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -39,7 +37,7 @@ pub struct NodeDebtData {
 }
 
 impl NodeDebtData {
-    fn new(buffer_period: u32) -> NodeDebtData {
+    pub fn new(buffer_period: u32) -> NodeDebtData {
         NodeDebtData {
             total_payment_received: Uint256::from(0u32),
             total_payment_sent: Uint256::from(0u32),

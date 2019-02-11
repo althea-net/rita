@@ -246,7 +246,7 @@ fn main() {
             .route("/interfaces", Method::POST, set_interfaces_endpoint)
             .route("/mesh_ip", Method::GET, get_mesh_ip)
             .route("/mesh_ip", Method::POST, set_mesh_ip)
-            .route("/neighbors", Method::GET, get_node_info)
+            .route("/neighbors", Method::GET, get_neighbor_info)
             .route(
                 "/remote_logging/enabled/{enabled}",
                 Method::POST,
