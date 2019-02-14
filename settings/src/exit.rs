@@ -38,6 +38,9 @@ pub struct ExitNetworkSettings {
     pub exit_start_ip: IpAddr,
     /// The netmask, in bits to mask out, for the exit tunnel
     pub netmask: u8,
+    /// Time in seconds before user is dropped from the db due to inactivity
+    /// 0 means disabled TODO convert to u64 when fixing the 2038 problem
+    pub entry_timeout: i32,
 }
 
 impl Default for ExitNetworkSettings {
@@ -49,6 +52,7 @@ impl Default for ExitNetworkSettings {
             own_internal_ip: "172.16.255.254".parse().unwrap(),
             exit_start_ip: "172.16.0.0".parse().unwrap(),
             netmask: 12,
+            entry_timeout: 0, // disabled by default
         }
     }
 }

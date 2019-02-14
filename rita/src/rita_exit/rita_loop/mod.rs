@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use ::actix::prelude::*;
 use ::actix::registry::SystemService;
 
-use crate::rita_exit::db_client::{DbClient, ListClients};
+use crate::rita_exit::db_client::{DbClient, DeleteClient, ListClients, SetClientTimestamp};
 
 use futures::future::Either;
 use futures::{future, Future};
@@ -32,6 +32,13 @@ use settings::RitaCommonSettings;
 use althea_kernel_interface::{ExitClient, KI};
 
 use althea_types::Identity;
+
+mod cleanup;
+mod enforcement;
+mod setup;
+use cleanup::cleanup_exit_clients;
+use enforcement::enforce_exit_clients;
+use setup::setup_exit_clients;
 
 pub struct RitaLoop;
 
@@ -89,115 +96,17 @@ fn clients_to_ids(clients: Vec<Client>) -> Vec<Identity> {
 impl Handler<Tick> for RitaLoop {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
-        let start = Instant::now();
         trace!("Exit tick!");
 
         // Create and update client tunnels
-        Arbiter::spawn(
-            DbClient::from_registry()
-                .send(ListClients {})
-                .then(move |res| {
-                    let clients = res.unwrap().unwrap();
-                    let ids = clients_to_ids(clients.clone());
-
-                    TrafficWatcher::from_registry().do_send(Watch(ids));
-
-                    let mut wg_clients = Vec::new();
-
-                    trace!("got clients from db {:?}", clients);
-
-                    for c in clients {
-                        if let Ok(c) = to_exit_client(c) {
-                            wg_clients.push(c);
-                        }
-                    }
-
-                    trace!("converted clients {:?}", wg_clients);
-
-                    let exit_status = KI.set_exit_wg_config(
-                        wg_clients,
-                        SETTING.get_exit_network().wg_tunnel_port,
-                        &SETTING.get_network().wg_private_key_path,
-                        &SETTING.get_exit_network().own_internal_ip,
-                        SETTING.get_exit_network().netmask,
-                    );
-
-                    match exit_status {
-                        Ok(_) => (),
-                        Err(e) => warn!("Error in Exit WG setup {:?}", e),
-                    }
-                    info!(
-                        "Rita Exit loop completed in {}s {}ms",
-                        start.elapsed().as_secs(),
-                        start.elapsed().subsec_millis()
-                    );
-                    Ok(())
-                }),
-        );
+        Arbiter::spawn(setup_exit_clients());
 
         // handle enforcement on client tunnels by querying debt keeper
-        Arbiter::spawn(
-            DebtKeeper::from_registry()
-                .send(GetDebtsList)
-                .and_then(|debts_list| match debts_list {
-                    Ok(list) => Either::A(DbClient::from_registry().send(ListClients {}).and_then(
-                        move |res| {
-                            let clients = res.unwrap();
-                            let mut clients_by_id = HashMap::new();
-                            let free_tier_limit = SETTING.get_payment().free_tier_throughput;
-                            for client in clients.iter() {
-                                if let Ok(id) = to_identity(client) {
-                                    clients_by_id.insert(id, client);
-                                }
-                            }
+        Arbiter::spawn(enforce_exit_clients());
 
-                            for debt_entry in list.iter() {
-                                match clients_by_id.get(&debt_entry.identity) {
-                                    Some(client) => {
-                                        match client.internal_ip.parse() {
-                                            Ok(IpAddr::V4(ip)) => {
-                                                let res = if debt_entry.payment_details.action
-                                                    == DebtAction::SuspendTunnel
-                                                {
-                                                    KI.set_class_limit(
-                                                        "wg_exit",
-                                                        free_tier_limit,
-                                                        free_tier_limit,
-                                                        &ip,
-                                                    )
-                                                } else {
-                                                    // set to 1gbps garunteed bandwidth and 5gbps
-                                                    // absolute max
-                                                    KI.set_class_limit(
-                                                        "wg_exit", 1_000_000, 5_000_000, &ip,
-                                                    )
-                                                };
-                                                if res.is_err() {
-                                                    warn!("Failed to limit {} with {:?}", ip, res);
-                                                }
-                                            }
-                                            _ => warn!("Can't parse Ipv4Addr to create limit!"),
-                                        };
-                                    }
-                                    None => {
-                                        warn!(
-                                            "Could not find {:?} to suspend!",
-                                            debt_entry.identity
-                                        );
-                                    }
-                                }
-                            }
-
-                            Ok(())
-                        },
-                    )),
-                    Err(e) => {
-                        warn!("Failed to get debts from DebtKeeper! {:?}", e);
-                        Either::B(future::ok(()))
-                    }
-                })
-                .then(|_| Ok(())),
-        );
+        // find users that have not been active within the configured time period
+        // and remove them from the db
+        Arbiter::spawn(cleanup_exit_clients());
 
         Ok(())
     }
