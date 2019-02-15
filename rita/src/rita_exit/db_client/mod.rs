@@ -11,6 +11,7 @@ use diesel;
 use diesel::dsl::*;
 use diesel::prelude::*;
 use diesel::select;
+use std::collections::HashMap;
 
 use reqwest;
 
@@ -49,7 +50,9 @@ use failure::Error;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 
 #[derive(Default)]
-pub struct DbClient;
+pub struct DbClient {
+    geoip_cache: HashMap<IpAddr, String>,
+}
 
 impl Actor for DbClient {
     type Context = Context<Self>;
@@ -160,38 +163,44 @@ fn increment(address: IpAddr, netmask: u8) -> Result<IpAddr, Error> {
 
 #[derive(Deserialize, Debug)]
 struct GeoIPRet {
-    country: GeoIPRetCountry,
+    country_code: String,
 }
 
-#[derive(Deserialize, Debug)]
-struct GeoIPRetCountry {
-    code: String,
-}
-
-// get ISO country code from ip
-fn get_country(ip: &IpAddr) -> Result<String, Error> {
+/// get ISO country code from ip, consults a in memory cache
+fn get_country(ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<String, Error> {
     let client = reqwest::Client::new();
+    let api_key = SETTING
+        .get_exit_network()
+        .api_key
+        .clone()
+        .expect("No api key configured!");
 
-    let geo_ip_url = format!("http://geoip.nekudo.com/api/{}", ip);
-    trace!("making geoip request to {}", geo_ip_url);
+    match cache.get(ip) {
+        Some(code) => Ok(code.clone()),
+        None => {
+            let geo_ip_url = format!("http://api.ipapi.com/{}?access_key={}", ip, api_key);
+            trace!("making geoip request to {}", geo_ip_url);
 
-    let res: GeoIPRet = client.get(&geo_ip_url).send()?.json()?;
-    info!("Got {:?} from GeoIP request", res);
+            let res: GeoIPRet = client.get(&geo_ip_url).send()?.json()?;
+            info!("Got {:?} from GeoIP request", res);
+            cache.insert(*ip, res.country_code.clone());
 
-    Ok(res.country.code)
+            Ok(res.country_code)
+        }
+    }
 }
 
 #[test]
 #[ignore]
 fn test_get_country() {
-    get_country(&"8.8.8.8".parse().unwrap()).unwrap();
+    get_country(&"8.8.8.8".parse().unwrap(), &mut HashMap::new()).unwrap();
 }
 
-fn verify_ip(request_ip: &IpAddr) -> Result<(), Error> {
+fn verify_ip(request_ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<(), Error> {
     if SETTING.get_allowed_countries().is_empty() {
         Ok(())
     } else {
-        let country = get_country(request_ip)?;
+        let country = get_country(request_ip, cache)?;
 
         if !SETTING.get_allowed_countries().is_empty()
             && !SETTING.get_allowed_countries().contains(&country)
@@ -414,7 +423,7 @@ impl Handler<SetupClient> for DbClient {
 
         trace!("got setup request {:?}", client);
 
-        match verify_ip(&msg.1) {
+        match verify_ip(&msg.1, &mut self.geoip_cache) {
             Ok(_) => conn.transaction::<_, Error, _>(|| {
                 add_dummy(&conn)?;
 
@@ -488,7 +497,7 @@ impl Handler<SetupClient> for DbClient {
                     let user_country = if SETTING.get_allowed_countries().is_empty() {
                         String::new()
                     } else {
-                        get_country(&msg.1)?
+                        get_country(&msg.1, &mut self.geoip_cache)?
                     };
 
                     let c = client_to_new_db_client(client, new_ip, user_country);
