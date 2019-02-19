@@ -148,6 +148,14 @@ lazy_static! {
         { Arc::new(RwLock::new(RitaExitSettingsStruct::default())) };
 }
 
+/// used to crash the exit on first startup if config does not make sense
+/// as is usually desirable for cloud infrastruture
+fn sanity_check_config() {
+    if !SETTING.get_allowed_countries().is_empty() && SETTING.get_exit_network().api_key.is_none() {
+        panic!("GEOIP enforcement configured but not api key provided!");
+    }
+}
+
 fn main() {
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
@@ -176,6 +184,7 @@ fn main() {
         env!("GIT_HASH")
     );
     trace!("Starting with Identity: {:?}", SETTING.get_identity());
+    sanity_check_config();
 
     let system = actix::System::new(format!("main {:?}", SETTING.get_network().mesh_ip));
 
