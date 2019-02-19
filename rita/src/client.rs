@@ -32,6 +32,8 @@ extern crate serde_derive;
 
 use env_logger;
 
+use std::env;
+
 use openssl_probe;
 
 use docopt::Docopt;
@@ -153,12 +155,21 @@ lazy_static! {
         { Arc::new(RwLock::new(RitaSettingsStruct::default())) };
 }
 
+fn env_vars_contains(var_name: &str) -> bool {
+    for (key, _value) in env::vars_os() {
+        if key == var_name {
+            return true;
+        }
+    }
+    false
+}
+
 fn main() {
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
     openssl_probe::init_ssl_cert_env_vars();
 
-    if !SETTING.get_log().enabled || option_env!("NO_REMOTE_LOG").is_some() {
+    if !SETTING.get_log().enabled || env_vars_contains("NO_REMOTE_LOG") {
         env_logger::init();
     }
 
