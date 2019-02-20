@@ -831,6 +831,67 @@ Format:
 
 ---
 
+## /eth_private_key GET
+
+- URL: `<rita ip>:<rita_dashboard_port>/eth_private_key`
+- Method: `GET`
+- URL Params: `None`
+- Contents:
+
+- Success Response:
+  - 200
+```json
+{
+  "eth_private_key": "<new_eth_private_key>"
+}
+```
+
+- Error Response: `500 Server Error`
+- Sample Call:
+
+`curl 127.0.0.1:<rita_dashboard_port>/eth_private_key`
+
+---
+
+## /eth_private_key POST
+
+- URL: `<rita ip>:<rita_dashboard_port>/eth_private_key`
+- Method: `POST`
+- URL Params: `None`
+- Contents:
+
+```json
+{
+  "eth_private_key": "<new_eth_private_key>"
+}
+```
+
+- Success Response:
+  - 200
+  - This endpoint will also derive a new eth public address from the provided private key
+- Error Response: `500 Server Error`
+- Sample Call:
+
+`curl 127.0.0.1:<rita_dashboard_port>/eth_private_key -H 'Content-Type: application/json' -i -d '{"eth_private_key":"0xb65efa9b5c156aa912223ffe75385571bc96f2c4a6b16e684d44e94039a9d38c"}'`
+
+---
+
+## /mesh_ip GET
+
+- URL: `<rita ip>:<rita_dashboard_port>/mesh_ip`
+- Method: `GET`
+- URL Params: `None`
+
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+- Error Response: `500 Server Error`
+- Sample Call:
+
+`curl 127.0.0.1:<rita_dashboard_port>/mesh_ip'`
+
+---
+
 ## /mesh_ip POST
 
 - URL: `<rita ip>:<rita_dashboard_port>/mesh_ip`
@@ -850,7 +911,7 @@ Format:
 - Error Response: `500 Server Error`
 - Sample Call:
 
-`curl 127.0..1:<rita_dashboard_port>/mesh_ip -H 'Content-Type: application/json' -i -d '{"mesh_ip":"fd00::1"}'`
+`curl 127.0.0.1:<rita_dashboard_port>/mesh_ip -H 'Content-Type: application/json' -i -d '{"mesh_ip":"fd00::1"}'`
 
 ---
 

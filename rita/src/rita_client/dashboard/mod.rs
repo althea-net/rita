@@ -49,6 +49,7 @@ use num256::Int256;
 use crate::rita_client::exit_manager::exit_setup_request;
 use althea_types::ExitState;
 
+pub mod eth_private_key;
 pub mod exits;
 pub mod interfaces;
 pub mod logging;
