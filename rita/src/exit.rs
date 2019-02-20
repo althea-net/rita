@@ -34,6 +34,8 @@ extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 
+extern crate arrayvec;
+
 use env_logger;
 
 use openssl_probe;
@@ -59,6 +61,7 @@ use crate::rita_common::dashboard::babel::*;
 use crate::rita_common::dashboard::dao::*;
 use crate::rita_common::dashboard::debts::*;
 use crate::rita_common::dashboard::development::*;
+use crate::rita_common::dashboard::nickname::*;
 use crate::rita_common::dashboard::own_info::*;
 use crate::rita_common::dashboard::pricing::*;
 use crate::rita_common::dashboard::settings::*;
@@ -268,6 +271,8 @@ fn main() {
                 set_auto_pricing,
             )
             .route("/auto_price/enabled", Method::GET, auto_pricing_status)
+            .route("/nickname/get/", Method::GET, get_nickname)
+            .route("/nickname/set/", Method::POST, set_nickname)
     })
     .bind(format!(
         "[::0]:{}",

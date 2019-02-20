@@ -1,6 +1,8 @@
 #[macro_use]
 extern crate serde_derive;
 
+extern crate arrayvec;
+
 pub mod interop;
 pub mod rtt;
 pub mod wg_key;

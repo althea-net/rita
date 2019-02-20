@@ -348,6 +348,7 @@ fn client_to_new_db_client(
         mesh_ip: client.global.mesh_ip.to_string(),
         wg_pubkey: client.global.wg_public_key.to_string(),
         eth_address: client.global.eth_address.to_string(),
+        nickname: client.global.nickname.unwrap_or_default().to_string(),
         internal_ip: new_ip.to_string(),
         email: client.reg_details.email.clone().unwrap_or_default(),
         country,
