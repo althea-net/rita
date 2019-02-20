@@ -1,9 +1,11 @@
 use super::*;
+use arrayvec::ArrayString;
 use num256::Uint256;
 
 #[derive(Serialize)]
 pub struct NodeInfo {
     pub nickname: String,
+    pub ip: String,
     pub route_metric_to_exit: u16,
     pub total_payments: Uint256,
     pub debt: Int256,
@@ -54,6 +56,11 @@ impl Handler<GetNeighborInfo> for Dashboard {
                             let current_exit = exit_client.get_current_exit();
 
                             for (identity, debt_info) in debts.iter() {
+                                let nickname = match identity.nickname {
+                                    Some(val) => val,
+                                    None => ArrayString::<[u8; 32]>::from("No Nickname").unwrap(),
+                                };
+
                                 if current_exit.is_some() {
                                     let exit_ip = current_exit.unwrap().id.mesh_ip;
                                     let maybe_route = babel.get_route_via_neigh(
@@ -67,6 +74,7 @@ impl Handler<GetNeighborInfo> for Dashboard {
                                     // caught here
                                     if maybe_route.is_err() {
                                         output.push(nonviable_node_info(
+                                            nickname,
                                             identity.mesh_ip.to_string(),
                                         ));
                                         continue;
@@ -75,7 +83,8 @@ impl Handler<GetNeighborInfo> for Dashboard {
                                     let route = maybe_route.unwrap();
 
                                     output.push(NodeInfo {
-                                        nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
+                                        nickname: nickname.to_string(),
+                                        ip: serde_json::to_string(&identity.mesh_ip).unwrap(),
                                         route_metric_to_exit: route.metric,
                                         total_payments: debt_info.total_payment_received.clone(),
                                         debt: debt_info.debt.clone(),
@@ -84,7 +93,8 @@ impl Handler<GetNeighborInfo> for Dashboard {
                                     })
                                 } else {
                                     output.push(NodeInfo {
-                                        nickname: serde_json::to_string(&identity.mesh_ip).unwrap(),
+                                        nickname: nickname.to_string(),
+                                        ip: serde_json::to_string(&identity.mesh_ip).unwrap(),
                                         route_metric_to_exit: u16::max_value(),
                                         total_payments: debt_info.total_payment_received.clone(),
                                         debt: debt_info.debt.clone(),
@@ -125,13 +135,14 @@ fn merge_debts_and_neighbors(
     }
 }
 
-fn nonviable_node_info(nickname: String) -> NodeInfo {
+fn nonviable_node_info(nickname: ArrayString<[u8; 32]>, ip: String) -> NodeInfo {
     NodeInfo {
-        nickname: nickname,
-        route_metric_to_exit: u16::max_value(),
+        nickname: nickname.to_string(),
+        ip,
         total_payments: 0u32.into(),
         debt: 0.into(),
         link_cost: 0,
         price_to_exit: 0,
+        route_metric_to_exit: u16::max_value(),
     }
 }

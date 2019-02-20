@@ -7,6 +7,7 @@ pub struct Client {
     pub wg_pubkey: String,
     pub wg_port: String,
     pub eth_address: String,
+    pub nickname: String,
     pub internal_ip: String,
     pub email: String,
     pub country: String,

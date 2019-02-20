@@ -239,6 +239,7 @@ mod tests {
 
     use super::*;
     use althea_types::WgKey;
+    use arrayvec::ArrayString;
     use clarity::Address;
     use std::str::FromStr;
 
@@ -257,6 +258,7 @@ mod tests {
                 "0.0.0.0".parse().unwrap(),
                 Address::from_str("abababababababababab").unwrap(),
                 WgKey::from_str("abc0abc1abc2abc3abc4abc5abc6abc7abc8abc=").unwrap(),
+                Some(ArrayString::<[u8; 32]>::new()),
             ),
             5,
         )

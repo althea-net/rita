@@ -1130,3 +1130,52 @@ Sets the blockchain being used by the router
 - Sample Call:
 
 `curl http://192.168.10.1:4877/blockchain/get/`
+
+---
+
+## /nickname/set/{nickname}
+
+Sets the optional nickname parameter for the router. Will error if the nickname
+is longer than 32 chars when utf-8 encoded (not always 32 assci chars)
+
+- URL: `<rita ip>:<rita_dashboard_port>/nickname/set/`
+- Method: `POST`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+()
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:<rita_dashboard_port>/nickname/set -H 'Content-Type: application/json' -i -d '{"nickname": "free form nickname value"}'`
+
+---
+
+## /nickname/get/
+
+Gets the nickname used by the router
+
+- URL: `<rita ip>:<rita_dashboard_port>/nickname/get/`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+()
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl http://192.168.10.1:4877/nickname/get/`

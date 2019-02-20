@@ -979,6 +979,7 @@ pub fn test_tunnel_manager() {
 
 #[test]
 pub fn test_tunnel_manager_lookup() {
+    use arrayvec::ArrayString;
     use clarity::Address;
     use std::str::FromStr;
 
@@ -991,6 +992,7 @@ pub fn test_tunnel_manager_lookup() {
         "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
             .parse()
             .unwrap(),
+        None,
     );
     assert!(tunnel_manager.tunnels.get(&id).is_none());
 

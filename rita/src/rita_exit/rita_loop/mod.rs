@@ -8,6 +8,8 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
 
+use arrayvec::ArrayString;
+
 use ::actix::prelude::*;
 use ::actix::registry::SystemService;
 
@@ -69,6 +71,7 @@ fn to_identity(client: &Client) -> Result<Identity, Error> {
         mesh_ip: client.mesh_ip.clone().parse()?,
         eth_address: client.eth_address.clone().parse()?,
         wg_public_key: client.wg_pubkey.clone().parse()?,
+        nickname: Some(ArrayString::<[u8; 32]>::from(&client.nickname).unwrap_or_default()),
     })
 }
 

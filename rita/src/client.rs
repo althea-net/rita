@@ -30,6 +30,8 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
+extern crate arrayvec;
+
 use env_logger;
 
 use std::env;
@@ -70,6 +72,7 @@ use crate::rita_common::dashboard::babel::*;
 use crate::rita_common::dashboard::dao::*;
 use crate::rita_common::dashboard::debts::*;
 use crate::rita_common::dashboard::development::*;
+use crate::rita_common::dashboard::nickname::*;
 use crate::rita_common::dashboard::own_info::*;
 use crate::rita_common::dashboard::pricing::*;
 use crate::rita_common::dashboard::settings::*;
@@ -293,6 +296,8 @@ fn main() {
                 set_system_blockchain,
             )
             .route("/blockchain/get/", Method::GET, get_system_blockchain)
+            .route("/nickname/get/", Method::GET, get_nickname)
+            .route("/nickname/set/", Method::POST, set_nickname)
             .route("/wipe", Method::POST, wipe)
     })
     .workers(1)
