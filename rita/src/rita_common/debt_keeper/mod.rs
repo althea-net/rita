@@ -1,6 +1,16 @@
 //! While traffic watcher keeps an eye on how much traffic flows and what that is worth debtkeeper
 //! maintains the long term memory of who owes whow what so that it may later be quiered and paid
 //! by payment manager in the current implementation or guac in the more final one
+//!
+//! You may be wondering what's up with debt buffers actions and incoming payments, why can't we
+//! just have debt? Well this whole module is only slightly more complicated than it needs to be.
+//! Lets say for example that we owe Bob some money, but for reasons unknown Bob pays us, do we
+//! increase the amount we owe Bob? That's probably a vulnerability rabbit hole at the very least.
+//! Hence we need an incoming paymetns parameter to take money out of. This of course implies half
+//! of the excess complexity you see, managing an incoming payments pool versus a incoming debts pool
+//!
+//! The debts buffer is pretty safe to eliminate I think, except insomuch as it lets us keep better
+//! track of state transitions by allowing us to apply new debt as a seperate operation.
 
 use ::actix::prelude::*;
 
@@ -343,6 +353,10 @@ impl DebtKeeper {
             }
         }
 
+        // closing has a fudge factor that increases the close treshold as more and more
+        // payments accure, 1/100th of the payment amount grace is the default, this isn't
+        // really needed as the modern system converges smoothly but neither should it really
+        // harm anything as long as earnings are greater than 1%
         let close_threshold = SETTING.get_payment().close_threshold.clone()
             - (debt_data
                 .total_payment_received
