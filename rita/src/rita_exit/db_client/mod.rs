@@ -49,6 +49,17 @@ use failure::Error;
 
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 
+/// Gets the Postgres database connection
+pub fn get_database_connection() -> Result<PgConnection, ConnectionError> {
+    let db_uri = SETTING.get_db_uri();
+    info!("Opening {:?}", db_uri);
+    if db_uri.contains("postgres://") {
+        PgConnection::establish(&db_uri)
+    } else {
+        panic!("You must provide a valid postgressql database uri!");
+    }
+}
+
 #[derive(Default)]
 pub struct DbClient {
     geoip_cache: HashMap<IpAddr, String>,
@@ -75,14 +86,7 @@ impl Handler<ListClients> for DbClient {
 
     fn handle(&mut self, _: ListClients, _: &mut Self::Context) -> Self::Result {
         use self::schema::clients::dsl::*;
-        info!("Opening {:?}", &SETTING.get_db_file());
-        let connection = match SqliteConnection::establish(&SETTING.get_db_file()) {
-            Ok(connection) => connection,
-            Err(e) => {
-                error!("We could not connect to the database file! {:?}", e);
-                bail!("Could not connect to database file!")
-            }
-        };
+        let connection = get_database_connection()?;
 
         let res = clients.load::<models::Client>(&connection)?;
         trace!("Got clients list {:?}", res);
@@ -244,7 +248,7 @@ pub fn get_exit_info() -> ExitDetails {
     }
 }
 
-fn add_dummy(conn: &SqliteConnection) -> Result<(), Error> {
+fn add_dummy(conn: &PgConnection) -> Result<(), Error> {
     use self::schema::clients::dsl::*;
 
     let mut dummy = models::Client::default();
@@ -259,7 +263,7 @@ fn add_dummy(conn: &SqliteConnection) -> Result<(), Error> {
     Ok(())
 }
 
-fn incr_dummy(conn: &SqliteConnection) -> Result<IpAddr, Error> {
+fn incr_dummy(conn: &PgConnection) -> Result<IpAddr, Error> {
     use self::schema::clients::dsl::*;
 
     add_dummy(&conn)?;
@@ -281,7 +285,7 @@ fn incr_dummy(conn: &SqliteConnection) -> Result<IpAddr, Error> {
     Ok(new_ip)
 }
 
-fn update_client(client: &ExitClientIdentity, conn: &SqliteConnection) -> Result<(), Error> {
+fn update_client(client: &ExitClientIdentity, conn: &PgConnection) -> Result<(), Error> {
     use self::schema::clients::dsl::{clients, email, last_seen, wg_port, wg_pubkey};
     let mail_addr = match client.clone().reg_details.email {
         Some(mail) => mail.clone(),
@@ -310,7 +314,7 @@ fn update_client(client: &ExitClientIdentity, conn: &SqliteConnection) -> Result
 fn verify_client(
     client: &ExitClientIdentity,
     client_verified: bool,
-    conn: &SqliteConnection,
+    conn: &PgConnection,
 ) -> Result<(), Error> {
     use self::schema::clients::dsl::*;
 
@@ -331,10 +335,7 @@ pub fn secs_since_unix_epoch() -> i32 {
 
 // we match on email not key? that has interesting implications for
 // shared emails
-fn update_mail_sent_time(
-    client: &ExitClientIdentity,
-    conn: &SqliteConnection,
-) -> Result<(), Error> {
+fn update_mail_sent_time(client: &ExitClientIdentity, conn: &PgConnection) -> Result<(), Error> {
     use self::schema::clients::dsl::{clients, email, email_sent_time};
     let mail_addr = match client.clone().reg_details.email {
         Some(mail) => mail.clone(),
@@ -348,7 +349,7 @@ fn update_mail_sent_time(
     Ok(())
 }
 
-fn client_exists(ip: &IpAddr, conn: &SqliteConnection) -> Result<bool, Error> {
+fn client_exists(ip: &IpAddr, conn: &PgConnection) -> Result<bool, Error> {
     use self::schema::clients::dsl::*;
     Ok(select(exists(clients.filter(mesh_ip.eq(ip.to_string())))).get_result(&*conn)?)
 }
@@ -430,13 +431,7 @@ impl Handler<SetupClient> for DbClient {
 
     fn handle(&mut self, msg: SetupClient, _: &mut Self::Context) -> Self::Result {
         use self::schema::clients::dsl::{clients, mesh_ip};
-        let conn = match SqliteConnection::establish(&SETTING.get_db_file()) {
-            Ok(connection) => connection,
-            Err(e) => {
-                error!("We could not connect to the database file! {:?}", e);
-                bail!("Could not connect to database file!")
-            }
-        };
+        let conn = get_database_connection()?;
         let client = msg.0.clone();
 
         trace!("got setup request {:?}", client);
@@ -553,13 +548,7 @@ impl Handler<ClientStatus> for DbClient {
 
     fn handle(&mut self, msg: ClientStatus, _: &mut Self::Context) -> Self::Result {
         use self::schema::clients::dsl::{clients, mesh_ip};
-        let conn = match SqliteConnection::establish(&SETTING.get_db_file()) {
-            Ok(connection) => connection,
-            Err(e) => {
-                error!("We could not connect to the database file! {:?}", e);
-                bail!("Could not connect to database file!")
-            }
-        };
+        let conn = get_database_connection()?;
         conn.transaction::<_, Error, _>(|| {
             let client = msg.0;
 
@@ -630,14 +619,9 @@ impl Handler<DeleteClient> for DbClient {
     fn handle(&mut self, client: DeleteClient, _: &mut Self::Context) -> Self::Result {
         use self::schema::clients::dsl::*;
         let client = client.0;
-        info!("Deleting all clients in {:?}", &SETTING.get_db_file());
-        let connection = match SqliteConnection::establish(&SETTING.get_db_file()) {
-            Ok(connection) => connection,
-            Err(e) => {
-                error!("We could not connect to the database file! {:?}", e);
-                bail!("Could not connect to database file!")
-            }
-        };
+        info!("Deleting clients {:?} in database", client);
+
+        let connection = get_database_connection()?;
         let mesh_ip_string = client.mesh_ip.to_string();
         let statement = clients.find(&mesh_ip_string);
         r#try!(delete(statement).execute(&connection));
@@ -658,14 +642,8 @@ impl Handler<SetClientTimestamp> for DbClient {
     fn handle(&mut self, client: SetClientTimestamp, _: &mut Self::Context) -> Self::Result {
         use self::schema::clients::dsl::*;
         let client = client.0;
-        info!("Deleting all clients in {:?}", &SETTING.get_db_file());
-        let connection = match SqliteConnection::establish(&SETTING.get_db_file()) {
-            Ok(connection) => connection,
-            Err(e) => {
-                error!("We could not connect to the database file! {:?}", e);
-                bail!("Could not connect to database file!")
-            }
-        };
+        info!("Setting timestamp for client {:?}", client);
+        let connection = get_database_connection()?;
         diesel::update(clients.find(&client.mesh_ip.to_string()))
             .set(last_seen.eq(secs_since_unix_epoch() as i32))
             .execute(&connection)?;
@@ -683,14 +661,8 @@ impl Handler<TruncateTables> for DbClient {
 
     fn handle(&mut self, _: TruncateTables, _: &mut Self::Context) -> Self::Result {
         use self::schema::clients::dsl::*;
-        info!("Deleting all clients in {:?}", &SETTING.get_db_file());
-        let connection = match SqliteConnection::establish(&SETTING.get_db_file()) {
-            Ok(connection) => connection,
-            Err(e) => {
-                error!("We could not connect to the database file! {:?}", e);
-                bail!("Could not connect to database file!")
-            }
-        };
+        info!("Deleting all clients in database");
+        let connection = get_database_connection()?;
         r#try!(delete(clients).execute(&connection));
         Ok(())
     }

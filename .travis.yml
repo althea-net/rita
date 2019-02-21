@@ -4,7 +4,7 @@ before_install:
   - sudo add-apt-repository ppa:wireguard/wireguard -y
   - sudo add-apt-repository universe
   - sudo apt-get -qq update
-  - sudo apt-get install -y libsqlite3-dev iperf3 python3-pip bridge-utils wireguard linux-source linux-headers-$(uname -r) curl git libssl-dev pkg-config build-essential ipset
+  - sudo apt-get install -y libsqlite3-dev postgressql-dev iperf3 python3-pip bridge-utils wireguard linux-source linux-headers-$(uname -r) curl git libssl-dev pkg-config build-essential ipset
   - which diesel || cargo install diesel_cli --no-default-features --features sqlite
   - sudo cp $(which diesel) /usr/bin
   - command -v cross 1>/dev/null || cargo install cross
