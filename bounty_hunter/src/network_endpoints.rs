@@ -3,7 +3,6 @@ use clarity::Address;
 use diesel::prelude::*;
 use failure::Error;
 use futures::{future, Future};
-use num256::Uint256;
 
 use std::collections::HashMap;
 
