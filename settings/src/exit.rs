@@ -111,7 +111,8 @@ pub enum ExitVerifSettings {
 /// This is the main settings struct for rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct RitaExitSettingsStruct {
-    db_file: String,
+    // starts with file:// or postgres://username:password@localhost/diesel_demo
+    db_uri: String,
     description: String,
     payment: PaymentSettings,
     dao: SubnetDAOSettings,
@@ -141,7 +142,7 @@ pub trait RitaExitSettings {
     fn get_mailer_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, Option<EmailVerifSettings>>;
-    fn get_db_file(&self) -> String;
+    fn get_db_uri(&self) -> String;
     fn get_description(&self) -> String;
     fn get_allowed_countries<'ret, 'me: 'ret>(
         &'me self,
@@ -154,8 +155,8 @@ impl RitaExitSettings for Arc<RwLock<RitaExitSettingsStruct>> {
     ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, ExitNetworkSettings> {
         RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.exit_network)
     }
-    fn get_db_file(&self) -> String {
-        self.read().unwrap().db_file.clone()
+    fn get_db_uri(&self) -> String {
+        self.read().unwrap().db_uri.clone()
     }
     fn get_description(&self) -> String {
         self.read().unwrap().description.clone()
