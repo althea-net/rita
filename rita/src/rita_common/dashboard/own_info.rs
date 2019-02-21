@@ -1,4 +1,5 @@
 use super::*;
+use crate::rita_common::oracle::low_balance;
 use num256::{Int256, Uint256};
 
 pub static READABLE_VERSION: &str = "Beta 2 RC6";
@@ -11,6 +12,7 @@ pub struct OwnInfo {
     pub metric_factor: u32,
     pub pay_threshold: Int256,
     pub close_threshold: Int256,
+    pub low_balance: bool,
     pub device: Option<String>,
     pub rita_version: String,
     pub version: String,
@@ -36,6 +38,7 @@ pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
         metric_factor: metric_factor,
         pay_threshold: pay_threshold,
         close_threshold: close_threshold,
+        low_balance: low_balance(),
         device: device,
         rita_version: env!("CARGO_PKG_VERSION").to_string(),
         version: READABLE_VERSION.to_string(),

@@ -31,6 +31,7 @@ use settings::RitaCommonSettings;
 
 use crate::rita_client::rita_loop::Tick;
 use crate::rita_client::traffic_watcher::{TrafficWatcher, Watch};
+use crate::rita_common::oracle::low_balance;
 
 use futures::future;
 use futures::future::join_all;
@@ -46,6 +47,9 @@ use crate::KI;
 use failure::Error;
 use std::net::SocketAddr;
 use std::time::Duration;
+
+use num256::Uint256;
+use num_traits::identities::Zero;
 
 /// enables remote logging if the user has configured it
 fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
@@ -309,6 +313,8 @@ pub struct ExitManager {
     // as that would cause a panic
     remote_logging_setting: bool,
     remote_logging_already_started: bool,
+    // if we are currently limiting our own connection speed due to a low balance.
+    local_limiting: bool,
 }
 
 impl Actor for ExitManager {
@@ -322,6 +328,7 @@ impl SystemService for ExitManager {
         self.last_exit = None;
         self.remote_logging_setting = SETTING.get_log().enabled;
         self.remote_logging_already_started = false;
+        self.local_limiting = false;
     }
 }
 
@@ -390,6 +397,19 @@ impl Handler<Tick> for ExitManager {
                     );
                 }
             }
+        }
+
+        // Self limit bandwidth consumption if we have a low balance
+        let free_tier_throughput = SETTING.get_payment().free_tier_throughput;
+        if self.last_exit.is_some() && low_balance() && !self.local_limiting {
+            // TODO send notification to user via sms
+            warn!("Balance is low! sending notification and limiting usage");
+            let _ = KI.set_classless_limit("wg_exit", free_tier_throughput);
+            self.local_limiting = true;
+        } else if self.last_exit.is_some() && low_balance() && self.local_limiting {
+            info!("Balance is above the payment level, removing local limits");
+            let _ = KI.delete_qdisc("wg_exit");
+            self.local_limiting = false;
         }
 
         // code that manages requesting details to exits
