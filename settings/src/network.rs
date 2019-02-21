@@ -3,6 +3,8 @@ use std::net::{IpAddr, Ipv6Addr};
 
 use althea_types::WgKey;
 
+use arrayvec::ArrayString;
+
 fn default_discovery_ip() -> Ipv6Addr {
     warn!("Add discovery_ip to network, removed in the next version!");
     Ipv6Addr::new(0xff02, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x8)
@@ -78,6 +80,9 @@ pub struct NetworkSettings {
     /// The name of the device or router model
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device: Option<String>,
+    /// Nickname of the device on the network
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nickname: Option<ArrayString<[u8; 32]>>,
 }
 
 impl Default for NetworkSettings {
@@ -104,6 +109,7 @@ impl Default for NetworkSettings {
             is_gateway: false,
             tunnel_timeout_seconds: default_tunnel_timeout(),
             device: None,
+            nickname: None,
         }
     }
 }

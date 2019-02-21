@@ -59,6 +59,7 @@ openssl-probe = "0.1"
 num-traits="0.2"
 clarity = "0.1"
 eui48 = "0.4"
+arrayvec = {version= "0.4", features = ["serde-1"]}
 lettre = {git="https://github.com/lettre/lettre.git"}
 lettre_email = {git="https://github.com/lettre/lettre.git"}
 

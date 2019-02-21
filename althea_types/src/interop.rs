@@ -1,4 +1,5 @@
 use crate::wg_key::WgKey;
+use arrayvec::ArrayString;
 use clarity::Address;
 use num256::Uint256;
 use std::net::IpAddr;
@@ -8,22 +9,42 @@ use std::str::FromStr;
 use actix::*;
 
 /// This is how nodes are identified.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Hash, Clone, Copy)]
 pub struct Identity {
     pub mesh_ip: IpAddr,
     pub eth_address: Address,
     pub wg_public_key: WgKey,
+    pub nickname: Option<ArrayString<[u8; 32]>>,
 }
 
 impl Identity {
-    pub fn new(mesh_ip: IpAddr, eth_address: Address, wg_public_key: WgKey) -> Identity {
+    pub fn new(
+        mesh_ip: IpAddr,
+        eth_address: Address,
+        wg_public_key: WgKey,
+        nickname: Option<ArrayString<[u8; 32]>>,
+    ) -> Identity {
         Identity {
             mesh_ip,
             eth_address,
             wg_public_key,
+            nickname,
         }
     }
 }
+
+// Comparison ignoring nicknames to allow changing
+// nicknames without breaking everything
+impl PartialEq for Identity {
+    fn eq(&self, other: &Identity) -> bool {
+        self.mesh_ip == other.mesh_ip
+            && self.eth_address == other.eth_address
+            && self.wg_public_key == other.wg_public_key
+    }
+}
+// I don't understand why we need this
+// docs insist on it though https://doc.rust-lang.org/std/cmp/trait.Eq.html
+impl Eq for Identity {}
 
 #[derive(Debug, Serialize, Deserialize, Hash, Clone, Eq, PartialEq, Copy)]
 pub enum SystemChain {
@@ -71,6 +92,7 @@ pub enum ExitState {
     GotInfo {
         general_details: ExitDetails,
         message: String,
+
         #[serde(default)]
         auto_register: bool,
     },

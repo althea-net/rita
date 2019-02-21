@@ -1,5 +1,4 @@
 use config;
-use std::collections::HashMap;
 
 use serde_json;
 
@@ -268,9 +267,10 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
 
     fn get_identity(&self) -> Option<Identity> {
         Some(Identity::new(
-            self.get_network().clone().mesh_ip?,
-            self.get_payment().clone().eth_address?,
-            self.get_network().clone().wg_public_key?,
+            self.get_network().mesh_ip.clone()?,
+            self.get_payment().eth_address.clone()?,
+            self.get_network().wg_public_key.clone()?,
+            self.get_network().nickname.clone(),
         ))
     }
 

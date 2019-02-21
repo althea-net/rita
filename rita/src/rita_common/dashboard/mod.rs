@@ -20,6 +20,8 @@ use std::{
     net::{SocketAddr, TcpStream},
 };
 
+use arrayvec::ArrayString;
+
 use crate::SETTING;
 use ::settings::RitaCommonSettings;
 
@@ -40,6 +42,7 @@ pub mod babel;
 pub mod dao;
 pub mod debts;
 pub mod development;
+pub mod nickname;
 pub mod own_info;
 pub mod pricing;
 pub mod settings;

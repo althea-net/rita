@@ -4,6 +4,7 @@ table! {
         wg_pubkey -> Text,
         wg_port -> Text,
         eth_address -> Text,
+        nickname -> Text,
         internal_ip -> Text,
         email -> Text,
         country -> Text,
