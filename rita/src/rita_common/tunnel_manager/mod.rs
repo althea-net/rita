@@ -641,15 +641,19 @@ impl TunnelManager {
                     let url = format!("http://[{}]:{}/hello", their_hostname, port);
                     trace!("Saying hello to: {:?} at ip {:?}", url, dnsresult);
                     if !dnsresult.is_empty() && SETTING.get_network().is_gateway {
-                        let their_ip = dnsresult[0].ip();
-                        let socket = SocketAddr::new(their_ip, port);
-                        let man_peer = Peer {
-                            ifidx: 0,
-                            contact_socket: socket,
-                        };
-                        let res = contact_neighbor(&man_peer, our_port);
-                        if res.is_err() {
-                            warn!("Contact neighbor failed with {:?}", res);
+                        // dns records may have many ip's if we get multiple it's a load
+                        // balanced exit and we need to create tunnels to all of them
+                        for dns_socket in dnsresult {
+                            let their_ip = dns_socket.ip();
+                            let socket = SocketAddr::new(their_ip, port);
+                            let man_peer = Peer {
+                                ifidx: 0,
+                                contact_socket: socket,
+                            };
+                            let res = contact_neighbor(&man_peer, our_port);
+                            if res.is_err() {
+                                warn!("Contact neighbor failed with {:?}", res);
+                            }
                         }
                     } else {
                         trace!(
