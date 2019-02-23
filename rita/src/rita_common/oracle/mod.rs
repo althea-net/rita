@@ -325,3 +325,18 @@ fn update_our_price() {
 
     Arbiter::spawn(res);
 }
+
+/// A very simple function placed here for convinence that indicates
+/// if the system should go into low balance mode
+pub fn low_balance() -> bool {
+    // check if we are at the low balance threshold if we are self limit
+    let payment_threshold = match SETTING.get_payment().pay_threshold.to_uint256() {
+        Some(val) => val,
+        None => Uint256::zero(),
+    };
+    let balance = SETTING.get_payment().balance.clone();
+    // might increase this in the future
+    const MULTIPLIER: u8 = 1;
+
+    balance < (payment_threshold * MULTIPLIER.into())
+}
