@@ -5,7 +5,7 @@ use crate::schema::clients;
 pub struct Client {
     pub mesh_ip: String,
     pub wg_pubkey: String,
-    pub wg_port: String,
+    pub wg_port: i32,
     pub eth_address: String,
     pub nickname: String,
     pub internal_ip: String,
@@ -14,6 +14,6 @@ pub struct Client {
     pub email_code: String,
     pub verified: bool,
     // TODO change before 2038; it's left that way because diesel cannot do `Insertable` for i64
-    pub email_sent_time: i32,
-    pub last_seen: i32,
+    pub email_sent_time: i64,
+    pub last_seen: i64,
 }
