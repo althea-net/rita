@@ -39,8 +39,8 @@ pub struct ExitNetworkSettings {
     /// The netmask, in bits to mask out, for the exit tunnel
     pub netmask: u8,
     /// Time in seconds before user is dropped from the db due to inactivity
-    /// 0 means disabled TODO convert to u64 when fixing the 2038 problem
-    pub entry_timeout: i32,
+    /// 0 means disabled 
+    pub entry_timeout: u32,
     /// api key for geoip
     pub api_key: Option<String>,
 }

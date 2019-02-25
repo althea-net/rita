@@ -293,7 +293,7 @@ fn update_client(client: &ExitClientIdentity, conn: &PgConnection) -> Result<(),
     };
 
     diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-        .set(wg_port.eq(&client.wg_port.to_string()))
+        .set(wg_port.eq(i32::from(client.wg_port)))
         .execute(&*conn)?;
 
     diesel::update(clients.find(&client.global.mesh_ip.to_string()))
@@ -305,7 +305,7 @@ fn update_client(client: &ExitClientIdentity, conn: &PgConnection) -> Result<(),
         .execute(&*conn)?;
 
     diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-        .set(last_seen.eq(secs_since_unix_epoch() as i32))
+        .set(last_seen.eq(secs_since_unix_epoch() as i64))
         .execute(&*conn)?;
 
     Ok(())
@@ -325,12 +325,13 @@ fn verify_client(
     Ok(())
 }
 
-pub fn secs_since_unix_epoch() -> i32 {
+// lossy conversion, but it won't matter until 2.9 * 10^8 millenia from now
+pub fn secs_since_unix_epoch() -> i64 {
     let start = SystemTime::now();
     let since_the_epoch = start
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards");
-    since_the_epoch.as_secs() as i32
+    since_the_epoch.as_secs() as i64
 }
 
 // we match on email not key? that has interesting implications for
@@ -343,7 +344,7 @@ fn update_mail_sent_time(client: &ExitClientIdentity, conn: &PgConnection) -> Re
     };
 
     diesel::update(clients.filter(email.eq(mail_addr)))
-        .set(email_sent_time.eq(secs_since_unix_epoch() as i32))
+        .set(email_sent_time.eq(secs_since_unix_epoch()))
         .execute(&*conn)?;
 
     Ok(())
@@ -362,7 +363,7 @@ fn client_to_new_db_client(
     let mut rng = rand::thread_rng();
     let rand_code: u64 = rng.gen_range(0, 999_999);
     models::Client {
-        wg_port: client.wg_port.to_string(),
+        wg_port: i32::from(client.wg_port),
         mesh_ip: client.global.mesh_ip.to_string(),
         wg_pubkey: client.global.wg_public_key.to_string(),
         eth_address: client.global.eth_address.to_string(),
@@ -477,7 +478,7 @@ impl Handler<SetupClient> for DbClient {
                         })
                     } else {
                         let cooldown = match SETTING.get_verif_settings() {
-                            Some(ExitVerifSettings::Email(mailer)) => mailer.email_cooldown as i32,
+                            Some(ExitVerifSettings::Email(mailer)) => mailer.email_cooldown as i64,
                             None => bail!("There is no verification configured!"),
                         };
                         let time_since_last_email =
@@ -645,7 +646,7 @@ impl Handler<SetClientTimestamp> for DbClient {
         info!("Setting timestamp for client {:?}", client);
         let connection = get_database_connection()?;
         diesel::update(clients.find(&client.mesh_ip.to_string()))
-            .set(last_seen.eq(secs_since_unix_epoch() as i32))
+            .set(last_seen.eq(secs_since_unix_epoch()))
             .execute(&connection)?;
         Ok(())
     }

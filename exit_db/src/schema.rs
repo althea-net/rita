@@ -1,16 +1,15 @@
 table! {
     clients (mesh_ip) {
-        mesh_ip -> Text,
-        wg_pubkey -> Text,
-        wg_port -> Text,
-        eth_address -> Text,
-        nickname -> Text,
-        internal_ip -> Text,
-        email -> Text,
-        country -> Text,
-        email_code -> Text,
+        mesh_ip -> Varchar,
+        wg_pubkey -> Varchar,
+        wg_port -> Int4,
+        internal_ip -> Varchar,
+        eth_address -> Varchar,
+        email -> Varchar,
+        country -> Varchar,
+        email_code -> Varchar,
         verified -> Bool,
-        email_sent_time -> Integer,
-        last_seen -> Integer,
+        email_sent_time -> Int8,
+        last_seen -> Int8,
     }
 }
