@@ -19,7 +19,7 @@ pub fn cleanup_exit_clients() -> Box<Future<Item = (), Error = ()>> {
                     match to_exit_client(client.clone()) {
                         Ok(client_id) => {
                             let time_delta = secs_since_unix_epoch() - client.last_seen;
-                            let entry_timeout = SETTING.get_exit_network().entry_timeout as i64;
+                            let entry_timeout = i64::from(SETTING.get_exit_network().entry_timeout);
                             if client.last_seen == 0 {
                                 info!(
                                     "{} does not have a last seen timestamp, adding one now ",
