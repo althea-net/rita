@@ -70,7 +70,7 @@ fn default_email_body() -> String {
     String::from("Your althea verification code is [{{email_code}}]")
 }
 
-/// This is the settings for email verification
+/// These are the settings for email verification
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct EmailVerifSettings {
     /// The email address of the from field of the email sent
@@ -101,11 +101,19 @@ pub struct EmailVerifSettings {
     pub smtp_password: String,
 }
 
-/// Placeholder
+/// These are the settings for text message verification using the twillio api
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
+pub struct PhoneVerifSettings {
+    pub api_key: String,
+}
+
+/// Struct containing the different types of supported verification
+/// and their respective settings
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(tag = "type", content = "contents")]
 pub enum ExitVerifSettings {
     Email(EmailVerifSettings),
+    Phone(PhoneVerifSettings)
 }
 
 /// This is the main settings struct for rita_exit

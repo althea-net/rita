@@ -10,10 +10,11 @@ pub struct Client {
     pub nickname: String,
     pub internal_ip: String,
     pub email: String,
+    pub phone: String,
     pub country: String,
     pub email_code: String,
     pub verified: bool,
-    // TODO change before 2038; it's left that way because diesel cannot do `Insertable` for i64
     pub email_sent_time: i64,
+    pub text_sent: bool,
     pub last_seen: i64,
 }

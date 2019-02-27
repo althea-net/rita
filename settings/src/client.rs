@@ -60,8 +60,10 @@ impl Default for ExitClientSettings {
             current_exit: None,
             wg_listen_port: 59999,
             reg_details: Some(ExitRegistrationDetails {
-                email: Some("1234@gmail.com".into()),
+                email: Some("1234@mail.com".into()),
                 email_code: Some("000000".into()),
+                phone: Some("00000".into()),
+                phone_code: Some("000000".into()),
             }),
             lan_nics: HashSet::new(),
         }

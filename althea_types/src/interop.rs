@@ -90,9 +90,12 @@ impl FromStr for SystemChain {
 pub struct ExitRegistrationDetails {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub email: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub email_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub phone: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub phone_code: Option<String>,
 }
 
 /// This is the state an exit can be in
@@ -116,6 +119,7 @@ pub enum ExitState {
         message: String,
         #[serde(default)]
         email_code: Option<String>,
+        phone_code: Option<String>,
     },
     Registered {
         general_details: ExitDetails,
@@ -187,8 +191,9 @@ pub struct ExitClientIdentity {
     pub reg_details: ExitRegistrationDetails,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum ExitVerifMode {
+    Phone,
     Email,
     Off,
 }

@@ -62,6 +62,7 @@ eui48 = "0.4"
 arrayvec = {version= "0.4", features = ["serde-1"]}
 lettre = {git="https://github.com/lettre/lettre.git"}
 lettre_email = {git="https://github.com/lettre/lettre.git"}
+phonenumber = "0.2"
 
 [features]
 default = []
