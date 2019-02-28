@@ -7,7 +7,6 @@
 
 use ::actix::prelude::*;
 use ::actix_web::*;
-use althea_types::ExitRegistrationDetails;
 use diesel;
 use diesel::dsl::*;
 use diesel::prelude::*;
@@ -20,7 +19,6 @@ use reqwest;
 use std::net::IpAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use lettre::EmailAddress;
 use lettre::{
     file::FileTransport,
     smtp::{
@@ -31,8 +29,6 @@ use lettre::{
     SmtpClient, Transport,
 };
 use lettre_email::EmailBuilder;
-
-use phonenumber::PhoneNumber;
 
 use handlebars::Handlebars;
 
