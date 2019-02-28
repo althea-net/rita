@@ -2,6 +2,7 @@ use crate::wg_key::WgKey;
 use arrayvec::ArrayString;
 use clarity::Address;
 use num256::Uint256;
+use std::hash::{Hash, Hasher};
 use std::net::IpAddr;
 use std::str::FromStr;
 
@@ -9,7 +10,7 @@ use std::str::FromStr;
 use actix::*;
 
 /// This is how nodes are identified.
-#[derive(Debug, Serialize, Deserialize, Hash, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct Identity {
     pub mesh_ip: IpAddr,
     pub eth_address: Address,
@@ -42,9 +43,19 @@ impl PartialEq for Identity {
             && self.wg_public_key == other.wg_public_key
     }
 }
+
 // I don't understand why we need this
 // docs insist on it though https://doc.rust-lang.org/std/cmp/trait.Eq.html
 impl Eq for Identity {}
+
+// Custom hash implementation that also ignores nickname
+impl Hash for Identity {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.mesh_ip.hash(state);
+        self.eth_address.hash(state);
+        self.wg_public_key.hash(state);
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, Hash, Clone, Eq, PartialEq, Copy)]
 pub enum SystemChain {
