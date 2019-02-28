@@ -32,6 +32,8 @@ use lettre_email::EmailBuilder;
 
 use handlebars::Handlebars;
 
+use phonenumber::PhoneNumber;
+
 use rand;
 use rand::Rng;
 
@@ -173,7 +175,7 @@ struct GeoIPRet {
 
 /// get ISO country code from ip, consults a in memory cache
 fn get_country(ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<String, Error> {
-    info!("get country for {}", ip.to_string());
+    info!("get GeoIP country for {}", ip.to_string());
     let client = reqwest::Client::new();
     let api_key = SETTING
         .get_exit_network()
@@ -186,7 +188,7 @@ fn get_country(ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<Strin
         None => {
             let geo_ip_url = format!("http://api.ipapi.com/{}?access_key={}", ip, api_key);
             info!(
-                "making geoip request to {} for {}",
+                "making GeoIP request to {} for {}",
                 geo_ip_url,
                 ip.to_string()
             );
@@ -195,7 +197,7 @@ fn get_country(ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<Strin
                 Ok(mut r) => match r.json() {
                     Ok(v) => v,
                     Err(e) => {
-                        warn!("Failed to Jsonize geoip response {:?}", e);
+                        warn!("Failed to Jsonize GeoIP response {:?}", e);
                         bail!("Failed to jsonize GeoIP response {:?}", e)
                     }
                 },
@@ -458,42 +460,60 @@ fn send_mail(client: &models::Client) -> Result<(), Error> {
     Ok(())
 }
 
+#[derive(Serialize)]
+pub struct SmsCheck {
+    api_key: String,
+    verification_code: String,
+    phone_number: String,
+    country_code: String,
+}
+
 fn check_text(number: String, code: String, api_key: String) -> Result<bool, Error> {
-    // get the first number when split by -
-    let country_code = match number.split("-").nth(0) {
-        Some(val) => val,
-        None => bail!("Invalid number {}", number),
-    };
+    trace!("About to check text message status for {}", number);
+    let number: PhoneNumber = number.parse()?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(1))
         .build()?;
     let res = client
         .get("https://api.authy.com/protected/json/phones/verification/check")
-        .body(format!(
-            "api_key={}&verification_code={}&phone_number={}&country_code={}",
-            api_key, code, number, country_code
-        ))
+        .form(&SmsCheck {
+            api_key: api_key,
+            verification_code: code,
+            phone_number: number.national().to_string(),
+            country_code: number.code().value().to_string(),
+        })
         .send()?;
     Ok(res.status().is_success())
 }
 
+#[derive(Serialize)]
+pub struct SmsRequest {
+    api_key: String,
+    via: String,
+    phone_number: String,
+    country_code: String,
+}
+
 fn send_text(number: String, api_key: String) -> Result<(), Error> {
-    // get the first number when split by -
-    let country_code = match number.split("-").nth(0) {
-        Some(val) => val,
-        None => bail!("Invalid number {}!", number),
-    };
+    trace!("Sending message for {}", number);
+    let number: PhoneNumber = number.parse()?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(1))
         .build()?;
     let res = client
         .post("https://api.authy.com/protected/json/phones/verification/start")
-        .body(format!(
-            "api_key={}&via=sms&phone_number={}&country_code={}",
-            api_key, number, country_code
-        ))
+        .form(&SmsRequest {
+            api_key: api_key,
+            via: "sms".to_string(),
+            phone_number: number.national().to_string(),
+            country_code: number.code().value().to_string(),
+        })
         .send()?;
-    Ok(())
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        bail!("SMS API failure! Maybe bad number?")
+    }
 }
 
 pub struct SetupClient(pub ExitClientIdentity, pub IpAddr);
@@ -584,6 +604,7 @@ fn handle_phone_registration(
     api_key: String,
     conn: &PgConnection,
 ) -> Result<ExitState, Error> {
+    trace!("Handling phone registration for {:?}", client);
     match (
         client.reg_details.phone.clone(),
         client.reg_details.phone_code.clone(),
@@ -608,7 +629,7 @@ fn handle_phone_registration(
                 })
             }
         }
-        (Some(number), None, true) => Ok(ExitState::Pending {
+        (Some(_number), None, true) => Ok(ExitState::Pending {
             general_details: get_exit_info(),
             message: "awaiting phone verification".to_string(),
             email_code: None,
@@ -630,7 +651,7 @@ fn handle_phone_registration(
             message: "Please submit a phone number first".to_string(),
         }),
         (None, _, _) => Ok(ExitState::Denied {
-            message: format!("This exit requires a phone number to register!"),
+            message: "This exit requires a phone number to register!".to_string(),
         }),
     }
 }
