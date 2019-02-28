@@ -39,7 +39,7 @@ pub struct ExitNetworkSettings {
     /// The netmask, in bits to mask out, for the exit tunnel
     pub netmask: u8,
     /// Time in seconds before user is dropped from the db due to inactivity
-    /// 0 means disabled 
+    /// 0 means disabled
     pub entry_timeout: u32,
     /// api key for geoip
     pub api_key: Option<String>,
@@ -113,7 +113,7 @@ pub struct PhoneVerifSettings {
 #[serde(tag = "type", content = "contents")]
 pub enum ExitVerifSettings {
     Email(EmailVerifSettings),
-    Phone(PhoneVerifSettings)
+    Phone(PhoneVerifSettings),
 }
 
 /// This is the main settings struct for rita_exit

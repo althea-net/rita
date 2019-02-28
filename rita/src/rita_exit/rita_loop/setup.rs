@@ -43,10 +43,12 @@ pub fn setup_exit_clients() -> Box<Future<Item = (), Error = ()>> {
 
                 match exit_status {
                     Ok(_) => trace!("Successfully setup Exit WG!"),
-                    Err(e) => {
-                        warn!("Error in Exit WG setup {:?}", e);
-                        panic!(e)
-                    }
+                    Err(e) => warn!(
+                        "Error in Exit WG setup {:?}, 
+                        this usually happens when a Rita service is 
+                        trying to auto restart in the background",
+                        e
+                    ),
                 }
                 info!(
                     "Rita Exit loop completed in {}s {}ms",

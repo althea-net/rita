@@ -532,6 +532,7 @@ impl Handler<SetupClient> for DbClient {
 
             let new_ip = incr_dummy(&conn)?;
 
+            trace!("About to check country");
             let user_country = if SETTING.get_allowed_countries().is_empty() {
                 String::new()
             } else {
@@ -540,6 +541,7 @@ impl Handler<SetupClient> for DbClient {
 
             let c = client_to_new_db_client(&client, new_ip, user_country);
 
+            trace!("Inserting new client");
             diesel::insert_into(clients).values(&c).execute(&conn)?;
 
             c
