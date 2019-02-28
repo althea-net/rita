@@ -25,8 +25,10 @@ pub fn setup_exit_clients() -> Box<Future<Item = (), Error = ()>> {
                 trace!("got clients from db {:?}", clients);
 
                 for c in clients {
-                    if let Ok(c) = to_exit_client(c) {
-                        wg_clients.push(c);
+                    match (c.verified, to_exit_client(c.clone())) {
+                        (true, Ok(exit_client_c)) => wg_clients.push(exit_client_c),
+                        (true, Err(e)) => warn!("Error converting {:?} to exit client {:?}", c, e),
+                        (false, _) => trace!("{:?} is not verified, not adding to wg_exit", c),
                     }
                 }
 
