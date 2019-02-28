@@ -48,9 +48,6 @@ use failure::Error;
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use num256::Uint256;
-use num_traits::identities::Zero;
-
 /// enables remote logging if the user has configured it
 fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
     // now that the exit tunnel is up we can start logging over it

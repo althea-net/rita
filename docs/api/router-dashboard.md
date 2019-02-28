@@ -331,7 +331,7 @@ application/json" -d '\{"url": "https://somewhere.safe"\}'
 
 - Sample Call:
 
-`curl -XPOST 127.0.0.1:4877/exits/borked/register`
+`curl -XPOST 127.0.0.1:4877/exits/borked/verify/32435`
 
 ---
 
@@ -841,6 +841,7 @@ Format:
 
 - Success Response:
   - 200
+
 ```json
 {
   "eth_private_key": "<new_eth_private_key>"
