@@ -1,5 +1,7 @@
 use super::{KernelInterface, KernelInterfaceError};
 
+use althea_types::WgKey;
+
 use std::collections::HashSet;
 
 use failure::Error;
@@ -9,7 +11,7 @@ use std::net::IpAddr;
 #[derive(Debug)]
 pub struct ExitClient {
     pub internal_ip: IpAddr,
-    pub public_key: String,
+    pub public_key: WgKey,
     pub mesh_ip: IpAddr,
     pub port: u16,
 }
@@ -53,7 +55,7 @@ impl dyn KernelInterface {
         self.run_command(&command, &arg_str[..])?;
 
         for i in self.get_peers("wg_exit")? {
-            if !client_pubkeys.contains(&i.to_string()) {
+            if !client_pubkeys.contains(&i) {
                 self.run_command(
                     "wg",
                     &["set", "wg_exit", "peer", &format!("{}", i), "remove"],

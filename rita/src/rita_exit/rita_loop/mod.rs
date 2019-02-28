@@ -34,6 +34,7 @@ use settings::RitaCommonSettings;
 use althea_kernel_interface::{ExitClient, KI};
 
 use althea_types::Identity;
+use althea_types::WgKey;
 
 mod cleanup;
 mod enforcement;
@@ -80,7 +81,7 @@ fn to_exit_client(client: Client) -> Result<ExitClient, Error> {
         mesh_ip: client.mesh_ip.parse()?,
         internal_ip: client.internal_ip.parse()?,
         port: client.wg_port as u16,
-        public_key: client.wg_pubkey,
+        public_key: client.wg_pubkey.parse()?,
     })
 }
 
