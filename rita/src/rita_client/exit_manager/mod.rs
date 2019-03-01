@@ -22,7 +22,7 @@ use ::actix_web::client::Connection;
 use ::actix_web::*;
 use std::net::IpAddr;
 
-use althea_types::{ExitClientIdentity, ExitState};
+use althea_types::{ExitClientIdentity, ExitState, ExitVerifMode};
 
 use crate::SETTING;
 use settings::client::ExitServer;
@@ -47,9 +47,6 @@ use crate::KI;
 use failure::Error;
 use std::net::SocketAddr;
 use std::time::Duration;
-
-use num256::Uint256;
-use num_traits::identities::Zero;
 
 /// enables remote logging if the user has configured it
 fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
@@ -217,9 +214,21 @@ pub fn exit_setup_request(
         Some(exit_struct) => exit_struct.clone(),
         None => return Box::new(future::err(format_err!("Could not find exit {:?}", exit))),
     };
+    let exit_auth_type = match current_exit.info.general_details() {
+        Some(details) => details.verif_mode,
+        None => return Box::new(future::err(format_err!("Exit is not ready to be setup!"))),
+    };
     let exit_server = current_exit.id.mesh_ip;
     let mut reg_details = SETTING.get_exit_client().reg_details.clone().unwrap();
-    reg_details.email_code = code;
+    match exit_auth_type {
+        ExitVerifMode::Email => {
+            reg_details.email_code = code;
+        }
+        ExitVerifMode::Phone => {
+            reg_details.phone_code = code;
+        }
+        ExitVerifMode::Off => {}
+    }
 
     let ident = ExitClientIdentity {
         global: match SETTING.get_identity() {

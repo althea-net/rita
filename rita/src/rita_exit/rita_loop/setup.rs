@@ -25,8 +25,10 @@ pub fn setup_exit_clients() -> Box<Future<Item = (), Error = ()>> {
                 trace!("got clients from db {:?}", clients);
 
                 for c in clients {
-                    if let Ok(c) = to_exit_client(c) {
-                        wg_clients.push(c);
+                    match (c.verified, to_exit_client(c.clone())) {
+                        (true, Ok(exit_client_c)) => wg_clients.push(exit_client_c),
+                        (true, Err(e)) => warn!("Error converting {:?} to exit client {:?}", c, e),
+                        (false, _) => trace!("{:?} is not verified, not adding to wg_exit", c),
                     }
                 }
 
@@ -42,8 +44,13 @@ pub fn setup_exit_clients() -> Box<Future<Item = (), Error = ()>> {
                 );
 
                 match exit_status {
-                    Ok(_) => (),
-                    Err(e) => warn!("Error in Exit WG setup {:?}", e),
+                    Ok(_) => trace!("Successfully setup Exit WG!"),
+                    Err(e) => warn!(
+                        "Error in Exit WG setup {:?}, 
+                        this usually happens when a Rita service is 
+                        trying to auto restart in the background",
+                        e
+                    ),
                 }
                 info!(
                     "Rita Exit loop completed in {}s {}ms",

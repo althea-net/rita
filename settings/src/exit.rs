@@ -39,8 +39,8 @@ pub struct ExitNetworkSettings {
     /// The netmask, in bits to mask out, for the exit tunnel
     pub netmask: u8,
     /// Time in seconds before user is dropped from the db due to inactivity
-    /// 0 means disabled TODO convert to u64 when fixing the 2038 problem
-    pub entry_timeout: i32,
+    /// 0 means disabled
+    pub entry_timeout: u32,
     /// api key for geoip
     pub api_key: Option<String>,
 }
@@ -70,7 +70,7 @@ fn default_email_body() -> String {
     String::from("Your althea verification code is [{{email_code}}]")
 }
 
-/// This is the settings for email verification
+/// These are the settings for email verification
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct EmailVerifSettings {
     /// The email address of the from field of the email sent
@@ -101,17 +101,26 @@ pub struct EmailVerifSettings {
     pub smtp_password: String,
 }
 
-/// Placeholder
+/// These are the settings for text message verification using the twillio api
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
+pub struct PhoneVerifSettings {
+    pub api_key: String,
+}
+
+/// Struct containing the different types of supported verification
+/// and their respective settings
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(tag = "type", content = "contents")]
 pub enum ExitVerifSettings {
     Email(EmailVerifSettings),
+    Phone(PhoneVerifSettings),
 }
 
 /// This is the main settings struct for rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct RitaExitSettingsStruct {
-    db_file: String,
+    // starts with file:// or postgres://username:password@localhost/diesel_demo
+    db_uri: String,
     description: String,
     payment: PaymentSettings,
     dao: SubnetDAOSettings,
@@ -141,7 +150,7 @@ pub trait RitaExitSettings {
     fn get_mailer_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, Option<EmailVerifSettings>>;
-    fn get_db_file(&self) -> String;
+    fn get_db_uri(&self) -> String;
     fn get_description(&self) -> String;
     fn get_allowed_countries<'ret, 'me: 'ret>(
         &'me self,
@@ -154,8 +163,8 @@ impl RitaExitSettings for Arc<RwLock<RitaExitSettingsStruct>> {
     ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, ExitNetworkSettings> {
         RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.exit_network)
     }
-    fn get_db_file(&self) -> String {
-        self.read().unwrap().db_file.clone()
+    fn get_db_uri(&self) -> String {
+        self.read().unwrap().db_uri.clone()
     }
     fn get_description(&self) -> String {
         self.read().unwrap().description.clone()

@@ -12,6 +12,7 @@ use diesel::dsl::*;
 use diesel::prelude::*;
 use diesel::select;
 use std::collections::HashMap;
+use std::time::Duration;
 
 use reqwest;
 
@@ -31,6 +32,8 @@ use lettre_email::EmailBuilder;
 
 use handlebars::Handlebars;
 
+use phonenumber::PhoneNumber;
+
 use rand;
 use rand::Rng;
 
@@ -48,6 +51,17 @@ use ipnetwork::IpNetwork;
 use failure::Error;
 
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
+
+/// Gets the Postgres database connection
+pub fn get_database_connection() -> Result<PgConnection, ConnectionError> {
+    let db_uri = SETTING.get_db_uri();
+    info!("Opening {:?}", db_uri);
+    if db_uri.contains("postgres://") {
+        PgConnection::establish(&db_uri)
+    } else {
+        panic!("You must provide a valid postgressql database uri!");
+    }
+}
 
 #[derive(Default)]
 pub struct DbClient {
@@ -75,14 +89,7 @@ impl Handler<ListClients> for DbClient {
 
     fn handle(&mut self, _: ListClients, _: &mut Self::Context) -> Self::Result {
         use self::schema::clients::dsl::*;
-        info!("Opening {:?}", &SETTING.get_db_file());
-        let connection = match SqliteConnection::establish(&SETTING.get_db_file()) {
-            Ok(connection) => connection,
-            Err(e) => {
-                error!("We could not connect to the database file! {:?}", e);
-                bail!("Could not connect to database file!")
-            }
-        };
+        let connection = get_database_connection()?;
 
         let res = clients.load::<models::Client>(&connection)?;
         trace!("Got clients list {:?}", res);
@@ -168,7 +175,7 @@ struct GeoIPRet {
 
 /// get ISO country code from ip, consults a in memory cache
 fn get_country(ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<String, Error> {
-    info!("get country for {}", ip.to_string());
+    info!("get GeoIP country for {}", ip.to_string());
     let client = reqwest::Client::new();
     let api_key = SETTING
         .get_exit_network()
@@ -181,7 +188,7 @@ fn get_country(ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<Strin
         None => {
             let geo_ip_url = format!("http://api.ipapi.com/{}?access_key={}", ip, api_key);
             info!(
-                "making geoip request to {} for {}",
+                "making GeoIP request to {} for {}",
                 geo_ip_url,
                 ip.to_string()
             );
@@ -190,7 +197,7 @@ fn get_country(ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<Strin
                 Ok(mut r) => match r.json() {
                     Ok(v) => v,
                     Err(e) => {
-                        warn!("Failed to Jsonize geoip response {:?}", e);
+                        warn!("Failed to Jsonize GeoIP response {:?}", e);
                         bail!("Failed to jsonize GeoIP response {:?}", e)
                     }
                 },
@@ -239,12 +246,13 @@ pub fn get_exit_info() -> ExitDetails {
         description: SETTING.get_description(),
         verif_mode: match SETTING.get_verif_settings() {
             Some(ExitVerifSettings::Email(_mailer_settings)) => ExitVerifMode::Email,
+            Some(ExitVerifSettings::Phone(_phone_settings)) => ExitVerifMode::Phone,
             None => ExitVerifMode::Off,
         },
     }
 }
 
-fn add_dummy(conn: &SqliteConnection) -> Result<(), Error> {
+fn add_dummy(conn: &PgConnection) -> Result<(), Error> {
     use self::schema::clients::dsl::*;
 
     let mut dummy = models::Client::default();
@@ -259,7 +267,7 @@ fn add_dummy(conn: &SqliteConnection) -> Result<(), Error> {
     Ok(())
 }
 
-fn incr_dummy(conn: &SqliteConnection) -> Result<IpAddr, Error> {
+fn incr_dummy(conn: &PgConnection) -> Result<IpAddr, Error> {
     use self::schema::clients::dsl::*;
 
     add_dummy(&conn)?;
@@ -281,7 +289,7 @@ fn incr_dummy(conn: &SqliteConnection) -> Result<IpAddr, Error> {
     Ok(new_ip)
 }
 
-fn update_client(client: &ExitClientIdentity, conn: &SqliteConnection) -> Result<(), Error> {
+fn update_client(client: &ExitClientIdentity, conn: &PgConnection) -> Result<(), Error> {
     use self::schema::clients::dsl::{clients, email, last_seen, wg_port, wg_pubkey};
     let mail_addr = match client.clone().reg_details.email {
         Some(mail) => mail.clone(),
@@ -289,7 +297,7 @@ fn update_client(client: &ExitClientIdentity, conn: &SqliteConnection) -> Result
     };
 
     diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-        .set(wg_port.eq(&client.wg_port.to_string()))
+        .set(wg_port.eq(i32::from(client.wg_port)))
         .execute(&*conn)?;
 
     diesel::update(clients.find(&client.global.mesh_ip.to_string()))
@@ -301,16 +309,31 @@ fn update_client(client: &ExitClientIdentity, conn: &SqliteConnection) -> Result
         .execute(&*conn)?;
 
     diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-        .set(last_seen.eq(secs_since_unix_epoch() as i32))
+        .set(last_seen.eq(secs_since_unix_epoch() as i64))
         .execute(&*conn)?;
 
     Ok(())
 }
 
+fn get_client(ip: IpAddr, conn: &PgConnection) -> Result<models::Client, Error> {
+    use self::schema::clients::dsl::{clients, mesh_ip};
+    match clients
+        .filter(mesh_ip.eq(&ip.to_string()))
+        .load::<models::Client>(conn)
+    {
+        Ok(entry) => Ok(entry[0].clone()),
+        Err(e) => {
+            error!("We failed to lookup the client {:?} with{:?}", mesh_ip, e);
+            bail!("We failed to lookup the client!")
+        }
+    }
+}
+
+/// Marks a client as verified in the database
 fn verify_client(
     client: &ExitClientIdentity,
     client_verified: bool,
-    conn: &SqliteConnection,
+    conn: &PgConnection,
 ) -> Result<(), Error> {
     use self::schema::clients::dsl::*;
 
@@ -321,20 +344,29 @@ fn verify_client(
     Ok(())
 }
 
-pub fn secs_since_unix_epoch() -> i32 {
+/// Marks a registration text as sent in the database
+fn text_sent(client: &ExitClientIdentity, conn: &PgConnection) -> Result<(), Error> {
+    use self::schema::clients::dsl::*;
+
+    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
+        .set(text_sent.eq(true))
+        .execute(&*conn)?;
+
+    Ok(())
+}
+
+// lossy conversion, but it won't matter until 2.9 * 10^8 millenia from now
+pub fn secs_since_unix_epoch() -> i64 {
     let start = SystemTime::now();
     let since_the_epoch = start
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards");
-    since_the_epoch.as_secs() as i32
+    since_the_epoch.as_secs() as i64
 }
 
 // we match on email not key? that has interesting implications for
 // shared emails
-fn update_mail_sent_time(
-    client: &ExitClientIdentity,
-    conn: &SqliteConnection,
-) -> Result<(), Error> {
+fn update_mail_sent_time(client: &ExitClientIdentity, conn: &PgConnection) -> Result<(), Error> {
     use self::schema::clients::dsl::{clients, email, email_sent_time};
     let mail_addr = match client.clone().reg_details.email {
         Some(mail) => mail.clone(),
@@ -342,49 +374,58 @@ fn update_mail_sent_time(
     };
 
     diesel::update(clients.filter(email.eq(mail_addr)))
-        .set(email_sent_time.eq(secs_since_unix_epoch() as i32))
+        .set(email_sent_time.eq(secs_since_unix_epoch()))
         .execute(&*conn)?;
 
     Ok(())
 }
 
-fn client_exists(ip: &IpAddr, conn: &SqliteConnection) -> Result<bool, Error> {
+fn client_exists(ip: &IpAddr, conn: &PgConnection) -> Result<bool, Error> {
     use self::schema::clients::dsl::*;
     Ok(select(exists(clients.filter(mesh_ip.eq(ip.to_string())))).get_result(&*conn)?)
 }
 
 fn client_to_new_db_client(
-    client: ExitClientIdentity,
+    client: &ExitClientIdentity,
     new_ip: IpAddr,
     country: String,
 ) -> models::Client {
     let mut rng = rand::thread_rng();
     let rand_code: u64 = rng.gen_range(0, 999_999);
     models::Client {
-        wg_port: client.wg_port.to_string(),
+        wg_port: i32::from(client.wg_port),
         mesh_ip: client.global.mesh_ip.to_string(),
         wg_pubkey: client.global.wg_public_key.to_string(),
         eth_address: client.global.eth_address.to_string(),
         nickname: client.global.nickname.unwrap_or_default().to_string(),
         internal_ip: new_ip.to_string(),
         email: client.reg_details.email.clone().unwrap_or_default(),
+        phone: client.reg_details.phone.clone().unwrap_or_default(),
         country,
         email_code: format!("{:06}", rand_code),
+        text_sent: false,
         verified: false,
         email_sent_time: 0,
         last_seen: 0,
     }
 }
 
-fn verif_done(client: &models::Client) -> Result<bool, Error> {
-    Ok(client.verified || SETTING.get_verif_settings().is_none())
+/// returns true if client is verified
+fn verif_done(client: &models::Client) -> bool {
+    client.verified
+}
+
+/// returns true if text message has been sent
+fn text_done(client: &models::Client) -> bool {
+    client.text_sent
 }
 
 fn send_mail(client: &models::Client) -> Result<(), Error> {
-    if SETTING.get_verif_settings().is_none() {
-        return Ok(());
+    let mailer = match SETTING.get_verif_settings() {
+        Some(ExitVerifSettings::Email(mailer)) => mailer,
+        Some(_) => bail!("Verification mode is not email!"),
+        None => bail!("No verification mode configured!"),
     };
-    let ExitVerifSettings::Email(mailer) = SETTING.get_verif_settings().unwrap();
 
     info!("Sending exit signup email for client");
 
@@ -419,6 +460,62 @@ fn send_mail(client: &models::Client) -> Result<(), Error> {
     Ok(())
 }
 
+#[derive(Serialize)]
+pub struct SmsCheck {
+    api_key: String,
+    verification_code: String,
+    phone_number: String,
+    country_code: String,
+}
+
+fn check_text(number: String, code: String, api_key: String) -> Result<bool, Error> {
+    trace!("About to check text message status for {}", number);
+    let number: PhoneNumber = number.parse()?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(1))
+        .build()?;
+    let res = client
+        .get("https://api.authy.com/protected/json/phones/verification/check")
+        .form(&SmsCheck {
+            api_key: api_key,
+            verification_code: code,
+            phone_number: number.national().to_string(),
+            country_code: number.code().value().to_string(),
+        })
+        .send()?;
+    Ok(res.status().is_success())
+}
+
+#[derive(Serialize)]
+pub struct SmsRequest {
+    api_key: String,
+    via: String,
+    phone_number: String,
+    country_code: String,
+}
+
+fn send_text(number: String, api_key: String) -> Result<(), Error> {
+    trace!("Sending message for {}", number);
+    let number: PhoneNumber = number.parse()?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(1))
+        .build()?;
+    let res = client
+        .post("https://api.authy.com/protected/json/phones/verification/start")
+        .form(&SmsRequest {
+            api_key: api_key,
+            via: "sms".to_string(),
+            phone_number: number.national().to_string(),
+            country_code: number.code().value().to_string(),
+        })
+        .send()?;
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        bail!("SMS API failure! Maybe bad number?")
+    }
+}
+
 pub struct SetupClient(pub ExitClientIdentity, pub IpAddr);
 
 impl Message for SetupClient {
@@ -429,115 +526,180 @@ impl Handler<SetupClient> for DbClient {
     type Result = Result<ExitState, Error>;
 
     fn handle(&mut self, msg: SetupClient, _: &mut Self::Context) -> Self::Result {
-        use self::schema::clients::dsl::{clients, mesh_ip};
-        let conn = match SqliteConnection::establish(&SETTING.get_db_file()) {
-            Ok(connection) => connection,
-            Err(e) => {
-                error!("We could not connect to the database file! {:?}", e);
-                bail!("Could not connect to database file!")
-            }
-        };
+        use self::schema::clients::dsl::clients;
+        let conn = get_database_connection()?;
         let client = msg.0.clone();
+        let client_mesh_ip = client.global.mesh_ip;
+        let gateway_ip = msg.1;
+        // adds the dummy db entry, the dummy is used to easily determine what the next ip
+        // in the database is TODO make sure dummy can't be overwriten by hostile registrant
+        // also TODO just select lowest free ip, while this is O(n) time it shouldn't really
+        // be a problem.
+        add_dummy(&conn)?;
 
         trace!("got setup request {:?}", client);
 
-        match verify_ip(&msg.1, &mut self.geoip_cache) {
-            Ok(_) => conn.transaction::<_, Error, _>(|| {
-                add_dummy(&conn)?;
+        // either update and grab an existing entry or create one
+        let their_record = if client_exists(&client_mesh_ip, &conn)? {
+            update_client(&client, &conn)?;
+            get_client(client_mesh_ip, &conn)?
+        } else {
+            trace!("record does not exist, creating");
 
-                trace!("Checking if record exists for {:?}", client.global.mesh_ip);
+            let new_ip = incr_dummy(&conn)?;
 
-                if client_exists(&client.global.mesh_ip, &conn)? {
-                    update_client(&msg.0, &conn)?;
-                    let mut their_record: models::Client = match clients
-                        .filter(mesh_ip.eq(&client.global.mesh_ip.to_string()))
-                        .load::<models::Client>(&conn)
-                    {
-                        Ok(entry) => entry[0].clone(),
-                        Err(e) => {
-                            error!("We failed to lookup the client {:?} with{:?}", mesh_ip, e);
-                            bail!("We failed to lookup the client!")
-                        }
-                    };
+            trace!("About to check country");
+            let user_country = if SETTING.get_allowed_countries().is_empty() {
+                String::new()
+            } else {
+                get_country(&msg.1, &mut self.geoip_cache)?
+            };
 
-                    info!(
-                        "expected code {}, got code {:?}",
-                        their_record.email_code, client.reg_details.email_code
-                    );
+            let c = client_to_new_db_client(&client, new_ip, user_country);
 
-                    if client.reg_details.email_code == Some(their_record.email_code.clone()) {
-                        info!("email verification complete for {:?}", client);
-                        verify_client(&client, true, &conn)?;
-                        their_record.verified = true;
-                    }
+            trace!("Inserting new client");
+            diesel::insert_into(clients).values(&c).execute(&conn)?;
 
-                    if verif_done(&their_record)? {
-                        info!("{:?} is now registered", client);
-                        Ok(ExitState::Registered {
-                            our_details: ExitClientDetails {
-                                client_internal_ip: their_record.internal_ip.parse()?,
-                            },
-                            general_details: get_exit_info(),
-                            message: "Registration OK".to_string(),
-                        })
-                    } else {
-                        let cooldown = match SETTING.get_verif_settings() {
-                            Some(ExitVerifSettings::Email(mailer)) => mailer.email_cooldown as i32,
-                            None => bail!("There is no verification configured!"),
-                        };
-                        let time_since_last_email =
-                            secs_since_unix_epoch() - their_record.email_sent_time;
+            c
+        };
 
-                        if time_since_last_email < cooldown {
-                            Ok(ExitState::GotInfo {
-                                general_details: get_exit_info(),
-                                message: format!(
-                                    "Wait {} more seconds for verification cooldown",
-                                    cooldown - time_since_last_email
-                                ),
-                                auto_register: true,
-                            })
-                        } else {
-                            update_mail_sent_time(&client, &conn)?;
-                            send_mail(&their_record)?;
-                            Ok(ExitState::Pending {
-                                general_details: get_exit_info(),
-                                message: "awaiting email verification".to_string(),
-                                email_code: None,
-                            })
-                        }
-                    }
-                } else {
-                    trace!("record does not exist, creating");
-
-                    let new_ip = incr_dummy(&conn)?;
-
-                    let user_country = if SETTING.get_allowed_countries().is_empty() {
-                        String::new()
-                    } else {
-                        get_country(&msg.1, &mut self.geoip_cache)?
-                    };
-
-                    let c = client_to_new_db_client(client, new_ip, user_country);
-
-                    diesel::insert_into(clients).values(&c).execute(&conn)?;
-
-                    send_mail(&c)?;
-
-                    Ok(ExitState::Pending {
-                        general_details: get_exit_info(),
-                        message: "awaiting email verification".to_string(),
-                        email_code: None,
-                    })
-                }
-            }),
-            Err(e) => Ok(ExitState::Denied {
+        match (
+            verify_ip(&gateway_ip, &mut self.geoip_cache),
+            SETTING.get_verif_settings(),
+        ) {
+            (Ok(_val), Some(ExitVerifSettings::Email(mailer))) => handle_email_registration(
+                &client,
+                &their_record,
+                &conn,
+                mailer.email_cooldown as i64,
+            ),
+            (Ok(_val), Some(ExitVerifSettings::Phone(phone))) => {
+                handle_phone_registration(&client, &their_record, phone.api_key, &conn)
+            }
+            (Ok(_val), None) => {
+                verify_client(&client, true, &conn)?;
+                Ok(ExitState::Registered {
+                    our_details: ExitClientDetails {
+                        client_internal_ip: their_record.internal_ip.parse()?,
+                    },
+                    general_details: get_exit_info(),
+                    message: "Registration OK".to_string(),
+                })
+            }
+            (Err(e), _) => Ok(ExitState::Denied {
                 message: format!(
                     "This exit only accepts connections from {:?}\n verbose error: {}",
                     SETTING.get_allowed_countries().clone(),
                     e
                 ),
             }),
+        }
+    }
+}
+
+/// Handles the minutia of phone registration states
+fn handle_phone_registration(
+    client: &ExitClientIdentity,
+    their_record: &exit_db::models::Client,
+    api_key: String,
+    conn: &PgConnection,
+) -> Result<ExitState, Error> {
+    trace!("Handling phone registration for {:?}", client);
+    match (
+        client.reg_details.phone.clone(),
+        client.reg_details.phone_code.clone(),
+        text_done(their_record),
+    ) {
+        (Some(number), Some(code), true) => {
+            if check_text(number, code, api_key)? {
+                verify_client(&client, true, conn)?;
+                Ok(ExitState::Registered {
+                    our_details: ExitClientDetails {
+                        client_internal_ip: their_record.internal_ip.parse()?,
+                    },
+                    general_details: get_exit_info(),
+                    message: "Registration OK".to_string(),
+                })
+            } else {
+                Ok(ExitState::Pending {
+                    general_details: get_exit_info(),
+                    message: "awaiting phone verification".to_string(),
+                    email_code: None,
+                    phone_code: None,
+                })
+            }
+        }
+        (Some(_number), None, true) => Ok(ExitState::Pending {
+            general_details: get_exit_info(),
+            message: "awaiting phone verification".to_string(),
+            email_code: None,
+            phone_code: None,
+        }),
+        (Some(number), None, false) => {
+            send_text(number, api_key)?;
+            text_sent(&client, &conn)?;
+            Ok(ExitState::Pending {
+                general_details: get_exit_info(),
+                message: "awaiting phone verification".to_string(),
+                email_code: None,
+                phone_code: None,
+            })
+        }
+        (Some(_), Some(_), false) => Ok(ExitState::GotInfo {
+            auto_register: false,
+            general_details: get_exit_info(),
+            message: "Please submit a phone number first".to_string(),
+        }),
+        (None, _, _) => Ok(ExitState::Denied {
+            message: "This exit requires a phone number to register!".to_string(),
+        }),
+    }
+}
+
+/// handles the minutia of emails and cooldowns
+fn handle_email_registration(
+    client: &ExitClientIdentity,
+    their_record: &exit_db::models::Client,
+    conn: &PgConnection,
+    cooldown: i64,
+) -> Result<ExitState, Error> {
+    let mut their_record = their_record.clone();
+    if client.reg_details.email_code == Some(their_record.email_code.clone()) {
+        info!("email verification complete for {:?}", client);
+        verify_client(&client, true, &conn)?;
+        their_record.verified = true;
+    }
+
+    if verif_done(&their_record) {
+        info!("{:?} is now registered", client);
+        Ok(ExitState::Registered {
+            our_details: ExitClientDetails {
+                client_internal_ip: their_record.internal_ip.parse()?,
+            },
+            general_details: get_exit_info(),
+            message: "Registration OK".to_string(),
+        })
+    } else {
+        let time_since_last_email = secs_since_unix_epoch() - their_record.email_sent_time;
+
+        if time_since_last_email < cooldown {
+            Ok(ExitState::GotInfo {
+                general_details: get_exit_info(),
+                message: format!(
+                    "Wait {} more seconds for verification cooldown",
+                    cooldown - time_since_last_email
+                ),
+                auto_register: true,
+            })
+        } else {
+            update_mail_sent_time(&client, &conn)?;
+            send_mail(&their_record)?;
+            Ok(ExitState::Pending {
+                general_details: get_exit_info(),
+                message: "awaiting email verification".to_string(),
+                email_code: None,
+                phone_code: None,
+            })
         }
     }
 }
@@ -553,13 +715,7 @@ impl Handler<ClientStatus> for DbClient {
 
     fn handle(&mut self, msg: ClientStatus, _: &mut Self::Context) -> Self::Result {
         use self::schema::clients::dsl::{clients, mesh_ip};
-        let conn = match SqliteConnection::establish(&SETTING.get_db_file()) {
-            Ok(connection) => connection,
-            Err(e) => {
-                error!("We could not connect to the database file! {:?}", e);
-                bail!("Could not connect to database file!")
-            }
-        };
+        let conn = get_database_connection()?;
         conn.transaction::<_, Error, _>(|| {
             let client = msg.0;
 
@@ -581,11 +737,12 @@ impl Handler<ClientStatus> for DbClient {
                     }
                 };
 
-                if !verif_done(&their_record)? {
+                if !verif_done(&their_record) {
                     return Ok(ExitState::Pending {
                         general_details: get_exit_info(),
                         message: "awaiting email verification".to_string(),
                         email_code: None,
+                        phone_code: None,
                     });
                 }
 
@@ -630,14 +787,9 @@ impl Handler<DeleteClient> for DbClient {
     fn handle(&mut self, client: DeleteClient, _: &mut Self::Context) -> Self::Result {
         use self::schema::clients::dsl::*;
         let client = client.0;
-        info!("Deleting all clients in {:?}", &SETTING.get_db_file());
-        let connection = match SqliteConnection::establish(&SETTING.get_db_file()) {
-            Ok(connection) => connection,
-            Err(e) => {
-                error!("We could not connect to the database file! {:?}", e);
-                bail!("Could not connect to database file!")
-            }
-        };
+        info!("Deleting clients {:?} in database", client);
+
+        let connection = get_database_connection()?;
         let mesh_ip_string = client.mesh_ip.to_string();
         let statement = clients.find(&mesh_ip_string);
         r#try!(delete(statement).execute(&connection));
@@ -658,16 +810,10 @@ impl Handler<SetClientTimestamp> for DbClient {
     fn handle(&mut self, client: SetClientTimestamp, _: &mut Self::Context) -> Self::Result {
         use self::schema::clients::dsl::*;
         let client = client.0;
-        info!("Deleting all clients in {:?}", &SETTING.get_db_file());
-        let connection = match SqliteConnection::establish(&SETTING.get_db_file()) {
-            Ok(connection) => connection,
-            Err(e) => {
-                error!("We could not connect to the database file! {:?}", e);
-                bail!("Could not connect to database file!")
-            }
-        };
+        info!("Setting timestamp for client {:?}", client);
+        let connection = get_database_connection()?;
         diesel::update(clients.find(&client.mesh_ip.to_string()))
-            .set(last_seen.eq(secs_since_unix_epoch() as i32))
+            .set(last_seen.eq(secs_since_unix_epoch()))
             .execute(&connection)?;
         Ok(())
     }
@@ -683,14 +829,8 @@ impl Handler<TruncateTables> for DbClient {
 
     fn handle(&mut self, _: TruncateTables, _: &mut Self::Context) -> Self::Result {
         use self::schema::clients::dsl::*;
-        info!("Deleting all clients in {:?}", &SETTING.get_db_file());
-        let connection = match SqliteConnection::establish(&SETTING.get_db_file()) {
-            Ok(connection) => connection,
-            Err(e) => {
-                error!("We could not connect to the database file! {:?}", e);
-                bail!("Could not connect to database file!")
-            }
-        };
+        info!("Deleting all clients in database");
+        let connection = get_database_connection()?;
         r#try!(delete(clients).execute(&connection));
         Ok(())
     }

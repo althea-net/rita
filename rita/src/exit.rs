@@ -34,7 +34,7 @@ extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 
-extern crate arrayvec;
+extern crate phonenumber;
 
 use env_logger;
 

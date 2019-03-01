@@ -1,7 +1,0 @@
-ALTER TABLE clients
-  ADD email_code VARCHAR DEFAULT "0" NOT NULL;
-ALTER TABLE clients
-  ADD verified bool DEFAULT TRUE NOT NULL;
-ALTER TABLE clients
-  ADD email_sent_time INTEGER DEFAULT 0 NOT NULL;
-
