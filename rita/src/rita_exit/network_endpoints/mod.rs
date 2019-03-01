@@ -14,8 +14,6 @@ use std::time::SystemTime;
 
 use althea_types::{ExitClientIdentity, ExitState, RTTimestamps};
 
-use crate::rita_common::tunnel_manager::{GetPhyIpFromMeshIp, TunnelManager};
-
 use crate::rita_exit::db_client::ListClients;
 use exit_db::models::Client;
 use failure::Error;
@@ -23,8 +21,10 @@ use std::net::SocketAddr;
 
 pub fn setup_request(
     their_id: (Json<ExitClientIdentity>, HttpRequest),
-) -> Box<dyn Future<Item = Json<ExitState>, Error = Error>> {
+) -> impl Future<Item = Json<ExitState>, Error = Error> {
     trace!("Received requester identity for setup, {:?}", their_id.0);
+    let client_mesh_ip = their_id.0.global.mesh_ip;
+    let client = their_id.0.into_inner();
     let remote_mesh_socket: SocketAddr = their_id
         .1
         .connection_info()
@@ -32,23 +32,19 @@ pub fn setup_request(
         .unwrap()
         .parse()
         .unwrap();
+
     let remote_mesh_ip = remote_mesh_socket.ip();
-    Box::new(
-        TunnelManager::from_registry()
-            .send(GetPhyIpFromMeshIp(remote_mesh_ip))
+    if remote_mesh_ip == client_mesh_ip {
+        DbClient::from_registry()
+            .send(SetupClient(client))
             .from_err()
-            .and_then(|phy_ip| match phy_ip {
-                Ok(phy_ip) => Box::new(
-                    DbClient::from_registry()
-                        .send(SetupClient(their_id.0.into_inner(), phy_ip))
-                        .from_err()
-                        .and_then(move |reply| Ok(Json(reply?))),
-                ) as FutureResponse<Json<ExitState>, Error>,
-                Err(e) => {
-                    Box::new(futures::future::err(e)) as FutureResponse<Json<ExitState>, Error>
-                }
-            }),
-    )
+            .and_then(move |reply| Ok(Json(reply?)))
+            .responder()
+    } else {
+        Box::new(futures::future::ok(Json(ExitState::Denied {
+            message: "The request ip does not match the signup ip".to_string(),
+        })))
+    }
 }
 
 pub fn status_request(

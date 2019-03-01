@@ -223,7 +223,9 @@ fn main() {
     // Exit stuff
     server::new(|| {
         App::new()
-            .resource("/setup", |r| r.method(Method::POST).with(setup_request))
+            .resource("/setup", |r| {
+                r.method(Method::POST).with_async(setup_request)
+            })
             .resource("/status", |r| {
                 r.method(Method::POST).with_async(status_request)
             })
