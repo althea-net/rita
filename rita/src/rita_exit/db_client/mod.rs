@@ -168,6 +168,7 @@ struct GeoIPRet {
 
 /// get ISO country code from ip, consults a in memory cache
 fn get_country(ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<String, Error> {
+    info!("get country for {}", ip.to_string());
     let client = reqwest::Client::new();
     let api_key = SETTING
         .get_exit_network()
@@ -179,9 +180,25 @@ fn get_country(ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<Strin
         Some(code) => Ok(code.clone()),
         None => {
             let geo_ip_url = format!("http://api.ipapi.com/{}?access_key={}", ip, api_key);
-            trace!("making geoip request to {}", geo_ip_url);
+            info!(
+                "making geoip request to {} for {}",
+                geo_ip_url,
+                ip.to_string()
+            );
 
-            let res: GeoIPRet = client.get(&geo_ip_url).send()?.json()?;
+            let res: GeoIPRet = match client.get(&geo_ip_url).send() {
+                Ok(mut r) => match r.json() {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!("Failed to Jsonize geoip response {:?}", e);
+                        bail!("Failed to jsonize GeoIP response {:?}", e)
+                    }
+                },
+                Err(e) => {
+                    warn!("Get request for GeoIP failed! {:?}", e);
+                    bail!("Get request for GeoIP failed {:?}", e)
+                }
+            };
             info!("Got {:?} from GeoIP request", res);
             cache.insert(*ip, res.country_code.clone());
 
