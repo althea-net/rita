@@ -19,7 +19,7 @@ use althea_types::LocalIdentity;
 
 use crate::KI;
 
-use babel_monitor::{Babel, Route};
+use babel_monitor::Babel;
 
 use crate::rita_common;
 use crate::rita_common::hello_handler::Hello;
@@ -32,7 +32,6 @@ use failure::Error;
 
 #[cfg(test)]
 use ::actix::actors::mocker::Mocker;
-use ipnetwork::IpNetwork;
 use std::fmt;
 use std::io::{Read, Write};
 
@@ -293,44 +292,11 @@ impl Handler<PortCallback> for TunnelManager {
     }
 }
 
-#[derive(Debug)]
-pub struct GetPhyIpFromMeshIp(pub IpAddr);
-impl Message for GetPhyIpFromMeshIp {
-    type Result = Result<IpAddr, Error>;
-}
-
 fn make_babel_stream() -> Result<TcpStream, Error> {
     let stream = TcpStream::connect::<SocketAddr>(
         format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
     )?;
     Ok(stream)
-}
-
-impl Handler<GetPhyIpFromMeshIp> for TunnelManager {
-    type Result = Result<IpAddr, Error>;
-
-    fn handle(&mut self, mesh_ip: GetPhyIpFromMeshIp, _: &mut Context<Self>) -> Self::Result {
-        let mut babel = Babel::new(make_babel_stream()?);
-        babel.start_connection()?;
-        let routes = babel.parse_routes()?;
-
-        let mut route_to_des: Option<Route> = None;
-
-        for route in routes {
-            // Only ip6
-            if let IpNetwork::V6(ref ip) = route.prefix {
-                // Only host addresses and installed routes
-                if ip.prefix() == 128 && route.installed && IpAddr::V6(ip.ip()) == mesh_ip.0 {
-                    route_to_des = Some(route.clone());
-                }
-            }
-        }
-
-        match route_to_des {
-            Some(route) => Ok(KI.get_wg_remote_ip(&route.iface)?),
-            None => bail!("No route found for mesh ip: {:?}", mesh_ip),
-        }
-    }
 }
 
 pub struct GetNeighbors;
@@ -983,7 +949,6 @@ pub fn test_tunnel_manager() {
 
 #[test]
 pub fn test_tunnel_manager_lookup() {
-    use arrayvec::ArrayString;
     use clarity::Address;
     use std::str::FromStr;
 

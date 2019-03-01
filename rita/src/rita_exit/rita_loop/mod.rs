@@ -13,7 +13,9 @@ use arrayvec::ArrayString;
 use ::actix::prelude::*;
 use ::actix::registry::SystemService;
 
-use crate::rita_exit::db_client::{DbClient, DeleteClient, ListClients, SetClientTimestamp};
+use crate::rita_exit::db_client::{
+    DbClient, DeleteClient, ListClients, SetClientTimestamp, ValidateClientsRegion,
+};
 
 use futures::future::Either;
 use futures::{future, Future};
@@ -34,7 +36,6 @@ use settings::RitaCommonSettings;
 use althea_kernel_interface::{ExitClient, KI};
 
 use althea_types::Identity;
-use althea_types::WgKey;
 
 mod cleanup;
 mod enforcement;
@@ -111,6 +112,11 @@ impl Handler<Tick> for RitaLoop {
         // find users that have not been active within the configured time period
         // and remove them from the db
         Arbiter::spawn(cleanup_exit_clients());
+
+        // Make sure no one we are setting up is geoip unauthorized
+        if !SETTING.get_allowed_countries().is_empty() {
+            DbClient::from_registry().do_send(ValidateClientsRegion {})
+        }
 
         Ok(())
     }

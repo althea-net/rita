@@ -11,12 +11,14 @@ use diesel;
 use diesel::dsl::*;
 use diesel::prelude::*;
 use diesel::select;
-use std::collections::HashMap;
 use std::time::Duration;
+
+use babel_monitor::{Babel, Route};
 
 use reqwest;
 
-use std::net::IpAddr;
+use std::collections::{HashMap, HashSet};
+use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use lettre::{
@@ -41,6 +43,7 @@ use exit_db::{models, schema};
 
 use althea_kernel_interface::ExitClient;
 
+use crate::KI;
 use crate::SETTING;
 use settings::exit::ExitVerifSettings;
 use settings::exit::RitaExitSettings;
@@ -168,6 +171,72 @@ fn increment(address: IpAddr, netmask: u8) -> Result<IpAddr, Error> {
     }
 }
 
+fn make_babel_stream() -> Result<TcpStream, Error> {
+    let stream = TcpStream::connect::<SocketAddr>(
+        format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
+    )?;
+    Ok(stream)
+}
+
+/// gets the gateway ip for a given mesh IP
+fn get_gateway_ip_single(mesh_ip: IpAddr) -> Result<IpAddr, Error> {
+    let mut babel = Babel::new(make_babel_stream()?);
+    babel.start_connection()?;
+    let routes = babel.parse_routes()?;
+
+    let mut route_to_des: Option<Route> = None;
+
+    for route in routes.iter() {
+        // Only ip6
+        if let IpNetwork::V6(ref ip) = route.prefix {
+            // Only host addresses and installed routes
+            if ip.prefix() == 128 && route.installed && IpAddr::V6(ip.ip()) == mesh_ip {
+                route_to_des = Some(route.clone());
+            }
+        }
+    }
+
+    match route_to_des {
+        Some(route) => Ok(KI.get_wg_remote_ip(&route.iface)?),
+        None => bail!("No route found for mesh ip: {:?}", mesh_ip),
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct IpPair {
+    mesh_ip: IpAddr,
+    gateway_ip: IpAddr,
+}
+
+/// gets the gateway ip for a given set of mesh IPs inactive addresses will simply
+/// not appear in the result vec
+fn get_gateway_ip_bulk(mesh_ip_list: Vec<IpAddr>) -> Result<Vec<IpPair>, Error> {
+    let mut babel = Babel::new(make_babel_stream()?);
+    babel.start_connection()?;
+    let routes = babel.parse_routes()?;
+    let mut results = Vec::new();
+
+    for mesh_ip in mesh_ip_list {
+        for route in routes.iter() {
+            // Only ip6
+            if let IpNetwork::V6(ref ip) = route.prefix {
+                // Only host addresses and installed routes
+                if ip.prefix() == 128 && route.installed && IpAddr::V6(ip.ip()) == mesh_ip {
+                    match KI.get_wg_remote_ip(&route.iface) {
+                        Ok(remote_ip) => results.push(IpPair {
+                            mesh_ip: mesh_ip,
+                            gateway_ip: remote_ip,
+                        }),
+                        Err(e) => error!("Failure looking up remote ip {:?}", e),
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(results)
+}
+
 #[derive(Deserialize, Debug)]
 struct GeoIPRet {
     country: CountryDetails,
@@ -234,19 +303,21 @@ fn test_get_country() {
     get_country(&"8.8.8.8".parse().unwrap(), &mut HashMap::new()).unwrap();
 }
 
-fn verify_ip(request_ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<(), Error> {
+/// Returns true or false if an ip is confirmed to be inside or outside the region and error
+/// if an api error is encountered trying to figure that out.
+fn verify_ip(request_ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<bool, Error> {
     if SETTING.get_allowed_countries().is_empty() {
-        Ok(())
+        Ok(true)
     } else {
         let country = get_country(request_ip, cache)?;
 
         if !SETTING.get_allowed_countries().is_empty()
             && !SETTING.get_allowed_countries().contains(&country)
         {
-            bail!("country not allowed")
+            return Ok(false);
         }
 
-        Ok(())
+        Ok(true)
     }
 }
 
@@ -343,7 +414,7 @@ fn get_client(ip: IpAddr, conn: &PgConnection) -> Result<models::Client, Error> 
     }
 }
 
-/// Marks a client as verified in the database
+/// changes a clients verified value in the database
 fn verify_client(
     client: &ExitClientIdentity,
     client_verified: bool,
@@ -352,6 +423,21 @@ fn verify_client(
     use self::schema::clients::dsl::*;
 
     diesel::update(clients.find(&client.global.mesh_ip.to_string()))
+        .set(verified.eq(client_verified))
+        .execute(&*conn)?;
+
+    Ok(())
+}
+
+/// Marks a client as verified in the database
+fn verify_db_client(
+    client: &models::Client,
+    client_verified: bool,
+    conn: &PgConnection,
+) -> Result<(), Error> {
+    use self::schema::clients::dsl::*;
+
+    diesel::update(clients.find(&client.mesh_ip))
         .set(verified.eq(client_verified))
         .execute(&*conn)?;
 
@@ -530,7 +616,16 @@ fn send_text(number: String, api_key: String) -> Result<(), Error> {
     }
 }
 
-pub struct SetupClient(pub ExitClientIdentity, pub IpAddr);
+/// quick display function for a neat error
+fn display_hashset(input: &HashSet<String>) -> String {
+    let mut out = String::new();
+    for item in input.iter() {
+        out += &format!("{}, ", item);
+    }
+    out
+}
+
+pub struct SetupClient(pub ExitClientIdentity);
 
 impl Message for SetupClient {
     type Result = Result<ExitState, Error>;
@@ -544,7 +639,7 @@ impl Handler<SetupClient> for DbClient {
         let conn = get_database_connection()?;
         let client = msg.0.clone();
         let client_mesh_ip = client.global.mesh_ip;
-        let gateway_ip = msg.1;
+        let gateway_ip = get_gateway_ip_single(client_mesh_ip)?;
         // adds the dummy db entry, the dummy is used to easily determine what the next ip
         // in the database is TODO make sure dummy can't be overwriten by hostile registrant
         // also TODO just select lowest free ip, while this is O(n) time it shouldn't really
@@ -566,7 +661,7 @@ impl Handler<SetupClient> for DbClient {
             let user_country = if SETTING.get_allowed_countries().is_empty() {
                 String::new()
             } else {
-                get_country(&msg.1, &mut self.geoip_cache)?
+                get_country(&gateway_ip, &mut self.geoip_cache)?
             };
 
             let c = client_to_new_db_client(&client, new_ip, user_country);
@@ -581,16 +676,16 @@ impl Handler<SetupClient> for DbClient {
             verify_ip(&gateway_ip, &mut self.geoip_cache),
             SETTING.get_verif_settings(),
         ) {
-            (Ok(_val), Some(ExitVerifSettings::Email(mailer))) => handle_email_registration(
+            (Ok(true), Some(ExitVerifSettings::Email(mailer))) => handle_email_registration(
                 &client,
                 &their_record,
                 &conn,
                 mailer.email_cooldown as i64,
             ),
-            (Ok(_val), Some(ExitVerifSettings::Phone(phone))) => {
+            (Ok(true), Some(ExitVerifSettings::Phone(phone))) => {
                 handle_phone_registration(&client, &their_record, phone.api_key, &conn)
             }
-            (Ok(_val), None) => {
+            (Ok(true), None) => {
                 verify_client(&client, true, &conn)?;
                 Ok(ExitState::Registered {
                     our_details: ExitClientDetails {
@@ -600,12 +695,14 @@ impl Handler<SetupClient> for DbClient {
                     message: "Registration OK".to_string(),
                 })
             }
-            (Err(e), _) => Ok(ExitState::Denied {
+            (Ok(false), _) => Ok(ExitState::Denied {
                 message: format!(
-                    "This exit only accepts connections from {:?}\n verbose error: {}",
-                    SETTING.get_allowed_countries().clone(),
-                    e
+                    "This exit only accepts connections from {}",
+                    display_hashset(&SETTING.get_allowed_countries()),
                 ),
+            }),
+            (Err(e), _) => Ok(ExitState::Denied {
+                message: "There was a problem signing up, please try again".to_string(),
             }),
         }
     }
@@ -787,6 +884,59 @@ impl Handler<ClientStatus> for DbClient {
                 Ok(ExitState::New)
             }
         })
+    }
+}
+
+pub struct ValidateClientsRegion();
+impl Message for ValidateClientsRegion {
+    type Result = Result<(), Error>;
+}
+
+impl Handler<ValidateClientsRegion> for DbClient {
+    type Result = Result<(), Error>;
+    fn handle(&mut self, _msg: ValidateClientsRegion, _: &mut Self::Context) -> Self::Result {
+        use self::schema::clients::dsl::*;
+        let conn = get_database_connection()?;
+
+        let clients_list = clients.load::<models::Client>(&conn)?;
+        trace!("Got clients list {:?}", clients_list);
+        let mut ip_vec = Vec::new();
+        let mut client_map = HashMap::new();
+        for item in clients_list {
+            match item.mesh_ip.parse() {
+                Ok(ip) => {
+                    client_map.insert(ip, item);
+                    ip_vec.push(ip);
+                }
+                Err(e) => error!("Database entry with invalid mesh ip! {:?}", item),
+            }
+        }
+
+        let mesh_to_gateway_ip_list = get_gateway_ip_bulk(ip_vec);
+
+        match mesh_to_gateway_ip_list {
+            Ok(list) => {
+                for item in list {
+                    match verify_ip(&item.gateway_ip, &mut self.geoip_cache) {
+                        Ok(true) => trace!("{:?} is from an allowed ip", item),
+                        Ok(false) => {
+                            // get_gateway_ip_bulk can't add new entires to the list
+                            // therefore client_map is strictly a superset of ip_bulk results
+                            let client_to_deauth = &client_map[&item.mesh_ip];
+                            if verify_db_client(client_to_deauth, false, &conn).is_err() {
+                                error!("Failed to deauth client {:?}", client_to_deauth);
+                            }
+                        }
+                        Err(e) => error!("Failed to GeoIP {:?} to check region", e),
+                    }
+                }
+                Ok(())
+            }
+            Err(e) => {
+                error!("Problem getting gateway ip's for clients! {:?}", e);
+                bail!("Problem getting gateway ips for clients! {:?}", e)
+            }
+        }
     }
 }
 
