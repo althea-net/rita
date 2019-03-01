@@ -170,30 +170,44 @@ fn increment(address: IpAddr, netmask: u8) -> Result<IpAddr, Error> {
 
 #[derive(Deserialize, Debug)]
 struct GeoIPRet {
-    country_code: String,
+    country: CountryDetails,
+}
+
+#[derive(Deserialize, Debug)]
+struct CountryDetails {
+    iso_code: String,
 }
 
 /// get ISO country code from ip, consults a in memory cache
 fn get_country(ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<String, Error> {
     info!("get GeoIP country for {}", ip.to_string());
     let client = reqwest::Client::new();
+    let api_user = SETTING
+        .get_exit_network()
+        .geoip_api_user
+        .clone()
+        .expect("No api key configured!");
     let api_key = SETTING
         .get_exit_network()
-        .api_key
+        .geoip_api_key
         .clone()
         .expect("No api key configured!");
 
     match cache.get(ip) {
         Some(code) => Ok(code.clone()),
         None => {
-            let geo_ip_url = format!("http://api.ipapi.com/{}?access_key={}", ip, api_key);
+            let geo_ip_url = format!("https://geoip.maxmind.com/geoip/v2.1/country/{}", ip);
             info!(
                 "making GeoIP request to {} for {}",
                 geo_ip_url,
                 ip.to_string()
             );
 
-            let res: GeoIPRet = match client.get(&geo_ip_url).send() {
+            let res: GeoIPRet = match client
+                .get(&geo_ip_url)
+                .basic_auth(api_user, Some(api_key))
+                .send()
+            {
                 Ok(mut r) => match r.json() {
                     Ok(v) => v,
                     Err(e) => {
@@ -207,9 +221,9 @@ fn get_country(ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<Strin
                 }
             };
             info!("Got {:?} from GeoIP request", res);
-            cache.insert(*ip, res.country_code.clone());
+            cache.insert(*ip, res.country.iso_code.clone());
 
-            Ok(res.country_code)
+            Ok(res.country.iso_code)
         }
     }
 }
