@@ -41,8 +41,9 @@ pub struct ExitNetworkSettings {
     /// Time in seconds before user is dropped from the db due to inactivity
     /// 0 means disabled
     pub entry_timeout: u32,
-    /// api key for geoip
-    pub api_key: Option<String>,
+    /// api credentials for Maxmind geoip
+    pub geoip_api_user: Option<String>,
+    pub geoip_api_key: Option<String>,
 }
 
 impl Default for ExitNetworkSettings {
@@ -55,7 +56,8 @@ impl Default for ExitNetworkSettings {
             exit_start_ip: "172.16.0.0".parse().unwrap(),
             netmask: 12,
             entry_timeout: 0,
-            api_key: None,
+            geoip_api_user: None,
+            geoip_api_key: None,
         }
     }
 }

@@ -154,7 +154,9 @@ lazy_static! {
 /// used to crash the exit on first startup if config does not make sense
 /// as is usually desirable for cloud infrastruture
 fn sanity_check_config() {
-    if !SETTING.get_allowed_countries().is_empty() && SETTING.get_exit_network().api_key.is_none() {
+    if !SETTING.get_allowed_countries().is_empty()
+        && SETTING.get_exit_network().geoip_api_key.is_none()
+    {
         panic!("GEOIP enforcement configured but not api key provided!");
     }
 }
