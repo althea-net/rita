@@ -241,11 +241,17 @@ pub fn exit_setup_request(
         },
         wg_port: SETTING.get_exit_client().wg_listen_port,
         reg_details,
+        low_balance: low_balance(),
     };
 
-    trace!("sending exit setup request {:?} to {}", ident, exit);
-
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
+
+    trace!(
+        "sending exit setup request {:?} to {}, using {:?}",
+        ident,
+        exit,
+        endpoint
+    );
 
     Box::new(
         send_exit_setup_request(&endpoint, ident)
@@ -288,11 +294,16 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
         },
         wg_port: SETTING.get_exit_client().wg_listen_port,
         reg_details: SETTING.get_exit_client().reg_details.clone().unwrap(),
+        low_balance: low_balance(),
     };
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
 
-    trace!("sending exit status request to {}", exit);
+    trace!(
+        "sending exit status request to {} using {:?}",
+        exit,
+        endpoint
+    );
 
     let r = send_exit_status_request(&endpoint, ident)
         .from_err()
