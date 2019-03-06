@@ -14,5 +14,6 @@ table! {
         email_sent_time -> Int8,
         text_sent -> Bool,
         last_seen -> Int8,
+        last_balance_warning_time -> Int8,
     }
 }

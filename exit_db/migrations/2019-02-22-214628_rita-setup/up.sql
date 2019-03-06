@@ -13,5 +13,6 @@ CREATE TABLE clients
     verified boolean DEFAULT FALSE NOT NULL,
     email_sent_time bigint DEFAULT 0 NOT NULL,
     text_sent boolean DEFAULT FALSE NOT NULL,
-    last_seen bigint DEFAULT 0 NOT NULL
+    last_seen bigint DEFAULT 0 NOT NULL,
+    last_balance_warning_time bigint DEFAULT 0 NOT NULL
 );

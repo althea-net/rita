@@ -17,4 +17,5 @@ pub struct Client {
     pub email_sent_time: i64,
     pub text_sent: bool,
     pub last_seen: i64,
+    pub last_balance_warning_time: i64,
 }

@@ -48,11 +48,12 @@ pub fn setup_request(
 }
 
 pub fn status_request(
-    their_id: Json<ExitClientIdentity>,
+    their_id: (Json<ExitClientIdentity>, HttpRequest),
 ) -> impl Future<Item = Json<ExitState>, Error = Error> {
     trace!("Received requester identity for status, {:?}", their_id);
+    let client = their_id.0.into_inner();
     DbClient::from_registry()
-        .send(ClientStatus(their_id.into_inner()))
+        .send(ClientStatus(client))
         .from_err()
         .and_then(move |reply| Ok(Json(reply?)))
         .responder()
