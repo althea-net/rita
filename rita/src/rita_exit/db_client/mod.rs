@@ -378,7 +378,19 @@ fn incr_dummy(conn: &PgConnection) -> Result<IpAddr, Error> {
 
 /// updates the last seen time
 fn update_client(client: &ExitClientIdentity, conn: &PgConnection) -> Result<(), Error> {
-    use self::schema::clients::dsl::{clients, last_seen, wg_port, wg_pubkey};
+    use self::schema::clients::dsl::{clients, email, last_seen, phone};
+
+    if let Some(mail) = client.reg_details.email.clone() {
+        diesel::update(clients.find(&client.global.mesh_ip.to_string()))
+            .set(email.eq(mail))
+            .execute(&*conn)?;
+    }
+
+    if let Some(number) = client.reg_details.phone.clone() {
+        diesel::update(clients.find(&client.global.mesh_ip.to_string()))
+            .set(phone.eq(number))
+            .execute(&*conn)?;
+    }
 
     diesel::update(clients.find(&client.global.mesh_ip.to_string()))
         .set(last_seen.eq(secs_since_unix_epoch() as i64))
