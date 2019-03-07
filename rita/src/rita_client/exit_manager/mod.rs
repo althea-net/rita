@@ -156,6 +156,7 @@ pub fn send_exit_status_request(
 
     stream.from_err().and_then(move |stream| {
         client::post(&endpoint)
+            .timeout(Duration::from_secs(1))
             .with_connection(Connection::from_stream(stream))
             .json(ident)
             .unwrap()
