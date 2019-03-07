@@ -715,7 +715,7 @@ impl Handler<SetupClient> for DbClient {
                     display_hashset(&SETTING.get_allowed_countries()),
                 ),
             }),
-            (Err(e), _) => Ok(ExitState::Denied {
+            (Err(_e), _) => Ok(ExitState::Denied {
                 message: "There was a problem signing up, please try again".to_string(),
             }),
         }
@@ -964,14 +964,12 @@ pub struct SmsNotification {
     body: String,
 }
 
-fn send_low_balance_text(number: &str, keys: PhoneVerifSettings) -> Result<(), Error> {
+fn send_low_balance_text(number: &str, phone: PhoneVerifSettings) -> Result<(), Error> {
     info!("Sending low balance message for {}", number);
-    let body =
-        "Your Althea router has a low balance! Please deposit soon to prevent slowed service";
 
     let url = format!(
         "https://api.twilio.com/2010-04-01/Accounts/{}/Messages.json",
-        keys.twillio_account_id
+        phone.twillio_account_id
     );
     let number: PhoneNumber = number.parse()?;
     let client = reqwest::Client::builder()
@@ -979,11 +977,11 @@ fn send_low_balance_text(number: &str, keys: PhoneVerifSettings) -> Result<(), E
         .build()?;
     let res = client
         .post(&url)
-        .basic_auth(keys.twillio_account_id, Some(keys.twillio_auth_token))
+        .basic_auth(phone.twillio_account_id, Some(phone.twillio_auth_token))
         .form(&SmsNotification {
             to: number.to_string(),
-            from: keys.notification_number,
-            body: body.to_string(),
+            from: phone.notification_number,
+            body: phone.balance_notification_body,
         })
         .send()?;
     if res.status().is_success() {
@@ -1041,7 +1039,7 @@ impl Handler<ValidateClientsRegion> for DbClient {
                     client_map.insert(ip, item);
                     ip_vec.push(ip);
                 }
-                Err(e) => error!("Database entry with invalid mesh ip! {:?}", item),
+                Err(_e) => error!("Database entry with invalid mesh ip! {:?}", item),
             }
         }
 
