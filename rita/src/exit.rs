@@ -223,12 +223,8 @@ fn main() {
     // Exit stuff
     server::new(|| {
         App::new()
-            .resource("/setup", |r| {
-                r.method(Method::POST).with_async(setup_request)
-            })
-            .resource("/status", |r| {
-                r.method(Method::POST).with_async(status_request)
-            })
+            .resource("/setup", |r| r.method(Method::POST).with(setup_request))
+            .resource("/status", |r| r.method(Method::POST).with(status_request))
             .resource("/list", |r| r.method(Method::POST).with(list_clients))
             .resource("/exit_info", |r| {
                 r.method(Method::GET).with(get_exit_info_http)
