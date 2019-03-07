@@ -376,24 +376,9 @@ fn incr_dummy(conn: &PgConnection) -> Result<IpAddr, Error> {
     Ok(new_ip)
 }
 
+/// updates the last seen time
 fn update_client(client: &ExitClientIdentity, conn: &PgConnection) -> Result<(), Error> {
-    use self::schema::clients::dsl::{clients, email, last_seen, wg_port, wg_pubkey};
-    let mail_addr = match client.clone().reg_details.email {
-        Some(mail) => mail.clone(),
-        None => bail!("Cloud not find email for {:?}", client.clone()),
-    };
-
-    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-        .set(wg_port.eq(i32::from(client.wg_port)))
-        .execute(&*conn)?;
-
-    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-        .set(wg_pubkey.eq(&client.global.wg_public_key.to_string()))
-        .execute(&*conn)?;
-
-    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-        .set(email.eq(&mail_addr))
-        .execute(&*conn)?;
+    use self::schema::clients::dsl::{clients, last_seen, wg_port, wg_pubkey};
 
     diesel::update(clients.find(&client.global.mesh_ip.to_string()))
         .set(last_seen.eq(secs_since_unix_epoch() as i64))
@@ -878,7 +863,6 @@ impl Handler<ClientStatus> for DbClient {
                 });
             }
 
-            // TODO investigate the need for this
             update_client(&client, &conn)?;
 
             low_balance_notification(client, &their_record, SETTING.get_verif_settings(), &conn);
