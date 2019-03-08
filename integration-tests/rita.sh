@@ -19,9 +19,6 @@ cd $(dirname $0) # Make the script runnable from anywhere
 
 # Loads module if not loaded and available, does nothing if already loaded and fails if not available
 sudo modprobe wireguard
-# installs cross to build without caring much about local deps, requires docker
-set +e
-cargo install cross
 set -e
 # sets up bounty hunter cers
 openssl req -newkey rsa:2048 -nodes -keyform pem -keyout bh_key.pem -x509 -days 365 -outform pem -out bh_cert.pem -subj "/C=US/ST=Althea/L=Althea/O=Althea/OU=Althea/CN=Althea"
@@ -48,7 +45,7 @@ build_rev() {
 
   pushd $dir
     git checkout $revision
-    cross build --target x86_64-unknown-linux-musl --verbose --all
+    cargo build --verbose --all
   popd
 }
 
@@ -71,21 +68,21 @@ fi
 # Only care about revisions if a compat layout was picked
 if [ ! -z "${COMPAT_LAYOUT-}" ] ; then
   build_rev $REMOTE_A "$REVISION_A" $DIR_A $TARGET_DIR_A
-  export RITA_A="$target_dir/x86_64-unknown-linux-musl/debug/rita"
-  export RITA_EXIT_A="$target_dir/x86_64-unknown-linux-musl/debug/rita_exit"
-  export BOUNTY_HUNTER_A="$target_dir/x86_64-unknown-linux-musl/debug/bounty_hunter"
+  export RITA_A="$target_dir/debug/rita"
+  export RITA_EXIT_A="$target_dir/debug/rita_exit"
+  export BOUNTY_HUNTER_A="$target_dir/debug/bounty_hunter"
   export DIR_A=$DIR_A
   cp -r $DIR_A/target/* $target_dir
  
   build_rev $REMOTE_B "$REVISION_B" $DIR_B $TARGET_DIR_B
-  export RITA_B="$target_dir/x86_64-unknown-linux-musl/debug/rita"
-  export RITA_EXIT_B="$target_dir/x86_64-unknown-linux-musl/debug/rita_exit"
-  export BOUNTY_HUNTER_B="$target_dir/x86_64-unknown-linux-musl/debug/bounty_hunter"
+  export RITA_B="$target_dir/debug/rita"
+  export RITA_EXIT_B="$target_dir/debug/rita_exit"
+  export BOUNTY_HUNTER_B="$target_dir/debug/bounty_hunter"
   export DIR_B=$DIR_B
   cp -r $DIR_B/target/* $target_dir
 else
   pushd ..
-    cross build --target x86_64-unknown-linux-musl --verbose --all
+    cargo build --verbose --all
   popd
 fi
 
