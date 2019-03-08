@@ -1,4 +1,4 @@
-db_file = "../exit_db/test.db"
+db_uri = "postgres://postgres@localhost/test"
 description = "just a normal althea exit"
 
 [payment]
@@ -49,6 +49,7 @@ smtp_url = "smtp.fastmail.com"
 smtp_domain = "mail.example.com"
 smtp_username = "changeme"
 smtp_password = "changeme"
+balance_notification_interval = 600
 
 [log]
 enabled = false
