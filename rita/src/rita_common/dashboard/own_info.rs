@@ -2,7 +2,7 @@ use super::*;
 use crate::rita_common::oracle::low_balance;
 use num256::{Int256, Uint256};
 
-pub static READABLE_VERSION: &str = "Beta 3 RC4";
+pub static READABLE_VERSION: &str = "Beta 3 RC5";
 
 #[derive(Serialize)]
 pub struct OwnInfo {

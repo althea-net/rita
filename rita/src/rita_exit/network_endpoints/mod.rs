@@ -21,7 +21,7 @@ use std::net::SocketAddr;
 
 pub fn setup_request(
     their_id: (Json<ExitClientIdentity>, HttpRequest),
-) -> impl Future<Item = Json<ExitState>, Error = Error> {
+) -> Box<dyn Future<Item = Json<ExitState>, Error = Error>> {
     trace!("Received requester identity for setup, {:?}", their_id.0);
     let client_mesh_ip = their_id.0.global.mesh_ip;
     let client = their_id.0.into_inner();
@@ -49,10 +49,11 @@ pub fn setup_request(
 
 pub fn status_request(
     their_id: Json<ExitClientIdentity>,
-) -> impl Future<Item = Json<ExitState>, Error = Error> {
+) -> Box<dyn Future<Item = Json<ExitState>, Error = Error>> {
     trace!("Received requester identity for status, {:?}", their_id);
+    let client = their_id.into_inner();
     DbClient::from_registry()
-        .send(ClientStatus(their_id.into_inner()))
+        .send(ClientStatus(client))
         .from_err()
         .and_then(move |reply| Ok(Json(reply?)))
         .responder()

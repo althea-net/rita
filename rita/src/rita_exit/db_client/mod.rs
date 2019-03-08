@@ -11,6 +11,8 @@ use diesel;
 use diesel::dsl::*;
 use diesel::prelude::*;
 use diesel::select;
+use settings::exit::EmailVerifSettings;
+use settings::exit::PhoneVerifSettings;
 use std::time::Duration;
 
 use babel_monitor::{Babel, Route};
@@ -374,24 +376,21 @@ fn incr_dummy(conn: &PgConnection) -> Result<IpAddr, Error> {
     Ok(new_ip)
 }
 
+/// updates the last seen time
 fn update_client(client: &ExitClientIdentity, conn: &PgConnection) -> Result<(), Error> {
-    use self::schema::clients::dsl::{clients, email, last_seen, wg_port, wg_pubkey};
-    let mail_addr = match client.clone().reg_details.email {
-        Some(mail) => mail.clone(),
-        None => bail!("Cloud not find email for {:?}", client.clone()),
-    };
+    use self::schema::clients::dsl::{clients, email, last_seen, phone};
 
-    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-        .set(wg_port.eq(i32::from(client.wg_port)))
-        .execute(&*conn)?;
+    if let Some(mail) = client.reg_details.email.clone() {
+        diesel::update(clients.find(&client.global.mesh_ip.to_string()))
+            .set(email.eq(mail))
+            .execute(&*conn)?;
+    }
 
-    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-        .set(wg_pubkey.eq(&client.global.wg_public_key.to_string()))
-        .execute(&*conn)?;
-
-    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-        .set(email.eq(&mail_addr))
-        .execute(&*conn)?;
+    if let Some(number) = client.reg_details.phone.clone() {
+        diesel::update(clients.find(&client.global.mesh_ip.to_string()))
+            .set(phone.eq(number))
+            .execute(&*conn)?;
+    }
 
     diesel::update(clients.find(&client.global.mesh_ip.to_string()))
         .set(last_seen.eq(secs_since_unix_epoch() as i64))
@@ -480,8 +479,22 @@ fn update_mail_sent_time(client: &ExitClientIdentity, conn: &PgConnection) -> Re
     Ok(())
 }
 
+fn update_low_balance_notification_time(
+    client: &ExitClientIdentity,
+    conn: &PgConnection,
+) -> Result<(), Error> {
+    use self::schema::clients::dsl::{clients, last_balance_warning_time, wg_pubkey};
+
+    diesel::update(clients.filter(wg_pubkey.eq(client.global.wg_public_key.to_string())))
+        .set(last_balance_warning_time.eq(secs_since_unix_epoch()))
+        .execute(&*conn)?;
+
+    Ok(())
+}
+
 fn client_exists(ip: &IpAddr, conn: &PgConnection) -> Result<bool, Error> {
     use self::schema::clients::dsl::*;
+    trace!("Checking if client exists");
     Ok(select(exists(clients.filter(mesh_ip.eq(ip.to_string())))).get_result(&*conn)?)
 }
 
@@ -507,6 +520,7 @@ fn client_to_new_db_client(
         verified: false,
         email_sent_time: 0,
         last_seen: 0,
+        last_balance_warning_time: 0,
     }
 }
 
@@ -534,10 +548,10 @@ fn send_mail(client: &models::Client) -> Result<(), Error> {
     let email = EmailBuilder::new()
         .to(client.email.clone())
         .from(mailer.from_address)
-        .subject(mailer.subject)
+        .subject(mailer.signup_subject)
         // TODO: maybe have a proper templating engine
         .text(reg.render_template(
-            &mailer.body,
+            &mailer.signup_body,
             &json!({"email_code": client.email_code.to_string()}),
         )?)
         .build()?;
@@ -683,7 +697,7 @@ impl Handler<SetupClient> for DbClient {
                 mailer.email_cooldown as i64,
             ),
             (Ok(true), Some(ExitVerifSettings::Phone(phone))) => {
-                handle_phone_registration(&client, &their_record, phone.api_key, &conn)
+                handle_phone_registration(&client, &their_record, phone.auth_api_key, &conn)
             }
             (Ok(true), None) => {
                 verify_client(&client, true, &conn)?;
@@ -701,7 +715,7 @@ impl Handler<SetupClient> for DbClient {
                     display_hashset(&SETTING.get_allowed_countries()),
                 ),
             }),
-            (Err(e), _) => Ok(ExitState::Denied {
+            (Err(_e), _) => Ok(ExitState::Denied {
                 message: "There was a problem signing up, please try again".to_string(),
             }),
         }
@@ -825,66 +839,183 @@ impl Handler<ClientStatus> for DbClient {
     type Result = Result<ExitState, Error>;
 
     fn handle(&mut self, msg: ClientStatus, _: &mut Self::Context) -> Self::Result {
-        use self::schema::clients::dsl::{clients, mesh_ip};
         let conn = get_database_connection()?;
-        conn.transaction::<_, Error, _>(|| {
-            let client = msg.0;
+        let client = msg.0;
+        let client_mesh_ip = client.global.mesh_ip;
 
-            add_dummy(&conn)?;
+        add_dummy(&conn)?;
 
-            trace!("Checking if record exists for {:?}", client.global.mesh_ip);
+        trace!("Checking if record exists for {:?}", client.global.mesh_ip);
 
-            if client_exists(&client.global.mesh_ip, &conn)? {
-                trace!("record exists, updating");
+        if client_exists(&client.global.mesh_ip, &conn)? {
+            trace!("record exists, updating");
 
-                let their_record: models::Client = match clients
-                    .filter(mesh_ip.eq(&client.global.mesh_ip.to_string()))
-                    .load::<models::Client>(&conn)
-                {
-                    Ok(entry) => entry[0].clone(),
-                    Err(e) => {
-                        error!("We failed to lookup the client {:?} with{:?}", mesh_ip, e);
-                        bail!("We failed to lookup the client!")
-                    }
-                };
+            let their_record = get_client(client_mesh_ip, &conn)?;
 
-                if !verif_done(&their_record) {
-                    return Ok(ExitState::Pending {
-                        general_details: get_exit_info(),
-                        message: "awaiting email verification".to_string(),
-                        email_code: None,
-                        phone_code: None,
-                    });
-                }
-
-                let current_ip = their_record.internal_ip.parse()?;
-
-                let current_subnet = IpNetwork::new(
-                    SETTING.get_exit_network().own_internal_ip,
-                    SETTING.get_exit_network().netmask,
-                )?;
-
-                if !current_subnet.contains(current_ip) {
-                    return Ok(ExitState::Registering {
-                        general_details: get_exit_info(),
-                        message: "Registration reset because of IP range change".to_string(),
-                    });
-                }
-
-                update_client(&client, &conn)?;
-
-                Ok(ExitState::Registered {
-                    our_details: ExitClientDetails {
-                        client_internal_ip: current_ip,
-                    },
+            if !verif_done(&their_record) {
+                return Ok(ExitState::Pending {
                     general_details: get_exit_info(),
-                    message: "Registration OK".to_string(),
-                })
-            } else {
-                Ok(ExitState::New)
+                    message: "awaiting email verification".to_string(),
+                    email_code: None,
+                    phone_code: None,
+                });
             }
-        })
+
+            let current_ip = their_record.internal_ip.parse()?;
+
+            let current_subnet = IpNetwork::new(
+                SETTING.get_exit_network().own_internal_ip,
+                SETTING.get_exit_network().netmask,
+            )?;
+
+            if !current_subnet.contains(current_ip) {
+                return Ok(ExitState::Registering {
+                    general_details: get_exit_info(),
+                    message: "Registration reset because of IP range change".to_string(),
+                });
+            }
+
+            update_client(&client, &conn)?;
+
+            low_balance_notification(client, &their_record, SETTING.get_verif_settings(), &conn);
+
+            Ok(ExitState::Registered {
+                our_details: ExitClientDetails {
+                    client_internal_ip: current_ip,
+                },
+                general_details: get_exit_info(),
+                message: "Registration OK".to_string(),
+            })
+        } else {
+            Ok(ExitState::New)
+        }
     }
+}
+
+/// Handles the dispatching of low balance notifications based on what validation method the exit
+/// is currently using and what the configured interval is. There are many many possible combinations
+/// of state to handle so this is a bit of a mess. May be possible to clean up by making more things
+/// mandatory?
+fn low_balance_notification(
+    client: ExitClientIdentity,
+    their_record: &exit_db::models::Client,
+    config: Option<ExitVerifSettings>,
+    conn: &PgConnection,
+) {
+    info!("Checking low balance nofication");
+    let time_since_last_notification =
+        secs_since_unix_epoch() - their_record.last_balance_warning_time;
+
+    match (client.low_balance, config) {
+        (true, Some(ExitVerifSettings::Phone(val))) => match (
+            client.reg_details.phone.clone(),
+            time_since_last_notification > i64::from(val.balance_notification_interval),
+        ) {
+            (Some(number), true) => {
+                let res = send_low_balance_text(&number, val);
+                if let Err(e) = res {
+                    warn!(
+                        "Failed to notify {} of their low balance with {:?}",
+                        number, e
+                    );
+                } else if let Err(e) = update_low_balance_notification_time(&client, conn) {
+                    error!(
+                        "Failed to find {:?} in the database to update notified time! {:?}",
+                        client, e
+                    );
+                }
+            }
+            (Some(_), false) => {}
+            (None, _) => error!("Client is registered but has no phone number!"),
+        },
+        (true, Some(ExitVerifSettings::Email(val))) => match (
+            client.reg_details.email.clone(),
+            time_since_last_notification > i64::from(val.balance_notification_interval),
+        ) {
+            (Some(email), true) => {
+                let res = send_low_balance_email(&email, val);
+                if let Err(e) = res {
+                    warn!(
+                        "Failed to notify {} of their low balance with {:?}",
+                        email, e
+                    );
+                } else if let Err(e) = update_low_balance_notification_time(&client, conn) {
+                    error!(
+                        "Failed to find {:?} in the database to update notified time! {:?}",
+                        client, e
+                    );
+                }
+            }
+            (Some(_), false) => {}
+            (None, _) => error!("Client is registered but has no phone number!"),
+        },
+        (true, None) => {}
+        (false, _) => {}
+    }
+}
+
+#[derive(Serialize)]
+pub struct SmsNotification {
+    #[serde(rename = "To")]
+    to: String,
+    #[serde(rename = "From")]
+    from: String,
+    #[serde(rename = "Body")]
+    body: String,
+}
+
+fn send_low_balance_text(number: &str, phone: PhoneVerifSettings) -> Result<(), Error> {
+    info!("Sending low balance message for {}", number);
+
+    let url = format!(
+        "https://api.twilio.com/2010-04-01/Accounts/{}/Messages.json",
+        phone.twillio_account_id
+    );
+    let number: PhoneNumber = number.parse()?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(1))
+        .build()?;
+    let res = client
+        .post(&url)
+        .basic_auth(phone.twillio_account_id, Some(phone.twillio_auth_token))
+        .form(&SmsNotification {
+            to: number.to_string(),
+            from: phone.notification_number,
+            body: phone.balance_notification_body,
+        })
+        .send()?;
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        bail!("SMS API failure! Maybe bad number?")
+    }
+}
+
+fn send_low_balance_email(email: &str, mailer: EmailVerifSettings) -> Result<(), Error> {
+    info!("Sending low balance email to {}", email);
+
+    let email = EmailBuilder::new()
+        .to(email)
+        .from(mailer.from_address)
+        .subject(mailer.balance_notification_subject)
+        .text(mailer.balance_notification_body)
+        .build()?;
+
+    if mailer.test {
+        let mut mailer = FileTransport::new(&mailer.test_dir);
+        mailer.send(email.into())?;
+    } else {
+        let mut mailer = SmtpClient::new_simple(&mailer.smtp_url)?
+            .hello_name(ClientId::Domain(mailer.smtp_domain))
+            .credentials(Credentials::new(mailer.smtp_username, mailer.smtp_password))
+            .smtp_utf8(true)
+            .authentication_mechanism(Mechanism::Plain)
+            .connection_reuse(ConnectionReuseParameters::ReuseUnlimited)
+            .transport();
+        mailer.send(email.into())?;
+    }
+
+    Ok(())
 }
 
 pub struct ValidateClientsRegion();
@@ -908,7 +1039,7 @@ impl Handler<ValidateClientsRegion> for DbClient {
                     client_map.insert(ip, item);
                     ip_vec.push(ip);
                 }
-                Err(e) => error!("Database entry with invalid mesh ip! {:?}", item),
+                Err(_e) => error!("Database entry with invalid mesh ip! {:?}", item),
             }
         }
 

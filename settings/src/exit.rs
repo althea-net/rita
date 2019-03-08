@@ -62,14 +62,22 @@ impl Default for ExitNetworkSettings {
     }
 }
 
-fn default_email_subject() -> String {
+fn default_signup_email_subject() -> String {
     String::from("Althea Exit verification code")
 }
 
-fn default_email_body() -> String {
+fn default_signup_email_body() -> String {
     // templated using the handlebars language
     // the code will be placed in the {{email_code}}, the [] is for integration testing
     String::from("Your althea verification code is [{{email_code}}]")
+}
+
+fn default_balance_notification_email_subject() -> String {
+    String::from("Althea low balance warning")
+}
+
+fn default_balance_notification_email_body() -> String {
+    String::from("Your Althea router has a low balance! Your service will be slow until more funds are added. Visit althea.org/top-up")
 }
 
 /// These are the settings for email verification
@@ -81,11 +89,17 @@ pub struct EmailVerifSettings {
     pub email_cooldown: u64,
 
     // templating stuff
-    #[serde(default = "default_email_subject")]
-    pub subject: String,
+    #[serde(default = "default_signup_email_subject")]
+    pub signup_subject: String,
 
-    #[serde(default = "default_email_body")]
-    pub body: String,
+    #[serde(default = "default_signup_email_body")]
+    pub signup_body: String,
+
+    #[serde(default = "default_balance_notification_email_subject")]
+    pub balance_notification_subject: String,
+
+    #[serde(default = "default_balance_notification_email_body")]
+    pub balance_notification_body: String,
 
     #[serde(default)]
     pub test: bool,
@@ -101,12 +115,33 @@ pub struct EmailVerifSettings {
     pub smtp_username: String,
     #[serde(default)]
     pub smtp_password: String,
+    /// time in seconds between notifications
+    pub balance_notification_interval: u32,
+}
+
+fn default_balance_notification_text_body() -> String {
+    String::from("Your Althea router has a low balance! Your service will be slow until more funds are added. Visit althea.org/top-up")
 }
 
 /// These are the settings for text message verification using the twillio api
+/// note that while you would expect the authentication and text notification flow
+/// to be the same they are in fact totally different and each have seperate
+/// credentials below
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct PhoneVerifSettings {
-    pub api_key: String,
+    /// API key used for the authenticaiton calls
+    pub auth_api_key: String,
+    /// The Twillio number used to send the notification message
+    pub notification_number: String,
+    /// The Twillio account id used to authenticate for notifications
+    pub twillio_account_id: String,
+    /// The auth token used to authenticate for notifications
+    pub twillio_auth_token: String,
+    /// the text for the balance notification
+    #[serde(default = "default_balance_notification_text_body")]
+    pub balance_notification_body: String,
+    /// time in seconds between notifications
+    pub balance_notification_interval: u32,
 }
 
 /// Struct containing the different types of supported verification

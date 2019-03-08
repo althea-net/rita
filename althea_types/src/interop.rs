@@ -189,6 +189,7 @@ pub struct ExitClientIdentity {
     pub wg_port: u16,
     pub global: Identity,
     pub reg_details: ExitRegistrationDetails,
+    pub low_balance: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]

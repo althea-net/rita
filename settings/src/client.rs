@@ -35,6 +35,10 @@ pub struct ExitServer {
     pub info: ExitState,
 }
 
+fn default_balance_notification() -> bool {
+    true
+}
+
 /// This struct is used by rita to encapsulate all the state/information needed to connect/register
 /// to a exit and to setup the exit tunnel
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -51,6 +55,9 @@ pub struct ExitClientSettings {
     pub reg_details: Option<ExitRegistrationDetails>,
     /// This controls which interfaces will be proxied over the exit tunnel
     pub lan_nics: HashSet<String>,
+    /// Specifies if the user would like to receive low balance messages from the exit
+    #[serde(default = "default_balance_notification")]
+    pub low_balance_notification: bool,
 }
 
 impl Default for ExitClientSettings {
@@ -66,6 +73,7 @@ impl Default for ExitClientSettings {
                 phone_code: Some("000000".into()),
             }),
             lan_nics: HashSet::new(),
+            low_balance_notification: true,
         }
     }
 }
