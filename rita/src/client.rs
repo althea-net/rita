@@ -66,6 +66,7 @@ use crate::rita_client::dashboard::interfaces::*;
 use crate::rita_client::dashboard::logging::*;
 use crate::rita_client::dashboard::mesh_ip::*;
 use crate::rita_client::dashboard::neighbors::*;
+use crate::rita_client::dashboard::notifications::*;
 use crate::rita_client::dashboard::system_chain::*;
 use crate::rita_client::dashboard::wifi::*;
 
@@ -301,6 +302,8 @@ fn main() {
             .route("/blockchain/get/", Method::GET, get_system_blockchain)
             .route("/nickname/get/", Method::GET, get_nickname)
             .route("/nickname/set/", Method::POST, set_nickname)
+            .route("/low_balance_notification", Method::GET, get_low_balance_notification)
+            .route("/low_balance_notification/{status}", Method::POST, set_low_balance_notification)
             .route("/wipe", Method::POST, wipe)
     })
     .workers(1)
