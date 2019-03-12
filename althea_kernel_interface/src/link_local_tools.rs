@@ -8,7 +8,7 @@ use failure::Error;
 
 impl dyn KernelInterface {
     /// This gets our link local ip for a given device
-    pub fn get_link_local_device_ip(&self, dev: &str) -> Result<Ipv6Addr, Error> {
+    pub fn get_link_local_device_ip(&self, dev: &str) -> Result<Ipv6Addr, KernelInterfaceError> {
         let output = self.run_command("ip", &["addr", "show", "dev", dev, "scope", "link"])?;
         trace!("Got {:?} from `ip addr`", output);
 
@@ -18,15 +18,21 @@ impl dyn KernelInterface {
         }
 
         let cap_str = String::from_utf8(output.stdout)?;
+        let err = String::from_utf8(output.stderr)?;
         let cap = RE.captures(&cap_str);
         if let Some(cap) = cap {
             trace!("got link local IP of {} from device {}", &cap[1], &dev);
             Ok(cap[1].parse::<Ipv6Addr>()?)
+        } else if err.contains("does not exist") {
+            Err(KernelInterfaceError::NoInterfaceError(dev.to_string()))
+        } else if cap.is_none() && output.status.success() {
+            Err(KernelInterfaceError::AddressNotReadyError(
+                "No address seems to be available yet".to_string(),
+            ))
         } else {
             Err(KernelInterfaceError::RuntimeError(
-                "No link local addresses found or no interface found".to_string(),
-            )
-            .into())
+                "Some other error occured".to_string(),
+            ))
         }
     }
 

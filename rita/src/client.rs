@@ -302,8 +302,16 @@ fn main() {
             .route("/blockchain/get/", Method::GET, get_system_blockchain)
             .route("/nickname/get/", Method::GET, get_nickname)
             .route("/nickname/set/", Method::POST, set_nickname)
-            .route("/low_balance_notification", Method::GET, get_low_balance_notification)
-            .route("/low_balance_notification/{status}", Method::POST, set_low_balance_notification)
+            .route(
+                "/low_balance_notification",
+                Method::GET,
+                get_low_balance_notification,
+            )
+            .route(
+                "/low_balance_notification/{status}",
+                Method::POST,
+                set_low_balance_notification,
+            )
             .route("/wipe", Method::POST, wipe)
     })
     .workers(1)

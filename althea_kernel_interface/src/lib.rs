@@ -40,11 +40,35 @@ pub use crate::create_wg_key::WgKeypair;
 pub use crate::exit_server_tunnel::ExitClient;
 
 use failure::Error;
+use std::net::AddrParseError;
+use std::string::FromUtf8Error;
 
 #[derive(Debug, Fail)]
 pub enum KernelInterfaceError {
     #[fail(display = "Runtime Error: {:?}", _0)]
     RuntimeError(String),
+    #[fail(display = "No interface by the name: {:?}", _0)]
+    NoInterfaceError(String),
+    #[fail(display = "Address isn't ready yet: {:?}", _0)]
+    AddressNotReadyError(String),
+}
+
+impl From<FromUtf8Error> for KernelInterfaceError {
+    fn from(e: FromUtf8Error) -> Self {
+        KernelInterfaceError::RuntimeError(format!("{:?}", e).to_string())
+    }
+}
+
+impl From<Error> for KernelInterfaceError {
+    fn from(e: Error) -> Self {
+        KernelInterfaceError::RuntimeError(format!("{:?}", e).to_string())
+    }
+}
+
+impl From<AddrParseError> for KernelInterfaceError {
+    fn from(e: AddrParseError) -> Self {
+        KernelInterfaceError::RuntimeError(format!("{:?}", e).to_string())
+    }
 }
 
 #[cfg(test)]
