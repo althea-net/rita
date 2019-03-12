@@ -242,7 +242,7 @@ pub fn exit_setup_request(
         },
         wg_port: SETTING.get_exit_client().wg_listen_port,
         reg_details,
-        low_balance: low_balance(),
+        low_balance: None,
     };
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
@@ -300,7 +300,7 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
         },
         wg_port: SETTING.get_exit_client().wg_listen_port,
         reg_details: SETTING.get_exit_client().reg_details.clone().unwrap(),
-        low_balance: balance_notification,
+        low_balance: Some(balance_notification),
     };
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);

@@ -907,7 +907,7 @@ fn low_balance_notification(
         secs_since_unix_epoch() - their_record.last_balance_warning_time;
 
     match (client.low_balance, config) {
-        (true, Some(ExitVerifSettings::Phone(val))) => match (
+        (Some(true), Some(ExitVerifSettings::Phone(val))) => match (
             client.reg_details.phone.clone(),
             time_since_last_notification > i64::from(val.balance_notification_interval),
         ) {
@@ -928,7 +928,7 @@ fn low_balance_notification(
             (Some(_), false) => {}
             (None, _) => error!("Client is registered but has no phone number!"),
         },
-        (true, Some(ExitVerifSettings::Email(val))) => match (
+        (Some(true), Some(ExitVerifSettings::Email(val))) => match (
             client.reg_details.email.clone(),
             time_since_last_notification > i64::from(val.balance_notification_interval),
         ) {
@@ -949,8 +949,7 @@ fn low_balance_notification(
             (Some(_), false) => {}
             (None, _) => error!("Client is registered but has no phone number!"),
         },
-        (true, None) => {}
-        (false, _) => {}
+        (_, _) => {}
     }
 }
 
