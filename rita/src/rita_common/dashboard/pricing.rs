@@ -1,4 +1,10 @@
-use super::*;
+use crate::ARGS;
+use crate::SETTING;
+use ::actix_web::Path;
+use ::actix_web::{HttpRequest, HttpResponse, Json, Result};
+use ::settings::FileWrite;
+use ::settings::RitaCommonSettings;
+use failure::Error;
 
 pub fn auto_pricing_status(_req: HttpRequest) -> Result<Json<bool>, Error> {
     debug!("Get Auto pricing enabled hit!");

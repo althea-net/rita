@@ -373,8 +373,10 @@ pub fn exit_init(platform: &str, settings: Arc<RwLock<settings::exit::RitaExitSe
     );
 }
 
+#[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::validate_mesh_ip;
+    use std::net::IpAddr;
 
     #[test]
     fn test_validate_mesh_ip() {

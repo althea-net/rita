@@ -1,6 +1,14 @@
 //! These endpoints are used to modify mundane wireless settings
 
-use super::*;
+use crate::KI;
+use crate::SETTING;
+use ::actix_web::http::StatusCode;
+use ::actix_web::Path;
+use ::actix_web::{HttpRequest, HttpResponse, Json};
+use failure::Error;
+use serde_json::Value;
+use settings::RitaCommonSettings;
+use std::collections::HashMap;
 
 // legal in the US and around the world, don't allow odd channels
 pub const ALLOWED_TWO: [u16; 3] = [1, 6, 11];
