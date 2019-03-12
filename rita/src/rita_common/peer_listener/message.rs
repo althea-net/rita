@@ -185,7 +185,7 @@ fn test_decode_imhere_with_wrong_magic() {
     match PeerMessage::decode(&[1, 2, 3, 4]) {
         Ok(msg) => assert!(false, "Unexpected success {:?}", msg),
         Err(MessageError::InvalidMagic) => assert!(true),
-        Err(_) => panic!("Invalid error"),
+        Err(e) => panic!("Invalid error {:?}", e),
     }
 }
 

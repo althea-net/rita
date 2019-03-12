@@ -13,6 +13,10 @@ use failure::Error;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
+use std::thread::sleep;
+use std::time::{Duration, Instant};
+
+use althea_kernel_interface::KernelInterfaceError;
 
 use crate::rita_common::rita_loop::Tick;
 
@@ -191,13 +195,41 @@ pub struct ListenInterface {
     linklocal_ip: Ipv6Addr,
 }
 
+/// This function retries and error matches getting the link local ip for an interface. Since the operating
+/// system must add it there's an inherent race condition while we wait for the interfaces to come up. This
+/// tries to wait out and exit early when the interface fails for other reasons.
+fn try_link_ip(ifname: &str) -> Result<Ipv6Addr, Error> {
+    let now = Instant::now();
+    loop {
+        match KI.get_link_local_device_ip(ifname) {
+            Ok(link_ip) => return Ok(link_ip),
+            Err(KernelInterfaceError::AddressNotReadyError(_e)) => {
+                sleep(Duration::new(5, 0));
+                warn!(
+                    "Failed to get link local address on {:?} trying again in 5 seconds",
+                    ifname
+                );
+                if now.elapsed().as_secs() > 120 {
+                    panic!("Timed out waiting for fe80 address on interface {}. Interface exists but is incapable of meshing!", ifname);
+                }
+            }
+            Err(KernelInterfaceError::NoInterfaceError(e)) => {
+                return Err(KernelInterfaceError::NoInterfaceError(e).into());
+            }
+            Err(KernelInterfaceError::RuntimeError(e)) => {
+                return Err(KernelInterfaceError::RuntimeError(e).into());
+            }
+        }
+    }
+}
+
 impl ListenInterface {
     pub fn new(ifname: &str) -> Result<ListenInterface, Error> {
         let port = SETTING.get_network().rita_hello_port;
         let disc_ip = SETTING.get_network().discovery_ip;
         debug!("Binding to {:?} for ListenInterface", ifname);
         // Lookup interface link local ip
-        let link_ip = KI.get_link_local_device_ip(&ifname)?;
+        let link_ip = try_link_ip(&ifname)?;
 
         // Lookup interface index
         let iface_index = match KI.get_iface_index(&ifname) {
@@ -206,6 +238,9 @@ impl ListenInterface {
         };
         // Bond to multicast discovery address on each listen port
         let multicast_socketaddr = SocketAddrV6::new(disc_ip, port, 0, iface_index);
+
+        // try_link_ip should guard from non-existant interfaces and the network stack not being ready
+        // so in theory we should never hit this expect or the panic below either.
         let multicast_socket = UdpSocket::bind(multicast_socketaddr)
             .expect("Failed to bind to peer discovery address!");
         let res = multicast_socket.join_multicast_v6(&disc_ip, iface_index);
