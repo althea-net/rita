@@ -1,4 +1,10 @@
-use super::*;
+use crate::ARGS;
+use crate::SETTING;
+use ::actix_web::{HttpRequest, HttpResponse, Json, Result};
+use ::settings::FileWrite;
+use ::settings::RitaCommonSettings;
+use arrayvec::ArrayString;
+use failure::Error;
 
 pub fn get_nickname(_req: HttpRequest) -> Result<HttpResponse, Error> {
     let nick = SETTING.get_network().nickname;

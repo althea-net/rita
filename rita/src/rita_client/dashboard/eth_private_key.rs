@@ -1,5 +1,12 @@
-use super::*;
+use crate::ARGS;
+use crate::KI;
+use crate::SETTING;
+use ::actix_web::{HttpRequest, HttpResponse, Json};
 use clarity::PrivateKey;
+use failure::Error;
+use settings::FileWrite;
+use settings::RitaCommonSettings;
+use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct EthPrivateKey {
