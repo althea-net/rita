@@ -110,7 +110,7 @@ impl Handler<CacheCallback> for DAOManager {
         let dao_address = msg.dao_address;
         let response = msg.response;
         trace!("Got response {:?}", response);
-        let num: Uint256 = match response.result {
+        let _num: Uint256 = match response.result {
             Some(uint) => match uint.replace("0x", "").parse() {
                 Ok(parsed) => parsed,
                 Err(e) => {

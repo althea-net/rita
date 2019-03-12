@@ -1,4 +1,5 @@
-use super::*;
+use ::actix_web::*;
+use failure::Error;
 
 #[cfg(not(feature = "development"))]
 pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {

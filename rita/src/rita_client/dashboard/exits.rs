@@ -1,9 +1,27 @@
 //! The Exit info endpoint gathers infromation about exit status and presents it to the dashbaord.
 
-use super::*;
-
+use crate::rita_client::exit_manager::exit_setup_request;
+use crate::rita_common::dashboard::Dashboard;
 use crate::ARGS;
+use crate::KI;
+use crate::SETTING;
+use ::actix::prelude::*;
+use ::actix_web::http::StatusCode;
+use ::actix_web::AsyncResponder;
+use ::actix_web::Path;
+use ::actix_web::{HttpRequest, HttpResponse, Json};
+use althea_types::ExitState;
+use babel_monitor::Babel;
+use failure::Error;
+use futures::{future, Future};
+use reqwest;
+use settings::client::{ExitServer, RitaClientSettings};
 use settings::FileWrite;
+use settings::RitaCommonSettings;
+use std::boxed::Box;
+use std::collections::HashMap;
+use std::net::{SocketAddr, TcpStream};
+use std::time::Duration;
 
 #[derive(Serialize)]
 pub struct ExitInfo {

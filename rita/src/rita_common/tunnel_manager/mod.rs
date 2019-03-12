@@ -529,16 +529,6 @@ fn get_tunnel_by_ifidx(ifidx: u32, tunnels: &[Tunnel]) -> Option<&Tunnel> {
     None
 }
 
-/// gets a mutable reference tunnel from the list with the given index
-fn get_mut_tunnel_by_ifidx(ifidx: u32, tunnels: &mut Vec<Tunnel>) -> Option<&mut Tunnel> {
-    for tunnel in tunnels.iter_mut() {
-        if tunnel.listen_ifidx == ifidx {
-            return Some(tunnel);
-        }
-    }
-    None
-}
-
 /// deletes all instances of a given tunnel from the list
 fn del_tunnel(to_del: &Tunnel, tunnels: &mut Vec<Tunnel>) {
     tunnels.retain(|val| *val != *to_del)
@@ -941,66 +931,85 @@ fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, Vec<Tunnel>>) -> Result<()
     Ok(())
 }
 
-#[test]
-pub fn test_tunnel_manager() {
-    let mut tunnel_manager = TunnelManager::new();
-    assert_eq!(tunnel_manager.free_ports.pop().unwrap(), 65534);
-}
+#[cfg(test)]
+mod tests {
+    use crate::rita_common::tunnel_manager::RegistrationState;
+    use crate::rita_common::tunnel_manager::Tunnel;
+    use crate::rita_common::tunnel_manager::TunnelManager;
+    use althea_types::Identity;
+    use althea_types::LocalIdentity;
 
-#[test]
-pub fn test_tunnel_manager_lookup() {
-    use clarity::Address;
-    use std::str::FromStr;
-
-    let mut tunnel_manager = TunnelManager::new();
-
-    // Create dummy identity
-    let id = Identity::new(
-        "0.0.0.0".parse().unwrap(),
-        Address::from_str("ffffffffffffffffffffffffffffffffffffffff").unwrap(),
-        "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
-            .parse()
-            .unwrap(),
-        None,
-    );
-    assert!(tunnel_manager.tunnels.get(&id).is_none());
-
-    // Create dummy tunnel
-    tunnel_manager
-        .tunnels
-        .entry(id)
-        .or_insert_with(Vec::new)
-        .push(Tunnel::new(
-            "0.0.0.0".parse().unwrap(),
-            "iface".into(),
-            65535,
-            0,
-            LocalIdentity {
-                wg_port: 65535,
-                have_tunnel: Some(true),
-                global: id,
-            },
-        ));
-    {
-        let existing_tunnel =
-            get_mut_tunnel_by_ifidx(0u32, tunnel_manager.tunnels.get_mut(&id).unwrap())
-                .expect("Unable to find existing tunnel");
-        assert_eq!(
-            existing_tunnel.state.registration_state,
-            RegistrationState::Registered
-        );
-        // Verify mutability - manual modifications shouldn't happen elsewhere
-        existing_tunnel.state.registration_state = RegistrationState::NotRegistered;
+    /// gets a mutable reference tunnel from the list with the given index
+    fn get_mut_tunnel_by_ifidx(ifidx: u32, tunnels: &mut Vec<Tunnel>) -> Option<&mut Tunnel> {
+        for tunnel in tunnels.iter_mut() {
+            if tunnel.listen_ifidx == ifidx {
+                return Some(tunnel);
+            }
+        }
+        None
     }
 
-    // Verify if object is modified
-    {
-        let existing_tunnel =
-            get_mut_tunnel_by_ifidx(0u32, tunnel_manager.tunnels.get_mut(&id).unwrap())
-                .expect("Unable to find existing tunnel");
-        assert_eq!(
-            existing_tunnel.state.registration_state,
-            RegistrationState::NotRegistered
+    #[test]
+    pub fn test_tunnel_manager() {
+        let mut tunnel_manager = TunnelManager::new();
+        assert_eq!(tunnel_manager.free_ports.pop().unwrap(), 65534);
+    }
+
+    #[test]
+    pub fn test_tunnel_manager_lookup() {
+        use clarity::Address;
+        use std::str::FromStr;
+
+        let mut tunnel_manager = TunnelManager::new();
+
+        // Create dummy identity
+        let id = Identity::new(
+            "0.0.0.0".parse().unwrap(),
+            Address::from_str("ffffffffffffffffffffffffffffffffffffffff").unwrap(),
+            "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
+                .parse()
+                .unwrap(),
+            None,
         );
+        assert!(tunnel_manager.tunnels.get(&id).is_none());
+
+        // Create dummy tunnel
+        tunnel_manager
+            .tunnels
+            .entry(id)
+            .or_insert_with(Vec::new)
+            .push(Tunnel::new(
+                "0.0.0.0".parse().unwrap(),
+                "iface".into(),
+                65535,
+                0,
+                LocalIdentity {
+                    wg_port: 65535,
+                    have_tunnel: Some(true),
+                    global: id,
+                },
+            ));
+        {
+            let existing_tunnel =
+                get_mut_tunnel_by_ifidx(0u32, tunnel_manager.tunnels.get_mut(&id).unwrap())
+                    .expect("Unable to find existing tunnel");
+            assert_eq!(
+                existing_tunnel.state.registration_state,
+                RegistrationState::Registered
+            );
+            // Verify mutability - manual modifications shouldn't happen elsewhere
+            existing_tunnel.state.registration_state = RegistrationState::NotRegistered;
+        }
+
+        // Verify if object is modified
+        {
+            let existing_tunnel =
+                get_mut_tunnel_by_ifidx(0u32, tunnel_manager.tunnels.get_mut(&id).unwrap())
+                    .expect("Unable to find existing tunnel");
+            assert_eq!(
+                existing_tunnel.state.registration_state,
+                RegistrationState::NotRegistered
+            );
+        }
     }
 }
