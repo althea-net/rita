@@ -24,7 +24,11 @@ set -e
 openssl req -newkey rsa:2048 -nodes -keyform pem -keyout bh_key.pem -x509 -days 365 -outform pem -out bh_cert.pem -subj "/C=US/ST=Althea/L=Althea/O=Althea/OU=Althea/CN=Althea"
 export BOUNTY_HUNTER_CERT=$PWD/bh_cert.pem
 export BOUNTY_HUNTER_KEY=$PWD/bh_key.pem
-
+# prep postgres
+cargo install diesel_cli --force
+sudo cp $(which diesel) /usr/bin
+# we need to start the database again in the namespace, so we have to kill it out here
+sudo killall -9 postgres
 
 build_rev() {
   remote=$1
