@@ -112,12 +112,7 @@ pub fn get_exit_info(to: &SocketAddr) -> impl Future<Item = ExitState, Error = E
             .unwrap()
             .send()
             .from_err()
-            .and_then(|response| {
-                response
-                    .json()
-                    .from_err()
-                    .and_then(|val: ExitState| Ok(val))
-            })
+            .and_then(|response| response.json().from_err().and_then(Ok))
     })
 }
 
@@ -137,12 +132,7 @@ pub fn send_exit_setup_request(
             .unwrap()
             .send()
             .from_err()
-            .and_then(|response| {
-                response
-                    .json()
-                    .from_err()
-                    .and_then(|val: ExitState| Ok(val))
-            })
+            .and_then(|response| response.json().from_err().and_then(Ok))
     })
 }
 
@@ -162,12 +152,7 @@ pub fn send_exit_status_request(
             .unwrap()
             .send()
             .from_err()
-            .and_then(|response| {
-                response
-                    .json()
-                    .from_err()
-                    .and_then(|val: ExitState| Ok(val))
-            })
+            .and_then(|response| response.json().from_err().and_then(Ok))
     })
 }
 

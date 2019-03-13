@@ -1,4 +1,4 @@
-use ::actix_web::*;
+use ::actix_web::{HttpRequest, HttpResponse, Result};
 use failure::Error;
 
 #[cfg(not(feature = "development"))]
