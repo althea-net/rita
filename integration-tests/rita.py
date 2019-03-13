@@ -15,12 +15,20 @@ import sys
 import time
 import toml
 
+EXIT_NAMESPACE="netlab-5"
+
 NETWORK_LAB = os.path.join(os.path.dirname(__file__), 'deps/network-lab/network-lab.sh')
 BABELD = os.path.join(os.path.dirname(__file__), 'deps/babeld/babeld')
 
-RITA_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/x86_64-unknown-linux-musl/debug/rita')
-RITA_EXIT_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/x86_64-unknown-linux-musl/debug/rita_exit')
-BOUNTY_HUNTER_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/x86_64-unknown-linux-musl/debug/bounty_hunter')
+RITA_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/debug/rita')
+RITA_EXIT_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/debug/rita_exit')
+BOUNTY_HUNTER_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/debug/bounty_hunter')
+
+# Envs for controlling postgres
+POSTGRES_USER = os.getenv('POSTGRES_USER')
+POSTGRES_BIN = os.getenv('POSTGRES_BIN')
+POSTGRES_CONFIG = os.getenv('POSTGRES_CONFIG')
+POSTGRES_DATABASE = os.getenv('POSTGRES_DATABASE')
 
 # Envs for controlling compat testing
 RITA_A = os.getenv('RITA_A', RITA_DEFAULT)
@@ -523,6 +531,12 @@ class World:
             prep_netns(id)
 
         print("namespaces prepped")
+
+        print("Starting postgres in exit namespace")
+        exec_or_exit("sudo ip netns exec {} sudo -u {} {} -D {} -c config_file={}".format(EXIT_NAMESPACE, POSTGRES_USER, POSTGRES_BIN, POSTGRES_DATABASE, POSTGRES_CONFIG), False)
+        print("Perform initial database migrations")
+        exec_or_exit('sudo ip netns exec {} diesel migration run --database-url="postgres://postgres@localhost/test" --migration-dir=../exit_db/migrations'.format(EXIT_NAMESPACE))
+
         time.sleep(10)
 
         print("starting babel")

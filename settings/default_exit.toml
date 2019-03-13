@@ -1,4 +1,4 @@
-db_file = "exit.db"
+db_uri = "postgres://postgres@localhost/test"
 description = "just a normal althea exit"
 
 [payment]
@@ -48,6 +48,7 @@ test = true
 email_cooldown=60
 test_dir = "mail"
 from_address = "email-verif@example.com"
+balance_notification_interval = 600
 
 [log]
 enabled = false
