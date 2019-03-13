@@ -1,6 +1,6 @@
 use crate::rita_common::network_endpoints::JsonStatusResponse;
 use crate::SETTING;
-use ::actix_web::*;
+use ::actix_web::{HttpRequest, Json, Result};
 use ::settings::RitaCommonSettings;
 use failure::Error;
 use serde_json;
