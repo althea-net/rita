@@ -155,7 +155,7 @@ dependencies = [
 name = "althea_rs"
 version = "0.1.10"
 dependencies = [
- "rita 0.3.14",
+ "rita 0.3.15",
 ]
 
 [[package]]
@@ -2014,7 +2014,7 @@ dependencies = [
 
 [[package]]
 name = "rita"
-version = "0.3.14"
+version = "0.3.15"
 dependencies = [
  "actix 0.7.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-web 0.7.18 (registry+https://github.com/rust-lang/crates.io-index)",
