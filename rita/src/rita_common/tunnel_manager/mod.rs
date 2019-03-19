@@ -292,7 +292,7 @@ impl Handler<PortCallback> for TunnelManager {
     }
 }
 
-fn make_babel_stream() -> Result<TcpStream, Error> {
+pub fn make_babel_stream() -> Result<TcpStream, Error> {
     let stream = TcpStream::connect::<SocketAddr>(
         format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
     )?;
