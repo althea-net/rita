@@ -70,6 +70,7 @@ use crate::rita_common::dashboard::wallet::*;
 use crate::rita_common::network_endpoints::*;
 use crate::rita_exit::network_endpoints::*;
 
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 #[cfg(test)]
@@ -202,7 +203,7 @@ fn main() {
     assert!(rita_common::peer_listener::PeerListener::from_registry().connected());
 
     assert!(rita_exit::traffic_watcher::TrafficWatcher::from_registry().connected());
-    assert!(rita_exit::db_client::DbClient::from_registry().connected());
+    assert!(rita_exit::database::db_client::DbClient::from_registry().connected());
 
     server::new(|| App::new().resource("/hello", |r| r.method(Method::POST).with(hello_response)))
         .bind(format!("[::0]:{}", SETTING.get_network().rita_hello_port))
@@ -214,7 +215,7 @@ fn main() {
             r.method(Method::POST).with(make_payments)
         })
     })
-    .workers(1)
+    .workers(8)
     .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
     .unwrap()
     .shutdown_timeout(0)
@@ -225,12 +226,12 @@ fn main() {
         App::new()
             .resource("/setup", |r| r.method(Method::POST).with(setup_request))
             .resource("/status", |r| r.method(Method::POST).with(status_request))
-            .resource("/list", |r| r.method(Method::POST).with(list_clients))
             .resource("/exit_info", |r| {
                 r.method(Method::GET).with(get_exit_info_http)
             })
             .resource("/rtt", |r| r.method(Method::GET).with(rtt))
     })
+    .workers(8)
     .bind(format!(
         "[::0]:{}",
         SETTING.get_exit_network().exit_hello_port
@@ -285,7 +286,9 @@ fn main() {
     let common = rita_common::rita_loop::RitaLoop::new();
     let _: Addr<_> = common.start();
 
-    let exit = rita_exit::rita_loop::RitaLoop {};
+    let exit = rita_exit::rita_loop::RitaLoop {
+        geoip_cache: HashMap::new(),
+    };
     let _: Addr<_> = exit.start();
 
     system.run();
