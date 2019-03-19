@@ -6,7 +6,7 @@ use clarity::Address;
 use failure::Error;
 use num256::{Int256, Uint256};
 
-pub static READABLE_VERSION: &str = "Beta 3 RC6";
+pub static READABLE_VERSION: &str = "Beta 3 RC7";
 
 #[derive(Serialize)]
 pub struct OwnInfo {
