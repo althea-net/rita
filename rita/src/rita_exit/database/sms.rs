@@ -1,4 +1,4 @@
-//use crate::rita_exit::database::database_tools::text_sent;
+use crate::rita_exit::database::database_tools::text_sent;
 use crate::rita_exit::database::database_tools::verify_client;
 use crate::rita_exit::database::get_exit_info;
 use crate::rita_exit::database::struct_tools::text_done;
@@ -107,9 +107,7 @@ pub fn handle_sms_registration(
         }),
         (Some(number), None, false) => {
             send_text(number, api_key)?;
-            // TODO this is currently abusable but we have turned it off
-            // to allow for reset and re-register to work
-            //text_sent(&client, &conn)?;
+            text_sent(&client, &conn)?;
             Ok(ExitState::Pending {
                 general_details: get_exit_info(),
                 message: "awaiting phone verification".to_string(),

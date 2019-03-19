@@ -118,7 +118,7 @@ pub fn verify_db_client(
 }
 
 /// Marks a registration text as sent in the database
-pub fn _text_sent(client: &ExitClientIdentity, conn: &PgConnection) -> Result<(), Error> {
+pub fn text_sent(client: &ExitClientIdentity, conn: &PgConnection) -> Result<(), Error> {
     use self::schema::clients::dsl::*;
 
     diesel::update(clients.find(&client.global.mesh_ip.to_string()))
