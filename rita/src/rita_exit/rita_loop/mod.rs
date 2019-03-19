@@ -4,47 +4,27 @@
 //! In this loop the exit checks it's database for registered users and deploys the endpoint for
 //! their exit tunnel
 
+use crate::rita_exit::database::struct_tools::clients_to_ids;
+use crate::rita_exit::database::{
+    cleanup_exit_clients, enforce_exit_clients, get_database_connection, setup_clients,
+    validate_clients_region,
+};
+use crate::rita_exit::traffic_watcher::{TrafficWatcher, Watch};
+use crate::SETTING;
+use ::actix::prelude::*;
+use diesel::query_dsl::RunQueryDsl;
+use exit_db::models;
+use failure::Error;
+use settings::exit::RitaExitSettings;
 use std::collections::HashMap;
 use std::net::IpAddr;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use arrayvec::ArrayString;
-
-use ::actix::prelude::*;
-use ::actix::registry::SystemService;
-
-use crate::rita_exit::db_client::{
-    DbClient, DeleteClient, ListClients, SetClientTimestamp, ValidateClientsRegion,
-};
-
-use futures::future::Either;
-use futures::{future, Future};
-
-use crate::rita_common::debt_keeper::DebtAction;
-use crate::rita_common::debt_keeper::DebtKeeper;
-use crate::rita_common::debt_keeper::GetDebtsList;
-use crate::rita_exit::traffic_watcher::{TrafficWatcher, Watch};
-
-use exit_db::models::Client;
-
-use failure::Error;
-
-use crate::SETTING;
-use settings::exit::RitaExitSettings;
-use settings::RitaCommonSettings;
-
-use althea_kernel_interface::{ExitClient, KI};
-
-use althea_types::Identity;
-
-mod cleanup;
-mod enforcement;
-mod setup;
-use cleanup::cleanup_exit_clients;
-use enforcement::enforce_exit_clients;
-use setup::setup_exit_clients;
-
-pub struct RitaLoop;
+#[derive(Default)]
+pub struct RitaLoop {
+    /// a simple cache to prevent regularly asking Maxmind for the same geoip data
+    pub geoip_cache: HashMap<IpAddr, String>,
+}
 
 // the speed in seconds for the exit loop
 pub const EXIT_LOOP_SPEED: u64 = 5;
@@ -67,56 +47,47 @@ impl Message for Tick {
     type Result = Result<(), Error>;
 }
 
-fn to_identity(client: &Client) -> Result<Identity, Error> {
-    trace!("Converting client {:?}", client);
-    Ok(Identity {
-        mesh_ip: client.mesh_ip.clone().parse()?,
-        eth_address: client.eth_address.clone().parse()?,
-        wg_public_key: client.wg_pubkey.clone().parse()?,
-        nickname: Some(ArrayString::<[u8; 32]>::from(&client.nickname).unwrap_or_default()),
-    })
-}
-
-fn to_exit_client(client: Client) -> Result<ExitClient, Error> {
-    Ok(ExitClient {
-        mesh_ip: client.mesh_ip.parse()?,
-        internal_ip: client.internal_ip.parse()?,
-        port: client.wg_port as u16,
-        public_key: client.wg_pubkey.parse()?,
-    })
-}
-
-fn clients_to_ids(clients: Vec<Client>) -> Vec<Identity> {
-    let mut ids: Vec<Identity> = Vec::new();
-    for client in clients.iter() {
-        match (client.verified, to_identity(client)) {
-            (true, Ok(id)) => ids.push(id),
-            (true, Err(e)) => warn!("Corrupt database entry {:?}", e),
-            (false, _) => trace!("{:?} is not registered", client),
-        }
-    }
-    ids
-}
-
 impl Handler<Tick> for RitaLoop {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
+        use exit_db::schema::clients::dsl::clients;
         trace!("Exit tick!");
 
-        // Create and update client tunnels
-        Arbiter::spawn(setup_exit_clients());
+        // opening a database connection takes at least several milliseconds, as the database server
+        // may be across the country, so to save on back and forth we open on and reuse it as much
+        // as possible
+        let conn = get_database_connection()?;
 
-        // handle enforcement on client tunnels by querying debt keeper
-        Arbiter::spawn(enforce_exit_clients());
+        let clients_list = clients.load::<models::Client>(&conn)?;
+        let ids = clients_to_ids(clients_list.clone());
+
+        // watch and bill for traffic it's super important this gets spawned!
+        TrafficWatcher::from_registry().do_send(Watch(ids));
+
+        // Create and update client tunnels
+        let res = setup_clients(&clients_list);
+        if res.is_err() {
+            error!("Setup clients failed with {:?}", res);
+        }
 
         // find users that have not been active within the configured time period
         // and remove them from the db
-        Arbiter::spawn(cleanup_exit_clients());
+        let res = cleanup_exit_clients(&clients_list, &conn);
+        if res.is_err() {
+            error!("Exit client cleanup failed with {:?}", res);
+        }
 
         // Make sure no one we are setting up is geoip unauthorized
         if !SETTING.get_allowed_countries().is_empty() {
-            DbClient::from_registry().do_send(ValidateClientsRegion {})
+            let res = validate_clients_region(&mut self.geoip_cache, &clients_list, &conn);
+            if res.is_err() {
+                error!("Valiadte clients failed with {:?}", res);
+            }
         }
+
+        // handle enforcement on client tunnels by querying debt keeper
+        // this consumes client list, you can move it up in exchange for a clone
+        Arbiter::spawn(enforce_exit_clients(clients_list));
 
         Ok(())
     }

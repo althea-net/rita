@@ -1,27 +1,20 @@
 //! Network endpoints for rita-exit that are not dashboard or local infromational endpoints
 //! these are called by rita instances to operate the mesh
 
-use ::actix::registry::SystemService;
-use ::actix_web::*;
+use ::actix_web::{HttpRequest, HttpResponse, Json, Result};
 
-use futures;
-use futures::Future;
+use crate::rita_exit::database::{client_status, get_exit_info, signup_client};
 
-use crate::rita_exit::db_client::{get_exit_info, ClientStatus, DbClient, SetupClient};
-
-use std::boxed::Box;
 use std::time::SystemTime;
 
 use althea_types::{ExitClientIdentity, ExitState, RTTimestamps};
 
-use crate::rita_exit::db_client::ListClients;
-use exit_db::models::Client;
 use failure::Error;
 use std::net::SocketAddr;
 
 pub fn setup_request(
     their_id: (Json<ExitClientIdentity>, HttpRequest),
-) -> Box<dyn Future<Item = Json<ExitState>, Error = Error>> {
+) -> Result<Json<ExitState>, Error> {
     trace!("Received requester identity for setup, {:?}", their_id.0);
     let client_mesh_ip = their_id.0.global.mesh_ip;
     let client = their_id.0.into_inner();
@@ -35,28 +28,19 @@ pub fn setup_request(
 
     let remote_mesh_ip = remote_mesh_socket.ip();
     if remote_mesh_ip == client_mesh_ip {
-        DbClient::from_registry()
-            .send(SetupClient(client))
-            .from_err()
-            .and_then(move |reply| Ok(Json(reply?)))
-            .responder()
+        Ok(Json(signup_client(client)?))
     } else {
-        Box::new(futures::future::ok(Json(ExitState::Denied {
+        Ok(Json(ExitState::Denied {
             message: "The request ip does not match the signup ip".to_string(),
-        })))
+        }))
     }
 }
 
-pub fn status_request(
-    their_id: Json<ExitClientIdentity>,
-) -> Box<dyn Future<Item = Json<ExitState>, Error = Error>> {
+pub fn status_request(their_id: Json<ExitClientIdentity>) -> Result<Json<ExitState>, Error> {
     trace!("Received requester identity for status, {:?}", their_id);
     let client = their_id.into_inner();
-    DbClient::from_registry()
-        .send(ClientStatus(client))
-        .from_err()
-        .and_then(move |reply| Ok(Json(reply?)))
-        .responder()
+
+    Ok(Json(client_status(client)?))
 }
 
 pub fn get_exit_info_http(_req: HttpRequest) -> Result<Json<ExitState>, Error> {
@@ -65,14 +49,6 @@ pub fn get_exit_info_http(_req: HttpRequest) -> Result<Json<ExitState>, Error> {
         message: "Got info successfully".to_string(),
         auto_register: false,
     }))
-}
-
-pub fn list_clients(_req: HttpRequest) -> Box<dyn Future<Item = Json<Vec<Client>>, Error = Error>> {
-    DbClient::from_registry()
-        .send(ListClients {})
-        .from_err()
-        .and_then(move |reply| Ok(Json(reply?)))
-        .responder()
 }
 
 /// An endpoint handler for the inner tunnel RTT. It responds with the request arrival and
