@@ -43,13 +43,20 @@ pub fn get_next_client_ip(conn: &PgConnection) -> Result<IpAddr, Error> {
 
     let clients_list = clients.load::<models::Client>(conn)?;
     let ips_list = get_internal_ips(&clients_list);
-    let mut new_ip = match ips_list.first() {
-        Some(val) => increment(val.clone().into(), netmask)?,
-        None => start_ip,
-    };
-    if new_ip == gateway_ip {
-        new_ip = increment(start_ip, netmask)?;
+    let mut new_ip: IpAddr = start_ip.into();
+
+    // iterate until we find an open spot, yes converting to string and back is quite awkward
+    while ips_list.contains(&new_ip.to_string().parse()?) {
+        new_ip = increment(new_ip, netmask)?;
+        if new_ip == gateway_ip {
+            new_ip = increment(new_ip, netmask)?;
+        }
     }
+    trace!(
+        "The new client's ip is {} selected using {:?}",
+        new_ip,
+        ips_list
+    );
 
     Ok(new_ip)
 }
