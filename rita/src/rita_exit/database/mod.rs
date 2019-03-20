@@ -111,7 +111,7 @@ fn client_to_new_db_client(
         phone: client.reg_details.phone.clone().unwrap_or_default(),
         country,
         email_code: format!("{:06}", rand_code),
-        text_sent: false,
+        text_sent: 0,
         verified: false,
         email_sent_time: 0,
         last_seen: 0,
@@ -187,8 +187,7 @@ pub fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Error> {
     }
 }
 
-/// Gets the status of a client and updates it in the database, not a member of
-/// DbClient because it needs to be called async
+/// Gets the status of a client and updates it in the database
 pub fn client_status(client: ExitClientIdentity) -> Result<ExitState, Error> {
     let conn = get_database_connection()?;
     let client_mesh_ip = client.global.mesh_ip;

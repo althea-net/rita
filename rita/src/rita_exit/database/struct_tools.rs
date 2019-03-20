@@ -42,8 +42,9 @@ pub fn verif_done(client: &models::Client) -> bool {
     client.verified
 }
 
-/// returns true if text message has been sent
-pub fn text_done(client: &models::Client) -> bool {
+/// returns the number of text messages this entry has requested
+/// and recieved so far
+pub fn texts_sent(client: &models::Client) -> i32 {
     client.text_sent
 }
 

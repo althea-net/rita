@@ -15,7 +15,7 @@ pub struct Client {
     pub email_code: String,
     pub verified: bool,
     pub email_sent_time: i64,
-    pub text_sent: bool,
+    pub text_sent: i32,
     pub last_seen: i64,
     pub last_balance_warning_time: i64,
 }
