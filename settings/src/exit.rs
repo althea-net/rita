@@ -5,7 +5,7 @@ use serde_json;
 use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
 
 use std::collections::HashSet;
-use std::net::IpAddr;
+use std::net::Ipv4Addr;
 use std::sync::{Arc, RwLock};
 
 use config::Config;
@@ -32,10 +32,10 @@ pub struct ExitNetworkSettings {
     /// Price in wei per byte which is charged to traffic both coming in and out over the internet
     pub exit_price: u64,
     /// This is the exit's own ip/gateway ip in the exit wireguard tunnel
-    pub own_internal_ip: IpAddr,
+    pub own_internal_ip: Ipv4Addr,
     /// This is the start of the exit tunnel's internal address allocation to clients, incremented
     /// by 1 every time a new client is added
-    pub exit_start_ip: IpAddr,
+    pub exit_start_ip: Ipv4Addr,
     /// The netmask, in bits to mask out, for the exit tunnel
     pub netmask: u8,
     /// Time in seconds before user is dropped from the db due to inactivity

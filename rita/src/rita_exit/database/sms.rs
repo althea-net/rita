@@ -19,6 +19,8 @@ pub struct SmsCheck {
     country_code: String,
 }
 
+/// Posts to the validation endpoint with the code, will return success if the code
+/// is the same as the one sent to the user
 fn check_text(number: String, code: String, api_key: String) -> Result<bool, Error> {
     trace!("About to check text message status for {}", number);
     let number: PhoneNumber = number.parse()?;
@@ -45,6 +47,7 @@ pub struct SmsRequest {
     country_code: String,
 }
 
+/// Sends the authy verification text by hitting the api endpoint
 fn send_text(number: String, api_key: String) -> Result<(), Error> {
     trace!("Sending message for {}", number);
     let number: PhoneNumber = number.parse()?;
@@ -76,11 +79,13 @@ pub fn handle_sms_registration(
 ) -> Result<ExitState, Error> {
     trace!("Handling phone registration for {:?}", client);
     let text_num = texts_sent(their_record);
+    let sent_more_than_allowed_texts = text_num > 10;
     match (
         client.reg_details.phone.clone(),
         client.reg_details.phone_code.clone(),
-        text_num < 10,
+        sent_more_than_allowed_texts,
     ) {
+        // all texts exhausted, but they can still submit the correct code
         (Some(number), Some(code), true) => {
             if check_text(number, code, api_key)? {
                 verify_client(&client, true, conn)?;
@@ -100,12 +105,14 @@ pub fn handle_sms_registration(
                 })
             }
         }
+        // user has exhausted attempts but is still not submitting code
         (Some(_number), None, true) => Ok(ExitState::Pending {
             general_details: get_exit_info(),
             message: "awaiting phone verification".to_string(),
             email_code: None,
             phone_code: None,
         }),
+        // user has attempts remaining and is requesting the code be resent
         (Some(number), None, false) => {
             send_text(number, api_key)?;
             text_sent(&client, &conn, text_num)?;
@@ -116,11 +123,27 @@ pub fn handle_sms_registration(
                 phone_code: None,
             })
         }
-        (Some(_), Some(_), false) => Ok(ExitState::GotInfo {
-            auto_register: false,
-            general_details: get_exit_info(),
-            message: "Please submit a phone number first".to_string(),
-        }),
+        // user has attempts remaining and is submitting a code
+        (Some(number), Some(code), false) => {
+            if check_text(number, code, api_key)? {
+                verify_client(&client, true, conn)?;
+                Ok(ExitState::Registered {
+                    our_details: ExitClientDetails {
+                        client_internal_ip: their_record.internal_ip.parse()?,
+                    },
+                    general_details: get_exit_info(),
+                    message: "Registration OK".to_string(),
+                })
+            } else {
+                Ok(ExitState::Pending {
+                    general_details: get_exit_info(),
+                    message: "awaiting phone verification".to_string(),
+                    email_code: None,
+                    phone_code: None,
+                })
+            }
+        }
+        // user did not submit a phonenumber
         (None, _, _) => Ok(ExitState::Denied {
             message: "This exit requires a phone number to register!".to_string(),
         }),

@@ -70,7 +70,7 @@ pub fn get_database_connection() -> Result<PgConnection, ConnectionError> {
 
 pub fn get_exit_info() -> ExitDetails {
     ExitDetails {
-        server_internal_ip: SETTING.get_exit_network().own_internal_ip,
+        server_internal_ip: SETTING.get_exit_network().own_internal_ip.into(),
         wg_exit_port: SETTING.get_exit_network().wg_tunnel_port,
         exit_price: SETTING.get_exit_network().exit_price,
         exit_currency: SETTING.get_payment().system_chain,
@@ -211,7 +211,7 @@ pub fn client_status(client: ExitClientIdentity) -> Result<ExitState, Error> {
         let current_ip = their_record.internal_ip.parse()?;
 
         let current_subnet = IpNetwork::new(
-            SETTING.get_exit_network().own_internal_ip,
+            SETTING.get_exit_network().own_internal_ip.into(),
             SETTING.get_exit_network().netmask,
         )?;
 
@@ -436,7 +436,7 @@ pub fn setup_clients(clients_list: &[exit_db::models::Client]) -> Result<(), Err
         wg_clients,
         SETTING.get_exit_network().wg_tunnel_port,
         &SETTING.get_network().wg_private_key_path,
-        &SETTING.get_exit_network().own_internal_ip,
+        &SETTING.get_exit_network().own_internal_ip.into(),
         SETTING.get_exit_network().netmask,
     );
 
