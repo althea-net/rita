@@ -40,8 +40,12 @@ pub fn incr_dummy(conn: &PgConnection) -> Result<IpAddr, Error> {
 
     trace!("incrementing dummy: {:?}", dummy);
     let netmask = SETTING.get_exit_network().netmask as u8;
+    let gateway_ip = SETTING.get_exit_network().own_internal_ip;
 
-    let new_ip = increment(dummy.internal_ip.parse()?, netmask)?;
+    let mut new_ip = increment(dummy.internal_ip.parse()?, netmask)?;
+    if new_ip == gateway_ip {
+        new_ip = increment(dummy.internal_ip.parse()?, netmask)?;
+    }
 
     diesel::update(clients.filter(mesh_ip.eq("0.0.0.0")))
         .set(internal_ip.eq(&new_ip.to_string()))
