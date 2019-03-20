@@ -95,6 +95,17 @@ mod tests {
     }
 
     #[test]
+    fn increment_across_netmask_v4() {
+        let mut ip: IpAddr = "192.168.0.0".parse().unwrap();
+        let stop_ip: IpAddr = "192.168.255.255".parse().unwrap();
+        while ip != stop_ip {
+            let res = increment(ip, 16);
+            assert!(res.is_ok());
+            ip = res.unwrap();
+        }
+    }
+
+    #[test]
     fn increment_basic_v6() {
         let addr1: IpAddr = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].into();
         let addr2: IpAddr = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1].into();
