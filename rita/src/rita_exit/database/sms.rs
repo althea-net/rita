@@ -1,7 +1,7 @@
 use crate::rita_exit::database::database_tools::text_sent;
 use crate::rita_exit::database::database_tools::verify_client;
 use crate::rita_exit::database::get_exit_info;
-use crate::rita_exit::database::struct_tools::text_done;
+use crate::rita_exit::database::struct_tools::texts_sent;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState};
 use diesel;
 use diesel::prelude::*;
@@ -75,10 +75,11 @@ pub fn handle_sms_registration(
     conn: &PgConnection,
 ) -> Result<ExitState, Error> {
     trace!("Handling phone registration for {:?}", client);
+    let text_num = texts_sent(their_record);
     match (
         client.reg_details.phone.clone(),
         client.reg_details.phone_code.clone(),
-        text_done(their_record),
+        text_num < 10,
     ) {
         (Some(number), Some(code), true) => {
             if check_text(number, code, api_key)? {
@@ -107,7 +108,7 @@ pub fn handle_sms_registration(
         }),
         (Some(number), None, false) => {
             send_text(number, api_key)?;
-            text_sent(&client, &conn)?;
+            text_sent(&client, &conn, text_num)?;
             Ok(ExitState::Pending {
                 general_details: get_exit_info(),
                 message: "awaiting phone verification".to_string(),

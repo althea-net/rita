@@ -121,12 +121,12 @@ pub fn verify_db_client(
     Ok(())
 }
 
-/// Marks a registration text as sent in the database
-pub fn text_sent(client: &ExitClientIdentity, conn: &PgConnection) -> Result<(), Error> {
+/// Increments the text message sent count in the database
+pub fn text_sent(client: &ExitClientIdentity, conn: &PgConnection, val: i32) -> Result<(), Error> {
     use self::schema::clients::dsl::*;
 
     diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-        .set(text_sent.eq(true))
+        .set(text_sent.eq(val + 1))
         .execute(&*conn)?;
 
     Ok(())
