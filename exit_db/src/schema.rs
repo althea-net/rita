@@ -12,7 +12,7 @@ table! {
         email_code -> Varchar,
         verified -> Bool,
         email_sent_time -> Int8,
-        text_sent -> Bool,
+        text_sent -> Int4,
         last_seen -> Int8,
         last_balance_warning_time -> Int8,
     }
