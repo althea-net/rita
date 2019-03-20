@@ -12,7 +12,7 @@ CREATE TABLE clients
     email_code varchar(16) NOT NULL,
     verified boolean DEFAULT FALSE NOT NULL,
     email_sent_time bigint DEFAULT 0 NOT NULL,
-    text_sent integer DEFAULT FALSE NOT NULL,
+    text_sent integer DEFAULT 0 NOT NULL,
     last_seen bigint DEFAULT 0 NOT NULL,
     last_balance_warning_time bigint DEFAULT 0 NOT NULL
 );
