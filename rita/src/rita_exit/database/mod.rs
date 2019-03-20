@@ -5,11 +5,10 @@
 use crate::rita_common::debt_keeper::DebtAction;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::GetDebtsList;
-use crate::rita_exit::database::database_tools::add_dummy;
 use crate::rita_exit::database::database_tools::client_exists;
 use crate::rita_exit::database::database_tools::delete_client;
 use crate::rita_exit::database::database_tools::get_client;
-use crate::rita_exit::database::database_tools::incr_dummy;
+use crate::rita_exit::database::database_tools::get_next_client_ip;
 use crate::rita_exit::database::database_tools::set_client_timestamp;
 use crate::rita_exit::database::database_tools::update_client;
 use crate::rita_exit::database::database_tools::update_low_balance_notification_time;
@@ -129,11 +128,6 @@ pub fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Error> {
     let conn = get_database_connection()?;
     let client_mesh_ip = client.global.mesh_ip;
     let gateway_ip = get_gateway_ip_single(client_mesh_ip)?;
-    // adds the dummy db entry, the dummy is used to easily determine what the next ip
-    // in the database is TODO make sure dummy can't be overwriten by hostile registrant
-    // also TODO just select lowest free ip, while this is O(n) time it shouldn't really
-    // be a problem.
-    add_dummy(&conn)?;
 
     trace!("got setup request {:?}", client);
 
@@ -144,7 +138,7 @@ pub fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Error> {
     } else {
         trace!("record does not exist, creating");
 
-        let new_ip = incr_dummy(&conn)?;
+        let new_ip = get_next_client_ip(&conn)?;
 
         trace!("About to check country");
         let user_country = if SETTING.get_allowed_countries().is_empty() {
@@ -198,8 +192,6 @@ pub fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Error> {
 pub fn client_status(client: ExitClientIdentity) -> Result<ExitState, Error> {
     let conn = get_database_connection()?;
     let client_mesh_ip = client.global.mesh_ip;
-
-    add_dummy(&conn)?;
 
     trace!("Checking if record exists for {:?}", client.global.mesh_ip);
 

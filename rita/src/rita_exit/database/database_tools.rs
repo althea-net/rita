@@ -12,40 +12,44 @@ use exit_db::{models, schema};
 use failure::Error;
 use settings::exit::RitaExitSettings;
 use std::net::IpAddr;
+use std::net::Ipv4Addr;
 
-pub fn add_dummy(conn: &PgConnection) -> Result<(), Error> {
-    use self::schema::clients::dsl::*;
-
-    let mut dummy = models::Client::default();
-
-    dummy.internal_ip = SETTING.get_exit_network().exit_start_ip.to_string();
-    dummy.mesh_ip = "0.0.0.0".to_string();
-
-    match diesel::insert_into(clients).values(&dummy).execute(&*conn) {
-        Err(_e) => {}
-        _ => warn!("Inserted dummy, this should only happen once"),
+/// Takes a list of clients and returns a sorted list of ip addresses spefically v4 since it
+/// can implement comparison operators
+fn get_internal_ips(clients: &[exit_db::models::Client]) -> Vec<Ipv4Addr> {
+    let mut list = Vec::with_capacity(clients.len());
+    for client in clients {
+        let client_internal_ip = client.internal_ip.parse();
+        match client_internal_ip {
+            Ok(address) => list.push(address),
+            Err(_e) => error!("Bad database entry! {:?}", client),
+        }
     }
-    Ok(())
+    // this list should come sorted from the database, this just double checks
+    list.sort();
+    list
 }
 
-pub fn incr_dummy(conn: &PgConnection) -> Result<IpAddr, Error> {
-    use self::schema::clients::dsl::*;
+/// Gets the next available client ip, takes about O(n) time, we could make it faster by
+/// sorting on the database side but I've left that optimization on the vine for now
+pub fn get_next_client_ip(conn: &PgConnection) -> Result<IpAddr, Error> {
+    use self::schema::clients::dsl::clients;
+    let exit_settings = SETTING.get_exit_network();
+    let netmask = exit_settings.netmask as u8;
+    let start_ip = exit_settings.exit_start_ip;
+    let gateway_ip = exit_settings.own_internal_ip;
+    // drop here to free up the settings lock, this codepath runs in parallel
+    drop(exit_settings);
 
-    add_dummy(&conn)?;
-    let dummy: models::Client = clients
-        .filter(mesh_ip.eq("0.0.0.0"))
-        .load::<models::Client>(&*conn)
-        .expect("failed loading dummy")[0]
-        .clone();
-
-    trace!("incrementing dummy: {:?}", dummy);
-    let netmask = SETTING.get_exit_network().netmask as u8;
-
-    let new_ip = increment(dummy.internal_ip.parse()?, netmask)?;
-
-    diesel::update(clients.filter(mesh_ip.eq("0.0.0.0")))
-        .set(internal_ip.eq(&new_ip.to_string()))
-        .execute(&*conn)?;
+    let clients_list = clients.load::<models::Client>(conn)?;
+    let ips_list = get_internal_ips(&clients_list);
+    let mut new_ip = match ips_list.first() {
+        Some(val) => increment(val.clone().into(), netmask)?,
+        None => start_ip,
+    };
+    if new_ip == gateway_ip {
+        new_ip = increment(start_ip, netmask)?;
+    }
 
     Ok(new_ip)
 }
