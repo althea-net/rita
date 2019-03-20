@@ -537,7 +537,7 @@ class World:
         print("Perform initial database migrations")
         exec_or_exit('sudo ip netns exec {} diesel migration run --database-url="postgres://postgres@localhost/test" --migration-dir=../exit_db/migrations'.format(EXIT_NAMESPACE))
 
-        time.sleep(10)
+        time.sleep(30)
 
         print("starting babel")
 
