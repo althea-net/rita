@@ -81,6 +81,10 @@ pub fn update_client(client: &ExitClientIdentity, conn: &PgConnection) -> Result
         .set(last_seen.eq(secs_since_unix_epoch() as i64))
         .execute(&*conn)?;
 
+    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
+        .set(last_seen.eq(secs_since_unix_epoch() as i64))
+        .execute(&*conn)?;
+
     Ok(())
 }
 
