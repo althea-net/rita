@@ -6,13 +6,16 @@
 
 use std::time::{Duration, Instant};
 
-use ::actix::prelude::*;
-use ::actix::registry::SystemService;
+use actix::prelude::{
+    Actor, ActorContext, ActorFuture, Addr, AsyncContext, Context, Handler, Message, Supervised,
+    SystemService, WrapFuture,
+};
 
 use crate::rita_client::exit_manager::ExitManager;
 
 use failure::Error;
 
+#[derive(Default)]
 pub struct RitaLoop;
 
 // the speed in seconds for the client loop
@@ -26,6 +29,28 @@ impl Actor for RitaLoop {
             let addr: Addr<Self> = ctx.address();
             addr.do_send(Tick);
         });
+    }
+}
+
+impl SystemService for RitaLoop {}
+impl Supervised for RitaLoop {
+    fn restarting(&mut self, _ctx: &mut Context<RitaLoop>) {
+        error!("Rita Client loop actor died! recovering!");
+    }
+}
+
+/// Used to test actor respawning
+pub struct Crash;
+
+impl Message for Crash {
+    type Result = Result<(), Error>;
+}
+
+impl Handler<Crash> for RitaLoop {
+    type Result = Result<(), Error>;
+    fn handle(&mut self, _: Crash, ctx: &mut Context<Self>) -> Self::Result {
+        ctx.stop();
+        Ok(())
     }
 }
 

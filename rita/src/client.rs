@@ -46,7 +46,6 @@ use settings::client::{RitaClientSettings, RitaSettingsStruct};
 use settings::RitaCommonSettings;
 
 use actix::registry::SystemService;
-use actix::*;
 use actix_web::http::Method;
 use actix_web::{http, server, App};
 
@@ -313,6 +312,7 @@ fn main() {
                 set_low_balance_notification,
             )
             .route("/wipe", Method::POST, wipe)
+            .route("/crash_actors", Method::POST, crash_actors)
     })
     .workers(1)
     .bind(format!(
@@ -323,11 +323,8 @@ fn main() {
     .shutdown_timeout(0)
     .start();
 
-    let common = rita_common::rita_loop::RitaLoop::new();
-    let _: Addr<_> = common.start();
-
-    let client = rita_client::rita_loop::RitaLoop {};
-    let _: Addr<_> = client.start();
+    assert!(rita_common::rita_loop::RitaLoop::from_registry().connected());
+    assert!(rita_client::rita_loop::RitaLoop::from_registry().connected());
 
     system.run();
 }

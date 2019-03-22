@@ -48,7 +48,6 @@ use docopt::Docopt;
 use settings::FileWrite;
 
 use actix::registry::SystemService;
-use actix::*;
 use actix_web::http::Method;
 use actix_web::{http, server, App};
 
@@ -70,7 +69,6 @@ use crate::rita_common::dashboard::wallet::*;
 use crate::rita_common::network_endpoints::*;
 use crate::rita_exit::network_endpoints::*;
 
-use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 #[cfg(test)]
@@ -274,6 +272,7 @@ fn main() {
             .route("/auto_price/enabled", Method::GET, auto_pricing_status)
             .route("/nickname/get/", Method::GET, get_nickname)
             .route("/nickname/set/", Method::POST, set_nickname)
+            .route("/crash_actors", Method::POST, crash_actors)
     })
     .bind(format!(
         "[::0]:{}",
@@ -283,13 +282,8 @@ fn main() {
     .shutdown_timeout(0)
     .start();
 
-    let common = rita_common::rita_loop::RitaLoop::new();
-    let _: Addr<_> = common.start();
-
-    let exit = rita_exit::rita_loop::RitaLoop {
-        geoip_cache: HashMap::new(),
-    };
-    let _: Addr<_> = exit.start();
+    assert!(rita_common::rita_loop::RitaLoop::from_registry().connected());
+    assert!(rita_exit::rita_loop::RitaLoop::from_registry().connected());
 
     system.run();
 }
