@@ -11,7 +11,10 @@ use crate::rita_exit::database::{
 };
 use crate::rita_exit::traffic_watcher::{TrafficWatcher, Watch};
 use crate::SETTING;
-use ::actix::prelude::*;
+use actix::prelude::{
+    Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
+    SystemService,
+};
 use diesel::query_dsl::RunQueryDsl;
 use exit_db::models;
 use failure::Error;
@@ -38,6 +41,28 @@ impl Actor for RitaLoop {
             let addr: Addr<Self> = ctx.address();
             addr.do_send(Tick);
         });
+    }
+}
+
+impl SystemService for RitaLoop {}
+impl Supervised for RitaLoop {
+    fn restarting(&mut self, _ctx: &mut Context<RitaLoop>) {
+        error!("Rita Exit loop actor died! recovering!");
+    }
+}
+
+/// Used to test actor respawning
+pub struct Crash;
+
+impl Message for Crash {
+    type Result = Result<(), Error>;
+}
+
+impl Handler<Crash> for RitaLoop {
+    type Result = Result<(), Error>;
+    fn handle(&mut self, _: Crash, ctx: &mut Context<Self>) -> Self::Result {
+        ctx.stop();
+        Ok(())
     }
 }
 
