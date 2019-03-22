@@ -296,22 +296,20 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
         endpoint
     );
 
-    let r = send_exit_status_request(&endpoint, ident)
-        .from_err()
-        .and_then(move |exit_response| {
-            let mut exits = SETTING.get_exits_mut();
+    let r = send_exit_status_request(&endpoint, ident).and_then(move |exit_response| {
+        let mut exits = SETTING.get_exits_mut();
 
-            let current_exit = match exits.get_mut(&exit) {
-                Some(exit_struct) => exit_struct,
-                None => bail!("Could not find exit {:?}", exit),
-            };
+        let current_exit = match exits.get_mut(&exit) {
+            Some(exit_struct) => exit_struct,
+            None => bail!("Could not find exit {:?}", exit),
+        };
 
-            current_exit.info = exit_response.clone();
+        current_exit.info = exit_response.clone();
 
-            trace!("Got exit status response {:?}", exit_response.clone());
+        trace!("Got exit status response {:?}", exit_response.clone());
 
-            Ok(())
-        });
+        Ok(())
+    });
     Box::new(r)
 }
 
