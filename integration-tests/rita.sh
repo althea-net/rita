@@ -28,7 +28,8 @@ export BOUNTY_HUNTER_KEY=$PWD/bh_key.pem
 cargo install diesel_cli --force
 sudo cp $(which diesel) /usr/bin
 # we need to start the database again in the namespace, so we have to kill it out here
-sudo killall -9 postgres
+# this sends sigint which should gracefully shut it down but terminate existing connections
+sudo killall -2 postgres
 
 build_rev() {
   remote=$1
