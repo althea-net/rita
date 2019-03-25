@@ -329,13 +329,9 @@ fn update_our_price() {
 /// A very simple function placed here for convinence that indicates
 /// if the system should go into low balance mode
 pub fn low_balance() -> bool {
-    let payment_threshold = match SETTING.get_payment().pay_threshold.to_uint256() {
-        Some(val) => val,
-        None => Uint256::zero(),
-    };
     let balance = SETTING.get_payment().balance.clone();
-    // might increase this in the future
-    const MULTIPLIER: u8 = 4;
+    // TODO this needs to be configured/oracalized
+    const THRESHOLD: u128 = 10_000_000_000_000_000;
 
-    balance < (payment_threshold * MULTIPLIER.into())
+    balance < THRESHOLD.into()
 }
