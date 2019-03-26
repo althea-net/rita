@@ -409,16 +409,45 @@ impl Handler<Tick> for ExitManager {
         }
 
         // Self limit bandwidth consumption if we have a low balance
-        // let free_tier_throughput = SETTING.get_payment().free_tier_throughput;
-        // if self.last_exit.is_some() && low_balance() && !self.local_limiting {
-        //     warn!("Balance is low! sending notification and limiting usage");
-        //     let _ = KI.set_classless_limit("wg_exit", free_tier_throughput);
-        //     self.local_limiting = true;
-        // } else if self.last_exit.is_some() && !low_balance() && self.local_limiting {
-        //     info!("Balance is above the payment level, removing local limits");
-        //     let _ = KI.delete_qdisc("wg_exit");
-        //     self.local_limiting = false;
-        // }
+        let free_tier_throughput = SETTING.get_payment().free_tier_throughput;
+        if self.last_exit.is_some() && low_balance() && !self.local_limiting {
+            warn!("Balance is low! sending notification and limiting usage");
+            let exit_ip = self
+                .last_exit
+                .clone()
+                .unwrap()
+                .info
+                .general_details()
+                .unwrap()
+                .server_internal_ip
+                .to_string()
+                .parse()
+                .unwrap();
+            let _ = KI.create_root_classful_limit("wg_exit");
+            let _ = KI.create_flow_by_ip("wg_exit", &exit_ip);
+            let _ = KI.set_class_limit(
+                "wg_exit",
+                free_tier_throughput,
+                free_tier_throughput,
+                &exit_ip,
+            );
+            self.local_limiting = true;
+        } else if self.last_exit.is_some() && !low_balance() && self.local_limiting {
+            info!("Balance is above the payment level, removing local limits");
+            let exit_ip = self
+                .last_exit
+                .clone()
+                .unwrap()
+                .info
+                .general_details()
+                .unwrap()
+                .server_internal_ip
+                .to_string()
+                .parse()
+                .unwrap();
+            let _ = KI.set_class_limit("wg_exit", 5_000_000, 5_000_000, &exit_ip);
+            self.local_limiting = false;
+        }
 
         // code that manages requesting details to exits
         let servers = { SETTING.get_exits().clone() };
