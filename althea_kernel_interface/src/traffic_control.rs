@@ -207,6 +207,7 @@ impl KernelInterface {
                 &format!("{}kbit", min_bw),
                 "ceil",
                 &format!("{}kbit", max_bw),
+                "quantum 1354",
             ],
         )?;
 
