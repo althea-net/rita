@@ -497,9 +497,9 @@ pub fn enforce_exit_clients(
                                                 &ip,
                                             )
                                         } else {
-                                            // set to 1gbps garunteed bandwidth and 5gbps
+                                            // set to 100mbps garunteed bandwidth and 1gbps
                                             // absolute max
-                                            KI.set_class_limit("wg_exit", 1_000_000, 5_000_000, &ip)
+                                            KI.set_class_limit("wg_exit", 100_000, 1_000_000, &ip)
                                         };
                                         if res.is_err() {
                                             warn!("Failed to limit {} with {:?}", ip, res);

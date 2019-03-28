@@ -207,7 +207,10 @@ impl KernelInterface {
                 &format!("{}kbit", min_bw),
                 "ceil",
                 &format!("{}kbit", max_bw),
+                // packet size plus 14 header bytes
                 "quantum 1354",
+                // 50 packets based on the above packet size
+                "burst 67700",
             ],
         )?;
 
