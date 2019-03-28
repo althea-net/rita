@@ -1,4 +1,6 @@
+use althea_types::WgKey;
 use config;
+use core::str::FromStr;
 
 use serde_json;
 
@@ -44,10 +46,20 @@ pub struct ExitNetworkSettings {
     /// api credentials for Maxmind geoip
     pub geoip_api_user: Option<String>,
     pub geoip_api_key: Option<String>,
+    /// The our public key for the wg_exit tunnel
+    pub wg_public_key: WgKey,
+    /// Our private key for the wg_exit tunnel, not an option because it's better
+    /// for exits to crash than to generate their own key
+    pub wg_private_key: WgKey,
+    /// path for the exit tunnel keyfile must be distinct from the common tunnel path!
+    pub wg_private_key_path: String,
 }
 
-impl Default for ExitNetworkSettings {
-    fn default() -> Self {
+impl ExitNetworkSettings {
+    /// Generates a configuration that can be used in integration tests, does not use the
+    /// default trait to prevent some future code from picking up on the 'default' implementation
+    /// and actually using it. Since obviously hardcoded keys are not at all secure
+    pub fn test_default() -> Self {
         ExitNetworkSettings {
             exit_hello_port: 4875,
             wg_tunnel_port: 59999,
@@ -58,6 +70,10 @@ impl Default for ExitNetworkSettings {
             entry_timeout: 0,
             geoip_api_user: None,
             geoip_api_key: None,
+            wg_public_key: WgKey::from_str("Ha2YlTfDimJNboqxOSCh6M29W/H0jKtB4utitjaTO3A=").unwrap(),
+            wg_private_key: WgKey::from_str("mFFBLqQYrycxfHo10P9l8I2G7zbw8tia4WkGGgjGCn8=")
+                .unwrap(),
+            wg_private_key_path: String::new(),
         }
     }
 }
@@ -154,7 +170,7 @@ pub enum ExitVerifSettings {
 }
 
 /// This is the main settings struct for rita_exit
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct RitaExitSettingsStruct {
     // starts with file:// or postgres://username:password@localhost/diesel_demo
     db_uri: String,
@@ -167,12 +183,28 @@ pub struct RitaExitSettingsStruct {
     /// (ISO country code)
     #[serde(skip_serializing_if = "HashSet::is_empty", default)]
     allowed_countries: HashSet<String>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    mailer: Option<EmailVerifSettings>, // Legacy setting, TODO: remove in Alpha 13
     #[serde(skip_serializing_if = "Option::is_none")]
     verif_settings: Option<ExitVerifSettings>, // mailer's successor with new verif methods readiness
     #[serde(skip)]
     future: bool,
+}
+
+impl RitaExitSettingsStruct {
+    /// Generates a configuration that can be used in integration tests, does not use the
+    /// default trait to prevent some future code from picking up on the 'default' implementation
+    pub fn test_default() -> Self {
+        RitaExitSettingsStruct {
+            db_uri: "".to_string(),
+            description: "".to_string(),
+            payment: PaymentSettings::default(),
+            dao: SubnetDAOSettings::default(),
+            network: NetworkSettings::default(),
+            exit_network: ExitNetworkSettings::test_default(),
+            allowed_countries: HashSet::new(),
+            verif_settings: None,
+            future: false,
+        }
+    }
 }
 
 pub trait RitaExitSettings {
@@ -183,10 +215,6 @@ pub trait RitaExitSettings {
     fn get_verif_settings_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, Option<ExitVerifSettings>>;
-    fn get_mailer(&self) -> Option<EmailVerifSettings>;
-    fn get_mailer_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, Option<EmailVerifSettings>>;
     fn get_db_uri(&self) -> String;
     fn get_description(&self) -> String;
     fn get_allowed_countries<'ret, 'me: 'ret>(
@@ -218,14 +246,6 @@ impl RitaExitSettings for Arc<RwLock<RitaExitSettingsStruct>> {
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, Option<ExitVerifSettings>> {
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.verif_settings)
-    }
-    fn get_mailer(&self) -> Option<EmailVerifSettings> {
-        self.read().unwrap().mailer.clone()
-    }
-    fn get_mailer_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, Option<EmailVerifSettings>> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.mailer)
     }
 }
 
