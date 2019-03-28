@@ -20,6 +20,8 @@ use ::actix::prelude::*;
 use ::actix::registry::SystemService;
 use ::actix_web::client::Connection;
 use ::actix_web::*;
+use althea_types::ExitClientDetails;
+use althea_types::ExitDetails;
 use std::net::IpAddr;
 
 use althea_types::{ExitClientIdentity, ExitState, ExitVerifMode};
@@ -72,13 +74,12 @@ fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
     res
 }
 
-fn linux_setup_exit_tunnel() -> Result<(), Error> {
+fn linux_setup_exit_tunnel(
+    current_exit: &ExitServer,
+    general_details: &ExitDetails,
+    our_details: &ExitClientDetails,
+) -> Result<(), Error> {
     KI.update_settings_route(&mut SETTING.get_network_mut().default_route)?;
-
-    let exit_client = SETTING.get_exit_client();
-    let current_exit = exit_client.get_current_exit().unwrap();
-    let general_details = current_exit.info.general_details().unwrap();
-    let our_details = current_exit.info.our_details().unwrap();
 
     KI.setup_wg_if_named("wg_exit")?;
     KI.set_client_exit_tunnel_config(
@@ -345,13 +346,15 @@ impl Handler<Tick> for ExitManager {
     type Result = ResponseFuture<(), Error>;
 
     fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
+        // strange notication lets us scope our access to SETTING and prevent
+        // holding a readlock while exit tunnel setup requires a write lock
         let exit_server = { SETTING.get_exit_client().get_current_exit().cloned() };
 
         // code that connects to the current exit server
         trace!("About to setup exit tunnel!");
         if let Some(exit) = exit_server {
             trace!("We have selected an exit!");
-            if let Some(ref general_details) = exit.info.general_details() {
+            if let Some(general_details) = exit.info.clone().general_details() {
                 trace!("We have details for the selected exit!");
                 // only run if we have our own details and we either have no setup exit or the chosen
                 // exit has changed, if all of that is good we check if the default route is still correct
@@ -360,7 +363,12 @@ impl Handler<Tick> for ExitManager {
                     && !(self.last_exit.is_some() && self.last_exit.clone().unwrap() == exit)
                 {
                     trace!("Exit change, setting up exit tunnel");
-                    linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
+                    linux_setup_exit_tunnel(
+                        &exit,
+                        &general_details.clone(),
+                        &exit.info.our_details().unwrap(),
+                    )
+                    .expect("failure setting up exit tunnel");
 
                     self.last_exit = Some(exit.clone());
                 } else if exit.info.our_details().is_some()
@@ -371,7 +379,12 @@ impl Handler<Tick> for ExitManager {
                 {
                     trace!("DHCP overwrite setup exit tunnel again");
                     trace!("Exit change, setting up exit tunnel");
-                    linux_setup_exit_tunnel().expect("failure setting up exit tunnel");
+                    linux_setup_exit_tunnel(
+                        &exit,
+                        &general_details.clone(),
+                        &exit.info.our_details().unwrap(),
+                    )
+                    .expect("failure setting up exit tunnel");
                 }
 
                 // enable remote logging only if it has not already been started
