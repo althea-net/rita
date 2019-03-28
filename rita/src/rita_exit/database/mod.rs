@@ -438,7 +438,7 @@ pub fn setup_clients(clients_list: &[exit_db::models::Client]) -> Result<(), Err
     let exit_status = KI.set_exit_wg_config(
         wg_clients,
         SETTING.get_exit_network().wg_tunnel_port,
-        &SETTING.get_network().wg_private_key_path,
+        &SETTING.get_exit_network().wg_private_key_path,
         &SETTING.get_exit_network().own_internal_ip.into(),
         SETTING.get_exit_network().netmask,
     );

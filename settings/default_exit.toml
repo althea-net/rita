@@ -18,8 +18,8 @@ rita_contact_port = 4874
 rita_dashboard_port = 4877
 rita_tick_interval = 5
 bounty_port = 8888
-wg_public_key = "H/ABwzXk834OwGYU8CZGfFxNZOd+BAJEaVDHiEiWWhU="
-wg_private_key = "ALxcZm2r58gY0sB4vIfnjShc86qBoVK3f32H9VrwqWU="
+wg_public_key = "bvM10HW73yePrxdtCQQ4U20W5ogogdiZtUihrPc/oGY="
+wg_private_key = "OGzbcm6czrjOEAViK7ZzlWM8mtjCxp7UPbuLS/dATV4="
 wg_private_key_path = "/tmp/priv"
 wg_start_port = 60000
 peer_interfaces = []
@@ -36,6 +36,9 @@ own_internal_ip = "172.168.1.254"
 exit_start_ip = "172.168.1.100"
 netmask = 24
 entry_timeout = 7776000
+wg_public_key = "H/ABwzXk834OwGYU8CZGfFxNZOd+BAJEaVDHiEiWWhU="
+wg_private_key = "ALxcZm2r58gY0sB4vIfnjShc86qBoVK3f32H9VrwqWU="
+wg_private_key_path = "/tmp/exit-priv"
 
 [dao]
 dao_enforcement = false
@@ -43,7 +46,10 @@ cache_timeout_seconds = 600
 node_list = []
 dao_addresses = []
 
-[mailer]
+[verif_settings]
+type = "Email"
+
+[verif_settings.contents]
 test = true
 email_cooldown=60
 test_dir = "mail"
