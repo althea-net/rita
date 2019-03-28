@@ -299,6 +299,9 @@ fn low_balance_notification(
     }
 }
 
+/// Every 5 seconds we vlaidate all online clients to make sure that they are in the right region
+/// we also do this in the client status requests but we want to handle the edge case of a modified
+/// client that doesn't make status requests
 pub fn validate_clients_region(
     mut geoip_cache: &mut HashMap<IpAddr, String>,
     clients_list: &[exit_db::models::Client],
