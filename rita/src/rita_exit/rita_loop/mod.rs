@@ -106,7 +106,7 @@ impl Handler<Tick> for RitaLoop {
         if !SETTING.get_allowed_countries().is_empty() {
             let res = validate_clients_region(&mut self.geoip_cache, &clients_list, &conn);
             if res.is_err() {
-                error!("Valiadte clients failed with {:?}", res);
+                error!("Validate clients failed with {:?}", res);
             }
         }
 
