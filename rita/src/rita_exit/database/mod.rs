@@ -502,7 +502,7 @@ pub fn enforce_exit_clients(
                                             KI.set_class_limit("wg_exit", 100_000, 1_000_000, &ip)
                                         };
                                         if res.is_err() {
-                                            warn!("Failed to limit {} with {:?}", ip, res);
+                                            panic!("Failed to limit {} with {:?}", ip, res);
                                         }
                                     }
                                     _ => warn!("Can't parse Ipv4Addr to create limit!"),
