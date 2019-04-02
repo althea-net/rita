@@ -1,3 +1,5 @@
+//! Clu is used to handle init tasks, mostly genreating eth and wireguard keys
+
 #[macro_use]
 extern crate log;
 
@@ -8,7 +10,7 @@ extern crate failure;
 extern crate lazy_static;
 
 use settings;
-use settings::exit::{ExitVerifSettings, RitaExitSettings};
+use settings::exit::RitaExitSettings;
 use settings::RitaCommonSettings;
 
 use ipgen;
@@ -232,6 +234,11 @@ fn linux_exit_init(
 ) -> Result<(), Error> {
     cleanup()?;
 
+    // we need to avoid a deadlock by copying things out explicitly
+    let exit_network_settings_ref = config.get_exit_network();
+    let exit_network_settings = exit_network_settings_ref.clone();
+    drop(exit_network_settings_ref);
+
     let mut network_settings = config.get_network_mut();
     let mesh_ip_option = network_settings.mesh_ip.clone();
     let wg_pubkey_option = network_settings.wg_public_key.clone();
@@ -265,13 +272,18 @@ fn linux_exit_init(
         network_settings.wg_private_key = Some(keypair.private);
     }
 
-    //Creates file on disk containing key
+    // Creates file on disk containing key
     KI.create_wg_key(
         &Path::new(&network_settings.wg_private_key_path),
         &network_settings
             .wg_private_key
             .clone()
             .expect("How did we get here without generating a key above?"),
+    )?;
+    // same thing but with the exit key
+    KI.create_wg_key(
+        &Path::new(&exit_network_settings.wg_private_key_path),
+        &exit_network_settings.wg_private_key.clone(),
     )?;
 
     drop(network_settings);
@@ -300,32 +312,6 @@ fn linux_exit_init(
 
     // Yield the mut lock
     drop(payment_settings);
-
-    // Migrate compat mailer settings. This is put in this particular spot so that the network
-    // settings lock can be dropped beforehand.
-    //
-    // TODO: REMOVE IN ALPHA 13 FROM HERE TILL THE Ok(())
-    let compat_mailer_settings = config.get_mailer().clone();
-    let verif_settings = config.get_verif_settings().clone();
-
-    match verif_settings.clone() {
-        Some(_settings) => match compat_mailer_settings {
-            Some(_) => {
-                info!("Both verif_settings and compat settings exist, removing compat settings.");
-                *config.get_mailer_mut() = None;
-            }
-            None => {}
-        },
-        None => match compat_mailer_settings {
-            Some(compat_settings) => {
-                info!("Only compat mailer settings are present, migrating to verif_settings");
-                *config.get_verif_settings_mut() =
-                    Some(ExitVerifSettings::Email(compat_settings.clone()));
-                *config.get_mailer_mut() = None;
-            }
-            None => {}
-        },
-    }
 
     let local_fee = config.get_payment().local_fee;
     let metric_factor = config.get_network().metric_factor;
