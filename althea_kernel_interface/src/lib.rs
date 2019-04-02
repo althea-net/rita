@@ -90,6 +90,15 @@ pub trait CommandRunner {
     fn set_mock(&self, mock: Box<dyn FnMut(String, Vec<String>) -> Result<Output, Error> + Send>);
 }
 
+// a quick throwaway function to print arguments arrays so that they can be copy/pasted from logs
+fn print_str_array(input: &[&str]) -> String {
+    let mut output = String::new();
+    for item in input {
+        output = output + " " + item;
+    }
+    output
+}
+
 pub struct LinuxCommandRunner;
 
 impl CommandRunner for LinuxCommandRunner {
@@ -105,12 +114,17 @@ impl CommandRunner for LinuxCommandRunner {
             }
         };
 
-        trace!("Command {:?} {:?} returned: {:?}", program, args, output);
+        trace!(
+            "Command {} {} returned: {:?}",
+            program,
+            print_str_array(args),
+            output
+        );
         if !output.status.success() {
             trace!(
-                "Command {:?} {:?} returned: an error {:?}",
+                "Command {} {} returned: an error {:?}",
                 program,
-                args,
+                print_str_array(args),
                 output
             );
         }
