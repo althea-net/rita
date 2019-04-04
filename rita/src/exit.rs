@@ -53,6 +53,7 @@ use rita_common::rita_loop::start_core_rita_endpoints;
 use rita_exit::rita_loop::check_rita_exit_actors;
 use rita_exit::rita_loop::start_rita_exit_endpoints;
 
+use crate::rita_common::dashboard::auth::*;
 use crate::rita_common::dashboard::babel::*;
 use crate::rita_common::dashboard::dao::*;
 use crate::rita_common::dashboard::debts::*;
@@ -259,6 +260,7 @@ fn start_rita_exit_dashboard() {
             .route("/auto_price/enabled", Method::GET, auto_pricing_status)
             .route("/nickname/get/", Method::GET, get_nickname)
             .route("/nickname/set/", Method::POST, set_nickname)
+            .route("/router/password/", Method::POST, set_pass)
             .route("/crash_actors", Method::POST, crash_actors)
             .route("/usage/payments", Method::GET, get_payments)
     })

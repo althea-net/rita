@@ -1275,6 +1275,7 @@ Gets the nickname used by the router
 
 ---
 
+<<<<<<< HEAD
 ## /router/update
 
 Manually runs the update script
@@ -1296,6 +1297,35 @@ Manually runs the update script
 - Sample Call:
 
 `curl -v -XPOST http://192.168.10.1:4877/router/update`
+=======
+## /router/password
+
+- URL: `<rita ip>:<rita_dashboard_port>/router/password`
+- Method: `POST`
+- URL Params: `Content-Type: application/json`
+- Data Params: `The password to set for the router dashboard endpoints`
+- Success Response:
+  - Code: `200 OK`
+  - Contents:
+
+```json
+{}
+```
+
+- Error Response:
+  - Code: `400 Bad Request`
+  - Contents:
+
+```json
+{
+  "error": "<human-readable description>"
+}
+```
+
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:<rita_dashboard_port>/router/password -H 'Content-Type: application/json' -i -d '{"password": "this is a freeform password"}'`
+>>>>>>> Add dashboard authentication
 
 ---
 

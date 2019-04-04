@@ -62,6 +62,7 @@ use crate::rita_client::dashboard::update::*;
 use crate::rita_client::dashboard::usage::*;
 use crate::rita_client::dashboard::wifi::*;
 
+use crate::rita_common::dashboard::auth::*;
 use crate::rita_common::dashboard::babel::*;
 use crate::rita_common::dashboard::dao::*;
 use crate::rita_common::dashboard::debts::*;
@@ -215,6 +216,7 @@ fn start_client_dashboard() {
     server::new(|| {
         App::new()
             .middleware(middleware::Headers)
+            .middleware(middleware::Auth)
             .route("/dao_list", Method::GET, get_dao_list)
             .route("/dao_list/add/{address}", Method::POST, add_to_dao_list)
             .route(
@@ -301,6 +303,7 @@ fn start_client_dashboard() {
             .route("/usage/client", Method::GET, get_client_usage)
             .route("/usage/payments", Method::GET, get_payments)
             .route("/router/update", Method::POST, update_router)
+            .route("/router/password/", Method::POST, set_pass)
             .route("/wipe", Method::POST, wipe)
             .route("/crash_actors", Method::POST, crash_actors)
     })
