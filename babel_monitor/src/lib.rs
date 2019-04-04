@@ -171,7 +171,10 @@ impl<T: Read + Write> Babel<T> {
     }
 
     pub fn monitor(&mut self, iface: &str) -> Result<(), Error> {
-        let _ = self.command(&format!("interface {} enable-timestamps true", iface))?;
+        let _ = self.command(&format!(
+            "interface {} max-rtt-penalty 500 enable-timestamps true",
+            iface
+        ))?;
         trace!("Babel started monitoring: {}", iface);
         Ok(())
     }
