@@ -27,6 +27,7 @@ syslog = "4"
 actix = "0.7"
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
 actix_derive = "0.4"
+actix-web-httpauth = "0.1"
 bytes = "0.4"
 config = "0.9"
 diesel = { version = "1.4", features = ["postgres", "r2d2"] }
