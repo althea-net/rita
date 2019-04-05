@@ -63,6 +63,7 @@ lettre = {git = "https://github.com/lettre/lettre/"}
 lettre_email = {git = "https://github.com/lettre/lettre/"}
 phonenumber = "0.2"
 r2d2 = "0.8"
+sha3 = "0.8"
 
 [features]
 default = []
