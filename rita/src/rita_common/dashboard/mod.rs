@@ -5,6 +5,7 @@
 use ::actix::prelude::*;
 use ::actix::registry::SystemService;
 
+pub mod auth;
 pub mod babel;
 pub mod dao;
 pub mod debts;
@@ -15,7 +16,6 @@ pub mod pricing;
 pub mod settings;
 pub mod usage;
 pub mod wallet;
-pub mod auth;
 
 pub struct Dashboard;
 
