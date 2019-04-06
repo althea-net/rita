@@ -256,7 +256,7 @@ impl Handler<IdentityCallback> for TunnelManager {
     fn handle(&mut self, msg: IdentityCallback, _: &mut Context<Self>) -> Self::Result {
         let our_port = match msg.our_port {
             Some(port) => port,
-            _ => match self.get_port() {
+            _ => match self.get_port(0) {
                 Some(p) => p,
                 None => {
                     warn!("Failed to allocate tunnel port! All tunnel opening will fail");
@@ -545,22 +545,28 @@ impl TunnelManager {
     }
 
     /// Gets a port off of the internal port list after checking that said port is free
-    /// with the operating system
-    fn get_port(&mut self) -> Option<u16> {
+    /// with the operating system, level argument is always zero for callers and is used
+    /// interally to prevent unchecked recursion
+    fn get_port(&mut self, level: usize) -> Option<u16> {
         let udp_table = KI.used_ports();
         let port = self.free_ports.pop();
         match (port, udp_table) {
             (Some(p), Ok(used_ports)) => {
                 if used_ports.contains(&p) {
-                    warn!("We tried to allocate a used port!");
+                    warn!("We tried to allocate a used port {}!", p);
 
-                    // don't use push here, you'll get that same
-                    // entry back in the next pop and recurse forever
-                    // hopefully the port will be free when we get
-                    // back to it in a few hours
-                    self.free_ports.insert(0, p);
-
-                    self.get_port()
+                    if level < 10 {
+                        // don't use push here, you'll get that same
+                        // entry back in the next pop and recurse forever
+                        // hopefully the port will be free when we get
+                        // back to it in a few hours
+                        self.free_ports.insert(0, p);
+                        self.get_port(level + 1)
+                    } else {
+                        // we've tried a bunch of ports and all are used
+                        // break recusion and try this one anyways
+                        Some(p)
+                    }
                 } else {
                     Some(p)
                 }
@@ -581,7 +587,7 @@ impl TunnelManager {
     pub fn neighbor_inquiry_hostname(&mut self, their_hostname: String) -> Result<(), Error> {
         trace!("Getting tunnel, inq");
 
-        let our_port = match self.get_port() {
+        let our_port = match self.get_port(0) {
             Some(p) => p,
             None => {
                 warn!("Failed to allocate tunnel port! All tunnel opening will fail");
@@ -638,7 +644,7 @@ impl TunnelManager {
     /// interface name.
     pub fn neighbor_inquiry(&mut self, peer: &Peer) -> Result<(), Error> {
         trace!("TunnelManager neigh inquiry for {:?}", peer);
-        let our_port = match self.get_port() {
+        let our_port = match self.get_port(0) {
             Some(p) => p,
             None => {
                 warn!("Failed to allocate tunnel port! All tunnel opening will fail");
