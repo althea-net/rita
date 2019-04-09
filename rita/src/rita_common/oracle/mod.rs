@@ -7,9 +7,9 @@
 //! operates by simply grabbing a text file from a configured server and adjusting prices
 //! to match. More advanced pricing systems may be broken out into their own file some day
 
-use ::actix::prelude::*;
+use ::actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use actix_web::error::PayloadError;
-use actix_web::*;
+use actix_web::{client, Either, HttpMessage, Result};
 use bytes::Bytes;
 use num256::Uint256;
 use num_traits::Zero;
@@ -257,6 +257,7 @@ struct PriceUpdate {
     client: u32,
     gateway: u32,
     max: u32,
+    dao_fee: u32,
     warning: u128,
 }
 
@@ -293,7 +294,6 @@ fn update_our_price() {
                                         Ok(new_prices) => {
                                             // TODO this always seemed to have a lot of false positives, bet that
                                             // causes intermediaries to get priced like gateways
-
                                             let mut payment = SETTING.get_payment_mut();
                                             if is_gateway {
                                                 payment.local_fee = new_prices.gateway;
@@ -303,6 +303,11 @@ fn update_our_price() {
                                             payment.max_fee = new_prices.max;
                                             payment.balance_warning_level =
                                                 new_prices.warning.into();
+
+                                            drop(payment);
+
+                                            let mut dao = SETTING.get_dao_mut();
+                                            dao.dao_fee = Uint256::from(new_prices.dao_fee);
 
                                             trace!("Successfully updated prices");
                                         }

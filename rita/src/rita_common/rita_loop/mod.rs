@@ -30,8 +30,8 @@ use crate::rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 
 use crate::rita_common::peer_listener::GetPeers;
 
-use crate::rita_common::dao_manager::DAOCheck;
 use crate::rita_common::dao_manager::DAOManager;
+use crate::rita_common::dao_manager::Tick as DAOTick;
 
 use crate::rita_common::tunnel_manager::PeersToContact;
 
@@ -141,29 +141,8 @@ impl Handler<Tick> for RitaLoop {
         // Update debts
         DebtKeeper::from_registry().do_send(SendUpdate {});
 
-        trace!("Starting DAOManager loop");
-        Arbiter::spawn(
-            TunnelManager::from_registry()
-                .send(GetNeighbors)
-                .then(move |neighbors| {
-                    match neighbors {
-                        Ok(Ok(neighbors)) => {
-                            trace!("Sending DAOCheck");
-                            for neigh in neighbors.iter() {
-                                let their_id = neigh.identity.global;
-                                DAOManager::from_registry().do_send(DAOCheck(their_id));
-                            }
-                        }
-                        Ok(Err(e)) => {
-                            trace!("Failed to get neighbors from tunnel manager {:?}", e);
-                        }
-                        Err(e) => {
-                            trace!("Failed to get neighbors from tunnel manager {:?}", e);
-                        }
-                    };
-                    Ok(())
-                }),
-        );
+        // Check DAO payments
+        DAOManager::from_registry().do_send(DAOTick);
 
         // Check payments
         PaymentValidator::from_registry().do_send(Validate());
