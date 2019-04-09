@@ -34,6 +34,10 @@ fn default_price_oracle() -> bool {
     true
 }
 
+fn default_balance_warning_level() -> Uint256 {
+    (10_000_000_000_000_000u64).into()
+}
+
 fn default_oracle_url() -> String {
     "https://updates.altheamesh.com/prices".to_string()
 }
@@ -75,6 +79,9 @@ pub struct PaymentSettings {
     /// The amount of 'grace' to give a long term neighbor
     #[serde(default = "default_close_fraction")]
     pub close_fraction: Int256,
+    /// The level of balance which will trigger a warning
+    #[serde(default = "default_balance_warning_level")]
+    pub balance_warning_level: Uint256,
     /// The amount of billing cycles a node can fall behind without being subjected to the threshold
     pub buffer_period: u32,
     /// Our own eth private key we do not store address, instead it is derived from here
@@ -115,6 +122,7 @@ impl Default for PaymentSettings {
             // computed as 10x the pay threshold
             close_threshold: (-8_400_000_000_000_000i64).into(),
             close_fraction: 100.into(),
+            balance_warning_level: (10_000_000_000_000_000u64).into(),
             buffer_period: 3,
             eth_private_key: None,
             eth_address: None,

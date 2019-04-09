@@ -257,6 +257,7 @@ struct PriceUpdate {
     client: u32,
     gateway: u32,
     max: u32,
+    warning: u128,
 }
 
 /// This is a very simple and early version of an automated pricing system
@@ -300,6 +301,8 @@ fn update_our_price() {
                                                 payment.local_fee = new_prices.client;
                                             }
                                             payment.max_fee = new_prices.max;
+                                            payment.balance_warning_level =
+                                                new_prices.warning.into();
 
                                             trace!("Successfully updated prices");
                                         }
@@ -329,9 +332,9 @@ fn update_our_price() {
 /// A very simple function placed here for convinence that indicates
 /// if the system should go into low balance mode
 pub fn low_balance() -> bool {
-    let balance = SETTING.get_payment().balance.clone();
-    // TODO this needs to be configured/oracalized
-    const THRESHOLD: u128 = 10_000_000_000_000_000;
+    let payment_settings = SETTING.get_payment();
+    let balance = payment_settings.balance.clone();
+    let balance_warning_level = payment_settings.balance_warning_level.clone();
 
-    balance < THRESHOLD.into()
+    balance < balance_warning_level
 }
