@@ -11,9 +11,9 @@ use rand::thread_rng;
 use rand::Rng;
 
 use crate::actix_utils::KillActor;
-use actix::prelude::{
-    Actor, ActorContext, ActorFuture, Addr, Arbiter, AsyncContext, Context, Handler, Message,
-    Supervised, System, SystemService, WrapFuture,
+use actix::{
+    Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
+    System, SystemService,
 };
 
 use crate::actix_utils::ResolverWrapper;
@@ -108,11 +108,12 @@ impl Handler<Tick> for RitaLoop {
         self.was_gateway = manage_gateway(self.was_gateway);
 
         let start = Instant::now();
-        ctx.spawn(
+
+        // watch neighbors for billing
+        Arbiter::spawn(
             TunnelManager::from_registry()
                 .send(GetNeighbors)
-                .into_actor(self)
-                .then(move |res, act, _ctx| {
+                .then(move |res| {
                     let res = res.unwrap().unwrap();
 
                     trace!("Currently open tunnels: {:?}", res);
@@ -126,18 +127,19 @@ impl Handler<Tick> for RitaLoop {
 
                     TrafficWatcher::from_registry()
                         .send(Watch::new(res))
-                        .into_actor(act)
-                        .then(move |_res, _act, _ctx| {
+                        .then(move |_res| {
                             info!(
                                 "TrafficWatcher completed in {}s {}ms",
                                 neigh.elapsed().as_secs(),
                                 neigh.elapsed().subsec_millis()
                             );
-                            DebtKeeper::from_registry().do_send(SendUpdate {});
-                            actix::fut::ok(())
+                            Ok(())
                         })
                 }),
         );
+
+        // Update debts
+        DebtKeeper::from_registry().do_send(SendUpdate {});
 
         trace!("Starting DAOManager loop");
         Arbiter::spawn(
