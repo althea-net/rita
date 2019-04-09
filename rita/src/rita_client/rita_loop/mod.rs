@@ -6,10 +6,11 @@
 
 use std::time::{Duration, Instant};
 
-use actix::prelude::{
-    Actor, ActorContext, ActorFuture, Addr, AsyncContext, Context, Handler, Message, Supervised,
-    SystemService, WrapFuture,
+use actix::{
+    Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
+    SystemService,
 };
+use futures::future::Future;
 
 use crate::rita_client::exit_manager::ExitManager;
 
@@ -62,19 +63,14 @@ impl Message for Tick {
 
 impl Handler<Tick> for RitaLoop {
     type Result = Result<(), Error>;
-    fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
         let start = Instant::now();
         trace!("Client Tick!");
 
-        ctx.spawn(
-            ExitManager::from_registry()
-                .send(Tick {})
-                .into_actor(self)
-                .then(|res, _act, _ctx| {
-                    trace!("exit manager said {:?}", res);
-                    actix::fut::ok(())
-                }),
-        );
+        Arbiter::spawn(ExitManager::from_registry().send(Tick {}).then(|res| {
+            trace!("exit manager said {:?}", res);
+            Ok(())
+        }));
 
         info!(
             "Rita Client loop completed in {}s {}ms",
