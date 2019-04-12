@@ -76,6 +76,13 @@ pub struct WifiChannel {
     pub channel: u16,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum WifiToken {
+    WifiChannel(WifiChannel),
+    WifiSSID(WifiSSID),
+    WifiPass(WifiPass),
+}
+
 /// A string of characters which we don't let users use because of corrupted UCI configs
 static FORBIDDEN_CHARS: &'static str = "'/\"\\";
 
@@ -103,6 +110,10 @@ pub fn set_wifi_ssid(wifi_ssid: Json<WifiSSID>) -> Result<HttpResponse, Error> {
     debug!("/wifi_settings/ssid hit with {:?}", wifi_ssid);
 
     let wifi_ssid = wifi_ssid.into_inner();
+    set_ssid(&wifi_ssid)
+}
+
+fn set_ssid(wifi_ssid: &WifiSSID) -> Result<HttpResponse, Error> {
     let mut ret: HashMap<String, String> = HashMap::new();
 
     if let Err(e) = validate_config_value(&wifi_ssid.ssid) {
@@ -114,8 +125,8 @@ pub fn set_wifi_ssid(wifi_ssid: Json<WifiSSID>) -> Result<HttpResponse, Error> {
     }
 
     // think radio0, radio1
-    let iface_name = wifi_ssid.radio;
-    let ssid = wifi_ssid.ssid;
+    let iface_name = wifi_ssid.radio.clone();
+    let ssid = wifi_ssid.ssid.clone();
     let section_name = format!("default_{}", iface_name);
     KI.set_uci_var(&format!("wireless.{}.ssid", section_name), &ssid)?;
 
@@ -132,6 +143,10 @@ pub fn set_wifi_pass(wifi_pass: Json<WifiPass>) -> Result<HttpResponse, Error> {
     debug!("/wifi_settings/pass hit with {:?}", wifi_pass);
 
     let wifi_pass = wifi_pass.into_inner();
+    set_pass(&wifi_pass)
+}
+
+fn set_pass(wifi_pass: &WifiPass) -> Result<HttpResponse, Error> {
     let mut ret = HashMap::new();
 
     let wifi_pass_len = wifi_pass.pass.len();
@@ -154,8 +169,8 @@ pub fn set_wifi_pass(wifi_pass: Json<WifiPass>) -> Result<HttpResponse, Error> {
     }
 
     // think radio0, radio1
-    let iface_name = wifi_pass.radio;
-    let pass = wifi_pass.pass;
+    let iface_name = wifi_pass.radio.clone();
+    let pass = wifi_pass.pass.clone();
     let section_name = format!("default_{}", iface_name);
     KI.set_uci_var(&format!("wireless.{}.key", section_name), &pass)?;
 
@@ -164,23 +179,27 @@ pub fn set_wifi_pass(wifi_pass: Json<WifiPass>) -> Result<HttpResponse, Error> {
 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
-
-    Ok(HttpResponse::Ok().json(ret))
+    Ok(HttpResponse::Ok().json(()))
 }
 
 pub fn set_wifi_channel(wifi_channel: Json<WifiChannel>) -> Result<HttpResponse, Error> {
     debug!("/wifi_settings/channel hit with {:?}", wifi_channel);
 
     let wifi_channel = wifi_channel.into_inner();
+    set_channel(&wifi_channel)
+}
+
+fn set_channel(wifi_channel: &WifiChannel) -> Result<HttpResponse, Error> {
     let current_channel: u16 = KI
         .get_uci_var(&format!("wireless.{}.channel", wifi_channel.radio))?
         .parse()?;
     let channel_width = KI.get_uci_var(&format!("wireless.{}.htmode", wifi_channel.radio))?;
 
     if let Err(e) = validate_channel(current_channel, wifi_channel.channel, &channel_width) {
+        info!("Setting of invalid SSID was requested: {}", e);
         return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
             .into_builder()
-            .json(e));
+            .json("Invalid SSID!"));
     }
 
     KI.set_uci_var(
@@ -192,7 +211,21 @@ pub fn set_wifi_channel(wifi_channel: Json<WifiChannel>) -> Result<HttpResponse,
 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
+    Ok(HttpResponse::Ok().json(()))
+}
 
+/// an endpoint that takes a series of wifi tokens in json format and applies them all at once
+/// the reason for this is that changing any setting while on wifi will disconnect the caller
+/// so in order to have all the changes 'take' we need to have a single endpoint for all changes
+pub fn set_wifi_multi(wifi_changes: Json<Vec<WifiToken>>) -> Result<HttpResponse, Error> {
+    trace!("Got multi wifi change!");
+    for token in wifi_changes.into_inner().iter() {
+        match token {
+            WifiToken::WifiChannel(val) => set_channel(val)?,
+            WifiToken::WifiPass(val) => set_pass(val)?,
+            WifiToken::WifiSSID(val) => set_ssid(val)?,
+        };
+    }
     Ok(HttpResponse::Ok().json(()))
 }
 
