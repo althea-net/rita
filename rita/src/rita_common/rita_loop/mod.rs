@@ -102,7 +102,7 @@ impl Message for Tick {
 
 impl Handler<Tick> for RitaLoop {
     type Result = Result<(), Error>;
-    fn handle(&mut self, _: Tick, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
         trace!("Common tick!");
 
         self.was_gateway = manage_gateway(self.was_gateway);
