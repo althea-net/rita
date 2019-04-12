@@ -12,4 +12,5 @@ pub mod mesh_ip;
 pub mod neighbors;
 pub mod notifications;
 pub mod system_chain;
+pub mod update;
 pub mod wifi;

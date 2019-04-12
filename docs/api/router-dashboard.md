@@ -1242,3 +1242,29 @@ Gets the nickname used by the router
 - Sample Call:
 
 `curl http://192.168.10.1:4877/nickname/get/`
+
+---
+
+## /router/update
+
+Manually runs the update script
+
+- URL: `<rita ip>:<rita_dashboard_port>/router/update`
+- Method: `POST`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+()
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl -v -XPOST http://192.168.10.1:4877/router/update`
+
+---

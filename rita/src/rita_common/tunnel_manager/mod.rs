@@ -591,7 +591,9 @@ impl TunnelManager {
             Some(p) => p,
             None => {
                 warn!("Failed to allocate tunnel port! All tunnel opening will fail");
-                return Err(TunnelManagerError::PortError("No remaining ports!".to_string()).into());
+                return Err(
+                    TunnelManagerError::PortError("No remaining ports!".to_string()).into(),
+                );
             }
         };
 
@@ -648,7 +650,9 @@ impl TunnelManager {
             Some(p) => p,
             None => {
                 warn!("Failed to allocate tunnel port! All tunnel opening will fail");
-                return Err(TunnelManagerError::PortError("No remaining ports!".to_string()).into());
+                return Err(
+                    TunnelManagerError::PortError("No remaining ports!".to_string()).into(),
+                );
             }
         };
 

@@ -25,6 +25,7 @@ mod interface_tools;
 mod ip_addr;
 mod ip_route;
 mod iptables;
+mod is_openwrt;
 mod link_local_tools;
 mod manipulate_uci;
 mod open_tunnel;

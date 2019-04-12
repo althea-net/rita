@@ -67,6 +67,7 @@ use crate::rita_client::dashboard::mesh_ip::*;
 use crate::rita_client::dashboard::neighbors::*;
 use crate::rita_client::dashboard::notifications::*;
 use crate::rita_client::dashboard::system_chain::*;
+use crate::rita_client::dashboard::update::*;
 use crate::rita_client::dashboard::wifi::*;
 
 use crate::rita_common::dashboard::babel::*;
@@ -311,6 +312,7 @@ fn main() {
                 Method::POST,
                 set_low_balance_notification,
             )
+            .route("/router/update", Method::POST, update_router)
             .route("/wipe", Method::POST, wipe)
             .route("/crash_actors", Method::POST, crash_actors)
     })
