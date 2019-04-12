@@ -7,6 +7,7 @@ use std::process::{Command, Stdio};
 impl dyn KernelInterface {
     /// Sets the system password on openwrt
     pub fn set_system_password(&self, password: String) -> Result<(), Error> {
+        trace!("Trying to set the system password to {}", password);
         let mut passwd = Command::new("passwd")
             .stdout(Stdio::piped())
             .stdin(Stdio::piped())

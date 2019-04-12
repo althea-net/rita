@@ -23,6 +23,10 @@ extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 
+#[cfg(test)]
+#[macro_use]
+extern crate hex_literal;
+
 extern crate phonenumber;
 
 use actix_web::http::Method;
