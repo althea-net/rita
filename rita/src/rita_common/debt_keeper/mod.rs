@@ -1,5 +1,5 @@
 //! While traffic watcher keeps an eye on how much traffic flows and what that is worth debtkeeper
-//! maintains the long term memory of who owes whow what so that it may later be quiered and paid
+//! maintains the long term memory of who owes who what so that it may later be quiered and paid
 //! by payment manager in the current implementation or guac in the more final one
 //!
 //! You may be wondering what's up with debt buffers actions and incoming payments, why can't we
