@@ -19,6 +19,10 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
+#[cfg(test)]
+#[macro_use]
+extern crate hex_literal;
+
 extern crate arrayvec;
 
 use env_logger;
