@@ -85,10 +85,6 @@ impl Handler<Watch> for TrafficWatcher {
 /// This traffic watcher watches how much traffic we send to the exit, and how much the exit sends
 /// back to us.
 pub fn watch(history: &mut TrafficWatcher, exit: &Identity, exit_price: u64) -> Result<(), Error> {
-    // the number of bytes provided under the free tier, (kbps * seconds) * 125 = bytes
-    let free_tier_threshold: u64 =
-        u64::from(SETTING.get_payment().free_tier_throughput) * CLIENT_LOOP_SPEED * 125u64;
-
     let exit_route = find_exit_route_capped(exit.mesh_ip)?;
 
     let counter = match KI.read_wg_counters("wg_exit") {
@@ -151,16 +147,22 @@ pub fn watch(history: &mut TrafficWatcher, exit: &Identity, exit_price: u64) -> 
     // rita_common but we do pay for return traffic here since it doesn't make sense
     // to handle in the general case
     let mut owes_exit = 0i128;
-    if input > free_tier_threshold {
-        let value = i128::from(input - free_tier_threshold) * exit_dest_price;
-        trace!("We are billing for {} bytes input subtracted from {} byte free tier times a exit dest price of {} for a total of {}", input, free_tier_threshold, exit_dest_price, value);
-        owes_exit += value;
-    }
-    if output > free_tier_threshold {
-        let value = i128::from(exit_price * (output - free_tier_threshold));
-        trace!("We are billing for {} bytes output subtracted from {} byte free tier times a exit price of {} for a total of {}", output, free_tier_threshold, exit_price, value);
-        owes_exit += value;
-    }
+    let value = i128::from(input) * exit_dest_price;
+    trace!(
+        "We are billing for {} bytes input times a exit dest price of {} for a total of {}",
+        input,
+        exit_dest_price,
+        value
+    );
+    owes_exit += value;
+    let value = i128::from(exit_price * (output));
+    trace!(
+        "We are billing for {} bytes output times a exit price of {} for a total of {}",
+        output,
+        exit_price,
+        value
+    );
+    owes_exit += value;
 
     if owes_exit > 0 {
         info!("Total client debt of {} this round", owes_exit);
