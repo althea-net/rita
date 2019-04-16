@@ -8,35 +8,30 @@
 //!
 //! Also handles enforcement of nonpayment, since there's no need for a complicated TunnelManager for exits
 
-use ::actix::prelude::*;
-use althea_types::WgKey;
-
-use althea_kernel_interface::wg_iface_counter::WgUsage;
-use althea_kernel_interface::KI;
-
-use althea_types::Identity;
-
-use babel_monitor::Babel;
-
 use crate::rita_common::debt_keeper;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::Traffic;
-
 use crate::rita_exit::rita_loop::EXIT_LOOP_SPEED;
-
+use crate::SETTING;
+use ::actix::prelude::{Actor, Context, Handler, Message, Supervised, SystemService};
+use althea_kernel_interface::wg_iface_counter::WgUsage;
+use althea_kernel_interface::KI;
+use althea_types::Identity;
+use althea_types::WgKey;
+use babel_monitor::Babel;
+use ipnetwork::IpNetwork;
+use settings::exit::RitaExitSettings;
+use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
-
-use ipnetwork::IpNetwork;
-
-use crate::SETTING;
-use settings::exit::RitaExitSettings;
-use settings::RitaCommonSettings;
+use std::time::Duration;
+use std::time::Instant;
 
 use failure::Error;
 
 pub struct TrafficWatcher {
+    last_run: Instant,
     last_seen_bytes: HashMap<WgKey, WgUsage>,
 }
 
@@ -59,6 +54,7 @@ impl SystemService for TrafficWatcher {
 impl Default for TrafficWatcher {
     fn default() -> TrafficWatcher {
         TrafficWatcher {
+            last_run: Instant::now(),
             last_seen_bytes: HashMap::new(),
         }
     }

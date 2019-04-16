@@ -55,7 +55,7 @@ pub fn get_gateway_ip_bulk(mesh_ip_list: Vec<IpAddr>) -> Result<Vec<IpPair>, Err
                 if ip.prefix() == 128 && route.installed && IpAddr::V6(ip.ip()) == mesh_ip {
                     match KI.get_wg_remote_ip(&route.iface) {
                         Ok(remote_ip) => results.push(IpPair {
-                            mesh_ip: mesh_ip,
+                            mesh_ip,
                             gateway_ip: remote_ip,
                         }),
                         Err(e) => error!("Failure looking up remote ip {:?}", e),

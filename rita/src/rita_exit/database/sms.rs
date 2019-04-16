@@ -30,7 +30,7 @@ fn check_text(number: String, code: String, api_key: String) -> Result<bool, Err
     let res = client
         .get("https://api.authy.com/protected/json/phones/verification/check")
         .form(&SmsCheck {
-            api_key: api_key,
+            api_key,
             verification_code: code,
             phone_number: number.national().to_string(),
             country_code: number.code().value().to_string(),
@@ -57,7 +57,7 @@ fn send_text(number: String, api_key: String) -> Result<(), Error> {
     let res = client
         .post("https://api.authy.com/protected/json/phones/verification/start")
         .form(&SmsRequest {
-            api_key: api_key,
+            api_key,
             via: "sms".to_string(),
             phone_number: number.national().to_string(),
             country_code: number.code().value().to_string(),
