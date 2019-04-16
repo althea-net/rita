@@ -442,6 +442,29 @@ impl<T: Read + Write> Babel<T> {
         }
         Ok(false)
     }
+
+    /// Returns the installed route to a given destination
+    pub fn get_installed_route(
+        &mut self,
+        mesh_ip: &IpAddr,
+        routes: &VecDeque<Route>,
+    ) -> Result<Route, Error> {
+        let mut exit_route = None;
+        for route in routes.iter() {
+            // Only ip6
+            if let IpNetwork::V6(ref ip) = route.prefix {
+                // Only host addresses and installed routes
+                if ip.prefix() == 128 && route.installed && IpAddr::V6(ip.ip()) == *mesh_ip {
+                    exit_route = Some(route);
+                    break;
+                }
+            }
+        }
+        if exit_route.is_none() {
+            bail!("No installed route to that destination!");
+        }
+        Ok(exit_route.unwrap().clone())
+    }
 }
 #[cfg(test)]
 mod tests {

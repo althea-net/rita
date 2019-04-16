@@ -262,9 +262,9 @@ impl ListenInterface {
         Ok(ListenInterface {
             ifname: ifname.to_string(),
             ifidx: iface_index,
-            multicast_socket: multicast_socket,
-            linklocal_socket: linklocal_socket,
-            multicast_socketaddr: multicast_socketaddr,
+            multicast_socket,
+            linklocal_socket,
+            multicast_socketaddr,
             linklocal_ip: link_ip,
         })
     }

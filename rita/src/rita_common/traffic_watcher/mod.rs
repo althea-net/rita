@@ -16,8 +16,6 @@ use crate::rita_common::debt_keeper;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::Traffic;
 
-use crate::rita_common::rita_loop::COMMON_LOOP_SPEED;
-
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
@@ -234,11 +232,6 @@ pub fn get_output_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
 /// This first time this is run, it will create the rules and then immediately read and zero them.
 /// (should return 0)
 pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result<(), Error> {
-    // the number of bytes provided under the free tier, (kbps * seconds) * 125 = bytes
-    // plus a 20% fudge factor to deal with bursty traffic
-    let free_tier_threshold: u64 =
-        u64::from(SETTING.get_payment().free_tier_throughput) * COMMON_LOOP_SPEED * 150u64;
-
     let (identities, if_to_id) = prepare_helper_maps(neighbors);
 
     let (destinations, local_fee) = get_babel_info(babel)?;
@@ -265,11 +258,7 @@ pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result
             (Some(dest), Some(id_from_if)) => {
                 match debts.get_mut(&id_from_if) {
                     Some(debt) => {
-                        if bytes < free_tier_threshold {
-                            trace!("Throughput for {:?} discounted under free tier", id_from_if)
-                        } else {
-                            *debt -= dest * i128::from(bytes - free_tier_threshold);
-                        }
+                        *debt -= dest * i128::from(bytes);
                     }
                     // debts is generated from identities, this should be impossible
                     None => warn!("No debts entry for input entry id {:?}", id_from_if),
@@ -295,12 +284,7 @@ pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result
         match state {
             (Some(dest), Some(id_from_if)) => match debts.get_mut(&id_from_if) {
                 Some(debt) => {
-                    if bytes < free_tier_threshold {
-                        trace!("Throughput for {:?} discounted under free tier", id_from_if)
-                    } else {
-                        *debt += (dest - i128::from(local_fee))
-                            * i128::from(bytes - free_tier_threshold);
-                    }
+                    *debt += (dest - i128::from(local_fee)) * i128::from(bytes);
                 }
                 // debts is generated from identities, this should be impossible
                 None => warn!("No debts entry for input entry id {:?}", id_from_if),
@@ -331,7 +315,7 @@ pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result
     for (from, amount) in debts {
         trace!("collated debt for {} is {}", from.mesh_ip, amount);
         traffic_vec.push(Traffic {
-            from: from,
+            from,
             amount: amount.into(),
         });
     }

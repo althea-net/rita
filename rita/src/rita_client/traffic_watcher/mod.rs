@@ -6,23 +6,38 @@
 //! different in that mesh nodes are paid by forwarding traffic, but exits have to return traffic and
 //! must get paid for doing so.
 
-use ::actix::prelude::*;
-use failure::Error;
-use ipnetwork::IpNetwork;
-use reqwest;
-
-use std::io::{Read, Write};
-use std::net::{IpAddr, SocketAddr, TcpStream};
-use std::time::{Duration, SystemTime};
-
-use crate::rita_client::rita_loop::CLIENT_LOOP_SPEED;
 use crate::rita_common::debt_keeper::{DebtKeeper, Traffic, TrafficUpdate};
 use crate::KI;
 use crate::SETTING;
-use althea_types::{Identity, RTTimestamps};
+use ::actix::prelude::{Actor, Context, Handler, Message, Supervised, SystemService};
+use althea_types::Identity;
 use babel_monitor::Babel;
-use settings::client::RitaClientSettings;
+use babel_monitor::Route;
+use failure::Error;
 use settings::RitaCommonSettings;
+use std::net::{IpAddr, SocketAddr, TcpStream};
+
+/// Returns the babel route to a given mesh ip with the properly capped price
+fn find_exit_route_capped(exit_mesh_ip: IpAddr) -> Result<Route, Error> {
+    let stream = TcpStream::connect::<SocketAddr>(
+        format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
+    )?;
+    let mut babel = Babel::new(stream);
+
+    babel.start_connection()?;
+    trace!("Getting routes");
+    let routes = babel.parse_routes()?;
+    trace!("Got routes: {:?}", routes);
+
+    let max_fee = SETTING.get_payment().max_fee;
+    let mut exit_route = babel.get_installed_route(&exit_mesh_ip, &routes)?;
+    if exit_route.price > max_fee {
+        let mut capped_route = exit_route.clone();
+        capped_route.price = max_fee;
+        exit_route = capped_route;
+    }
+    Ok(exit_route)
+}
 
 pub struct TrafficWatcher {
     last_read_input: u64,
@@ -62,56 +77,14 @@ impl Handler<Watch> for TrafficWatcher {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        let stream = TcpStream::connect::<SocketAddr>(
-            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
-        )?;
-
-        watch(self, Babel::new(stream), &msg.exit_id, msg.exit_price)
+        watch(self, &msg.exit_id, msg.exit_price)
     }
 }
 
 /// This traffic watcher watches how much traffic we send to the exit, and how much the exit sends
 /// back to us.
-pub fn watch<T: Read + Write>(
-    history: &mut TrafficWatcher,
-    mut babel: Babel<T>,
-    exit: &Identity,
-    exit_price: u64,
-) -> Result<(), Error> {
-    // the number of bytes provided under the free tier, (kbps * seconds) * 125 = bytes
-    let free_tier_threshold: u64 =
-        u64::from(SETTING.get_payment().free_tier_throughput) * CLIENT_LOOP_SPEED * 125u64;
-
-    babel.start_connection()?;
-
-    trace!("Getting routes");
-    let routes = babel.parse_routes()?;
-    trace!("Got routes: {:?}", routes);
-    let babel_neighs = babel.parse_neighs()?;
-    trace!("Got neighs: {:?}", babel_neighs);
-
-    let max_fee = SETTING.get_payment().max_fee;
-    let mut exit_route = None;
-    for route in routes.iter() {
-        // Only ip6
-        if let IpNetwork::V6(ref ip) = route.prefix {
-            // Only host addresses and installed routes
-            if ip.prefix() == 128 && route.installed && IpAddr::V6(ip.ip()) == exit.mesh_ip {
-                if route.price > max_fee {
-                    let mut capped_route = route.clone();
-                    capped_route.price = max_fee;
-                    exit_route = Some(capped_route);
-                } else {
-                    exit_route = Some(route.clone());
-                }
-                break;
-            }
-        }
-    }
-    if exit_route.is_none() {
-        bail!("No route to exit, therefore we can't be sending traffic to it");
-    }
-    let exit_route = exit_route.unwrap();
+pub fn watch(history: &mut TrafficWatcher, exit: &Identity, exit_price: u64) -> Result<(), Error> {
+    let exit_route = find_exit_route_capped(exit.mesh_ip)?;
 
     let counter = match KI.read_wg_counters("wg_exit") {
         Ok(res) => {
@@ -154,42 +127,11 @@ pub fn watch<T: Read + Write>(
     // the price we pay to send traffic through the exit
     info!("exit price {}", exit_price);
 
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
-        .build()?;
-
     // price to get traffic to the exit as a u64 to make the type rules for math easy
     let exit_route_price: i128 = exit_route.price.into();
     // the total price for the exit returning traffic to us, in the future we should ask
     // the exit for this because TODO assumes symetric route
     let exit_dest_price: i128 = exit_route_price + i128::from(exit_price);
-    let client_tx = SystemTime::now();
-    let RTTimestamps { exit_rx, exit_tx } = client
-        .get(&format!(
-            "http://[{}]:{}/rtt",
-            exit.mesh_ip,
-            match SETTING.get_exit_client().get_current_exit() {
-                Some(current_exit) => current_exit.registration_port,
-                None => {
-                    return Err(format_err!(
-                        "No current exit even though an exit route is present"
-                    ));
-                }
-            }
-        ))
-        .send()?
-        .json()?;
-    let client_rx = SystemTime::now();
-
-    let inner_rtt = client_rx.duration_since(client_tx)? - exit_tx.duration_since(exit_rx)?;
-    let inner_rtt_millis =
-        inner_rtt.as_secs() as f32 * 1000.0 + inner_rtt.subsec_nanos() as f32 / 1_000_000.0;
-    //                        secs -> millis                            nanos -> millis
-
-    info!(
-        "RTTs: per-hop {}ms, inner {}ms",
-        exit_route.full_path_rtt, inner_rtt_millis
-    );
 
     info!("Exit destination price {}", exit_dest_price);
     trace!("Exit ip: {:?}", exit.mesh_ip);
@@ -204,16 +146,22 @@ pub fn watch<T: Read + Write>(
     // rita_common but we do pay for return traffic here since it doesn't make sense
     // to handle in the general case
     let mut owes_exit = 0i128;
-    if input > free_tier_threshold {
-        let value = i128::from(input - free_tier_threshold) * exit_dest_price;
-        trace!("We are billing for {} bytes input subtracted from {} byte free tier times a exit dest price of {} for a total of {}", input, free_tier_threshold, exit_dest_price, value);
-        owes_exit += value;
-    }
-    if output > free_tier_threshold {
-        let value = i128::from(exit_price * (output - free_tier_threshold));
-        trace!("We are billing for {} bytes output subtracted from {} byte free tier times a exit price of {} for a total of {}", output, free_tier_threshold, exit_price, value);
-        owes_exit += value;
-    }
+    let value = i128::from(input) * exit_dest_price;
+    trace!(
+        "We are billing for {} bytes input times a exit dest price of {} for a total of {}",
+        input,
+        exit_dest_price,
+        value
+    );
+    owes_exit += value;
+    let value = i128::from(exit_price * (output));
+    trace!(
+        "We are billing for {} bytes output times a exit price of {} for a total of {}",
+        output,
+        exit_price,
+        value
+    );
+    owes_exit += value;
 
     if owes_exit > 0 {
         info!("Total client debt of {} this round", owes_exit);
@@ -231,37 +179,4 @@ pub fn watch<T: Read + Write>(
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use env_logger;
-
-    use super::*;
-    use althea_types::WgKey;
-    use arrayvec::ArrayString;
-    use clarity::Address;
-    use std::str::FromStr;
-
-    #[test]
-    #[ignore]
-    fn debug_babel_socket_client() {
-        env_logger::init();
-        let bm_stream = TcpStream::connect::<SocketAddr>("[::1]:9001".parse().unwrap()).unwrap();
-        watch(
-            &mut TrafficWatcher {
-                last_read_input: 0u64,
-                last_read_output: 0u64,
-            },
-            Babel::new(bm_stream),
-            &Identity::new(
-                "0.0.0.0".parse().unwrap(),
-                Address::from_str("abababababababababab").unwrap(),
-                WgKey::from_str("abc0abc1abc2abc3abc4abc5abc6abc7abc8abc=").unwrap(),
-                Some(ArrayString::<[u8; 32]>::new()),
-            ),
-            5,
-        )
-        .unwrap();
-    }
 }

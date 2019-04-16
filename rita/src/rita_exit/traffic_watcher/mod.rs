@@ -8,31 +8,22 @@
 //!
 //! Also handles enforcement of nonpayment, since there's no need for a complicated TunnelManager for exits
 
-use ::actix::prelude::*;
-use althea_types::WgKey;
-
-use althea_kernel_interface::wg_iface_counter::WgUsage;
-use althea_kernel_interface::KI;
-
-use althea_types::Identity;
-
-use babel_monitor::Babel;
-
 use crate::rita_common::debt_keeper;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::Traffic;
-
-use crate::rita_exit::rita_loop::EXIT_LOOP_SPEED;
-
+use crate::SETTING;
+use ::actix::prelude::{Actor, Context, Handler, Message, Supervised, SystemService};
+use althea_kernel_interface::wg_iface_counter::WgUsage;
+use althea_kernel_interface::KI;
+use althea_types::Identity;
+use althea_types::WgKey;
+use babel_monitor::Babel;
+use ipnetwork::IpNetwork;
+use settings::exit::RitaExitSettings;
+use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
-
-use ipnetwork::IpNetwork;
-
-use crate::SETTING;
-use settings::exit::RitaExitSettings;
-use settings::RitaCommonSettings;
 
 use failure::Error;
 
@@ -215,10 +206,6 @@ pub fn watch<T: Read + Write>(
     babel: Babel<T>,
     clients: &[Identity],
 ) -> Result<(), Error> {
-    // the number of bytes provided under the free tier, (kbps * seconds) * 125 = bytes
-    let free_tier_threshold: u64 =
-        u64::from(SETTING.get_payment().free_tier_throughput) * EXIT_LOOP_SPEED * 125u64;
-
     let our_price = SETTING.get_exit_network().exit_price;
     let our_id = match SETTING.get_identity() {
         Some(id) => id,
@@ -264,13 +251,9 @@ pub fn watch<T: Read + Write>(
             (Some(id), Some(_dest), Some(history)) => match debts.get_mut(&id) {
                 Some(debt) => {
                     let used = bytes.download - history.download;
-                    if free_tier_threshold < used {
-                        let value = i128::from(our_price) * i128::from(used - free_tier_threshold);
-                        trace!("We are billing for {} bytes input (client output) subtracted from {} byte free tier times a exit price of {} for a total of -{}", used, free_tier_threshold, our_price, value);
-                        *debt -= value;
-                    } else {
-                        trace!("{:?} not billed under free tier rules", id);
-                    }
+                    let value = i128::from(our_price) * i128::from(used);
+                    trace!("We are billing for {} bytes input (client output) times a exit price of {} for a total of -{}", used, our_price, value);
+                    *debt -= value;
                     // update history so that we know what was used from previous cycles
                     history.download = bytes.download;
                 }
@@ -298,14 +281,9 @@ pub fn watch<T: Read + Write>(
             (Some(id), Some(dest), Some(history)) => match debts.get_mut(&id) {
                 Some(debt) => {
                     let used = bytes.upload - history.upload;
-                    if free_tier_threshold < used {
-                        let value =
-                            i128::from(dest + our_price) * i128::from(used - free_tier_threshold);
-                        trace!("We are billing for {} bytes output (client input) subtracted from {} byte free tier times a exit dest price of {} for a total of -{}", used, free_tier_threshold, dest + our_price, value);
-                        *debt -= value;
-                    } else {
-                        trace!("{:?} not billed under free tier rules", id);
-                    }
+                    let value = i128::from(dest + our_price) * i128::from(used);
+                    trace!("We are billing for {} bytes output (client input) times a exit dest price of {} for a total of -{}", used, dest + our_price, value);
+                    *debt -= value;
                     history.upload = bytes.upload;
                 }
                 // debts is generated from identities, this should be impossible
@@ -325,12 +303,9 @@ pub fn watch<T: Read + Write>(
 
     let mut traffic_vec = Vec::new();
     for (from, amount) in debts {
-        // Provides a 10% discount to encourage convergence
-        let discounted_amount = ((amount as f64) * 0.95) as i128;
-        trace!("discounted {} to {}", amount, discounted_amount);
         traffic_vec.push(Traffic {
-            from: from,
-            amount: discounted_amount.into(),
+            from,
+            amount: amount.into(),
         })
     }
     let update = debt_keeper::TrafficUpdate {

@@ -149,8 +149,8 @@ impl Tunnel {
         their_id: LocalIdentity,
     ) -> Tunnel {
         Tunnel {
-            ip: ip,
-            iface_name: iface_name,
+            ip,
+            iface_name,
             listen_ifidx: ifidx,
             listen_port: our_listen_port,
             neigh_id: their_id,
