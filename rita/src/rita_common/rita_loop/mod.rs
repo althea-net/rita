@@ -208,7 +208,6 @@ impl Handler<Tick> for RitaLoop {
 }
 
 /// Manages gateway functionaltiy and maintains the was_gateway parameter
-/// for Rita loop
 fn manage_gateway(mut was_gateway: bool) -> bool {
     // Resolves the gateway client corner case
     // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
@@ -220,15 +219,15 @@ fn manage_gateway(mut was_gateway: bool) -> bool {
         None => false,
     };
 
-    trace!("We are a Gateway: {}", gateway);
+    info!("We are a Gateway: {}", gateway);
     SETTING.get_network_mut().is_gateway = gateway;
 
     if SETTING.get_network().is_gateway {
         if was_gateway {
+            // trust_dns will fail to resolve if you plugin the wan port after Rita has started
+            // this may be fixed in a future update of Trustdns
             let resolver_addr: Addr<ResolverWrapper> = System::current().registry().get();
             resolver_addr.do_send(KillActor);
-
-            was_gateway = true
         }
 
         match KI.get_resolv_servers() {
