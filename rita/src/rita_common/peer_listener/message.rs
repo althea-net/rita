@@ -175,7 +175,7 @@ fn test_decode_imhere_with_empty_buf() {
     let result = PeerMessage::decode(&vec![] as &Vec<u8>);
     match result {
         Ok(msg) => panic!("Expected error, got message {:?}", msg),
-        Err(MessageError::InvalidPayloadError) => assert!(true),
+        Err(MessageError::InvalidPayloadError) => (),
         Err(e) => panic!("Unexpected error received: {:?}", e),
     }
 }
@@ -183,8 +183,8 @@ fn test_decode_imhere_with_empty_buf() {
 #[test]
 fn test_decode_imhere_with_wrong_magic() {
     match PeerMessage::decode(&[1, 2, 3, 4]) {
-        Ok(msg) => assert!(false, "Unexpected success {:?}", msg),
-        Err(MessageError::InvalidMagic) => assert!(true),
+        Ok(msg) => panic!("Unexpected success {:?}", msg),
+        Err(MessageError::InvalidMagic) => (),
         Err(e) => panic!("Invalid error {:?}", e),
     }
 }
@@ -197,7 +197,7 @@ fn test_decode_imhere_with_multicast_interface() {
     let msg = PeerMessage::decode(&data);
     match msg {
         Ok(msg) => panic!("Unexpected Ok: {:?}", msg),
-        Err(MessageError::InvalidIpAddress) => assert!(true),
+        Err(MessageError::InvalidIpAddress) => (),
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }

@@ -98,7 +98,7 @@ impl Handler<GetExitInfo> for Dashboard {
                 nickname: exit.0,
                 exit_settings: exit.1.clone(),
                 is_selected: selected,
-                have_route: have_route,
+                have_route,
                 is_reachable: reachable,
                 is_tunnel_working: tunnel_working,
             })

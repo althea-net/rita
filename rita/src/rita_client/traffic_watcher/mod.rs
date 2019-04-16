@@ -6,7 +6,6 @@
 //! different in that mesh nodes are paid by forwarding traffic, but exits have to return traffic and
 //! must get paid for doing so.
 
-use crate::rita_client::rita_loop::CLIENT_LOOP_SPEED;
 use crate::rita_common::debt_keeper::{DebtKeeper, Traffic, TrafficUpdate};
 use crate::KI;
 use crate::SETTING;

@@ -405,8 +405,8 @@ impl Handler<Tick> for ExitManager {
                     Arbiter::spawn(
                         TrafficWatcher::from_registry()
                             .send(Watch {
-                                exit_id: exit_id,
-                                exit_price: exit_price,
+                                exit_id,
+                                exit_price,
                             })
                             .then(|res| match res {
                                 Ok(val) => Ok(val),

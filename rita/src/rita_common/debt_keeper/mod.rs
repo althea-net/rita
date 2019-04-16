@@ -207,7 +207,7 @@ impl Handler<SendUpdate> for DebtKeeper {
                             Some(id) => id,
                             None => bail!("Identity has no mesh IP ready yet"),
                         },
-                        amount: amount,
+                        amount,
                         txid: None, // not yet published
                     })),
                 DebtAction::None => {}

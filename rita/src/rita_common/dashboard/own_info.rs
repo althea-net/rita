@@ -37,13 +37,13 @@ pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
 
     let reply = OwnInfo {
         address: eth_address,
-        balance: balance,
-        local_fee: local_fee,
-        metric_factor: metric_factor,
-        pay_threshold: pay_threshold,
-        close_threshold: close_threshold,
+        balance,
+        local_fee,
+        metric_factor,
+        pay_threshold,
+        close_threshold,
         low_balance: low_balance(),
-        device: device,
+        device,
         rita_version: env!("CARGO_PKG_VERSION").to_string(),
         version: READABLE_VERSION.to_string(),
     };
