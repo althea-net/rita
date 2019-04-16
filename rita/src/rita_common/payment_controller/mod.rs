@@ -152,8 +152,8 @@ impl PaymentController {
         let web3 = Web3::new(&full_node);
 
         let tx = Transaction {
-            nonce: nonce,
-            gas_price: gas_price,
+            nonce,
+            gas_price,
             gas_limit: "21000".parse().unwrap(),
             to: pmt.to.eth_address,
             value: pmt.amount.clone(),

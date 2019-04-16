@@ -315,7 +315,7 @@ pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result
     for (from, amount) in debts {
         trace!("collated debt for {} is {}", from.mesh_ip, amount);
         traffic_vec.push(Traffic {
-            from: from,
+            from,
             amount: amount.into(),
         });
     }
