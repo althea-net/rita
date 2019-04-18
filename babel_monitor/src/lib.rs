@@ -449,21 +449,44 @@ impl<T: Read + Write> Babel<T> {
         mesh_ip: &IpAddr,
         routes: &VecDeque<Route>,
     ) -> Result<Route, Error> {
-        let mut exit_route = None;
+        let mut installed_route = None;
         for route in routes.iter() {
             // Only ip6
             if let IpNetwork::V6(ref ip) = route.prefix {
                 // Only host addresses and installed routes
                 if ip.prefix() == 128 && route.installed && IpAddr::V6(ip.ip()) == *mesh_ip {
-                    exit_route = Some(route);
+                    installed_route = Some(route);
                     break;
                 }
             }
         }
-        if exit_route.is_none() {
+        if installed_route.is_none() {
             bail!("No installed route to that destination!");
         }
-        Ok(exit_route.unwrap().clone())
+        Ok(installed_route.unwrap().clone())
+    }
+
+    /// Returns the route to a given destination
+    pub fn get_routes(
+        &mut self,
+        mesh_ip: &IpAddr,
+        routes: &VecDeque<Route>,
+    ) -> Result<VecDeque<Route>, Error> {
+        let mut routes_to_dest: VecDeque<Route> = VecDeque::new();
+        for route in routes.iter() {
+            // Only ip6
+            if let IpNetwork::V6(ref ip) = route.prefix {
+                // Only host addresses and installed routes
+                if ip.prefix() == 128 && IpAddr::V6(ip.ip()) == *mesh_ip {
+                    routes_to_dest.push_back(route.clone());
+                    break;
+                }
+            }
+        }
+        if routes_to_dest.is_empty() {
+            bail!("No routes to that destination!");
+        }
+        Ok(routes_to_dest)
     }
 }
 #[cfg(test)]
