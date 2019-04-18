@@ -4,7 +4,6 @@ extern crate failure;
 #[macro_use]
 extern crate log;
 
-use std::collections::VecDeque;
 use std::io::{BufRead, Read, Write};
 use std::iter::Iterator;
 use std::net::IpAddr;
@@ -195,8 +194,8 @@ impl<T: Read + Write> Babel<T> {
         Ok(())
     }
 
-    pub fn parse_neighs(&mut self) -> Result<VecDeque<Neighbor>, Error> {
-        let mut vector: VecDeque<Neighbor> = VecDeque::with_capacity(5);
+    pub fn parse_neighs(&mut self) -> Result<Vec<Neighbor>, Error> {
+        let mut vector: Vec<Neighbor> = Vec::with_capacity(5);
         let mut found_neigh = false;
         for entry in self.command("dump")?.split("\n") {
             if entry.contains("add neighbour") {
@@ -283,7 +282,7 @@ impl<T: Read + Write> Babel<T> {
                         Err(_) => continue,
                     },
                 };
-                vector.push_back(neigh);
+                vector.push(neigh);
             }
         }
         if vector.len() == 0 && found_neigh {
@@ -292,8 +291,8 @@ impl<T: Read + Write> Babel<T> {
         Ok(vector)
     }
 
-    pub fn parse_routes(&mut self) -> Result<VecDeque<Route>, Error> {
-        let mut vector: VecDeque<Route> = VecDeque::with_capacity(20);
+    pub fn parse_routes(&mut self) -> Result<Vec<Route>, Error> {
+        let mut vector: Vec<Route> = Vec::with_capacity(20);
         let babel_out = self.command("dump")?;
         let mut found_route = false;
         trace!("Got from babel dump: {}", babel_out);
@@ -388,7 +387,7 @@ impl<T: Read + Write> Babel<T> {
                     },
                 };
 
-                vector.push_back(route);
+                vector.push(route);
             }
         }
         if vector.len() == 0 && found_route {
@@ -405,7 +404,7 @@ impl<T: Read + Write> Babel<T> {
         &mut self,
         neigh_mesh_ip: IpAddr,
         dest_mesh_ip: IpAddr,
-        routes: &VecDeque<Route>,
+        routes: &Vec<Route>,
     ) -> Result<Route, Error> {
         // First find the neighbors route to itself to get the local address
         for neigh_route in routes.iter() {
@@ -431,7 +430,7 @@ impl<T: Read + Write> Babel<T> {
     pub fn do_we_have_route(
         &mut self,
         mesh_ip: &IpAddr,
-        routes: &VecDeque<Route>,
+        routes: &Vec<Route>,
     ) -> Result<bool, Error> {
         for route in routes.iter() {
             if let IpNetwork::V6(ref ip) = route.prefix {
@@ -447,7 +446,7 @@ impl<T: Read + Write> Babel<T> {
     pub fn get_installed_route(
         &mut self,
         mesh_ip: &IpAddr,
-        routes: &VecDeque<Route>,
+        routes: &Vec<Route>,
     ) -> Result<Route, Error> {
         let mut installed_route = None;
         for route in routes.iter() {
@@ -470,15 +469,15 @@ impl<T: Read + Write> Babel<T> {
     pub fn get_routes(
         &mut self,
         mesh_ip: &IpAddr,
-        routes: &VecDeque<Route>,
-    ) -> Result<VecDeque<Route>, Error> {
-        let mut routes_to_dest: VecDeque<Route> = VecDeque::new();
+        routes: &Vec<Route>,
+    ) -> Result<Vec<Route>, Error> {
+        let mut routes_to_dest: Vec<Route> = Vec::new();
         for route in routes.iter() {
             // Only ip6
             if let IpNetwork::V6(ref ip) = route.prefix {
                 // Only host addresses and installed routes
                 if ip.prefix() == 128 && IpAddr::V6(ip.ip()) == *mesh_ip {
-                    routes_to_dest.push_back(route.clone());
+                    routes_to_dest.push(route.clone());
                     break;
                 }
             }
