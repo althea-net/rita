@@ -11,10 +11,15 @@ use actix::{
     SystemService,
 };
 use althea_types::RTTimestamps;
+use babel_monitor::Babel;
 use failure::Error;
 use futures::future::Future;
 use reqwest;
 use settings::client::RitaClientSettings;
+use settings::RitaCommonSettings;
+use std::net::IpAddr;
+use std::net::SocketAddr;
+use std::net::TcpStream;
 use std::time::{Duration, Instant};
 
 #[derive(Default)]
@@ -68,6 +73,12 @@ impl Handler<Tick> for RitaLoop {
         let start = Instant::now();
         trace!("Client Tick!");
 
+        if SETTING.get_network().is_gateway {
+            for (_exit_name, exit_client) in SETTING.get_exits().iter() {
+                correct_exit_flapping(exit_client.id.mesh_ip);
+            }
+        }
+
         Arbiter::spawn(ExitManager::from_registry().send(Tick {}).then(|res| {
             trace!("exit manager said {:?}", res);
             Ok(())
@@ -80,6 +91,33 @@ impl Handler<Tick> for RitaLoop {
         );
         Ok(())
     }
+}
+
+/// The reason why we need this is complex, within the network most nodes offering
+/// routes to a destination are offering a route to the same destination, so switching
+/// routes is seamless and involves at most a lost packet or two. For the case of our exit
+/// clustering multihomed our exits, with two nodes advertising the same route. Babel may switch
+/// between them, because exit nodes nat external traffic this kills any existing tcp sessions and
+/// is very disruptive to the user. Since only gateways can pick routes that may be different exits
+/// this function artificially increases the difficulty of switching to prevent babel from doing it
+/// as often as it might otherwise. It's hacky and a little risky but the alternative is manually
+/// asking about exit regions or pulling even more complexity into Rita to replicate packet loss
+/// and latency sensitive exit selection.
+fn correct_exit_flapping(current_exit: IpAddr) -> Result<(), Error> {
+    let stream = TcpStream::connect::<SocketAddr>(
+        format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
+    )?;
+    let mut babel = Babel::new(stream);
+
+    babel.start_connection()?;
+    trace!("Getting routes");
+    let routes = babel.parse_routes()?;
+    let routes_to_exit = babel.get_routes(&current_exit, &routes);
+    let installed_route = babel.get_installed_route(&current_exit, &routes);
+    trace!("Got routes: {:?}", routes);
+    let neighs = babel.parse_neighs()?;
+
+    Ok(())
 }
 
 pub fn _compute_verification_rtt() -> Result<RTTimestamps, Error> {

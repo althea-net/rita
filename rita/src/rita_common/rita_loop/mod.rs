@@ -5,46 +5,30 @@
 //! all system functions. Anything that blocks will eventually filter up to block this loop and
 //! halt essential functions like opening tunnels and managing peers
 
-use std::time::{Duration, Instant};
-
-use rand::thread_rng;
-use rand::Rng;
-
 use crate::actix_utils::KillActor;
+use crate::actix_utils::ResolverWrapper;
+use crate::rita_common::dao_manager::DAOManager;
+use crate::rita_common::dao_manager::Tick as DAOTick;
+use crate::rita_common::debt_keeper::{DebtKeeper, SendUpdate};
+use crate::rita_common::oracle::{Oracle, Update};
+use crate::rita_common::payment_validator::{PaymentValidator, Validate};
+use crate::rita_common::peer_listener::GetPeers;
+use crate::rita_common::peer_listener::PeerListener;
+use crate::rita_common::traffic_watcher::{TrafficWatcher, Watch};
+use crate::rita_common::tunnel_manager::PeersToContact;
+use crate::rita_common::tunnel_manager::{GetNeighbors, TriggerGC, TunnelManager};
+use crate::KI;
+use crate::SETTING;
 use actix::{
     Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
     System, SystemService,
 };
-
-use crate::actix_utils::ResolverWrapper;
-
-use crate::KI;
-
-use crate::rita_common::tunnel_manager::{GetNeighbors, TriggerGC, TunnelManager};
-
-use crate::rita_common::traffic_watcher::{TrafficWatcher, Watch};
-
-use crate::rita_common::peer_listener::PeerListener;
-
-use crate::rita_common::debt_keeper::{DebtKeeper, SendUpdate};
-
-use crate::rita_common::peer_listener::GetPeers;
-
-use crate::rita_common::dao_manager::DAOManager;
-use crate::rita_common::dao_manager::Tick as DAOTick;
-
-use crate::rita_common::tunnel_manager::PeersToContact;
-
-use crate::rita_common::payment_validator::{PaymentValidator, Validate};
-
-use crate::rita_common::oracle::{Oracle, Update};
-
 use failure::Error;
-
 use futures::Future;
-
-use crate::SETTING;
+use rand::thread_rng;
+use rand::Rng;
 use settings::RitaCommonSettings;
+use std::time::{Duration, Instant};
 
 // the speed in seconds for the common loop
 pub const COMMON_LOOP_SPEED: u64 = 5;
