@@ -103,7 +103,15 @@ pub fn get_babel_info<T: Read + Write>(
     let routes = babel.parse_routes()?;
     trace!("Got routes: {:?}", routes);
     let mut destinations = HashMap::new();
-    let local_fee = babel.get_local_fee().unwrap();
+    let local_fee = match babel.get_local_fee() {
+        Ok(fee) => fee,
+        Err(e) => {
+            error!("Babel fee not set properly! this is a bad sign! {:?}", e);
+            let configured_fee = SETTING.get_payment().local_fee;
+            babel.set_local_fee(configured_fee)?;
+            configured_fee
+        }
+    };
 
     let max_fee = SETTING.get_payment().max_fee;
     for route in &routes {

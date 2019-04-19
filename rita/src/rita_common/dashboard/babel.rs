@@ -31,6 +31,11 @@ pub fn set_local_fee(path: Path<u32>) -> Result<HttpResponse, Error> {
     debug!("/local_fee/{} POST hit", new_fee);
     let mut ret = HashMap::<String, String>::new();
 
+    if new_fee > 999_999_999 {
+        // required because of https://github.com/althea-mesh/babeld/issues/28
+        bail!("Price is too high due to babel bug!");
+    }
+
     let stream = match TcpStream::connect::<SocketAddr>(
         format!("[::1]:{}", SETTING.get_network().babel_port)
             .parse()
