@@ -48,6 +48,7 @@ use settings::RitaCommonSettings;
 
 // the speed in seconds for the common loop
 pub const COMMON_LOOP_SPEED: u64 = 5;
+pub const COMMON_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
 
 pub struct RitaLoop {
     was_gateway: bool,
@@ -113,6 +114,7 @@ impl Handler<Tick> for RitaLoop {
         Arbiter::spawn(
             TunnelManager::from_registry()
                 .send(GetNeighbors)
+                .timeout(COMMON_LOOP_TIMEOUT)
                 .then(move |res| {
                     let res = res.unwrap().unwrap();
 
@@ -127,6 +129,7 @@ impl Handler<Tick> for RitaLoop {
 
                     TrafficWatcher::from_registry()
                         .send(Watch::new(res))
+                        .timeout(COMMON_LOOP_TIMEOUT)
                         .then(move |_res| {
                             info!(
                                 "TrafficWatcher completed in {}s {}ms",
@@ -155,6 +158,7 @@ impl Handler<Tick> for RitaLoop {
                 .send(TriggerGC(Duration::from_secs(
                     SETTING.get_network().tunnel_timeout_seconds,
                 )))
+                .timeout(COMMON_LOOP_TIMEOUT)
                 .then(move |res| {
                     info!(
                         "TunnelManager GC pass completed in {}s {}ms, with result {:?}",
@@ -172,6 +176,7 @@ impl Handler<Tick> for RitaLoop {
         Arbiter::spawn(
             PeerListener::from_registry()
                 .send(Tick {})
+                .timeout(COMMON_LOOP_TIMEOUT)
                 .then(move |res| {
                     info!(
                         "PeerListener tick completed in {}s {}ms, with result {:?}",
@@ -189,6 +194,7 @@ impl Handler<Tick> for RitaLoop {
         Arbiter::spawn(
             PeerListener::from_registry()
                 .send(GetPeers {})
+                .timeout(COMMON_LOOP_TIMEOUT)
                 .and_then(move |peers| {
                     // GetPeers never fails so unwrap is safe
                     let peers = peers.unwrap();
@@ -198,7 +204,9 @@ impl Handler<Tick> for RitaLoop {
                         start.elapsed().as_secs(),
                         start.elapsed().subsec_millis(),
                     );
-                    TunnelManager::from_registry().send(PeersToContact::new(peers))
+                    TunnelManager::from_registry()
+                        .send(PeersToContact::new(peers))
+                        .timeout(COMMON_LOOP_TIMEOUT)
                 })
                 .then(|_| Ok(())),
         );
@@ -224,10 +232,13 @@ fn manage_gateway(mut was_gateway: bool) -> bool {
 
     if SETTING.get_network().is_gateway {
         if was_gateway {
+            // TODO I don't think this has been running for months
+            info!("Killed trust dns actor!");
             // trust_dns will fail to resolve if you plugin the wan port after Rita has started
             // this may be fixed in a future update of Trustdns
             let resolver_addr: Addr<ResolverWrapper> = System::current().registry().get();
             resolver_addr.do_send(KillActor);
+            was_gateway = false;
         }
 
         match KI.get_resolv_servers() {
