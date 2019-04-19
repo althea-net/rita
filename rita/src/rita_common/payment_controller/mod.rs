@@ -3,32 +3,24 @@
 //! so long as we have not published it to a full node, once the payment is on
 //! the blockchain it's up to the reciever to validate that it's correct
 
-use ::actix::prelude::*;
-use ::actix_web::client;
-use ::actix_web::client::Connection;
-
-use futures::future::Either;
-use futures::{future, Future};
-
-use std::net::SocketAddr;
-
-use tokio::net::TcpStream as TokioTcpStream;
-
-use althea_types::PaymentTx;
-
-use clarity::Transaction;
-
-use crate::SETTING;
-use settings::RitaCommonSettings;
-
 use crate::rita_common::debt_keeper;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::PaymentFailed;
 use crate::rita_common::rita_loop::get_web3_server;
-
-use web3::client::Web3;
-
+use crate::SETTING;
+use ::actix::prelude::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
+use ::actix_web::client;
+use ::actix_web::client::Connection;
+use althea_types::PaymentTx;
+use clarity::Transaction;
 use failure::Error;
+use futures::future::Either;
+use futures::{future, Future};
+use settings::RitaCommonSettings;
+use std::net::SocketAddr;
+use std::time::Duration;
+use tokio::net::TcpStream as TokioTcpStream;
+use web3::client::Web3;
 
 pub struct PaymentController();
 
@@ -187,6 +179,7 @@ impl PaymentController {
                                 .json(&pmt)
                                 .expect("Failed to serialize payment!")
                                 .send()
+                                .timeout(Duration::from_secs(4))
                                 .then(|neigh_ack| match neigh_ack {
                                     // return emtpy result, we're using messages anyways
                                     Ok(msg) => {

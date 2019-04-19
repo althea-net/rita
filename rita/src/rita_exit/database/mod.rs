@@ -44,7 +44,7 @@ use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::time::Instant;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod database_tools;
 pub mod db_client;
@@ -472,6 +472,7 @@ pub fn enforce_exit_clients(
     Box::new(
         DebtKeeper::from_registry()
             .send(GetDebtsList)
+            .timeout(Duration::from_secs(4))
             .and_then(move |debts_list| match debts_list {
                 Ok(list) => {
                     let mut clients_by_id = HashMap::new();
