@@ -27,24 +27,24 @@ web3 = {git = "https://github.com/althea-mesh/guac_rs"}
 syslog = "4"
 actix = "0.7"
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
-actix_derive = "0.3"
+actix_derive = "0.4"
 bytes = "0.4"
 config = "0.9"
-diesel = { version = "1.3", features = ["postgres"] }
+diesel = { version = "1.4", features = ["postgres"] }
 libsqlite3-sys = { version = "0.9", features = ["bundled"] }
-docopt = "0.8"
+docopt = "1.1"
 dotenv = "0.13"
 env_logger = "0.6"
 failure = "0.1"
 futures = "0.1"
 handlebars = "1.1"
-ipnetwork = "0.12.8"
-lazy_static = "1.2"
+ipnetwork = "0.14"
+lazy_static = "1.3"
 log = "0.4"
 minihttpse = "0.1"
-mockito = "0.13"
+mockito = "0.17"
 mockstream = { git = "https://github.com/lazy-bitfield/rust-mockstream.git" }
-rand = "0.5"
+rand = "0.6"
 reqwest = "0.9"
 serde = "1.0"
 serde_derive = "1.0"
@@ -54,7 +54,7 @@ tokio-io = "0.1"
 tokio-codec = "0.1"
 regex = "1.1"
 trust-dns-resolver = "0.10"
-byteorder = { version = "1.2", features = ["i128"] }
+byteorder = { version = "1.3", features = ["i128"] }
 openssl-probe = "0.1"
 num-traits="0.2"
 clarity = "0.1"
