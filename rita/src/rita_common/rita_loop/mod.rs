@@ -232,10 +232,13 @@ fn manage_gateway(mut was_gateway: bool) -> bool {
 
     if SETTING.get_network().is_gateway {
         if was_gateway {
+            // TODO I don't think this has been running for months
+            info!("Killed trust dns actor!");
             // trust_dns will fail to resolve if you plugin the wan port after Rita has started
             // this may be fixed in a future update of Trustdns
             let resolver_addr: Addr<ResolverWrapper> = System::current().registry().get();
             resolver_addr.do_send(KillActor);
+            was_gateway = false;
         }
 
         match KI.get_resolv_servers() {
