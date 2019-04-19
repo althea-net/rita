@@ -68,10 +68,15 @@ impl Handler<Tick> for RitaLoop {
         let start = Instant::now();
         trace!("Client Tick!");
 
-        Arbiter::spawn(ExitManager::from_registry().send(Tick {}).then(|res| {
-            trace!("exit manager said {:?}", res);
-            Ok(())
-        }));
+        Arbiter::spawn(
+            ExitManager::from_registry()
+                .send(Tick {})
+                .timeout(Duration::from_secs(4))
+                .then(|res| {
+                    trace!("exit manager said {:?}", res);
+                    Ok(())
+                }),
+        );
 
         info!(
             "Rita Client loop completed in {}s {}ms",

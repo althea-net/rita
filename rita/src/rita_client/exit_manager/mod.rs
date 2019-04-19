@@ -408,6 +408,7 @@ impl Handler<Tick> for ExitManager {
                                 exit_id,
                                 exit_price,
                             })
+                            .timeout(Duration::from_secs(4))
                             .then(|res| match res {
                                 Ok(val) => Ok(val),
                                 Err(e) => {
