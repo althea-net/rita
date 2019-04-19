@@ -4,46 +4,33 @@
 //! up tunnels if they respond, likewise if someone calls us their hello goes through network_endpoints
 //! then into TunnelManager to open a tunnel for them.
 
-use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr, TcpStream};
-use std::path::Path;
-use std::time::{Duration, Instant};
-
-use ::actix::actors::resolver;
-use ::actix::prelude::*;
-
-use futures::Future;
-
-use althea_types::Identity;
-use althea_types::LocalIdentity;
-
-use crate::KI;
-
-use babel_monitor::Babel;
-
 use crate::rita_common;
 use crate::rita_common::hello_handler::Hello;
 use crate::rita_common::peer_listener::Peer;
-
+use crate::KI;
 use crate::SETTING;
-use settings::RitaCommonSettings;
-
-use failure::Error;
-
 #[cfg(test)]
 use ::actix::actors::mocker::Mocker;
+use ::actix::actors::resolver;
+use ::actix::prelude::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
+use althea_types::Identity;
+use althea_types::LocalIdentity;
+use babel_monitor::Babel;
+use failure::Error;
+use futures::Future;
+use settings::RitaCommonSettings;
+use std::collections::HashMap;
 use std::fmt;
 use std::io::{Read, Write};
-
+use std::net::{IpAddr, SocketAddr, TcpStream};
+use std::path::Path;
+use std::time::{Duration, Instant};
 #[cfg(test)]
 type HelloHandler = Mocker<rita_common::hello_handler::HelloHandler>;
-
 #[cfg(not(test))]
 type HelloHandler = rita_common::hello_handler::HelloHandler;
-
 #[cfg(test)]
 type Resolver = Mocker<resolver::Resolver>;
-
 #[cfg(not(test))]
 type Resolver = resolver::Resolver;
 
@@ -600,6 +587,7 @@ impl TunnelManager {
 
         let res = Resolver::from_registry()
             .send(resolver::Resolve::host(their_hostname.clone()))
+            .timeout(Duration::from_secs(1))
             .then(move |res| match res {
                 Ok(Ok(dnsresult)) => {
                     let port = SETTING.get_network().rita_hello_port;
