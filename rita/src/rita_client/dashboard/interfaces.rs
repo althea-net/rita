@@ -343,7 +343,15 @@ pub fn ethernet_transform_mode(
 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
-    trace!("Successsfully transformed ethernet mode");
+    trace!("Successsfully transformed ethernet mode, rebooting");
+
+    // it's now safe to restart the process, return an error if that fails somehow
+    // do not remove this, we lose the multicast listeners on other mesh ports when
+    // we toggle network modes, this means we will clean up valid tunnels 15 minutes
+    // after the toggle unless we do this
+    if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
+        return Err(e);
+    }
 
     Ok(())
 }
@@ -484,6 +492,14 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
+
+    // it's now safe to restart the process, return an error if that fails somehow
+    // do not remove this, we lose the multicast listeners on other mesh ports when
+    // we toggle network modes, this means we will clean up valid tunnels 15 minutes
+    // after the toggle unless we do this
+    if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
+        return Err(e);
+    }
 
     Ok(())
 }
