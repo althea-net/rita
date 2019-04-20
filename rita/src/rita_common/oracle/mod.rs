@@ -207,13 +207,10 @@ fn update_gas_price(web3: &Web3) {
                 let mut payment_settings = SETTING.get_payment_mut();
 
                 if payment_settings.system_chain == SystemChain::Xdai {
-                    payment_settings.pay_threshold = 105_000_000_000_000_000u128.into();
-                    payment_settings.close_threshold = (420_000_000_000_000_000i128 * -1).into();
                     payment_settings.gas_price = 250_000_000_000u128.into();
-                    return Ok(());
+                } else {
+                    payment_settings.gas_price = value;
                 }
-
-                payment_settings.gas_price = value;
                 let dynamic_fee_factor: Int256 = payment_settings.dynamic_fee_multiplier.into();
                 let transaction_gas: Int256 = 21000.into();
                 let neg_one = -1i32;
@@ -259,6 +256,7 @@ struct PriceUpdate {
     max: u32,
     dao_fee: u32,
     warning: u128,
+    fee_multiplier: u32,
 }
 
 /// This is a very simple and early version of an automated pricing system
@@ -303,7 +301,8 @@ fn update_our_price() {
                                             payment.max_fee = new_prices.max;
                                             payment.balance_warning_level =
                                                 new_prices.warning.into();
-
+                                            payment.dynamic_fee_multiplier =
+                                                new_prices.fee_multiplier;
                                             drop(payment);
 
                                             let mut dao = SETTING.get_dao_mut();
