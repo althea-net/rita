@@ -304,20 +304,20 @@ impl<T: Read + Write> Babel<T> {
                 found_route = true;
                 let route = Route {
                     id: match find_babel_val("route", entry) {
-                        Ok(entry) => entry,
+                        Ok(value) => value,
                         Err(_) => continue,
                     },
                     iface: match find_babel_val("if", entry) {
-                        Ok(entry) => entry,
+                        Ok(value) => value,
                         Err(_) => continue,
                     },
                     xroute: false,
                     installed: match find_babel_val("installed", entry) {
-                        Ok(entry) => entry.contains("yes"),
+                        Ok(value) => value.contains("yes"),
                         Err(_) => continue,
                     },
                     neigh_ip: match find_babel_val("via", entry) {
-                        Ok(entry) => match entry.parse() {
+                        Ok(value) => match value.parse() {
                             Ok(parsed_data) => parsed_data,
                             Err(e) => {
                                 warn!("Error parsing neigh_ip for route {:?} from {}", e, entry);
@@ -327,7 +327,7 @@ impl<T: Read + Write> Babel<T> {
                         Err(_) => continue,
                     },
                     prefix: match find_babel_val("prefix", entry) {
-                        Ok(entry) => match entry.parse() {
+                        Ok(value) => match value.parse() {
                             Ok(parsed_data) => parsed_data,
                             Err(e) => {
                                 warn!("Error parsing prefix for route {:?} from {}", e, entry);
@@ -337,7 +337,7 @@ impl<T: Read + Write> Babel<T> {
                         Err(_) => continue,
                     },
                     metric: match find_babel_val("metric", entry) {
-                        Ok(entry) => match entry.parse() {
+                        Ok(value) => match value.parse() {
                             Ok(parsed_data) => parsed_data,
                             Err(e) => {
                                 warn!("Error parsing metric for route {:?} from {}", e, entry);
@@ -347,7 +347,7 @@ impl<T: Read + Write> Babel<T> {
                         Err(_) => continue,
                     },
                     refmetric: match find_babel_val("refmetric", entry) {
-                        Ok(entry) => match entry.parse() {
+                        Ok(value) => match value.parse() {
                             Ok(parsed_data) => parsed_data,
                             Err(e) => {
                                 warn!("Error parsing refmetric {:?} from {}", e, entry);
@@ -357,7 +357,7 @@ impl<T: Read + Write> Babel<T> {
                         Err(_) => continue,
                     },
                     full_path_rtt: match find_babel_val("full-path-rtt", entry) {
-                        Ok(entry) => match entry.parse() {
+                        Ok(value) => match value.parse() {
                             Ok(parsed_data) => parsed_data,
                             Err(e) => {
                                 warn!("Error parsing full_path_rtt {:?} from {}", e, entry);
@@ -367,7 +367,7 @@ impl<T: Read + Write> Babel<T> {
                         Err(_) => continue,
                     },
                     price: match find_babel_val("price", entry) {
-                        Ok(entry) => match entry.parse() {
+                        Ok(value) => match value.parse() {
                             Ok(parsed_data) => parsed_data,
                             Err(e) => {
                                 warn!("Error parsing price {:?} from {}", e, entry);
@@ -377,7 +377,7 @@ impl<T: Read + Write> Babel<T> {
                         Err(_) => continue,
                     },
                     fee: match find_babel_val("fee", entry) {
-                        Ok(entry) => match entry.parse() {
+                        Ok(value) => match value.parse() {
                             Ok(parsed_data) => parsed_data,
                             Err(e) => {
                                 warn!("Error parsing fee {:?} from {}", e, entry);
