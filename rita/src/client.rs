@@ -7,19 +7,8 @@
 //! This file initilizes the dashboard endpoints for the client as well as the common and client
 //! specific actors.
 
-#![cfg_attr(feature = "system_alloc", feature(alloc_system, allocator_api))]
 #![warn(clippy::all)]
 #![allow(clippy::pedantic)]
-
-#[cfg(feature = "system_alloc")]
-extern crate alloc_system;
-
-#[cfg(feature = "system_alloc")]
-use alloc_system::System;
-
-#[cfg(feature = "system_alloc")]
-#[global_allocator]
-static A: System = System;
 
 #[macro_use]
 extern crate failure;
