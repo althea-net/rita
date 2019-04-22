@@ -13,4 +13,5 @@ pub mod neighbors;
 pub mod notifications;
 pub mod system_chain;
 pub mod update;
+pub mod usage;
 pub mod wifi;

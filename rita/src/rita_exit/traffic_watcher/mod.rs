@@ -11,6 +11,9 @@
 use crate::rita_common::debt_keeper;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::Traffic;
+use crate::rita_common::usage_tracker::UpdateUsage;
+use crate::rita_common::usage_tracker::UsageTracker;
+use crate::rita_common::usage_tracker::UsageType;
 use crate::SETTING;
 use ::actix::prelude::{Actor, Context, Handler, Message, Supervised, SystemService};
 use althea_kernel_interface::wg_iface_counter::WgUsage;
@@ -139,7 +142,7 @@ fn generate_helper_maps(
     Ok((identities, id_from_ip))
 }
 
-fn counters_logging(counters: &HashMap<WgKey, WgUsage>) {
+fn counters_logging(counters: &HashMap<WgKey, WgUsage>, exit_fee: u32) {
     trace!("exit counters: {:?}", counters);
 
     let mut total_in: u64 = 0;
@@ -163,6 +166,15 @@ fn counters_logging(counters: &HashMap<WgKey, WgUsage>) {
         let output = entry.1;
         total_out += output.upload;
     }
+
+    // update the usage tracker with the details of this round's usage
+    UsageTracker::from_registry().do_send(UpdateUsage {
+        kind: UsageType::Exit,
+        up: total_out,
+        down: total_in,
+        price: exit_fee,
+    });
+
     info!("Total Exit output of {} bytes this round", total_out);
 }
 
@@ -237,7 +249,8 @@ pub fn watch<T: Read + Write>(
             return Err(e);
         }
     };
-    counters_logging(&counters);
+
+    counters_logging(&counters, our_price as u32);
 
     // creates new usage entires does not actualy update the values
     update_usage_history(&counters, usage_history);

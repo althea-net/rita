@@ -13,6 +13,7 @@ pub mod nickname;
 pub mod own_info;
 pub mod pricing;
 pub mod settings;
+pub mod usage;
 pub mod wallet;
 
 pub struct Dashboard;

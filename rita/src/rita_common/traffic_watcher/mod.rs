@@ -2,30 +2,25 @@
 //! iptables and ipset counters on each per hop tunnel (the WireGuard tunnel between two devices). These counts
 //! are then stored and used to compute amounts for bills.
 
-use crate::rita_common::tunnel_manager::Neighbor;
-use ::actix::prelude::*;
-
-use crate::KI;
-use althea_kernel_interface::FilterTarget;
-
-use althea_types::Identity;
-
-use babel_monitor::Babel;
-
 use crate::rita_common::debt_keeper;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::Traffic;
-
+use crate::rita_common::tunnel_manager::Neighbor;
+use crate::rita_common::usage_tracker::UpdateUsage;
+use crate::rita_common::usage_tracker::UsageTracker;
+use crate::rita_common::usage_tracker::UsageType;
+use crate::KI;
+use crate::SETTING;
+use ::actix::{Actor, Context, Handler, Message, Supervised, SystemService};
+use althea_kernel_interface::FilterTarget;
+use althea_types::Identity;
+use babel_monitor::Babel;
+use failure::Error;
+use ipnetwork::IpNetwork;
+use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
-
-use ipnetwork::IpNetwork;
-
-use crate::SETTING;
-use settings::RitaCommonSettings;
-
-use failure::Error;
 
 pub struct TrafficWatcher;
 
@@ -232,6 +227,34 @@ pub fn get_output_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
     Ok(total_output_counters)
 }
 
+/// Takes and sumns the input and output counters for logging
+fn update_usage(
+    input: &HashMap<(IpAddr, String), u64>,
+    output: &HashMap<(IpAddr, String), u64>,
+    our_fee: u32,
+) {
+    let mut total_in = 0;
+    let mut total_out = 0;
+    for (_, count) in input.iter() {
+        total_in += count;
+    }
+    for (_, count) in output.iter() {
+        total_out += count;
+    }
+    info!(
+        "Total of {} bytes relay upload and {} bytes relay download",
+        total_out, total_in
+    );
+
+    // update the usage tracker with the details of this round's usage
+    UsageTracker::from_registry().do_send(UpdateUsage {
+        kind: UsageType::Relay,
+        up: total_out,
+        down: total_in,
+        price: our_fee,
+    });
+}
+
 /// This traffic watcher watches how much traffic each neighbor sends to each destination
 /// between the last time watch was run, (This does _not_ block the thread)
 /// It also gathers the price to each destination from Babel and uses this information
@@ -246,6 +269,7 @@ pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result
 
     let total_input_counters = get_input_counters()?;
     let total_output_counters = get_output_counters()?;
+    update_usage(&total_input_counters, &total_output_counters, local_fee);
 
     // Flow counters should debit your neighbor which you received the packet from
     // Destination counters should credit your neighbor which you sent the packet to

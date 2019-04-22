@@ -7,6 +7,9 @@
 //! must get paid for doing so.
 
 use crate::rita_common::debt_keeper::{DebtKeeper, Traffic, TrafficUpdate};
+use crate::rita_common::usage_tracker::UpdateUsage;
+use crate::rita_common::usage_tracker::UsageTracker;
+use crate::rita_common::usage_tracker::UsageType;
 use crate::KI;
 use crate::SETTING;
 use ::actix::prelude::{Actor, Context, Handler, Message, Supervised, SystemService};
@@ -174,8 +177,16 @@ pub fn watch(history: &mut TrafficWatcher, exit: &Identity, exit_price: u64) -> 
         };
 
         DebtKeeper::from_registry().do_send(exit_update);
+
+        // update the usage tracker with the details of this round's usage
+        UsageTracker::from_registry().do_send(UpdateUsage {
+            kind: UsageType::Client,
+            up: output,
+            down: input,
+            price: exit_dest_price as u32,
+        });
     } else {
-        trace!("Exit bandwidth did not exceed free tier, no bill");
+        error!("no Exit bandwidth, no bill!");
     }
 
     Ok(())

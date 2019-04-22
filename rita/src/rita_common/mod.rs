@@ -10,3 +10,4 @@ pub mod peer_listener;
 pub mod rita_loop;
 pub mod traffic_watcher;
 pub mod tunnel_manager;
+pub mod usage_tracker;
