@@ -1271,3 +1271,78 @@ Manually runs the update script
 `curl -v -XPOST http://192.168.10.1:4877/router/update`
 
 ---
+
+## /usage/client
+
+Gets a history of client bandwidth usage, index is in hours since unix epoch, the first being
+the latest, up and down are in bytes, and the price is in wei/gb
+
+- URL: `<rita ip>:<rita_dashboard_port>/usage/client`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+[{"index":432212,"up":154040,"down":433480,"price":71400000}, ...]
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl -v -XGET http://192.168.10.1:4877/usage/client`
+
+---
+
+## /usage/relay
+
+Gets a history of relay bandwidth usage, index is in hours since unix epoch, the first being
+the latest, up and down are in bytes, and the price is in wei/gb
+
+- URL: `<rita ip>:<rita_dashboard_port>/usage/relay`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+[{"index":432212,"up":154040,"down":433480,"price":71400000}, ...]
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl -v -XGET http://192.168.10.1:4877/usage/relay`
+
+---
+
+## /usage/payments
+
+Gets a history of payments, indexes are hours since unix epoch the first being the latest
+amounts are in wei
+
+- URL: `<rita ip>:<rita_dashboard_port>/usage/payments`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+[{"index":432212,"payments":[{"to":{"mesh_ip":"fd00::1337:1e0f","eth_address":"0x5aee3dff733f56cfe7e5390b9cc3a46a90ca1cfa","wg_public_key":"zgAlhyOQy8crB0ewrsWt3ES9SvFguwx5mq9i2KiknmA=","nickname":null},"from":{"mesh_ip":"fd3f:fd20:e900:4e94:a638:f99b:b7f7:6ec0","eth_address":"0xbda3c7fa35896de7fa3e3591b44b44baaa3e3bc1","wg_public_key":"+/JmQoUnJeKoWb/cmXGBal6J/TtAQpEDL9hCD1fSSiY=","nickname":null},"amount":"1691124136800000","txid":"1180495127369290936054714943770774396461041662226307173060896507466108779575"}, ...]}]
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl -v -XGET http://192.168.10.1:4877/usage/payments`
+
+---
