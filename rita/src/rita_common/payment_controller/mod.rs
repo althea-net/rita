@@ -7,6 +7,8 @@ use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::PaymentFailed;
 use crate::rita_common::oracle::update_nonce;
 use crate::rita_common::rita_loop::get_web3_server;
+use crate::rita_common::usage_tracker::UpdatePayments;
+use crate::rita_common::usage_tracker::UsageTracker;
 use crate::SETTING;
 use ::actix::prelude::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use ::actix_web::client;
@@ -159,6 +161,11 @@ impl PaymentController {
                                             tx_id, msg, full_node, pmt.amount
                                         );
                                         SETTING.get_payment_mut().nonce += 1u64.into();
+
+                                        // update the usage tracker with the details of this payment
+                                        UsageTracker::from_registry()
+                                            .do_send(UpdatePayments { payment: pmt });
+
                                         Ok(()) as Result<(), ()>
                                     }
                                     Err(e) => {
