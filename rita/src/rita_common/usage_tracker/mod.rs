@@ -6,6 +6,7 @@
 //!
 //! Persistant storage is planned but not currently implemented.
 
+use crate::SETTING;
 use actix::Actor;
 use actix::Context;
 use actix::Handler;
@@ -16,16 +17,25 @@ use althea_types::Identity;
 use althea_types::PaymentTx;
 use failure::Error;
 use num256::Uint256;
+use serde::{Deserialize, Serialize};
+use serde_json::Error as SerdeError;
+use settings::RitaCommonSettings;
 use std::collections::VecDeque;
+use std::fs::File;
+use std::io::Error as IOError;
+use std::io::Read;
+use std::io::Write;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
 /// On year worth of usage storage
 const MAX_ENTRIES: usize = 8760;
+/// Save every 24 hours
+const SAVE_FREQENCY: u64 = 24;
 
 /// In an effort to converge this module between the three possible bw tracking
 /// use cases this enum is used to identify which sort of usage we are tracking
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub enum UsageType {
     Client,
@@ -35,7 +45,7 @@ pub enum UsageType {
 
 /// A struct for tracking each hour of usage, indexed by time in hours since
 /// the unix epoch
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct UsageHour {
     index: u64,
     up: u64,
@@ -72,7 +82,7 @@ fn to_formatted_payment_tx(input: PaymentTx) -> FormattedPaymentTx {
 }
 
 /// A struct for tracking each hours of paymetns indexed in hours since unix epoch
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PaymentHour {
     index: u64,
     payments: Vec<FormattedPaymentTx>,
@@ -80,14 +90,65 @@ pub struct PaymentHour {
 
 /// The main actor that holds the usage state for the duration of operations
 /// at some point loading and saving will be defined in service started
-#[derive(Default, Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UsageTracker {
+    last_save_hour: u64,
     // at least one of these will be left unused
     client_bandwith: VecDeque<UsageHour>,
     relay_bandwith: VecDeque<UsageHour>,
     exit_bandwith: VecDeque<UsageHour>,
-    /// A history of txid's
+    /// A history of payments
     payments: VecDeque<PaymentHour>,
+}
+
+impl Default for UsageTracker {
+    fn default() -> UsageTracker {
+        let file = File::open(SETTING.get_network().usage_tracker_file.clone());
+        // if the loading process goes wrong for any reason, we just start again
+        let blank_usage_tracker = UsageTracker {
+            last_save_hour: 0,
+            client_bandwith: VecDeque::new(),
+            relay_bandwith: VecDeque::new(),
+            exit_bandwith: VecDeque::new(),
+            payments: VecDeque::new(),
+        };
+
+        match file {
+            Ok(mut file) => {
+                let mut contents = String::new();
+                match file.read_to_string(&mut contents) {
+                    Ok(_bytes_read) => {
+                        let deserialized: Result<UsageTracker, SerdeError> =
+                            serde_json::from_str(&contents);
+
+                        match deserialized {
+                            Ok(value) => value,
+                            Err(e) => {
+                                error!("Failed to deserialize usage tracker {:?}", e);
+                                blank_usage_tracker
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to read usage tracker file! {:?}", e);
+                        blank_usage_tracker
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to open usage tracker file! {:?}", e);
+                blank_usage_tracker
+            }
+        }
+    }
+}
+
+impl UsageTracker {
+    fn save(&mut self) -> Result<(), IOError> {
+        let serialized = serde_json::to_string(self)?;
+        let mut file = File::create(SETTING.get_network().usage_tracker_file.clone())?;
+        file.write_all(serialized.as_bytes())
+    }
 }
 
 impl Actor for UsageTracker {
@@ -171,6 +232,11 @@ fn process_usage_update(current_hour: u64, msg: UpdateUsage, data: &mut UsageTra
     while history.len() > MAX_ENTRIES {
         let _discarded_entry = history.pop_back();
     }
+    if (current_hour - SAVE_FREQENCY) > data.last_save_hour {
+        data.last_save_hour = current_hour;
+        let res = data.save();
+        info!("Saving usage data: {:?}", res);
+    }
 }
 
 pub struct UpdatePayments {
@@ -210,6 +276,11 @@ impl Handler<UpdatePayments> for UsageTracker {
         }
         while self.payments.len() > MAX_ENTRIES {
             let _discarded_entry = self.payments.pop_back();
+        }
+        if (current_hour - SAVE_FREQENCY) > self.last_save_hour {
+            self.last_save_hour = current_hour;
+            let res = self.save();
+            info!("Saving usage data: {:?}", res);
         }
         Ok(())
     }
