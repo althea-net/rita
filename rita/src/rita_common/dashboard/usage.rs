@@ -15,6 +15,6 @@ pub fn get_payments(
     UsageTracker::from_registry()
         .send(GetPayments {})
         .from_err()
-        .and_then(move |reply| Ok(Json(reply?)))
+        .and_then(|reply| Ok(Json(reply?)))
         .responder()
 }

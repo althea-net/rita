@@ -12,8 +12,10 @@ use actix::Handler;
 use actix::Message;
 use actix::Supervised;
 use actix::SystemService;
+use althea_types::Identity;
 use althea_types::PaymentTx;
 use failure::Error;
+use num256::Uint256;
 use std::collections::VecDeque;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
@@ -41,11 +43,39 @@ pub struct UsageHour {
     price: u32,
 }
 
+/// A version of payment tx with a string txid so that the formatting is correct
+/// for display to users.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+pub struct FormattedPaymentTx {
+    pub to: Identity,
+    pub from: Identity,
+    pub amount: Uint256,
+    // should always be populated in this case
+    pub txid: String,
+}
+
+fn to_formatted_payment_tx(input: PaymentTx) -> FormattedPaymentTx {
+    match input.txid {
+        Some(txid) => FormattedPaymentTx {
+            to: input.to,
+            from: input.from,
+            amount: input.amount,
+            txid: format!("{:#066x}", txid),
+        },
+        None => FormattedPaymentTx {
+            to: input.to,
+            from: input.from,
+            amount: input.amount,
+            txid: String::new(),
+        },
+    }
+}
+
 /// A struct for tracking each hours of paymetns indexed in hours since unix epoch
 #[derive(Clone, Debug, Serialize)]
 pub struct PaymentHour {
     index: u64,
-    payments: Vec<PaymentTx>,
+    payments: Vec<FormattedPaymentTx>,
 }
 
 /// The main actor that holds the usage state for the duration of operations
@@ -161,18 +191,19 @@ impl Handler<UpdatePayments> for UsageTracker {
                 return Ok(());
             }
         };
+        let formatted_payment = to_formatted_payment_tx(msg.payment);
         match self.payments.front_mut() {
             None => self.payments.push_front(PaymentHour {
                 index: current_hour,
-                payments: vec![msg.payment],
+                payments: vec![formatted_payment],
             }),
             Some(entry) => {
                 if entry.index == current_hour {
-                    entry.payments.push(msg.payment);
+                    entry.payments.push(formatted_payment);
                 } else {
                     self.payments.push_front(PaymentHour {
                         index: current_hour,
-                        payments: vec![msg.payment],
+                        payments: vec![formatted_payment],
                     })
                 }
             }
