@@ -18,6 +18,10 @@ fn default_metric_factor() -> u32 {
     1_900u32
 }
 
+fn default_usage_tracker_file() -> String {
+    "/var/rita-usage-tracker.json".to_string()
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
     /// How much non-financial metrics matter compared to a route's cost. By default a 2x more
@@ -83,6 +87,9 @@ pub struct NetworkSettings {
     /// Nickname of the device on the network
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nickname: Option<ArrayString<[u8; 32]>>,
+    /// Full file path for usage tracker storage
+    #[serde(default = "default_usage_tracker_file")]
+    pub usage_tracker_file: String,
 }
 
 impl Default for NetworkSettings {
@@ -110,6 +117,7 @@ impl Default for NetworkSettings {
             tunnel_timeout_seconds: default_tunnel_timeout(),
             device: None,
             nickname: None,
+            usage_tracker_file: default_usage_tracker_file(),
         }
     }
 }
