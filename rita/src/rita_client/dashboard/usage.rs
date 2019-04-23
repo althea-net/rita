@@ -18,7 +18,7 @@ pub fn get_client_usage(
             kind: UsageType::Client,
         })
         .from_err()
-        .and_then(move |reply| Ok(Json(reply?)))
+        .and_then(|reply| Ok(Json(reply?)))
         .responder()
 }
 
@@ -31,6 +31,6 @@ pub fn get_relay_usage(
             kind: UsageType::Relay,
         })
         .from_err()
-        .and_then(move |reply| Ok(Json(reply?)))
+        .and_then(|reply| Ok(Json(reply?)))
         .responder()
 }
