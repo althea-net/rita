@@ -682,7 +682,7 @@ impl TunnelManager {
                 for tunnel in tunnels.iter_mut() {
                     if tunnel.listen_ifidx == peer.ifidx && tunnel.ip == peer.contact_socket.ip() {
                         trace!("We already have a tunnel for {:?}", tunnel);
-                        info!(
+                        trace!(
                             "Bumping timestamp after {}s for tunnel: {:?}",
                             tunnel.last_contact.elapsed().as_secs(),
                             tunnel
@@ -712,7 +712,7 @@ impl TunnelManager {
             } else {
                 // In the case that we have a tunnel and they don't we drop our existing one
                 // and agree on the new parameters in this message
-                trace!(
+                info!(
                     "We have a tunnel but our peer {:?} does not! Handling",
                     peer.contact_socket.ip()
                 );
@@ -747,7 +747,7 @@ impl TunnelManager {
                 return_bool = true;
             }
         }
-        trace!(
+        info!(
             "no tunnel found for {:?}%{:?} creating",
             peer.contact_socket.ip(),
             peer.ifidx,
