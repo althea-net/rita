@@ -27,6 +27,7 @@ pub fn set_pass(router_pass: Json<RouterPassword>) -> Result<HttpResponse, Error
     SETTING.get_network_mut().rita_dashboard_password = Some(hashed_pass);
     // try and save the config and fail if we can't
     if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+        trace!("Saved new password in config!");
         return Err(e);
     }
 
