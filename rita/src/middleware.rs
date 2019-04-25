@@ -36,6 +36,8 @@ impl<S> Middleware<S> for Headers {
     }
 }
 
+// for some reason the Headers struct doesn't get this
+#[allow(dead_code)]
 pub struct Auth;
 
 impl<S> Middleware<S> for Auth {

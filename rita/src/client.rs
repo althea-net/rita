@@ -18,11 +18,9 @@ extern crate lazy_static;
 extern crate log;
 #[macro_use]
 extern crate serde_derive;
-
 #[cfg(test)]
 #[macro_use]
 extern crate hex_literal;
-
 extern crate arrayvec;
 
 use env_logger;
@@ -65,7 +63,6 @@ use crate::rita_client::dashboard::system_chain::*;
 use crate::rita_client::dashboard::update::*;
 use crate::rita_client::dashboard::usage::*;
 use crate::rita_client::dashboard::wifi::*;
-
 use crate::rita_common::dashboard::auth::*;
 use crate::rita_common::dashboard::babel::*;
 use crate::rita_common::dashboard::dao::*;
@@ -77,7 +74,6 @@ use crate::rita_common::dashboard::pricing::*;
 use crate::rita_common::dashboard::settings::*;
 use crate::rita_common::dashboard::usage::*;
 use crate::rita_common::dashboard::wallet::*;
-
 use crate::rita_common::network_endpoints::*;
 
 #[derive(Debug, Deserialize, Default)]
