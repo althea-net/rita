@@ -1300,7 +1300,7 @@ Manually runs the update script
 ## /router/password
 
 Note a cleartext password is submitted to this endpoint but when actually used to login
-a sha256 hashed version of the text plus the text "RitaSalt" must be used
+a sha512 hashed version of the text plus the text "RitaSalt" must be used
 
 - URL: `<rita ip>:<rita_dashboard_port>/router/password`
 - Method: `POST`
