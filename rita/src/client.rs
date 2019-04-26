@@ -173,6 +173,14 @@ fn main() {
         println!("Running this on production is unsupported and not safe!");
     }
 
+    // If we are an an OpenWRT device try and rescue it from update issues
+    // TODO remove in Beta 6
+    if KI.is_openwrt() {
+        if KI.check_cron().is_err() {
+            error!("Failed to setup cron!");
+        }
+    }
+
     let args: Args = Docopt::new((*USAGE).as_str())
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());

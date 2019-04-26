@@ -13,6 +13,7 @@ use std::time::Instant;
 
 use std::str;
 
+mod check_cron;
 mod counter;
 mod create_wg_key;
 mod delete_tunnel;
