@@ -18,6 +18,7 @@ use actix::prelude::{
 use diesel::query_dsl::RunQueryDsl;
 use exit_db::models;
 use failure::Error;
+use futures::future::Future;
 use settings::exit::RitaExitSettings;
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -38,8 +39,14 @@ impl Actor for RitaLoop {
     fn started(&mut self, ctx: &mut Context<Self>) {
         info!("exit loop started");
         ctx.run_interval(Duration::from_secs(EXIT_LOOP_SPEED), |_act, ctx| {
+            // we add a timeout on the loop future here as a hacky way to timeout
+            // the databse connection since diesel doesn't provide such a feature
             let addr: Addr<Self> = ctx.address();
-            addr.do_send(Tick);
+            let fut = addr
+                .send(Tick)
+                .timeout(Duration::from_secs(4))
+                .then(|_result| Ok(()) as Result<(), ()>);
+            Arbiter::spawn(fut);
         });
     }
 }
