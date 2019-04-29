@@ -473,6 +473,8 @@ mod tests {
 
     static TABLE: &'static str =
 "local fee 1024\n\
+metric factor 1900\n\
+add interface lo up false\n\
 add interface wlan0 up true ipv6 fe80::1a8b:ec1:8542:1bd8 ipv4 10.28.119.131\n\
 add interface wg0 up true ipv6 fe80::2cee:2fff:7380:8354 ipv4 10.0.236.201\n\
 add neighbour 14f19a8 address fe80::2cee:2fff:648:8796 if wg0 reach ffff rxcost 256 txcost 256 rtt \
@@ -508,7 +510,7 @@ ok\n";
          ba:27:eb:ff:fe:c1:2d:d5 metric 1306 price 4008 refmetric 0 full-path-rtt 18.674 via \
          fe80::e9d0:498f:6c61:be29 if wlan0";
 
-    static PROBLEM_ROUTE_LINE: &'static str = 
+    static PROBLEM_ROUTE_LINE: &'static str =
         "add route 241fee0 prefix fdc5:5bcb:24ac:b35a:4b7f:146a:a2a1:bdc4/128 \
          from ::/0 installed no id e6:95:6e:ff:fe:44:c4:12 metric 331 price 426000 fee 354600 refmetric 220 full-path-rtt \
          38.286 via fe80::6459:f009:c4b4:9971 if wg36";
@@ -557,10 +559,7 @@ ok\n";
             find_babel_val("route", PROBLEM_ROUTE_LINE).unwrap(),
             "241fee0"
         );
-        assert_eq!(
-            find_babel_val("fee", PROBLEM_ROUTE_LINE).unwrap(),
-            "354600"
-        );
+        assert_eq!(find_babel_val("fee", PROBLEM_ROUTE_LINE).unwrap(), "354600");
         assert_eq!(
             find_babel_val("price", PROBLEM_ROUTE_LINE).unwrap(),
             "426000"
