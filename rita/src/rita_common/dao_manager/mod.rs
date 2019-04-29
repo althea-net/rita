@@ -62,12 +62,18 @@ impl Handler<Tick> for DAOManager {
         let dao_settings = SETTING.get_dao();
         let payment_settings = SETTING.get_payment();
         let eth_private_key = payment_settings.eth_private_key;
-        let our_id = SETTING.get_identity().unwrap();
+        let our_id = match SETTING.get_identity() {
+            Some(id) => id,
+            None => return,
+        };
         let gas_price = payment_settings.gas_price.clone();
         let nonce = payment_settings.nonce.clone();
         let pay_threshold = payment_settings.pay_threshold.clone();
         let dao_addresses = dao_settings.dao_addresses.clone();
-        let dao_fee = dao_settings.dao_fee.to_int256().unwrap();
+        let dao_fee = match dao_settings.dao_fee.to_int256() {
+            Some(val) => val,
+            None => return,
+        };
         let we_have_a_dao = !dao_addresses.is_empty();
         let should_pay =
             (Int256::from(self.last_payment_time.elapsed().as_secs()) * dao_fee) > pay_threshold;
@@ -75,7 +81,11 @@ impl Handler<Tick> for DAOManager {
         if we_have_a_dao && should_pay {
             // pay all the daos on the list at once
             for address in dao_addresses {
-                let amount_to_pay = pay_threshold.abs().to_uint256().unwrap().clone();
+                let amount_to_pay = match pay_threshold.abs().to_uint256().clone() {
+                    Some(val) => val,
+                    None => return,
+                };
+
                 let dao_identity = Identity {
                     eth_address: address,
                     wg_public_key: "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF="
