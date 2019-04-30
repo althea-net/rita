@@ -203,9 +203,13 @@ impl PaymentController {
 
                     Err(e) => {
                         warn!("Failed to send bandwidth payment {:?}", e);
-                        // once again this may not be the best idea, we need to increment
-                        // the nonce but it's possible this will only end up making the payment invalid
-                        SETTING.get_payment_mut().nonce += 1u64.into();
+                        let error_message = format!("{:?}", e);
+                        if error_message.contains("nonce too low")
+                            || error_message.contains("Transaction nonce is too low")
+                        {
+                            SETTING.get_payment_mut().nonce += 1u64.into();
+                        }
+
                         DebtKeeper::from_registry().do_send(PaymentFailed {
                             to: pmt.to,
                             amount: pmt.amount,
