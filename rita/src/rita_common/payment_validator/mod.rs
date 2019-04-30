@@ -127,40 +127,43 @@ pub fn validate_transaction(ts: &ToValidate) {
 
     let long_life_ts = ts.clone();
 
-    let res = web3
-        .eth_get_transaction_by_hash(txid)
-        .then(move |tx_status| match tx_status {
-            // first level is our success/failure at talking to the full node
-            Ok(status) => match status {
-                // this level handles the actual response about the transaction
-                // and checking if it's good.
-                Some(transaction) => {
-                    if transaction.from == from_address
-                        && transaction.value == amount
-                        && transaction.to == our_address
-                    {
-                        if transaction.block_number.is_some() {
-                            trace!("payment successfully validated!");
-                            PaymentController::from_registry()
-                                .do_send(rita_common::payment_controller::PaymentReceived(pmt));
-                            PaymentValidator::from_registry().do_send(Remove(long_life_ts));
+    let res =
+        web3.eth_get_transaction_by_hash(txid.clone())
+            .then(move |tx_status| match tx_status {
+                // first level is our success/failure at talking to the full node
+                Ok(status) => match status {
+                    // this level handles the actual response about the transaction
+                    // and checking if it's good.
+                    Some(transaction) => {
+                        if transaction.from == from_address
+                            && transaction.value == amount
+                            && transaction.to == our_address
+                        {
+                            if transaction.block_number.is_some() {
+                                info!(
+                                    "payment {:#066x}  from {} successfully validated!",
+                                    txid, from_address
+                                );
+                                PaymentController::from_registry()
+                                    .do_send(rita_common::payment_controller::PaymentReceived(pmt));
+                                PaymentValidator::from_registry().do_send(Remove(long_life_ts));
+                            } else {
+                                trace!("transaction is vaild but not in a block yet");
+                            }
+                            Ok(())
                         } else {
-                            trace!("transaction is vaild but not in a block yet");
+                            trace!("payment failed, transaction invalid");
+                            PaymentValidator::from_registry().do_send(Remove(long_life_ts));
+                            Ok(())
                         }
-                        Ok(())
-                    } else {
-                        trace!("payment failed, transaction invalid");
-                        PaymentValidator::from_registry().do_send(Remove(long_life_ts));
-                        Ok(())
                     }
+                    None => Ok(()),
+                },
+                Err(e) => {
+                    // full node failure, we don't actually know anything about the transaction
+                    warn!("Failed to validate {:?} transaction with {:?}", pmt.from, e);
+                    Ok(())
                 }
-                None => Ok(()),
-            },
-            Err(e) => {
-                // full node failure, we don't actually know anything about the transaction
-                warn!("Failed to validate {:?} transaction with {:?}", pmt.from, e);
-                Ok(())
-            }
-        });
+            });
     Arbiter::spawn(res);
 }
