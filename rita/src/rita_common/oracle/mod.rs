@@ -84,7 +84,7 @@ impl Handler<Update> for Oracle {
             let oracle_enabled = payment_settings.price_oracle_enabled;
             drop(payment_settings);
 
-            trace!("About to make web3 requests to {}", full_node);
+            info!("About to make web3 requests to {}", full_node);
             update_balance(our_address, &web3);
             update_nonce(our_address, &web3);
             update_gas_price(&web3);
@@ -105,7 +105,7 @@ fn update_balance(our_address: Address, web3: &Web3) {
         .eth_get_balance(our_address)
         .then(|balance| match balance {
             Ok(value) => {
-                trace!("Got response from balance request {:?}", value);
+                info!("Got response from balance request {:?}", value);
                 let our_balance = &mut SETTING.get_payment_mut().balance;
                 // if our balance is not zero and the response we get from the full node
                 // is zero either we very carefully emptied our wallet or it's that annoying Geth bug
@@ -134,7 +134,7 @@ fn get_net_version(web3: &Web3) {
     let res = web3.net_version()
                 .then(|net_version| match net_version {
                     Ok(value) => {
-                        trace!("Got response from net_version request {:?}", value);
+                        info!("Got response from net_version request {:?}", value);
                         match value.parse::<u64>() {
                             Ok(net_id_num) => {
                                 let mut payment_settings = SETTING.get_payment_mut();
@@ -176,7 +176,7 @@ fn update_nonce(our_address: Address, web3: &Web3) {
         .eth_get_transaction_count(our_address)
         .then(|transaction_count| match transaction_count {
             Ok(value) => {
-                trace!("Got response from nonce request {:?}", value);
+                info!("Got response from nonce request {:?}", value);
                 let mut payment_settings = SETTING.get_payment_mut();
                 payment_settings.nonce = value;
                 Ok(())
@@ -202,7 +202,7 @@ fn update_gas_price(web3: &Web3) {
         .eth_gas_price()
         .then(|gas_price| match gas_price {
             Ok(value) => {
-                trace!("Got response from gas price request {:?}", value);
+                info!("Got response from gas price request {:?}", value);
                 // Dynamic fee computation
                 let mut payment_settings = SETTING.get_payment_mut();
 

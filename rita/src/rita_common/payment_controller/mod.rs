@@ -172,7 +172,7 @@ impl PaymentController {
                     Ok(tx_id) => {
                         info!("Sending bw payment with txid: {:#066x}", tx_id);
                         // add published txid to submission
-                        pmt.txid = Some(tx_id);
+                        pmt.txid = Some(tx_id.clone());
                         Either::A(
                             client::post(&neighbor_url)
                                 .with_connection(Connection::from_stream(open_stream))
@@ -180,10 +180,13 @@ impl PaymentController {
                                 .expect("Failed to serialize payment!")
                                 .send()
                                 .timeout(Duration::from_secs(4))
-                                .then(|neigh_ack| match neigh_ack {
+                                .then(move |neigh_ack| match neigh_ack {
                                     // return emtpy result, we're using messages anyways
                                     Ok(msg) => {
-                                        trace!("Payment successful with {:?}", msg);
+                                        info!(
+                                            "Payment with txid: {:#066x} successful with {:?}",
+                                            tx_id, msg
+                                        );
                                         // this is questionably useful, we will upadte this value on our
                                         // next full node request, the increment is on the off chance we
                                         // try to send another payment before we update the nonce again
@@ -200,6 +203,9 @@ impl PaymentController {
 
                     Err(e) => {
                         warn!("Failed to send bandwidth payment {:?}", e);
+                        // once again this may not be the best idea, we need to increment
+                        // the nonce but it's possible this will only end up making the payment invalid
+                        SETTING.get_payment_mut().nonce += 1u64.into();
                         DebtKeeper::from_registry().do_send(PaymentFailed {
                             to: pmt.to,
                             amount: pmt.amount,
