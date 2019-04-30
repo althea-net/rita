@@ -202,7 +202,10 @@ impl PaymentController {
                     }
 
                     Err(e) => {
-                        warn!("Failed to send bandwidth payment {:?}", e);
+                        warn!(
+                            "Failed to send bandwidth payment {:?}, using full node {}",
+                            e, full_node
+                        );
                         let error_message = format!("{:?}", e);
                         if error_message.contains("nonce too low")
                             || error_message.contains("Transaction nonce is too low")
