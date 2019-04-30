@@ -39,7 +39,7 @@ use crate::BabelMonitorError::*;
 fn find_babel_val(val: &str, line: &str) -> Result<String, Error> {
     let mut iter = line.split(" ");
     while let Some(entry) = iter.next() {
-        if entry.to_string().contains(val) {
+        if entry.to_string() == val {
             match iter.next() {
                 Some(v) => return Ok(v.to_string()),
                 None => continue,
@@ -473,6 +473,8 @@ mod tests {
 
     static TABLE: &'static str =
 "local fee 1024\n\
+metric factor 1900\n\
+add interface lo up false\n\
 add interface wlan0 up true ipv6 fe80::1a8b:ec1:8542:1bd8 ipv4 10.28.119.131\n\
 add interface wg0 up true ipv6 fe80::2cee:2fff:7380:8354 ipv4 10.0.236.201\n\
 add neighbour 14f19a8 address fe80::2cee:2fff:648:8796 if wg0 reach ffff rxcost 256 txcost 256 rtt \
@@ -484,14 +486,16 @@ rtt 18.674 rttcost 473 cost 817\n\
 add neighbour 14f0488 address fe80::e914:2335:a76:bda3 if wlan0 reach feff rxcost 258 txcost 256 \
 rtt 22.805 rttcost 698 cost 956\n\
 add xroute 10.28.119.131/32-::/0 prefix 10.28.119.131/32 from ::/0 metric 0\n\
-add route 14f0820 prefix 10.28.7.7/32 from 0.0.0.0/0 installed yes id ba:27:eb:ff:fe:5b:fe:c7\
+add route 14f0820 prefix 10.28.7.7/32 from 0.0.0.0/0 installed yes id ba:27:eb:ff:fe:5b:fe:c7 \
 metric 1596 price 3072 fee 3072 refmetric 638 full-path-rtt 22.805 via fe80::e914:2335:a76:bda3 if wlan0\n\
-add route 14f07a0 prefix 10.28.7.7/32 from 0.0.0.0/0 installed no id ba:27:eb:ff:fe:5b:fe:c7\
+add route 14f07a0 prefix 10.28.7.7/32 from 0.0.0.0/0 installed no id ba:27:eb:ff:fe:5b:fe:c7 \
 metric 1569 price 5032 fee 5032 refmetric 752 full-path-rtt 42.805 via fe80::e9d0:498f:6c61:be29 if wlan0\n\
-add route 14f06d8 prefix 10.28.20.151/32 from 0.0.0.0/0 installed yes id ba:27:eb:ff:fe:c1:2d:d5\
-metric 817 price 4008 fee 4008 refmetric 0 full-path-rtt 18.674 via fe80::e9d0:498f:6c61:be29 if wlan0\n\
-add route 14f0548 prefix 10.28.244.138/32 from 0.0.0.0/0 installed yes id ba:27:eb:ff:fe:d1:3e:ba\
+add route 14f06d8 prefix 10.28.20.151/32 from 0.0.0.0/0 installed yes id ba:27:eb:ff:fe:c1:2d:d5 \
+metric 817 price 4008 fee 4008 refmetric 0 full-path-rtt 18.674 via fe80::e9d0:498f:6c61:be29 if wlan0 \n\
+add route 14f0548 prefix 10.28.244.138/32 from 0.0.0.0/0 installed yes id ba:27:eb:ff:fe:d1:3e:ba \
 metric 958 price 2048 fee 2048 refmetric 0 full-path-rtt 56.805 via fe80::e914:2335:a76:bda3 if wlan0\n\
+add route 241fee0 prefix fdc5:5bcb:24ac:b35a:4b7f:146a:a2a1:bdc4/128 from ::/0 installed no id \
+e6:95:6e:ff:fe:44:c4:12 metric 328 price 426000 fee 354600 refmetric 217 full-path-rtt 39.874 via fe80::6459:f009:c4b4:9971 if wg36
 ok\n";
 
     static PREAMBLE: &'static str =
@@ -505,6 +509,11 @@ ok\n";
         "add route 14f06d8 prefix 10.28.20.151/32 from 0.0.0.0/0 installed yes id \
          ba:27:eb:ff:fe:c1:2d:d5 metric 1306 price 4008 refmetric 0 full-path-rtt 18.674 via \
          fe80::e9d0:498f:6c61:be29 if wlan0";
+
+    static PROBLEM_ROUTE_LINE: &'static str =
+        "add route 241fee0 prefix fdc5:5bcb:24ac:b35a:4b7f:146a:a2a1:bdc4/128 \
+         from ::/0 installed no id e6:95:6e:ff:fe:44:c4:12 metric 331 price 426000 fee 354600 refmetric 220 full-path-rtt \
+         38.286 via fe80::6459:f009:c4b4:9971 if wg36";
 
     static NEIGH_LINE: &'static str =
         "add neighbour 14f05f0 address fe80::e9d0:498f:6c61:be29 if wlan0 reach ffff rxcost \
@@ -546,6 +555,24 @@ ok\n";
             find_babel_val("via", ROUTE_LINE).unwrap(),
             "fe80::e9d0:498f:6c61:be29"
         );
+        assert_eq!(
+            find_babel_val("route", PROBLEM_ROUTE_LINE).unwrap(),
+            "241fee0"
+        );
+        assert_eq!(find_babel_val("fee", PROBLEM_ROUTE_LINE).unwrap(), "354600");
+        assert_eq!(
+            find_babel_val("price", PROBLEM_ROUTE_LINE).unwrap(),
+            "426000"
+        );
+        assert_eq!(find_babel_val("if", PROBLEM_ROUTE_LINE).unwrap(), "wg36");
+        assert_eq!(
+            find_babel_val("prefix", PROBLEM_ROUTE_LINE).unwrap(),
+            "fdc5:5bcb:24ac:b35a:4b7f:146a:a2a1:bdc4/128"
+        );
+        assert_eq!(
+            find_babel_val("full-path-rtt", PROBLEM_ROUTE_LINE).unwrap(),
+            "38.286"
+        );
         assert_eq!(find_babel_val("reach", NEIGH_LINE).unwrap(), "ffff");
         assert_eq!(find_babel_val("rxcost", NEIGH_LINE).unwrap(), "256");
         assert_eq!(find_babel_val("rtt", NEIGH_LINE).unwrap(), "29.264");
@@ -574,7 +601,7 @@ ok\n";
         let mut b = Babel::new(s);
 
         let routes = b.parse_routes().unwrap();
-        assert_eq!(routes.len(), 4);
+        assert_eq!(routes.len(), 5);
 
         let route = routes.get(0).unwrap();
         assert_eq!(route.price, 3072);
@@ -600,7 +627,7 @@ ok\n";
         b.start_connection().unwrap();
 
         let routes = b.parse_routes().unwrap();
-        assert_eq!(routes.len(), 4);
+        assert_eq!(routes.len(), 5);
 
         let route = routes.get(0).unwrap();
         assert_eq!(route.price, 3072);
