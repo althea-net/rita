@@ -184,8 +184,8 @@ impl PaymentController {
                                     // return emtpy result, we're using messages anyways
                                     Ok(msg) => {
                                         info!(
-                                            "Payment with txid: {:#066x} successful with {:?}",
-                                            tx_id, msg
+                                            "Payment with txid: {:#066x} successful with {:?}, using full node {} and amound {:?}",
+                                            tx_id, msg, full_node, pmt.amount
                                         );
                                         // this is questionably useful, we will upadte this value on our
                                         // next full node request, the increment is on the off chance we
