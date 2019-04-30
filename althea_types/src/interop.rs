@@ -38,9 +38,7 @@ impl Identity {
 // nicknames without breaking everything
 impl PartialEq for Identity {
     fn eq(&self, other: &Identity) -> bool {
-        self.mesh_ip == other.mesh_ip
-            && self.eth_address == other.eth_address
-            && self.wg_public_key == other.wg_public_key
+        self.mesh_ip == other.mesh_ip && self.eth_address == other.eth_address
     }
 }
 
@@ -53,7 +51,6 @@ impl Hash for Identity {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.mesh_ip.hash(state);
         self.eth_address.hash(state);
-        self.wg_public_key.hash(state);
     }
 }
 
