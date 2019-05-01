@@ -10,10 +10,6 @@ fn default_max_fee() -> u32 {
     20_000_000u32 // $3/gb at $150 eth
 }
 
-fn default_close_fraction() -> Int256 {
-    100.into()
-}
-
 fn default_close_threshold() -> Int256 {
     (-8400000000000000i64).into()
 }
@@ -76,14 +72,9 @@ pub struct PaymentSettings {
     /// The threshold below which we will kick another node off (not implemented yet)
     #[serde(default = "default_close_threshold")]
     pub close_threshold: Int256,
-    /// The amount of 'grace' to give a long term neighbor
-    #[serde(default = "default_close_fraction")]
-    pub close_fraction: Int256,
     /// The level of balance which will trigger a warning
     #[serde(default = "default_balance_warning_level")]
     pub balance_warning_level: Uint256,
-    /// The amount of billing cycles a node can fall behind without being subjected to the threshold
-    pub buffer_period: u32,
     /// Our own eth private key we do not store address, instead it is derived from here
     pub eth_private_key: Option<PrivateKey>,
     // Our own eth Address, derived from the private key on startup and not stored
@@ -121,9 +112,7 @@ impl Default for PaymentSettings {
             pay_threshold: 840_000_000_000_000i64.into(),
             // computed as 10x the pay threshold
             close_threshold: (-8_400_000_000_000_000i64).into(),
-            close_fraction: 100.into(),
             balance_warning_level: (10_000_000_000_000_000u64).into(),
-            buffer_period: 3,
             eth_private_key: None,
             eth_address: None,
             balance: 0u64.into(),
