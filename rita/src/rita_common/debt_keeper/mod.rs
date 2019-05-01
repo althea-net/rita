@@ -226,9 +226,10 @@ impl DebtKeeper {
             .to_int256()
             .ok_or_else(|| format_err!("Unable to convert amount to 256 bit signed integer"))?;
         let debt_data = self.get_debt_data_mut(ident);
-        println!(
+        trace!(
             "payment received: old incoming payments for {:?}: {:?}",
-            ident.mesh_ip, debt_data.incoming_payments
+            ident.mesh_ip,
+            debt_data.incoming_payments
         );
 
         // just a counter, no convergence importance
@@ -254,15 +255,16 @@ impl DebtKeeper {
             (false, _) => {}
         }
 
-        println!(
+        trace!(
             "new incoming payments for {:?}: {:?}",
-            ident.mesh_ip, debt_data.incoming_payments
+            ident.mesh_ip,
+            debt_data.incoming_payments
         );
         Ok(())
     }
 
     fn traffic_update(&mut self, ident: &Identity, amount: Int256) {
-        println!("traffic update for {} is {}", ident.mesh_ip, amount);
+        trace!("traffic update for {} is {}", ident.mesh_ip, amount);
         let debt_data = self.get_debt_data_mut(ident);
         assert!(debt_data.incoming_payments >= Int256::from(0));
 
@@ -300,9 +302,10 @@ impl DebtKeeper {
 
         let close_threshold = SETTING.get_payment().close_threshold.clone();
 
-        println!(
+        trace!(
             "Debt is {} and close is {}",
-            debt_data.debt, close_threshold
+            debt_data.debt,
+            close_threshold
         );
         // negative debt means they owe us so when the debt is more negative than
         // the close treshold we should enforce.
