@@ -876,8 +876,10 @@ impl Handler<TunnelStateChange> for TunnelManager {
                 }
             }
             None => {
-                // TODO: This should probably return error
-                warn!("Couldn't find tunnel for identity {:?}", msg.identity);
+                // This is now pretty common since there's no more none action
+                // and exits have identities for all clients (active or not)
+                // on hand
+                trace!("Couldn't find tunnel for identity {:?}", msg.identity);
             }
         }
 
