@@ -53,6 +53,7 @@ use crate::rita_common::dashboard::nickname::*;
 use crate::rita_common::dashboard::own_info::*;
 use crate::rita_common::dashboard::pricing::*;
 use crate::rita_common::dashboard::settings::*;
+use crate::rita_common::dashboard::usage::*;
 use crate::rita_common::dashboard::wallet::*;
 
 use crate::rita_common::network_endpoints::*;
@@ -262,6 +263,7 @@ fn main() {
             .route("/nickname/get/", Method::GET, get_nickname)
             .route("/nickname/set/", Method::POST, set_nickname)
             .route("/crash_actors", Method::POST, crash_actors)
+            .route("/usage/payments", Method::GET, get_payments)
     })
     .bind(format!(
         "[::0]:{}",

@@ -57,6 +57,7 @@ use crate::rita_client::dashboard::neighbors::*;
 use crate::rita_client::dashboard::notifications::*;
 use crate::rita_client::dashboard::system_chain::*;
 use crate::rita_client::dashboard::update::*;
+use crate::rita_client::dashboard::usage::*;
 use crate::rita_client::dashboard::wifi::*;
 
 use crate::rita_common::dashboard::babel::*;
@@ -67,6 +68,7 @@ use crate::rita_common::dashboard::nickname::*;
 use crate::rita_common::dashboard::own_info::*;
 use crate::rita_common::dashboard::pricing::*;
 use crate::rita_common::dashboard::settings::*;
+use crate::rita_common::dashboard::usage::*;
 use crate::rita_common::dashboard::wallet::*;
 
 use crate::rita_common::network_endpoints::*;
@@ -308,6 +310,9 @@ fn main() {
                 Method::POST,
                 set_low_balance_notification,
             )
+            .route("/usage/relay", Method::GET, get_relay_usage)
+            .route("/usage/client", Method::GET, get_client_usage)
+            .route("/usage/payments", Method::GET, get_payments)
             .route("/router/update", Method::POST, update_router)
             .route("/wipe", Method::POST, wipe)
             .route("/crash_actors", Method::POST, crash_actors)

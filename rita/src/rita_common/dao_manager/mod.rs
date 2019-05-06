@@ -5,8 +5,12 @@
 //! to compute the amount it should pay at a time, these micropayments have the effect of pro-rating
 //! the DAO fee amount and preventing the router from drastically making a large payment
 
+use crate::rita_common::usage_tracker::UpdatePayments;
+use crate::rita_common::usage_tracker::UsageTracker;
 use crate::SETTING;
 use ::actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
+use althea_types::Identity;
+use althea_types::PaymentTx;
 use clarity::Transaction;
 use futures::future::Future;
 use num256::Int256;
@@ -58,11 +62,18 @@ impl Handler<Tick> for DAOManager {
         let dao_settings = SETTING.get_dao();
         let payment_settings = SETTING.get_payment();
         let eth_private_key = payment_settings.eth_private_key;
+        let our_id = match SETTING.get_identity() {
+            Some(id) => id,
+            None => return,
+        };
         let gas_price = payment_settings.gas_price.clone();
         let nonce = payment_settings.nonce.clone();
         let pay_threshold = payment_settings.pay_threshold.clone();
         let dao_addresses = dao_settings.dao_addresses.clone();
-        let dao_fee = dao_settings.dao_fee.to_int256().unwrap();
+        let dao_fee = match dao_settings.dao_fee.to_int256() {
+            Some(val) => val,
+            None => return,
+        };
         let we_have_a_dao = !dao_addresses.is_empty();
         let should_pay =
             (Int256::from(self.last_payment_time.elapsed().as_secs()) * dao_fee) > pay_threshold;
@@ -70,6 +81,20 @@ impl Handler<Tick> for DAOManager {
         if we_have_a_dao && should_pay {
             // pay all the daos on the list at once
             for address in dao_addresses {
+                let amount_to_pay = match pay_threshold.abs().to_uint256().clone() {
+                    Some(val) => val,
+                    None => return,
+                };
+
+                let dao_identity = Identity {
+                    eth_address: address,
+                    wg_public_key: "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF="
+                        .parse()
+                        .unwrap(),
+                    mesh_ip: "::1".parse().unwrap(),
+                    nickname: None,
+                };
+
                 let full_node = get_web3_server();
                 let web3 = Web3::new(&full_node);
 
@@ -78,7 +103,7 @@ impl Handler<Tick> for DAOManager {
                     gas_price: gas_price.clone(),
                     gas_limit: "21000".parse().unwrap(),
                     to: address,
-                    value: pay_threshold.abs().to_uint256().unwrap(),
+                    value: amount_to_pay.clone(),
                     data: Vec::new(),
                     signature: None,
                 };
@@ -96,8 +121,27 @@ impl Handler<Tick> for DAOManager {
                 };
 
                 let transaction_status = web3.eth_send_raw_transaction(transaction_bytes);
-                // in theory this may fail, for now we will just underpay when that occurs
-                Arbiter::spawn(transaction_status.then(|_res| Ok(())));
+
+                // in theory this may fail, for now there is no handler and
+                // we will just underpay when that occurs
+                Arbiter::spawn(transaction_status.then(move |res| match res {
+                    Ok(txid) => {
+                        info!("Successfully paid the subnet dao!");
+                        UsageTracker::from_registry().do_send(UpdatePayments {
+                            payment: PaymentTx {
+                                to: dao_identity,
+                                from: our_id,
+                                amount: amount_to_pay,
+                                txid: Some(txid),
+                            },
+                        });
+                        Ok(())
+                    }
+                    Err(e) => {
+                        warn!("Failed to pay subnet dao! {:?}", e);
+                        Ok(())
+                    }
+                }));
             }
             self.last_payment_time = Instant::now();
         }
