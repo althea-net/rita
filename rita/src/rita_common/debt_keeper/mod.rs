@@ -108,18 +108,29 @@ impl Handler<PaymentFailed> for DebtKeeper {
                 Some(entry) => {
                     // no need to check for negative amount_int because we're converting
                     // from a uint256
+                    info!(
+                        "Handling failed payment by adding {} back into the debts account",
+                        amount_int
+                    );
                     entry.debt += amount_int.clone();
                     entry.total_payment_sent = entry
                         .total_payment_sent
                         .checked_sub(&msg.amount)
                         .ok_or_else(|| {
+                            error!("Failed to correct total payments! Value is now inaccurate!");
                             format_err!("Unable to subtract amount from total payments sent")
                         })?;
                     Ok(())
                 }
-                None => bail!("Payment failed but no debt! Somthing Must have gone wrong!"),
+                None => {
+                    error!("Failed to find id for payment failure! Payments now inaccurate!");
+                    bail!("Payment failed but no debt! Somthing Must have gone wrong!")
+                }
             },
-            None => bail!("Unsable to convert amount to integer256 bit"),
+            None => {
+                error!("Failed to convert amount for payment failure! Payments now inaccurate!");
+                bail!("Unable to convert amount to integer256 bit")
+            }
         }
     }
 }
