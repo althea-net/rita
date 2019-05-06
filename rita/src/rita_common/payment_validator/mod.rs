@@ -10,6 +10,8 @@
 use crate::rita_common;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::rita_loop::get_web3_server;
+use crate::rita_common::usage_tracker::UpdatePayments;
+use crate::rita_common::usage_tracker::UsageTracker;
 use crate::SETTING;
 use ::actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use althea_types::PaymentTx;
@@ -139,9 +141,13 @@ pub fn validate_transaction(ts: &ToValidate) {
                                 );
                                 DebtKeeper::from_registry().do_send(PaymentReceived {
                                     from: pmt.from,
-                                    amount: pmt.amount,
+                                    amount: pmt.amount.clone(),
                                 });
                                 PaymentValidator::from_registry().do_send(Remove(long_life_ts));
+
+                                // update the usage tracker with the details of this payment
+                                UsageTracker::from_registry()
+                                    .do_send(UpdatePayments { payment: pmt });
                             } else {
                                 trace!("transaction is vaild but not in a block yet");
                             }
