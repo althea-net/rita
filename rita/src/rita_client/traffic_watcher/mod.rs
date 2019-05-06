@@ -14,17 +14,16 @@ use crate::KI;
 use crate::SETTING;
 use ::actix::prelude::{Actor, Context, Handler, Message, Supervised, SystemService};
 use althea_types::Identity;
+use babel_monitor::open_babel_stream;
 use babel_monitor::Babel;
 use babel_monitor::Route;
 use failure::Error;
 use settings::RitaCommonSettings;
-use std::net::{IpAddr, SocketAddr, TcpStream};
+use std::net::IpAddr;
 
 /// Returns the babel route to a given mesh ip with the properly capped price
 fn find_exit_route_capped(exit_mesh_ip: IpAddr) -> Result<Route, Error> {
-    let stream = TcpStream::connect::<SocketAddr>(
-        format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
-    )?;
+    let stream = open_babel_stream(SETTING.get_network().babel_port)?;
     let mut babel = Babel::new(stream);
 
     babel.start_connection()?;
