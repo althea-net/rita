@@ -218,6 +218,9 @@ fn main() {
                 r.method(Method::GET).with(get_exit_info_http)
             })
             .resource("/rtt", |r| r.method(Method::GET).with(rtt))
+            .resource("/client_debt", |r| {
+                r.method(Method::POST).with(get_client_debt)
+            })
     })
     .workers(8)
     .bind(format!(

@@ -1,27 +1,26 @@
 //! Network endpoints for rita-exit that are not dashboard or local infromational endpoints
 //! these are called by rita instances to operate the mesh
 
+use crate::rita_common::debt_keeper::DebtKeeper;
+use crate::rita_common::debt_keeper::GetDebtsList;
 #[cfg(feature = "development")]
 use crate::rita_exit::database::db_client::DbClient;
 #[cfg(feature = "development")]
 use crate::rita_exit::database::db_client::TruncateTables;
+use crate::rita_exit::database::{client_status, get_exit_info, signup_client};
+use ::actix_web::{AsyncResponder, HttpRequest, HttpResponse, Json, Result};
 #[cfg(feature = "development")]
+use actix::SystemService;
 use actix::SystemService;
 #[cfg(feature = "development")]
 use actix_web::AsyncResponder;
-#[cfg(feature = "development")]
-use futures::Future;
-
-use ::actix_web::{HttpRequest, HttpResponse, Json, Result};
-
-use crate::rita_exit::database::{client_status, get_exit_info, signup_client};
-
-use std::time::SystemTime;
-
+use althea_types::Identity;
 use althea_types::{ExitClientIdentity, ExitState, RTTimestamps};
-
 use failure::Error;
+use futures::Future;
+use num256::Int256;
 use std::net::SocketAddr;
+use std::time::SystemTime;
 
 pub fn setup_request(
     their_id: (Json<ExitClientIdentity>, HttpRequest),
@@ -70,6 +69,37 @@ pub fn rtt(_req: HttpRequest) -> Result<Json<RTTimestamps>> {
         exit_rx: SystemTime::now(),
         exit_tx: SystemTime::now(),
     }))
+}
+
+/// Used by clients to get their debt from the exits. While it is in theory possible for the
+/// client to totally compute their own bill it's not possible for the exit and the client
+/// to agree on the billed amount in the presence of packet loss. Normally Althea is pay per forward
+/// which means packet loss simply resolves to overpayment, but the exit is being paid for uploaded traffic
+/// (the clients download traffic) which breaks this assumption
+pub fn get_client_debt(
+    client: Json<Identity>,
+) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+    let client = client.into_inner();
+    DebtKeeper::from_registry()
+        .send(GetDebtsList {})
+        .from_err()
+        .and_then(move |reply| match reply {
+            Ok(debts) => {
+                for debt in debts {
+                    if debt.identity == client {
+                        return Ok(
+                            HttpResponse::Ok().json(debt.payment_details.debt * Int256::from(-1))
+                        );
+                    }
+                }
+                Ok(HttpResponse::NotFound().json("No client by that ID"))
+            }
+            Err(e) => {
+                error!("Failed to contact debt keeper {:?}", e);
+                Ok(HttpResponse::InternalServerError().json("Internal Error"))
+            }
+        })
+        .responder()
 }
 
 #[cfg(not(feature = "development"))]
