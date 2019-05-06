@@ -146,7 +146,7 @@ fn merge_debts_and_neighbors(
 ) {
     for neighbor in neighbors {
         let id = neighbor.identity.global;
-        debts.entry(id).or_insert_with(|| NodeDebtData::new(0));
+        debts.entry(id).or_insert_with(NodeDebtData::new);
     }
 }
 

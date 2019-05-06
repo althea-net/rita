@@ -6,6 +6,7 @@
 use crate::rita_common::debt_keeper;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::PaymentFailed;
+use crate::rita_common::oracle::update_nonce;
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::SETTING;
 use ::actix::prelude::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
@@ -99,11 +100,12 @@ impl PaymentController {
         let balance = payment_settings.balance.clone();
         let nonce = payment_settings.nonce.clone();
         let gas_price = payment_settings.gas_price.clone();
+        let our_address = payment_settings.eth_address.unwrap();
         info!(
             "current balance: {:?}, payment of {:?}, from address {:#x} to address {:#x} with nonce {}",
             balance,
             pmt.amount,
-            payment_settings.eth_address.unwrap(),
+            our_address,
             pmt.to.eth_address,
             nonce
         );
@@ -184,12 +186,9 @@ impl PaymentController {
                                     // return emtpy result, we're using messages anyways
                                     Ok(msg) => {
                                         info!(
-                                            "Payment with txid: {:#066x} successful with {:?}, using full node {} and amound {:?}",
+                                            "Payment with txid: {:#066x} successful with {:?}, using full node {} and amount {:?}",
                                             tx_id, msg, full_node, pmt.amount
                                         );
-                                        // this is questionably useful, we will upadte this value on our
-                                        // next full node request, the increment is on the off chance we
-                                        // try to send another payment before we update the nonce again
                                         SETTING.get_payment_mut().nonce += 1u64.into();
                                         Ok(()) as Result<(), ()>
                                     }
@@ -206,12 +205,14 @@ impl PaymentController {
                             "Failed to send bandwidth payment {:?}, using full node {}",
                             e, full_node
                         );
-                        let error_message = format!("{:?}", e);
-                        if error_message.contains("nonce too low")
-                            || error_message.contains("Transaction nonce is too low")
-                        {
-                            SETTING.get_payment_mut().nonce += 1u64.into();
-                        }
+
+                        // Previously we updated our nonce constantly, but this lead to issues
+                        // where rapid payments would often happen and always fail due to nonce
+                        // issues, you can't just check the error message and try incrementing
+                        // because by the time you're back here it's been reset by the oracle 
+                        // so now we only update nonces when we get an error, otherwise it should
+                        // remain internally consistent and correct
+                        update_nonce(our_address, &web3);
 
                         DebtKeeper::from_registry().do_send(PaymentFailed {
                             to: pmt.to,

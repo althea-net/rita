@@ -86,7 +86,9 @@ impl Handler<Update> for Oracle {
 
             info!("About to make web3 requests to {}", full_node);
             update_balance(our_address, &web3);
-            update_nonce(our_address, &web3);
+            // removed and placed into error handling in payment controller
+            // time will tell if that was a good idea
+            //update_nonce(our_address, &web3);
             update_gas_price(&web3);
             get_net_version(&web3);
             if oracle_enabled {
@@ -165,13 +167,12 @@ fn get_net_version(web3: &Web3) {
 /// Updates the nonce in global SETTING storage. The nonce of our next transaction
 /// must always be greater than the nonce of our last transaction, since it's possible that other
 /// programs are using the same private key and/or the router may be reset we need to get the nonce
-/// from the blockchain at least once. We could stick to incrementing it locally once we have it but
-/// we don't due to the various ways local only tracking might go wrong.
+/// from the blockchain at least once. We stick to incrementing it locally once we have it.
 ///
 /// A potential attack here would be providing a lower nonce to cause you to replace an earlier transaction
 /// that is still unconfirmed. That's a bit of a streach, more realistiically this would be spoofed in conjunction
 /// with net_version
-fn update_nonce(our_address: Address, web3: &Web3) {
+pub fn update_nonce(our_address: Address, web3: &Web3) {
     let res = web3
         .eth_get_transaction_count(our_address)
         .then(|transaction_count| match transaction_count {

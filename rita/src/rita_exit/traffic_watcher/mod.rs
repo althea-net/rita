@@ -144,9 +144,10 @@ fn counters_logging(counters: &HashMap<WgKey, WgUsage>) {
 
     let mut total_in: u64 = 0;
     for entry in counters.iter() {
-        info!(
+        trace!(
             "Exit accounted {} uploaded {} bytes",
-            entry.0, entry.1.download
+            entry.0,
+            entry.1.download
         );
         let input = entry.1;
         total_in += input.download;
@@ -154,9 +155,10 @@ fn counters_logging(counters: &HashMap<WgKey, WgUsage>) {
     info!("Total Exit input of {} bytes this round", total_in);
     let mut total_out: u64 = 0;
     for entry in counters.iter() {
-        info!(
+        trace!(
             "Exit accounted {} downloaded {} bytes",
-            entry.0, entry.1.upload
+            entry.0,
+            entry.1.upload
         );
         let output = entry.1;
         total_out += output.upload;
@@ -298,7 +300,7 @@ pub fn watch<T: Read + Write>(
             },
             (Some(id), Some(_dest), None) => warn!("Entry for {:?} should have been created", id),
             // this can be caused by a peer that has not yet formed a babel route
-            (Some(id), None, _) => warn!("We have an id {:?} but not destination", id),
+            (Some(id), None, _) => trace!("We have an id {:?} but not destination", id),
             // if we have a babel route we should have a peer it's possible we have a mesh client sneaking in?
             (None, Some(dest), _) => warn!("We have a destination {:?} but no id", dest),
             // dead entry?
