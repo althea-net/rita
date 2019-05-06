@@ -3,7 +3,6 @@
 //! so long as we have not published it to a full node, once the payment is on
 //! the blockchain it's up to the reciever to validate that it's correct
 
-use crate::rita_common::debt_keeper;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::PaymentFailed;
 use crate::rita_common::oracle::update_nonce;
@@ -36,17 +35,6 @@ impl SystemService for PaymentController {
 }
 
 #[derive(Message)]
-pub struct PaymentReceived(pub PaymentTx);
-
-impl Handler<PaymentReceived> for PaymentController {
-    type Result = ();
-
-    fn handle(&mut self, msg: PaymentReceived, _: &mut Context<Self>) -> Self::Result {
-        DebtKeeper::from_registry().do_send(self.payment_received(msg.0).unwrap());
-    }
-}
-
-#[derive(Message)]
 pub struct MakePayment(pub PaymentTx);
 
 impl Handler<MakePayment> for PaymentController {
@@ -74,26 +62,7 @@ impl PaymentController {
         PaymentController {}
     }
 
-    /// This gets called when a payment from a counterparty has arrived, and updates
-    /// the balance in memory and sends an update to the "bounty hunter".
-    pub fn payment_received(
-        &mut self,
-        pmt: PaymentTx,
-    ) -> Result<debt_keeper::PaymentReceived, Error> {
-        trace!(
-            "payment of {:?} received from {:?}: {:?}",
-            pmt.amount,
-            pmt.from.mesh_ip,
-            pmt
-        );
-
-        Ok(debt_keeper::PaymentReceived {
-            from: pmt.from,
-            amount: pmt.amount.clone(),
-        })
-    }
-
-    /// This is called by the other modules in Rita to make payments. It sends a
+    /// This is called by debt_keeper to make payments. It sends a
     /// PaymentTx to the `mesh_ip` in its `to` field.
     pub fn make_payment(&mut self, mut pmt: PaymentTx) -> Result<(), Error> {
         let payment_settings = SETTING.get_payment();

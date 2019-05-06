@@ -7,25 +7,18 @@
 //! off to debt keeper to be removed from the owed balance. Payments may time out after a
 //! configured period.
 
-use ::actix::prelude::*;
-
-use althea_types::PaymentTx;
-
-use std::time::{Duration, Instant};
-
-use web3::client::Web3;
-
-use settings::RitaCommonSettings;
-
 use crate::rita_common;
-use crate::rita_common::payment_controller::PaymentController;
+use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::rita_loop::get_web3_server;
-
-use std::collections::HashSet;
-
-use futures::Future;
-
 use crate::SETTING;
+use ::actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
+use althea_types::PaymentTx;
+use futures::Future;
+use rita_common::debt_keeper::PaymentReceived;
+use settings::RitaCommonSettings;
+use std::collections::HashSet;
+use std::time::{Duration, Instant};
+use web3::client::Web3;
 
 // Discard payments after 30 minutes of failing to find txid
 const PAYMENT_TIMEOUT: Duration = Duration::from_secs(1800u64);
@@ -144,8 +137,10 @@ pub fn validate_transaction(ts: &ToValidate) {
                                     "payment {:#066x}  from {} successfully validated!",
                                     txid, from_address
                                 );
-                                PaymentController::from_registry()
-                                    .do_send(rita_common::payment_controller::PaymentReceived(pmt));
+                                DebtKeeper::from_registry().do_send(PaymentReceived {
+                                    from: pmt.from,
+                                    amount: pmt.amount,
+                                });
                                 PaymentValidator::from_registry().do_send(Remove(long_life_ts));
                             } else {
                                 trace!("transaction is vaild but not in a block yet");
