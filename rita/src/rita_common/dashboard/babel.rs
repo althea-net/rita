@@ -5,10 +5,10 @@ use ::actix_web::Path;
 use ::actix_web::{HttpRequest, HttpResponse, Result};
 use ::settings::FileWrite;
 use ::settings::RitaCommonSettings;
+use babel_monitor::open_babel_stream;
 use babel_monitor::Babel;
 use failure::Error;
 use std::collections::HashMap;
-use std::net::{SocketAddr, TcpStream};
 
 pub fn get_local_fee(_req: HttpRequest) -> Result<HttpResponse, Error> {
     debug!("/local_fee GET hit");
@@ -36,11 +36,7 @@ pub fn set_local_fee(path: Path<u32>) -> Result<HttpResponse, Error> {
         bail!("Price is too high due to babel bug!");
     }
 
-    let stream = match TcpStream::connect::<SocketAddr>(
-        format!("[::1]:{}", SETTING.get_network().babel_port)
-            .parse()
-            .unwrap(),
-    ) {
+    let stream = match open_babel_stream(SETTING.get_network().babel_port) {
         Ok(s) => s,
         Err(e) => {
             error!("Failed to set local fee! {:?}", e);
@@ -102,11 +98,7 @@ pub fn set_metric_factor(path: Path<u32>) -> Result<HttpResponse, Error> {
     debug!("/metric_factor/{} POST hit", new_factor);
     let mut ret = HashMap::<String, String>::new();
 
-    let stream = match TcpStream::connect::<SocketAddr>(
-        format!("[::1]:{}", SETTING.get_network().babel_port)
-            .parse()
-            .unwrap(),
-    ) {
+    let stream = match open_babel_stream(SETTING.get_network().babel_port) {
         Ok(s) => s,
         Err(e) => {
             error!("Failed to set metric factor! {:?}", e);

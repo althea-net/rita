@@ -15,18 +15,19 @@ use crate::rita_common::usage_tracker::UpdateUsage;
 use crate::rita_common::usage_tracker::UsageTracker;
 use crate::rita_common::usage_tracker::UsageType;
 use crate::SETTING;
-use ::actix::prelude::{Actor, Context, Handler, Message, Supervised, SystemService};
+use ::actix::{Actor, Context, Handler, Message, Supervised, SystemService};
 use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_kernel_interface::KI;
 use althea_types::Identity;
 use althea_types::WgKey;
+use babel_monitor::open_babel_stream;
 use babel_monitor::Babel;
 use ipnetwork::IpNetwork;
 use settings::exit::RitaExitSettings;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::net::{IpAddr, SocketAddr, TcpStream};
+use std::net::IpAddr;
 
 use failure::Error;
 
@@ -68,9 +69,7 @@ impl Handler<Watch> for TrafficWatcher {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        let stream = TcpStream::connect::<SocketAddr>(
-            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
-        )?;
+        let stream = open_babel_stream(SETTING.get_network().babel_port)?;
 
         watch(&mut self.last_seen_bytes, Babel::new(stream), &msg.0)
     }
@@ -336,19 +335,4 @@ pub fn watch<T: Read + Write>(
     DebtKeeper::from_registry().do_send(update);
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use env_logger;
-
-    use super::*;
-
-    #[test]
-    #[ignore]
-    fn debug_babel_socket_client() {
-        env_logger::init();
-        let bm_stream = TcpStream::connect::<SocketAddr>("[::1]:9001".parse().unwrap()).unwrap();
-        watch(&mut HashMap::new(), Babel::new(bm_stream), &[]).unwrap();
-    }
 }

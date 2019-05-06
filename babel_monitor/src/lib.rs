@@ -1,18 +1,21 @@
 #[macro_use]
 extern crate failure;
-
 #[macro_use]
 extern crate log;
-
-use std::collections::VecDeque;
-use std::io::{BufRead, Read, Write};
-use std::iter::Iterator;
-use std::net::IpAddr;
-use std::str;
 
 use bufstream::BufStream;
 use failure::Error;
 use ipnetwork::IpNetwork;
+use std::collections::VecDeque;
+use std::io::{BufRead, Read, Write};
+use std::iter::Iterator;
+use std::net::IpAddr;
+use std::net::SocketAddr;
+use std::net::TcpStream;
+use std::str;
+use std::time::Duration;
+
+const BABEL_OPERATION_TIMEOUT: Duration = Duration::from_secs(4);
 
 #[derive(Debug, Fail)]
 pub enum BabelMonitorError {
@@ -32,7 +35,10 @@ pub enum BabelMonitorError {
     NoNeighbor(String),
 }
 
-use crate::BabelMonitorError::*;
+use crate::BabelMonitorError::{
+    CommandFailed, InvalidPreamble, LocalFeeNotFound, NoNeighbor, NoTerminator, ReadFailed,
+    VariableNotFound,
+};
 
 // If a function doesn't need internal state of the Babel object
 // we don't want to place it as a member function.
@@ -76,6 +82,15 @@ pub struct Neighbor {
     pub rtt: f32,
     pub rttcost: u16,
     pub cost: u16,
+}
+
+/// Opens a tcpstream to the babel management socket using a standard timeout
+/// for both the open and read operations
+pub fn open_babel_stream(babel_port: u16) -> Result<TcpStream, Error> {
+    let socket: SocketAddr = format!("[::1]:{}", babel_port,).parse()?;
+    let stream = TcpStream::connect_timeout(&socket, BABEL_OPERATION_TIMEOUT)?;
+    stream.set_read_timeout(Some(BABEL_OPERATION_TIMEOUT))?;
+    Ok(stream)
 }
 
 pub struct Babel<T: Read + Write> {

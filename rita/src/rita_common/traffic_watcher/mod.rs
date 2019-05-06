@@ -14,13 +14,14 @@ use crate::SETTING;
 use ::actix::{Actor, Context, Handler, Message, Supervised, SystemService};
 use althea_kernel_interface::FilterTarget;
 use althea_types::Identity;
+use babel_monitor::open_babel_stream;
 use babel_monitor::Babel;
 use failure::Error;
 use ipnetwork::IpNetwork;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::net::{IpAddr, SocketAddr, TcpStream};
+use std::net::IpAddr;
 
 pub struct TrafficWatcher;
 
@@ -66,9 +67,7 @@ impl Handler<Watch> for TrafficWatcher {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        let stream = TcpStream::connect::<SocketAddr>(
-            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
-        )?;
+        let stream = open_babel_stream(SETTING.get_network().babel_port)?;
 
         watch(Babel::new(stream), &msg.neighbors)
     }
@@ -357,19 +356,4 @@ pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result
     DebtKeeper::from_registry().do_send(update);
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use env_logger;
-
-    use super::*;
-
-    #[test]
-    #[ignore]
-    fn debug_babel_socket_common() {
-        env_logger::init();
-        let bm_stream = TcpStream::connect::<SocketAddr>("[::1]:9001".parse().unwrap()).unwrap();
-        watch(Babel::new(bm_stream), &Vec::new()).unwrap();
-    }
 }

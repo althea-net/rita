@@ -2,11 +2,12 @@ use crate::rita_common::dashboard::Dashboard;
 use crate::rita_common::debt_keeper::{DebtKeeper, Dump, NodeDebtData};
 use crate::rita_common::tunnel_manager::{GetNeighbors, Neighbor, TunnelManager};
 use crate::SETTING;
-use ::actix::prelude::*;
+use ::actix::{Handler, Message, ResponseFuture, SystemService};
 use ::actix_web::AsyncResponder;
 use ::actix_web::{HttpRequest, Json};
 use althea_types::Identity;
 use arrayvec::ArrayString;
+use babel_monitor::open_babel_stream;
 use babel_monitor::Babel;
 use failure::Error;
 use futures::Future;
@@ -15,7 +16,6 @@ use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;
 use std::boxed::Box;
 use std::collections::HashMap;
-use std::net::{SocketAddr, TcpStream};
 
 #[derive(Serialize)]
 pub struct NodeInfo {
@@ -58,9 +58,7 @@ impl Handler<GetNeighborInfo> for Dashboard {
                                 merge_debts_and_neighbors(neighbors, &mut debts);
                             }
 
-                            let stream = TcpStream::connect::<SocketAddr>(
-                                format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
-                            )?;
+                            let stream = open_babel_stream(SETTING.get_network().babel_port)?;
                             let mut babel = Babel::new(stream);
                             babel.start_connection()?;
                             let route_table_sample = babel.parse_routes()?;

@@ -15,6 +15,7 @@ use ::actix::actors::resolver;
 use ::actix::prelude::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use althea_types::Identity;
 use althea_types::LocalIdentity;
+use babel_monitor::open_babel_stream;
 use babel_monitor::Babel;
 use failure::Error;
 use futures::Future;
@@ -281,9 +282,8 @@ impl Handler<PortCallback> for TunnelManager {
 }
 
 pub fn make_babel_stream() -> Result<TcpStream, Error> {
-    let stream = TcpStream::connect::<SocketAddr>(
-        format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
-    )?;
+    let stream = open_babel_stream(SETTING.get_network().babel_port)?;
+
     Ok(stream)
 }
 
