@@ -6,45 +6,22 @@
 //! different in that mesh nodes are paid by forwarding traffic, but exits have to return traffic and
 //! must get paid for doing so.
 
-use crate::rita_common::debt_keeper::{DebtKeeper, Traffic, TrafficUpdate};
-use crate::rita_common::usage_tracker::UpdateUsage;
-use crate::rita_common::usage_tracker::UsageTracker;
-use crate::rita_common::usage_tracker::UsageType;
-use crate::KI;
+use crate::rita_common::debt_keeper::{DebtKeeper, Traffic, TrafficReplace};
 use crate::SETTING;
-use ::actix::prelude::{Actor, Context, Handler, Message, Supervised, SystemService};
+use ::actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
+use actix_web::client;
+use actix_web::client::Connection;
+use actix_web::HttpMessage;
 use althea_types::Identity;
-use babel_monitor::open_babel_stream;
-use babel_monitor::Babel;
-use babel_monitor::Route;
 use failure::Error;
+use futures::future::ok as future_ok;
+use futures::future::Future;
+use num256::Int256;
 use settings::RitaCommonSettings;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
+use tokio::net::TcpStream as TokioTcpStream;
 
-/// Returns the babel route to a given mesh ip with the properly capped price
-fn find_exit_route_capped(exit_mesh_ip: IpAddr) -> Result<Route, Error> {
-    let stream = open_babel_stream(SETTING.get_network().babel_port)?;
-    let mut babel = Babel::new(stream);
-
-    babel.start_connection()?;
-    trace!("Getting routes");
-    let routes = babel.parse_routes()?;
-    trace!("Got routes: {:?}", routes);
-
-    let max_fee = SETTING.get_payment().max_fee;
-    let mut exit_route = babel.get_installed_route(&exit_mesh_ip, &routes)?;
-    if exit_route.price > max_fee {
-        let mut capped_route = exit_route.clone();
-        capped_route.price = max_fee;
-        exit_route = capped_route;
-    }
-    Ok(exit_route)
-}
-
-pub struct TrafficWatcher {
-    last_read_input: u64,
-    last_read_output: u64,
-}
+pub struct TrafficWatcher {}
 
 impl Actor for TrafficWatcher {
     type Context = Context<Self>;
@@ -53,140 +30,103 @@ impl Supervised for TrafficWatcher {}
 impl SystemService for TrafficWatcher {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("Client traffic watcher started");
-        self.last_read_input = 0;
-        self.last_read_output = 0;
     }
 }
 impl Default for TrafficWatcher {
     fn default() -> TrafficWatcher {
-        TrafficWatcher {
-            last_read_input: 0,
-            last_read_output: 0,
-        }
+        TrafficWatcher {}
     }
 }
 
-pub struct Watch {
+/// Used to request what the exits thinks this clients debts are. We will compare
+/// this value to our own computation and alert to any large discrepencies, but in
+/// general we have to trust the exit. In a pay per forward system nodes within the
+/// network have either two states, properly paid, or in the face of packet loss or
+/// network issues, overpaid. Because packet loss presents as the sending node having
+/// a higher total packets sent count than the receiving node. Resulting in what looks
+/// like overpayment on the receiving end. For client traffic though this does not apply
+/// the client is paying for the exit to send it download traffic. So if packets are lost
+/// on the way the client will never know the full price the exit has to pay. This call
+/// resolves that issue by communicating about debts with the exit.
+///
+/// This request is made against the exits internal ip address to ensure that upstream
+/// nodes can't spoof it.
+pub struct QueryExitDebts {
+    pub exit_internal_addr: IpAddr,
+    pub exit_port: u16,
     pub exit_id: Identity,
-    pub exit_price: u64,
 }
 
-impl Message for Watch {
+impl Message for QueryExitDebts {
     type Result = Result<(), Error>;
 }
 
-impl Handler<Watch> for TrafficWatcher {
+impl Handler<QueryExitDebts> for TrafficWatcher {
     type Result = Result<(), Error>;
 
-    fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        watch(self, &msg.exit_id, msg.exit_price)
-    }
-}
+    fn handle(&mut self, msg: QueryExitDebts, _: &mut Context<Self>) -> Self::Result {
+        trace!("About to query the exit for client debts");
+        let exit_addr = msg.exit_internal_addr;
+        let exit_id = msg.exit_id;
+        let exit_port = msg.exit_port;
+        // actix client behaves badly if you build a request the default way but don't give it
+        // a domain name, so in order to do peer to peer requests we use with_connection and our own
+        // socket speficification
+        let our_id = SETTING.get_identity();
+        let request = format!("http://{}:{}/client_debt", exit_addr, exit_port);
+        // it's an ipaddr appended to a u16, there's no real way for this to fail
+        // unless of course it's an ipv6 address and you don't do the []
+        let socket: SocketAddr = format!("{}:{}", exit_addr, exit_port).parse().unwrap();
 
-/// This traffic watcher watches how much traffic we send to the exit, and how much the exit sends
-/// back to us.
-pub fn watch(history: &mut TrafficWatcher, exit: &Identity, exit_price: u64) -> Result<(), Error> {
-    let exit_route = find_exit_route_capped(exit.mesh_ip)?;
+        let stream_future = TokioTcpStream::connect(&socket);
 
-    let counter = match KI.read_wg_counters("wg_exit") {
-        Ok(res) => {
-            if res.len() > 1 {
-                warn!("wg_exit client tunnel has multiple peers!");
-            } else if res.is_empty() {
-                warn!("No peers on wg_exit why is client traffic watcher running?");
-                return Err(format_err!("No peers on wg_exit"));
+        let s = stream_future.then(move |active_stream| match active_stream {
+            Ok(stream) => Box::new(
+                client::post(request)
+                    .with_connection(Connection::from_stream(stream))
+                    .json(our_id)
+                    .unwrap()
+                    .send()
+                    .then(move |response| match response {
+                        Ok(response) => Box::new(response.json().then(move |debt_value| {
+                            match debt_value {
+                                Ok(debt) => {
+                                    trace!("Successfully got debt from the exit {:?}", debt);
+                                    if debt >= Int256::from(0) {
+                                        let exit_replace = TrafficReplace {
+                                            traffic: Traffic {
+                                                from: exit_id,
+                                                amount: debt,
+                                            },
+                                        };
+
+                                        DebtKeeper::from_registry().do_send(exit_replace);
+                                    } else {
+                                        error!("The exit owes us? That shouldn't be possible!");
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed deserializing exit debts update with {:?}", e)
+                                }
+                            }
+                            Ok(()) as Result<(), ()>
+                        })),
+                        Err(e) => {
+                            error!("Exit debts value not deserializable with {:?}", e);
+                            Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = ()>>
+                        }
+                    }),
+            ),
+
+            Err(e) => {
+                error!(
+                    "Failed to open stream to exit for debts update! with {:?}",
+                    e
+                );
+                Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = ()>>
             }
-            // unwrap is safe because we check that len is not equal to zero
-            // then we toss the exit's wg key as we don't need it
-            res.iter().last().unwrap().1.clone()
-        }
-        Err(e) => {
-            warn!(
-                "Error getting router client input output counters {:?} traffic has gone unaccounted!",
-                e
-            );
-            return Err(e);
-        }
-    };
-
-    // bandwidth usage should always increase if it doesn't the interface has been
-    // deleted and recreated and we need to reset our usage, also protects from negatives
-    if history.last_read_input > counter.download || history.last_read_output > counter.upload {
-        warn!("Exit tunnel reset resetting counters");
-        history.last_read_input = 0;
-        history.last_read_output = 0;
-    }
-
-    let input = counter.download - history.last_read_input;
-    let output = counter.upload - history.last_read_output;
-
-    history.last_read_input = counter.download;
-    history.last_read_output = counter.upload;
-
-    info!("{:?} bytes downloaded from exit this round", &input);
-    info!("{:?} bytes uploaded to exit this round", &output);
-
-    // the price we pay to send traffic through the exit
-    info!("exit price {}", exit_price);
-
-    // price to get traffic to the exit as a u64 to make the type rules for math easy
-    let exit_route_price: i128 = exit_route.price.into();
-    // the total price for the exit returning traffic to us, in the future we should ask
-    // the exit for this because TODO assumes symetric route
-    let exit_dest_price: i128 = exit_route_price + i128::from(exit_price);
-
-    info!("Exit destination price {}", exit_dest_price);
-    trace!("Exit ip: {:?}", exit.mesh_ip);
-    trace!("Exit destination:\n{:#?}", exit_route);
-
-    // accounts for what we owe the exit for return data and sent data
-    // we have to pay our neighbor for what we send over them
-    // remember pay per *forward* so we pay our neighbor for what we
-    // send to the exit while we pay the exit to pay it's neighbor to eventually
-    // pay our neighbor to send data back to us. Here we only pay the exit the exit
-    // fee for traffic we send to it since our neighbors billing should be handled in
-    // rita_common but we do pay for return traffic here since it doesn't make sense
-    // to handle in the general case
-    let mut owes_exit = 0i128;
-    let value = i128::from(input) * exit_dest_price;
-    trace!(
-        "We are billing for {} bytes input times a exit dest price of {} for a total of {}",
-        input,
-        exit_dest_price,
-        value
-    );
-    owes_exit += value;
-    let value = i128::from(exit_price * (output));
-    trace!(
-        "We are billing for {} bytes output times a exit price of {} for a total of {}",
-        output,
-        exit_price,
-        value
-    );
-    owes_exit += value;
-
-    if owes_exit > 0 {
-        info!("Total client debt of {} this round", owes_exit);
-
-        let exit_update = TrafficUpdate {
-            traffic: vec![Traffic {
-                from: *exit,
-                amount: owes_exit.into(),
-            }],
-        };
-
-        DebtKeeper::from_registry().do_send(exit_update);
-
-        // update the usage tracker with the details of this round's usage
-        UsageTracker::from_registry().do_send(UpdateUsage {
-            kind: UsageType::Client,
-            up: output,
-            down: input,
-            price: exit_dest_price as u32,
         });
-    } else {
-        error!("no Exit bandwidth, no bill!");
+        Arbiter::spawn(s);
+        Ok(())
     }
-
-    Ok(())
 }
