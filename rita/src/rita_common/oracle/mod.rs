@@ -306,8 +306,12 @@ fn update_our_price() {
                                                 new_prices.fee_multiplier;
                                             drop(payment);
 
-                                            let mut dao = SETTING.get_dao_mut();
-                                            dao.dao_fee = Uint256::from(new_prices.dao_fee);
+                                            let new_dao_fee = Uint256::from(new_prices.dao_fee);
+                                            let current_dao_fee = SETTING.get_dao().dao_fee.clone();
+                                            if new_dao_fee > current_dao_fee {
+                                                let mut dao = SETTING.get_dao_mut();
+                                                dao.dao_fee = new_dao_fee;
+                                            }
 
                                             trace!("Successfully updated prices");
                                         }
