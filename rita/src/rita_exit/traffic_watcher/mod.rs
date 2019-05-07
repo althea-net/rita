@@ -285,7 +285,7 @@ pub fn watch<T: Read + Write>(
             // this can be caused by a peer that has not yet formed a babel route
             (Some(id), None, _) => warn!("We have an id {:?} but not destination", id),
             // if we have a babel route we should have a peer it's possible we have a mesh client sneaking in?
-            (None, Some(dest), _) => warn!("We have a destination {:?} but no id", dest),
+            (None, Some(dest), _) => trace!("We have a destination {:?} but no id", dest),
             // dead entry?
             (None, None, _) => warn!("We have no id or dest for an input counter on {:?}", wg_key),
         }
