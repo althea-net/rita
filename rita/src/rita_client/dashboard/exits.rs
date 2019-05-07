@@ -11,6 +11,7 @@ use ::actix_web::AsyncResponder;
 use ::actix_web::Path;
 use ::actix_web::{HttpRequest, HttpResponse, Json};
 use althea_types::ExitState;
+use babel_monitor::open_babel_stream;
 use babel_monitor::Babel;
 use failure::Error;
 use futures::{future, Future};
@@ -20,7 +21,6 @@ use settings::FileWrite;
 use settings::RitaCommonSettings;
 use std::boxed::Box;
 use std::collections::HashMap;
-use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
 
 #[derive(Serialize)]
@@ -66,9 +66,7 @@ impl Handler<GetExitInfo> for Dashboard {
     type Result = Result<Vec<ExitInfo>, Error>;
 
     fn handle(&mut self, _msg: GetExitInfo, _ctx: &mut Self::Context) -> Self::Result {
-        let stream = TcpStream::connect::<SocketAddr>(
-            format!("[::1]:{}", SETTING.get_network().babel_port).parse()?,
-        )?;
+        let stream = open_babel_stream(SETTING.get_network().babel_port)?;
         let mut babel = Babel::new(stream);
         babel.start_connection()?;
         let route_table_sample = babel.parse_routes()?;
