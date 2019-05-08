@@ -19,9 +19,11 @@ use ::actix::prelude::{Actor, Context, Handler, Message, Supervised, SystemServi
 use althea_types::{Identity, PaymentTx};
 use failure::Error;
 use num256::{Int256, Uint256};
-use num_traits::{CheckedSub, Signed};
+use num_traits::Signed;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
+use std::time::Duration;
+use std::time::Instant;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodeDebtData {
@@ -30,6 +32,9 @@ pub struct NodeDebtData {
     pub debt: Int256,
     pub incoming_payments: Uint256,
     pub action: DebtAction,
+    pub payment_in_flight: bool,
+    #[serde(skip_serializing, skip_deserializing)]
+    pub payment_in_flight_start: Option<Instant>,
 }
 
 impl NodeDebtData {
@@ -40,6 +45,8 @@ impl NodeDebtData {
             debt: Int256::from(0),
             incoming_payments: Uint256::from(0u32),
             action: DebtAction::OpenTunnel,
+            payment_in_flight: false,
+            payment_in_flight_start: None,
         }
     }
 }
@@ -74,11 +81,14 @@ impl Handler<Dump> for DebtKeeper {
     }
 }
 
-#[derive(Message, PartialEq, Eq, Debug)]
-#[rtype(result = "Result<(), Error>")]
+#[derive(PartialEq, Eq, Debug)]
 pub struct PaymentReceived {
     pub from: Identity,
     pub amount: Uint256,
+}
+
+impl Message for PaymentReceived {
+    type Result = Result<(), Error>;
 }
 
 impl Handler<PaymentReceived> for DebtKeeper {
@@ -89,21 +99,38 @@ impl Handler<PaymentReceived> for DebtKeeper {
     }
 }
 
-#[derive(Message, PartialEq, Eq, Debug)]
-#[rtype(result = "Result<(), Error>")]
-/// This is called when a payment fails and needs to be retried, the debt
-/// state is restored with the failed debt as it's top priority to immediately
-/// be retried
+#[derive(PartialEq, Eq, Debug)]
 pub struct PaymentFailed {
     pub to: Identity,
-    pub amount: Uint256,
+}
+
+impl Message for PaymentFailed {
+    type Result = Result<(), Error>;
 }
 
 impl Handler<PaymentFailed> for DebtKeeper {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: PaymentFailed, _: &mut Context<Self>) -> Self::Result {
-        self.payment_failed(&msg.to, msg.amount)
+        self.payment_failed(&msg.to)
+    }
+}
+
+#[derive(PartialEq, Eq, Debug)]
+pub struct PaymentSucceeded {
+    pub to: Identity,
+    pub amount: Uint256,
+}
+
+impl Message for PaymentSucceeded {
+    type Result = Result<(), Error>;
+}
+
+impl Handler<PaymentSucceeded> for DebtKeeper {
+    type Result = Result<(), Error>;
+
+    fn handle(&mut self, msg: PaymentSucceeded, _: &mut Context<Self>) -> Self::Result {
+        self.payment_succeeded(&msg.to, msg.amount)
     }
 }
 
@@ -203,36 +230,24 @@ impl DebtKeeper {
             .or_insert_with(NodeDebtData::new)
     }
 
-    fn payment_failed(&mut self, to: &Identity, amount: Uint256) -> Result<(), Error> {
-        match amount.to_int256() {
-            Some(amount_int) => match self.debt_data.get_mut(&to) {
-                Some(entry) => {
-                    // no need to check for negative amount_int because we're converting
-                    // from a uint256
-                    info!(
-                        "Handling failed payment by adding {} back into the debts account",
-                        amount_int
-                    );
-                    entry.debt += amount_int.clone();
-                    entry.total_payment_sent = entry
-                        .total_payment_sent
-                        .checked_sub(&amount)
-                        .ok_or_else(|| {
-                            error!("Failed to correct total payments! Value is now inaccurate!");
-                            format_err!("Unable to subtract amount from total payments sent")
-                        })?;
-                    Ok(())
-                }
-                None => {
-                    error!("Failed to find id for payment failure! Payments now inaccurate!");
-                    bail!("Payment failed but no debt! Somthing Must have gone wrong!")
-                }
-            },
-            None => {
-                error!("Failed to convert amount for payment failure! Payments now inaccurate!");
-                bail!("Unable to convert amount to integer256 bit")
-            }
-        }
+    fn payment_failed(&mut self, to: &Identity) -> Result<(), Error> {
+        let peer = self.get_debt_data_mut(to);
+        peer.payment_in_flight = false;
+        peer.payment_in_flight_start = None;
+        Ok(())
+    }
+
+    fn payment_succeeded(&mut self, to: &Identity, amount: Uint256) -> Result<(), Error> {
+        let peer = self.get_debt_data_mut(to);
+        peer.payment_in_flight = false;
+        peer.payment_in_flight_start = None;
+
+        peer.total_payment_sent += amount.clone();
+        peer.debt -= match amount.to_int256() {
+            Some(val) => val,
+            None => bail!("Failed to convert amount paid to Int256!"),
+        };
+        Ok(())
     }
 
     fn payment_received(&mut self, ident: &Identity, amount: Uint256) -> Result<(), Error> {
@@ -333,9 +348,10 @@ impl DebtKeeper {
 
         let should_close = debt_data.debt < close_threshold;
         let should_pay = debt_data.debt > SETTING.get_payment().pay_threshold;
-        match (should_close, should_pay) {
-            (true, true) => panic!("Close threshold is less than pay threshold!"),
-            (true, false) => {
+        let payment_in_flight = debt_data.payment_in_flight;
+        match (should_close, should_pay, payment_in_flight) {
+            (true, true, _) => panic!("Close threshold is less than pay threshold!"),
+            (true, false, _) => {
                 info!(
                     "debt is below close threshold for {}. suspending forwarding",
                     ident.mesh_ip
@@ -343,12 +359,13 @@ impl DebtKeeper {
                 debt_data.action = DebtAction::SuspendTunnel;
                 Ok(DebtAction::SuspendTunnel)
             }
-            (false, true) => {
+            (false, true, false) => {
                 let d: Uint256 = debt_data.debt.to_uint256().ok_or_else(|| {
                     format_err!("Unable to convert debt data into unsigned 256 bit integer")
                 })?;
-                debt_data.total_payment_sent += d.clone();
-                debt_data.debt = Int256::from(0);
+
+                debt_data.payment_in_flight = true;
+                debt_data.payment_in_flight_start = Some(Instant::now());
 
                 debt_data.action = DebtAction::MakePayment {
                     to: *ident,
@@ -360,7 +377,27 @@ impl DebtKeeper {
                     amount: d,
                 })
             }
-            (false, false) => {
+            (false, false, _) => {
+                debt_data.action = DebtAction::OpenTunnel;
+                Ok(DebtAction::OpenTunnel)
+            }
+            (false, true, true) => {
+                // In theory it's possible for the payment_failed or payment_succeeded actor calls to fail for
+                // various reasons. In practice this only happens with the system is in a nearly inoperable state.
+                // But for the sake of parinoia we provide a handler here which will time out in such a situation
+                match debt_data.payment_in_flight_start {
+                    Some(start_time) => {
+                        if Instant::now() - start_time > Duration::from_secs(600) {
+                            error!("Payment in flight for more than 10 minutes! Resetting!");
+                            debt_data.payment_in_flight = false;
+                            debt_data.payment_in_flight_start = None;
+                        }
+                    }
+                    None => {
+                        error!("No start time but payment in flight?");
+                        debt_data.payment_in_flight = false;
+                    }
+                }
                 debt_data.action = DebtAction::OpenTunnel;
                 Ok(DebtAction::OpenTunnel)
             }
@@ -553,6 +590,58 @@ mod tests {
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
 
+        // generate a bunch of traffic
+        for _ in 0..100 {
+            d.traffic_update(&ident, Int256::from(100))
+        }
+        // make sure that the update response is to pay
+        assert_eq!(
+            d.send_update(&ident).unwrap(),
+            DebtAction::MakePayment {
+                amount: Uint256::from(10000u32),
+                to: ident,
+            }
+        );
+        // simulate a payment failure
+        d.payment_failed(&ident).unwrap();
+
+        // make sure we haven't marked any payments as sent (because the payment failed)
+        assert_eq!(
+            d.get_debts()[&ident].total_payment_sent,
+            Uint256::from(0u32)
+        );
+
+        // mark the payment as a success
+        d.payment_succeeded(&ident, Uint256::from(10000u32))
+            .unwrap();
+        // make sure the payment sent value is updated
+        assert_eq!(
+            d.get_debts()[&ident].total_payment_sent,
+            Uint256::from(10000u32)
+        );
+
+        // more traffic
+        for _ in 0..100 {
+            d.traffic_update(&ident, Int256::from(100))
+        }
+        // another payment, to make sure the state was all set right after
+        // the failure then success
+        assert_eq!(
+            d.send_update(&ident).unwrap(),
+            DebtAction::MakePayment {
+                amount: Uint256::from(10000u32),
+                to: ident,
+            }
+        );
+        d.payment_succeeded(&ident, Uint256::from(10000u32))
+            .unwrap();
+        assert_eq!(
+            d.get_debts()[&ident].total_payment_sent,
+            Uint256::from(20000u32)
+        );
+
+        // finally lets make sure we don't send any payments while
+        // a payment is in flight
         for _ in 0..100 {
             d.traffic_update(&ident, Int256::from(100))
         }
@@ -563,16 +652,8 @@ mod tests {
                 to: ident,
             }
         );
-        d.payment_failed(&ident, Uint256::from(10000u64)).unwrap();
-
-        assert_eq!(
-            d.get_debts()[&ident].total_payment_sent,
-            Uint256::from(0u32)
-        );
-        d.send_update(&ident).unwrap();
-        assert_eq!(
-            d.get_debts()[&ident].total_payment_sent,
-            Uint256::from(10000u32)
-        );
+        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
     }
 }

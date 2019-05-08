@@ -5,6 +5,7 @@
 
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::PaymentFailed;
+use crate::rita_common::debt_keeper::PaymentSucceeded;
 use crate::rita_common::oracle::update_nonce;
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::rita_common::usage_tracker::UpdatePayments;
@@ -45,10 +46,7 @@ impl Handler<MakePayment> for PaymentController {
     fn handle(&mut self, msg: MakePayment, _ctx: &mut Context<Self>) -> Self::Result {
         let res = self.make_payment(msg.0.clone());
         if res.is_err() {
-            DebtKeeper::from_registry().do_send(PaymentFailed {
-                to: msg.0.to,
-                amount: msg.0.amount,
-            });
+            DebtKeeper::from_registry().do_send(PaymentFailed { to: msg.0.to });
         }
     }
 }
@@ -162,9 +160,15 @@ impl PaymentController {
                                         );
                                         SETTING.get_payment_mut().nonce += 1u64.into();
 
+
                                         // update the usage tracker with the details of this payment
                                         UsageTracker::from_registry()
-                                            .do_send(UpdatePayments { payment: pmt });
+                                            .do_send(UpdatePayments { payment: pmt.clone() });
+
+                                        DebtKeeper::from_registry().do_send(PaymentSucceeded {
+                                         to: pmt.to,
+                                         amount: pmt.amount,
+                                         });
 
                                         Ok(()) as Result<(), ()>
                                     }
@@ -192,7 +196,6 @@ impl PaymentController {
 
                         DebtKeeper::from_registry().do_send(PaymentFailed {
                             to: pmt.to,
-                            amount: pmt.amount,
                         });
                         Either::B(future::ok(()))
                     }
@@ -207,7 +210,6 @@ impl PaymentController {
                 );
                 DebtKeeper::from_registry().do_send(PaymentFailed {
                     to: pmt.to,
-                    amount: pmt.amount,
                 });
                 Either::B(future::ok(()))
             }
