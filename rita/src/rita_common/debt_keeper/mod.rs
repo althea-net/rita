@@ -237,10 +237,9 @@ impl DebtKeeper {
             .to_int256()
             .ok_or_else(|| format_err!("Unable to convert amount to 256 bit signed integer"))?;
         let debt_data = self.get_debt_data_mut(ident);
-        trace!(
+        info!(
             "payment received: old incoming payments for {:?}: {:?}",
-            ident.mesh_ip,
-            debt_data.incoming_payments
+            ident.mesh_ip, debt_data.incoming_payments
         );
 
         // just a counter, no convergence importance
@@ -250,6 +249,10 @@ impl DebtKeeper {
 
         let they_owe_us = debt_data.debt < Int256::from(0);
         let incoming_greater_than_debt = debt_data.incoming_payments > debt_data.debt.abs();
+        if debt_data.incoming_payments < Int256::from(0) {
+            error!("Negative incoming payments!");
+            bail!("Billing state is wrong!")
+        }
 
         // somewhat more complicated, we apply incoming to the balance, but don't allow
         // the balance to go positive (we owe them) we don't want to get into paying them
@@ -263,13 +266,14 @@ impl DebtKeeper {
                 debt_data.debt += debt_data.incoming_payments.clone();
                 debt_data.incoming_payments = zero;
             }
-            (false, _) => {}
+            (false, _) => {
+                error!("Why did we get a payment when they don't owe us anything?");
+            }
         }
 
-        trace!(
+        info!(
             "new incoming payments for {:?}: {:?}",
-            ident.mesh_ip,
-            debt_data.incoming_payments
+            ident.mesh_ip, debt_data.incoming_payments
         );
         Ok(())
     }
