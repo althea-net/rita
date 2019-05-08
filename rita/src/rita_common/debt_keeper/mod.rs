@@ -28,7 +28,7 @@ pub struct NodeDebtData {
     pub total_payment_received: Uint256,
     pub total_payment_sent: Uint256,
     pub debt: Int256,
-    pub incoming_payments: Int256,
+    pub incoming_payments: Uint256,
     pub action: DebtAction,
 }
 
@@ -38,7 +38,7 @@ impl NodeDebtData {
             total_payment_received: Uint256::from(0u32),
             total_payment_sent: Uint256::from(0u32),
             debt: Int256::from(0),
-            incoming_payments: Int256::from(0),
+            incoming_payments: Uint256::from(0u32),
             action: DebtAction::OpenTunnel,
         }
     }
@@ -103,35 +103,7 @@ impl Handler<PaymentFailed> for DebtKeeper {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: PaymentFailed, _: &mut Context<Self>) -> Self::Result {
-        match msg.amount.to_int256() {
-            Some(amount_int) => match self.debt_data.get_mut(&msg.to) {
-                Some(entry) => {
-                    // no need to check for negative amount_int because we're converting
-                    // from a uint256
-                    info!(
-                        "Handling failed payment by adding {} back into the debts account",
-                        amount_int
-                    );
-                    entry.debt += amount_int.clone();
-                    entry.total_payment_sent = entry
-                        .total_payment_sent
-                        .checked_sub(&msg.amount)
-                        .ok_or_else(|| {
-                            error!("Failed to correct total payments! Value is now inaccurate!");
-                            format_err!("Unable to subtract amount from total payments sent")
-                        })?;
-                    Ok(())
-                }
-                None => {
-                    error!("Failed to find id for payment failure! Payments now inaccurate!");
-                    bail!("Payment failed but no debt! Somthing Must have gone wrong!")
-                }
-            },
-            None => {
-                error!("Failed to convert amount for payment failure! Payments now inaccurate!");
-                bail!("Unable to convert amount to integer256 bit")
-            }
-        }
+        self.payment_failed(&msg.to, msg.amount)
     }
 }
 
@@ -231,11 +203,42 @@ impl DebtKeeper {
             .or_insert_with(NodeDebtData::new)
     }
 
+    fn payment_failed(&mut self, to: &Identity, amount: Uint256) -> Result<(), Error> {
+        match amount.to_int256() {
+            Some(amount_int) => match self.debt_data.get_mut(&to) {
+                Some(entry) => {
+                    // no need to check for negative amount_int because we're converting
+                    // from a uint256
+                    info!(
+                        "Handling failed payment by adding {} back into the debts account",
+                        amount_int
+                    );
+                    entry.debt += amount_int.clone();
+                    entry.total_payment_sent = entry
+                        .total_payment_sent
+                        .checked_sub(&amount)
+                        .ok_or_else(|| {
+                            error!("Failed to correct total payments! Value is now inaccurate!");
+                            format_err!("Unable to subtract amount from total payments sent")
+                        })?;
+                    Ok(())
+                }
+                None => {
+                    error!("Failed to find id for payment failure! Payments now inaccurate!");
+                    bail!("Payment failed but no debt! Somthing Must have gone wrong!")
+                }
+            },
+            None => {
+                error!("Failed to convert amount for payment failure! Payments now inaccurate!");
+                bail!("Unable to convert amount to integer256 bit")
+            }
+        }
+    }
+
     fn payment_received(&mut self, ident: &Identity, amount: Uint256) -> Result<(), Error> {
-        let zero = Int256::from(0);
-        let incoming_amount = amount
-            .to_int256()
-            .ok_or_else(|| format_err!("Unable to convert amount to 256 bit signed integer"))?;
+        let signed_zero = Int256::from(0);
+        let unsigned_zero = Uint256::from(0u32);
+
         let debt_data = self.get_debt_data_mut(ident);
         info!(
             "payment received: old incoming payments for {:?}: {:?}",
@@ -245,26 +248,30 @@ impl DebtKeeper {
         // just a counter, no convergence importance
         debt_data.total_payment_received += amount.clone();
         // add in the latest amount to the pile before processing
-        debt_data.incoming_payments += incoming_amount;
+        debt_data.incoming_payments += amount;
 
         let they_owe_us = debt_data.debt < Int256::from(0);
-        let incoming_greater_than_debt = debt_data.incoming_payments > debt_data.debt.abs();
-        if debt_data.incoming_payments < Int256::from(0) {
-            error!("Negative incoming payments!");
-            bail!("Billing state is wrong!")
-        }
+        // unwrap is safe because the abs of a signed 256 bit int can't overflow a unsigned 256 bit int or be negative
+        let incoming_greater_than_debt =
+            debt_data.incoming_payments > debt_data.debt.abs().to_uint256().unwrap();
 
         // somewhat more complicated, we apply incoming to the balance, but don't allow
         // the balance to go positive (we owe them) we don't want to get into paying them
         // because they overpaid us.
         match (they_owe_us, incoming_greater_than_debt) {
             (true, true) => {
-                debt_data.incoming_payments -= debt_data.debt.abs();
-                debt_data.debt = zero;
+                debt_data.incoming_payments -= debt_data.debt.abs().to_uint256().unwrap();
+                debt_data.debt = signed_zero;
             }
             (true, false) => {
-                debt_data.debt += debt_data.incoming_payments.clone();
-                debt_data.incoming_payments = zero;
+                // we validate payments before they get here, so in theory if someone pays you a few trillion coins and it
+                // gets into a block this could overflow
+                let signed_incoming = match debt_data.incoming_payments.to_int256() {
+                    Some(val) => val,
+                    None => bail!("Unsigned payment int too big! You're super rich now"),
+                };
+                debt_data.debt += signed_incoming;
+                debt_data.incoming_payments = unsigned_zero;
             }
             (false, _) => {
                 error!("Why did we get a payment when they don't owe us anything?");
@@ -281,7 +288,6 @@ impl DebtKeeper {
     fn traffic_update(&mut self, ident: &Identity, amount: Int256) {
         trace!("traffic update for {} is {}", ident.mesh_ip, amount);
         let debt_data = self.get_debt_data_mut(ident);
-        assert!(debt_data.incoming_payments >= Int256::from(0));
 
         // we handle the incoming debit or credit versus our existing debit or credit
         // very simple
@@ -487,7 +493,6 @@ mod tests {
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
 
-        // send lots of payments
         for _ in 0..100 {
             d.traffic_update(&ident, Int256::from(100))
         }
@@ -538,5 +543,36 @@ mod tests {
         d.payment_received(&ident, Uint256::from(200u64)).unwrap();
 
         assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+    }
+
+    #[test]
+    fn test_payment_fail() {
+        SETTING.get_payment_mut().pay_threshold = Int256::from(5);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+
+        let mut d = DebtKeeper::new();
+        let ident = get_test_identity();
+
+        for _ in 0..100 {
+            d.traffic_update(&ident, Int256::from(100))
+        }
+        assert_eq!(
+            d.send_update(&ident).unwrap(),
+            DebtAction::MakePayment {
+                amount: Uint256::from(10000u32),
+                to: ident,
+            }
+        );
+        d.payment_failed(&ident, Uint256::from(10000u64)).unwrap();
+
+        assert_eq!(
+            d.get_debts()[&ident].total_payment_sent,
+            Uint256::from(0u32)
+        );
+        d.send_update(&ident).unwrap();
+        assert_eq!(
+            d.get_debts()[&ident].total_payment_sent,
+            Uint256::from(10000u32)
+        );
     }
 }
