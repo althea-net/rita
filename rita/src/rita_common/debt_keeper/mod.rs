@@ -11,6 +11,7 @@
 
 use crate::rita_common::payment_controller;
 use crate::rita_common::payment_controller::PaymentController;
+use crate::rita_common::payment_validator::PAYMENT_TIMEOUT;
 use crate::rita_common::tunnel_manager::TunnelAction;
 use crate::rita_common::tunnel_manager::TunnelManager;
 use crate::rita_common::tunnel_manager::TunnelStateChange;
@@ -22,7 +23,6 @@ use num256::{Int256, Uint256};
 use num_traits::Signed;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
-use std::time::Duration;
 use std::time::Instant;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -387,8 +387,8 @@ impl DebtKeeper {
                 // But for the sake of parinoia we provide a handler here which will time out in such a situation
                 match debt_data.payment_in_flight_start {
                     Some(start_time) => {
-                        if Instant::now() - start_time > Duration::from_secs(600) {
-                            error!("Payment in flight for more than 10 minutes! Resetting!");
+                        if Instant::now() - start_time > PAYMENT_TIMEOUT {
+                            error!("Payment in flight for more than payment timeout! Resetting!");
                             debt_data.payment_in_flight = false;
                             debt_data.payment_in_flight_start = None;
                         }

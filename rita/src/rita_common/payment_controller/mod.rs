@@ -5,15 +5,13 @@
 
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::PaymentFailed;
-use crate::rita_common::debt_keeper::PaymentSucceeded;
 use crate::rita_common::oracle::update_nonce;
+use crate::rita_common::payment_validator::{PaymentValidator, ToValidate, ValidateLater};
 use crate::rita_common::rita_loop::get_web3_server;
-use crate::rita_common::usage_tracker::UpdatePayments;
-use crate::rita_common::usage_tracker::UsageTracker;
 use crate::SETTING;
-use ::actix::prelude::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
-use ::actix_web::client;
-use ::actix_web::client::Connection;
+use actix::prelude::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
+use actix_web::client;
+use actix_web::client::Connection;
 use althea_types::PaymentTx;
 use clarity::Transaction;
 use failure::Error;
@@ -22,6 +20,7 @@ use futures::{future, Future};
 use settings::RitaCommonSettings;
 use std::net::SocketAddr;
 use std::time::Duration;
+use std::time::Instant;
 use tokio::net::TcpStream as TokioTcpStream;
 use web3::client::Web3;
 
@@ -155,20 +154,17 @@ impl PaymentController {
                                     // return emtpy result, we're using messages anyways
                                     Ok(msg) => {
                                         info!(
-                                            "Payment with txid: {:#066x} successful with {:?}, using full node {} and amount {:?}",
+                                            "Payment with txid: {:#066x} is in the mempool with {:?}, using full node {} and amount {:?}",
                                             tx_id, msg, full_node, pmt.amount
                                         );
                                         SETTING.get_payment_mut().nonce += 1u64.into();
 
 
-                                        // update the usage tracker with the details of this payment
-                                        UsageTracker::from_registry()
-                                            .do_send(UpdatePayments { payment: pmt.clone() });
-
-                                        DebtKeeper::from_registry().do_send(PaymentSucceeded {
-                                         to: pmt.to,
-                                         amount: pmt.amount,
-                                         });
+                                       let ts = ToValidate {
+                                       payment: pmt,
+                                      recieved: Instant::now(),
+                                       };
+                                      PaymentValidator::from_registry().do_send(ValidateLater(ts));
 
                                         Ok(()) as Result<(), ()>
                                     }
