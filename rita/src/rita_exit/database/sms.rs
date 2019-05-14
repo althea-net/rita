@@ -49,7 +49,7 @@ pub struct SmsRequest {
 
 /// Sends the authy verification text by hitting the api endpoint
 fn send_text(number: String, api_key: String) -> Result<(), Error> {
-    trace!("Sending message for {}", number);
+    info!("Sending message for {}", number);
     let number: PhoneNumber = number.parse()?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(1))

@@ -283,7 +283,7 @@ pub fn watch<T: Read + Write>(
             },
             (Some(id), Some(_dest), None) => warn!("Entry for {:?} should have been created", id),
             // this can be caused by a peer that has not yet formed a babel route
-            (Some(id), None, _) => warn!("We have an id {:?} but not destination", id),
+            (Some(id), None, _) => trace!("We have an id {:?} but not destination", id),
             // if we have a babel route we should have a peer it's possible we have a mesh client sneaking in?
             (None, Some(dest), _) => trace!("We have a destination {:?} but no id", dest),
             // dead entry?

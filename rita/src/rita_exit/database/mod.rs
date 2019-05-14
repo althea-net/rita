@@ -248,7 +248,7 @@ fn low_balance_notification(
     config: Option<ExitVerifSettings>,
     conn: &PgConnection,
 ) {
-    info!("Checking low balance nofication");
+    trace!("Checking low balance nofication");
     let time_since_last_notification =
         secs_since_unix_epoch() - their_record.last_balance_warning_time;
 
