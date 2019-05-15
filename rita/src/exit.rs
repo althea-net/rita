@@ -232,12 +232,11 @@ fn main() {
     server::new(|| {
         App::new()
             .middleware(middleware::Headers)
-            // assuming exit nodes dont need wifi
-            //.resource("/wifisettings", |r| r.route().filter(pred::Get()).h(get_wifi_config))
-            //.resource("/wifisettings", |r| r.route().filter(pred::Post()).h(set_wifi_config))
             .route("/info", Method::GET, get_own_info)
             .route("/local_fee", Method::GET, get_local_fee)
             .route("/local_fee/{fee}", Method::POST, set_local_fee)
+            .route("/dao_fee", Method::GET, get_dao_fee)
+            .route("/dao_fee/{fee}", Method::POST, set_dao_fee)
             .route("/metric_factor", Method::GET, get_metric_factor)
             .route("/metric_factor/{factor}", Method::POST, set_metric_factor)
             .route("/settings", Method::GET, get_settings)
