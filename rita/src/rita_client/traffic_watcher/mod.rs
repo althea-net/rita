@@ -100,7 +100,7 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
                                             },
                                         };
 
-                                        DebtKeeper::from_registry().do_send(exit_replace);
+                                    //DebtKeeper::from_registry().do_send(exit_replace);
                                     } else {
                                         error!("The exit owes us? That shouldn't be possible!");
                                     }
