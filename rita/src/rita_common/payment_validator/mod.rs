@@ -305,7 +305,7 @@ fn payment_is_old(chain_height: Uint256, tx_height: Option<Uint256>) -> bool {
             if tx_block > chain_height {
                 false
             } else {
-                chain_height - tx_block < Uint256::from(BLOCKS_TO_OLD)
+                chain_height - tx_block > Uint256::from(BLOCKS_TO_OLD)
             }
         }
         None => false,
