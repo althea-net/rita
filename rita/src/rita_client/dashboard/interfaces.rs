@@ -1,10 +1,10 @@
 //! A generalized interface for modifying networking interface assignments using UCI
 use crate::rita_common::peer_listener::PeerListener;
-use crate::rita_common::peer_listener::{Listen, UnListen};
+use crate::rita_common::peer_listener::UnListen;
 use crate::ARGS;
 use crate::KI;
 use crate::SETTING;
-use ::actix::prelude::*;
+use ::actix::prelude::{Arbiter, SystemService};
 use ::actix_web::{HttpRequest, HttpResponse, Json};
 use failure::Error;
 use futures::Future;
@@ -329,8 +329,12 @@ pub fn ethernet_transform_mode(
         let fut = Delay::new(when)
             .map_err(|e| warn!("timer failed; err={:?}", e))
             .and_then(move |_| {
-                trace!("Adding mesh interface {:?}", locally_owned_ifname);
-                PeerListener::from_registry().do_send(Listen(locally_owned_ifname));
+                trace!("rebooting router for {:?}", locally_owned_ifname);
+                // it's now safe to restart the router, return an error if that fails somehow
+                // do not remove this, we lose the multicast listeners on other mesh ports when
+                // we toggle network modes, this means we will clean up valid tunnels 15 minutes
+                // after the toggle unless we do this
+                let _ = KI.run_command("reboot", &[]);
                 Ok(())
             });
 
@@ -343,15 +347,7 @@ pub fn ethernet_transform_mode(
 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
-    trace!("Successsfully transformed ethernet mode, rebooting");
-
-    // it's now safe to restart the process, return an error if that fails somehow
-    // do not remove this, we lose the multicast listeners on other mesh ports when
-    // we toggle network modes, this means we will clean up valid tunnels 15 minutes
-    // after the toggle unless we do this
-    if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
-        return Err(e);
-    }
+    trace!("Successsfully transformed ethernet mode, rebooting in 60 seconds");
 
     Ok(())
 }
@@ -471,13 +467,15 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
         );
     } else if mesh_add {
         let when = Instant::now() + Duration::from_millis(60000);
-        let locally_owned_ifname = mesh_wlan.to_string();
 
         let fut = Delay::new(when)
             .map_err(|e| warn!("timer failed; err={:?}", e))
             .and_then(move |_| {
-                trace!("Adding mesh interface {:?}", locally_owned_ifname);
-                PeerListener::from_registry().do_send(Listen(locally_owned_ifname));
+                // it's now safe to restart the router, return an error if that fails somehow
+                // do not remove this, we lose the multicast listeners on other mesh ports when
+                // we toggle network modes, this means we will clean up valid tunnels 15 minutes
+                // after the toggle unless we do this
+                let _ = KI.run_command("reboot", &[]);
                 Ok(())
             });
 
@@ -492,14 +490,6 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
-
-    // it's now safe to restart the process, return an error if that fails somehow
-    // do not remove this, we lose the multicast listeners on other mesh ports when
-    // we toggle network modes, this means we will clean up valid tunnels 15 minutes
-    // after the toggle unless we do this
-    if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
-        return Err(e);
-    }
 
     Ok(())
 }
