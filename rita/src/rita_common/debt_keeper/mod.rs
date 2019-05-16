@@ -154,6 +154,21 @@ impl Handler<TrafficUpdate> for DebtKeeper {
     }
 }
 
+/// A variant of traffic update that replaces one debts entry wholesale
+/// only used by the client to update it's own debt to the exit
+#[derive(Message)]
+pub struct TrafficReplace {
+    pub traffic: Traffic,
+}
+
+impl Handler<TrafficReplace> for DebtKeeper {
+    type Result = ();
+
+    fn handle(&mut self, msg: TrafficReplace, _: &mut Context<Self>) -> Self::Result {
+        self.traffic_replace(&msg.traffic.from, msg.traffic.amount);
+    }
+}
+
 pub struct SendUpdate;
 
 impl Message for SendUpdate {
@@ -307,6 +322,17 @@ impl DebtKeeper {
         // we handle the incoming debit or credit versus our existing debit or credit
         // very simple
         debt_data.debt += amount;
+
+        trace!("debt data for {} is {:?}", ident.mesh_ip, debt_data);
+    }
+
+    fn traffic_replace(&mut self, ident: &Identity, amount: Int256) {
+        trace!("traffic replace for {} is {}", ident.mesh_ip, amount);
+        let debt_data = self.get_debt_data_mut(ident);
+
+        // we handle the incoming debit or credit versus our existing debit or credit
+        // very simple
+        debt_data.debt = amount;
 
         trace!("debt data for {} is {:?}", ident.mesh_ip, debt_data);
     }

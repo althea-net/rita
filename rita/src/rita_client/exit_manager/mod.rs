@@ -16,39 +16,32 @@
 //!
 //! Signup is complete and the user may use the connection
 
-use ::actix::prelude::*;
+use crate::rita_client::rita_loop::Tick;
+use crate::rita_client::traffic_watcher::{QueryExitDebts, TrafficWatcher};
+use crate::rita_common::oracle::low_balance;
+use crate::KI;
+use crate::SETTING;
 use ::actix::registry::SystemService;
+use ::actix::{Actor, Arbiter, Context, Handler, ResponseFuture, Supervised};
 use ::actix_web::client::Connection;
-use ::actix_web::*;
+use ::actix_web::{client, HttpMessage, Result};
 use althea_types::ExitClientDetails;
 use althea_types::ExitDetails;
-use std::net::IpAddr;
-
 use althea_types::{ExitClientIdentity, ExitState, ExitVerifMode};
-
-use crate::SETTING;
-use settings::client::ExitServer;
-use settings::client::RitaClientSettings;
-use settings::RitaCommonSettings;
-
-use crate::rita_client::rita_loop::Tick;
-use crate::rita_client::traffic_watcher::{TrafficWatcher, Watch};
-use crate::rita_common::oracle::low_balance;
-
+use failure::Error;
 use futures::future;
 use futures::future::join_all;
 use futures::Future;
-
-use tokio::net::TcpStream as TokioTcpStream;
-
 use log::LevelFilter;
-use syslog::Error as LogError;
-use syslog::{init_udp, Facility};
-
-use crate::KI;
-use failure::Error;
+use settings::client::ExitServer;
+use settings::client::RitaClientSettings;
+use settings::RitaCommonSettings;
+use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::time::Duration;
+use syslog::Error as LogError;
+use syslog::{init_udp, Facility};
+use tokio::net::TcpStream as TokioTcpStream;
 
 /// enables remote logging if the user has configured it
 fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
@@ -399,14 +392,16 @@ impl Handler<Tick> for ExitManager {
 
                 // run billing at all times when an exit is setup
                 if self.last_exit.is_some() {
-                    let exit_price = general_details.exit_price;
+                    let exit_internal_addr = general_details.server_internal_ip;
+                    let exit_port = exit.registration_port;
                     let exit_id = exit.id;
                     trace!("We are signed up for the selected exit!");
                     Arbiter::spawn(
                         TrafficWatcher::from_registry()
-                            .send(Watch {
+                            .send(QueryExitDebts {
+                                exit_internal_addr,
+                                exit_port,
                                 exit_id,
-                                exit_price,
                             })
                             .timeout(Duration::from_secs(4))
                             .then(|res| match res {
