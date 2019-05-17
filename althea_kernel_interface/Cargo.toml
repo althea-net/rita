@@ -12,5 +12,5 @@ itertools = "0.8"
 lazy_static = "1.2"
 log = "0.4"
 regex = "1.1"
-eui48 = { git = "https://github.com/althea-mesh/eui48", features = ["serde"] }
+eui48 =  "0.4"
 althea_types = { path = "../althea_types" }
