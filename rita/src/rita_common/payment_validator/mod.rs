@@ -217,7 +217,7 @@ fn handle_tx_messaging(
     }
 
     if is_old {
-        error!("Transaction is more than 6 hours old! {:?}", pmt.txid);
+        error!("Transaction is more than 6 hours old! {:#066x}", txid);
         PaymentValidator::from_registry().do_send(Remove {
             tx: ts,
             success: false,

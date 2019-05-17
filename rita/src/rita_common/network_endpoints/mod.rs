@@ -47,17 +47,10 @@ pub fn make_payments(
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let txid = pmt.0.txid.clone();
 
-    info!(
-        "Got Payment from {:?} for {} with txid {:?}",
-        pmt.1.connection_info().remote(),
-        pmt.0.amount,
-        txid,
-    );
-
     // we didn't get a txid, probably an old client.
     // why don't we need an Either up here? Because the types ultimately match?
     if txid.is_none() {
-        trace!("Did not find txid, payment failed!");
+        info!("Did not find txid, payment failed!");
         return Box::new(future::ok(
             HttpResponse::new(StatusCode::from_u16(400u16).unwrap())
                 .into_builder()
@@ -65,7 +58,12 @@ pub fn make_payments(
         ));
     }
     let txid = txid.unwrap();
-    trace!("Payment txid is {:#x}", txid);
+    info!(
+        "Got Payment from {:?} for {} with txid {:#066x}",
+        pmt.1.connection_info().remote(),
+        pmt.0.amount,
+        txid,
+    );
     let ts = ToValidate {
         payment: pmt.0.into_inner(),
         recieved: Instant::now(),
