@@ -4,6 +4,7 @@ extern crate failure;
 extern crate lazy_static;
 #[macro_use]
 extern crate log;
+extern crate eui48;
 
 use std::env;
 use std::io::ErrorKind;
@@ -41,6 +42,7 @@ pub use crate::counter::FilterTarget;
 pub use crate::create_wg_key::WgKeypair;
 pub use crate::exit_server_tunnel::ExitClient;
 
+use eui48::ParseError;
 use failure::Error;
 use std::net::AddrParseError;
 use std::string::FromUtf8Error;
@@ -69,6 +71,12 @@ impl From<Error> for KernelInterfaceError {
 
 impl From<AddrParseError> for KernelInterfaceError {
     fn from(e: AddrParseError) -> Self {
+        KernelInterfaceError::RuntimeError(format!("{:?}", e).to_string())
+    }
+}
+
+impl From<ParseError> for KernelInterfaceError {
+    fn from(e: ParseError) -> Self {
         KernelInterfaceError::RuntimeError(format!("{:?}", e).to_string())
     }
 }
