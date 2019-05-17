@@ -541,7 +541,11 @@ impl TunnelManager {
         match (port, udp_table) {
             (Some(p), Ok(used_ports)) => {
                 if used_ports.contains(&p) {
-                    warn!("We tried to allocate a used port {}!", p);
+                    warn!(
+                        "We tried to allocate a used port {}!, there are {} ports remaining",
+                        p,
+                        self.free_ports.len()
+                    );
 
                     if level < 10 {
                         // don't use push here, you'll get that same
@@ -552,8 +556,9 @@ impl TunnelManager {
                         self.get_port(level + 1)
                     } else {
                         // we've tried a bunch of ports and all are used
-                        // break recusion and try this one anyways
-                        Some(p)
+                        // break recusion and die, hopefully to be restarted in 15min
+                        error!("We ran out of ports!");
+                        panic!("We ran out of ports!");
                     }
                 } else {
                     Some(p)
