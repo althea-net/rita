@@ -19,6 +19,8 @@ use babel_monitor::open_babel_stream;
 use babel_monitor::Babel;
 use failure::Error;
 use futures::Future;
+use rand::thread_rng;
+use rand::Rng;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::fmt;
@@ -537,9 +539,11 @@ impl TunnelManager {
     /// interally to prevent unchecked recursion
     fn get_port(&mut self, level: usize) -> Option<u16> {
         let udp_table = KI.used_ports();
-        let port = self.free_ports.pop();
+        let mut rng = thread_rng();
+        let val = rng.gen_range(0, self.free_ports.len());
+        let port = self.free_ports.remove(val);
         match (port, udp_table) {
-            (Some(p), Ok(used_ports)) => {
+            (p, Ok(used_ports)) => {
                 if used_ports.contains(&p) {
                     warn!(
                         "We tried to allocate a used port {}!, there are {} ports remaining",
@@ -548,11 +552,7 @@ impl TunnelManager {
                     );
 
                     if level < 10 {
-                        // don't use push here, you'll get that same
-                        // entry back in the next pop and recurse forever
-                        // hopefully the port will be free when we get
-                        // back to it in a few hours
-                        self.free_ports.insert(0, p);
+                        self.free_ports.push(p);
                         self.get_port(level + 1)
                     } else {
                         // we've tried a bunch of ports and all are used
@@ -564,13 +564,12 @@ impl TunnelManager {
                     Some(p)
                 }
             }
-            (Some(p), Err(e)) => {
-                // we can either crash for sure here or take the chance
-                // that the port is not actually used, we chose the latter
+            (_p, Err(e)) => {
+                // better not to open an individual tunnel than it is to
+                // risk having a failed one
                 warn!("Failed to check if port was in use! {:?}", e);
-                Some(p)
+                None
             }
-            (None, _) => None,
         }
     }
 
