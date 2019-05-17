@@ -255,7 +255,7 @@ struct PriceUpdate {
     client: u32,
     gateway: u32,
     max: u32,
-    dao_fee: u32,
+    dao_fee: u128,
     warning: u128,
     fee_multiplier: u32,
 }

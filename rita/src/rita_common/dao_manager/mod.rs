@@ -77,10 +77,13 @@ impl Handler<Tick> for DAOManager {
         let we_have_a_dao = !dao_addresses.is_empty();
         let should_pay =
             (Int256::from(self.last_payment_time.elapsed().as_secs()) * dao_fee) > pay_threshold;
+        trace!("We should pay the subnet dao {}", should_pay);
+        trace!("We have a dao to pay {}", we_have_a_dao);
 
         if we_have_a_dao && should_pay {
             // pay all the daos on the list at once
             for address in dao_addresses {
+                trace!("Paying subnet dao fee to {}", address);
                 let amount_to_pay = match pay_threshold.abs().to_uint256().clone() {
                     Some(val) => val,
                     None => return,
