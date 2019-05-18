@@ -7,12 +7,10 @@
 use crate::rita_client::exit_manager::ExitManager;
 use crate::SETTING;
 use actix::{
-    Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
-    SystemService,
+    Actor, ActorContext, Addr, AsyncContext, Context, Handler, Message, Supervised, SystemService,
 };
 use althea_types::RTTimestamps;
 use failure::Error;
-use futures::future::Future;
 use reqwest;
 use settings::client::RitaClientSettings;
 use std::time::{Duration, Instant};
@@ -68,15 +66,7 @@ impl Handler<Tick> for RitaLoop {
         let start = Instant::now();
         trace!("Client Tick!");
 
-        Arbiter::spawn(
-            ExitManager::from_registry()
-                .send(Tick {})
-                .timeout(Duration::from_secs(4))
-                .then(|res| {
-                    trace!("exit manager said {:?}", res);
-                    Ok(())
-                }),
-        );
+        ExitManager::from_registry().do_send(Tick {});
 
         info!(
             "Rita Client loop completed in {}s {}ms",

@@ -22,7 +22,7 @@ use crate::rita_common::oracle::low_balance;
 use crate::KI;
 use crate::SETTING;
 use ::actix::registry::SystemService;
-use ::actix::{Actor, Arbiter, Context, Handler, ResponseFuture, Supervised};
+use ::actix::{Actor, Context, Handler, ResponseFuture, Supervised};
 use ::actix_web::client::Connection;
 use ::actix_web::{client, HttpMessage, Result};
 use althea_types::ExitClientDetails;
@@ -396,23 +396,12 @@ impl Handler<Tick> for ExitManager {
                     let exit_port = exit.registration_port;
                     let exit_id = exit.id;
                     trace!("We are signed up for the selected exit!");
-                    Arbiter::spawn(
-                        TrafficWatcher::from_registry()
-                            .send(QueryExitDebts {
-                                exit_internal_addr,
-                                exit_port,
-                                exit_id,
-                            })
-                            .timeout(Duration::from_secs(4))
-                            .then(|res| match res {
-                                Ok(val) => Ok(val),
-                                Err(e) => {
-                                    error!("Client traffic watcher failed with {:?}", e);
-                                    Err(e)
-                                }
-                            })
-                            .then(|_| Ok(())),
-                    );
+
+                    TrafficWatcher::from_registry().do_send(QueryExitDebts {
+                        exit_internal_addr,
+                        exit_port,
+                        exit_id,
+                    });
                 }
             }
         }
