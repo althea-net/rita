@@ -116,7 +116,7 @@ fn get_babel_info<T: Read + Write>(
 
                         destinations.insert(id.wg_public_key, u64::from(price));
                     }
-                    None => warn!("Can't find destinatoin for client {:?}", ip.ip()),
+                    None => warn!("Can't find destination for client {:?}", ip.ip()),
                 }
             }
         }

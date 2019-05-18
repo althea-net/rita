@@ -80,7 +80,7 @@ struct CountryDetails {
 
 /// get ISO country code from ip, consults a in memory cache
 pub fn get_country(ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<String, Error> {
-    info!("get GeoIP country for {}", ip.to_string());
+    trace!("get GeoIP country for {}", ip.to_string());
     let client = reqwest::Client::new();
     let api_user = SETTING
         .get_exit_network()
