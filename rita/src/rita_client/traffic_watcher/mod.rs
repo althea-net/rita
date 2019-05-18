@@ -19,6 +19,8 @@ use futures::future::Future;
 use num256::Int256;
 use settings::RitaCommonSettings;
 use std::net::{IpAddr, SocketAddr};
+use std::time::Duration;
+use std::time::Instant;
 use tokio::net::TcpStream as TokioTcpStream;
 
 pub struct TrafficWatcher {}
@@ -66,6 +68,8 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
 
     fn handle(&mut self, msg: QueryExitDebts, _: &mut Context<Self>) -> Self::Result {
         trace!("About to query the exit for client debts");
+
+        let start = Instant::now();
         let exit_addr = msg.exit_internal_addr;
         let exit_id = msg.exit_id;
         let exit_port = msg.exit_port;
@@ -82,16 +86,22 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
 
         let s = stream_future.then(move |active_stream| match active_stream {
             Ok(stream) => Box::new(
-                client::post(request)
+                client::post(request.clone())
                     .with_connection(Connection::from_stream(stream))
                     .json(our_id)
                     .unwrap()
                     .send()
+                    .timeout(Duration::from_secs(5))
                     .then(move |response| match response {
                         Ok(response) => Box::new(response.json().then(move |debt_value| {
                             match debt_value {
                                 Ok(debt) => {
-                                    trace!("Successfully got debt from the exit {:?}", debt);
+                                    info!(
+                                        "Successfully got debt from the exit {:?} Rita Client TrafficWatcher completed in {}s {}ms",
+                                        debt,
+                                        start.elapsed().as_secs(),
+                                        start.elapsed().subsec_millis()
+                                    );
                                     if debt >= Int256::from(0) {
                                         let exit_replace = TrafficReplace {
                                             traffic: Traffic {
@@ -112,7 +122,7 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
                             Ok(()) as Result<(), ()>
                         })),
                         Err(e) => {
-                            error!("Exit debts value not deserializable with {:?}", e);
+                            trace!("Exit debts request to {} failed with {:?}", request, e);
                             Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = ()>>
                         }
                     }),
