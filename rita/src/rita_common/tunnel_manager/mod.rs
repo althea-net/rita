@@ -793,112 +793,129 @@ impl TunnelManager {
     }
 }
 
-pub struct TunnelStateChange {
+pub struct TunnelChange {
     pub identity: Identity,
     pub action: TunnelAction,
+}
+
+pub struct TunnelStateChange {
+    pub tunnels: Vec<TunnelChange>,
 }
 
 impl Message for TunnelStateChange {
     type Result = Result<(), Error>;
 }
 
-// Called by DAOManager to notify TunnelManager about the registration state of a given peer
-// also called by DebtKeeper when someone doesn't pay their bill
+// Called by DebtKeeper with the updated billing status of every tunnel every round
 impl Handler<TunnelStateChange> for TunnelManager {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: TunnelStateChange, _: &mut Context<Self>) -> Self::Result {
-        trace!(
-            "Tunnel state change request for {:?} with action {:?}",
-            msg.identity,
-            msg.action
-        );
-        let mut tunnel_bw_limits_need_change = false;
+        for tunnel in msg.tunnels {
+            let res = tunnel_state_change(tunnel, &mut self.tunnels);
+            if res.is_err() {
+                error!("Tunnel state change failed with {:?}", res);
+            }
+        }
+        Ok(())
+    }
+}
 
-        // Find a tunnel
-        match self.tunnels.get_mut(&msg.identity) {
-            Some(tunnels) => {
-                for tunnel in tunnels.iter_mut() {
-                    trace!("Handle action {} on tunnel {:?}", msg.action, tunnel);
-                    match msg.action {
-                        TunnelAction::MembershipConfirmed => {
-                            trace!(
-                                "Membership confirmed for identity {:?} returned tunnel {:?}",
-                                msg.identity,
-                                tunnel
-                            );
-                            match tunnel.state.registration_state {
-                                RegistrationState::NotRegistered => {
-                                    tunnel.monitor(make_babel_stream()?)?;
-                                    tunnel.state.registration_state = RegistrationState::Registered;
-                                }
-                                RegistrationState::Registered => {
-                                    continue;
-                                }
+fn tunnel_state_change(
+    msg: TunnelChange,
+    tunnels: &mut HashMap<Identity, Vec<Tunnel>>,
+) -> Result<(), Error> {
+    let id = msg.identity;
+    let action = msg.action;
+    trace!(
+        "Tunnel state change request for {:?} with action {:?}",
+        id,
+        action,
+    );
+    let mut tunnel_bw_limits_need_change = false;
+
+    // Find a tunnel
+    match tunnels.get_mut(&id) {
+        Some(tunnels) => {
+            for tunnel in tunnels.iter_mut() {
+                trace!("Handle action {} on tunnel {:?}", action, tunnel);
+                match action {
+                    TunnelAction::MembershipConfirmed => {
+                        trace!(
+                            "Membership confirmed for identity {:?} returned tunnel {:?}",
+                            id,
+                            tunnel
+                        );
+                        match tunnel.state.registration_state {
+                            RegistrationState::NotRegistered => {
+                                tunnel.monitor(make_babel_stream()?)?;
+                                tunnel.state.registration_state = RegistrationState::Registered;
+                            }
+                            RegistrationState::Registered => {
+                                continue;
                             }
                         }
-                        TunnelAction::MembershipExpired => {
-                            trace!("Membership for identity {:?} is expired", msg.identity);
-                            match tunnel.state.registration_state {
-                                RegistrationState::Registered => {
-                                    tunnel.unmonitor(make_babel_stream()?)?;
-                                    tunnel.state.registration_state =
-                                        RegistrationState::NotRegistered;
-                                }
-                                RegistrationState::NotRegistered => {
-                                    continue;
-                                }
+                    }
+                    TunnelAction::MembershipExpired => {
+                        trace!("Membership for identity {:?} is expired", id);
+                        match tunnel.state.registration_state {
+                            RegistrationState::Registered => {
+                                tunnel.unmonitor(make_babel_stream()?)?;
+                                tunnel.state.registration_state = RegistrationState::NotRegistered;
+                            }
+                            RegistrationState::NotRegistered => {
+                                continue;
                             }
                         }
-                        TunnelAction::PaidOnTime => {
-                            trace!("identity {:?} has paid!", msg.identity);
-                            match tunnel.state.payment_state {
-                                PaymentState::Paid => {
-                                    continue;
-                                }
-                                PaymentState::Overdue => {
-                                    trace!("Tunnel {:?} has returned to a paid state.", tunnel);
-                                    tunnel.state.payment_state = PaymentState::Paid;
-                                    tunnel_bw_limits_need_change = true;
-                                }
+                    }
+                    TunnelAction::PaidOnTime => {
+                        trace!("identity {:?} has paid!", id);
+                        match tunnel.state.payment_state {
+                            PaymentState::Paid => {
+                                continue;
+                            }
+                            PaymentState::Overdue => {
+                                trace!("Tunnel {:?} has returned to a paid state.", tunnel);
+                                tunnel.state.payment_state = PaymentState::Paid;
+                                tunnel_bw_limits_need_change = true;
                             }
                         }
-                        TunnelAction::PaymentOverdue => {
-                            trace!("No payment from identity {:?}", msg.identity);
-                            match tunnel.state.payment_state {
-                                PaymentState::Paid => {
-                                    trace!("Tunnel {:?} has entered an overdue state.", tunnel);
-                                    tunnel.state.payment_state = PaymentState::Overdue;
-                                    tunnel_bw_limits_need_change = true;
-                                }
-                                PaymentState::Overdue => {
-                                    continue;
-                                }
+                    }
+                    TunnelAction::PaymentOverdue => {
+                        trace!("No payment from identity {:?}", id);
+                        match tunnel.state.payment_state {
+                            PaymentState::Paid => {
+                                trace!("Tunnel {:?} has entered an overdue state.", tunnel);
+                                tunnel.state.payment_state = PaymentState::Overdue;
+                                tunnel_bw_limits_need_change = true;
+                            }
+                            PaymentState::Overdue => {
+                                continue;
                             }
                         }
                     }
                 }
             }
-            None => {
-                // This is now pretty common since there's no more none action
-                // and exits have identities for all clients (active or not)
-                // on hand
-                trace!("Couldn't find tunnel for identity {:?}", msg.identity);
-            }
         }
-
-        // this is done ouside of the match to make the borrow checker happy
-        if tunnel_bw_limits_need_change {
-            let res = tunnel_bw_limit_update(&self.tunnels);
-            // if this fails consistently it could be a wallet draining attack
-            // TODO check for that case
-            if res.is_err() {
-                error!("Bandwidth limiting failed with {:?}", res);
-            }
+        None => {
+            // This is now pretty common since there's no more none action
+            // and exits have identities for all clients (active or not)
+            // on hand
+            trace!("Couldn't find tunnel for identity {:?}", id);
         }
-
-        Ok(())
     }
+
+    // this is done ouside of the match to make the borrow checker happy
+    if tunnel_bw_limits_need_change {
+        let res = tunnel_bw_limit_update(&tunnels);
+        // if this fails consistently it could be a wallet draining attack
+        // TODO check for that case
+        if res.is_err() {
+            error!("Bandwidth limiting failed with {:?}", res);
+        }
+    }
+
+    Ok(())
 }
 
 /// Takes the tunnels list and iterates over it to update all of the traffic control settings
