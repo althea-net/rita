@@ -15,7 +15,7 @@ use std::net::TcpStream;
 use std::str;
 use std::time::Duration;
 
-const BABEL_OPERATION_TIMEOUT: Duration = Duration::from_secs(4);
+const BABEL_OPERATION_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Fail)]
 pub enum BabelMonitorError {

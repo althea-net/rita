@@ -13,6 +13,7 @@ use crate::rita_common::payment_controller;
 use crate::rita_common::payment_controller::PaymentController;
 use crate::rita_common::payment_validator::PAYMENT_TIMEOUT;
 use crate::rita_common::tunnel_manager::TunnelAction;
+use crate::rita_common::tunnel_manager::TunnelChange;
 use crate::rita_common::tunnel_manager::TunnelManager;
 use crate::rita_common::tunnel_manager::TunnelStateChange;
 use crate::SETTING;
@@ -189,16 +190,20 @@ impl Handler<SendUpdate> for DebtKeeper {
 
     fn handle(&mut self, _msg: SendUpdate, _ctx: &mut Context<Self>) -> Self::Result {
         trace!("sending debt keeper update");
+        // in order to keep from overloading actix when we have thousands of debts to process
+        // (mainly on exits) we batch tunnel change operations before sending them over
+        let mut debts_message = Vec::new();
+
         for (k, _) in self.debt_data.clone() {
             match self.send_update(&k)? {
                 DebtAction::SuspendTunnel => {
-                    TunnelManager::from_registry().do_send(TunnelStateChange {
+                    debts_message.push(TunnelChange {
                         identity: k,
                         action: TunnelAction::PaymentOverdue,
                     });
                 }
                 DebtAction::OpenTunnel => {
-                    TunnelManager::from_registry().do_send(TunnelStateChange {
+                    debts_message.push(TunnelChange {
                         identity: k,
                         action: TunnelAction::PaidOnTime,
                     });
@@ -215,6 +220,10 @@ impl Handler<SendUpdate> for DebtKeeper {
                     })),
             }
         }
+
+        TunnelManager::from_registry().do_send(TunnelStateChange {
+            tunnels: debts_message,
+        });
         Ok(())
     }
 }
