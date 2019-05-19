@@ -875,7 +875,10 @@ fn tunnel_state_change(
                                 continue;
                             }
                             PaymentState::Overdue => {
-                                trace!("Tunnel {:?} has returned to a paid state.", tunnel);
+                                info!(
+                                    "Tunnel {} has returned to a paid state.",
+                                    tunnel.neigh_id.global.wg_public_key
+                                );
                                 tunnel.state.payment_state = PaymentState::Paid;
                                 tunnel_bw_limits_need_change = true;
                             }
@@ -885,7 +888,10 @@ fn tunnel_state_change(
                         trace!("No payment from identity {:?}", id);
                         match tunnel.state.payment_state {
                             PaymentState::Paid => {
-                                trace!("Tunnel {:?} has entered an overdue state.", tunnel);
+                                info!(
+                                    "Tunnel {} has entered an overdue state.",
+                                    tunnel.neigh_id.global.wg_public_key
+                                );
                                 tunnel.state.payment_state = PaymentState::Overdue;
                                 tunnel_bw_limits_need_change = true;
                             }
