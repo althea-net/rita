@@ -188,7 +188,7 @@ impl PaymentController {
                         // because by the time you're back here it's been reset by the oracle 
                         // so now we only update nonces when we get an error, otherwise it should
                         // remain internally consistent and correct
-                        update_nonce(our_address, &web3);
+                        update_nonce(our_address, &web3, full_node);
 
                         DebtKeeper::from_registry().do_send(PaymentFailed {
                             to: pmt.to,

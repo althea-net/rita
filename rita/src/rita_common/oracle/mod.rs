@@ -85,12 +85,12 @@ impl Handler<Update> for Oracle {
             drop(payment_settings);
 
             info!("About to make web3 requests to {}", full_node);
-            update_balance(our_address, &web3);
+            update_balance(our_address, &web3, full_node.clone());
             // removed and placed into error handling in payment controller
             // time will tell if that was a good idea
             //update_nonce(our_address, &web3);
-            update_gas_price(&web3);
-            get_net_version(&web3);
+            update_gas_price(&web3, full_node.clone());
+            get_net_version(&web3, full_node);
             if oracle_enabled {
                 update_our_price();
             }
@@ -102,12 +102,15 @@ impl Handler<Update> for Oracle {
 /// Gets the balance for the provided eth address and updates it
 /// in the global SETTING variable, do not use this function as a generic
 /// balance getter.
-fn update_balance(our_address: Address, web3: &Web3) {
+fn update_balance(our_address: Address, web3: &Web3, full_node: String) {
     let res = web3
         .eth_get_balance(our_address)
-        .then(|balance| match balance {
+        .then(move |balance| match balance {
             Ok(value) => {
-                info!("Got response from balance request {:?}", value);
+                info!(
+                    "Got response from {} balance request {:?}",
+                    full_node, value
+                );
                 let our_balance = &mut SETTING.get_payment_mut().balance;
                 // if our balance is not zero and the response we get from the full node
                 // is zero either we very carefully emptied our wallet or it's that annoying Geth bug
@@ -117,7 +120,7 @@ fn update_balance(our_address: Address, web3: &Web3) {
                 Ok(())
             }
             Err(e) => {
-                warn!("Balance request failed with {:?}", e);
+                warn!("Balance request to {} failed with {:?}", full_node, e);
                 Err(e)
             }
         })
@@ -132,11 +135,11 @@ fn update_balance(our_address: Address, web3: &Web3) {
 /// a different network than the one we are actually using. For example an address
 /// that contains both real eth and test eth may be tricked into singing a transaction
 /// for real eth while operating on the testnet. Because of this we have warnings behavior
-fn get_net_version(web3: &Web3) {
+fn get_net_version(web3: &Web3, full_node: String) {
     let res = web3.net_version()
-                .then(|net_version| match net_version {
+                .then(move |net_version| match net_version {
                     Ok(value) => {
-                        info!("Got response from net_version request {:?}", value);
+                        info!("Got response from {} for net_version request {:?}", full_node, value);
                         match value.parse::<u64>() {
                             Ok(net_id_num) => {
                                 let mut payment_settings = SETTING.get_payment_mut();
@@ -156,7 +159,7 @@ fn get_net_version(web3: &Web3) {
                         Ok(())
                     }
                     Err(e) => {
-                        warn!("net_version request failed with {:?}", e);
+                        warn!("net_version request to {} failed with {:?}", full_node, e);
                         Err(e)
                     }
                 }).then(|_| Ok(()));
@@ -172,18 +175,21 @@ fn get_net_version(web3: &Web3) {
 /// A potential attack here would be providing a lower nonce to cause you to replace an earlier transaction
 /// that is still unconfirmed. That's a bit of a streach, more realistiically this would be spoofed in conjunction
 /// with net_version
-pub fn update_nonce(our_address: Address, web3: &Web3) {
+pub fn update_nonce(our_address: Address, web3: &Web3, full_node: String) {
     let res = web3
         .eth_get_transaction_count(our_address)
-        .then(|transaction_count| match transaction_count {
+        .then(move |transaction_count| match transaction_count {
             Ok(value) => {
-                info!("Got response from nonce request {:?}", value);
+                info!(
+                    "Got response from {} for nonce request {:?}",
+                    full_node, value
+                );
                 let mut payment_settings = SETTING.get_payment_mut();
                 payment_settings.nonce = value;
                 Ok(())
             }
             Err(e) => {
-                warn!("nonce request failed with {:?}", e);
+                warn!("nonce request to {} failed with {:?}", full_node, e);
                 Err(e)
             }
         })
@@ -198,12 +204,15 @@ pub fn update_nonce(our_address: Address, web3: &Web3) {
 /// (or whatever they care to configure as dyanmic_fee_factor). This also handles dramatic spikes in
 /// gas prices by increasing the maximum debt before a drop to the free tier occurs. So if the blockchain
 /// is simply to busy to use for some period of time payments will simply wait.
-fn update_gas_price(web3: &Web3) {
+fn update_gas_price(web3: &Web3, full_node: String) {
     let res = web3
         .eth_gas_price()
-        .then(|gas_price| match gas_price {
+        .then(move |gas_price| match gas_price {
             Ok(value) => {
-                info!("Got response from gas price request {:?}", value);
+                info!(
+                    "Got response from {} for gas price request {:?}",
+                    full_node, value
+                );
                 // Dynamic fee computation
                 let mut payment_settings = SETTING.get_payment_mut();
 
@@ -241,7 +250,7 @@ fn update_gas_price(web3: &Web3) {
                 Ok(())
             }
             Err(e) => {
-                warn!("gas price request failed with {:?}", e);
+                warn!("gas price request to {} failed with {:?}", full_node, e);
                 Err(e)
             }
         })

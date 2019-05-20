@@ -126,14 +126,17 @@ impl Handler<Validate> for PaymentValidator {
     type Result = ();
 
     fn handle(&mut self, _msg: Validate, _ctx: &mut Context<Self>) -> Self::Result {
-        trace!(
+        info!(
             "Attempting to validate {} transactions",
             self.unvalidated_transactions.len()
         );
         let mut to_delete = Vec::new();
         for item in self.unvalidated_transactions.iter() {
             if item.recieved.elapsed() > PAYMENT_TIMEOUT {
-                error!("Transaction {:?} has timed out, payment failed!", item);
+                error!(
+                    "Transaction {:#066x} has timed out, payment failed!",
+                    item.payment.txid.clone().unwrap()
+                );
                 to_delete.push(item.clone());
             } else {
                 validate_transaction(item);
@@ -173,7 +176,11 @@ pub fn validate_transaction(ts: &ToValidate) {
                             },
                             Err(e) => {
                                 // full node failure, we don't actually know anything about the transaction
-                                warn!("Failed to validate {:?} transaction with {:?}", pmt.from, e);
+                                warn!(
+                                    "Failed to validate {:#066x} transaction with {:?}",
+                                    pmt.txid.unwrap(),
+                                    e
+                                );
                                 Ok(())
                             }
                         }),
@@ -181,7 +188,11 @@ pub fn validate_transaction(ts: &ToValidate) {
             }
             Err(e) => {
                 // full node failure, we don't actually know anything about the transaction
-                warn!("Failed to validate {:?} transaction with {:?}", pmt.from, e);
+                warn!(
+                    "Failed to get blocknum to validate {:#066x} transaction with {:?}",
+                    pmt.txid.unwrap(),
+                    e
+                );
                 Either::B(future::ok(()))
             }
         }
