@@ -26,11 +26,12 @@ use std::time::{Duration, Instant};
 use web3::client::Web3;
 use web3::types::TransactionResponse;
 
-// Discard payments after 15 minutes of failing to find txid
-pub const PAYMENT_TIMEOUT: Duration = Duration::from_secs(900u64);
+// Discard payments after 1 hour of failing to find txid
+pub const PAYMENT_TIMEOUT: Duration = Duration::from_secs(3600u64);
 // How many blocks before we assume finality
 const BLOCKS_TO_CONFIRM: u32 = 4;
 // How old does a txid need to be before we don't accept it?
+// this is 12 hours
 const BLOCKS_TO_OLD: u32 = 1440;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
