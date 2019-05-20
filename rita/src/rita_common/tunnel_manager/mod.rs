@@ -928,6 +928,7 @@ fn tunnel_state_change(
 /// since we can't figure out how to combine interfaces badnwidth budgets we're subdividing it
 /// here with manual terminal commands whenever there is a change
 fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, Vec<Tunnel>>) -> Result<(), Error> {
+    info!("Running tunnel bw limit update!");
     // number of interfaces over which we will have to divide free tier BW
     let mut limited_interfaces = 0u16;
     for sublist in tunnels.iter() {

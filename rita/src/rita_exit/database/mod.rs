@@ -57,12 +57,19 @@ pub mod struct_tools;
 /// Gets the Postgres database connection
 pub fn get_database_connection() -> Result<PgConnection, ConnectionError> {
     let db_uri = SETTING.get_db_uri();
+    let start = Instant::now();
     info!("Opening database connection {:?}", db_uri);
     if db_uri.contains("postgres://")
         || db_uri.contains("postgresql://")
         || db_uri.contains("psql://")
     {
-        PgConnection::establish(&db_uri)
+        let conn = PgConnection::establish(&db_uri);
+        info!(
+            "It took {}s {}ms to open the database connection",
+            start.elapsed().as_secs(),
+            start.elapsed().subsec_millis()
+        );
+        conn
     } else {
         panic!("You must provide a valid postgressql database uri!");
     }
