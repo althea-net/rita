@@ -65,7 +65,7 @@ pub fn withdraw(path: Path<(Address, u64)>) -> Box<dyn Future<Item = HttpRespons
             HttpResponse::Ok().json(format!("txid:{:#066x}", tx_id))
         })),
         Err(e) => {
-            update_nonce(our_address, &web3);
+            update_nonce(our_address, &web3, full_node);
             if e.to_string().contains("nonce") {
                 Box::new(future::ok(
                     HttpResponse::new(StatusCode::from_u16(504u16).unwrap())
