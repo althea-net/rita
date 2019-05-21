@@ -9,7 +9,10 @@ use clarity::{Address, Transaction};
 use failure::Error;
 use futures::{future, Future};
 use std::boxed::Box;
-use web3::client::Web3;
+use std::time::Duration;
+use web30::client::Web3;
+
+pub const WITHDRAW_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub fn withdraw(path: Path<(Address, u64)>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let address = path.0;
@@ -17,7 +20,7 @@ pub fn withdraw(path: Path<(Address, u64)>) -> Box<dyn Future<Item = HttpRespons
     debug!("/withdraw/{:#x}/{} hit", address, amount);
 
     let full_node = get_web3_server();
-    let web3 = Web3::new(&full_node);
+    let web3 = Web3::new(&full_node, WITHDRAW_TIMEOUT);
     let payment_settings = SETTING.get_payment();
     let our_address = match payment_settings.eth_address {
         Some(address) => address,
