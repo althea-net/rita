@@ -20,3 +20,4 @@ codegen-units = 1
 incremental = false
 
 [patch.crates-io]
+clarity = {git = "https://github.com/althea-mesh/clarity/"}

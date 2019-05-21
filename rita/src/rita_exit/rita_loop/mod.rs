@@ -130,7 +130,6 @@ impl Handler<Tick> for RitaLoop {
         let ids = clients_to_ids(clients_list.clone());
 
         // watch and bill for traffic
-
         Arbiter::spawn(
             open_babel_stream(babel_port)
                 .from_err()
@@ -172,6 +171,8 @@ impl Handler<Tick> for RitaLoop {
             Arbiter::spawn(validate_clients_region(clients_list.clone()));
         }
 
+        // watch and bill for traffic
+        TrafficWatcher::from_registry().do_send(Watch(ids));
         // handle enforcement on client tunnels by querying debt keeper
         // this consumes client list, you can move it up in exchange for a clone
         Arbiter::spawn(enforce_exit_clients(clients_list));
