@@ -7,7 +7,7 @@
 //! off the queue. These are turned into Peer structs which are passed to TunnelManager to do
 //! whatever remaining work there may be.
 
-use crate::rita_common::rita_loop::Tick;
+use crate::rita_common::rita_loop::fast_loop::Tick;
 use crate::KI;
 use crate::SETTING;
 use ::actix::{Actor, Context};
