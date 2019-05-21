@@ -22,29 +22,22 @@ extern crate log;
 extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
-
 extern crate phonenumber;
-
-use env_logger;
-
-use openssl_probe;
-
-use settings::exit::{RitaExitSettings, RitaExitSettingsStruct};
-use settings::RitaCommonSettings;
-
-use docopt::Docopt;
-#[cfg(not(test))]
-use settings::FileWrite;
 
 use actix::registry::SystemService;
 use actix_web::http::Method;
 use actix_web::{http, server, App};
-
+use docopt::Docopt;
+use env_logger;
+use openssl_probe;
+use settings::exit::{RitaExitSettings, RitaExitSettingsStruct};
+#[cfg(not(test))]
+use settings::FileWrite;
+use settings::RitaCommonSettings;
 pub mod actix_utils;
 mod middleware;
 mod rita_common;
 mod rita_exit;
-
 use crate::rita_common::dashboard::babel::*;
 use crate::rita_common::dashboard::dao::*;
 use crate::rita_common::dashboard::debts::*;
@@ -55,14 +48,13 @@ use crate::rita_common::dashboard::pricing::*;
 use crate::rita_common::dashboard::settings::*;
 use crate::rita_common::dashboard::usage::*;
 use crate::rita_common::dashboard::wallet::*;
-
 use crate::rita_common::network_endpoints::*;
 use crate::rita_exit::network_endpoints::*;
-
-use std::sync::{Arc, RwLock};
-
+use crate::rita_exit::rita_loop::start_rita_exit_loop;
+use althea_kernel_interface::KernelInterface;
 #[cfg(test)]
 use std::sync::Mutex;
+use std::sync::{Arc, RwLock};
 
 #[derive(Debug, Deserialize, Default)]
 pub struct Args {
@@ -83,8 +75,6 @@ About:
         env!("GIT_HASH")
     );
 }
-
-use althea_kernel_interface::KernelInterface;
 
 #[cfg(not(test))]
 use althea_kernel_interface::LinuxCommandRunner;
@@ -276,7 +266,7 @@ fn main() {
     .start();
 
     assert!(rita_common::rita_loop::RitaLoop::from_registry().connected());
-    assert!(rita_exit::rita_loop::RitaLoop::from_registry().connected());
+    start_rita_exit_loop();
 
     system.run();
 }
