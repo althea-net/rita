@@ -48,7 +48,7 @@ pub struct RitaSyncLoop {
 }
 
 // the speed in seconds for the exit loop
-pub const EXIT_LOOP_SPEED: u64 = 5;
+pub const EXIT_LOOP_SPEED: u64 = 30;
 
 impl Actor for RitaLoop {
     type Context = Context<Self>;
