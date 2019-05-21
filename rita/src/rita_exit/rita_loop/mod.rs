@@ -2,7 +2,22 @@
 //! tied together with message calls.
 //!
 //! In this loop the exit checks it's database for registered users and deploys the endpoint for
-//! their exit tunnel
+//! their exit tunnel the execution model for all of this is pretty whacky thanks to Actix quirks
+//! we have the usual actors, these actors process Async events, but we have database queries by
+//! Diesel that are syncronous so we create a special actix construct called a 'sync actor' that
+//! is really another thread dedicated to running an actor which may block. Since it's another thread
+//! the block now only halts the single actor. In order to run an actor like this regularly we would like
+//! to use the run_interval closure setup, but that's only implemented for normal Async actors, likewise
+//! the system service setup which lets us use from_registry also doesn't work with SyncActors
+//! so as a workaround for both of those we have an actor Ritaloop which creates the SyncActor thread
+//! and address on startup and then proceeds to spawn futures there using it's own loop.
+//!
+//! Crash behavior is really where this starts to cause issues, SyncActors can't really crash
+//! they will always be ready for another message, AsyncActors on the other hand can, which is why
+//! this one is marked as a system service, so that it will be restarted. But when it's restarted it
+//! will create another SyncActor loop and addres to send messages to! Hopefully the borro checker and
+//! actix work together on this on properly, not that I've every seen simple actors like the loop crash
+//! very often.
 
 use crate::rita_exit::database::struct_tools::clients_to_ids;
 use crate::rita_exit::database::{
@@ -11,43 +26,49 @@ use crate::rita_exit::database::{
 };
 use crate::rita_exit::traffic_watcher::{TrafficWatcher, Watch};
 use crate::SETTING;
-use actix::prelude::{
-    Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
-    SystemService,
+use actix::{
+    Actor, ActorContext, Arbiter, AsyncContext, Context, Handler, Message, Supervised, SyncArbiter,
+    SyncContext, SystemService,
 };
 use diesel::query_dsl::RunQueryDsl;
 use exit_db::models;
 use failure::Error;
-use futures::future::Future;
 use settings::exit::RitaExitSettings;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::time::Duration;
 
 #[derive(Default)]
-pub struct RitaLoop {
+pub struct RitaLoop {}
+
+#[derive(Default)]
+pub struct RitaSyncLoop {
     /// a simple cache to prevent regularly asking Maxmind for the same geoip data
     pub geoip_cache: HashMap<IpAddr, String>,
 }
 
 // the speed in seconds for the exit loop
-pub const EXIT_LOOP_SPEED: u64 = 5;
+pub const EXIT_LOOP_SPEED: u64 = 30;
 
 impl Actor for RitaLoop {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
         info!("exit loop started");
-        ctx.run_interval(Duration::from_secs(EXIT_LOOP_SPEED), |_act, ctx| {
-            // we add a timeout on the loop future here as a hacky way to timeout
-            // the databse connection since diesel doesn't provide such a feature
-            let addr: Addr<Self> = ctx.address();
-            let fut = addr
-                .send(Tick)
-                .timeout(Duration::from_secs(4))
-                .then(|_result| Ok(()) as Result<(), ()>);
-            Arbiter::spawn(fut);
+        let addr = SyncArbiter::start(1, || RitaSyncLoop {
+            geoip_cache: HashMap::new(),
         });
+        ctx.run_interval(Duration::from_secs(EXIT_LOOP_SPEED), move |_act, _ctx| {
+            addr.do_send(Tick)
+        });
+    }
+}
+
+impl Actor for RitaSyncLoop {
+    type Context = SyncContext<Self>;
+
+    fn started(&mut self, _ctx: &mut SyncContext<Self>) {
+        info!("exit sync loop started");
     }
 }
 
@@ -55,6 +76,12 @@ impl SystemService for RitaLoop {}
 impl Supervised for RitaLoop {
     fn restarting(&mut self, _ctx: &mut Context<RitaLoop>) {
         error!("Rita Exit loop actor died! recovering!");
+    }
+}
+
+impl Supervised for RitaSyncLoop {
+    fn restarting(&mut self, _ctx: &mut SyncContext<RitaSyncLoop>) {
+        error!("Rita Exit Sync loop actor died! recovering!");
     }
 }
 
@@ -79,9 +106,9 @@ impl Message for Tick {
     type Result = Result<(), Error>;
 }
 
-impl Handler<Tick> for RitaLoop {
+impl Handler<Tick> for RitaSyncLoop {
     type Result = Result<(), Error>;
-    fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _: Tick, _ctx: &mut SyncContext<Self>) -> Self::Result {
         use exit_db::schema::clients::dsl::clients;
         trace!("Exit tick!");
 
