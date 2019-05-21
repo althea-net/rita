@@ -25,7 +25,10 @@ use std::time::SystemTime;
 pub fn setup_request(
     their_id: (Json<ExitClientIdentity>, HttpRequest),
 ) -> Result<Json<ExitState>, Error> {
-    trace!("Received requester identity for setup, {:?}", their_id.0);
+    info!(
+        "Received setup request from, {}",
+        their_id.0.global.wg_public_key
+    );
     let client_mesh_ip = their_id.0.global.mesh_ip;
     let client = their_id.0.into_inner();
     let remote_mesh_socket: SocketAddr = their_id

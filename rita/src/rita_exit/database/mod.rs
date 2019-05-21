@@ -143,7 +143,10 @@ pub fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Error> {
         update_client(&client, &conn)?;
         get_client(client_mesh_ip, &conn)?
     } else {
-        trace!("record does not exist, creating");
+        info!(
+            "record for {} does not exist, creating",
+            client.global.wg_public_key
+        );
 
         let new_ip = get_next_client_ip(&conn)?;
 
@@ -156,7 +159,7 @@ pub fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Error> {
 
         let c = client_to_new_db_client(&client, new_ip, user_country);
 
-        trace!("Inserting new client");
+        info!("Inserting new client {}", client.global.wg_public_key);
         diesel::insert_into(clients).values(&c).execute(&conn)?;
 
         c
