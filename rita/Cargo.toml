@@ -22,8 +22,7 @@ exit_db = { path = "../exit_db" }
 num256 = "0.2"
 settings = { path = "../settings" }
 
-guac_core = {git = "https://github.com/althea-mesh/guac_rs"}
-web3 = {git = "https://github.com/althea-mesh/guac_rs"}
+web30 = {git = "https://github.com/althea-mesh/web30"}
 syslog = "4"
 actix = "0.7"
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }

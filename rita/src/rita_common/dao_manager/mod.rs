@@ -5,6 +5,7 @@
 //! to compute the amount it should pay at a time, these micropayments have the effect of pro-rating
 //! the DAO fee amount and preventing the router from drastically making a large payment
 
+use crate::rita_common::payment_controller::TRANSACTION_SUBMISSON_TIMEOUT;
 use crate::rita_common::usage_tracker::UpdatePayments;
 use crate::rita_common::usage_tracker::UsageTracker;
 use crate::SETTING;
@@ -19,7 +20,7 @@ use rand::thread_rng;
 use rand::Rng;
 use settings::RitaCommonSettings;
 use std::time::Instant;
-use web3::client::Web3;
+use web30::client::Web3;
 
 pub struct DAOManager {
     last_payment_time: Instant,
@@ -99,7 +100,7 @@ impl Handler<Tick> for DAOManager {
                 };
 
                 let full_node = get_web3_server();
-                let web3 = Web3::new(&full_node);
+                let web3 = Web3::new(&full_node, TRANSACTION_SUBMISSON_TIMEOUT);
 
                 let tx = Transaction {
                     nonce: nonce.clone(),

@@ -20,7 +20,7 @@ use futures::{future, Future};
 
 use num256::Int256;
 
-use web3::client::Web3;
+use web30::client::Web3;
 
 use clarity::Address;
 
@@ -63,6 +63,7 @@ impl Default for Oracle {
 
 /// How often we update all the Oracle values, currently every eth block
 pub const ORACLE_UPDATE_RATE: Duration = Duration::from_secs(15);
+pub const ORACLE_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// True if an update should occur
 fn timer_check(timestamp: Instant) -> bool {
@@ -79,7 +80,7 @@ impl Handler<Update> for Oracle {
         if timer_check(self.last_updated) {
             let payment_settings = SETTING.get_payment();
             let full_node = get_web3_server();
-            let web3 = Web3::new(&full_node);
+            let web3 = Web3::new(&full_node, ORACLE_TIMEOUT);
             let our_address = payment_settings.eth_address.expect("No address!");
             let oracle_enabled = payment_settings.price_oracle_enabled;
             drop(payment_settings);
