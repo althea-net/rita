@@ -77,7 +77,10 @@ pub fn handle_sms_registration(
     api_key: String,
     conn: &PgConnection,
 ) -> Result<ExitState, Error> {
-    trace!("Handling phone registration for {:?}", client);
+    info!(
+        "Handling phone registration for {}",
+        client.global.wg_public_key
+    );
     let text_num = texts_sent(their_record);
     let sent_more_than_allowed_texts = text_num > 10;
     match (
@@ -89,6 +92,11 @@ pub fn handle_sms_registration(
         (Some(number), Some(code), true) => {
             if check_text(number, code, api_key)? {
                 verify_client(&client, true, conn)?;
+
+                info!(
+                    "Phone registration complete for {}",
+                    client.global.wg_public_key
+                );
                 Ok(ExitState::Registered {
                     our_details: ExitClientDetails {
                         client_internal_ip: their_record.internal_ip.parse()?,
@@ -127,6 +135,11 @@ pub fn handle_sms_registration(
         (Some(number), Some(code), false) => {
             if check_text(number, code, api_key)? {
                 verify_client(&client, true, conn)?;
+
+                info!(
+                    "Phone registration complete for {}",
+                    client.global.wg_public_key
+                );
                 Ok(ExitState::Registered {
                     our_details: ExitClientDetails {
                         client_internal_ip: their_record.internal_ip.parse()?,
