@@ -24,7 +24,7 @@ use std::time::Instant;
 use tokio::net::TcpStream as TokioTcpStream;
 use web30::client::Web3;
 
-pub const TRANSACTION_SUBMISSON_TIMEOUT: Duration = Duration::from_secs(10);
+pub const TRANSACTION_SUBMISSON_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub struct PaymentController();
 
