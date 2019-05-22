@@ -43,7 +43,6 @@ use std::sync::{Arc, RwLock};
 #[cfg(test)]
 use std::sync::Mutex;
 
-pub mod actix_utils;
 mod middleware;
 mod rita_client;
 mod rita_common;

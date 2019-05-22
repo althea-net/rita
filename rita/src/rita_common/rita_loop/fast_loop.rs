@@ -1,5 +1,3 @@
-use crate::actix_utils::KillActor;
-use crate::actix_utils::ResolverWrapper;
 use crate::rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 use crate::rita_common::peer_listener::GetPeers;
 use crate::rita_common::peer_listener::PeerListener;
@@ -10,7 +8,7 @@ use crate::KI;
 use crate::SETTING;
 use actix::{
     Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
-    System, SystemService,
+    SystemService,
 };
 use failure::Error;
 use futures::Future;
@@ -175,16 +173,6 @@ fn manage_gateway(mut was_gateway: bool) -> bool {
     SETTING.get_network_mut().is_gateway = gateway;
 
     if SETTING.get_network().is_gateway {
-        if was_gateway {
-            // TODO I don't think this has been running for months
-            info!("Killed trust dns actor!");
-            // trust_dns will fail to resolve if you plugin the wan port after Rita has started
-            // this may be fixed in a future update of Trustdns
-            let resolver_addr: Addr<ResolverWrapper> = System::current().registry().get();
-            resolver_addr.do_send(KillActor);
-            was_gateway = false;
-        }
-
         match KI.get_resolv_servers() {
             Ok(s) => {
                 for ip in s.iter() {
