@@ -23,9 +23,11 @@ use rita_common::debt_keeper::PaymentReceived;
 use settings::RitaCommonSettings;
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
-use web3::client::Web3;
-use web3::types::TransactionResponse;
+use web30::client::Web3;
+use web30::types::TransactionResponse;
 
+// How long we will wait for full node responses
+const TRANSACTION_VERIFICATION_TIMEOUT: Duration = Duration::from_secs(10);
 // Discard payments after 1 hour of failing to find txid
 pub const PAYMENT_TIMEOUT: Duration = Duration::from_secs(3600u64);
 // How many blocks before we assume finality
@@ -157,7 +159,7 @@ pub fn validate_transaction(ts: &ToValidate) {
     let txid = ts.payment.clone().txid.unwrap();
     let pmt = ts.payment.clone();
     let full_node = get_web3_server();
-    let web3 = Web3::new(&full_node);
+    let web3 = Web3::new(&full_node, TRANSACTION_VERIFICATION_TIMEOUT);
 
     let long_life_ts = ts.clone();
 

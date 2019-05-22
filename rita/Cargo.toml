@@ -22,8 +22,7 @@ exit_db = { path = "../exit_db" }
 num256 = "0.2"
 settings = { path = "../settings" }
 
-guac_core = {git = "https://github.com/althea-mesh/guac_rs"}
-web3 = {git = "https://github.com/althea-mesh/guac_rs"}
+web30 = {git = "https://github.com/althea-mesh/web30"}
 syslog = "4"
 actix = "0.7"
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
@@ -53,7 +52,7 @@ tokio = "0.1"
 tokio-io = "0.1"
 tokio-codec = "0.1"
 regex = "1.1"
-trust-dns-resolver = "0.10"
+trust-dns-resolver = "0.11"
 byteorder = { version = "1.3", features = ["i128"] }
 openssl-probe = "0.1"
 num-traits="0.2"

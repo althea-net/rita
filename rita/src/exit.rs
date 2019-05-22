@@ -40,10 +40,12 @@ use actix::registry::SystemService;
 use actix_web::http::Method;
 use actix_web::{http, server, App};
 
-pub mod actix_utils;
 mod middleware;
 mod rita_common;
 mod rita_exit;
+
+use rita_common::rita_loop::fast_loop::RitaFastLoop;
+use rita_common::rita_loop::slow_loop::RitaSlowLoop;
 
 use crate::rita_common::dashboard::babel::*;
 use crate::rita_common::dashboard::dao::*;
@@ -275,7 +277,8 @@ fn main() {
     .shutdown_timeout(0)
     .start();
 
-    assert!(rita_common::rita_loop::RitaLoop::from_registry().connected());
+    assert!(RitaFastLoop::from_registry().connected());
+    assert!(RitaSlowLoop::from_registry().connected());
     assert!(rita_exit::rita_loop::RitaLoop::from_registry().connected());
 
     system.run();

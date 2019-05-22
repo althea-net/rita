@@ -43,10 +43,12 @@ use std::sync::{Arc, RwLock};
 #[cfg(test)]
 use std::sync::Mutex;
 
-pub mod actix_utils;
 mod middleware;
 mod rita_client;
 mod rita_common;
+
+use rita_common::rita_loop::fast_loop::RitaFastLoop;
+use rita_common::rita_loop::slow_loop::RitaSlowLoop;
 
 use crate::rita_client::dashboard::eth_private_key::*;
 use crate::rita_client::dashboard::exits::*;
@@ -328,7 +330,8 @@ fn main() {
     .shutdown_timeout(0)
     .start();
 
-    assert!(rita_common::rita_loop::RitaLoop::from_registry().connected());
+    assert!(RitaFastLoop::from_registry().connected());
+    assert!(RitaSlowLoop::from_registry().connected());
     assert!(rita_client::rita_loop::RitaLoop::from_registry().connected());
 
     system.run();

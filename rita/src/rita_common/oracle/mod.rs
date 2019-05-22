@@ -20,7 +20,7 @@ use futures::{future, Future};
 
 use num256::Int256;
 
-use web3::client::Web3;
+use web30::client::Web3;
 
 use clarity::Address;
 
@@ -61,13 +61,8 @@ impl Default for Oracle {
     }
 }
 
-/// How often we update all the Oracle values, currently every eth block
-pub const ORACLE_UPDATE_RATE: Duration = Duration::from_secs(15);
-
-/// True if an update should occur
-fn timer_check(timestamp: Instant) -> bool {
-    Instant::now() - timestamp > ORACLE_UPDATE_RATE
-}
+/// How long we wait for a response from the full node
+pub const ORACLE_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Message)]
 pub struct Update();
@@ -76,26 +71,24 @@ impl Handler<Update> for Oracle {
     type Result = ();
 
     fn handle(&mut self, _msg: Update, _ctx: &mut Context<Self>) -> Self::Result {
-        if timer_check(self.last_updated) {
-            let payment_settings = SETTING.get_payment();
-            let full_node = get_web3_server();
-            let web3 = Web3::new(&full_node);
-            let our_address = payment_settings.eth_address.expect("No address!");
-            let oracle_enabled = payment_settings.price_oracle_enabled;
-            drop(payment_settings);
+        let payment_settings = SETTING.get_payment();
+        let full_node = get_web3_server();
+        let web3 = Web3::new(&full_node, ORACLE_TIMEOUT);
+        let our_address = payment_settings.eth_address.expect("No address!");
+        let oracle_enabled = payment_settings.price_oracle_enabled;
+        drop(payment_settings);
 
-            info!("About to make web3 requests to {}", full_node);
-            update_balance(our_address, &web3, full_node.clone());
-            // removed and placed into error handling in payment controller
-            // time will tell if that was a good idea
-            //update_nonce(our_address, &web3);
-            update_gas_price(&web3, full_node.clone());
-            get_net_version(&web3, full_node);
-            if oracle_enabled {
-                update_our_price();
-            }
-            self.last_updated = Instant::now();
+        info!("About to make web3 requests to {}", full_node);
+        update_balance(our_address, &web3, full_node.clone());
+        // removed and placed into error handling in payment controller
+        // time will tell if that was a good idea
+        //update_nonce(our_address, &web3);
+        update_gas_price(&web3, full_node.clone());
+        get_net_version(&web3, full_node);
+        if oracle_enabled {
+            update_our_price();
         }
+        self.last_updated = Instant::now();
     }
 }
 

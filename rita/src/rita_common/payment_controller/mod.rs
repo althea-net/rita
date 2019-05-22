@@ -22,7 +22,9 @@ use std::net::SocketAddr;
 use std::time::Duration;
 use std::time::Instant;
 use tokio::net::TcpStream as TokioTcpStream;
-use web3::client::Web3;
+use web30::client::Web3;
+
+pub const TRANSACTION_SUBMISSON_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub struct PaymentController();
 
@@ -111,7 +113,7 @@ impl PaymentController {
         };
 
         let full_node = get_web3_server();
-        let web3 = Web3::new(&full_node);
+        let web3 = Web3::new(&full_node, TRANSACTION_SUBMISSON_TIMEOUT);
 
         let tx = Transaction {
             nonce,
