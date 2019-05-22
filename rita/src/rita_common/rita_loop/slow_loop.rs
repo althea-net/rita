@@ -73,6 +73,7 @@ impl Handler<Tick> for RitaSlowLoop {
 
         // Check payments
         PaymentValidator::from_registry().do_send(Validate());
+
         // Update blockchain info
         Oracle::from_registry().do_send(Update());
 

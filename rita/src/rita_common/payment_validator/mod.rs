@@ -26,7 +26,8 @@ use std::time::{Duration, Instant};
 use web30::client::Web3;
 use web30::types::TransactionResponse;
 
-const TRANSACTION_VERIFICATION_TIMEOUT: Duration = Duration::from_secs(4);
+// How long we will wait for full node responses
+const TRANSACTION_VERIFICATION_TIMEOUT: Duration = Duration::from_secs(10);
 // Discard payments after 1 hour of failing to find txid
 pub const PAYMENT_TIMEOUT: Duration = Duration::from_secs(3600u64);
 // How many blocks before we assume finality

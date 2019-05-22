@@ -61,7 +61,8 @@ impl Default for Oracle {
     }
 }
 
-pub const ORACLE_TIMEOUT: Duration = Duration::from_secs(1);
+/// How long we wait for a response from the full node
+pub const ORACLE_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Message)]
 pub struct Update();
