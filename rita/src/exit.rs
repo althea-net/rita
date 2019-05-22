@@ -40,7 +40,6 @@ use actix::registry::SystemService;
 use actix_web::http::Method;
 use actix_web::{http, server, App};
 
-pub mod actix_utils;
 mod middleware;
 mod rita_common;
 mod rita_exit;
