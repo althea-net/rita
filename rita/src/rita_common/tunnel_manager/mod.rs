@@ -622,12 +622,13 @@ impl TunnelManager {
                 }
                 Err(e) => {
                     warn!("Actor mailbox failure from DNS resolver! {:?}", e);
-                    // We might need a port callback here
+                    TunnelManager::from_registry().do_send(PortCallback(our_port));
                     Ok(())
                 }
 
                 Ok(Err(e)) => {
                     warn!("DNS resolution failed with {:?}", e);
+                    TunnelManager::from_registry().do_send(PortCallback(our_port));
                     Ok(())
                 }
             });
