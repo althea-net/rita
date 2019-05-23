@@ -35,9 +35,9 @@ pub fn setup_request(
         .1
         .connection_info()
         .remote()
-        .unwrap()
+        .expect("Failed in setup request")
         .parse()
-        .unwrap();
+        .expect("Failed in setup request");
 
     let remote_mesh_ip = remote_mesh_socket.ip();
     if remote_mesh_ip == client_mesh_ip {
@@ -50,7 +50,10 @@ pub fn setup_request(
 }
 
 pub fn status_request(their_id: Json<ExitClientIdentity>) -> Result<Json<ExitState>, Error> {
-    trace!("Received requester identity for status, {:?}", their_id);
+    trace!(
+        "Received requester identity for status, {}",
+        their_id.global.wg_public_key
+    );
     let client = their_id.into_inner();
 
     Ok(Json(client_status(client)?))
