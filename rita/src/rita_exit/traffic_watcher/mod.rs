@@ -42,12 +42,6 @@ impl Actor for TrafficWatcher {
 impl Supervised for TrafficWatcher {}
 impl SystemService for TrafficWatcher {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        if let Err(e) = KI.setup_wg_if_named("wg_exit") {
-            warn!("exit setup returned {}", e)
-        }
-        KI.setup_nat(&SETTING.get_network().external_nic.clone().unwrap())
-            .unwrap();
-
         info!("Traffic Watcher started");
     }
 }

@@ -135,6 +135,21 @@ impl CommandRunner for LinuxCommandRunner {
             start.elapsed().as_secs(),
             start.elapsed().subsec_nanos() / 1000000
         );
+
+        if start.elapsed().as_secs() > 5 {
+            error!(
+                "Command {} {} took more than five seconds to complete!",
+                program,
+                print_str_array(args)
+            );
+        } else if start.elapsed().as_secs() > 1 {
+            warn!(
+                "Command {} {} took more than one second to complete!",
+                program,
+                print_str_array(args)
+            );
+        }
+
         return Ok(output);
     }
 
