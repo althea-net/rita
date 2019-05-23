@@ -25,6 +25,7 @@ use crate::rita_exit::database::{
     validate_clients_region,
 };
 use crate::rita_exit::traffic_watcher::{TrafficWatcher, Watch};
+use crate::KI;
 use crate::SETTING;
 use actix::{
     Actor, ActorContext, Arbiter, AsyncContext, Context, Handler, Message, Supervised, SyncArbiter,
@@ -34,6 +35,7 @@ use diesel::query_dsl::RunQueryDsl;
 use exit_db::models;
 use failure::Error;
 use settings::exit::RitaExitSettings;
+use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::time::Duration;
@@ -55,6 +57,7 @@ impl Actor for RitaLoop {
 
     fn started(&mut self, ctx: &mut Context<Self>) {
         info!("exit loop started");
+        setup_exit_wg_tunnel();
         let addr = SyncArbiter::start(1, || RitaSyncLoop {
             geoip_cache: HashMap::new(),
         });
@@ -150,4 +153,16 @@ impl Handler<Tick> for RitaSyncLoop {
 
         Ok(())
     }
+}
+
+fn setup_exit_wg_tunnel() {
+    if let Err(e) = KI.setup_wg_if_named("wg_exit") {
+        warn!("exit setup returned {}", e)
+    }
+    KI.one_time_exit_setup(
+        &SETTING.get_exit_network().own_internal_ip.into(),
+        SETTING.get_exit_network().netmask,
+    ).expect("Failed to setup wg_exit!");
+    KI.setup_nat(&SETTING.get_network().external_nic.clone().unwrap())
+        .unwrap();
 }

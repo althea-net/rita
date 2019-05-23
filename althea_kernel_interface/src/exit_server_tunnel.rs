@@ -22,8 +22,6 @@ impl dyn KernelInterface {
         clients: Vec<ExitClient>,
         listen_port: u16,
         private_key_path: &str,
-        local_ip: &IpAddr,
-        netmask: u8,
     ) -> Result<(), Error> {
         let command = "wg".to_string();
 
@@ -63,6 +61,23 @@ impl dyn KernelInterface {
             }
         }
 
+        // setup traffic classes for enforcement with flow id's derived from the ip
+        for c in clients.iter() {
+            match c.internal_ip {
+                IpAddr::V4(addr) => {
+                    if !self.has_flow(&addr, "wg_exit")? {
+                        self.create_flow_by_ip("wg_exit", &addr)?
+                    }
+                }
+                _ => panic!("Could not derive ipv4 addr for client! Corrupt DB!"),
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Performs the one time startup tasks for the rita_exit clients loop
+    pub fn one_time_exit_setup(&self, local_ip: &IpAddr, netmask: u8) -> Result<(), Error> {
         let _output = self.run_command(
             "ip",
             &[
@@ -98,17 +113,6 @@ impl dyn KernelInterface {
             info!("Setting up root HTB qdisc, this should only run once");
             self.create_root_classful_limit("wg_exit")
                 .expect("Failed to setup root HTB qdisc!");
-        }
-        // setup traffic classes for enforcement with flow id's derived from the ip
-        for c in clients.iter() {
-            match c.internal_ip {
-                IpAddr::V4(addr) => {
-                    if !self.has_flow(&addr, "wg_exit")? {
-                        self.create_flow_by_ip("wg_exit", &addr)?
-                    }
-                }
-                _ => panic!("Could not derive ipv4 addr for client! Corrupt DB!"),
-            }
         }
 
         Ok(())
