@@ -8,7 +8,7 @@ use failure::Error;
 
 use std::net::IpAddr;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct ExitClient {
     pub internal_ip: IpAddr,
     pub public_key: WgKey,
@@ -52,7 +52,9 @@ impl dyn KernelInterface {
 
         self.run_command(&command, &arg_str[..])?;
 
-        for i in self.get_peers("wg_exit")? {
+        let wg_peers = self.get_peers("wg_exit")?;
+        info!("wg_exit has {} peers", wg_peers.len());
+        for i in wg_peers {
             if !client_pubkeys.contains(&i) {
                 self.run_command(
                     "wg",
