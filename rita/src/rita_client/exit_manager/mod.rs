@@ -17,7 +17,7 @@
 //! Signup is complete and the user may use the connection
 
 use crate::rita_client::rita_loop::Tick;
-use crate::rita_client::traffic_watcher::{QueryExitDebts, TrafficWatcher};
+use crate::rita_client::traffic_watcher::{QueryExitDebts, TrafficWatcher, Watch};
 use crate::rita_common::oracle::low_balance;
 use crate::KI;
 use crate::SETTING;
@@ -401,6 +401,10 @@ impl Handler<Tick> for ExitManager {
                         exit_internal_addr,
                         exit_port,
                         exit_id,
+                    });
+                    TrafficWatcher::from_registry().do_send(Watch {
+                        exit_id,
+                        exit_price: general_details.exit_price,
                     });
                 }
             }
