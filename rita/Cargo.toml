@@ -59,8 +59,8 @@ num-traits="0.2"
 clarity = "0.1"
 eui48 = "0.4"
 arrayvec = {version= "0.4", features = ["serde-1"]}
-lettre = "0.9"
-lettre_email = "0.9"
+lettre = {git = "https://github.com/lettre/lettre/"}
+lettre_email = {git = "https://github.com/lettre/lettre/"}
 phonenumber = "0.2"
 
 [features]
