@@ -28,8 +28,8 @@ use web30::types::TransactionResponse;
 
 // How long we will wait for full node responses
 const TRANSACTION_VERIFICATION_TIMEOUT: Duration = Duration::from_secs(10);
-// Discard payments after 1 hour of failing to find txid
-pub const PAYMENT_TIMEOUT: Duration = Duration::from_secs(3600u64);
+// Discard payments after 15 minutes of failing to find txid
+pub const PAYMENT_TIMEOUT: Duration = Duration::from_secs(900u64);
 // How many blocks before we assume finality
 const BLOCKS_TO_CONFIRM: u32 = 4;
 // How old does a txid need to be before we don't accept it?
