@@ -446,7 +446,7 @@ pub fn setup_clients(clients_list: &[exit_db::models::Client]) -> Result<(), Err
 
     // setup all the tunnels
     let exit_status = KI.set_exit_wg_config(
-        wg_clients,
+        wg_clients.clone(),
         SETTING.get_exit_network().wg_tunnel_port,
         &SETTING.get_exit_network().wg_private_key_path,
     );
@@ -461,9 +461,11 @@ pub fn setup_clients(clients_list: &[exit_db::models::Client]) -> Result<(), Err
         ),
     }
     info!(
-        "exit setup loop completed in {}s {}ms",
+        "exit setup loop completed in {}s {}ms with {} clients and {} wg_clients",
         start.elapsed().as_secs(),
-        start.elapsed().subsec_millis()
+        start.elapsed().subsec_millis(),
+        clients_list.len(),
+        wg_clients.len(),
     );
     Ok(())
 }
