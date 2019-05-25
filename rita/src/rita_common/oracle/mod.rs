@@ -80,9 +80,7 @@ impl Handler<Update> for Oracle {
 
         info!("About to make web3 requests to {}", full_node);
         update_balance(our_address, &web3, full_node.clone());
-        // removed and placed into error handling in payment controller
-        // time will tell if that was a good idea
-        //update_nonce(our_address, &web3);
+        update_nonce(our_address, &web3, full_node.clone());
         update_gas_price(&web3, full_node.clone());
         get_net_version(&web3, full_node);
         if oracle_enabled {
