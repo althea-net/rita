@@ -17,6 +17,86 @@
 //! For the withdraw process we create a withdraw request object which does a best effort sheparding of the
 //! requested withdraw amount back to Eth and into the users hands. If this fails then the withdraw will timeout
 //! and the money will not be lost but instead moved back into XDAI by the normal conveyor belt operation
+//!
+//! If there are no withdraw orders on the queue
+//!
+//!     If there is an `eth_balance` that is greater than the `minimum_to_exchange` amount, subtract the `reserve` amount
+//!     and convert it through uniswap into DAI.
+//!
+//!     If there is a dai balance, send it through the bridge into xdai
+//!
+//! If there is a dai withdraw order on the queue
+//!
+//!     If there is a dai balance (minus pending withdraw orders) greater or equal to the withdraw amount,
+//!     send the withdraw amount through uniswap into eth and create a pending dai withdraw order.
+//!     Future waits on Uniswap and upon successful transfer, deletes pending dai withdraw order and
+//!     creates eth withdraw order. Upon timeout, retries uniswap (possibly with increased timeout and/or gas fee?)
+//!
+//! If there is an eth withdraw order on the queue
+//!
+//!     If there is an `eth_balance` greater or equal to the withdraw amount, send the withdraw amount to the
+//!     destination of the withdraw order, and delete the withdraw order. (Should there be a retry here?)
+//!
+//! Possibly simpler technique: This can only handle one withdraw at once, but that's probably ok
+//! 
+//! DefaultState:
+//!     TickEvent:
+//!         If there is an `eth_balance` that is greater than the `minimum_to_exchange` amount, subtract the `reserve` amount
+//!         and convert it through uniswap into DAI.
+//!
+//!         If there is a dai balance, send it through the bridge into xdai
+//!     
+//!     WithdrawEvent(to, amount):
+//!         Send amount into bridge, switch to WithdrawState.
+//! 
+//! WithdrawState{ to, amount, timestamp}:
+//!     TickEvent:
+//!         If there is a dai balance greater or equal to the withdraw amount, send the withdraw
+//!         amount through uniswap.
+//!         Future waits on Uniswap and upon successful swap, sends eth to "to" address. Another future
+//!         waits on this transfer to complete. When it is complete, the state switches back to DefaultState
+//! 
+//!     WithdrawEvent:
+//!         Nothing happens
+//! 
+//! Alternate design of the above where we poll instead of using futures
+//! 
+//! DefaultState:
+//!     TickEvent:
+//!         If there is an `eth_balance` that is greater than the `minimum_to_exchange` amount, subtract the `reserve` amount
+//!         and convert it through uniswap into DAI.
+//!
+//!         If there is a dai balance, send it through the bridge into xdai
+//!     
+//!     WithdrawEvent(to, amount):
+//!         Send amount into bridge, switch to DaiWithdrawState.
+//! 
+//! DaiWithdrawState{ to, daiAmount, timestamp }:
+//!     TickEvent:
+//!         If there is a dai balance greater or equal to the daiAmount, send the daiAmount
+//!         through uniswap and switch to EthWithdrawState.
+//! 
+//!     WithdrawEvent:
+//!         Nothing happens       
+//! 
+//! PendingUniswapState{ to, daiAmount, timestamp }:
+//!     TickEvent:
+//!         Check our eth balance. If it is greater than daiAmount.toEth(), send daiAmount.toEth() to
+//!         "to" address and switch to PendingEthTransferState (alternately, also check for uniswap event).
+//!         If not, and if current time is greater than timestamp + uniswap timeout, retry sending the 
+//!         daiAmount through uniswap and reset the timestamp.
+//! 
+//!     WithdrawEvent:
+//!         Nothing happens
+//!         
+//! PendingEthTransferState{ to, daiAmount, timestamp, txHash }:
+//!     TickEvent:
+//!         Check to see if txHash has gone through. If it has, switch to DefaultState. If it has not,
+//!         check if current time is greater than timestamp + eth transfer timeout, if it is, retry.
+//! 
+//!     WithdrawEvent:
+//!         Nothing happens
+//!     
 
 use crate::SETTING;
 use actix::Actor;
@@ -45,25 +125,39 @@ fn is_timed_out(started: Instant) -> bool {
 
 /// List of all possible events that may be in progress in this module
 /// as well as a starting time in order to apply timeouts
-pub enum InProgress {
-    EthToDai(Instant),
-    DaiToXdai(Instant),
-    XdaiToDai(Instant),
-    DaiToEth(Instant),
-    EthToWithdraw(Instant),
-    UniswapApprove(Instant),
-}
+// pub enum InProgress {
+//     EthToDai(Instant),
+//     DaiToXdai(Instant),
+//     XdaiToDai(Instant),
+//     DaiToEth(Instant),
+//     EthToWithdraw(Instant),
+//     UniswapApprove(Instant),
+// }
 
 /// Represents a withdraw in progress
-pub struct Withdraw {
-    start: Instant,
-    amount: Uint256,
+pub enum Withdraw {
+    Eth {
+        timestamp: Instant,
+        amount: Uint256,
+        to: Address,
+    },
+    Dai {
+        timestamp: Instant,
+        amount: Uint256,
+        to: Address,
+    },
+    PendingDai {
+        timestamp: Instant,
+        amount: Uint256,
+        to: Address,
+    },
 }
 
 pub struct TokenBridge {
     bridge: TokenBridgeInfo,
-    withdraws: Vec<Withdraw>,
-    operation_in_progress: Option<InProgress>,
+    eth_withdraws: Vec<Withdraw>,
+    dai_withdraws: Vec<Withdraw>,
+    pending_dai_withdraws: Vec<Withdraw>,
     // these amounts are in dollars, we also assume the dai price is equal to the dollar
     // exchange rate for Eth. The reserve amount is how much we are keeping in our Eth wallet
     // in order to pay for the fees of future actions we may be required to take to deposit or
@@ -98,8 +192,10 @@ impl Default for TokenBridge {
                 "https://eth.althea.org".into(),
                 "https://dai.althea.org".into(),
             ),
-            withdraws: Vec::new(),
-            operation_in_progress: None,
+            eth_withdraws: Vec::new(),
+            dai_withdraws: Vec::new(),
+            pending_dai_withdraws: Vec::new(),
+            // operation_in_progress: None,
             minimum_to_exchange: 10,
             reserve_amount: 1,
         }
@@ -123,10 +219,25 @@ impl Handler<Update> for TokenBridge {
 
         match system_chain {
             SystemChain::Xdai => {
-                if self.withdraws.len() > 0 {
-                    progress_xdai_withdraws()
+                if self.dai_withdraws.len() > 0 {
+                    self.bridge
+                        .get_dai_balance(address)
+                        .then(move |our_dai_balance| {
+                            let pending_withdraw_amount = self
+                                .pending_dai_withdraws
+                                .iter()
+                                .fold(0, |acc, x| acc + x.amount);
+
+                            if (our_dai_balance - pending_withdraw_amount) >
+                        })
                 } else {
-                    progress_xdai_deposits()
+
+                }
+
+                if self.eth_withdraws.len() > 0 {
+
+                } else {
+
                 }
             }
             // no other chains have auto migration code, ignore clippy for now
@@ -135,27 +246,27 @@ impl Handler<Update> for TokenBridge {
     }
 }
 
-fn progress_xdai_deposits() {
-    dispatch_approval(bridge: TokenBridgeInfo);
-    dispatch_eth_to_dai_swap(
-        bridge: TokenBridgeInfo,
-        reserve_dollars: u32,
-        minimum_to_exchange_dollars: u32,
-        balance: Uint256,
-    );
-    dispatch_dai_to_xdai_swap(
-        bridge: TokenBridgeInfo,
-        minimum_to_exchange_dollars: u32,
-        address: Address,
-    );
-}
+// fn progress_xdai_deposits() {
+//     dispatch_approval(bridge: TokenBridgeInfo);
+//     dispatch_eth_to_dai_swap(
+//         bridge: TokenBridgeInfo,
+//         reserve_dollars: u32,
+//         minimum_to_exchange_dollars: u32,
+//         balance: Uint256,
+//     );
+//     dispatch_dai_to_xdai_swap(
+//         bridge: TokenBridgeInfo,
+//         minimum_to_exchange_dollars: u32,
+//         address: Address,
+//     );
+// }
 
-fn progress_xdai_withdraws() {
-    dispatch_approval(bridge: TokenBridgeInfo);
-    dispatch_xdai_to_dai_swap(bridge: TokenBridgeInfo, amount: Uint256);
-    dispatch_dai_to_eth_swap(bridge: TokenBridgeInfo, address: Address);
-    dispatch_user_withdraw();
-}
+// fn progress_xdai_withdraws() {
+//     dispatch_approval(bridge: TokenBridgeInfo);
+//     dispatch_xdai_to_dai_swap(bridge: TokenBridgeInfo, amount: Uint256);
+//     dispatch_dai_to_eth_swap(bridge: TokenBridgeInfo, address: Address);
+//     dispatch_user_withdraw();
+// }
 
 /// Spawns a future that will attempt to swap Eth from our eth address into DAI also
 /// in that same Eth address using Uniswap. The reserve dollars amount will always be
