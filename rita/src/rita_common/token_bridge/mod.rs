@@ -83,6 +83,7 @@ fn is_timed_out(started: Instant) -> bool {
 // }
 
 /// Represents a withdraw in progress
+#[derive(Clone)]
 pub enum State {
     Deposit {},
     Withdraw {
@@ -152,53 +153,58 @@ impl Handler<Update> for TokenBridge {
         let system_chain = payment_settings.system_chain;
         drop(payment_settings);
 
+        let bridge = self.bridge.clone();
+
         match system_chain {
-            SystemChain::Xdai => match self.state {
-                State::Deposit {} => {
-                    Box::new(futures::future::ok(())) as Box<Future<Item = (), Error = Error>>
-                }
+            SystemChain::Xdai => match self.state.clone() {
+                State::Deposit {} => (),
                 State::Withdraw {
                     timestamp,
                     to,
                     amount,
-                } => Box::new(self.bridge.get_dai_balance(our_address).and_then(
-                    move |our_dai_balance| {
-                        if our_dai_balance >= amount {
-                            Box::new(
-                                self.bridge
-                                    .dai_to_eth_swap(amount, UNISWAP_TIMEOUT)
-                                    .and_then(|transferred_eth| {
-                                        self.bridge
-                                            .eth_web3
-                                            .send_transaction(
-                                                to,
-                                                Vec::new(),
-                                                transferred_eth,
-                                                our_address,
-                                                our_private_key,
-                                                vec![
-                                                    SendTxOption::GasPrice(
-                                                        10_000_000_000u128.into(),
-                                                    ),
-                                                    SendTxOption::NetworkId(100u64),
-                                                ],
-                                            )
-                                            .and_then(|tx_hash| {
-                                                self.bridge
-                                                    .eth_web3
-                                                    .wait_for_transaction(tx_hash.into())
-                                                    .timeout(Duration::from_secs(
-                                                        ETH_TRANSFER_TIMEOUT,
-                                                    ))
-                                            })
-                                    }),
-                            ) as Box<Future<Item = (), Error = Error>>
-                        } else {
-                            Box::new(futures::future::ok(()))
-                                as Box<Future<Item = (), Error = Error>>
-                        }
-                    },
-                )),
+                } => Arbiter::spawn(
+                    self.bridge
+                        .get_dai_balance(our_address)
+                        .and_then(move |our_dai_balance| {
+                            if our_dai_balance >= amount {
+                                Box::new(
+                                    bridge
+                                        .dai_to_eth_swap(amount, UNISWAP_TIMEOUT)
+                                        .and_then(move |transferred_eth| {
+                                            bridge
+                                                .eth_web3
+                                                .send_transaction(
+                                                    to,
+                                                    Vec::new(),
+                                                    transferred_eth,
+                                                    our_address,
+                                                    our_private_key,
+                                                    vec![
+                                                        SendTxOption::GasPrice(
+                                                            10_000_000_000u128.into(),
+                                                        ),
+                                                        SendTxOption::NetworkId(100u64),
+                                                    ],
+                                                )
+                                                .and_then(move |tx_hash| {
+                                                    bridge
+                                                        .eth_web3
+                                                        .wait_for_transaction(tx_hash.into())
+                                                        .timeout(Duration::from_secs(
+                                                            ETH_TRANSFER_TIMEOUT,
+                                                        ))
+                                                })
+                                        })
+                                        .then(|_| futures::future::ok(())),
+                                )
+                                    as Box<Future<Item = (), Error = Error>>
+                            } else {
+                                Box::new(futures::future::ok(()))
+                                    as Box<Future<Item = (), Error = Error>>
+                            }
+                        })
+                        .then(|_| Ok(())),
+                ),
             },
             // no other chains have auto migration code, ignore clippy for now
             _ => {}
