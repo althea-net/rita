@@ -38,6 +38,24 @@ impl KernelInterface {
         Ok(stdout.contains(&format!("1:{}", class_id)))
     }
 
+    /// Gets the full flows list to pass to bulk functions
+    pub fn get_flows(&self, iface_name: &str) -> Result<String, Error> {
+        let result = self.run_command("tc", &["filter", "show", "dev", iface_name])?;
+
+        if !result.status.success() {
+            let res = String::from_utf8(result.stderr)?;
+            bail!("Failed to get flows {:?}", res);
+        }
+        Ok(String::from_utf8(result.stdout)?)
+    }
+
+    /// A version of the flows check designed to be run from the raw input, more efficient
+    /// in the exit setup loop than running the same command several hundred times
+    pub fn has_flow_bulk(&self, ip: &Ipv4Addr, tc_out: &str) -> bool {
+        let class_id = self.get_class_id(&ip);
+        tc_out.contains(&format!("1:{}", class_id))
+    }
+
     /// Determines if the provided flow is assigned
     pub fn has_class(&self, ip: &Ipv4Addr, iface_name: &str) -> Result<bool, Error> {
         let class_id = self.get_class_id(ip);
