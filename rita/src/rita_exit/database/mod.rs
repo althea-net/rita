@@ -45,6 +45,7 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::time::Instant;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::collections::HashSet;
 
 mod database_tools;
 pub mod db_client;
@@ -430,13 +431,16 @@ pub fn setup_clients(clients_list: &[exit_db::models::Client]) -> Result<(), Err
 
     let start = Instant::now();
 
-    let mut wg_clients = Vec::new();
+    // use hashset to ensure uniqueness and check for duplicate db entries
+    let mut wg_clients = HashSet::new();
 
     trace!("got clients from db {:?}", clients);
 
     for c in clients_list.iter() {
         match (c.verified, to_exit_client(c.clone())) {
-            (true, Ok(exit_client_c)) => wg_clients.push(exit_client_c),
+            (true, Ok(exit_client_c)) => if !wg_clients.insert(exit_client_c) {
+                error!("Duplicate database entry! {}", c.wg_pubkey);
+            },
             (true, Err(e)) => warn!("Error converting {:?} to exit client {:?}", c, e),
             (false, _) => trace!("{:?} is not verified, not adding to wg_exit", c),
         }
@@ -446,7 +450,7 @@ pub fn setup_clients(clients_list: &[exit_db::models::Client]) -> Result<(), Err
 
     // setup all the tunnels
     let exit_status = KI.set_exit_wg_config(
-        wg_clients.clone(),
+        &wg_clients,
         SETTING.get_exit_network().wg_tunnel_port,
         &SETTING.get_exit_network().wg_private_key_path,
     );
