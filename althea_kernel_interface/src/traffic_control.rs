@@ -6,6 +6,7 @@
 
 use super::KernelInterface;
 use failure::Error;
+use regex::Regex;
 use std::net::Ipv4Addr;
 
 impl KernelInterface {
@@ -243,6 +244,11 @@ impl KernelInterface {
     /// TODO when ipv6 exit support is added this will need to be revisited
     pub fn create_flow_by_ip(&self, iface_name: &str, ip: &Ipv4Addr) -> Result<(), Error> {
         let class_id = self.get_class_id(ip);
+        if let Ok(true) = self.has_flow_by_ip(iface_name, ip) {
+            trace!("Prevented the creation of a duplicate flow by ip!");
+            return Ok(());
+        }
+        trace!("Creating new flow by ip");
 
         let output = self.run_command(
             "tc",
@@ -273,6 +279,30 @@ impl KernelInterface {
         }
     }
 
+    /// Determines if a given interface already has a flow by a given ip
+    pub fn has_flow_by_ip(&self, iface_name: &str, ip: &Ipv4Addr) -> Result<bool, Error> {
+        let traffic_class = self.get_class_id(ip);
+        let output = self.run_command("tc", &["filter", "show", "dev", iface_name])?;
+        trace!("Got {:?} from `tc filter show`", output);
+
+        lazy_static! {
+            // this regex will become invalid if you change the parent flow in create flow by ip! see the 1:
+            static ref RE: Regex =
+                Regex::new(r"flowid 1:([0-9]+)?").expect("Unable to compile regular expression");
+        }
+
+        let cap_str = String::from_utf8(output.stdout)?;
+        let _err = String::from_utf8(output.stderr)?;
+        let cap = RE.captures(&cap_str);
+        for line in cap {
+            let c: u32 = line[1].parse()?;
+            if c == traffic_class {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     /// deletes the interface qdisc
     pub fn delete_qdisc(&self, iface_name: &str) -> Result<(), Error> {
         let output = self.run_command("tc", &["qdisc", "del", "dev", iface_name, "root"])?;
@@ -282,4 +312,74 @@ impl KernelInterface {
             bail!("Failed to delete qdisc limit!");
         }
     }
+}
+
+#[test]
+fn test_has_flow_by_ip_linux() {
+    use crate::KI;
+
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
+
+    let mut counter = 0;
+
+    KI.set_mock(Box::new(move |program, args| {
+        counter += 1;
+        match counter {
+            1 => {
+                assert_eq!(program, "tc");
+                assert_eq!(args, &["filter", "show", "dev", "wg_exit"]);
+
+                Ok(Output {
+                    stdout: b"
+filter parent 1: protocol ip pref 48960 u32 
+filter parent 1: protocol ip pref 48960 u32 fh 8c0: ht divisor 1 
+filter parent 1: protocol ip pref 48960 u32 fh 8c0::800 order 2048 key ht 8c0 bkt 0 flowid 1:5290 not_in_hw"
+                        .to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            _ => unimplemented!("called too many times"),
+        }
+    }));
+
+    assert_eq!(KI.get_class_id(&"172.168.1.17".parse().unwrap()), 5290);
+
+    assert!(KI
+        .has_flow_by_ip("wg_exit", &"172.168.1.17".parse().unwrap())
+        .unwrap());
+}
+
+#[test]
+fn test_does_not_have_flow_by_ip_linux() {
+    use crate::KI;
+
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
+
+    let mut counter = 0;
+
+    KI.set_mock(Box::new(move |program, args| {
+        counter += 1;
+        match counter {
+            1 => {
+                assert_eq!(program, "tc");
+                assert_eq!(args, &["filter", "show", "dev", "wg_exit"]);
+
+                Ok(Output {
+                    stdout: b"".to_vec(),
+                    stderr: b"".to_vec(),
+                    status: ExitStatus::from_raw(0),
+                })
+            }
+            _ => unimplemented!("called too many times"),
+        }
+    }));
+
+    assert!(!KI
+        .has_flow_by_ip("wg_exit", &"172.168.1.17".parse().unwrap())
+        .unwrap());
 }
