@@ -59,8 +59,6 @@ use crate::dao::SubnetDAOSettings;
 use crate::network::NetworkSettings;
 use crate::payment::PaymentSettings;
 
-/// This is the network settings for rita and rita_exit which generally only applies to networking
-/// _within_ the mesh or setting up pre hop tunnels (so nothing on exits)
 #[cfg(test)]
 lazy_static! {
     static ref KI: Box<dyn KernelInterface> = Box::new(TestCommandRunner {
@@ -72,6 +70,8 @@ lazy_static! {
 
 #[cfg(not(test))]
 lazy_static! {
+    /// This is the network settings for rita and rita_exit which generally only applies to networking
+    /// _within_ the mesh or setting up pre hop tunnels (so nothing on exits)
     static ref KI: Box<dyn KernelInterface> = Box::new(LinuxCommandRunner {});
 }
 
