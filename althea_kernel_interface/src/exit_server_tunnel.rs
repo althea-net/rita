@@ -56,6 +56,7 @@ impl dyn KernelInterface {
         info!("wg_exit has {} peers", wg_peers.len());
         for i in wg_peers {
             if !client_pubkeys.contains(&i) {
+                warn!("Removing no longer authorized peer {}", i);
                 self.run_command(
                     "wg",
                     &["set", "wg_exit", "peer", &format!("{}", i), "remove"],
@@ -64,10 +65,12 @@ impl dyn KernelInterface {
         }
 
         // setup traffic classes for enforcement with flow id's derived from the ip
+        // only get the flows list once
+        let flows = self.get_flows("wg_exit")?;
         for c in clients.iter() {
             match c.internal_ip {
                 IpAddr::V4(addr) => {
-                    if !self.has_flow(&addr, "wg_exit")? {
+                    if !self.has_flow_bulk(&addr, &flows) {
                         self.create_flow_by_ip("wg_exit", &addr)?
                     }
                 }
