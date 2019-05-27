@@ -1,14 +1,10 @@
 use super::{KernelInterface, KernelInterfaceError};
-
 use althea_types::WgKey;
-
+use std::net::IpAddr;
+use failure::Error;
 use std::collections::HashSet;
 
-use failure::Error;
-
-use std::net::IpAddr;
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct ExitClient {
     pub internal_ip: IpAddr,
     pub public_key: WgKey,
@@ -19,7 +15,7 @@ pub struct ExitClient {
 impl dyn KernelInterface {
     pub fn set_exit_wg_config(
         &self,
-        clients: Vec<ExitClient>,
+        clients: &HashSet<ExitClient>,
         listen_port: u16,
         private_key_path: &str,
     ) -> Result<(), Error> {
