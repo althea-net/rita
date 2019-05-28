@@ -1,8 +1,8 @@
 use super::{KernelInterface, KernelInterfaceError};
 use althea_types::WgKey;
-use std::net::IpAddr;
 use failure::Error;
 use std::collections::HashSet;
+use std::net::IpAddr;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct ExitClient {

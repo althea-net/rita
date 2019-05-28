@@ -31,16 +31,16 @@ use actix::{
     Actor, ActorContext, Arbiter, AsyncContext, Context, Handler, Message, Supervised, SyncArbiter,
     SyncContext, SystemService,
 };
+use althea_kernel_interface::ExitClient;
 use diesel::query_dsl::RunQueryDsl;
 use exit_db::models;
 use failure::Error;
 use settings::exit::RitaExitSettings;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::net::IpAddr;
 use std::time::Duration;
-use althea_kernel_interface::ExitClient;
-use std::collections::HashSet;
 
 #[derive(Default)]
 pub struct RitaLoop {}
@@ -134,7 +134,7 @@ impl Handler<Tick> for RitaSyncLoop {
         // Create and update client tunnels
         match setup_clients(&clients_list, &self.wg_clients) {
             Ok(wg_clients) => self.wg_clients = wg_clients,
-            Err(e) => error!("Setup clients failed with {:?}", e)
+            Err(e) => error!("Setup clients failed with {:?}", e),
         }
 
         // find users that have not been active within the configured time period
