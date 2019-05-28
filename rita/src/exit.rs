@@ -250,6 +250,7 @@ fn main() {
             .route("/wipe", Method::POST, wipe)
             .route("/database", Method::DELETE, nuke_db)
             .route("/debts", Method::GET, get_debts)
+            .route("/debts/reset", Method::POST, reset_debt)
             .route("/dao_list", Method::GET, get_dao_list)
             .route("/dao_list/add/{address}", Method::POST, add_to_dao_list)
             .route(

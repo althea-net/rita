@@ -1,7 +1,11 @@
+use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::GetDebtsList;
-use crate::rita_common::debt_keeper::{DebtKeeper, GetDebtsResult};
-use ::actix::registry::SystemService;
-use ::actix_web::{AsyncResponder, HttpRequest, Json};
+use crate::rita_common::debt_keeper::GetDebtsResult;
+use crate::rita_common::debt_keeper::Traffic;
+use crate::rita_common::debt_keeper::TrafficReplace;
+use ::actix::SystemService;
+use ::actix_web::{AsyncResponder, HttpRequest, HttpResponse, Json};
+use althea_types::Identity;
 use failure::Error;
 use futures::Future;
 use std::boxed::Box;
@@ -15,4 +19,15 @@ pub fn get_debts(
         .from_err()
         .and_then(move |reply| Ok(Json(reply?)))
         .responder()
+}
+
+pub fn reset_debt(user_to_forgive: Json<Identity>) -> HttpResponse {
+    let forgiven_traffic = TrafficReplace {
+        traffic: Traffic {
+            from: user_to_forgive.into_inner(),
+            amount: 0.into(),
+        },
+    };
+    DebtKeeper::from_registry().do_send(forgiven_traffic);
+    HttpResponse::Ok().json(())
 }

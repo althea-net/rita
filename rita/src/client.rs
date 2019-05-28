@@ -241,6 +241,7 @@ fn main() {
                 remove_from_dao_list,
             )
             .route("/debts", Method::GET, get_debts)
+            .route("/debts/reset", Method::POST, reset_debt)
             .route("/exits/sync", Method::GET, exits_sync)
             .route("/exits", Method::GET, get_exit_info)
             .route("/exits", Method::POST, add_exits)

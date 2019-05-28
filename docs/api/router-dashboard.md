@@ -702,6 +702,31 @@ Format:
 
 ---
 
+## /debts/reset
+
+Posting a JSON identity object to this endpoint will reset the debt of the provided identity to
+zero. Use the /debts/ endpoint to get the id.
+
+- URL: `<rita ip>:<rita_dashboard_port>/debts/reset`
+- Method: `POST`
+- URL Params: `None`
+- Data Params: `Json<Identity>`
+- Success Response:
+  - Code: 200 OK
+  - Contents: `None`.
+- Error Response: `500 Server Error`
+- Sample Call
+
+`curl 127.0..1:<rita_dashboard_port>/debts/reset -H 'Content-Type: application/json' -i -d '{ "mesh_ip": "a:b:c:d:e:f:g:h", "eth_address": "0x0101010101010101010101010101010101010101", "wg_public_key": "pubkey"}'`
+
+Format:
+
+```json
+[]
+```
+
+---
+
 ## /dao_list
 
 Calling HTTP `GET` request on this endpoint returns a list of EthAddresses for a configured subnet DAO. If no DAO is configured it will return an empty list.
