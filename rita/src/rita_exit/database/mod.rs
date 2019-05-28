@@ -29,6 +29,7 @@ use crate::rita_exit::database::struct_tools::verif_done;
 use crate::KI;
 use crate::SETTING;
 use ::actix::prelude::SystemService;
+use althea_kernel_interface::ExitClient;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 use diesel;
 use diesel::prelude::{Connection, ConnectionError, PgConnection, RunQueryDsl};
@@ -42,11 +43,10 @@ use settings::exit::ExitVerifSettings;
 use settings::exit::RitaExitSettings;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::net::IpAddr;
 use std::time::Instant;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use std::collections::HashSet;
-use althea_kernel_interface::ExitClient;
 
 mod database_tools;
 pub mod db_client;
@@ -427,7 +427,10 @@ pub fn cleanup_exit_clients(
 /// into a single very long wg tunnel setup command which is then applied to the
 /// wg_exit tunnel (or created if it's the first run). This is the offically supported
 /// way to update live WireGuard tunnels and should not disrupt traffic
-pub fn setup_clients(clients_list: &[exit_db::models::Client], old_clients: &HashSet<ExitClient>) -> Result<HashSet<ExitClient>, Error> {
+pub fn setup_clients(
+    clients_list: &[exit_db::models::Client],
+    old_clients: &HashSet<ExitClient>,
+) -> Result<HashSet<ExitClient>, Error> {
     use self::schema::clients::dsl::clients;
 
     let start = Instant::now();
@@ -439,9 +442,11 @@ pub fn setup_clients(clients_list: &[exit_db::models::Client], old_clients: &Has
 
     for c in clients_list.iter() {
         match (c.verified, to_exit_client(c.clone())) {
-            (true, Ok(exit_client_c)) => if !wg_clients.insert(exit_client_c) {
-                error!("Duplicate database entry! {}", c.wg_pubkey);
-            },
+            (true, Ok(exit_client_c)) => {
+                if !wg_clients.insert(exit_client_c) {
+                    error!("Duplicate database entry! {}", c.wg_pubkey);
+                }
+            }
             (true, Err(e)) => warn!("Error converting {:?} to exit client {:?}", c, e),
             (false, _) => trace!("{:?} is not verified, not adding to wg_exit", c),
         }
