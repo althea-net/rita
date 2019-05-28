@@ -1,14 +1,10 @@
 use super::{KernelInterface, KernelInterfaceError};
-
 use althea_types::WgKey;
-
-use std::collections::HashSet;
-
 use failure::Error;
-
+use std::collections::HashSet;
 use std::net::IpAddr;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct ExitClient {
     pub internal_ip: IpAddr,
     pub public_key: WgKey,
@@ -19,7 +15,7 @@ pub struct ExitClient {
 impl dyn KernelInterface {
     pub fn set_exit_wg_config(
         &self,
-        clients: Vec<ExitClient>,
+        clients: &HashSet<ExitClient>,
         listen_port: u16,
         private_key_path: &str,
     ) -> Result<(), Error> {
@@ -56,6 +52,7 @@ impl dyn KernelInterface {
         info!("wg_exit has {} peers", wg_peers.len());
         for i in wg_peers {
             if !client_pubkeys.contains(&i) {
+                warn!("Removing no longer authorized peer {}", i);
                 self.run_command(
                     "wg",
                     &["set", "wg_exit", "peer", &format!("{}", i), "remove"],
@@ -64,10 +61,12 @@ impl dyn KernelInterface {
         }
 
         // setup traffic classes for enforcement with flow id's derived from the ip
+        // only get the flows list once
+        let flows = self.get_flows("wg_exit")?;
         for c in clients.iter() {
             match c.internal_ip {
                 IpAddr::V4(addr) => {
-                    if !self.has_flow(&addr, "wg_exit")? {
+                    if !self.has_flow_bulk(&addr, &flows) {
                         self.create_flow_by_ip("wg_exit", &addr)?
                     }
                 }

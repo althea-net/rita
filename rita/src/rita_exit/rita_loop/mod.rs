@@ -31,12 +31,14 @@ use actix::{
     Actor, ActorContext, Arbiter, AsyncContext, Context, Handler, Message, Supervised, SyncArbiter,
     SyncContext, SystemService,
 };
+use althea_kernel_interface::ExitClient;
 use diesel::query_dsl::RunQueryDsl;
 use exit_db::models;
 use failure::Error;
 use settings::exit::RitaExitSettings;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::net::IpAddr;
 use std::time::Duration;
 
@@ -47,6 +49,8 @@ pub struct RitaLoop {}
 pub struct RitaSyncLoop {
     /// a simple cache to prevent regularly asking Maxmind for the same geoip data
     pub geoip_cache: HashMap<IpAddr, String>,
+    /// a cache of what tunnels we had setup last round, used to prevent extra setup ops
+    pub wg_clients: HashSet<ExitClient>,
 }
 
 // the speed in seconds for the exit loop
@@ -60,6 +64,7 @@ impl Actor for RitaLoop {
         setup_exit_wg_tunnel();
         let addr = SyncArbiter::start(1, || RitaSyncLoop {
             geoip_cache: HashMap::new(),
+            wg_clients: HashSet::new(),
         });
         ctx.run_interval(Duration::from_secs(EXIT_LOOP_SPEED), move |_act, _ctx| {
             addr.do_send(Tick)
@@ -127,9 +132,9 @@ impl Handler<Tick> for RitaSyncLoop {
         TrafficWatcher::from_registry().do_send(Watch(ids));
 
         // Create and update client tunnels
-        let res = setup_clients(&clients_list);
-        if res.is_err() {
-            error!("Setup clients failed with {:?}", res);
+        match setup_clients(&clients_list, &self.wg_clients) {
+            Ok(wg_clients) => self.wg_clients = wg_clients,
+            Err(e) => error!("Setup clients failed with {:?}", e),
         }
 
         // find users that have not been active within the configured time period

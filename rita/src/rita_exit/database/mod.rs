@@ -29,6 +29,7 @@ use crate::rita_exit::database::struct_tools::verif_done;
 use crate::KI;
 use crate::SETTING;
 use ::actix::prelude::SystemService;
+use althea_kernel_interface::ExitClient;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 use diesel;
 use diesel::prelude::{Connection, ConnectionError, PgConnection, RunQueryDsl};
@@ -42,6 +43,7 @@ use settings::exit::ExitVerifSettings;
 use settings::exit::RitaExitSettings;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::net::IpAddr;
 use std::time::Instant;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -425,28 +427,43 @@ pub fn cleanup_exit_clients(
 /// into a single very long wg tunnel setup command which is then applied to the
 /// wg_exit tunnel (or created if it's the first run). This is the offically supported
 /// way to update live WireGuard tunnels and should not disrupt traffic
-pub fn setup_clients(clients_list: &[exit_db::models::Client]) -> Result<(), Error> {
+pub fn setup_clients(
+    clients_list: &[exit_db::models::Client],
+    old_clients: &HashSet<ExitClient>,
+) -> Result<HashSet<ExitClient>, Error> {
     use self::schema::clients::dsl::clients;
 
     let start = Instant::now();
 
-    let mut wg_clients = Vec::new();
+    // use hashset to ensure uniqueness and check for duplicate db entries
+    let mut wg_clients = HashSet::new();
 
     trace!("got clients from db {:?}", clients);
 
     for c in clients_list.iter() {
         match (c.verified, to_exit_client(c.clone())) {
-            (true, Ok(exit_client_c)) => wg_clients.push(exit_client_c),
+            (true, Ok(exit_client_c)) => {
+                if !wg_clients.insert(exit_client_c) {
+                    error!("Duplicate database entry! {}", c.wg_pubkey);
+                }
+            }
             (true, Err(e)) => warn!("Error converting {:?} to exit client {:?}", c, e),
             (false, _) => trace!("{:?} is not verified, not adding to wg_exit", c),
         }
     }
 
     trace!("converted clients {:?}", wg_clients);
+    // symetric difference is an iterator of all items in A but not in B
+    // or in B but not in A, in short if there's any difference between the two
+    // it must be nonzero, since all entires must be unique there can not be duplicates
+    if wg_clients.symmetric_difference(old_clients).count() == 0 {
+        info!("No change in wg_exit, skipping setup for this round");
+        return Ok(wg_clients);
+    }
 
     // setup all the tunnels
     let exit_status = KI.set_exit_wg_config(
-        wg_clients.clone(),
+        &wg_clients,
         SETTING.get_exit_network().wg_tunnel_port,
         &SETTING.get_exit_network().wg_private_key_path,
     );
@@ -467,7 +484,7 @@ pub fn setup_clients(clients_list: &[exit_db::models::Client]) -> Result<(), Err
         clients_list.len(),
         wg_clients.len(),
     );
-    Ok(())
+    Ok(wg_clients)
 }
 
 /// Performs enforcement actions on clients by requesting a list of clients from debt keeper
