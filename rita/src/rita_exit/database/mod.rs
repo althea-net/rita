@@ -46,6 +46,7 @@ use std::net::IpAddr;
 use std::time::Instant;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::collections::HashSet;
+use althea_kernel_interface::ExitClient;
 
 mod database_tools;
 pub mod db_client;
@@ -426,7 +427,7 @@ pub fn cleanup_exit_clients(
 /// into a single very long wg tunnel setup command which is then applied to the
 /// wg_exit tunnel (or created if it's the first run). This is the offically supported
 /// way to update live WireGuard tunnels and should not disrupt traffic
-pub fn setup_clients(clients_list: &[exit_db::models::Client]) -> Result<(), Error> {
+pub fn setup_clients(clients_list: &[exit_db::models::Client], old_clients: &HashSet<ExitClient>) -> Result<HashSet<ExitClient>, Error> {
     use self::schema::clients::dsl::clients;
 
     let start = Instant::now();
@@ -447,6 +448,13 @@ pub fn setup_clients(clients_list: &[exit_db::models::Client]) -> Result<(), Err
     }
 
     trace!("converted clients {:?}", wg_clients);
+    // symetric difference is an iterator of all items in A but not in B
+    // or in B but not in A, in short if there's any difference between the two
+    // it must be nonzero, since all entires must be unique there can not be duplicates
+    if wg_clients.symmetric_difference(old_clients).count() == 0 {
+        info!("No change in wg_exit, skipping setup for this round");
+        return Ok(wg_clients);
+    }
 
     // setup all the tunnels
     let exit_status = KI.set_exit_wg_config(
@@ -471,7 +479,7 @@ pub fn setup_clients(clients_list: &[exit_db::models::Client]) -> Result<(), Err
         clients_list.len(),
         wg_clients.len(),
     );
-    Ok(())
+    Ok(wg_clients)
 }
 
 /// Performs enforcement actions on clients by requesting a list of clients from debt keeper
