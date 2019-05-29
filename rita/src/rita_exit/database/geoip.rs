@@ -42,6 +42,7 @@ pub struct IpPair {
 /// gets the gateway ip for a given set of mesh IPs, inactive addresses will simply
 /// not appear in the result vec
 pub fn get_gateway_ip_bulk(mesh_ip_list: Vec<IpAddr>) -> Result<Vec<IpPair>, Error> {
+    let mut remote_ip_cache: HashMap<String, IpAddr> = HashMap::new();
     let mut babel = Babel::new(make_babel_stream()?);
     babel.start_connection()?;
     let routes = babel.parse_routes()?;
@@ -53,12 +54,24 @@ pub fn get_gateway_ip_bulk(mesh_ip_list: Vec<IpAddr>) -> Result<Vec<IpPair>, Err
             if let IpNetwork::V6(ref ip) = route.prefix {
                 // Only host addresses and installed routes
                 if ip.prefix() == 128 && route.installed && IpAddr::V6(ip.ip()) == mesh_ip {
-                    match KI.get_wg_remote_ip(&route.iface) {
-                        Ok(remote_ip) => results.push(IpPair {
+                    // check if we've already looked up this interface this round, since gateways
+                    // have many clients this will often be the case
+                    if let Some(remote_ip) = remote_ip_cache.get(&route.iface) {
+                        results.push(IpPair {
                             mesh_ip,
-                            gateway_ip: remote_ip,
-                        }),
-                        Err(e) => error!("Failure looking up remote ip {:?}", e),
+                            gateway_ip: *remote_ip,
+                        });
+                    } else {
+                        match KI.get_wg_remote_ip(&route.iface) {
+                            Ok(remote_ip) => {
+                                remote_ip_cache.insert(route.iface.clone(), remote_ip);
+                                results.push(IpPair {
+                                    mesh_ip,
+                                    gateway_ip: remote_ip,
+                                })
+                            }
+                            Err(e) => error!("Failure looking up remote ip {:?}", e),
+                        }
                     }
                 }
             }
