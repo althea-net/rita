@@ -3,9 +3,9 @@ extern crate failure;
 #[macro_use]
 extern crate log;
 extern crate futures;
-extern crate tokio_tcp;
 
 use failure::Error;
+use futures::future;
 use futures::future::result as future_result;
 use futures::future::Either;
 use futures::future::Future;
@@ -14,10 +14,13 @@ use std::iter::Iterator;
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::str;
-use tokio::io::read_to_end;
+use std::time::Duration;
+use std::time::Instant;
+use tokio::io::read;
 use tokio::io::write_all;
-use tokio_tcp::ConnectFuture;
-use tokio_tcp::TcpStream;
+use tokio::net::tcp::ConnectFuture;
+use tokio::net::TcpStream;
+use tokio::timer::Delay;
 
 #[derive(Debug, Fail)]
 pub enum BabelMonitorError {
@@ -91,27 +94,67 @@ pub struct Neighbor {
 /// Opens a tcpstream to the babel management socket using a standard timeout
 /// for both the open and read operations
 pub fn open_babel_stream(babel_port: u16) -> ConnectFuture {
-    let socket: SocketAddr = format!("[::1]:{}", babel_port,).parse().unwrap();
+    let socket_string = format!("[::1]:{}", babel_port);
+    trace!("About to open Babel socket using {}", socket_string);
+    let socket: SocketAddr = socket_string.parse().unwrap();
     TcpStream::connect(&socket)
 }
 
-fn read_babel(stream: TcpStream) -> Box<Future<Item = (TcpStream, String), Error = Error>> {
-    let buffer = Vec::new();
-    Box::new(read_to_end(stream, buffer).then(|result| {
-        if result.is_err() {
-            return Err(TokioError(format!("{:?}", result)).into());
-        }
-        let (stream, buffer) = result.unwrap();
-        let output = String::from_utf8(buffer);
-        if output.is_err() {
-            //handle
-        }
-        let output = output.unwrap();
-        Ok((stream, read_babel_sync(output)?))
-    }))
+/// Read function, you should always pass an empty string to the previous contents field
+/// it's used when the function does not find a babel terminator and needs to recuse to get
+/// the full message
+fn read_babel(
+    stream: TcpStream,
+    previous_contents: String,
+) -> impl Future<Item = (TcpStream, String), Error = Error> {
+    // 100kbyte
+    let buffer: [u8; 100000] = [0; 100000];
+    read(stream, buffer.to_vec())
+        .from_err()
+        .and_then(move |result| {
+            let (stream, buffer, bytes) = result;
+
+            let output = String::from_utf8(buffer);
+            if let Err(e) = output {
+                return Box::new(future::err(TokioError(format!("{:?}", e)).into()))
+                    as Box<Future<Item = (TcpStream, String), Error = Error>>;
+            }
+            let output = output.unwrap();
+            let output = output.trim_matches(char::from(0));
+            trace!(
+                "Babel monitor got {} bytes with the message {}",
+                bytes,
+                output
+            );
+
+            // it's possible we caught babel in the middle of writing to the socket
+            // if we don't see a terminator we either have an error in Babel or an error
+            // in our code for expecting one. So it's safe for us to keep trying and building
+            // a larger response until we see one.
+            let babel_data = read_babel_sync(&output);
+            if let Err(NoTerminator(_)) = babel_data {
+                let when = Instant::now() + Duration::from_millis(100);
+                trace!("we didn't get the whole message yet, trying again");
+                let full_message = format!("{}{}", previous_contents, output);
+                return Box::new(
+                    Delay::new(when)
+                        .map_err(move |e| panic!("timer failed; err={:?}", e))
+                        .and_then(move |_| read_babel(stream, full_message)),
+                ) as Box<Future<Item = (TcpStream, String), Error = Error>>;
+            }
+            if let Err(e) = babel_data {
+                warn!("Babel read failed! {} {:?}", output, e);
+                return Box::new(future::err(ReadFailed(format!("{:?}", e)).into()))
+                    as Box<Future<Item = (TcpStream, String), Error = Error>>;
+            }
+            let babel_data = babel_data.unwrap();
+
+            Box::new(future::ok((stream, babel_data)))
+                as Box<Future<Item = (TcpStream, String), Error = Error>>
+        })
 }
 
-fn read_babel_sync(output: String) -> Result<String, Error> {
+fn read_babel_sync(output: &str) -> Result<String, BabelMonitorError> {
     let mut ret = String::new();
     for line in output.lines() {
         ret.push_str(line);
@@ -144,11 +187,11 @@ fn read_babel_sync(output: String) -> Result<String, Error> {
 pub fn run_command(
     stream: TcpStream,
     cmd: &str,
-) -> Box<Future<Item = (TcpStream, String), Error = Error>> {
-    let mut bytes = Vec::new();
-    bytes.clone_from_slice(&cmd.as_bytes());
-    let cmd = cmd.to_string();
-    Box::new(write_all(stream, bytes).then(move |out| {
+) -> impl Future<Item = (TcpStream, String), Error = Error> {
+    trace!("Running babel command {}", cmd);
+    let cmd = format!("{}\n", cmd);
+    let bytes = cmd.as_bytes().to_vec();
+    write_all(stream, bytes).then(move |out| {
         if out.is_err() {
             return Box::new(Either::A(future_result(Err(CommandFailed(
                 cmd,
@@ -157,20 +200,22 @@ pub fn run_command(
             .into()))));
         }
         let (stream, _res) = out.unwrap();
-        Box::new(Either::B(read_babel(stream)))
-    }))
+        trace!("Command write succeeded, returning output");
+        Box::new(Either::B(read_babel(stream, String::new())))
+    })
 }
 
 // Consumes the automated Preamble and validates configuration api version
-pub fn start_connection(stream: TcpStream) -> Box<Future<Item = TcpStream, Error = Error>> {
-    Box::new(read_babel(stream).then(|result| {
+pub fn start_connection(stream: TcpStream) -> impl Future<Item = TcpStream, Error = Error> {
+    trace!("Starting babel connection");
+    read_babel(stream, String::new()).then(|result| {
         if let Err(e) = result {
             return Err(e);
         }
         let (stream, preamble) = result.unwrap();
         validate_preamble(preamble)?;
         Ok(stream)
-    }))
+    })
 }
 
 fn validate_preamble(preamble: String) -> Result<(), Error> {
@@ -183,14 +228,14 @@ fn validate_preamble(preamble: String) -> Result<(), Error> {
     }
 }
 
-pub fn get_local_fee(stream: TcpStream) -> Box<Future<Item = (TcpStream, u32), Error = Error>> {
-    Box::new(run_command(stream, "dump").then(|output| {
+pub fn get_local_fee(stream: TcpStream) -> impl Future<Item = (TcpStream, u32), Error = Error> {
+    run_command(stream, "dump").then(|output| {
         if let Err(e) = output {
             return Err(e);
         }
         let (stream, babel_output) = output.unwrap();
         Ok((stream, get_local_fee_sync(babel_output)?))
-    }))
+    })
 }
 
 fn get_local_fee_sync(babel_output: String) -> Result<u32, Error> {
@@ -212,91 +257,87 @@ fn get_local_fee_sync(babel_output: String) -> Result<u32, Error> {
 pub fn set_local_fee(
     stream: TcpStream,
     new_fee: u32,
-) -> Box<Future<Item = TcpStream, Error = Error>> {
-    Box::new(
-        run_command(stream, &format!("fee {}", new_fee)).then(|result| {
-            if let Err(e) = result {
-                return Err(e);
-            }
-            let (stream, _out) = result.unwrap();
-            Ok(stream)
-        }),
-    )
+) -> impl Future<Item = TcpStream, Error = Error> {
+    run_command(stream, &format!("fee {}", new_fee)).then(|result| {
+        if let Err(e) = result {
+            return Err(e);
+        }
+        let (stream, _out) = result.unwrap();
+        Ok(stream)
+    })
 }
 
 pub fn set_metric_factor(
     stream: TcpStream,
     new_factor: u32,
-) -> Box<Future<Item = TcpStream, Error = Error>> {
-    Box::new(
-        run_command(stream, &format!("metric-factor {}", new_factor)).then(|result| {
-            if let Err(e) = result {
-                return Err(e);
-            }
-            let (stream, _out) = result.unwrap();
-            Ok(stream)
-        }),
-    )
+) -> impl Future<Item = TcpStream, Error = Error> {
+    run_command(stream, &format!("metric-factor {}", new_factor)).then(|result| {
+        if let Err(e) = result {
+            return Err(e);
+        }
+        let (stream, _out) = result.unwrap();
+        Ok(stream)
+    })
 }
 
-pub fn monitor(stream: TcpStream, iface: &str) -> Box<Future<Item = TcpStream, Error = Error>> {
+pub fn monitor(stream: TcpStream, iface: &str) -> impl Future<Item = TcpStream, Error = Error> {
     let command = &format!(
         "interface {} max-rtt-penalty 500 enable-timestamps true",
         iface
     );
     let iface = iface.to_string();
-    Box::new(run_command(stream, &command).then(move |result| {
+    run_command(stream, &command).then(move |result| {
         if let Err(e) = result {
             return Err(e);
         }
         trace!("Babel started monitoring: {}", iface);
         let (stream, _out) = result.unwrap();
         Ok(stream)
-    }))
+    })
 }
 
 pub fn redistribute_ip(
     stream: TcpStream,
     ip: &IpAddr,
     allow: bool,
-) -> Box<Future<Item = (TcpStream, String), Error = Error>> {
+) -> impl Future<Item = (TcpStream, String), Error = Error> {
     let command = format!(
         "redistribute ip {}/128 {}",
         ip,
         if allow { "allow" } else { "deny" }
     );
-    Box::new(run_command(stream, &command).then(move |result| {
+    run_command(stream, &command).then(move |result| {
         if let Err(e) = result {
-            return Box::new(Either::A(future_result(Err(e).into())));
+            return Either::A(future_result(Err(e).into()));
         }
         let (stream, _out) = result.unwrap();
-        Box::new(Either::B(read_babel(stream)))
-    }))
+        Either::B(read_babel(stream, String::new()))
+    })
 }
 
-pub fn unmonitor(stream: TcpStream, iface: &str) -> Box<Future<Item = TcpStream, Error = Error>> {
+pub fn unmonitor(stream: TcpStream, iface: &str) -> impl Future<Item = TcpStream, Error = Error> {
     let command = format!("flush interface {}", iface);
     let iface = iface.to_string();
-    Box::new(run_command(stream, &command).then(move |result| {
+    run_command(stream, &command).then(move |result| {
         if let Err(e) = result {
             return Err(e);
         }
         trace!("Babel stopped monitoring: {}", iface);
         let (stream, _out) = result.unwrap();
         Ok(stream)
-    }))
+    })
 }
 
 pub fn parse_neighs(
     stream: TcpStream,
-) -> Box<Future<Item = (TcpStream, Vec<Neighbor>), Error = Error>> {
-    Box::new(run_command(stream, "dump").then(|result| {
+) -> impl Future<Item = (TcpStream, Vec<Neighbor>), Error = Error> {
+    run_command(stream, "dump").then(|result| {
         if let Err(e) = result {
             return Err(e);
         }
         let (stream, output) = result.unwrap();
         Ok((stream, parse_neighs_sync(output)?))
-    }))
+    })
 }
 
 fn parse_neighs_sync(output: String) -> Result<Vec<Neighbor>, Error> {
@@ -398,14 +439,14 @@ fn parse_neighs_sync(output: String) -> Result<Vec<Neighbor>, Error> {
 
 pub fn parse_routes(
     stream: TcpStream,
-) -> Box<Future<Item = (TcpStream, Vec<Route>), Error = Error>> {
-    Box::new(run_command(stream, "dump").then(|result| {
+) -> impl Future<Item = (TcpStream, Vec<Route>), Error = Error> {
+    run_command(stream, "dump").then(|result| {
         if let Err(e) = result {
             return Err(e);
         }
         let (stream, babel_out) = result.unwrap();
         Ok((stream, parse_routes_sync(babel_out)?))
-    }))
+    })
 }
 
 pub fn parse_routes_sync(babel_out: String) -> Result<Vec<Route>, Error> {
@@ -702,6 +743,6 @@ ok\n";
 
     #[test]
     fn only_ok_in_output() {
-        read_babel_sync("ok\n".to_string()).unwrap();
+        read_babel_sync("ok\n").unwrap();
     }
 }
