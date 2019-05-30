@@ -8,15 +8,8 @@ extern crate failure;
 extern crate lazy_static;
 
 use althea_kernel_interface::KI;
-use babel_monitor::open_babel_stream;
-use babel_monitor::run_command;
-use babel_monitor::set_local_fee;
-use babel_monitor::set_metric_factor;
-use babel_monitor::start_connection;
 use clarity::PrivateKey;
 use failure::Error;
-use futures::future::Future;
-use futures::future::Join;
 use ipgen;
 use rand;
 use rand::distributions::Alphanumeric;
@@ -27,7 +20,7 @@ use settings::exit::RitaExitSettings;
 use settings::RitaCommonSettings;
 use std::fs::File;
 use std::io::Read;
-use std::net::{IpAddr, SocketAddr, TcpStream};
+use std::net::IpAddr;
 use std::path::Path;
 use std::str;
 use std::sync::{Arc, RwLock};
@@ -189,35 +182,6 @@ fn linux_init(config: Arc<RwLock<settings::client::RitaSettingsStruct>>) -> Resu
         }
     }
 
-    // Yield the mut lock
-    drop(payment_settings);
-
-    let local_fee = config.get_payment().local_fee;
-    let metric_factor = config.get_network().metric_factor;
-    if local_fee == 0 {
-        warn!("THIS NODE IS GIVING BANDWIDTH AWAY FOR FREE. PLEASE SET local_fee TO A NON-ZERO VALUE TO DISABLE THIS WARNING.");
-    }
-    if metric_factor == 0 {
-        warn!("THIS NODE DOESN'T PAY ATTENTION TO ROUTE QUALITY - IT'LL CHOOSE THE CHEAPEST ROUTE EVEN IF IT'S THE WORST LINK AROUND. PLEASE SET metric_factor TO A NON-ZERO VALUE TO DISABLE THIS WARNING.");
-    }
-    if metric_factor > 2000000 {
-        warn!("THIS NODE DOESN'T PAY ATTENTION TO ROUTE PRICE - IT'LL CHOOSE THE BEST ROUTE EVEN IF IT COSTS WAY TOO MUCH. PLEASE SET metric_factor TO A LOWER VALUE TO DISABLE THIS WARNING.");
-    }
-
-    // it's safe to use wait because CLU is run outside of the event loop
-    // pre-startup, if we can't get to babel now we should just panic
-    open_babel_stream(config.get_network().babel_port)
-        .then(|stream| {
-            // if we can't get to babel here we panic
-            let stream = stream.expect("Can't reach Babel!");
-            start_connection(stream).and_then(|stream| {
-                set_local_fee(stream, local_fee)
-                    .and_then(|stream| Ok(set_metric_factor(stream, metric_factor)))
-            })
-        })
-        .wait()
-        .expect("Unable to set babel fee or metric factor!");
-
     Ok(())
 }
 
@@ -301,26 +265,6 @@ fn linux_exit_init(
             payment_settings.eth_address = Some(new_private_key.to_public_key()?)
         }
     }
-
-    // Yield the mut lock
-    drop(payment_settings);
-
-    let local_fee = config.get_payment().local_fee;
-    let metric_factor = config.get_network().metric_factor;
-
-    // it's safe to use wait because CLU is run outside of the event loop
-    // pre-startup, if we can't get to babel now we should just panic
-    open_babel_stream(config.get_network().babel_port)
-        .then(|stream| {
-            // if we can't get to babel here we panic
-            let stream = stream.expect("Can't reach Babel!");
-            start_connection(stream).and_then(|stream| {
-                set_local_fee(stream, local_fee)
-                    .and_then(|stream| Ok(set_metric_factor(stream, metric_factor)))
-            })
-        })
-        .wait()
-        .expect("Unable to set babel fee or metric factor!");
 
     Ok(())
 }
