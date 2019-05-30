@@ -35,9 +35,13 @@ use actix::{
 use actix_web::http::Method;
 use actix_web::{server, App};
 use althea_kernel_interface::ExitClient;
+use babel_monitor::open_babel_stream;
+use babel_monitor::parse_routes;
+use babel_monitor::start_connection;
 use diesel::query_dsl::RunQueryDsl;
 use exit_db::models;
 use failure::Error;
+use futures::future::Future;
 use settings::exit::RitaExitSettings;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
@@ -121,6 +125,7 @@ impl Handler<Tick> for RitaSyncLoop {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, _ctx: &mut SyncContext<Self>) -> Self::Result {
         use exit_db::schema::clients::dsl::clients;
+        let babel_port = SETTING.get_network().babel_port;
         trace!("Exit tick!");
 
         // opening a database connection takes at least several milliseconds, as the database server
@@ -131,8 +136,30 @@ impl Handler<Tick> for RitaSyncLoop {
         let clients_list = clients.load::<models::Client>(&conn)?;
         let ids = clients_to_ids(clients_list.clone());
 
-        // watch and bill for traffic it's super important this gets spawned!
-        TrafficWatcher::from_registry().do_send(Watch(ids));
+        // watch and bill for traffic
+
+        Arbiter::spawn(
+            open_babel_stream(babel_port)
+                .from_err()
+                .and_then(|stream| {
+                    start_connection(stream).then(|stream| {
+                        let stream = stream.expect("Unexpected babel version!");
+                        parse_routes(stream).and_then(|routes| {
+                            TrafficWatcher::from_registry().do_send(Watch {
+                                users: ids,
+                                routes: routes.1,
+                            });
+                            Ok(())
+                        })
+                    })
+                })
+                .then(|ret| {
+                    if let Err(e) = ret {
+                        error!("Failed to watch Exit traffic with {:?}", e)
+                    }
+                    Ok(())
+                }),
+        );
 
         // Create and update client tunnels
         match setup_clients(&clients_list, &self.wg_clients) {

@@ -10,6 +10,9 @@ use actix::{
     Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
     SystemService,
 };
+use babel_monitor::open_babel_stream;
+use babel_monitor::parse_routes;
+use babel_monitor::start_connection;
 use failure::Error;
 use futures::Future;
 use settings::RitaCommonSettings;
@@ -85,9 +88,9 @@ impl Handler<Tick> for RitaFastLoop {
                 .send(GetNeighbors)
                 .timeout(FAST_LOOP_TIMEOUT)
                 .then(move |res| {
-                    let res = res.unwrap().unwrap();
-
                     trace!("Currently open tunnels: {:?}", res);
+                    let neighbors = res.unwrap().unwrap();
+                    let babel_port = SETTING.get_network().babel_port;
 
                     let neigh = Instant::now();
                     info!(
@@ -96,15 +99,30 @@ impl Handler<Tick> for RitaFastLoop {
                         start.elapsed().subsec_millis()
                     );
 
-                    TrafficWatcher::from_registry()
-                        .send(Watch::new(res))
-                        .timeout(FAST_LOOP_TIMEOUT)
-                        .then(move |_res| {
-                            info!(
-                                "TrafficWatcher completed in {}s {}ms",
-                                neigh.elapsed().as_secs(),
-                                neigh.elapsed().subsec_millis()
-                            );
+                    open_babel_stream(babel_port)
+                        .from_err()
+                        .and_then(move |stream| {
+                            start_connection(stream).then(move |stream| {
+                                let stream = stream.expect("Unexpected babel version!");
+                                parse_routes(stream).and_then(move |routes| {
+                                    TrafficWatcher::from_registry()
+                                        .send(Watch::new(neighbors, routes.1))
+                                        .timeout(FAST_LOOP_TIMEOUT)
+                                        .then(move |_res| {
+                                            info!(
+                                                "TrafficWatcher completed in {}s {}ms",
+                                                neigh.elapsed().as_secs(),
+                                                neigh.elapsed().subsec_millis()
+                                            );
+                                            Ok(())
+                                        })
+                                })
+                            })
+                        })
+                        .then(|ret| {
+                            if let Err(e) = ret {
+                                error!("Failed to watch client traffic with {:?}", e)
+                            }
                             Ok(())
                         })
                 }),

@@ -32,8 +32,7 @@ use actix_web::client;
 use actix_web::client::Connection;
 use actix_web::HttpMessage;
 use althea_types::Identity;
-use babel_monitor::open_babel_stream;
-use babel_monitor::Babel;
+use babel_monitor::get_installed_route;
 use babel_monitor::Route;
 use failure::Error;
 use futures::future::ok as future_ok;
@@ -172,17 +171,9 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
 }
 
 /// Returns the babel route to a given mesh ip with the properly capped price
-fn find_exit_route_capped(exit_mesh_ip: IpAddr) -> Result<Route, Error> {
-    let stream = open_babel_stream(SETTING.get_network().babel_port)?;
-    let mut babel = Babel::new(stream);
-
-    babel.start_connection()?;
-    trace!("Getting routes");
-    let routes = babel.parse_routes()?;
-    trace!("Got routes: {:?}", routes);
-
+fn find_exit_route_capped(exit_mesh_ip: IpAddr, routes: Vec<Route>) -> Result<Route, Error> {
     let max_fee = SETTING.get_payment().max_fee;
-    let mut exit_route = babel.get_installed_route(&exit_mesh_ip, &routes)?;
+    let mut exit_route = get_installed_route(&exit_mesh_ip, &routes)?;
     if exit_route.price > max_fee {
         let mut capped_route = exit_route.clone();
         capped_route.price = max_fee;
@@ -196,6 +187,7 @@ fn find_exit_route_capped(exit_mesh_ip: IpAddr) -> Result<Route, Error> {
 pub struct Watch {
     pub exit_id: Identity,
     pub exit_price: u64,
+    pub routes: Vec<Route>,
 }
 
 impl Message for Watch {
@@ -206,12 +198,17 @@ impl Handler<Watch> for TrafficWatcher {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        watch(self, &msg.exit_id, msg.exit_price)
+        watch(self, &msg.exit_id, msg.exit_price, msg.routes)
     }
 }
 
-pub fn watch(history: &mut TrafficWatcher, exit: &Identity, exit_price: u64) -> Result<(), Error> {
-    let exit_route = find_exit_route_capped(exit.mesh_ip)?;
+pub fn watch(
+    history: &mut TrafficWatcher,
+    exit: &Identity,
+    exit_price: u64,
+    routes: Vec<Route>,
+) -> Result<(), Error> {
+    let exit_route = find_exit_route_capped(exit.mesh_ip, routes)?;
 
     let counter = match KI.read_wg_counters("wg_exit") {
         Ok(res) => {

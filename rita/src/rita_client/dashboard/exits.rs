@@ -5,14 +5,16 @@ use crate::rita_common::dashboard::Dashboard;
 use crate::ARGS;
 use crate::KI;
 use crate::SETTING;
-use ::actix::prelude::*;
+use ::actix::*;
 use ::actix_web::http::StatusCode;
 use ::actix_web::AsyncResponder;
 use ::actix_web::Path;
 use ::actix_web::{HttpRequest, HttpResponse, Json};
 use althea_types::ExitState;
+use babel_monitor::do_we_have_route;
 use babel_monitor::open_babel_stream;
-use babel_monitor::Babel;
+use babel_monitor::parse_routes;
+use babel_monitor::start_connection;
 use failure::Error;
 use futures::{future, Future};
 use reqwest;
@@ -63,46 +65,56 @@ fn is_tunnel_working(exit: &ExitServer, current_exit: Option<&ExitServer>) -> bo
 }
 
 impl Handler<GetExitInfo> for Dashboard {
-    type Result = Result<Vec<ExitInfo>, Error>;
+    type Result = ResponseFuture<Vec<ExitInfo>, Error>;
 
     fn handle(&mut self, _msg: GetExitInfo, _ctx: &mut Self::Context) -> Self::Result {
-        let stream = open_babel_stream(SETTING.get_network().babel_port)?;
-        let mut babel = Babel::new(stream);
-        babel.start_connection()?;
-        let route_table_sample = babel.parse_routes()?;
+        let babel_port = SETTING.get_network().babel_port;
 
-        let mut output = Vec::new();
+        Box::new(
+            open_babel_stream(babel_port)
+                .from_err()
+                .and_then(move |stream| {
+                    start_connection(stream).then(move |stream| {
+                        let stream = stream.expect("Unexpected babel version!");
+                        parse_routes(stream).and_then(move |routes| {
+                            let route_table_sample = routes.1;
+                            let mut output = Vec::new();
 
-        let exit_client = SETTING.get_exit_client();
-        let current_exit = exit_client.get_current_exit();
+                            let exit_client = SETTING.get_exit_client();
+                            let current_exit = exit_client.get_current_exit();
 
-        for exit in exit_client.exits.clone().into_iter() {
-            let selected = is_selected(&exit.1, current_exit);
-            let have_route = babel.do_we_have_route(&exit.1.id.mesh_ip, &route_table_sample)?;
+                            for exit in exit_client.exits.clone().into_iter() {
+                                let selected = is_selected(&exit.1, current_exit);
+                                let have_route =
+                                    do_we_have_route(&exit.1.id.mesh_ip, &route_table_sample)?;
 
-            // failed pings block for one second, so we should be sure it's at least reasonable
-            // to expect the pings to work before issuing them.
-            let reachable = if have_route {
-                KI.ping_check_v6(&exit.1.id.mesh_ip)?
-            } else {
-                false
-            };
-            let tunnel_working = match (have_route, selected) {
-                (true, true) => is_tunnel_working(&exit.1, current_exit),
-                _ => false,
-            };
+                                // failed pings block for one second, so we should be sure it's at least reasonable
+                                // to expect the pings to work before issuing them.
+                                let reachable = if have_route {
+                                    KI.ping_check_v6(&exit.1.id.mesh_ip)?
+                                } else {
+                                    false
+                                };
+                                let tunnel_working = match (have_route, selected) {
+                                    (true, true) => is_tunnel_working(&exit.1, current_exit),
+                                    _ => false,
+                                };
 
-            output.push(ExitInfo {
-                nickname: exit.0,
-                exit_settings: exit.1.clone(),
-                is_selected: selected,
-                have_route,
-                is_reachable: reachable,
-                is_tunnel_working: tunnel_working,
-            })
-        }
+                                output.push(ExitInfo {
+                                    nickname: exit.0,
+                                    exit_settings: exit.1.clone(),
+                                    is_selected: selected,
+                                    have_route,
+                                    is_reachable: reachable,
+                                    is_tunnel_working: tunnel_working,
+                                })
+                            }
 
-        Ok(output)
+                            Ok(output)
+                        })
+                    })
+                }),
+        )
     }
 }
 

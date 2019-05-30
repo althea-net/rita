@@ -136,7 +136,8 @@ pub fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Error> {
     let mut tmp_cache = HashMap::new();
     let conn = get_database_connection()?;
     let client_mesh_ip = client.global.mesh_ip;
-    let gateway_ip = get_gateway_ip_single(client_mesh_ip)?;
+    // this blocks but it's being run in a threadpool anyways
+    let gateway_ip = get_gateway_ip_single(client_mesh_ip).wait()?;
 
     trace!("got setup request {:?}", client);
 
@@ -335,7 +336,7 @@ pub fn validate_clients_region(
         }
     }
 
-    let mesh_to_gateway_ip_list = get_gateway_ip_bulk(ip_vec);
+    let mesh_to_gateway_ip_list = get_gateway_ip_bulk(ip_vec).wait();
 
     match mesh_to_gateway_ip_list {
         Ok(list) => {

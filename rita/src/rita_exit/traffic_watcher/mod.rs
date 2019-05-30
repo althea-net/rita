@@ -20,16 +20,13 @@ use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_kernel_interface::KI;
 use althea_types::Identity;
 use althea_types::WgKey;
-use babel_monitor::open_babel_stream;
-use babel_monitor::Babel;
+use babel_monitor::Route;
+use failure::Error;
 use ipnetwork::IpNetwork;
 use settings::exit::RitaExitSettings;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
-use std::io::{Read, Write};
 use std::net::IpAddr;
-
-use failure::Error;
 
 pub struct TrafficWatcher {
     last_seen_bytes: HashMap<WgKey, WgUsage>,
@@ -53,7 +50,10 @@ impl Default for TrafficWatcher {
     }
 }
 
-pub struct Watch(pub Vec<Identity>);
+pub struct Watch {
+    pub users: Vec<Identity>,
+    pub routes: Vec<Route>,
+}
 
 impl Message for Watch {
     type Result = Result<(), Error>;
@@ -63,39 +63,25 @@ impl Handler<Watch> for TrafficWatcher {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        let stream = open_babel_stream(SETTING.get_network().babel_port)?;
-
-        watch(&mut self.last_seen_bytes, Babel::new(stream), &msg.0)
+        watch(&mut self.last_seen_bytes, &msg.routes, &msg.users)
     }
 }
 
-fn get_babel_info<T: Read + Write>(
-    mut babel: Babel<T>,
+fn get_babel_info(
+    routes: &[Route],
     our_id: Identity,
     id_from_ip: HashMap<IpAddr, Identity>,
 ) -> Result<HashMap<WgKey, u64>, Error> {
-    babel.start_connection()?;
-
-    trace!("Getting routes");
-    let routes = babel.parse_routes()?;
-    info!("Got routes: {:?}", routes);
-
-    let local_fee = match babel.get_local_fee() {
-        Ok(fee) => fee,
-        Err(e) => {
-            error!("Babel fee not set properly! this is a bad sign! {:?}", e);
-            let configured_fee = SETTING.get_payment().local_fee;
-            babel.set_local_fee(configured_fee)?;
-            configured_fee
-        }
-    };
+    // we assume this matches what is actually set it babel becuase we
+    // panic on startup if it does not get set correctly
+    let local_fee = SETTING.get_payment().local_fee;
 
     // insert ourselves as a destination, don't think this is actually needed
     let mut destinations = HashMap::new();
     destinations.insert(our_id.wg_public_key, u64::from(local_fee));
 
     let max_fee = SETTING.get_payment().max_fee;
-    for route in &routes {
+    for route in routes {
         // Only ip6
         if let IpNetwork::V6(ref ip) = route.prefix {
             // Only host addresses and installed routes
@@ -215,9 +201,9 @@ pub fn update_usage_history(
 }
 
 /// This traffic watcher watches how much traffic each we send and receive from each client.
-pub fn watch<T: Read + Write>(
+pub fn watch(
     usage_history: &mut HashMap<WgKey, WgUsage>,
-    babel: Babel<T>,
+    routes: &[Route],
     clients: &[Identity],
 ) -> Result<(), Error> {
     let our_price = SETTING.get_exit_network().exit_price;
@@ -230,7 +216,7 @@ pub fn watch<T: Read + Write>(
     };
 
     let (identities, id_from_ip) = generate_helper_maps(&our_id, clients)?;
-    let destinations = get_babel_info(babel, our_id, id_from_ip)?;
+    let destinations = get_babel_info(routes, our_id, id_from_ip)?;
 
     let counters = match KI.read_wg_counters("wg_exit") {
         Ok(res) => res,

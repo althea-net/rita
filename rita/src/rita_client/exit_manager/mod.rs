@@ -22,12 +22,15 @@ use crate::rita_common::oracle::low_balance;
 use crate::KI;
 use crate::SETTING;
 use ::actix::registry::SystemService;
-use ::actix::{Actor, Context, Handler, ResponseFuture, Supervised};
+use ::actix::{Actor, Arbiter, Context, Handler, ResponseFuture, Supervised};
 use ::actix_web::client::Connection;
 use ::actix_web::{client, HttpMessage, Result};
 use althea_types::ExitClientDetails;
 use althea_types::ExitDetails;
 use althea_types::{ExitClientIdentity, ExitState, ExitVerifMode};
+use babel_monitor::open_babel_stream;
+use babel_monitor::parse_routes;
+use babel_monitor::start_connection;
 use failure::Error;
 use futures::future;
 use futures::future::join_all;
@@ -392,9 +395,11 @@ impl Handler<Tick> for ExitManager {
 
                 // run billing at all times when an exit is setup
                 if self.last_exit.is_some() {
+                    let exit_price = general_details.exit_price;
                     let exit_internal_addr = general_details.server_internal_ip;
                     let exit_port = exit.registration_port;
                     let exit_id = exit.id;
+                    let babel_port = SETTING.get_network().babel_port;
                     trace!("We are signed up for the selected exit!");
 
                     TrafficWatcher::from_registry().do_send(QueryExitDebts {
@@ -402,10 +407,29 @@ impl Handler<Tick> for ExitManager {
                         exit_port,
                         exit_id,
                     });
-                    TrafficWatcher::from_registry().do_send(Watch {
-                        exit_id,
-                        exit_price: general_details.exit_price,
-                    });
+                    Arbiter::spawn(
+                        open_babel_stream(babel_port)
+                            .from_err()
+                            .and_then(move |stream| {
+                                start_connection(stream).then(move |stream| {
+                                    let stream = stream.expect("Unexpected babel version!");
+                                    parse_routes(stream).and_then(move |routes| {
+                                        TrafficWatcher::from_registry().do_send(Watch {
+                                            exit_id,
+                                            exit_price,
+                                            routes: routes.1,
+                                        });
+                                        Ok(())
+                                    })
+                                })
+                            })
+                            .then(|ret| {
+                                if let Err(e) = ret {
+                                    error!("Failed to watch client traffic with {:?}", e)
+                                }
+                                Ok(())
+                            }),
+                    );
                 }
             }
         }
