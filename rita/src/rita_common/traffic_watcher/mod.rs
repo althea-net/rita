@@ -14,13 +14,11 @@ use crate::SETTING;
 use ::actix::{Actor, Context, Handler, Message, Supervised, SystemService};
 use althea_kernel_interface::FilterTarget;
 use althea_types::Identity;
-use babel_monitor::open_babel_stream;
-use babel_monitor::Babel;
+use babel_monitor::Route;
 use failure::Error;
 use ipnetwork::IpNetwork;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
-use std::io::{Read, Write};
 use std::net::IpAddr;
 
 pub struct TrafficWatcher;
@@ -51,11 +49,12 @@ impl Default for TrafficWatcher {
 pub struct Watch {
     /// List of neighbors to watch
     pub neighbors: Vec<Neighbor>,
+    pub routes: Vec<Route>,
 }
 
 impl Watch {
-    pub fn new(neighbors: Vec<Neighbor>) -> Watch {
-        Watch { neighbors }
+    pub fn new(neighbors: Vec<Neighbor>, routes: Vec<Route>) -> Watch {
+        Watch { neighbors, routes }
     }
 }
 
@@ -67,9 +66,7 @@ impl Handler<Watch> for TrafficWatcher {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        let stream = open_babel_stream(SETTING.get_network().babel_port)?;
-
-        watch(Babel::new(stream), &msg.neighbors)
+        watch(msg.routes, &msg.neighbors)
     }
 }
 
@@ -88,24 +85,12 @@ pub fn prepare_helper_maps(
     (identities, if_to_id)
 }
 
-pub fn get_babel_info<T: Read + Write>(
-    mut babel: Babel<T>,
-) -> Result<(HashMap<IpAddr, i128>, u32), Error> {
-    babel.start_connection()?;
-
-    trace!("Getting routes");
-    let routes = babel.parse_routes()?;
+pub fn get_babel_info(routes: Vec<Route>) -> Result<(HashMap<IpAddr, i128>, u32), Error> {
     trace!("Got routes: {:?}", routes);
     let mut destinations = HashMap::new();
-    let local_fee = match babel.get_local_fee() {
-        Ok(fee) => fee,
-        Err(e) => {
-            error!("Babel fee not set properly! this is a bad sign! {:?}", e);
-            let configured_fee = SETTING.get_payment().local_fee;
-            babel.set_local_fee(configured_fee)?;
-            configured_fee
-        }
-    };
+    // we assume this matches what is actually set it babel becuase we
+    // panic on startup if it does not get set correctly
+    let local_fee = SETTING.get_payment().local_fee;
 
     let max_fee = SETTING.get_payment().max_fee;
     for route in &routes {
@@ -261,10 +246,10 @@ fn update_usage(
 ///
 /// This first time this is run, it will create the rules and then immediately read and zero them.
 /// (should return 0)
-pub fn watch<T: Read + Write>(babel: Babel<T>, neighbors: &[Neighbor]) -> Result<(), Error> {
+pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
     let (identities, if_to_id) = prepare_helper_maps(neighbors);
 
-    let (destinations, local_fee) = get_babel_info(babel)?;
+    let (destinations, local_fee) = get_babel_info(routes)?;
 
     let total_input_counters = get_input_counters()?;
     let total_output_counters = get_output_counters()?;

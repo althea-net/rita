@@ -7,8 +7,10 @@ use ::actix_web::AsyncResponder;
 use ::actix_web::{HttpRequest, Json};
 use althea_types::Identity;
 use arrayvec::ArrayString;
+use babel_monitor::get_route_via_neigh;
 use babel_monitor::open_babel_stream;
-use babel_monitor::Babel;
+use babel_monitor::parse_routes;
+use babel_monitor::start_connection;
 use failure::Error;
 use futures::Future;
 use num256::{Int256, Uint256};
@@ -52,72 +54,93 @@ impl Handler<GetNeighborInfo> for Dashboard {
                         .send(GetNeighbors {})
                         .from_err()
                         .and_then(|neighbors| {
-                            let mut debts = debts?;
+                            let mut debts = debts.unwrap();
                             if neighbors.is_ok() {
-                                let neighbors = neighbors?;
+                                let neighbors = neighbors.unwrap();
                                 merge_debts_and_neighbors(neighbors, &mut debts);
                             }
 
-                            let stream = open_babel_stream(SETTING.get_network().babel_port)?;
-                            let mut babel = Babel::new(stream);
-                            babel.start_connection()?;
-                            let route_table_sample = babel.parse_routes()?;
+                            let babel_port = SETTING.get_network().babel_port;
 
-                            let mut output = Vec::new();
+                            open_babel_stream(babel_port)
+                                .from_err()
+                                .and_then(move |stream| {
+                                    start_connection(stream).then(move |stream| {
+                                        let stream = stream.expect("Unexpected babel version!");
+                                        parse_routes(stream).and_then(move |routes| {
+                                            let route_table_sample = routes.1;
 
-                            let exit_client = SETTING.get_exit_client();
-                            let current_exit = exit_client.get_current_exit();
+                                            let mut output = Vec::new();
 
-                            for (identity, debt_info) in debts.iter() {
-                                let nickname = match identity.nickname {
-                                    Some(val) => val,
-                                    None => ArrayString::<[u8; 32]>::from("No Nickname").unwrap(),
-                                };
+                                            let exit_client = SETTING.get_exit_client();
+                                            let current_exit = exit_client.get_current_exit();
 
-                                if current_exit.is_some() {
-                                    let exit_ip = current_exit.unwrap().id.mesh_ip;
-                                    let maybe_route = babel.get_route_via_neigh(
-                                        identity.mesh_ip,
-                                        exit_ip,
-                                        &route_table_sample,
-                                    );
+                                            for (identity, debt_info) in debts.iter() {
+                                                let nickname = match identity.nickname {
+                                                    Some(val) => val,
+                                                    None => {
+                                                        ArrayString::<[u8; 32]>::from("No Nickname")
+                                                            .unwrap()
+                                                    }
+                                                };
 
-                                    // We have a peer that is an exit, so we can't find a route
-                                    // from them to our selected exit. Other errors can also get
-                                    // caught here
-                                    if maybe_route.is_err() {
-                                        output.push(nonviable_node_info(
-                                            nickname,
-                                            identity.mesh_ip.to_string(),
-                                        ));
-                                        continue;
-                                    }
-                                    // we check that this is safe above
-                                    let route = maybe_route.unwrap();
+                                                if current_exit.is_some() {
+                                                    let exit_ip = current_exit.unwrap().id.mesh_ip;
+                                                    let maybe_route = get_route_via_neigh(
+                                                        identity.mesh_ip,
+                                                        exit_ip,
+                                                        &route_table_sample,
+                                                    );
 
-                                    output.push(NodeInfo {
-                                        nickname: nickname.to_string(),
-                                        ip: serde_json::to_string(&identity.mesh_ip).unwrap(),
-                                        route_metric_to_exit: route.metric,
-                                        total_payments: debt_info.total_payment_received.clone(),
-                                        debt: debt_info.debt.clone(),
-                                        link_cost: route.refmetric,
-                                        price_to_exit: route.price,
+                                                    // We have a peer that is an exit, so we can't find a route
+                                                    // from them to our selected exit. Other errors can also get
+                                                    // caught here
+                                                    if maybe_route.is_err() {
+                                                        output.push(nonviable_node_info(
+                                                            nickname,
+                                                            identity.mesh_ip.to_string(),
+                                                        ));
+                                                        continue;
+                                                    }
+                                                    // we check that this is safe above
+                                                    let route = maybe_route.unwrap();
+
+                                                    output.push(NodeInfo {
+                                                        nickname: nickname.to_string(),
+                                                        ip: serde_json::to_string(
+                                                            &identity.mesh_ip,
+                                                        )
+                                                        .unwrap(),
+                                                        route_metric_to_exit: route.metric,
+                                                        total_payments: debt_info
+                                                            .total_payment_received
+                                                            .clone(),
+                                                        debt: debt_info.debt.clone(),
+                                                        link_cost: route.refmetric,
+                                                        price_to_exit: route.price,
+                                                    })
+                                                } else {
+                                                    output.push(NodeInfo {
+                                                        nickname: nickname.to_string(),
+                                                        ip: serde_json::to_string(
+                                                            &identity.mesh_ip,
+                                                        )
+                                                        .unwrap(),
+                                                        route_metric_to_exit: u16::max_value(),
+                                                        total_payments: debt_info
+                                                            .total_payment_received
+                                                            .clone(),
+                                                        debt: debt_info.debt.clone(),
+                                                        link_cost: u16::max_value(),
+                                                        price_to_exit: u32::max_value(),
+                                                    })
+                                                }
+                                            }
+
+                                            Ok(output)
+                                        })
                                     })
-                                } else {
-                                    output.push(NodeInfo {
-                                        nickname: nickname.to_string(),
-                                        ip: serde_json::to_string(&identity.mesh_ip).unwrap(),
-                                        route_metric_to_exit: u16::max_value(),
-                                        total_payments: debt_info.total_payment_received.clone(),
-                                        debt: debt_info.debt.clone(),
-                                        link_cost: u16::max_value(),
-                                        price_to_exit: u32::max_value(),
-                                    })
-                                }
-                            }
-
-                            Ok(output)
+                                })
                         })
                 }),
         )
