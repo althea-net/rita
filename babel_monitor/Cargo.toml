@@ -7,10 +7,14 @@ edition = "2018"
 [dependencies]
 ascii = "0.9"
 bufstream = "0.1"
-env_logger = "0.6.0"
+env_logger = "0.6"
 failure = "0.1"
 ipnetwork = "0.14"
 log = "0.4"
+futures = "0.1"
+tokio-tcp = "0.1"
+tokio-io = "0.1"
+tokio = "0.1"
 
 [dependencies.mockstream]
 git = "https://github.com/lazy-bitfield/rust-mockstream.git"
