@@ -387,6 +387,15 @@ impl DebtKeeper {
         match (should_close, should_pay, payment_in_flight) {
             (true, true, _) => panic!("Close threshold is less than pay threshold!"),
             (true, false, _) => {
+                // before we suspend check if there is any unapplied credit
+                // if there is send a zero payment to apply it.
+                let zero = Uint256::from(0u32);
+                if debt_data.incoming_payments > zero {
+                    debt_data.action = DebtAction::OpenTunnel;
+                    self.payment_received(ident, zero)?;
+                    return Ok(DebtAction::OpenTunnel);
+                }
+
                 info!(
                     "debt is below close threshold for {}. suspending forwarding",
                     ident.mesh_ip
@@ -586,12 +595,12 @@ mod tests {
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
 
+        d.traffic_update(&ident, Int256::from(-10100i64));
+
         // send lots of payments
         for _ in 0..100 {
             d.payment_received(&ident, Uint256::from(100u64)).unwrap();
         }
-
-        d.traffic_update(&ident, Int256::from(-10100i64));
 
         assert_eq!(d.send_update(&ident).unwrap(), DebtAction::SuspendTunnel);
     }
@@ -604,12 +613,37 @@ mod tests {
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
 
+        d.traffic_update(&ident, Int256::from(-10100i64));
+
+        for _ in 0..100 {
+            d.payment_received(&ident, Uint256::from(100u64)).unwrap();
+        }
+
+        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::SuspendTunnel);
+
+        d.payment_received(&ident, Uint256::from(200u64)).unwrap();
+
+        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+    }
+
+    #[test]
+    fn test_credit_reopen() {
+        SETTING.get_payment_mut().pay_threshold = Int256::from(5);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+
+        let mut d = DebtKeeper::new();
+        let ident = get_test_identity();
+
+        // user pays early
         for _ in 0..100 {
             d.payment_received(&ident, Uint256::from(100u64)).unwrap();
         }
 
         d.traffic_update(&ident, Int256::from(-10100i64));
 
+        // one round of grace while we apply their old payments
+        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+        // then enforcement kicks in becuase they have in fact used more than their credit
         assert_eq!(d.send_update(&ident).unwrap(), DebtAction::SuspendTunnel);
 
         d.payment_received(&ident, Uint256::from(200u64)).unwrap();
