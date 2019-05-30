@@ -141,7 +141,7 @@ fn read_babel_sync(output: String) -> Result<String, Error> {
     return Err(NoTerminator(ret).into());
 }
 
-fn run_command(
+pub fn run_command(
     stream: TcpStream,
     cmd: &str,
 ) -> Box<Future<Item = (TcpStream, String), Error = Error>> {
