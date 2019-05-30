@@ -4,7 +4,7 @@ use crate::rita_common::peer_listener::UnListen;
 use crate::ARGS;
 use crate::KI;
 use crate::SETTING;
-use ::actix::prelude::{Arbiter, SystemService};
+use ::actix::{Arbiter, SystemService};
 use ::actix_web::{HttpRequest, HttpResponse, Json};
 use failure::Error;
 use futures::Future;
