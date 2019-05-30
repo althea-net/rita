@@ -10,7 +10,6 @@ use futures::future::result as future_result;
 use futures::future::Either;
 use futures::future::Future;
 use ipnetwork::IpNetwork;
-use std::collections::VecDeque;
 use std::iter::Iterator;
 use std::net::IpAddr;
 use std::net::SocketAddr;
@@ -148,12 +147,13 @@ fn run_command(
 ) -> Box<Future<Item = (TcpStream, String), Error = Error>> {
     let mut bytes = Vec::new();
     bytes.clone_from_slice(&cmd.as_bytes());
+    let cmd = cmd.to_string();
     Box::new(write_all(stream, bytes).then(move |out| {
         if out.is_err() {
-            return Box::new(Either::A(future_result(Err(TokioError(format!(
-                "{:?}",
-                out
-            ))
+            return Box::new(Either::A(future_result(Err(CommandFailed(
+                cmd,
+                format!("{:?}", out),
+            )
             .into()))));
         }
         let (stream, _res) = out.unwrap();
@@ -289,7 +289,7 @@ pub fn unmonitor(stream: TcpStream, iface: &str) -> Box<Future<Item = TcpStream,
 
 pub fn parse_neighs(
     stream: TcpStream,
-) -> Box<Future<Item = (TcpStream, VecDeque<Neighbor>), Error = Error>> {
+) -> Box<Future<Item = (TcpStream, Vec<Neighbor>), Error = Error>> {
     Box::new(run_command(stream, "dump").then(|result| {
         if let Err(e) = result {
             return Err(e);
@@ -299,8 +299,8 @@ pub fn parse_neighs(
     }))
 }
 
-fn parse_neighs_sync(output: String) -> Result<VecDeque<Neighbor>, Error> {
-    let mut vector: VecDeque<Neighbor> = VecDeque::with_capacity(5);
+fn parse_neighs_sync(output: String) -> Result<Vec<Neighbor>, Error> {
+    let mut vector: Vec<Neighbor> = Vec::with_capacity(5);
     let mut found_neigh = false;
     for entry in output.split("\n") {
         if entry.contains("add neighbour") {
@@ -387,7 +387,7 @@ fn parse_neighs_sync(output: String) -> Result<VecDeque<Neighbor>, Error> {
                     Err(_) => continue,
                 },
             };
-            vector.push_back(neigh);
+            vector.push(neigh);
         }
     }
     if vector.len() == 0 && found_neigh {
@@ -398,7 +398,7 @@ fn parse_neighs_sync(output: String) -> Result<VecDeque<Neighbor>, Error> {
 
 pub fn parse_routes(
     stream: TcpStream,
-) -> Box<Future<Item = (TcpStream, VecDeque<Route>), Error = Error>> {
+) -> Box<Future<Item = (TcpStream, Vec<Route>), Error = Error>> {
     Box::new(run_command(stream, "dump").then(|result| {
         if let Err(e) = result {
             return Err(e);
@@ -408,8 +408,8 @@ pub fn parse_routes(
     }))
 }
 
-pub fn parse_routes_sync(babel_out: String) -> Result<VecDeque<Route>, Error> {
-    let mut vector: VecDeque<Route> = VecDeque::with_capacity(20);
+pub fn parse_routes_sync(babel_out: String) -> Result<Vec<Route>, Error> {
+    let mut vector: Vec<Route> = Vec::with_capacity(20);
     let mut found_route = false;
     trace!("Got from babel dump: {}", babel_out);
 
@@ -503,7 +503,7 @@ pub fn parse_routes_sync(babel_out: String) -> Result<VecDeque<Route>, Error> {
                 },
             };
 
-            vector.push_back(route);
+            vector.push(route);
         }
     }
     if vector.len() == 0 && found_route {
@@ -519,7 +519,7 @@ pub fn parse_routes_sync(babel_out: String) -> Result<VecDeque<Route>, Error> {
 pub fn get_route_via_neigh(
     neigh_mesh_ip: IpAddr,
     dest_mesh_ip: IpAddr,
-    routes: &VecDeque<Route>,
+    routes: &Vec<Route>,
 ) -> Result<Route, Error> {
     // First find the neighbors route to itself to get the local address
     for neigh_route in routes.iter() {
@@ -541,7 +541,7 @@ pub fn get_route_via_neigh(
     Err(NoNeighbor(neigh_mesh_ip.to_string()).into())
 }
 /// Checks if Babel has an installed route to the given destination
-pub fn do_we_have_route(mesh_ip: &IpAddr, routes: &VecDeque<Route>) -> Result<bool, Error> {
+pub fn do_we_have_route(mesh_ip: &IpAddr, routes: &Vec<Route>) -> Result<bool, Error> {
     for route in routes.iter() {
         if let IpNetwork::V6(ref ip) = route.prefix {
             if ip.ip() == *mesh_ip && route.installed {
@@ -552,7 +552,7 @@ pub fn do_we_have_route(mesh_ip: &IpAddr, routes: &VecDeque<Route>) -> Result<bo
     Ok(false)
 }
 /// Returns the installed route to a given destination
-pub fn get_installed_route(mesh_ip: &IpAddr, routes: &VecDeque<Route>) -> Result<Route, Error> {
+pub fn get_installed_route(mesh_ip: &IpAddr, routes: &Vec<Route>) -> Result<Route, Error> {
     let mut exit_route = None;
     for route in routes.iter() {
         // Only ip6
