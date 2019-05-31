@@ -189,7 +189,9 @@ impl Tunnel {
                         monitor(stream, &iface_name)
                     })
                 })
-                .then(|res| Ok(())),
+                .then(|res| {
+                    error!("Monitoring tunnel {} has failed! The tunnels cache is an incorrect state {:?}" , iface_name, res);
+                    Ok(())}),
         )
     }
 
@@ -207,7 +209,9 @@ impl Tunnel {
                         unmonitor(stream, &iface_name)
                     })
                 })
-                .then(|res| Ok(())),
+                .then(|res| {
+                    error!("Unmonitoring tunnel {} has failed! Babel will now listen on a non-existant tunnel {:?}", iface_name, res);
+                    Ok(())}),
         )
     }
 }
