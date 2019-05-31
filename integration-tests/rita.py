@@ -945,6 +945,7 @@ def main():
                   (time.time() - start_time, CONVERGENCE_DELAY, interval))
 
     print("Test reachabibility and optimum routes...")
+    time.sleep(120)
 
     duration = time.time() - start_time
 
