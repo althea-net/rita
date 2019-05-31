@@ -184,13 +184,13 @@ impl Tunnel {
             open_babel_stream(babel_port)
                 .from_err()
                 .and_then(move |stream| {
-                    start_connection(stream).then(move |stream| {
-                        let stream = stream.expect("Unexpected babel version!");
+                    start_connection(stream).and_then(move |stream| {
                         monitor(stream, &iface_name)
                     })
                 })
-                .then(|res| {
-                    error!("Monitoring tunnel {} has failed! The tunnels cache is an incorrect state {:?}" , iface_name, res);
+                .then(move |res| {
+                    // if you ever see this error go and make a handler to delete the tunnel from memory
+                    error!("Monitoring tunnel has failed! The tunnels cache is an incorrect state {:?}" , res);
                     Ok(())}),
         )
     }
@@ -204,13 +204,13 @@ impl Tunnel {
             open_babel_stream(babel_port)
                 .from_err()
                 .and_then(move |stream| {
-                    start_connection(stream).then(move |stream| {
-                        let stream = stream.expect("Unexpected babel version!");
+                    start_connection(stream).and_then(move |stream| {
                         unmonitor(stream, &iface_name)
                     })
                 })
-                .then(|res| {
-                    error!("Unmonitoring tunnel {} has failed! Babel will now listen on a non-existant tunnel {:?}", iface_name, res);
+                .then(move |res| {
+                    // if you ever see this error go and make a handler to try and unlisten until it works
+                    error!("Unmonitoring tunnel has failed! Babel will now listen on a non-existant tunnel {:?}", res);
                     Ok(())}),
         )
     }
