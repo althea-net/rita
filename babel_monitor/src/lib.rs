@@ -1,3 +1,7 @@
+//! Babel monitor is an async futures based interface for the Babeld management interface
+//! it provides abastractions over the major data this interface provides and an async
+//! way to efficiently communicate with it.
+
 #[macro_use]
 extern crate failure;
 #[macro_use]
