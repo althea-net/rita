@@ -14,7 +14,7 @@ rita = { path = "./rita" }
 members = ["althea_kernel_interface", "bounty_hunter", "settings", "clu", "exit_db"]
 
 [profile.release]
-opt-level = 2
+opt-level = "z"
 lto = true
 codegen-units = 1
 incremental = false
