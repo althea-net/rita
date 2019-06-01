@@ -16,9 +16,11 @@ use failure::Error;
 use futures::future::Future;
 use settings::RitaCommonSettings;
 use std::time::Duration;
+use tokio::util::FutureExt;
 
 // the speed in seconds for the common loop
 pub const SLOW_LOOP_SPEED: u64 = 60;
+pub const SLOW_LOOP_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub struct RitaSlowLoop;
 
@@ -112,6 +114,7 @@ fn set_babel_price() {
                     })
                 })
             })
+            .timeout(SLOW_LOOP_TIMEOUT)
             .then(|res| {
                 if let Err(e) = res {
                     error!("Failed to set babel price {:?}", e);

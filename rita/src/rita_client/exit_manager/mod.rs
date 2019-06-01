@@ -45,6 +45,7 @@ use std::time::Duration;
 use syslog::Error as LogError;
 use syslog::{init_udp, Facility};
 use tokio::net::TcpStream as TokioTcpStream;
+use tokio::util::FutureExt;
 
 /// enables remote logging if the user has configured it
 fn enable_remote_logging(server_internal_ip: IpAddr) -> Result<(), LogError> {
@@ -476,7 +477,7 @@ impl Handler<Tick> for ExitManager {
                                     })
                                 })
                             })
-                            .then(|ret| {
+                            .timeout(Duration::from_secs(4)).then(|ret| {
                                 if let Err(e) = ret {
                                     error!("Failed to watch client traffic with {:?}", e)
                                 }
