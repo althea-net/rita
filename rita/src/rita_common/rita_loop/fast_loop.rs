@@ -102,8 +102,7 @@ impl Handler<Tick> for RitaFastLoop {
                     open_babel_stream(babel_port)
                         .from_err()
                         .and_then(move |stream| {
-                            start_connection(stream).then(move |stream| {
-                                let stream = stream.expect("Unexpected babel version!");
+                            start_connection(stream).and_then(move |stream| {
                                 parse_routes(stream).and_then(move |routes| {
                                     TrafficWatcher::from_registry()
                                         .send(Watch::new(neighbors, routes.1))

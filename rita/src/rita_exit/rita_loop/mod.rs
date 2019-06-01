@@ -142,8 +142,7 @@ impl Handler<Tick> for RitaSyncLoop {
             open_babel_stream(babel_port)
                 .from_err()
                 .and_then(|stream| {
-                    start_connection(stream).then(|stream| {
-                        let stream = stream.expect("Unexpected babel version!");
+                    start_connection(stream).and_then(|stream| {
                         parse_routes(stream).and_then(|routes| {
                             TrafficWatcher::from_registry().do_send(Watch {
                                 users: ids,
