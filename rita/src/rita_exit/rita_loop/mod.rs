@@ -48,6 +48,9 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::IpAddr;
 use std::time::Duration;
+use tokio::util::FutureExt;
+
+pub const EXIT_LOOP_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Default)]
 pub struct RitaLoop {}
@@ -152,6 +155,7 @@ impl Handler<Tick> for RitaSyncLoop {
                         })
                     })
                 })
+                .timeout(EXIT_LOOP_TIMEOUT)
                 .then(|ret| {
                     if let Err(e) = ret {
                         error!("Failed to watch Exit traffic with {:?}", e)
