@@ -20,8 +20,7 @@ pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Box<Future<Item = IpAddr, Error
         open_babel_stream(babel_port)
             .from_err()
             .and_then(move |stream| {
-                start_connection(stream).then(move |stream| {
-                    let stream = stream.expect("Unexpected babel version!");
+                start_connection(stream).and_then(move |stream| {
                     parse_routes(stream).and_then(move |routes| {
                         let mut route_to_des = None;
                         for route in routes.1.iter() {
@@ -61,8 +60,7 @@ pub fn get_gateway_ip_bulk(
     let babel_port = SETTING.get_network().babel_port;
 
     Box::new(open_babel_stream(babel_port).from_err().and_then(|stream| {
-        start_connection(stream).then(|stream| {
-            let stream = stream.expect("Unexpected babel version!");
+        start_connection(stream).and_then(|stream| {
             parse_routes(stream).and_then(|routes| {
                 let mut remote_ip_cache: HashMap<String, IpAddr> = HashMap::new();
                 let mut results = Vec::new();

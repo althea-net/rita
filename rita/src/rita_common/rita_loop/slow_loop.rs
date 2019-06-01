@@ -101,10 +101,9 @@ fn set_babel_price() {
     let metric_factor = SETTING.get_network().metric_factor;
     Arbiter::spawn(
         open_babel_stream(babel_port)
-            .then(move |stream| {
+            .from_err()
+            .and_then(move |stream| {
                 println!("We opened the stream!");
-                // if we can't get to babel here we panic
-                let stream = stream.expect("Can't reach Babel!");
                 start_connection(stream).and_then(move |stream| {
                     println!("We started the connection!");
                     set_local_fee(stream, local_fee).and_then(move |stream| {
