@@ -9,6 +9,8 @@ use diesel;
 use diesel::prelude::PgConnection;
 use exit_db::models;
 use failure::Error;
+use futures::future;
+use futures::future::Future;
 use handlebars::Handlebars;
 use lettre::file::FileTransport;
 use lettre::smtp::authentication::{Credentials, Mechanism};
@@ -66,20 +68,27 @@ pub fn handle_email_registration(
     their_record: &exit_db::models::Client,
     conn: &PgConnection,
     cooldown: i64,
-) -> Result<ExitState, Error> {
+) -> impl Future<Item = ExitState, Error = Error> {
     let mut their_record = their_record.clone();
     if client.reg_details.email_code == Some(their_record.email_code.clone()) {
         info!("email verification complete for {:?}", client);
-        verify_client(&client, true, &conn)?;
+
+        match verify_client(&client, true, &conn) {
+            Ok(_) => (),
+            Err(e) => return future::err(e),
+        }
         their_record.verified = true;
     }
 
     if verif_done(&their_record) {
         info!("{:?} is now registered", client);
-        Ok(ExitState::Registered {
-            our_details: ExitClientDetails {
-                client_internal_ip: their_record.internal_ip.parse()?,
-            },
+
+        let client_internal_ip = match their_record.internal_ip.parse() {
+            Ok(ip) => ip,
+            Err(e) => return future::err(format_err!("{:?}", e)),
+        };
+        future::ok(ExitState::Registered {
+            our_details: ExitClientDetails { client_internal_ip },
             general_details: get_exit_info(),
             message: "Registration OK".to_string(),
         })
@@ -87,7 +96,7 @@ pub fn handle_email_registration(
         let time_since_last_email = secs_since_unix_epoch() - their_record.email_sent_time;
 
         if time_since_last_email < cooldown {
-            Ok(ExitState::GotInfo {
+            future::ok(ExitState::GotInfo {
                 general_details: get_exit_info(),
                 message: format!(
                     "Wait {} more seconds for verification cooldown",
@@ -96,9 +105,15 @@ pub fn handle_email_registration(
                 auto_register: true,
             })
         } else {
-            update_mail_sent_time(&client, &conn)?;
-            send_mail(&their_record)?;
-            Ok(ExitState::Pending {
+            match update_mail_sent_time(&client, &conn) {
+                Ok(_) => (),
+                Err(e) => return future::err(e),
+            }
+            match send_mail(&their_record) {
+                Ok(_) => (),
+                Err(e) => return future::err(e),
+            }
+            future::ok(ExitState::Pending {
                 general_details: get_exit_info(),
                 message: "awaiting email verification".to_string(),
                 email_code: None,
