@@ -112,3 +112,8 @@ pub fn _compute_verification_rtt() -> Result<RTTimestamps, Error> {
     info!("Computed RTTs: inner {}ms", inner_rtt_millis);
     Ok(timestamps)
 }
+
+pub fn check_rita_client_actors() {
+    assert!(crate::rita_client::rita_loop::RitaLoop::from_registry().connected());
+    assert!(crate::rita_client::exit_manager::ExitManager::from_registry().connected());
+}

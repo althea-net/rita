@@ -36,7 +36,6 @@ use docopt::Docopt;
 #[cfg(not(test))]
 use settings::FileWrite;
 
-use actix::registry::SystemService;
 use actix_web::http::Method;
 use actix_web::{http, server, App};
 
@@ -44,8 +43,11 @@ mod middleware;
 mod rita_common;
 mod rita_exit;
 
-use rita_common::rita_loop::fast_loop::RitaFastLoop;
-use rita_common::rita_loop::slow_loop::RitaSlowLoop;
+use rita_common::rita_loop::check_rita_common_actors;
+use rita_common::rita_loop::start_core_rita_endpoints;
+
+use rita_exit::rita_loop::check_rita_exit_actors;
+use rita_exit::rita_loop::start_rita_exit_endpoints;
 
 use crate::rita_common::dashboard::babel::*;
 use crate::rita_common::dashboard::dao::*;
@@ -184,55 +186,16 @@ fn main() {
 
     let system = actix::System::new(format!("main {:?}", SETTING.get_network().mesh_ip));
 
-    assert!(rita_common::debt_keeper::DebtKeeper::from_registry().connected());
-    assert!(rita_common::payment_controller::PaymentController::from_registry().connected());
-    assert!(rita_common::payment_validator::PaymentValidator::from_registry().connected());
-    assert!(rita_common::tunnel_manager::TunnelManager::from_registry().connected());
-    assert!(rita_common::hello_handler::HelloHandler::from_registry().connected());
-    assert!(rita_common::traffic_watcher::TrafficWatcher::from_registry().connected());
-    assert!(rita_common::peer_listener::PeerListener::from_registry().connected());
+    check_rita_common_actors();
+    check_rita_exit_actors();
+    start_core_rita_endpoints(8);
+    start_rita_exit_endpoints(128);
+    start_rita_exit_dashboard();
 
-    assert!(rita_exit::traffic_watcher::TrafficWatcher::from_registry().connected());
-    assert!(rita_exit::database::db_client::DbClient::from_registry().connected());
+    system.run();
+}
 
-    server::new(|| App::new().resource("/hello", |r| r.method(Method::POST).with(hello_response)))
-        .bind(format!("[::0]:{}", SETTING.get_network().rita_hello_port))
-        .unwrap()
-        .shutdown_timeout(0)
-        .start();
-    server::new(|| {
-        App::new().resource("/make_payment", |r| {
-            r.method(Method::POST).with(make_payments)
-        })
-    })
-    .workers(8)
-    .bind(format!("[::0]:{}", SETTING.get_network().rita_contact_port))
-    .unwrap()
-    .shutdown_timeout(0)
-    .start();
-
-    // Exit stuff
-    server::new(|| {
-        App::new()
-            .resource("/setup", |r| r.method(Method::POST).with(setup_request))
-            .resource("/status", |r| r.method(Method::POST).with(status_request))
-            .resource("/exit_info", |r| {
-                r.method(Method::GET).with(get_exit_info_http)
-            })
-            .resource("/rtt", |r| r.method(Method::GET).with(rtt))
-            .resource("/client_debt", |r| {
-                r.method(Method::POST).with(get_client_debt)
-            })
-    })
-    .workers(8)
-    .bind(format!(
-        "[::0]:{}",
-        SETTING.get_exit_network().exit_hello_port
-    ))
-    .unwrap()
-    .shutdown_timeout(0)
-    .start();
-
+fn start_rita_exit_dashboard() {
     // Dashboard
     server::new(|| {
         App::new()
@@ -275,12 +238,7 @@ fn main() {
         SETTING.get_network().rita_dashboard_port
     ))
     .unwrap()
+    .workers(1)
     .shutdown_timeout(0)
     .start();
-
-    assert!(RitaFastLoop::from_registry().connected());
-    assert!(RitaSlowLoop::from_registry().connected());
-    assert!(rita_exit::rita_loop::RitaLoop::from_registry().connected());
-
-    system.run();
 }
