@@ -119,8 +119,16 @@ struct CountryDetails {
 
 /// get ISO country code from ip, consults a in memory cache
 pub fn get_country(ip: IpAddr) -> impl Future<Item = String, Error = Error> {
-    // a function local cache for results, reset during every restart
     trace!("get GeoIP country for {}", ip.to_string());
+
+    // if allowed countries is not configured we don't care and will insert
+    // empty stings into the DB.
+    if SETTING.get_allowed_countries().is_empty() {
+        return Either::A(future::ok(String::new()));
+    }
+
+    // on the other hand if there is a configured list of allowed countries
+    // but no configured api details, we panic
     let api_user = SETTING
         .get_exit_network()
         .geoip_api_user
