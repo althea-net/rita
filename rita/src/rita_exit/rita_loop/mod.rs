@@ -24,6 +24,7 @@ use crate::rita_exit::database::{
     cleanup_exit_clients, enforce_exit_clients, get_database_connection, setup_clients,
     validate_clients_region,
 };
+use crate::rita_exit::network_endpoints::*;
 use crate::rita_exit::traffic_watcher::{TrafficWatcher, Watch};
 use crate::KI;
 use crate::SETTING;
@@ -31,6 +32,8 @@ use actix::{
     Actor, ActorContext, Arbiter, AsyncContext, Context, Handler, Message, Supervised, SyncArbiter,
     SyncContext, SystemService,
 };
+use actix_web::http::Method;
+use actix_web::{server, App};
 use althea_kernel_interface::ExitClient;
 use diesel::query_dsl::RunQueryDsl;
 use exit_db::models;
@@ -171,4 +174,34 @@ fn setup_exit_wg_tunnel() {
     .expect("Failed to setup wg_exit!");
     KI.setup_nat(&SETTING.get_network().external_nic.clone().unwrap())
         .unwrap();
+}
+
+pub fn check_rita_exit_actors() {
+    assert!(crate::rita_exit::rita_loop::RitaLoop::from_registry().connected());
+    assert!(crate::rita_exit::traffic_watcher::TrafficWatcher::from_registry().connected());
+    assert!(crate::rita_exit::database::db_client::DbClient::from_registry().connected());
+}
+
+pub fn start_rita_exit_endpoints(workers: usize) {
+    // Exit stuff, huge threadpool to offset Pgsql blocking
+    server::new(|| {
+        App::new()
+            .resource("/setup", |r| r.method(Method::POST).with(setup_request))
+            .resource("/status", |r| r.method(Method::POST).with(status_request))
+            .resource("/exit_info", |r| {
+                r.method(Method::GET).with(get_exit_info_http)
+            })
+            .resource("/rtt", |r| r.method(Method::GET).with(rtt))
+            .resource("/client_debt", |r| {
+                r.method(Method::POST).with(get_client_debt)
+            })
+    })
+    .workers(workers)
+    .bind(format!(
+        "[::0]:{}",
+        SETTING.get_exit_network().exit_hello_port
+    ))
+    .unwrap()
+    .shutdown_timeout(0)
+    .start();
 }
