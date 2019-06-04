@@ -1,12 +1,16 @@
+use crate::GEOIP_CACHE;
 use crate::KI;
 use crate::SETTING;
+use actix_web::client as actix_client;
+use actix_web::HttpMessage;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
 use babel_monitor::start_connection;
 use failure::Error;
+use future::Either;
+use futures::future;
 use futures::future::Future;
 use ipnetwork::IpNetwork;
-use reqwest;
 use settings::exit::RitaExitSettings;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
@@ -114,9 +118,9 @@ struct CountryDetails {
 }
 
 /// get ISO country code from ip, consults a in memory cache
-pub fn get_country(ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<String, Error> {
+pub fn get_country(ip: IpAddr) -> impl Future<Item = String, Error = Error> {
+    // a function local cache for results, reset during every restart
     trace!("get GeoIP country for {}", ip.to_string());
-    let client = reqwest::Client::new();
     let api_user = SETTING
         .get_exit_network()
         .geoip_api_user
@@ -128,8 +132,8 @@ pub fn get_country(ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<S
         .clone()
         .expect("No api key configured!");
 
-    match cache.get(ip) {
-        Some(code) => Ok(code.clone()),
+    match GEOIP_CACHE.read().unwrap().get(&ip) {
+        Some(code) => Either::A(future::ok(code.clone())),
         None => {
             let geo_ip_url = format!("https://geoip.maxmind.com/geoip/v2.1/country/{}", ip);
             info!(
@@ -137,52 +141,46 @@ pub fn get_country(ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<S
                 geo_ip_url,
                 ip.to_string()
             );
-
-            let res: GeoIPRet = match client
-                .get(&geo_ip_url)
-                .basic_auth(api_user, Some(api_key))
-                .send()
-            {
-                Ok(mut r) => match r.json() {
-                    Ok(v) => v,
-                    Err(e) => {
-                        warn!("Failed to Jsonize GeoIP response {:?}", e);
-                        bail!("Failed to jsonize GeoIP response {:?}", e)
-                    }
-                },
-                Err(e) => {
-                    warn!("Get request for GeoIP failed! {:?}", e);
-                    bail!("Get request for GeoIP failed {:?}", e)
-                }
-            };
-            info!("Got {:?} from GeoIP request", res);
-            cache.insert(*ip, res.country.iso_code.clone());
-
-            Ok(res.country.iso_code)
+            Either::B(
+                actix_client::get(&geo_ip_url)
+                    .basic_auth(api_user, Some(api_key))
+                    .finish()
+                    .unwrap()
+                    .send()
+                    .from_err()
+                    .and_then(move |response| {
+                        response.json().from_err().and_then(move |result| {
+                            let value: GeoIPRet = result;
+                            let code = value.country.iso_code;
+                            GEOIP_CACHE.write().unwrap().insert(ip, code.clone());
+                            Ok(code)
+                        })
+                    }),
+            )
         }
     }
 }
 
 /// Returns true or false if an ip is confirmed to be inside or outside the region and error
 /// if an api error is encountered trying to figure that out.
-pub fn verify_ip(request_ip: &IpAddr, cache: &mut HashMap<IpAddr, String>) -> Result<bool, Error> {
+pub fn verify_ip(request_ip: IpAddr) -> impl Future<Item = bool, Error = Error> {
     if SETTING.get_allowed_countries().is_empty() {
-        Ok(true)
+        Either::A(future::ok(true))
     } else {
-        let country = get_country(request_ip, cache)?;
+        Either::B(get_country(request_ip).and_then(|country| {
+            if !SETTING.get_allowed_countries().is_empty()
+                && !SETTING.get_allowed_countries().contains(&country)
+            {
+                return Ok(false);
+            }
 
-        if !SETTING.get_allowed_countries().is_empty()
-            && !SETTING.get_allowed_countries().contains(&country)
-        {
-            return Ok(false);
-        }
-
-        Ok(true)
+            Ok(true)
+        }))
     }
 }
 
 #[test]
 #[ignore]
 fn test_get_country() {
-    get_country(&"8.8.8.8".parse().unwrap(), &mut HashMap::new()).unwrap();
+    get_country("8.8.8.8".parse().unwrap()).wait().unwrap();
 }

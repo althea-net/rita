@@ -179,10 +179,7 @@ impl Handler<Tick> for RitaSyncLoop {
 
         // Make sure no one we are setting up is geoip unauthorized
         if !SETTING.get_allowed_countries().is_empty() {
-            let res = validate_clients_region(&mut self.geoip_cache, &clients_list, &conn);
-            if res.is_err() {
-                error!("Validate clients failed with {:?}", res);
-            }
+            Arbiter::spawn(validate_clients_region(clients_list.clone(), conn));
         }
 
         // handle enforcement on client tunnels by querying debt keeper
