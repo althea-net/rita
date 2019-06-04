@@ -35,6 +35,7 @@ use diesel;
 use diesel::prelude::{Connection, ConnectionError, PgConnection, RunQueryDsl};
 use exit_db::{models, schema};
 use failure::Error;
+use futures::future;
 use futures::future::join_all;
 use futures::Future;
 use ipnetwork::IpNetwork;
@@ -164,36 +165,54 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
     get_gateway_ip_single(client.global.mesh_ip).and_then(move |gateway_ip| {
         verify_ip(gateway_ip).and_then(move |verify_status| {
             get_country(gateway_ip).and_then(move |user_country| {
-                let conn = get_database_connection()?;
-                let their_record = create_or_update_user_record(&conn, &client, user_country)?;
+                let conn = match get_database_connection() {
+                    Ok(db) => db,
+                    Err(e) => {
+                        return Box::new(future::err(format_err!("{:?}", e)))
+                            as Box<Future<Item = ExitState, Error = Error>>
+                    }
+                };
+                let their_record = match create_or_update_user_record(&conn, &client, user_country)
+                {
+                    Ok(record) => record,
+                    Err(e) => return Box::new(future::err(e)),
+                };
 
                 // either update and grab an existing entry or create one
                 match (verify_status, SETTING.get_verif_settings()) {
-                    (true, Some(ExitVerifSettings::Email(mailer))) => handle_email_registration(
-                        &client,
-                        &their_record,
-                        &conn,
-                        mailer.email_cooldown as i64,
-                    ),
-                    (true, Some(ExitVerifSettings::Phone(phone))) => {
-                        handle_sms_registration(&client, &their_record, phone.auth_api_key, &conn)
+                    (true, Some(ExitVerifSettings::Email(mailer))) => {
+                        Box::new(handle_email_registration(
+                            &client,
+                            &their_record,
+                            &conn,
+                            mailer.email_cooldown as i64,
+                        ))
                     }
+                    (true, Some(ExitVerifSettings::Phone(phone))) => Box::new(
+                        handle_sms_registration(client, their_record, phone.auth_api_key, conn),
+                    ),
                     (true, None) => {
-                        verify_client(&client, true, &conn)?;
-                        Ok(ExitState::Registered {
-                            our_details: ExitClientDetails {
-                                client_internal_ip: their_record.internal_ip.parse()?,
-                            },
+                        match verify_client(&client, true, &conn) {
+                            Ok(_) => (),
+                            Err(e) => return Box::new(future::err(e)),
+                        }
+                        let client_internal_ip = match their_record.internal_ip.parse() {
+                            Ok(ip) => ip,
+                            Err(e) => return Box::new(future::err(format_err!("{:?}", e))),
+                        };
+
+                        Box::new(future::ok(ExitState::Registered {
+                            our_details: ExitClientDetails { client_internal_ip },
                             general_details: get_exit_info(),
                             message: "Registration OK".to_string(),
-                        })
+                        }))
                     }
-                    (false, _) => Ok(ExitState::Denied {
+                    (false, _) => Box::new(future::ok(ExitState::Denied {
                         message: format!(
                             "This exit only accepts connections from {}",
                             display_hashset(&SETTING.get_allowed_countries()),
                         ),
-                    }),
+                    })),
                 }
             })
         })
