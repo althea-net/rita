@@ -5,25 +5,27 @@ use crate::rita_common::dashboard::Dashboard;
 use crate::ARGS;
 use crate::KI;
 use crate::SETTING;
-use ::actix::*;
+use ::actix::{Handler, Message, ResponseFuture, SystemService};
+use ::actix_web::client;
 use ::actix_web::http::StatusCode;
 use ::actix_web::AsyncResponder;
 use ::actix_web::Path;
 use ::actix_web::{HttpRequest, HttpResponse, Json};
+use actix_web::error::PayloadError;
+use actix_web::HttpMessage;
 use althea_types::ExitState;
 use babel_monitor::do_we_have_route;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
 use babel_monitor::start_connection;
+use bytes::Bytes;
 use failure::Error;
 use futures::{future, Future};
-use reqwest;
 use settings::client::{ExitServer, RitaClientSettings};
 use settings::FileWrite;
 use settings::RitaCommonSettings;
 use std::boxed::Box;
 use std::collections::HashMap;
-use std::time::Duration;
 
 #[derive(Serialize)]
 pub struct ExitInfo {
@@ -159,78 +161,80 @@ pub fn exits_sync(
                     .json(ret),
             ));
         }
-    };
-
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
-        .build()
-        .unwrap();
-
-    let mut new_exits: HashMap<String, ExitServer> = match client.get(list_url).send() {
-        Ok(mut response) => match response.json() {
-            Ok(deserialized) => deserialized,
-            Err(e) => {
-                let mut ret = HashMap::<String, String>::new();
-
-                error!(
-                    "Could not deserialize exit list at {:?} because of error: {:?}",
-                    list_url, e
-                );
-                ret.insert(
-                    "error".to_owned(),
-                    format!(
-                        "Could not deserialize exit list at URL {:?} because of error {:?}",
-                        list_url, e
-                    ),
-                );
-
-                return Box::new(future::ok(
-                    HttpResponse::new(StatusCode::BAD_REQUEST)
-                        .into_builder()
-                        .json(ret),
-                ));
-            }
-        },
-        Err(e) => {
-            let mut ret = HashMap::new();
-
-            error!(
-                "Could not make GET request vor URL {:?}, Rust error: {:?}",
-                list_url, e
-            );
-            ret.insert(
-                "error".to_owned(),
-                format!("Could not make GET request for URL {:?}", list_url),
-            );
-            ret.insert("rust_error".to_owned(), format!("{:?}", e));
-            return Box::new(future::ok(
-                HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
-                    .into_builder()
-                    .json(ret),
-            ));
-        }
-    };
-
-    info!("exit_sync list: {:#?}", new_exits);
-
-    let exits = &mut SETTING.get_exit_client_mut().exits;
-
-    // if the entry already exists copy the registration info over
-    for new_exit in new_exits.iter_mut() {
-        let nick = new_exit.0;
-        let new_settings = new_exit.1;
-        if let Some(old_exit) = exits.get(nick) {
-            new_settings.info = old_exit.info.clone();
-        }
     }
-    exits.extend(new_exits);
+    .to_string();
 
-    // try and save the config and fail if we can't
-    if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
-        return Box::new(future::err(e));
-    }
+    let res = client::get(list_url.clone())
+        .header("User-Agent", "Actix-web")
+        .finish()
+        .unwrap()
+        .send()
+        .from_err()
+        .and_then(move |response| {
+            response
+                .body()
+                .then(move |message_body: Result<Bytes, PayloadError>| {
+                    if let Err(e) = message_body {
+                        return Box::new(future::ok(
+                            HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+                                .into_builder()
+                                .json(format!("Actix encountered a payload error {:?}", e)),
+                        ));
+                    }
+                    let message_body = message_body.unwrap();
 
-    Box::new(future::ok(HttpResponse::Ok().json(exits.clone())))
+                    // .json() only works on application/json content types unlike reqwest which handles bytes
+                    // transparently actix requests need to get the body and deserialize using serde_json in
+                    // an explicit fashion
+                    match serde_json::from_slice::<HashMap<String, ExitServer>>(&message_body) {
+                        Ok(mut new_exits) => {
+                            info!("exit_sync list: {:#?}", new_exits);
+
+                            let exits = &mut SETTING.get_exit_client_mut().exits;
+
+                            // if the entry already exists copy the registration info over
+                            for new_exit in new_exits.iter_mut() {
+                                let nick = new_exit.0;
+                                let new_settings = new_exit.1;
+                                if let Some(old_exit) = exits.get(nick) {
+                                    new_settings.info = old_exit.info.clone();
+                                }
+                            }
+                            exits.extend(new_exits);
+
+                            // try and save the config and fail if we can't
+                            if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+                                return Box::new(future::err(e));
+                            }
+
+                            Box::new(future::ok(HttpResponse::Ok().json(exits.clone())))
+                        }
+                        Err(e) => {
+                            let mut ret = HashMap::<String, String>::new();
+
+                            error!(
+                                "Could not deserialize exit list at {:?} because of error: {:?}",
+                                list_url, e
+                            );
+                            ret.insert(
+                                "error".to_owned(),
+                                format!(
+                            "Could not deserialize exit list at URL {:?} because of error {:?}",
+                             list_url, e
+                             ),
+                            );
+
+                            Box::new(future::ok(
+                                HttpResponse::new(StatusCode::BAD_REQUEST)
+                                    .into_builder()
+                                    .json(ret),
+                            ))
+                        }
+                    }
+                })
+        });
+
+    Box::new(res)
 }
 
 pub fn get_exit_info(
