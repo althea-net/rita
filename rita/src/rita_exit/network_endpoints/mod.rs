@@ -17,6 +17,7 @@ use actix_web::AsyncResponder;
 use althea_types::Identity;
 use althea_types::{ExitClientIdentity, ExitState, RTTimestamps};
 use failure::Error;
+use futures::future;
 use futures::Future;
 use num256::Int256;
 use std::net::SocketAddr;
@@ -24,7 +25,7 @@ use std::time::SystemTime;
 
 pub fn setup_request(
     their_id: (Json<ExitClientIdentity>, HttpRequest),
-) -> Result<Json<ExitState>, Error> {
+) -> Box<Future<Item = Json<ExitState>, Error = Error>> {
     info!(
         "Received setup request from, {}",
         their_id.0.global.wg_public_key
@@ -41,11 +42,19 @@ pub fn setup_request(
 
     let remote_mesh_ip = remote_mesh_socket.ip();
     if remote_mesh_ip == client_mesh_ip {
-        Ok(Json(signup_client(client)?))
-    } else {
-        Ok(Json(ExitState::Denied {
-            message: "The request ip does not match the signup ip".to_string(),
+        Box::new(signup_client(client).then(|result| match result {
+            Ok(exit_state) => Ok(Json(exit_state)),
+            Err(e) => {
+                error!("Signup client failed with {:?}", e);
+                Ok(Json(ExitState::Denied {
+                    message: "There was an internal server error!".to_string(),
+                }))
+            }
         }))
+    } else {
+        Box::new(future::ok(Json(ExitState::Denied {
+            message: "The request ip does not match the signup ip".to_string(),
+        })))
     }
 }
 

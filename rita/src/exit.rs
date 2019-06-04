@@ -38,6 +38,8 @@ use settings::FileWrite;
 
 use actix_web::http::Method;
 use actix_web::{http, server, App};
+use std::collections::HashMap;
+use std::net::IpAddr;
 
 mod middleware;
 mod rita_common;
@@ -119,6 +121,11 @@ lazy_static! {
     pub static ref ARGS: Args = Docopt::new((*USAGE).as_str())
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
+}
+
+lazy_static! {
+    pub static ref GEOIP_CACHE: Arc<RwLock<HashMap<IpAddr, String>>> =
+        Arc::new(RwLock::new(HashMap::new()));
 }
 
 #[cfg(not(test))]

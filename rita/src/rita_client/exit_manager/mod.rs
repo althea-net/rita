@@ -477,7 +477,8 @@ impl Handler<Tick> for ExitManager {
                                     })
                                 })
                             })
-                            .timeout(Duration::from_secs(4)).then(|ret| {
+                            .timeout(Duration::from_secs(4))
+                            .then(|ret| {
                                 if let Err(e) = ret {
                                     error!("Failed to watch client traffic with {:?}", e)
                                 }
