@@ -186,6 +186,60 @@ fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = 
     Box::new(r)
 }
 
+fn update_exit_price(exit: String) -> impl Future<Item = (), Error = Error> {
+    let current_exit = match SETTING.get_exits().get(&exit) {
+        Some(current_exit) => current_exit.clone(),
+        None => {
+            return Box::new(future::err(format_err!("No valid exit for {}", exit)))
+                as Box<dyn Future<Item = (), Error = Error>>;
+        }
+    };
+
+    let endpoint = SocketAddr::new(current_exit.id.mesh_ip, current_exit.registration_port);
+
+    trace!("sending exit price request to {}", exit);
+
+    let r = get_exit_info(&endpoint).and_then(move |exit_details| {
+        let mut exits = SETTING.get_exits_mut();
+
+        let current_exit = match exits.get_mut(&exit) {
+            Some(exit) => exit,
+            None => bail!("Could not find exit {}", exit),
+        };
+
+        match exit_details {
+            ExitState::GotInfo { .. } => {
+                trace!("Got exit info response {:?}", exit_details);
+            }
+            _ => bail!("got incorrect state from exit details request"),
+        }
+        let new_price = exit_details.general_details().unwrap().exit_price;
+
+        match current_exit.info {
+            ExitState::GotInfo {
+                ref mut general_details,
+                ..
+            } => general_details.exit_price = new_price,
+            ExitState::Registering {
+                ref mut general_details,
+                ..
+            } => general_details.exit_price = new_price,
+            ExitState::Pending {
+                ref mut general_details,
+                ..
+            } => general_details.exit_price = new_price,
+            ExitState::Registered {
+                ref mut general_details,
+                ..
+            } => general_details.exit_price = new_price,
+            _ => bail!("We don't know enough about this exit yet for price to matter?"),
+        }
+        Ok(())
+    });
+
+    Box::new(r)
+}
+
 pub fn exit_setup_request(
     exit: String,
     code: Option<String>,
@@ -439,17 +493,43 @@ impl Handler<Tick> for ExitManager {
                     )));
                 }
                 ExitState::Registered { .. } => {
-                    futs.push(Box::new(exit_status_request(k.clone()).then(move |res| {
-                        match res {
-                            Ok(_) => {
-                                trace!("exit status request to {} was successful", k);
-                            }
-                            Err(e) => {
-                                trace!("exit status request to {} failed with {:?}", k, e);
-                            }
-                        };
-                        Ok(())
-                    })));
+                    // different values for error printing
+                    let server_a = k.clone();
+                    let server_b = k.clone();
+                    futs.push(Box::new(exit_status_request(server_a.clone()).then(
+                        move |res| {
+                            match res {
+                                Ok(_) => {
+                                    trace!("exit status request to {} was successful", server_a);
+                                }
+                                Err(e) => {
+                                    trace!(
+                                        "exit status request to {} failed with {:?}",
+                                        server_a,
+                                        e
+                                    );
+                                }
+                            };
+                            Ok(())
+                        },
+                    )));
+                    futs.push(Box::new(update_exit_price(server_b.clone()).then(
+                        move |res| {
+                            match res {
+                                Ok(_) => {
+                                    trace!("exit price request to {} was successful", server_b);
+                                }
+                                Err(e) => {
+                                    trace!(
+                                        "exit price request to {} failed with {:?}",
+                                        server_b,
+                                        e
+                                    );
+                                }
+                            };
+                            Ok(())
+                        },
+                    )));
                 }
                 state => {
                     trace!("Waiting on exit state {:?} for {}", state, k);
