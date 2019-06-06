@@ -39,6 +39,9 @@ use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
 use babel_monitor::start_connection;
 use diesel::query_dsl::RunQueryDsl;
+use diesel::r2d2::ConnectionManager;
+use diesel::r2d2::PooledConnection;
+use diesel::PgConnection;
 use exit_db::models;
 use failure::Error;
 use futures::future::Future;
@@ -77,7 +80,14 @@ impl Actor for RitaLoop {
             wg_clients: HashSet::new(),
         });
         ctx.run_interval(Duration::from_secs(EXIT_LOOP_SPEED), move |_act, _ctx| {
-            addr.do_send(Tick)
+            let addr = addr.clone();
+            Arbiter::spawn(get_database_connection().then(move |database| {
+                match database {
+                    Ok(database) =>  addr.do_send(Tick(database)),
+                    Err(e) => error!("Could not reach database for Rita sync loop! {:?}", e) 
+                }
+                Ok(())
+            }));
         });
     }
 }
@@ -118,7 +128,7 @@ impl Handler<Crash> for RitaLoop {
     }
 }
 
-pub struct Tick;
+pub struct Tick(PooledConnection<ConnectionManager<PgConnection>>);
 
 impl Message for Tick {
     type Result = Result<(), Error>;
@@ -126,7 +136,7 @@ impl Message for Tick {
 
 impl Handler<Tick> for RitaSyncLoop {
     type Result = Result<(), Error>;
-    fn handle(&mut self, _: Tick, _ctx: &mut SyncContext<Self>) -> Self::Result {
+    fn handle(&mut self, msg: Tick, _ctx: &mut SyncContext<Self>) -> Self::Result {
         use exit_db::schema::clients::dsl::clients;
         let babel_port = SETTING.get_network().babel_port;
         trace!("Exit tick!");
@@ -134,7 +144,7 @@ impl Handler<Tick> for RitaSyncLoop {
         // opening a database connection takes at least several milliseconds, as the database server
         // may be across the country, so to save on back and forth we open on and reuse it as much
         // as possible
-        let conn = get_database_connection()?;
+        let conn = msg.0;
 
         let clients_list = clients.load::<models::Client>(&conn)?;
         let ids = clients_to_ids(clients_list.clone());
@@ -179,7 +189,7 @@ impl Handler<Tick> for RitaSyncLoop {
 
         // Make sure no one we are setting up is geoip unauthorized
         if !SETTING.get_allowed_countries().is_empty() {
-            Arbiter::spawn(validate_clients_region(clients_list.clone(), conn));
+            Arbiter::spawn(validate_clients_region(clients_list.clone()));
         }
 
         // handle enforcement on client tunnels by querying debt keeper
