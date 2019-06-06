@@ -83,8 +83,8 @@ impl Actor for RitaLoop {
             let addr = addr.clone();
             Arbiter::spawn(get_database_connection().then(move |database| {
                 match database {
-                    Ok(database) =>  addr.do_send(Tick(database)),
-                    Err(e) => error!("Could not reach database for Rita sync loop! {:?}", e) 
+                    Ok(database) => addr.do_send(Tick(database)),
+                    Err(e) => error!("Could not reach database for Rita sync loop! {:?}", e),
                 }
                 Ok(())
             }));
