@@ -1,21 +1,30 @@
+//! Babel monitor is an async futures based interface for the Babeld management interface
+//! it provides abastractions over the major data this interface provides and an async
+//! way to efficiently communicate with it.
+
 #[macro_use]
 extern crate failure;
 #[macro_use]
 extern crate log;
+extern crate futures;
 
-use bufstream::BufStream;
 use failure::Error;
+use futures::future;
+use futures::future::result as future_result;
+use futures::future::Either;
+use futures::future::Future;
 use ipnetwork::IpNetwork;
-use std::collections::VecDeque;
-use std::io::{BufRead, Read, Write};
 use std::iter::Iterator;
 use std::net::IpAddr;
 use std::net::SocketAddr;
-use std::net::TcpStream;
 use std::str;
 use std::time::Duration;
-
-const BABEL_OPERATION_TIMEOUT: Duration = Duration::from_secs(1);
+use std::time::Instant;
+use tokio::io::read;
+use tokio::io::write_all;
+use tokio::net::tcp::ConnectFuture;
+use tokio::net::TcpStream;
+use tokio::timer::Delay;
 
 #[derive(Debug, Fail)]
 pub enum BabelMonitorError {
@@ -33,11 +42,13 @@ pub enum BabelMonitorError {
     NoTerminator(String),
     #[fail(display = "No Neighbor was found matching address:\n{}", _0)]
     NoNeighbor(String),
+    #[fail(display = "Tokio had a failure while it was talking to babel:\n{}", _0)]
+    TokioError(String),
 }
 
 use crate::BabelMonitorError::{
     CommandFailed, InvalidPreamble, LocalFeeNotFound, NoNeighbor, NoTerminator, ReadFailed,
-    VariableNotFound,
+    TokioError, VariableNotFound,
 };
 
 // If a function doesn't need internal state of the Babel object
@@ -86,405 +97,526 @@ pub struct Neighbor {
 
 /// Opens a tcpstream to the babel management socket using a standard timeout
 /// for both the open and read operations
-pub fn open_babel_stream(babel_port: u16) -> Result<TcpStream, Error> {
-    let socket: SocketAddr = format!("[::1]:{}", babel_port,).parse()?;
-    let stream = TcpStream::connect_timeout(&socket, BABEL_OPERATION_TIMEOUT)?;
-    stream.set_read_timeout(Some(BABEL_OPERATION_TIMEOUT))?;
-    Ok(stream)
+pub fn open_babel_stream(babel_port: u16) -> ConnectFuture {
+    let socket_string = format!("[::1]:{}", babel_port);
+    trace!("About to open Babel socket using {}", socket_string);
+    let socket: SocketAddr = socket_string.parse().unwrap();
+    TcpStream::connect(&socket)
 }
 
-pub struct Babel<T: Read + Write> {
-    stream: BufStream<T>,
-}
+/// Read function, you should always pass an empty string to the previous contents field
+/// it's used when the function does not find a babel terminator and needs to recuse to get
+/// the full message
+fn read_babel(
+    stream: TcpStream,
+    previous_contents: String,
+) -> impl Future<Item = (TcpStream, String), Error = Error> {
+    // 100kbyte
+    let buffer: [u8; 100000] = [0; 100000];
+    read(stream, buffer.to_vec())
+        .from_err()
+        .and_then(move |result| {
+            let (stream, buffer, bytes) = result;
 
-impl<T: Read + Write> Babel<T> {
-    pub fn new(stream: T) -> Babel<T> {
-        Babel {
-            stream: BufStream::new(stream),
-        }
-    }
-
-    fn read_babel(&mut self) -> Result<String, Error> {
-        let mut ret = String::new();
-        for line in Read::by_ref(&mut self.stream).lines() {
-            let line = &line?;
-            ret.push_str(line);
-            ret.push_str("\n");
-            match line.as_str().trim() {
-                "ok" => {
-                    trace!(
-                        "Babel returned ok; full output:\n{}\nEND OF BABEL OUTPUT",
-                        ret
-                    );
-                    return Ok(ret);
-                }
-                "bad" | "no" => {
-                    warn!(
-                        "Babel returned bad/no; full output:\n{}\nEND OF BABEL OUTPUT",
-                        ret
-                    );
-                    return Err(ReadFailed(ret).into());
-                }
-                _ => continue,
+            let output = String::from_utf8(buffer);
+            if let Err(e) = output {
+                return Box::new(future::err(TokioError(format!("{:?}", e)).into()))
+                    as Box<Future<Item = (TcpStream, String), Error = Error>>;
             }
+            let output = output.unwrap();
+            let output = output.trim_matches(char::from(0));
+            trace!(
+                "Babel monitor got {} bytes with the message {}",
+                bytes,
+                output
+            );
+
+            // it's possible we caught babel in the middle of writing to the socket
+            // if we don't see a terminator we either have an error in Babel or an error
+            // in our code for expecting one. So it's safe for us to keep trying and building
+            // a larger response until we see one.
+            let babel_data = read_babel_sync(&output);
+            if let Err(NoTerminator(_)) = babel_data {
+                let when = Instant::now() + Duration::from_millis(100);
+                trace!("we didn't get the whole message yet, trying again");
+                let full_message = format!("{}{}", previous_contents, output);
+                return Box::new(
+                    Delay::new(when)
+                        .map_err(move |e| panic!("timer failed; err={:?}", e))
+                        .and_then(move |_| read_babel(stream, full_message)),
+                ) as Box<Future<Item = (TcpStream, String), Error = Error>>;
+            }
+            if let Err(e) = babel_data {
+                warn!("Babel read failed! {} {:?}", output, e);
+                return Box::new(future::err(ReadFailed(format!("{:?}", e)).into()))
+                    as Box<Future<Item = (TcpStream, String), Error = Error>>;
+            }
+            let babel_data = babel_data.unwrap();
+
+            Box::new(future::ok((stream, babel_data)))
+                as Box<Future<Item = (TcpStream, String), Error = Error>>
+        })
+}
+
+fn read_babel_sync(output: &str) -> Result<String, BabelMonitorError> {
+    let mut ret = String::new();
+    for line in output.lines() {
+        ret.push_str(line);
+        ret.push_str("\n");
+        match line.trim() {
+            "ok" => {
+                trace!(
+                    "Babel returned ok; full output:\n{}\nEND OF BABEL OUTPUT",
+                    ret
+                );
+                return Ok(ret);
+            }
+            "bad" | "no" => {
+                warn!(
+                    "Babel returned bad/no; full output:\n{}\nEND OF BABEL OUTPUT",
+                    ret
+                );
+                return Err(ReadFailed(ret).into());
+            }
+            _ => continue,
         }
-        warn!(
-            "Terminator was never found; full output:\n{:?}\nEND OF BABEL OUTPUT",
-            ret
-        );
-        return Err(NoTerminator(ret).into());
     }
+    warn!(
+        "Terminator was never found; full output:\n{:?}\nEND OF BABEL OUTPUT",
+        ret
+    );
+    return Err(NoTerminator(ret).into());
+}
 
-    fn command(&mut self, cmd: &str) -> Result<String, Error> {
-        self.stream.write_all(format!("{}\n", cmd).as_bytes())?;
-        self.stream.flush()?;
-
-        trace!("Sent '{}' to babel", cmd);
-        match self.read_babel() {
-            Ok(out) => Ok(out),
-            Err(e) => Err(CommandFailed(String::from(cmd), e.to_string()).into()),
+pub fn run_command(
+    stream: TcpStream,
+    cmd: &str,
+) -> impl Future<Item = (TcpStream, String), Error = Error> {
+    trace!("Running babel command {}", cmd);
+    let cmd = format!("{}\n", cmd);
+    let bytes = cmd.as_bytes().to_vec();
+    write_all(stream, bytes).then(move |out| {
+        if out.is_err() {
+            return Box::new(Either::A(future_result(Err(CommandFailed(
+                cmd,
+                format!("{:?}", out),
+            )
+            .into()))));
         }
-    }
+        let (stream, _res) = out.unwrap();
+        trace!("Command write succeeded, returning output");
+        Box::new(Either::B(read_babel(stream, String::new())))
+    })
+}
 
-    // Consumes the automated Preamble and validates configuration api version
-    pub fn start_connection(&mut self) -> Result<(), Error> {
-        let preamble = self.read_babel()?;
-        // Note you have changed the config interface, bump to 1.1 in babel
-        if preamble.contains("ALTHEA 0.1") {
-            trace!("Attached OK to Babel with preamble: {}", preamble);
-            return Ok(());
-        } else {
-            return Err(InvalidPreamble(preamble).into());
+// Consumes the automated Preamble and validates configuration api version
+pub fn start_connection(stream: TcpStream) -> impl Future<Item = TcpStream, Error = Error> {
+    trace!("Starting babel connection");
+    read_babel(stream, String::new()).then(|result| {
+        if let Err(e) = result {
+            return Err(e);
         }
+        let (stream, preamble) = result.unwrap();
+        validate_preamble(preamble)?;
+        Ok(stream)
+    })
+}
+
+fn validate_preamble(preamble: String) -> Result<(), Error> {
+    // Note you have changed the config interface, bump to 1.1 in babel
+    if preamble.contains("ALTHEA 0.1") {
+        trace!("Attached OK to Babel with preamble: {}", preamble);
+        return Ok(());
+    } else {
+        return Err(InvalidPreamble(preamble).into());
     }
+}
 
-    pub fn get_local_fee(&mut self) -> Result<u32, Error> {
-        let babel_output = self.command("dump")?;
-        let fee_entry = match babel_output.split("\n").nth(0) {
-            Some(entry) => entry,
-            // Even an empty string wouldn't yield None
-            None => return Err(LocalFeeNotFound(String::from("<Babel output is None>")).into()),
-        };
-
-        if fee_entry.contains("local fee") {
-            let fee = find_babel_val("fee", fee_entry)?.parse()?;
-            trace!("Retrieved a local fee of {}", fee);
-            return Ok(fee);
+pub fn get_local_fee(stream: TcpStream) -> impl Future<Item = (TcpStream, u32), Error = Error> {
+    run_command(stream, "dump").then(|output| {
+        if let Err(e) = output {
+            return Err(e);
         }
+        let (stream, babel_output) = output.unwrap();
+        Ok((stream, get_local_fee_sync(babel_output)?))
+    })
+}
 
-        Err(LocalFeeNotFound(String::from(fee_entry)).into())
+fn get_local_fee_sync(babel_output: String) -> Result<u32, Error> {
+    let fee_entry = match babel_output.split("\n").nth(0) {
+        Some(entry) => entry,
+        // Even an empty string wouldn't yield None
+        None => return Err(LocalFeeNotFound(String::from("<Babel output is None>")).into()),
+    };
+
+    if fee_entry.contains("local fee") {
+        let fee = find_babel_val("fee", fee_entry)?.parse()?;
+        trace!("Retrieved a local fee of {}", fee);
+        return Ok(fee);
     }
 
-    pub fn set_local_fee(&mut self, new_fee: u32) -> Result<(), Error> {
-        let _babel_output = self.command(&format!("fee {}", new_fee))?;
-        Ok(())
-    }
+    Err(LocalFeeNotFound(String::from(fee_entry)).into())
+}
 
-    pub fn set_metric_factor(&mut self, new_factor: u32) -> Result<(), Error> {
-        let _babel_output = self.command(&format!("metric-factor {}", new_factor))?;
-        Ok(())
-    }
+pub fn set_local_fee(
+    stream: TcpStream,
+    new_fee: u32,
+) -> impl Future<Item = TcpStream, Error = Error> {
+    run_command(stream, &format!("fee {}", new_fee)).then(|result| {
+        if let Err(e) = result {
+            return Err(e);
+        }
+        let (stream, _out) = result.unwrap();
+        Ok(stream)
+    })
+}
 
-    pub fn monitor(&mut self, iface: &str) -> Result<(), Error> {
-        let _ = self.command(&format!(
-            "interface {} max-rtt-penalty 500 enable-timestamps true",
-            iface
-        ))?;
+pub fn set_metric_factor(
+    stream: TcpStream,
+    new_factor: u32,
+) -> impl Future<Item = TcpStream, Error = Error> {
+    run_command(stream, &format!("metric-factor {}", new_factor)).then(|result| {
+        if let Err(e) = result {
+            return Err(e);
+        }
+        let (stream, _out) = result.unwrap();
+        Ok(stream)
+    })
+}
+
+pub fn monitor(stream: TcpStream, iface: &str) -> impl Future<Item = TcpStream, Error = Error> {
+    let command = &format!(
+        "interface {} max-rtt-penalty 500 enable-timestamps true",
+        iface
+    );
+    let iface = iface.to_string();
+    run_command(stream, &command).then(move |result| {
+        if let Err(e) = result {
+            return Err(e);
+        }
         trace!("Babel started monitoring: {}", iface);
-        Ok(())
-    }
+        let (stream, _out) = result.unwrap();
+        Ok(stream)
+    })
+}
 
-    pub fn redistribute_ip(&mut self, ip: &IpAddr, allow: bool) -> Result<(), Error> {
-        let commmand = format!(
-            "redistribute ip {}/128 {}",
-            ip,
-            if allow { "allow" } else { "deny" }
-        );
-        self.command(&commmand)?;
-        let _ = self.read_babel()?;
-        Ok(())
-    }
+pub fn redistribute_ip(
+    stream: TcpStream,
+    ip: &IpAddr,
+    allow: bool,
+) -> impl Future<Item = (TcpStream, String), Error = Error> {
+    let command = format!(
+        "redistribute ip {}/128 {}",
+        ip,
+        if allow { "allow" } else { "deny" }
+    );
+    run_command(stream, &command).then(move |result| {
+        if let Err(e) = result {
+            return Either::A(future_result(Err(e).into()));
+        }
+        let (stream, _out) = result.unwrap();
+        Either::B(read_babel(stream, String::new()))
+    })
+}
 
-    pub fn unmonitor(&mut self, iface: &str) -> Result<(), Error> {
-        self.command(&format!("flush interface {}", iface))?;
-        Ok(())
-    }
+pub fn unmonitor(stream: TcpStream, iface: &str) -> impl Future<Item = TcpStream, Error = Error> {
+    let command = format!("flush interface {}", iface);
+    let iface = iface.to_string();
+    run_command(stream, &command).then(move |result| {
+        if let Err(e) = result {
+            return Err(e);
+        }
+        trace!("Babel stopped monitoring: {}", iface);
+        let (stream, _out) = result.unwrap();
+        Ok(stream)
+    })
+}
 
-    pub fn parse_neighs(&mut self) -> Result<VecDeque<Neighbor>, Error> {
-        let mut vector: VecDeque<Neighbor> = VecDeque::with_capacity(5);
-        let mut found_neigh = false;
-        for entry in self.command("dump")?.split("\n") {
-            if entry.contains("add neighbour") {
-                found_neigh = true;
-                let neigh = Neighbor {
-                    id: match find_babel_val("neighbour", entry) {
+pub fn parse_neighs(
+    stream: TcpStream,
+) -> impl Future<Item = (TcpStream, Vec<Neighbor>), Error = Error> {
+    run_command(stream, "dump").then(|result| {
+        if let Err(e) = result {
+            return Err(e);
+        }
+        let (stream, output) = result.unwrap();
+        Ok((stream, parse_neighs_sync(output)?))
+    })
+}
+
+fn parse_neighs_sync(output: String) -> Result<Vec<Neighbor>, Error> {
+    let mut vector: Vec<Neighbor> = Vec::with_capacity(5);
+    let mut found_neigh = false;
+    for entry in output.split("\n") {
+        if entry.contains("add neighbour") {
+            found_neigh = true;
+            let neigh = Neighbor {
+                id: match find_babel_val("neighbour", entry) {
+                    Ok(val) => val,
+                    Err(_) => continue,
+                },
+                address: match find_babel_val("address", entry) {
+                    Ok(entry) => match entry.parse() {
+                        Ok(parsed_data) => parsed_data,
+                        Err(e) => {
+                            warn!("Error parsing address for neigh {:?} from {}", e, entry);
+                            continue;
+                        }
+                    },
+                    Err(_) => continue,
+                },
+                iface: match find_babel_val("if", entry) {
+                    Ok(val) => val,
+                    Err(_) => continue,
+                },
+                reach: match find_babel_val("reach", entry) {
+                    Ok(val) => match u16::from_str_radix(&val, 16) {
                         Ok(val) => val,
-                        Err(_) => continue,
+                        Err(e) => {
+                            warn!("Failed to convert reach {:?} {}", e, entry);
+                            continue;
+                        }
                     },
-                    address: match find_babel_val("address", entry) {
-                        Ok(entry) => match entry.parse() {
-                            Ok(parsed_data) => parsed_data,
-                            Err(e) => {
-                                warn!("Error parsing address for neigh {:?} from {}", e, entry);
-                                continue;
-                            }
-                        },
-                        Err(_) => continue,
+                    Err(_) => continue,
+                },
+                txcost: match find_babel_val("txcost", entry) {
+                    Ok(entry) => match entry.parse() {
+                        Ok(parsed_data) => parsed_data,
+                        Err(e) => {
+                            warn!("Error parsing txcost for neigh {:?} from {}", e, entry);
+                            continue;
+                        }
                     },
-                    iface: match find_babel_val("if", entry) {
-                        Ok(val) => val,
-                        Err(_) => continue,
+                    Err(_) => continue,
+                },
+                rxcost: match find_babel_val("rxcost", entry) {
+                    Ok(entry) => match entry.parse() {
+                        Ok(parsed_data) => parsed_data,
+                        Err(e) => {
+                            warn!("Error parsing rxcost for neigh {:?} from {}", e, entry);
+                            continue;
+                        }
                     },
-                    reach: match find_babel_val("reach", entry) {
-                        Ok(val) => match u16::from_str_radix(&val, 16) {
-                            Ok(val) => val,
-                            Err(e) => {
-                                warn!("Failed to convert reach {:?} {}", e, entry);
-                                continue;
-                            }
-                        },
-                        Err(_) => continue,
+                    Err(_) => continue,
+                },
+                rtt: match find_babel_val("rtt", entry) {
+                    Ok(entry) => match entry.parse() {
+                        Ok(parsed_data) => parsed_data,
+                        Err(e) => {
+                            warn!("Error parsing rtt for neigh {:?} from {}", e, entry);
+                            continue;
+                        }
                     },
-                    txcost: match find_babel_val("txcost", entry) {
-                        Ok(entry) => match entry.parse() {
-                            Ok(parsed_data) => parsed_data,
-                            Err(e) => {
-                                warn!("Error parsing txcost for neigh {:?} from {}", e, entry);
-                                continue;
-                            }
-                        },
-                        Err(_) => continue,
+                    // it's possible that our neigh does not have rtt enabled, handle
+                    Err(_) => 0.0,
+                },
+                rttcost: match find_babel_val("rttcost", entry) {
+                    Ok(entry) => match entry.parse() {
+                        Ok(parsed_data) => parsed_data,
+                        Err(e) => {
+                            warn!("Error parsing rtt for neigh {:?} from {}", e, entry);
+                            continue;
+                        }
                     },
-                    rxcost: match find_babel_val("rxcost", entry) {
-                        Ok(entry) => match entry.parse() {
-                            Ok(parsed_data) => parsed_data,
-                            Err(e) => {
-                                warn!("Error parsing rxcost for neigh {:?} from {}", e, entry);
-                                continue;
-                            }
-                        },
-                        Err(_) => continue,
+                    // it's possible that our neigh does not have rtt enabled, handle
+                    Err(_) => 0,
+                },
+                cost: match find_babel_val("cost", entry) {
+                    Ok(entry) => match entry.parse() {
+                        Ok(parsed_data) => parsed_data,
+                        Err(e) => {
+                            warn!("Error parsing cost for neigh {:?} from {}", e, entry);
+                            continue;
+                        }
                     },
-                    rtt: match find_babel_val("rtt", entry) {
-                        Ok(entry) => match entry.parse() {
-                            Ok(parsed_data) => parsed_data,
-                            Err(e) => {
-                                warn!("Error parsing rtt for neigh {:?} from {}", e, entry);
-                                continue;
-                            }
-                        },
-                        // it's possible that our neigh does not have rtt enabled, handle
-                        Err(_) => 0.0,
-                    },
-                    rttcost: match find_babel_val("rttcost", entry) {
-                        Ok(entry) => match entry.parse() {
-                            Ok(parsed_data) => parsed_data,
-                            Err(e) => {
-                                warn!("Error parsing rtt for neigh {:?} from {}", e, entry);
-                                continue;
-                            }
-                        },
-                        // it's possible that our neigh does not have rtt enabled, handle
-                        Err(_) => 0,
-                    },
-                    cost: match find_babel_val("cost", entry) {
-                        Ok(entry) => match entry.parse() {
-                            Ok(parsed_data) => parsed_data,
-                            Err(e) => {
-                                warn!("Error parsing cost for neigh {:?} from {}", e, entry);
-                                continue;
-                            }
-                        },
-                        Err(_) => continue,
-                    },
-                };
-                vector.push_back(neigh);
-            }
+                    Err(_) => continue,
+                },
+            };
+            vector.push(neigh);
         }
-        if vector.len() == 0 && found_neigh {
-            bail!("All Babel neigh parsing failed!")
-        }
-        Ok(vector)
     }
-
-    pub fn parse_routes(&mut self) -> Result<VecDeque<Route>, Error> {
-        let mut vector: VecDeque<Route> = VecDeque::with_capacity(20);
-        let babel_out = self.command("dump")?;
-        let mut found_route = false;
-        trace!("Got from babel dump: {}", babel_out);
-
-        for entry in babel_out.split("\n") {
-            if entry.contains("add route") {
-                trace!("Parsing 'add route' entry: {}", entry);
-                found_route = true;
-                let route = Route {
-                    id: match find_babel_val("route", entry) {
-                        Ok(value) => value,
-                        Err(_) => continue,
-                    },
-                    iface: match find_babel_val("if", entry) {
-                        Ok(value) => value,
-                        Err(_) => continue,
-                    },
-                    xroute: false,
-                    installed: match find_babel_val("installed", entry) {
-                        Ok(value) => value.contains("yes"),
-                        Err(_) => continue,
-                    },
-                    neigh_ip: match find_babel_val("via", entry) {
-                        Ok(value) => match value.parse() {
-                            Ok(parsed_data) => parsed_data,
-                            Err(e) => {
-                                warn!("Error parsing neigh_ip for route {:?} from {}", e, entry);
-                                continue;
-                            }
-                        },
-                        Err(_) => continue,
-                    },
-                    prefix: match find_babel_val("prefix", entry) {
-                        Ok(value) => match value.parse() {
-                            Ok(parsed_data) => parsed_data,
-                            Err(e) => {
-                                warn!("Error parsing prefix for route {:?} from {}", e, entry);
-                                continue;
-                            }
-                        },
-                        Err(_) => continue,
-                    },
-                    metric: match find_babel_val("metric", entry) {
-                        Ok(value) => match value.parse() {
-                            Ok(parsed_data) => parsed_data,
-                            Err(e) => {
-                                warn!("Error parsing metric for route {:?} from {}", e, entry);
-                                continue;
-                            }
-                        },
-                        Err(_) => continue,
-                    },
-                    refmetric: match find_babel_val("refmetric", entry) {
-                        Ok(value) => match value.parse() {
-                            Ok(parsed_data) => parsed_data,
-                            Err(e) => {
-                                warn!("Error parsing refmetric {:?} from {}", e, entry);
-                                continue;
-                            }
-                        },
-                        Err(_) => continue,
-                    },
-                    full_path_rtt: match find_babel_val("full-path-rtt", entry) {
-                        Ok(value) => match value.parse() {
-                            Ok(parsed_data) => parsed_data,
-                            Err(e) => {
-                                warn!("Error parsing full_path_rtt {:?} from {}", e, entry);
-                                continue;
-                            }
-                        },
-                        Err(_) => continue,
-                    },
-                    price: match find_babel_val("price", entry) {
-                        Ok(value) => match value.parse() {
-                            Ok(parsed_data) => parsed_data,
-                            Err(e) => {
-                                warn!("Error parsing price {:?} from {}", e, entry);
-                                continue;
-                            }
-                        },
-                        Err(_) => continue,
-                    },
-                    fee: match find_babel_val("fee", entry) {
-                        Ok(value) => match value.parse() {
-                            Ok(parsed_data) => parsed_data,
-                            Err(e) => {
-                                warn!("Error parsing fee {:?} from {}", e, entry);
-                                continue;
-                            }
-                        },
-                        Err(_) => continue,
-                    },
-                };
-
-                vector.push_back(route);
-            }
-        }
-        if vector.len() == 0 && found_route {
-            bail!("All Babel route parsing failed!")
-        }
-        Ok(vector)
+    if vector.len() == 0 && found_neigh {
+        bail!("All Babel neigh parsing failed!")
     }
+    Ok(vector)
+}
 
-    /// In this function we take a route snapshot then loop over the routes list twice
-    /// to find the neighbor local address and then the route to the destination
-    /// via that neighbor. This could be dramatically more efficient if we had the neighbors
-    /// local ip lying around somewhere.
-    pub fn get_route_via_neigh(
-        &mut self,
-        neigh_mesh_ip: IpAddr,
-        dest_mesh_ip: IpAddr,
-        routes: &VecDeque<Route>,
-    ) -> Result<Route, Error> {
-        // First find the neighbors route to itself to get the local address
-        for neigh_route in routes.iter() {
-            // This will fail on v4 babel routes etc
-            if let IpNetwork::V6(ref ip) = neigh_route.prefix {
-                if ip.ip() == neigh_mesh_ip {
-                    let neigh_local_ip = neigh_route.neigh_ip;
-                    // Now we take the neigh_local_ip and search for a route via that
-                    for route in routes.iter() {
-                        if let IpNetwork::V6(ref ip) = route.prefix {
-                            if ip.ip() == dest_mesh_ip && route.neigh_ip == neigh_local_ip {
-                                return Ok(route.clone());
-                            }
+pub fn parse_routes(
+    stream: TcpStream,
+) -> impl Future<Item = (TcpStream, Vec<Route>), Error = Error> {
+    run_command(stream, "dump").then(|result| {
+        if let Err(e) = result {
+            return Err(e);
+        }
+        let (stream, babel_out) = result.unwrap();
+        Ok((stream, parse_routes_sync(babel_out)?))
+    })
+}
+
+pub fn parse_routes_sync(babel_out: String) -> Result<Vec<Route>, Error> {
+    let mut vector: Vec<Route> = Vec::with_capacity(20);
+    let mut found_route = false;
+    trace!("Got from babel dump: {}", babel_out);
+
+    for entry in babel_out.split("\n") {
+        if entry.contains("add route") {
+            trace!("Parsing 'add route' entry: {}", entry);
+            found_route = true;
+            let route = Route {
+                id: match find_babel_val("route", entry) {
+                    Ok(value) => value,
+                    Err(_) => continue,
+                },
+                iface: match find_babel_val("if", entry) {
+                    Ok(value) => value,
+                    Err(_) => continue,
+                },
+                xroute: false,
+                installed: match find_babel_val("installed", entry) {
+                    Ok(value) => value.contains("yes"),
+                    Err(_) => continue,
+                },
+                neigh_ip: match find_babel_val("via", entry) {
+                    Ok(value) => match value.parse() {
+                        Ok(parsed_data) => parsed_data,
+                        Err(e) => {
+                            warn!("Error parsing neigh_ip for route {:?} from {}", e, entry);
+                            continue;
+                        }
+                    },
+                    Err(_) => continue,
+                },
+                prefix: match find_babel_val("prefix", entry) {
+                    Ok(value) => match value.parse() {
+                        Ok(parsed_data) => parsed_data,
+                        Err(e) => {
+                            warn!("Error parsing prefix for route {:?} from {}", e, entry);
+                            continue;
+                        }
+                    },
+                    Err(_) => continue,
+                },
+                metric: match find_babel_val("metric", entry) {
+                    Ok(value) => match value.parse() {
+                        Ok(parsed_data) => parsed_data,
+                        Err(e) => {
+                            warn!("Error parsing metric for route {:?} from {}", e, entry);
+                            continue;
+                        }
+                    },
+                    Err(_) => continue,
+                },
+                refmetric: match find_babel_val("refmetric", entry) {
+                    Ok(value) => match value.parse() {
+                        Ok(parsed_data) => parsed_data,
+                        Err(e) => {
+                            warn!("Error parsing refmetric {:?} from {}", e, entry);
+                            continue;
+                        }
+                    },
+                    Err(_) => continue,
+                },
+                full_path_rtt: match find_babel_val("full-path-rtt", entry) {
+                    Ok(value) => match value.parse() {
+                        Ok(parsed_data) => parsed_data,
+                        Err(e) => {
+                            warn!("Error parsing full_path_rtt {:?} from {}", e, entry);
+                            continue;
+                        }
+                    },
+                    Err(_) => continue,
+                },
+                price: match find_babel_val("price", entry) {
+                    Ok(value) => match value.parse() {
+                        Ok(parsed_data) => parsed_data,
+                        Err(e) => {
+                            warn!("Error parsing price {:?} from {}", e, entry);
+                            continue;
+                        }
+                    },
+                    Err(_) => continue,
+                },
+                fee: match find_babel_val("fee", entry) {
+                    Ok(value) => match value.parse() {
+                        Ok(parsed_data) => parsed_data,
+                        Err(e) => {
+                            warn!("Error parsing fee {:?} from {}", e, entry);
+                            continue;
+                        }
+                    },
+                    Err(_) => continue,
+                },
+            };
+
+            vector.push(route);
+        }
+    }
+    if vector.len() == 0 && found_route {
+        bail!("All Babel route parsing failed!")
+    }
+    Ok(vector)
+}
+
+/// In this function we take a route snapshot then loop over the routes list twice
+/// to find the neighbor local address and then the route to the destination
+/// via that neighbor. This could be dramatically more efficient if we had the neighbors
+/// local ip lying around somewhere.
+pub fn get_route_via_neigh(
+    neigh_mesh_ip: IpAddr,
+    dest_mesh_ip: IpAddr,
+    routes: &Vec<Route>,
+) -> Result<Route, Error> {
+    // First find the neighbors route to itself to get the local address
+    for neigh_route in routes.iter() {
+        // This will fail on v4 babel routes etc
+        if let IpNetwork::V6(ref ip) = neigh_route.prefix {
+            if ip.ip() == neigh_mesh_ip {
+                let neigh_local_ip = neigh_route.neigh_ip;
+                // Now we take the neigh_local_ip and search for a route via that
+                for route in routes.iter() {
+                    if let IpNetwork::V6(ref ip) = route.prefix {
+                        if ip.ip() == dest_mesh_ip && route.neigh_ip == neigh_local_ip {
+                            return Ok(route.clone());
                         }
                     }
                 }
             }
         }
-        Err(NoNeighbor(neigh_mesh_ip.to_string()).into())
     }
-
-    /// Checks if Babel has an installed route to the given destination
-    pub fn do_we_have_route(
-        &mut self,
-        mesh_ip: &IpAddr,
-        routes: &VecDeque<Route>,
-    ) -> Result<bool, Error> {
-        for route in routes.iter() {
-            if let IpNetwork::V6(ref ip) = route.prefix {
-                if ip.ip() == *mesh_ip && route.installed {
-                    return Ok(true);
-                }
+    Err(NoNeighbor(neigh_mesh_ip.to_string()).into())
+}
+/// Checks if Babel has an installed route to the given destination
+pub fn do_we_have_route(mesh_ip: &IpAddr, routes: &Vec<Route>) -> Result<bool, Error> {
+    for route in routes.iter() {
+        if let IpNetwork::V6(ref ip) = route.prefix {
+            if ip.ip() == *mesh_ip && route.installed {
+                return Ok(true);
             }
         }
-        Ok(false)
     }
-
-    /// Returns the installed route to a given destination
-    pub fn get_installed_route(
-        &mut self,
-        mesh_ip: &IpAddr,
-        routes: &VecDeque<Route>,
-    ) -> Result<Route, Error> {
-        let mut exit_route = None;
-        for route in routes.iter() {
-            // Only ip6
-            if let IpNetwork::V6(ref ip) = route.prefix {
-                // Only host addresses and installed routes
-                if ip.prefix() == 128 && route.installed && IpAddr::V6(ip.ip()) == *mesh_ip {
-                    exit_route = Some(route);
-                    break;
-                }
+    Ok(false)
+}
+/// Returns the installed route to a given destination
+pub fn get_installed_route(mesh_ip: &IpAddr, routes: &Vec<Route>) -> Result<Route, Error> {
+    let mut exit_route = None;
+    for route in routes.iter() {
+        // Only ip6
+        if let IpNetwork::V6(ref ip) = route.prefix {
+            // Only host addresses and installed routes
+            if ip.prefix() == 128 && route.installed && IpAddr::V6(ip.ip()) == *mesh_ip {
+                exit_route = Some(route);
+                break;
             }
         }
-        if exit_route.is_none() {
-            bail!("No installed route to that destination!");
-        }
-        Ok(exit_route.unwrap().clone())
     }
+    if exit_route.is_none() {
+        bail!("No installed route to that destination!");
+    }
+    Ok(exit_route.unwrap().clone())
 }
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockstream::SharedMockStream;
 
     static TABLE: &'static str =
 "local fee 1024\n\
@@ -540,24 +672,6 @@ ok\n";
     static PRICE_LINE: &'static str = "local price 1024";
 
     #[test]
-    fn mock_connect() {
-        let mut s = SharedMockStream::new();
-        s.push_bytes_to_read(PREAMBLE.as_bytes());
-        let mut b = Babel::new(s);
-        b.start_connection().unwrap()
-    }
-
-    #[test]
-    fn mock_dump() {
-        let mut s = SharedMockStream::new();
-        s.push_bytes_to_read(TABLE.as_bytes());
-
-        let mut b = Babel::new(s);
-        let dump = b.command("dump").unwrap();
-        assert_eq!(&dump, TABLE);
-    }
-
-    #[test]
     fn line_parse() {
         assert_eq!(find_babel_val("metric", XROUTE_LINE).unwrap(), "0");
         assert_eq!(
@@ -598,10 +712,7 @@ ok\n";
 
     #[test]
     fn neigh_parse() {
-        let mut s = SharedMockStream::new();
-        s.push_bytes_to_read(TABLE.as_bytes());
-        let mut b = Babel::new(s);
-        let neighs = b.parse_neighs().unwrap();
+        let neighs = parse_neighs_sync(TABLE.to_string()).unwrap();
         let neigh = neighs.get(0);
         assert!(neigh.is_some());
         let neigh = neigh.unwrap();
@@ -611,11 +722,7 @@ ok\n";
 
     #[test]
     fn route_parse() {
-        let mut s = SharedMockStream::new();
-        s.push_bytes_to_read(TABLE.as_bytes());
-        let mut b = Babel::new(s);
-
-        let routes = b.parse_routes().unwrap();
+        let routes = parse_routes_sync(TABLE.to_string()).unwrap();
         assert_eq!(routes.len(), 5);
 
         let route = routes.get(0).unwrap();
@@ -624,39 +731,22 @@ ok\n";
 
     #[test]
     fn local_fee_parse() {
-        let mut s = SharedMockStream::new();
-        s.push_bytes_to_read(TABLE.as_bytes());
-
-        let mut b = Babel::new(s);
-        assert_eq!(b.get_local_fee().unwrap(), 1024);
+        assert_eq!(get_local_fee_sync(TABLE.to_string()).unwrap(), 1024);
     }
 
     #[test]
     fn multiple_babel_outputs_in_stream() {
-        let mut s = SharedMockStream::new();
-        s.push_bytes_to_read(PREAMBLE.as_bytes());
-        s.push_bytes_to_read(TABLE.as_bytes());
-        s.push_bytes_to_read(b"ok\n");
-
-        let mut b = Babel::new(s);
-        b.start_connection().unwrap();
-
-        let routes = b.parse_routes().unwrap();
+        let input = PREAMBLE.to_string() + TABLE + "ok\n";
+        let routes = parse_routes_sync(input).unwrap();
         assert_eq!(routes.len(), 5);
 
         let route = routes.get(0).unwrap();
         assert_eq!(route.price, 3072);
         assert_eq!(route.full_path_rtt, 22.805);
-
-        b.command("interface wg0").unwrap();
     }
 
     #[test]
     fn only_ok_in_output() {
-        let mut s = SharedMockStream::new();
-        s.push_bytes_to_read(b"ok\n");
-
-        let mut b = Babel::new(s);
-        b.command("interface wg0").unwrap();
+        read_babel_sync("ok\n").unwrap();
     }
 }

@@ -29,7 +29,7 @@ actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
 actix_derive = "0.4"
 bytes = "0.4"
 config = "0.9"
-diesel = { version = "1.4", features = ["postgres"] }
+diesel = { version = "1.4", features = ["postgres", "r2d2"] }
 libsqlite3-sys = { version = "0.9", features = ["bundled"] }
 docopt = "1.1"
 dotenv = "0.13"
@@ -44,7 +44,6 @@ minihttpse = "0.1"
 mockito = "0.17"
 mockstream = { git = "https://github.com/lazy-bitfield/rust-mockstream.git" }
 rand = "0.6"
-reqwest = "0.9"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
@@ -62,6 +61,7 @@ arrayvec = {version= "0.4", features = ["serde-1"]}
 lettre = {git = "https://github.com/lettre/lettre/"}
 lettre_email = {git = "https://github.com/lettre/lettre/"}
 phonenumber = "0.2"
+r2d2 = "0.8"
 
 [features]
 default = []

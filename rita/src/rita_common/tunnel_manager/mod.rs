@@ -12,11 +12,13 @@ use crate::SETTING;
 #[cfg(test)]
 use ::actix::actors::mocker::Mocker;
 use ::actix::actors::resolver;
-use ::actix::prelude::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
+use ::actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use althea_types::Identity;
 use althea_types::LocalIdentity;
+use babel_monitor::monitor;
 use babel_monitor::open_babel_stream;
-use babel_monitor::Babel;
+use babel_monitor::start_connection;
+use babel_monitor::unmonitor;
 use failure::Error;
 use futures::Future;
 use rand::thread_rng;
@@ -24,10 +26,10 @@ use rand::Rng;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::fmt;
-use std::io::{Read, Write};
-use std::net::{IpAddr, SocketAddr, TcpStream};
+use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 use std::time::{Duration, Instant};
+
 #[cfg(test)]
 type HelloHandler = Mocker<rita_common::hello_handler::HelloHandler>;
 #[cfg(not(test))]
@@ -173,20 +175,44 @@ impl Tunnel {
     }
 
     /// Register this tunnel into Babel monitor
-    pub fn monitor<T: Read + Write>(&self, stream: T) -> Result<(), Error> {
+    pub fn monitor(&self) {
         info!("Monitoring tunnel {}", self.iface_name);
-        let mut babel = Babel::new(stream);
-        babel.start_connection()?;
-        babel.monitor(&self.iface_name)?;
-        Ok(())
+        let iface_name = self.iface_name.clone();
+        let babel_port = SETTING.get_network().babel_port;
+
+        Arbiter::spawn(
+            open_babel_stream(babel_port)
+                .from_err()
+                .and_then(move |stream| {
+                    start_connection(stream).and_then(move |stream| {
+                        monitor(stream, &iface_name)
+                    })
+                })
+                .then(move |res| {
+                    // if you ever see this error go and make a handler to delete the tunnel from memory
+                    error!("Monitoring tunnel has failed! The tunnels cache is an incorrect state {:?}" , res);
+                    Ok(())}),
+        )
     }
 
-    pub fn unmonitor<T: Read + Write>(&self, stream: T) -> Result<(), Error> {
+    pub fn unmonitor(&self) {
         warn!("Unmonitoring tunnel {}", self.iface_name);
-        let mut babel = Babel::new(stream);
-        babel.start_connection()?;
-        babel.unmonitor(&self.iface_name)?;
-        Ok(())
+        let iface_name = self.iface_name.clone();
+        let babel_port = SETTING.get_network().babel_port;
+
+        Arbiter::spawn(
+            open_babel_stream(babel_port)
+                .from_err()
+                .and_then(move |stream| {
+                    start_connection(stream).and_then(move |stream| {
+                        unmonitor(stream, &iface_name)
+                    })
+                })
+                .then(move |res| {
+                    // if you ever see this error go and make a handler to try and unlisten until it works
+                    error!("Unmonitoring tunnel has failed! Babel will now listen on a non-existant tunnel {:?}", res);
+                    Ok(())}),
+        )
     }
 }
 
@@ -283,12 +309,6 @@ impl Handler<PortCallback> for TunnelManager {
     }
 }
 
-pub fn make_babel_stream() -> Result<TcpStream, Error> {
-    let stream = open_babel_stream(SETTING.get_network().babel_port)?;
-
-    Ok(stream)
-}
-
 pub struct GetNeighbors;
 
 #[derive(Debug)]
@@ -378,24 +398,7 @@ impl Handler<TriggerGC> for TunnelManager {
             for tunnel in tunnels {
                 // In the same spirit, we return the port to the free port pool only after tunnel
                 // deletion goes well.
-                let stream = match make_babel_stream() {
-                    Ok(stream) => stream,
-                    Err(e) => {
-                        warn!("Tunnel GC failed to open babel stream with {:?}", e);
-                        return Err(e);
-                    }
-                };
-                let mut babel = Babel::new(stream);
-                let res = babel.start_connection();
-                if res.is_err() {
-                    warn!("Failed to start Babel RPC connection! {:?}", res);
-                    bail!("Failed to start Babel RPC connection!");
-                }
-
-                let res = babel.unmonitor(&tunnel.iface_name);
-                if res.is_err() {
-                    warn!("Failed to unmonitor {} with {:?}", tunnel.iface_name, res);
-                }
+                tunnel.unmonitor();
                 KI.del_interface(&tunnel.iface_name)?;
                 self.free_ports.push(tunnel.listen_port);
             }
@@ -773,24 +776,14 @@ impl TunnelManager {
                 return Err(e);
             }
         }
-        match tunnel.monitor(make_babel_stream()?) {
-            Ok(_) => {
-                let new_key = tunnel.neigh_id.global;
-                // Add a tunnel to internal map based on identity, and interface index.
-                self.tunnels
-                    .entry(new_key)
-                    .or_insert_with(Vec::new)
-                    .push(tunnel.clone());
-                Ok((tunnel, return_bool))
-            }
-            Err(e) => {
-                error!(
-                    "Unable to execute babel monitor on tunnel {:?}: {}",
-                    tunnel, e
-                );
-                Err(e)
-            }
-        }
+        let new_key = tunnel.neigh_id.global;
+        tunnel.monitor();
+
+        self.tunnels
+            .entry(new_key)
+            .or_insert_with(Vec::new)
+            .push(tunnel.clone());
+        Ok((tunnel, return_bool))
     }
 }
 
@@ -849,7 +842,7 @@ fn tunnel_state_change(
                         );
                         match tunnel.state.registration_state {
                             RegistrationState::NotRegistered => {
-                                tunnel.monitor(make_babel_stream()?)?;
+                                tunnel.monitor();
                                 tunnel.state.registration_state = RegistrationState::Registered;
                             }
                             RegistrationState::Registered => {
@@ -861,7 +854,7 @@ fn tunnel_state_change(
                         trace!("Membership for identity {:?} is expired", id);
                         match tunnel.state.registration_state {
                             RegistrationState::Registered => {
-                                tunnel.unmonitor(make_babel_stream()?)?;
+                                tunnel.unmonitor();
                                 tunnel.state.registration_state = RegistrationState::NotRegistered;
                             }
                             RegistrationState::NotRegistered => {

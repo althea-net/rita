@@ -7,6 +7,7 @@ use crate::rita_common::debt_keeper::GetDebtsList;
 use crate::rita_exit::database::db_client::DbClient;
 #[cfg(feature = "development")]
 use crate::rita_exit::database::db_client::TruncateTables;
+use crate::rita_exit::database::get_database_connection;
 use crate::rita_exit::database::{client_status, get_exit_info, signup_client};
 use ::actix_web::{AsyncResponder, HttpRequest, HttpResponse, Json, Result};
 #[cfg(feature = "development")]
@@ -17,6 +18,7 @@ use actix_web::AsyncResponder;
 use althea_types::Identity;
 use althea_types::{ExitClientIdentity, ExitState, RTTimestamps};
 use failure::Error;
+use futures::future;
 use futures::Future;
 use num256::Int256;
 use std::net::SocketAddr;
@@ -24,7 +26,7 @@ use std::time::SystemTime;
 
 pub fn setup_request(
     their_id: (Json<ExitClientIdentity>, HttpRequest),
-) -> Result<Json<ExitState>, Error> {
+) -> Box<Future<Item = Json<ExitState>, Error = Error>> {
     info!(
         "Received setup request from, {}",
         their_id.0.global.wg_public_key
@@ -41,22 +43,34 @@ pub fn setup_request(
 
     let remote_mesh_ip = remote_mesh_socket.ip();
     if remote_mesh_ip == client_mesh_ip {
-        Ok(Json(signup_client(client)?))
-    } else {
-        Ok(Json(ExitState::Denied {
-            message: "The request ip does not match the signup ip".to_string(),
+        Box::new(signup_client(client).then(|result| match result {
+            Ok(exit_state) => Ok(Json(exit_state)),
+            Err(e) => {
+                error!("Signup client failed with {:?}", e);
+                Ok(Json(ExitState::Denied {
+                    message: "There was an internal server error!".to_string(),
+                }))
+            }
         }))
+    } else {
+        Box::new(future::ok(Json(ExitState::Denied {
+            message: "The request ip does not match the signup ip".to_string(),
+        })))
     }
 }
 
-pub fn status_request(their_id: Json<ExitClientIdentity>) -> Result<Json<ExitState>, Error> {
+pub fn status_request(
+    their_id: Json<ExitClientIdentity>,
+) -> Box<Future<Item = Json<ExitState>, Error = Error>> {
     trace!(
         "Received requester identity for status, {}",
         their_id.global.wg_public_key
     );
     let client = their_id.into_inner();
 
-    Ok(Json(client_status(client)?))
+    Box::new(
+        get_database_connection().and_then(move |conn| Ok(Json(client_status(client, &conn)?))),
+    )
 }
 
 pub fn get_exit_info_http(_req: HttpRequest) -> Result<Json<ExitState>, Error> {

@@ -26,15 +26,20 @@ use crate::rita_exit::database::struct_tools::display_hashset;
 use crate::rita_exit::database::struct_tools::to_exit_client;
 use crate::rita_exit::database::struct_tools::to_identity;
 use crate::rita_exit::database::struct_tools::verif_done;
+use crate::DB_POOL;
 use crate::KI;
 use crate::SETTING;
-use ::actix::prelude::SystemService;
+use ::actix::SystemService;
 use althea_kernel_interface::ExitClient;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 use diesel;
-use diesel::prelude::{Connection, ConnectionError, PgConnection, RunQueryDsl};
+use diesel::prelude::{PgConnection, RunQueryDsl};
+use diesel::r2d2::ConnectionManager;
+use diesel::r2d2::PooledConnection;
 use exit_db::{models, schema};
 use failure::Error;
+use futures::future;
+use futures::future::join_all;
 use futures::Future;
 use ipnetwork::IpNetwork;
 use rand;
@@ -47,6 +52,7 @@ use std::collections::HashSet;
 use std::net::IpAddr;
 use std::time::Instant;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::timer::Delay;
 
 mod database_tools;
 pub mod db_client;
@@ -56,24 +62,22 @@ mod ip_increment;
 mod sms;
 pub mod struct_tools;
 
-/// Gets the Postgres database connection
-pub fn get_database_connection() -> Result<PgConnection, ConnectionError> {
-    let db_uri = SETTING.get_db_uri();
-    let start = Instant::now();
-    info!("Opening database connection {:?}", db_uri);
-    if db_uri.contains("postgres://")
-        || db_uri.contains("postgresql://")
-        || db_uri.contains("psql://")
-    {
-        let conn = PgConnection::establish(&db_uri);
-        info!(
-            "It took {}s {}ms to open the database connection",
-            start.elapsed().as_secs(),
-            start.elapsed().subsec_millis()
-        );
-        conn
-    } else {
-        panic!("You must provide a valid postgressql database uri!");
+/// Gets the Postgres database connection from the threadpool, gracefully waiting using futures delay if there
+/// is no connection available.
+pub fn get_database_connection(
+) -> impl Future<Item = PooledConnection<ConnectionManager<PgConnection>>, Error = Error> {
+    match DB_POOL.read().unwrap().try_get() {
+        Some(connection) => Box::new(future::ok(connection))
+            as Box<Future<Item = PooledConnection<ConnectionManager<PgConnection>>, Error = Error>>,
+        None => {
+            trace!("No available db connection sleeping!");
+            let when = Instant::now() + Duration::from_millis(100);
+            Box::new(
+                Delay::new(when)
+                    .map_err(move |e| panic!("timer failed; err={:?}", e))
+                    .and_then(move |_| get_database_connection()),
+            )
+        }
     }
 }
 
@@ -128,80 +132,95 @@ fn client_to_new_db_client(
     }
 }
 
-/// Handles a new client registration api call. Performs a geoip lookup
-/// on their registration ip to make sure that they are coming from a valid gateway
-/// ip and then sends out an email of phone message
-pub fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Error> {
+fn create_or_update_user_record(
+    conn: &PgConnection,
+    client: &ExitClientIdentity,
+    user_country: String,
+) -> Result<models::Client, Error> {
     use self::schema::clients::dsl::clients;
-    let mut tmp_cache = HashMap::new();
-    let conn = get_database_connection()?;
     let client_mesh_ip = client.global.mesh_ip;
-    let gateway_ip = get_gateway_ip_single(client_mesh_ip)?;
-
-    trace!("got setup request {:?}", client);
-
-    // either update and grab an existing entry or create one
-    let their_record = if client_exists(&client_mesh_ip, &conn)? {
-        update_client(&client, &conn)?;
-        get_client(client_mesh_ip, &conn)?
+    if client_exists(&client_mesh_ip, conn)? {
+        update_client(&client, conn)?;
+        Ok(get_client(client_mesh_ip, conn)?)
     } else {
         info!(
             "record for {} does not exist, creating",
             client.global.wg_public_key
         );
 
-        let new_ip = get_next_client_ip(&conn)?;
-
-        trace!("About to check country");
-        let user_country = if SETTING.get_allowed_countries().is_empty() {
-            String::new()
-        } else {
-            get_country(&gateway_ip, &mut tmp_cache)?
-        };
+        let new_ip = get_next_client_ip(conn)?;
 
         let c = client_to_new_db_client(&client, new_ip, user_country);
 
         info!("Inserting new client {}", client.global.wg_public_key);
-        diesel::insert_into(clients).values(&c).execute(&conn)?;
+        diesel::insert_into(clients).values(&c).execute(conn)?;
 
-        c
-    };
-
-    match (
-        verify_ip(&gateway_ip, &mut tmp_cache),
-        SETTING.get_verif_settings(),
-    ) {
-        (Ok(true), Some(ExitVerifSettings::Email(mailer))) => {
-            handle_email_registration(&client, &their_record, &conn, mailer.email_cooldown as i64)
-        }
-        (Ok(true), Some(ExitVerifSettings::Phone(phone))) => {
-            handle_sms_registration(&client, &their_record, phone.auth_api_key, &conn)
-        }
-        (Ok(true), None) => {
-            verify_client(&client, true, &conn)?;
-            Ok(ExitState::Registered {
-                our_details: ExitClientDetails {
-                    client_internal_ip: their_record.internal_ip.parse()?,
-                },
-                general_details: get_exit_info(),
-                message: "Registration OK".to_string(),
-            })
-        }
-        (Ok(false), _) => Ok(ExitState::Denied {
-            message: format!(
-                "This exit only accepts connections from {}",
-                display_hashset(&SETTING.get_allowed_countries()),
-            ),
-        }),
-        (Err(_e), _) => Ok(ExitState::Denied {
-            message: "There was a problem signing up, please try again".to_string(),
-        }),
+        Ok(c)
     }
 }
 
+/// Handles a new client registration api call. Performs a geoip lookup
+/// on their registration ip to make sure that they are coming from a valid gateway
+/// ip and then sends out an email of phone message
+pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState, Error = Error> {
+    trace!("got setup request {:?}", client);
+    get_gateway_ip_single(client.global.mesh_ip).and_then(move |gateway_ip| {
+        verify_ip(gateway_ip).and_then(move |verify_status| {
+            get_country(gateway_ip).and_then(move |user_country| {
+                get_database_connection().and_then(move |conn| {
+                    let their_record =
+                        match create_or_update_user_record(&conn, &client, user_country) {
+                            Ok(record) => record,
+                            Err(e) => {
+                                return Box::new(future::err(e))
+                                    as Box<Future<Item = ExitState, Error = Error>>
+                            }
+                        };
+
+                    // either update and grab an existing entry or create one
+                    match (verify_status, SETTING.get_verif_settings()) {
+                        (true, Some(ExitVerifSettings::Email(mailer))) => {
+                            Box::new(handle_email_registration(
+                                &client,
+                                &their_record,
+                                &conn,
+                                mailer.email_cooldown as i64,
+                            ))
+                        }
+                        (true, Some(ExitVerifSettings::Phone(phone))) => Box::new(
+                            handle_sms_registration(client, their_record, phone.auth_api_key),
+                        ),
+                        (true, None) => {
+                            match verify_client(&client, true, &conn) {
+                                Ok(_) => (),
+                                Err(e) => return Box::new(future::err(e)),
+                            }
+                            let client_internal_ip = match their_record.internal_ip.parse() {
+                                Ok(ip) => ip,
+                                Err(e) => return Box::new(future::err(format_err!("{:?}", e))),
+                            };
+
+                            Box::new(future::ok(ExitState::Registered {
+                                our_details: ExitClientDetails { client_internal_ip },
+                                general_details: get_exit_info(),
+                                message: "Registration OK".to_string(),
+                            }))
+                        }
+                        (false, _) => Box::new(future::ok(ExitState::Denied {
+                            message: format!(
+                                "This exit only accepts connections from {}",
+                                display_hashset(&SETTING.get_allowed_countries()),
+                            ),
+                        })),
+                    }
+                })
+            })
+        })
+    })
+}
+
 /// Gets the status of a client and updates it in the database
-pub fn client_status(client: ExitClientIdentity) -> Result<ExitState, Error> {
-    let conn = get_database_connection()?;
+pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<ExitState, Error> {
     let client_mesh_ip = client.global.mesh_ip;
 
     trace!("Checking if record exists for {:?}", client.global.mesh_ip);
@@ -315,10 +334,8 @@ fn low_balance_notification(
 /// we also do this in the client status requests but we want to handle the edge case of a modified
 /// client that doesn't make status requests
 pub fn validate_clients_region(
-    mut geoip_cache: &mut HashMap<IpAddr, String>,
-    clients_list: &[exit_db::models::Client],
-    conn: &PgConnection,
-) -> Result<(), Error> {
+    clients_list: Vec<exit_db::models::Client>,
+) -> impl Future<Item = (), Error = ()> {
     info!("Starting exit region validation");
     let start = Instant::now();
 
@@ -334,37 +351,43 @@ pub fn validate_clients_region(
             Err(_e) => error!("Database entry with invalid mesh ip! {:?}", item),
         }
     }
-
-    let mesh_to_gateway_ip_list = get_gateway_ip_bulk(ip_vec);
-
-    match mesh_to_gateway_ip_list {
-        Ok(list) => {
-            for item in list {
-                match verify_ip(&item.gateway_ip, &mut geoip_cache) {
-                    Ok(true) => trace!("{:?} is from an allowed ip", item),
-                    Ok(false) => {
-                        // get_gateway_ip_bulk can't add new entires to the list
-                        // therefore client_map is strictly a superset of ip_bulk results
-                        let client_to_deauth = &client_map[&item.mesh_ip];
-                        if verify_db_client(client_to_deauth, false, conn).is_err() {
-                            error!("Failed to deauth client {:?}", client_to_deauth);
+    get_gateway_ip_bulk(ip_vec)
+        .and_then(move |list| {
+            get_database_connection().and_then(move |conn| {
+                let mut fut_vec = Vec::new();
+                for item in list.iter() {
+                    fut_vec.push(verify_ip(item.gateway_ip));
+                }
+                join_all(fut_vec).and_then(move |client_verifications| {
+                    for (n, res) in client_verifications.iter().enumerate() {
+                        match res {
+                            true => trace!("{:?} is from an allowed ip", list[n]),
+                            false => {
+                                // get_gateway_ip_bulk can't add new entires to the list
+                                // therefore client_map is strictly a superset of ip_bulk results
+                                let client_to_deauth = &client_map[&list[n].mesh_ip];
+                                if verify_db_client(client_to_deauth, false, &conn).is_err() {
+                                    error!("Failed to deauth client {:?}", client_to_deauth);
+                                }
+                            }
                         }
                     }
-                    Err(e) => error!("Failed to GeoIP {:?} to check region", e),
-                }
+
+                    info!(
+                        "Exit region validation completed in {}s {}ms",
+                        start.elapsed().as_secs(),
+                        start.elapsed().subsec_millis(),
+                    );
+                    Ok(())
+                })
+            })
+        })
+        .then(|output| {
+            if output.is_err() {
+                error!("Validate clients region failed with {:?}", output);
             }
-            info!(
-                "Exit region validation completed in {}s {}ms",
-                start.elapsed().as_secs(),
-                start.elapsed().subsec_millis(),
-            );
             Ok(())
-        }
-        Err(e) => {
-            error!("Problem getting gateway ip's for clients! {:?}", e);
-            bail!("Problem getting gateway ips for clients! {:?}", e)
-        }
-    }
+        })
 }
 
 /// Iterates over the the database of clients, if a client's last_seen value
