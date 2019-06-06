@@ -7,6 +7,7 @@ use crate::rita_common::debt_keeper::GetDebtsList;
 use crate::rita_exit::database::db_client::DbClient;
 #[cfg(feature = "development")]
 use crate::rita_exit::database::db_client::TruncateTables;
+use crate::rita_exit::database::get_database_connection;
 use crate::rita_exit::database::{client_status, get_exit_info, signup_client};
 use ::actix_web::{AsyncResponder, HttpRequest, HttpResponse, Json, Result};
 #[cfg(feature = "development")]
@@ -58,14 +59,18 @@ pub fn setup_request(
     }
 }
 
-pub fn status_request(their_id: Json<ExitClientIdentity>) -> Result<Json<ExitState>, Error> {
+pub fn status_request(
+    their_id: Json<ExitClientIdentity>,
+) -> Box<Future<Item = Json<ExitState>, Error = Error>> {
     trace!(
         "Received requester identity for status, {}",
         their_id.global.wg_public_key
     );
     let client = their_id.into_inner();
 
-    Ok(Json(client_status(client)?))
+    Box::new(
+        get_database_connection().and_then(move |conn| Ok(Json(client_status(client, &conn)?))),
+    )
 }
 
 pub fn get_exit_info_http(_req: HttpRequest) -> Result<Json<ExitState>, Error> {

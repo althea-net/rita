@@ -25,21 +25,23 @@ extern crate serde_json;
 
 extern crate phonenumber;
 
+use actix_web::http::Method;
+use actix_web::{http, server, App};
+use diesel::r2d2::ConnectionManager;
+use diesel::PgConnection;
+use docopt::Docopt;
 use env_logger;
-
 use openssl_probe;
+use r2d2::Pool;
+use std::collections::HashMap;
+use std::net::IpAddr;
+use std::sync::{Arc, RwLock};
 
 use settings::exit::{RitaExitSettings, RitaExitSettingsStruct};
 use settings::RitaCommonSettings;
 
-use docopt::Docopt;
 #[cfg(not(test))]
 use settings::FileWrite;
-
-use actix_web::http::Method;
-use actix_web::{http, server, App};
-use std::collections::HashMap;
-use std::net::IpAddr;
 
 mod middleware;
 mod rita_common;
@@ -64,8 +66,6 @@ use crate::rita_common::dashboard::wallet::*;
 
 use crate::rita_common::network_endpoints::*;
 use crate::rita_exit::network_endpoints::*;
-
-use std::sync::{Arc, RwLock};
 
 #[cfg(test)]
 use std::sync::Mutex;
@@ -126,6 +126,27 @@ lazy_static! {
 lazy_static! {
     pub static ref GEOIP_CACHE: Arc<RwLock<HashMap<IpAddr, String>>> =
         Arc::new(RwLock::new(HashMap::new()));
+}
+
+lazy_static! {
+    pub static ref DB_POOL: Arc<RwLock<Pool<ConnectionManager<PgConnection>>>> = {
+        let db_uri = SETTING.get_db_uri();
+
+        if !(db_uri.contains("postgres://")
+            || db_uri.contains("postgresql://")
+            || db_uri.contains("psql://"))
+        {
+            panic!("You must provide a valid postgressql database uri!");
+        }
+
+        let manager = ConnectionManager::new(SETTING.get_db_uri());
+        Arc::new(RwLock::new(
+            r2d2::Pool::builder()
+                .max_size(4)
+                .build(manager)
+                .expect("Failed to create pool."),
+        ))
+    };
 }
 
 #[cfg(not(test))]
