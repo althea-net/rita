@@ -26,7 +26,7 @@ web30 = {git = "https://github.com/althea-mesh/web30", rev="56b0068aa43eb563db99
 syslog = "4"
 actix = "0.7"
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
-actix-web-httpauth = "0.2.0"
+actix-web-httpauth = {git = "https://github.com/asoltys/actix-web-httpauth"}
 actix_derive = "0.4"
 bytes = "0.4"
 config = "0.9"
