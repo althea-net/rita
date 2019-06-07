@@ -30,6 +30,7 @@ use crate::DB_POOL;
 use crate::KI;
 use crate::SETTING;
 use ::actix::SystemService;
+use actix::ActorFuture;
 use althea_kernel_interface::ExitClient;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 use diesel;
@@ -53,7 +54,6 @@ use std::net::IpAddr;
 use std::time::Instant;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::timer::Delay;
-use actix::ActorFuture;
 use tokio::util::FutureExt;
 
 mod database_tools;
@@ -78,9 +78,10 @@ pub fn get_database_connection(
                 Delay::new(when)
                     .map_err(move |e| panic!("timer failed; err={:?}", e))
                     .and_then(move |_| get_database_connection())
-                    .timeout(Duration::from_secs(1)).then(|result| match result {
+                    .timeout(Duration::from_secs(1))
+                    .then(|result| match result {
                         Ok(v) => Ok(v),
-                        Err(e) => Err(format_err!("{:?}", e))
+                        Err(e) => Err(format_err!("{:?}", e)),
                     }),
             )
         }
