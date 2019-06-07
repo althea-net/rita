@@ -142,7 +142,7 @@ lazy_static! {
         let manager = ConnectionManager::new(SETTING.get_db_uri());
         Arc::new(RwLock::new(
             r2d2::Pool::builder()
-                .max_size(SETTING.get_connection_pool_size())
+                .max_size(SETTING.get_connection_pool_size() + 1)
                 .build(manager)
                 .expect("Failed to create pool."),
         ))
