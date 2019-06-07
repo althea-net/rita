@@ -53,7 +53,9 @@ use std::net::IpAddr;
 use std::time::Duration;
 use tokio::util::FutureExt;
 
-pub const EXIT_LOOP_TIMEOUT: Duration = Duration::from_secs(15);
+// the speed in seconds for the exit loop
+pub const EXIT_LOOP_SPEED: u64 = 5;
+pub const EXIT_LOOP_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Default)]
 pub struct RitaLoop {}
@@ -65,9 +67,6 @@ pub struct RitaSyncLoop {
     /// a cache of what tunnels we had setup last round, used to prevent extra setup ops
     pub wg_clients: HashSet<ExitClient>,
 }
-
-// the speed in seconds for the exit loop
-pub const EXIT_LOOP_SPEED: u64 = 30;
 
 impl Actor for RitaLoop {
     type Context = Context<Self>;
@@ -139,7 +138,7 @@ impl Handler<Tick> for RitaSyncLoop {
     fn handle(&mut self, msg: Tick, _ctx: &mut SyncContext<Self>) -> Self::Result {
         use exit_db::schema::clients::dsl::clients;
         let babel_port = SETTING.get_network().babel_port;
-        trace!("Exit tick!");
+        info!("Exit tick!");
 
         // opening a database connection takes at least several milliseconds, as the database server
         // may be across the country, so to save on back and forth we open on and reuse it as much
