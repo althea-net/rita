@@ -142,7 +142,7 @@ lazy_static! {
         let manager = ConnectionManager::new(SETTING.get_db_uri());
         Arc::new(RwLock::new(
             r2d2::Pool::builder()
-                .max_size(4)
+                .max_size(SETTING.get_connection_pool_size())
                 .build(manager)
                 .expect("Failed to create pool."),
         ))
@@ -216,8 +216,9 @@ fn main() {
 
     check_rita_common_actors();
     check_rita_exit_actors();
-    start_core_rita_endpoints(8);
-    start_rita_exit_endpoints(128);
+    let thread_pool_size = SETTING.get_connection_pool_size();
+    start_core_rita_endpoints(thread_pool_size as usize);
+    start_rita_exit_endpoints(thread_pool_size as usize);
     start_rita_exit_dashboard();
 
     system.run();
