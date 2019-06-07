@@ -23,26 +23,22 @@ extern crate serde_derive;
 extern crate hex_literal;
 extern crate arrayvec;
 
-use env_logger;
-
-use std::env;
-
-use openssl_probe;
-
+use actix_web::{http, server, App};
 use docopt::Docopt;
+use env_logger;
+use openssl_probe;
+use settings::client::{RitaClientSettings, RitaSettingsStruct};
+use settings::RitaCommonSettings;
+use std::env;
+use std::sync::{Arc, RwLock};
+use actix_web::http::Method;
+
 #[cfg(not(test))]
 use settings::FileWrite;
 
-use settings::client::{RitaClientSettings, RitaSettingsStruct};
-use settings::RitaCommonSettings;
-
-use actix_web::http::Method;
-use actix_web::{http, server, App};
-
-use std::sync::{Arc, RwLock};
-
 #[cfg(test)]
 use std::sync::Mutex;
+
 
 mod middleware;
 mod rita_client;
