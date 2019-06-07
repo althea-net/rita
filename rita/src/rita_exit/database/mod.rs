@@ -30,7 +30,6 @@ use crate::DB_POOL;
 use crate::KI;
 use crate::SETTING;
 use ::actix::SystemService;
-use actix::ActorFuture;
 use althea_kernel_interface::ExitClient;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 use diesel;
