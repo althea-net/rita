@@ -1,5 +1,5 @@
 db_uri = "postgres://postgres@localhost/test"
-connection_pool_size = 1
+workers = 1
 description = "just a normal althea exit"
 
 [payment]

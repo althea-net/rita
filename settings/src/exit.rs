@@ -174,8 +174,8 @@ pub enum ExitVerifSettings {
 pub struct RitaExitSettingsStruct {
     // starts with file:// or postgres://username:password@localhost/diesel_demo
     db_uri: String,
-    // the size of the exit connection pool, this affects the size of the worker thread pool
-    connection_pool_size: u32,
+    // the size of the worker thread pool, the connection pool is this plus one
+    workers: u32,
     description: String,
     payment: PaymentSettings,
     dao: SubnetDAOSettings,
@@ -197,7 +197,7 @@ impl RitaExitSettingsStruct {
     pub fn test_default() -> Self {
         RitaExitSettingsStruct {
             db_uri: "".to_string(),
-            connection_pool_size: 1,
+            workers: 1,
             description: "".to_string(),
             payment: PaymentSettings::default(),
             dao: SubnetDAOSettings::default(),
@@ -219,7 +219,7 @@ pub trait RitaExitSettings {
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, Option<ExitVerifSettings>>;
     fn get_db_uri(&self) -> String;
-    fn get_connection_pool_size(&self) -> u32;
+    fn get_workers(&self) -> u32;
     fn get_description(&self) -> String;
     fn get_allowed_countries<'ret, 'me: 'ret>(
         &'me self,
@@ -235,8 +235,8 @@ impl RitaExitSettings for Arc<RwLock<RitaExitSettingsStruct>> {
     fn get_db_uri(&self) -> String {
         self.read().unwrap().db_uri.clone()
     }
-    fn get_connection_pool_size(&self) -> u32 {
-        self.read().unwrap().connection_pool_size
+    fn get_workers(&self) -> u32 {
+        self.read().unwrap().workers
     }
     fn get_description(&self) -> String {
         self.read().unwrap().description.clone()
