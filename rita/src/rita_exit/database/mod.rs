@@ -53,6 +53,7 @@ use std::net::IpAddr;
 use std::time::Instant;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::timer::Delay;
+use tokio::util::FutureExt;
 
 mod database_tools;
 pub mod db_client;
@@ -75,7 +76,12 @@ pub fn get_database_connection(
             Box::new(
                 Delay::new(when)
                     .map_err(move |e| panic!("timer failed; err={:?}", e))
-                    .and_then(move |_| get_database_connection()),
+                    .and_then(move |_| get_database_connection())
+                    .timeout(Duration::from_secs(1))
+                    .then(|result| match result {
+                        Ok(v) => Ok(v),
+                        Err(e) => Err(format_err!("{:?}", e)),
+                    }),
             )
         }
     }
