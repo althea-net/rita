@@ -29,8 +29,8 @@ use crate::rita_exit::traffic_watcher::{TrafficWatcher, Watch};
 use crate::KI;
 use crate::SETTING;
 use actix::{
-    Actor, ActorContext, Arbiter, AsyncContext, Context, Handler, Message, Supervised, SyncArbiter,
-    SyncContext, SystemService,
+    Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
+    SystemService,
 };
 use actix_web::http::Method;
 use actix_web::{server, App};
@@ -51,22 +51,21 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::IpAddr;
 use std::time::Duration;
+use std::time::Instant;
 use tokio::util::FutureExt;
 
 // the speed in seconds for the exit loop
 pub const EXIT_LOOP_SPEED: u64 = 5;
-pub const EXIT_LOOP_TIMEOUT: Duration = Duration::from_secs(3);
+pub const EXIT_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
 
 #[derive(Default)]
-pub struct RitaLoop {}
-
-#[derive(Default)]
-pub struct RitaSyncLoop {
+pub struct RitaLoop {
     /// a simple cache to prevent regularly asking Maxmind for the same geoip data
     pub geoip_cache: HashMap<IpAddr, String>,
     /// a cache of what tunnels we had setup last round, used to prevent extra setup ops
     pub wg_clients: HashSet<ExitClient>,
 }
+
 
 impl Actor for RitaLoop {
     type Context = Context<Self>;
@@ -74,12 +73,8 @@ impl Actor for RitaLoop {
     fn started(&mut self, ctx: &mut Context<Self>) {
         info!("exit loop started");
         setup_exit_wg_tunnel();
-        let addr = SyncArbiter::start(1, || RitaSyncLoop {
-            geoip_cache: HashMap::new(),
-            wg_clients: HashSet::new(),
-        });
-        ctx.run_interval(Duration::from_secs(EXIT_LOOP_SPEED), move |_act, _ctx| {
-            let addr = addr.clone();
+        ctx.run_interval(Duration::from_secs(EXIT_LOOP_SPEED), move |_act, ctx| {
+            let addr: Addr<Self> = ctx.address();
             Arbiter::spawn(get_database_connection().then(move |database| {
                 match database {
                     Ok(database) => addr.do_send(Tick(database)),
@@ -91,13 +86,6 @@ impl Actor for RitaLoop {
     }
 }
 
-impl Actor for RitaSyncLoop {
-    type Context = SyncContext<Self>;
-
-    fn started(&mut self, _ctx: &mut SyncContext<Self>) {
-        info!("exit sync loop started");
-    }
-}
 
 impl SystemService for RitaLoop {}
 impl Supervised for RitaLoop {
@@ -106,11 +94,6 @@ impl Supervised for RitaLoop {
     }
 }
 
-impl Supervised for RitaSyncLoop {
-    fn restarting(&mut self, _ctx: &mut SyncContext<RitaSyncLoop>) {
-        error!("Rita Exit Sync loop actor died! recovering!");
-    }
-}
 
 /// Used to test actor respawning
 pub struct Crash;
@@ -133,9 +116,10 @@ impl Message for Tick {
     type Result = Result<(), Error>;
 }
 
-impl Handler<Tick> for RitaSyncLoop {
+impl Handler<Tick> for RitaLoop {
     type Result = Result<(), Error>;
-    fn handle(&mut self, msg: Tick, _ctx: &mut SyncContext<Self>) -> Self::Result {
+    fn handle(&mut self, msg: Tick, _ctx: &mut Context<Self>) -> Self::Result {
+        let start = Instant::now();
         use exit_db::schema::clients::dsl::clients;
         let babel_port = SETTING.get_network().babel_port;
         info!("Exit tick!");
@@ -195,6 +179,11 @@ impl Handler<Tick> for RitaSyncLoop {
         // this consumes client list, you can move it up in exchange for a clone
         Arbiter::spawn(enforce_exit_clients(clients_list));
 
+        info!(
+            "Completed Rita sync loop in {}s {}ms, all vars should be dropped",
+            start.elapsed().as_secs(),
+            start.elapsed().subsec_millis(),
+        );
         Ok(())
     }
 }
