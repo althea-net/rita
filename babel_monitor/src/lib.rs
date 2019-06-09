@@ -139,10 +139,11 @@ fn read_babel(
             let babel_data = read_babel_sync(&output);
             if depth > 5 {
                 warn!("Babel read timed out! {}", output);
-                return Box::new(future::err(ReadFailed(format!("Babel read timed out!")).into()))
+                return Box::new(future::err(
+                    ReadFailed(format!("Babel read timed out!")).into(),
+                ))
                     as Box<Future<Item = (TcpStream, String), Error = Error>>;
-            }
-            else if let Err(NoTerminator(_)) = babel_data {
+            } else if let Err(NoTerminator(_)) = babel_data {
                 let when = Instant::now() + Duration::from_millis(100);
                 trace!("we didn't get the whole message yet, trying again");
                 let full_message = format!("{}{}", previous_contents, output);
@@ -151,8 +152,7 @@ fn read_babel(
                         .map_err(move |e| panic!("timer failed; err={:?}", e))
                         .and_then(move |_| read_babel(stream, full_message, depth + 1)),
                 ) as Box<Future<Item = (TcpStream, String), Error = Error>>;
-            }
-            else if let Err(e) = babel_data {
+            } else if let Err(e) = babel_data {
                 warn!("Babel read failed! {} {:?}", output, e);
                 return Box::new(future::err(ReadFailed(format!("{:?}", e)).into()))
                     as Box<Future<Item = (TcpStream, String), Error = Error>>;
