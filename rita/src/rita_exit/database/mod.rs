@@ -26,6 +26,7 @@ use crate::rita_exit::database::struct_tools::display_hashset;
 use crate::rita_exit::database::struct_tools::to_exit_client;
 use crate::rita_exit::database::struct_tools::to_identity;
 use crate::rita_exit::database::struct_tools::verif_done;
+use crate::rita_exit::rita_loop::EXIT_LOOP_TIMEOUT;
 use crate::DB_POOL;
 use crate::KI;
 use crate::SETTING;
@@ -388,6 +389,7 @@ pub fn validate_clients_region(
                 })
             })
         })
+        .timeout(EXIT_LOOP_TIMEOUT)
         .then(|output| {
             if output.is_err() {
                 error!("Validate clients region failed with {:?}", output);
@@ -583,6 +585,12 @@ pub fn enforce_exit_clients(
                     Ok(())
                 }
             })
-            .then(|_| Ok(())),
+            .timeout(EXIT_LOOP_TIMEOUT)
+            .then(|res| {
+                if let Err(e) = res {
+                    error!("Exit enforcement failed with {:?}", e);
+                }
+                Ok(())
+            }),
     )
 }
