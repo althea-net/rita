@@ -66,7 +66,6 @@ pub struct RitaLoop {
     pub wg_clients: HashSet<ExitClient>,
 }
 
-
 impl Actor for RitaLoop {
     type Context = Context<Self>;
 
@@ -86,14 +85,12 @@ impl Actor for RitaLoop {
     }
 }
 
-
 impl SystemService for RitaLoop {}
 impl Supervised for RitaLoop {
     fn restarting(&mut self, _ctx: &mut Context<RitaLoop>) {
         error!("Rita Exit loop actor died! recovering!");
     }
 }
-
 
 /// Used to test actor respawning
 pub struct Crash;
