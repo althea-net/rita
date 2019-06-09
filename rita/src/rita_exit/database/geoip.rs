@@ -62,10 +62,12 @@ pub fn get_gateway_ip_bulk(
     mesh_ip_list: Vec<IpAddr>,
 ) -> Box<Future<Item = Vec<IpPair>, Error = Error>> {
     let babel_port = SETTING.get_network().babel_port;
+    trace!("getting gateway ip bulk");
 
     Box::new(open_babel_stream(babel_port).from_err().and_then(|stream| {
         start_connection(stream).and_then(|stream| {
             parse_routes(stream).and_then(|routes| {
+                trace!("done talking to babel for gateway ip bulk");
                 let mut remote_ip_cache: HashMap<String, IpAddr> = HashMap::new();
                 let mut results = Vec::new();
                 for mesh_ip in mesh_ip_list {
