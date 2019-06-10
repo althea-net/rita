@@ -110,6 +110,7 @@ pub fn open_babel_stream(babel_port: u16) -> ConnectFuture {
 fn read_babel(
     stream: TcpStream,
     previous_contents: String,
+    depth: usize,
 ) -> impl Future<Item = (TcpStream, String), Error = Error> {
     // 100kbyte
     let buffer: [u8; 100000] = [0; 100000];
@@ -134,19 +135,24 @@ fn read_babel(
             // it's possible we caught babel in the middle of writing to the socket
             // if we don't see a terminator we either have an error in Babel or an error
             // in our code for expecting one. So it's safe for us to keep trying and building
-            // a larger response until we see one.
+            // a larger response until we see one. We termiante after 5 tries
             let babel_data = read_babel_sync(&output);
-            if let Err(NoTerminator(_)) = babel_data {
+            if depth > 5 {
+                warn!("Babel read timed out! {}", output);
+                return Box::new(future::err(
+                    ReadFailed(format!("Babel read timed out!")).into(),
+                ))
+                    as Box<Future<Item = (TcpStream, String), Error = Error>>;
+            } else if let Err(NoTerminator(_)) = babel_data {
                 let when = Instant::now() + Duration::from_millis(100);
                 trace!("we didn't get the whole message yet, trying again");
                 let full_message = format!("{}{}", previous_contents, output);
                 return Box::new(
                     Delay::new(when)
                         .map_err(move |e| panic!("timer failed; err={:?}", e))
-                        .and_then(move |_| read_babel(stream, full_message)),
+                        .and_then(move |_| read_babel(stream, full_message, depth + 1)),
                 ) as Box<Future<Item = (TcpStream, String), Error = Error>>;
-            }
-            if let Err(e) = babel_data {
+            } else if let Err(e) = babel_data {
                 warn!("Babel read failed! {} {:?}", output, e);
                 return Box::new(future::err(ReadFailed(format!("{:?}", e)).into()))
                     as Box<Future<Item = (TcpStream, String), Error = Error>>;
@@ -205,14 +211,14 @@ pub fn run_command(
         }
         let (stream, _res) = out.unwrap();
         trace!("Command write succeeded, returning output");
-        Box::new(Either::B(read_babel(stream, String::new())))
+        Box::new(Either::B(read_babel(stream, String::new(), 0)))
     })
 }
 
 // Consumes the automated Preamble and validates configuration api version
 pub fn start_connection(stream: TcpStream) -> impl Future<Item = TcpStream, Error = Error> {
     trace!("Starting babel connection");
-    read_babel(stream, String::new()).then(|result| {
+    read_babel(stream, String::new(), 0).then(|result| {
         if let Err(e) = result {
             return Err(e);
         }
@@ -315,7 +321,7 @@ pub fn redistribute_ip(
             return Either::A(future_result(Err(e).into()));
         }
         let (stream, _out) = result.unwrap();
-        Either::B(read_babel(stream, String::new()))
+        Either::B(read_babel(stream, String::new(), 0))
     })
 }
 
