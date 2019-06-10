@@ -1,6 +1,6 @@
 # Althea_rs
 
-This contains many (although confusingly not all) of the Rust components for the Althea firmware. The only separated components are [guac_rs](https://github.com/althea-mesh/guac_rs) which we want to be easily used externally as a Rust Payment channel light client, [Clarity](https://github.com/althea-mesh/clarity) a lightweight transaction generation library for Ethereum, and [num256](https://github.com/althea-mesh/num256) a architecture portable fixed 256 bit integer implementation.
+This contains many (although confusingly not all) of the Rust components for the Althea firmware. The only separated components are [guac_rs](https://github.com/althea-mesh/guac_rs) which we want to be easily used externally as a Rust Payment channel light client, [Clarity](https://github.com/althea-mesh/clarity) a lightweight transaction generation library for Ethereum, and [web30](https://github.com/althea-mesh/web30) a full node communication library.
 
 The primary binary crate in this repo is 'rita' which produces two binaries 'rita' and 'rita_exit'
 see the file headers for descriptions.
@@ -62,10 +62,10 @@ Status:
 - Opening a Wireguard tunnel to the exit: done
 - Setting the user traffic route to the exit tunnel: Partially complete, needs ipv6
 - Accepting commands from the user configuration dashboard and applying them: Done
-- Accounts for bandwidth used and required payment: Has known bugs
+- Accounts for bandwidth used and required payment: done
 - Communicates with Babeld to get mesh info: done
 - Communicates with Babeld to detect fraud: in progress
-- Makes payments: Will mostly be contained in the Guac_rs repo
+- Makes payments: done
 
 ### althea_kernel_interface
 
