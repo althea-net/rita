@@ -33,6 +33,10 @@ pub fn set_local_fee(path: Path<u32>) -> Box<Future<Item = HttpResponse, Error =
     let new_fee = path.into_inner();
     debug!("/local_fee/{} POST hit", new_fee);
     let babel_port = SETTING.get_network().babel_port;
+    let max_fee = SETTING.get_payment().max_fee;
+    // prevent the user from setting a higher price than they would pay
+    // themselves
+    let new_fee = if new_fee > max_fee { max_fee } else { new_fee };
 
     Box::new(open_babel_stream(babel_port).then(move |stream| {
         // if we can't get to babel here we panic
