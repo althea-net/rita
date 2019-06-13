@@ -6,6 +6,7 @@ use ::actix_web::AsyncResponder;
 use ::actix_web::{HttpRequest, Json};
 use althea_types::Identity;
 use arrayvec::ArrayString;
+use babel_monitor::get_installed_route;
 use babel_monitor::get_route_via_neigh;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
@@ -23,6 +24,7 @@ pub struct NodeInfo {
     pub nickname: String,
     pub ip: String,
     pub route_metric_to_exit: u16,
+    pub route_metric: u16,
     pub total_payments: Uint256,
     pub debt: Int256,
     pub link_cost: u16,
@@ -88,40 +90,52 @@ fn generate_neighbors_list(
             Some(val) => val,
             None => ArrayString::<[u8; 32]>::from("No Nickname").unwrap(),
         };
+        let maybe_route = get_installed_route(&identity.mesh_ip, &route_table_sample);
+        if maybe_route.is_err() {
+            output.push(nonviable_node_info(
+                nickname,
+                0,
+                identity.mesh_ip.to_string(),
+            ));
+            continue;
+        }
+        let neigh_route = maybe_route.unwrap();
 
         if current_exit.is_some() {
             let exit_ip = current_exit.unwrap().id.mesh_ip;
-            let maybe_route = get_route_via_neigh(identity.mesh_ip, exit_ip, &route_table_sample);
+            let maybe_exit_route =
+                get_route_via_neigh(identity.mesh_ip, exit_ip, &route_table_sample);
 
             // We have a peer that is an exit, so we can't find a route
             // from them to our selected exit. Other errors can also get
             // caught here
-            if maybe_route.is_err() {
-                output.push(nonviable_node_info(nickname, identity.mesh_ip.to_string()));
+            if maybe_exit_route.is_err() {
+                output.push(nonviable_node_info(
+                    nickname,
+                    neigh_route.metric,
+                    identity.mesh_ip.to_string(),
+                ));
                 continue;
             }
             // we check that this is safe above
-            let route = maybe_route.unwrap();
+            let exit_route = maybe_exit_route.unwrap();
 
             output.push(NodeInfo {
                 nickname: nickname.to_string(),
                 ip: serde_json::to_string(&identity.mesh_ip).unwrap(),
-                route_metric_to_exit: route.metric,
+                route_metric_to_exit: exit_route.metric,
+                route_metric: neigh_route.metric,
                 total_payments: debt_info.total_payment_received.clone(),
                 debt: debt_info.debt.clone(),
-                link_cost: route.refmetric,
-                price_to_exit: route.price,
+                link_cost: exit_route.refmetric,
+                price_to_exit: exit_route.price,
             })
         } else {
-            output.push(NodeInfo {
-                nickname: nickname.to_string(),
-                ip: serde_json::to_string(&identity.mesh_ip).unwrap(),
-                route_metric_to_exit: u16::max_value(),
-                total_payments: debt_info.total_payment_received.clone(),
-                debt: debt_info.debt.clone(),
-                link_cost: u16::max_value(),
-                price_to_exit: u32::max_value(),
-            })
+            output.push(nonviable_node_info(
+                nickname,
+                0,
+                identity.mesh_ip.to_string(),
+            ));
         }
     }
     output
@@ -140,7 +154,7 @@ fn merge_debts_and_neighbors(
     }
 }
 
-fn nonviable_node_info(nickname: ArrayString<[u8; 32]>, ip: String) -> NodeInfo {
+fn nonviable_node_info(nickname: ArrayString<[u8; 32]>, neigh_metric: u16, ip: String) -> NodeInfo {
     NodeInfo {
         nickname: nickname.to_string(),
         ip,
@@ -149,5 +163,6 @@ fn nonviable_node_info(nickname: ArrayString<[u8; 32]>, ip: String) -> NodeInfo 
         link_cost: 0,
         price_to_exit: 0,
         route_metric_to_exit: u16::max_value(),
+        route_metric: neigh_metric,
     }
 }
