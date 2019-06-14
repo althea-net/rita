@@ -110,7 +110,7 @@ dependencies = [
 [[package]]
 name = "actix-web-httpauth"
 version = "0.2.0"
-source = "git+https://github.com/asoltys/actix-web-httpauth#5f984f95a0b777d548ec68618671d26a96d92fde"
+source = "git+https://github.com/althea-mesh/actix-web-httpauth#4d6bf7afee950668b336a68727d847aa05300723"
 dependencies = [
  "actix-web 0.7.19 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1934,7 +1934,7 @@ version = "0.5.0"
 dependencies = [
  "actix 0.7.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-web 0.7.19 (registry+https://github.com/rust-lang/crates.io-index)",
- "actix-web-httpauth 0.2.0 (git+https://github.com/asoltys/actix-web-httpauth)",
+ "actix-web-httpauth 0.2.0 (git+https://github.com/althea-mesh/actix-web-httpauth)",
  "actix_derive 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "althea_kernel_interface 0.1.0",
  "althea_types 0.1.0",
@@ -2930,7 +2930,7 @@ dependencies = [
 "checksum actix 0.7.9 (registry+https://github.com/rust-lang/crates.io-index)" = "6c616db5fa4b0c40702fb75201c2af7f8aa8f3a2e2c1dda3b0655772aa949666"
 "checksum actix-net 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)" = "8bebfbe6629e0131730746718c9e032b58f02c6ce06ed7c982b9fef6c8545acd"
 "checksum actix-web 0.7.19 (registry+https://github.com/rust-lang/crates.io-index)" = "b0ac60f86c65a50b140139f499f4f7c6e49e4b5d88fbfba08e4e3975991f7bf4"
-"checksum actix-web-httpauth 0.2.0 (git+https://github.com/asoltys/actix-web-httpauth)" = "<none>"
+"checksum actix-web-httpauth 0.2.0 (git+https://github.com/althea-mesh/actix-web-httpauth)" = "<none>"
 "checksum actix_derive 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "4300e9431455322ae393d43a2ba1ef96b8080573c0fc23b196219efedfb6ba69"
 "checksum actix_derive 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "0bf5f6d7bf2d220ae8b4a7ae02a572bb35b7c4806b24049af905ab8110de156c"
 "checksum aho-corasick 0.6.10 (registry+https://github.com/rust-lang/crates.io-index)" = "81ce3d38065e618af2d7b77e10c5ad9a069859b4be3c2250f674af3840d9c8a5"
