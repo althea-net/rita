@@ -26,6 +26,7 @@ web30 = {git = "https://github.com/althea-mesh/web30", rev="56b0068aa43eb563db99
 syslog = "4"
 actix = "0.7"
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
+actix-web-httpauth = {git = "https://github.com/althea-mesh/actix-web-httpauth"}
 actix_derive = "0.4"
 bytes = "0.4"
 config = "0.9"
@@ -62,6 +63,8 @@ lettre = {git = "https://github.com/lettre/lettre/"}
 lettre_email = {git = "https://github.com/lettre/lettre/"}
 phonenumber = "0.2"
 r2d2 = "0.8"
+sha3 = "0.8"
+hex-literal = "0.2"
 
 [features]
 default = []

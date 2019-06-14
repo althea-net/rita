@@ -1206,7 +1206,7 @@ Sets the blockchain being used by the router, either 'Ethereum','Rinkeby' or 'Xd
 
 Sets the blockchain being used by the router
 
-- URL: `<rita ip>:<rita_dashboard_port>/blockchain/get/`
+- URL: `<rita ip>:<rita_dashboard_port>/blockchain/get`
 - Method: `GET`
 - URL Params: `None`
 - Data Params: `None`
@@ -1222,7 +1222,7 @@ Sets the blockchain being used by the router
 
 - Sample Call:
 
-`curl http://192.168.10.1:4877/blockchain/get/`
+`curl http://192.168.10.1:4877/blockchain/get`
 
 ---
 
@@ -1231,7 +1231,7 @@ Sets the blockchain being used by the router
 Sets the optional nickname parameter for the router. Will error if the nickname
 is longer than 32 chars when utf-8 encoded (not always 32 assci chars)
 
-- URL: `<rita ip>:<rita_dashboard_port>/nickname/set/`
+- URL: `<rita ip>:<rita_dashboard_port>/nickname/set`
 - Method: `POST`
 - URL Params: `None`
 - Data Params: `None`
@@ -1296,6 +1296,37 @@ Manually runs the update script
 - Sample Call:
 
 `curl -v -XPOST http://192.168.10.1:4877/router/update`
+
+## /router/password
+
+Note a cleartext password is submitted to this endpoint but when actually used to login
+a sha512 hashed version of the text plus the text "RitaSalt" must be used
+
+- URL: `<rita ip>:<rita_dashboard_port>/router/password`
+- Method: `POST`
+- URL Params: `Content-Type: application/json`
+- Data Params: `The password to set for the router dashboard endpoints`
+- Success Response:
+  - Code: `200 OK`
+  - Contents:
+
+```json
+{}
+```
+
+- Error Response:
+  - Code: `400 Bad Request`
+  - Contents:
+
+```json
+{
+  "error": "<human-readable description>"
+}
+```
+
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:<rita_dashboard_port>/router/password -H 'Content-Type: application/json' -i -d '{"password": "this is a freeform cleartext password"}'`
 
 ---
 

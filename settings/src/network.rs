@@ -47,6 +47,8 @@ pub struct NetworkSettings {
     pub rita_contact_port: u16,
     /// Port over which the dashboard will be accessible upon
     pub rita_dashboard_port: u16,
+    /// The password for dashboard authentication
+    pub rita_dashboard_password: Option<String>,
     /// Port over which the bounty hunter will be contacted
     pub bounty_port: u16,
     /// The tick interval in seconds between rita hellos, traffic watcher measurements and payments
@@ -102,6 +104,7 @@ impl Default for NetworkSettings {
             babel_port: 6872,
             rita_hello_port: 4876,
             rita_dashboard_port: 4877,
+            rita_dashboard_password: None,
             rita_contact_port: 4875,
             bounty_port: 8888,
             rita_tick_interval: 5,

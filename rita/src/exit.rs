@@ -22,7 +22,9 @@ extern crate log;
 extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
-
+#[cfg(test)]
+#[macro_use]
+extern crate hex_literal;
 extern crate phonenumber;
 
 use actix_web::http::Method;
@@ -36,6 +38,9 @@ use r2d2::Pool;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::{Arc, RwLock};
+
+#[cfg(test)]
+use std::sync::Mutex;
 
 use settings::exit::{RitaExitSettings, RitaExitSettingsStruct};
 use settings::RitaCommonSettings;
@@ -53,6 +58,7 @@ use rita_common::rita_loop::start_core_rita_endpoints;
 use rita_exit::rita_loop::check_rita_exit_actors;
 use rita_exit::rita_loop::start_rita_exit_endpoints;
 
+use crate::rita_common::dashboard::auth::*;
 use crate::rita_common::dashboard::babel::*;
 use crate::rita_common::dashboard::dao::*;
 use crate::rita_common::dashboard::debts::*;
@@ -63,12 +69,8 @@ use crate::rita_common::dashboard::pricing::*;
 use crate::rita_common::dashboard::settings::*;
 use crate::rita_common::dashboard::usage::*;
 use crate::rita_common::dashboard::wallet::*;
-
 use crate::rita_common::network_endpoints::*;
 use crate::rita_exit::network_endpoints::*;
-
-#[cfg(test)]
-use std::sync::Mutex;
 
 #[derive(Debug, Deserialize, Default)]
 pub struct Args {
@@ -259,6 +261,7 @@ fn start_rita_exit_dashboard() {
             .route("/auto_price/enabled", Method::GET, auto_pricing_status)
             .route("/nickname/get/", Method::GET, get_nickname)
             .route("/nickname/set/", Method::POST, set_nickname)
+            .route("/router/password/", Method::POST, set_pass)
             .route("/crash_actors", Method::POST, crash_actors)
             .route("/usage/payments", Method::GET, get_payments)
     })
