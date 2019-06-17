@@ -30,7 +30,7 @@ impl<S> Middleware<S> for Headers {
         );
         resp.headers_mut().insert(
             header::HeaderName::try_from("Access-Control-Allow-Headers").unwrap(),
-            header::HeaderValue::from_static("content-type"),
+            header::HeaderValue::from_static("authorization"),
         );
         Ok(Response::Done(resp))
     }
