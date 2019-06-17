@@ -1,6 +1,8 @@
 use crate::rita_common::dao_manager::DAOManager;
 use crate::rita_common::dao_manager::Tick as DAOTick;
 use crate::rita_common::payment_validator::{PaymentValidator, Validate};
+use crate::rita_common::token_bridge::Tick as TokenBridgeTick;
+use crate::rita_common::token_bridge::TokenBridge;
 use crate::rita_common::tunnel_manager::{TriggerGC, TunnelManager};
 use crate::SETTING;
 use actix::{
@@ -84,6 +86,8 @@ impl Handler<Tick> for RitaSlowLoop {
         TunnelManager::from_registry().do_send(TriggerGC(Duration::from_secs(
             SETTING.get_network().tunnel_timeout_seconds,
         )));
+
+        TokenBridge::from_registry().do_send(TokenBridgeTick());
 
         // we really only need to run this on startup, but doing so periodically
         // could catch the edge case where babel is restarted under us

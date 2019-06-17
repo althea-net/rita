@@ -85,6 +85,7 @@ pub struct PaymentSettings {
     // Our own eth Address, derived from the private key on startup and not stored
     pub eth_address: Option<Address>,
     // Denotes addresses that we have approved for uniswap
+    #[serde(default)]
     pub approved_for_uniswap: HashMap<Address, bool>,
     #[serde(default)]
     pub balance: Uint256,
