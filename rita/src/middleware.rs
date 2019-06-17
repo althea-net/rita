@@ -7,7 +7,6 @@ use actix_web::middleware::{Middleware, Response, Started};
 use actix_web::{FromRequest, HttpRequest, HttpResponse, Result};
 use actix_web_httpauth::extractors::basic::{BasicAuth, Config};
 use actix_web_httpauth::extractors::AuthenticationError;
-use regex::Regex;
 use settings::RitaCommonSettings;
 
 pub struct Headers;
@@ -18,19 +17,16 @@ impl<S> Middleware<S> for Headers {
     }
 
     fn response(&self, req: &HttpRequest<S>, mut resp: HttpResponse) -> Result<Response> {
-        let url = req.connection_info().host().to_owned();
-        let re = Regex::new(r"^(.*):").unwrap();
-        let url_no_port = re.captures(&url).unwrap()[1].to_string();
         if req.method() == Method::OPTIONS {
             *resp.status_mut() = StatusCode::OK;
         }
         resp.headers_mut().insert(
             header::HeaderName::try_from("Access-Control-Allow-Origin").unwrap(),
-            header::HeaderValue::from_str(&format!("http://{}", url_no_port)).unwrap(),
+            header::HeaderValue::from_str("*").unwrap(),
         );
         resp.headers_mut().insert(
             header::HeaderName::try_from("Access-Control-Allow-Headers").unwrap(),
-            header::HeaderValue::from_static("content-type"),
+            header::HeaderValue::from_static("*"),
         );
         Ok(Response::Done(resp))
     }
