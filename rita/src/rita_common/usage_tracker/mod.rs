@@ -31,7 +31,7 @@ use std::time::UNIX_EPOCH;
 /// On year worth of usage storage
 const MAX_ENTRIES: usize = 8760;
 /// Save every 24 hours
-const SAVE_FREQENCY: u64 = 24;
+const SAVE_FREQENCY: u64 = 4;
 
 /// In an effort to converge this module between the three possible bw tracking
 /// use cases this enum is used to identify which sort of usage we are tracking
