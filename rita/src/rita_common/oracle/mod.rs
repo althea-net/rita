@@ -191,7 +191,7 @@ pub fn update_nonce(our_address: Address, web3: &Web3, full_node: String) {
 
 /// This function updates the gas price and in the process adjusts our payment threshold
 /// The average gas price over the last hour are averaged by the web3 call we then adjust our
-/// expected payment amount and grace period so that every transaction pays 10% in transaction fees
+/// expected payment amount and grace period so that every transaction pays 5% in transaction fees
 /// (or whatever they care to configure as dyanmic_fee_factor). This also handles dramatic spikes in
 /// gas prices by increasing the maximum debt before a drop to the free tier occurs. So if the blockchain
 /// is simply to busy to use for some period of time payments will simply wait.
@@ -210,7 +210,11 @@ fn update_gas_price(web3: &Web3, full_node: String) {
                 if payment_settings.system_chain == SystemChain::Xdai {
                     payment_settings.gas_price = 250_000_000_000u128.into();
                 } else {
-                    payment_settings.gas_price = value;
+                    // use 105% of the gas price provided by the full node, this is designed
+                    // to keep us above the median price provided by the full node.
+                    // This should ensure that we maintain a higher-than-median priority even
+                    // if the network is being spammed with transactions
+                    payment_settings.gas_price = value.clone() + (value / 20u32.into());
                 }
                 let dynamic_fee_factor: Int256 = payment_settings.dynamic_fee_multiplier.into();
                 let transaction_gas: Int256 = 21000.into();
