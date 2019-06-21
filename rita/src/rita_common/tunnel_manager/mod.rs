@@ -158,6 +158,7 @@ impl Tunnel {
     /// Open a real tunnel to match the virtual tunnel we store in memory
     pub fn open(&self) -> Result<(), Error> {
         let network = SETTING.get_network().clone();
+        trace!("About to open tunnel");
         KI.open_tunnel(
             &self.iface_name,
             self.listen_port,
@@ -171,7 +172,14 @@ impl Tunnel {
             network.external_nic.clone(),
             &mut SETTING.get_network_mut().default_route,
         )?;
-        KI.set_codel_shaping(&self.iface_name)
+        trace!("About to set codel shaping");
+        if let Err(e) = KI.set_codel_shaping(&self.iface_name) {
+            error!(
+                "Tunnel {} is now active without traffic shaping! {:?}",
+                self.iface_name, e
+            );
+        }
+        Ok(())
     }
 
     /// Register this tunnel into Babel monitor
