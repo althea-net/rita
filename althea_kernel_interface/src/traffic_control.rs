@@ -127,7 +127,8 @@ impl KernelInterface {
 
             if !output.status.success() {
                 let res = String::from_utf8(output.stderr)?;
-                bail!("Failed to create new qdisc limit! {:?}", res);
+                error!("Failed to set codel shaping! {:?}", res);
+                bail!("Failed to set codel shaping! {:?}", res);
             }
         }
 
