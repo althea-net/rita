@@ -1255,7 +1255,7 @@ is longer than 32 chars when utf-8 encoded (not always 32 assci chars)
 
 Gets the nickname used by the router
 
-- URL: `<rita ip>:<rita_dashboard_port>/nickname/get/`
+- URL: `<rita ip>:<rita_dashboard_port>/nickname/get`
 - Method: `GET`
 - URL Params: `None`
 - Data Params: `None`
@@ -1271,7 +1271,7 @@ Gets the nickname used by the router
 
 - Sample Call:
 
-`curl http://192.168.10.1:4877/nickname/get/`
+`curl http://192.168.10.1:4877/nickname/get`
 
 ---
 
