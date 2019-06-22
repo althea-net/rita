@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # export PATH="$PATH:$HOME/.cargo/bin"
 BABELD_DIR="deps/babeld"
+BOUNTY_HUNTER_DIR="/tmp/bounty_hunter"
 NETLAB_PATH="deps/network-lab/network-lab.sh"
 
 REMOTE_A=${REMOTE_A:=https://github.com/althea-mesh/althea_rs.git}
@@ -69,20 +70,29 @@ if [ ! -f "${BABELD_DIR-}/babeld" ]; then
   make -C $BABELD_DIR
 fi
 
+# Build BH if not built
+if [ ! -f "${BOUNTY_HUNTER_DIR-}/babeld" ]; then
+  rm -rf BOUNTY_HUNTER_DIR
+  git clone -b master https://github.com/althea-net/bounty_hunter.git $BOUNTY_HUNTER_DIR
+  pushd $BOUNTY_HUNTER_DIR
+     cargo build
+  popd
+fi
+
 
 # Only care about revisions if a compat layout was picked
 if [ ! -z "${COMPAT_LAYOUT-}" ] ; then
   build_rev $REMOTE_A "$REVISION_A" $DIR_A $TARGET_DIR_A
   export RITA_A="$target_dir/debug/rita"
   export RITA_EXIT_A="$target_dir/debug/rita_exit"
-  export BOUNTY_HUNTER_A="$target_dir/debug/bounty_hunter"
+  export BOUNTY_HUNTER_A="$BOUNTY_HUNTER_DIR/target/debug/bounty_hunter"
   export DIR_A=$DIR_A
   cp -r $DIR_A/target/* $target_dir
  
   build_rev $REMOTE_B "$REVISION_B" $DIR_B $TARGET_DIR_B
   export RITA_B="$target_dir/debug/rita"
   export RITA_EXIT_B="$target_dir/debug/rita_exit"
-  export BOUNTY_HUNTER_B="$target_dir/debug/bounty_hunter"
+  export BOUNTY_HUNTER_B="$BOUNTY_HUNTER_DIR/target/debug/bounty_hunter"
   export DIR_B=$DIR_B
   cp -r $DIR_B/target/* $target_dir
 else
