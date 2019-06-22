@@ -24,18 +24,35 @@ use num256::{Int256, Uint256};
 use num_traits::Signed;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
+use std::time::Duration;
 use std::time::Instant;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodeDebtData {
+    /// The amount this node has paid us, validated in payment_validator
     pub total_payment_received: Uint256,
+    /// The amount we have sent another node, does not count until validated
+    /// by payment_validator
     pub total_payment_sent: Uint256,
+    /// The amount we owe the other node (positive) or they owe us (negative)
     pub debt: Int256,
+    /// A storage pool for overpayment, if a node overpays us we don't go into debt to them
+    /// the excess value is placed here to be applied in the future
     pub incoming_payments: Uint256,
+    /// The last thing we did, this value is updated but does not actual affect controll flow
+    /// do not use it to affect control flow!
     pub action: DebtAction,
+    /// If we have an outgoing payment to a node in flight
     pub payment_in_flight: bool,
     #[serde(skip_serializing, skip_deserializing)]
+    /// When the payment in flight was started, used to time out attempts and try again
+    /// if they don't get into the blockchain
     pub payment_in_flight_start: Option<Instant>,
+    #[serde(skip_serializing, skip_deserializing)]
+    /// The last time we successfully paid a node, this is used only in the exit payments
+    /// case, where when we get payments from the exit there is a race condition where the
+    /// exit may not update that we have paid it fast enough
+    pub last_successful_payment: Option<Instant>,
 }
 
 impl NodeDebtData {
@@ -48,6 +65,7 @@ impl NodeDebtData {
             action: DebtAction::OpenTunnel,
             payment_in_flight: false,
             payment_in_flight_start: None,
+            last_successful_payment: None,
         }
     }
 }
@@ -267,6 +285,7 @@ impl DebtKeeper {
         peer.payment_in_flight_start = None;
 
         peer.total_payment_sent += amount.clone();
+        peer.last_successful_payment = Some(Instant::now());
         peer.debt -= match amount.to_int256() {
             Some(val) => val,
             None => bail!("Failed to convert amount paid to Int256!"),
@@ -339,9 +358,22 @@ impl DebtKeeper {
         trace!("traffic replace for {} is {}", ident.mesh_ip, amount);
         let debt_data = self.get_debt_data_mut(ident);
 
-        // we handle the incoming debit or credit versus our existing debit or credit
-        // very simple
-        debt_data.debt = amount;
+        // if we have a payment in flight we shouldn't reset the debt as
+        // we may end up double paying we also should wait 60 seconds after
+        // our last successful payment to make sure that the exit has had time
+        // to check the full node, then update it's own debt keeper
+        match (
+            debt_data.payment_in_flight,
+            debt_data.last_successful_payment,
+        ) {
+            (true, _) => {}
+            (false, Some(val)) => {
+                if Instant::now() - val > Duration::from_secs(60) {
+                    debt_data.debt = amount;
+                }
+            }
+            (false, None) => debt_data.debt = amount,
+        }
 
         trace!("debt data for {} is {:?}", ident.mesh_ip, debt_data);
     }
