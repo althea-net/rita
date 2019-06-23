@@ -150,6 +150,15 @@ pub fn get_input_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
     };
 
     for (k, v) in input_counters {
+        let ip = k.0;
+        // our counters have captured packets that are either multicast
+        // or ipv6 link local, these are peer to peer comms and not billable
+        // since they are not forwarded, ignore them
+        if is_link_local(ip) || ip.is_multicast() {
+            trace!("Discarding packets that can't be forwarded");
+            continue;
+        }
+
         *total_input_counters.entry(k).or_insert(0) += v
     }
 
@@ -195,6 +204,15 @@ pub fn get_output_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
     };
 
     for (k, v) in output_counters {
+        let ip = k.0;
+        // our counters have captured packets that are either multicast
+        // or ipv6 link local, these are peer to peer comms and not billable
+        // since they are not forwarded, ignore them
+        if is_link_local(ip) || ip.is_multicast() {
+            trace!("Discarding packets that can't be forwarded");
+            continue;
+        }
+
         *total_output_counters.entry(k).or_insert(0) += v
     }
 
@@ -271,14 +289,6 @@ pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
     // to credit that debt to using the interface (since tunnel interfaces are unique to a neighbor)
     // we also look up the destination cost from babel using the destination ip
     for ((ip, interface), bytes) in total_input_counters {
-        // our counters have captured packets that are either multicast
-        // or ipv6 link local, these are peer to peer comms and not billable
-        // since they are not forwarded, ignore them
-        if is_link_local(ip) || ip.is_multicast() {
-            trace!("Discarding packets that can't be forwarded");
-            continue;
-        }
-
         let state = (destinations.get(&ip), if_to_id.get(&interface));
         match state {
             (Some(dest), Some(id_from_if)) => {
@@ -306,14 +316,6 @@ pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
     // to credit that debt from us using the interface (since tunnel interfaces are unique to a neighbor)
     // we also look up the destination cost from babel using the destination ip
     for ((ip, interface), bytes) in total_output_counters {
-        // our counters have captured packets that are either multicast
-        // or ipv6 link local, these are peer to peer comms and not billable
-        // since they are not forwarded, ignore them
-        if is_link_local(ip) || ip.is_multicast() {
-            trace!("Discarding packets that can't be forwarded");
-            continue;
-        }
-
         let state = (destinations.get(&ip), if_to_id.get(&interface));
         match state {
             (Some(dest), Some(id_from_if)) => match debts.get_mut(&id_from_if) {
