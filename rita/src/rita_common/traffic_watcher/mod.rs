@@ -87,7 +87,7 @@ pub fn prepare_helper_maps(
 }
 
 pub fn get_babel_info(routes: Vec<Route>) -> Result<(HashMap<IpAddr, i128>, u32), Error> {
-    trace!("Got routes: {:?}", routes);
+    trace!("Got {} routes: {:?}", routes.len(), routes);
     let mut destinations = HashMap::new();
     // we assume this matches what is actually set it babel becuase we
     // panic on startup if it does not get set correctly
@@ -106,7 +106,10 @@ pub fn get_babel_info(routes: Vec<Route>) -> Result<(HashMap<IpAddr, i128>, u32)
                 };
 
                 //TODO gracefully handle exceeding max price
-                trace!("Inserting {} into the destiantons map", IpAddr::V6(ip.ip()));
+                trace!(
+                    "Inserting {} into the destinations map",
+                    IpAddr::V6(ip.ip())
+                );
                 destinations.insert(IpAddr::V6(ip.ip()), i128::from(price + local_fee));
             }
         }
@@ -119,6 +122,8 @@ pub fn get_babel_info(routes: Vec<Route>) -> Result<(HashMap<IpAddr, i128>, u32)
         },
         i128::from(0),
     );
+
+    trace!("{} destinations setup", destinations.len());
 
     Ok((destinations, local_fee))
 }
