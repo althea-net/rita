@@ -112,12 +112,14 @@ fn read_babel(
     previous_contents: String,
     depth: usize,
 ) -> impl Future<Item = (TcpStream, String), Error = Error> {
-    // 100kbyte
-    let buffer: [u8; 100000] = [0; 100000];
+    // 500kbytes / 0.5mbyte
+    const BUFFER_SIZE: usize = 500_000;
+    let buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
     read(stream, buffer.to_vec())
         .from_err()
         .and_then(move |result| {
             let (stream, buffer, bytes) = result;
+            let full_buffer = bytes == BUFFER_SIZE;
 
             let output = String::from_utf8(buffer);
             if let Err(e) = output {
@@ -132,35 +134,44 @@ fn read_babel(
                 output
             );
 
-            // it's possible we caught babel in the middle of writing to the socket
+            // It's possible we caught babel in the middle of writing to the socket
             // if we don't see a terminator we either have an error in Babel or an error
             // in our code for expecting one. So it's safe for us to keep trying and building
-            // a larger response until we see one. We termiante after 5 tries
-            let babel_data = read_babel_sync(&output);
+            // a larger response until we see one. We terminate after 5 tries
+            // There is also the possible case that our buffer is full, in that case recurse
+            // with no retry limit immediately as we can simply go and read more
+            let full_message = previous_contents + output;
+            let babel_data = read_babel_sync(&full_message);
             if depth > 5 {
+                // prevent infinite recursion in error cases
                 warn!("Babel read timed out! {}", output);
                 return Box::new(future::err(
                     ReadFailed(format!("Babel read timed out!")).into(),
                 ))
                     as Box<Future<Item = (TcpStream, String), Error = Error>>;
+            } else if full_buffer {
+                // our buffer is full, we should recurse right away
+                warn!("Babel read larger than buffer! Consider increasing it's size");
+                return Box::new(read_babel(stream, full_message, depth));
             } else if let Err(NoTerminator(_)) = babel_data {
+                // our buffer was not full but we also did not find a terminator,
+                // we must have caught babel while it was interupped (only really happens
+                // in single cpu situations)
                 let when = Instant::now() + Duration::from_millis(100);
                 trace!("we didn't get the whole message yet, trying again");
-                let full_message = format!("{}{}", previous_contents, output);
                 return Box::new(
                     Delay::new(when)
                         .map_err(move |e| panic!("timer failed; err={:?}", e))
                         .and_then(move |_| read_babel(stream, full_message, depth + 1)),
-                ) as Box<Future<Item = (TcpStream, String), Error = Error>>;
+                );
             } else if let Err(e) = babel_data {
+                // some other error
                 warn!("Babel read failed! {} {:?}", output, e);
-                return Box::new(future::err(ReadFailed(format!("{:?}", e)).into()))
-                    as Box<Future<Item = (TcpStream, String), Error = Error>>;
+                return Box::new(future::err(ReadFailed(format!("{:?}", e)).into()));
             }
             let babel_data = babel_data.unwrap();
 
             Box::new(future::ok((stream, babel_data)))
-                as Box<Future<Item = (TcpStream, String), Error = Error>>
         })
 }
 
