@@ -22,7 +22,7 @@ BABELD = os.path.join(os.path.dirname(__file__), 'deps/babeld/babeld')
 
 RITA_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/debug/rita')
 RITA_EXIT_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/debug/rita_exit')
-BOUNTY_HUNTER_DEFAULT = os.path.join(os.path.dirname(__file__), '../target/debug/bounty_hunter')
+BOUNTY_HUNTER_DEFAULT = os.path.join(os.path.dirname(__file__), '/tmp/bounty_hunter/target/debug/bounty_hunter')
 
 # Envs for controlling postgres
 POSTGRES_USER = os.getenv('POSTGRES_USER')
@@ -441,7 +441,7 @@ class World:
     def setup_dbs(self):
         os.system("rm -rf bounty.db exit.db")
 
-        bounty_repo_dir = ".."
+        bounty_repo_dir = "/tmp/bounty_hunter/"
         exit_repo_dir = ".."
 
         bounty_index = self.bounty_id - 1
@@ -452,16 +452,8 @@ class World:
 
         if COMPAT_LAYOUT:
             # Figure out whether release A or B was
-            # assigned to the exit and
-            # bounty
+            # assigned to the exit
             layout = COMPAT_LAYOUTS[COMPAT_LAYOUT]
-            if layout[bounty_index] == 'a':
-                bounty_repo_dir = DIR_A
-            elif layout[bounty_index] == 'b':
-                bounty_repo_dir = DIR_B
-            else:
-                print("DB setup: Unknown release {} assigned to bounty".format(layout[bounty_index]))
-                sys.exit(1)
 
             if layout[exit_index] == 'a':
                 exit_repo_dir = DIR_A
@@ -475,7 +467,7 @@ class World:
         cwd = os.getcwd()
 
         # Go to bounty_hunter/ in the bounty's release
-        os.chdir(os.path.join(cwd, bounty_repo_dir, "bounty_hunter"))
+        os.chdir(bounty_repo_dir)
         if VERBOSE:
             print("DB setup: Entering {}/bounty_hunter".format(bounty_repo_dir))
 
