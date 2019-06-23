@@ -31,7 +31,6 @@ actix_derive = "0.4"
 bytes = "0.4"
 config = "0.9"
 diesel = { version = "1.4", features = ["postgres", "r2d2"] }
-libsqlite3-sys = { version = "0.9", features = ["bundled"] }
 docopt = "1.1"
 dotenv = "0.13"
 env_logger = "0.6"
@@ -59,8 +58,8 @@ num-traits="0.2"
 clarity = "0.1"
 eui48 = "0.4"
 arrayvec = {version= "0.4", features = ["serde-1"]}
-lettre = {git = "https://github.com/lettre/lettre/"}
-lettre_email = {git = "https://github.com/lettre/lettre/"}
+lettre = "0.9"
+lettre_email = "0.9"
 phonenumber = "0.2"
 r2d2 = "0.8"
 sha3 = "0.8"
