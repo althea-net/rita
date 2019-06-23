@@ -12,6 +12,7 @@ use crate::rita_common::usage_tracker::UsageType;
 use crate::KI;
 use crate::SETTING;
 use ::actix::{Actor, Context, Handler, Message, Supervised, SystemService};
+use althea_kernel_interface::open_tunnel::is_link_local;
 use althea_kernel_interface::FilterTarget;
 use althea_types::Identity;
 use babel_monitor::Route;
@@ -20,7 +21,6 @@ use ipnetwork::IpNetwork;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::net::IpAddr;
-use althea_kernel_interface::open_tunnel::is_link_local;
 
 pub struct TrafficWatcher;
 
@@ -302,7 +302,10 @@ pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
             }
             // this can be caused by a peer that has not yet formed a babel route
             // we use _ because ip_to_if is created from identites, if one fails the other must
-            (None, Some(if_to_id)) => warn!("We have an id {:?} but not destination for {}", if_to_id.mesh_ip, ip),
+            (None, Some(if_to_id)) => warn!(
+                "We have an id {:?} but not destination for {}",
+                if_to_id.mesh_ip, ip
+            ),
             // if we have a babel route we should have a peer it's possible we have a mesh client sneaking in?
             (Some(dest), None) => warn!("We have a destination {:?} but no id", dest),
             // dead entry?
@@ -327,7 +330,10 @@ pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
             },
             // this can be caused by a peer that has not yet formed a babel route
             // we use _ because ip_to_if is created from identites, if one fails the other must
-            (None, Some(id_from_if)) => warn!("We have an id {:?} but not destination for {}", id_from_if.mesh_ip, ip),
+            (None, Some(id_from_if)) => warn!(
+                "We have an id {:?} but not destination for {}",
+                id_from_if.mesh_ip, ip
+            ),
             // if we have a babel route we should have a peer it's possible we have a mesh client sneaking in?
             (Some(dest), None) => warn!("We have a destination {:?} but no id", dest),
             // dead entry?
@@ -365,19 +371,17 @@ pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::net::IpAddr;
     use std::net::Ipv6Addr;
-    use std::collections::HashMap;
-#[test]
-fn test_ip_lookup() {
-    let ip_a: IpAddr = "fd00::1337:e8f".parse().unwrap();
-    let ip_b: Ipv6Addr = "fd00::1337:e8f".parse().unwrap();
-    let ip_b = IpAddr::V6(ip_b);
-    assert_eq!(ip_a, ip_b);
-    let mut map = HashMap::new();
-    map.insert(ip_b, "test");
-    assert!(map.get(&ip_a) != None);
-
-
-}
+    #[test]
+    fn test_ip_lookup() {
+        let ip_a: IpAddr = "fd00::1337:e8f".parse().unwrap();
+        let ip_b: Ipv6Addr = "fd00::1337:e8f".parse().unwrap();
+        let ip_b = IpAddr::V6(ip_b);
+        assert_eq!(ip_a, ip_b);
+        let mut map = HashMap::new();
+        map.insert(ip_b, "test");
+        assert!(map.get(&ip_a) != None);
+    }
 }
