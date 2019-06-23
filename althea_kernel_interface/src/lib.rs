@@ -29,7 +29,7 @@ mod iptables;
 mod is_openwrt;
 mod link_local_tools;
 mod manipulate_uci;
-mod open_tunnel;
+pub mod open_tunnel;
 mod openwrt_ubus;
 mod ping_check;
 mod set_system_password;

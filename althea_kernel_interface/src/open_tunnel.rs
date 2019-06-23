@@ -28,7 +28,7 @@ fn test_to_wg_local() {
     )
 }
 
-fn is_link_local(ip: IpAddr) -> bool {
+pub fn is_link_local(ip: IpAddr) -> bool {
     if let IpAddr::V6(ip) = ip {
         return (ip.segments()[0] & 0xffc0) == 0xfe80;
     }
