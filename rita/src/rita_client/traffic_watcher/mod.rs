@@ -141,7 +141,7 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
 
                                         DebtKeeper::from_registry().do_send(exit_replace);
                                     } else {
-                                        error!("The exit owes us? That shouldn't be possible!");
+                                        info!("The exit owes us? We must be a gateway!");
                                     }
                                 }
                                 Err(e) => {

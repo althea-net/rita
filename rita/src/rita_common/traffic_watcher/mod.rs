@@ -12,6 +12,7 @@ use crate::rita_common::usage_tracker::UsageType;
 use crate::KI;
 use crate::SETTING;
 use ::actix::{Actor, Context, Handler, Message, Supervised, SystemService};
+use althea_kernel_interface::open_tunnel::is_link_local;
 use althea_kernel_interface::FilterTarget;
 use althea_types::Identity;
 use babel_monitor::Route;
@@ -86,7 +87,7 @@ pub fn prepare_helper_maps(
 }
 
 pub fn get_babel_info(routes: Vec<Route>) -> Result<(HashMap<IpAddr, i128>, u32), Error> {
-    trace!("Got routes: {:?}", routes);
+    trace!("Got {} routes: {:?}", routes.len(), routes);
     let mut destinations = HashMap::new();
     // we assume this matches what is actually set it babel becuase we
     // panic on startup if it does not get set correctly
@@ -105,6 +106,10 @@ pub fn get_babel_info(routes: Vec<Route>) -> Result<(HashMap<IpAddr, i128>, u32)
                 };
 
                 //TODO gracefully handle exceeding max price
+                trace!(
+                    "Inserting {} into the destinations map",
+                    IpAddr::V6(ip.ip())
+                );
                 destinations.insert(IpAddr::V6(ip.ip()), i128::from(price + local_fee));
             }
         }
@@ -117,6 +122,8 @@ pub fn get_babel_info(routes: Vec<Route>) -> Result<(HashMap<IpAddr, i128>, u32)
         },
         i128::from(0),
     );
+
+    trace!("{} destinations setup", destinations.len());
 
     Ok((destinations, local_fee))
 }
@@ -148,6 +155,15 @@ pub fn get_input_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
     };
 
     for (k, v) in input_counters {
+        let ip = k.0;
+        // our counters have captured packets that are either multicast
+        // or ipv6 link local, these are peer to peer comms and not billable
+        // since they are not forwarded, ignore them
+        if is_link_local(ip) || ip.is_multicast() {
+            trace!("Discarding packets that can't be forwarded");
+            continue;
+        }
+
         *total_input_counters.entry(k).or_insert(0) += v
     }
 
@@ -193,6 +209,15 @@ pub fn get_output_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
     };
 
     for (k, v) in output_counters {
+        let ip = k.0;
+        // our counters have captured packets that are either multicast
+        // or ipv6 link local, these are peer to peer comms and not billable
+        // since they are not forwarded, ignore them
+        if is_link_local(ip) || ip.is_multicast() {
+            trace!("Discarding packets that can't be forwarded");
+            continue;
+        }
+
         *total_output_counters.entry(k).or_insert(0) += v
     }
 
@@ -282,7 +307,10 @@ pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
             }
             // this can be caused by a peer that has not yet formed a babel route
             // we use _ because ip_to_if is created from identites, if one fails the other must
-            (None, Some(id)) => warn!("We have an id {:?} but not destination", id),
+            (None, Some(if_to_id)) => warn!(
+                "We have an id {:?} but not destination for {}",
+                if_to_id.mesh_ip, ip
+            ),
             // if we have a babel route we should have a peer it's possible we have a mesh client sneaking in?
             (Some(dest), None) => warn!("We have a destination {:?} but no id", dest),
             // dead entry?
@@ -307,7 +335,10 @@ pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
             },
             // this can be caused by a peer that has not yet formed a babel route
             // we use _ because ip_to_if is created from identites, if one fails the other must
-            (None, Some(id_from_if)) => warn!("We have an id {:?} but not destination", id_from_if),
+            (None, Some(id_from_if)) => warn!(
+                "We have an id {:?} but not destination for {}",
+                id_from_if.mesh_ip, ip
+            ),
             // if we have a babel route we should have a peer it's possible we have a mesh client sneaking in?
             (Some(dest), None) => warn!("We have a destination {:?} but no id", dest),
             // dead entry?
@@ -341,4 +372,21 @@ pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
     DebtKeeper::from_registry().do_send(update);
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::net::IpAddr;
+    use std::net::Ipv6Addr;
+    #[test]
+    fn test_ip_lookup() {
+        let ip_a: IpAddr = "fd00::1337:e8f".parse().unwrap();
+        let ip_b: Ipv6Addr = "fd00::1337:e8f".parse().unwrap();
+        let ip_b = IpAddr::V6(ip_b);
+        assert_eq!(ip_a, ip_b);
+        let mut map = HashMap::new();
+        map.insert(ip_b, "test");
+        assert!(map.get(&ip_a) != None);
+    }
 }
