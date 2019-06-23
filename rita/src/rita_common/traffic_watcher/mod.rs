@@ -20,6 +20,7 @@ use ipnetwork::IpNetwork;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::net::IpAddr;
+use althea_kernel_interface::open_tunnel::is_link_local;
 
 pub struct TrafficWatcher;
 
@@ -105,6 +106,7 @@ pub fn get_babel_info(routes: Vec<Route>) -> Result<(HashMap<IpAddr, i128>, u32)
                 };
 
                 //TODO gracefully handle exceeding max price
+                trace!("Inserting {} into the destiantons map", IpAddr::V6(ip.ip()));
                 destinations.insert(IpAddr::V6(ip.ip()), i128::from(price + local_fee));
             }
         }
@@ -269,6 +271,14 @@ pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
     // to credit that debt to using the interface (since tunnel interfaces are unique to a neighbor)
     // we also look up the destination cost from babel using the destination ip
     for ((ip, interface), bytes) in total_input_counters {
+        // our counters have captured packets that are either multicast
+        // or ipv6 link local, these are peer to peer comms and not billable
+        // since they are not forwarded, ignore them
+        if is_link_local(ip) || ip.is_multicast() {
+            trace!("Discarding packets that can't be forwarded");
+            continue;
+        }
+
         let state = (destinations.get(&ip), if_to_id.get(&interface));
         match state {
             (Some(dest), Some(id_from_if)) => {
@@ -282,7 +292,7 @@ pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
             }
             // this can be caused by a peer that has not yet formed a babel route
             // we use _ because ip_to_if is created from identites, if one fails the other must
-            (None, Some(id)) => warn!("We have an id {:?} but not destination", id),
+            (None, Some(if_to_id)) => warn!("We have an id {:?} but not destination for {}", if_to_id.mesh_ip, ip),
             // if we have a babel route we should have a peer it's possible we have a mesh client sneaking in?
             (Some(dest), None) => warn!("We have a destination {:?} but no id", dest),
             // dead entry?
@@ -296,6 +306,14 @@ pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
     // to credit that debt from us using the interface (since tunnel interfaces are unique to a neighbor)
     // we also look up the destination cost from babel using the destination ip
     for ((ip, interface), bytes) in total_output_counters {
+        // our counters have captured packets that are either multicast
+        // or ipv6 link local, these are peer to peer comms and not billable
+        // since they are not forwarded, ignore them
+        if is_link_local(ip) || ip.is_multicast() {
+            trace!("Discarding packets that can't be forwarded");
+            continue;
+        }
+
         let state = (destinations.get(&ip), if_to_id.get(&interface));
         match state {
             (Some(dest), Some(id_from_if)) => match debts.get_mut(&id_from_if) {
@@ -307,7 +325,7 @@ pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
             },
             // this can be caused by a peer that has not yet formed a babel route
             // we use _ because ip_to_if is created from identites, if one fails the other must
-            (None, Some(id_from_if)) => warn!("We have an id {:?} but not destination", id_from_if),
+            (None, Some(id_from_if)) => warn!("We have an id {:?} but not destination for {}", id_from_if.mesh_ip, ip),
             // if we have a babel route we should have a peer it's possible we have a mesh client sneaking in?
             (Some(dest), None) => warn!("We have a destination {:?} but no id", dest),
             // dead entry?
@@ -341,4 +359,23 @@ pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
     DebtKeeper::from_registry().do_send(update);
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::IpAddr;
+    use std::net::Ipv6Addr;
+    use std::collections::HashMap;
+#[test]
+fn test_ip_lookup() {
+    let ip_a: IpAddr = "fd00::1337:e8f".parse().unwrap();
+    let ip_b: Ipv6Addr = "fd00::1337:e8f".parse().unwrap();
+    let ip_b = IpAddr::V6(ip_b);
+    assert_eq!(ip_a, ip_b);
+    let mut map = HashMap::new();
+    map.insert(ip_b, "test");
+    assert!(map.get(&ip_a) != None);
+
+
+}
 }
