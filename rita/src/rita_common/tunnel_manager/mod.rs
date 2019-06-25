@@ -29,6 +29,7 @@ use std::fmt;
 use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 use std::time::{Duration, Instant};
+use tokio::timer::Delay;
 
 #[cfg(test)]
 type HelloHandler = Mocker<rita_common::hello_handler::HelloHandler>;
@@ -175,43 +176,73 @@ impl Tunnel {
     }
 
     /// Register this tunnel into Babel monitor
-    pub fn monitor(&self) {
+    pub fn monitor(&self, retry_count: u8) {
         info!("Monitoring tunnel {}", self.iface_name);
         let iface_name = self.iface_name.clone();
         let babel_port = SETTING.get_network().babel_port;
+        let tunnel = self.clone();
 
         Arbiter::spawn(
             open_babel_stream(babel_port)
                 .from_err()
                 .and_then(move |stream| {
-                    start_connection(stream).and_then(move |stream| {
-                        monitor(stream, &iface_name)
-                    })
+                    start_connection(stream).and_then(move |stream| monitor(stream, &iface_name))
                 })
                 .then(move |res| {
-                    // if you ever see this error go and make a handler to delete the tunnel from memory
-                    error!("Monitoring tunnel has failed! The tunnels cache is an incorrect state {:?}" , res);
-                    Ok(())}),
+                    // Errors here seem very very rare, I've only ever seen it happen
+                    // twice myself and I couldn't reproduce it, nontheless it's a pretty
+                    // bad situation so we will retry
+                    if let Err(e) = res {
+                        warn!("Tunnel monitor failed with {:?}, retrying in 1 second", e);
+                        let when = Instant::now() + Duration::from_secs(1);
+                        let fut = Delay::new(when)
+                            .map_err(move |e| panic!("timer failed; err={:?}", e))
+                            .and_then(move |_| {
+                                TunnelManager::from_registry().do_send(TunnelMonitorFailure {
+                                    tunnel_to_retry: tunnel,
+                                    retry_count,
+                                });
+                                Ok(())
+                            });
+                        Arbiter::spawn(fut);
+                    }
+                    Ok(())
+                }),
         )
     }
 
-    pub fn unmonitor(&self) {
+    pub fn unmonitor(&self, retry_count: u8) {
         warn!("Unmonitoring tunnel {}", self.iface_name);
         let iface_name = self.iface_name.clone();
         let babel_port = SETTING.get_network().babel_port;
+        let tunnel = self.clone();
 
         Arbiter::spawn(
             open_babel_stream(babel_port)
                 .from_err()
                 .and_then(move |stream| {
-                    start_connection(stream).and_then(move |stream| {
-                        unmonitor(stream, &iface_name)
-                    })
+                    start_connection(stream).and_then(move |stream| unmonitor(stream, &iface_name))
                 })
                 .then(move |res| {
-                    // if you ever see this error go and make a handler to try and unlisten until it works
-                    error!("Unmonitoring tunnel has failed! Babel will now listen on a non-existant tunnel {:?}", res);
-                    Ok(())}),
+                    // Errors here seem very very rare, I've only ever seen it happen
+                    // twice myself and I couldn't reproduce it, nontheless it's a pretty
+                    // bad situation so we will retry
+                    if let Err(e) = res {
+                        warn!("Tunnel unmonitor failed with {:?}, retrying in 1 second", e);
+                        let when = Instant::now() + Duration::from_secs(1);
+                        let fut = Delay::new(when)
+                            .map_err(move |e| panic!("timer failed; err={:?}", e))
+                            .and_then(move |_| {
+                                TunnelManager::from_registry().do_send(TunnelUnMonitorFailure {
+                                    tunnel_to_retry: tunnel,
+                                    retry_count,
+                                });
+                                Ok(())
+                            });
+                        Arbiter::spawn(fut);
+                    }
+                    Ok(())
+                }),
         )
     }
 }
@@ -234,6 +265,62 @@ impl SystemService for TunnelManager {
 impl Default for TunnelManager {
     fn default() -> TunnelManager {
         TunnelManager::new()
+    }
+}
+
+/// When listening on a tunnel fails we need to try again
+pub struct TunnelMonitorFailure {
+    pub tunnel_to_retry: Tunnel,
+    pub retry_count: u8,
+}
+
+impl Message for TunnelMonitorFailure {
+    type Result = ();
+}
+
+impl Handler<TunnelMonitorFailure> for TunnelManager {
+    type Result = ();
+
+    fn handle(&mut self, msg: TunnelMonitorFailure, _: &mut Context<Self>) -> Self::Result {
+        let tunnel_to_retry = msg.tunnel_to_retry;
+        let retry_count = msg.retry_count;
+
+        if retry_count < 10 {
+            tunnel_to_retry.monitor(retry_count + 1);
+        } else {
+            // this could result in networking not working, it's better to panic if we can't
+            // do anything over the span of 10 retries and 10 seconds
+            let message = "ERROR: Monitoring tunnel has failed! The tunnels cache is an incorrect state";
+            error!("{}", message);
+            panic!(message);
+        }
+    }
+}
+
+/// When listening on a tunnel fails we need to try again
+pub struct TunnelUnMonitorFailure {
+    pub tunnel_to_retry: Tunnel,
+    pub retry_count: u8,
+}
+
+impl Message for TunnelUnMonitorFailure {
+    type Result = ();
+}
+
+impl Handler<TunnelUnMonitorFailure> for TunnelManager {
+    type Result = ();
+
+    fn handle(&mut self, msg: TunnelUnMonitorFailure, _: &mut Context<Self>) -> Self::Result {
+        let tunnel_to_retry = msg.tunnel_to_retry;
+        let retry_count = msg.retry_count;
+
+        if retry_count < 10 {
+            tunnel_to_retry.unmonitor(retry_count + 1);
+        } else {
+            error!(
+                "Unmonitoring tunnel has failed! Babel will now listen on a non-existant tunnel"
+            );
+        }
     }
 }
 
@@ -398,7 +485,7 @@ impl Handler<TriggerGC> for TunnelManager {
             for tunnel in tunnels {
                 // In the same spirit, we return the port to the free port pool only after tunnel
                 // deletion goes well.
-                tunnel.unmonitor();
+                tunnel.unmonitor(0);
                 KI.del_interface(&tunnel.iface_name)?;
                 self.free_ports.push(tunnel.listen_port);
             }
@@ -777,7 +864,7 @@ impl TunnelManager {
             }
         }
         let new_key = tunnel.neigh_id.global;
-        tunnel.monitor();
+        tunnel.monitor(0);
 
         self.tunnels
             .entry(new_key)
@@ -842,7 +929,7 @@ fn tunnel_state_change(
                         );
                         match tunnel.state.registration_state {
                             RegistrationState::NotRegistered => {
-                                tunnel.monitor();
+                                tunnel.monitor(0);
                                 tunnel.state.registration_state = RegistrationState::Registered;
                             }
                             RegistrationState::Registered => {
@@ -854,7 +941,7 @@ fn tunnel_state_change(
                         trace!("Membership for identity {:?} is expired", id);
                         match tunnel.state.registration_state {
                             RegistrationState::Registered => {
-                                tunnel.unmonitor();
+                                tunnel.unmonitor(0);
                                 tunnel.state.registration_state = RegistrationState::NotRegistered;
                             }
                             RegistrationState::NotRegistered => {
