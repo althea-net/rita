@@ -290,7 +290,8 @@ impl Handler<TunnelMonitorFailure> for TunnelManager {
         } else {
             // this could result in networking not working, it's better to panic if we can't
             // do anything over the span of 10 retries and 10 seconds
-            let message = "ERROR: Monitoring tunnel has failed! The tunnels cache is an incorrect state";
+            let message =
+                "ERROR: Monitoring tunnel has failed! The tunnels cache is an incorrect state";
             error!("{}", message);
             panic!(message);
         }
