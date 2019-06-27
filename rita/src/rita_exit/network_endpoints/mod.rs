@@ -26,7 +26,7 @@ use std::time::SystemTime;
 
 pub fn setup_request(
     their_id: (Json<ExitClientIdentity>, HttpRequest),
-) -> Box<Future<Item = Json<ExitState>, Error = Error>> {
+) -> Box<dyn Future<Item = Json<ExitState>, Error = Error>> {
     info!(
         "Received setup request from, {}",
         their_id.0.global.wg_public_key
@@ -61,7 +61,7 @@ pub fn setup_request(
 
 pub fn status_request(
     their_id: Json<ExitClientIdentity>,
-) -> Box<Future<Item = Json<ExitState>, Error = Error>> {
+) -> Box<dyn Future<Item = Json<ExitState>, Error = Error>> {
     trace!(
         "Received requester identity for status, {}",
         their_id.global.wg_public_key

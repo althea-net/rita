@@ -8,7 +8,7 @@ use super::KernelInterface;
 use failure::Error;
 use std::net::Ipv4Addr;
 
-impl KernelInterface {
+impl dyn KernelInterface {
     /// Determines if the provided interface has a configured qdisc
     pub fn has_qdisc(&self, iface_name: &str) -> Result<bool, Error> {
         let result = self.run_command("tc", &["qdisc", "show", "dev", iface_name])?;
