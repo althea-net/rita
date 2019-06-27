@@ -1,4 +1,5 @@
 use crate::rita_common::debt_keeper::{DebtKeeper, SendUpdate};
+use crate::rita_common::oracle::{Oracle, Update};
 use crate::rita_common::peer_listener::GetPeers;
 use crate::rita_common::peer_listener::PeerListener;
 use crate::rita_common::traffic_watcher::{TrafficWatcher, Watch};
@@ -81,6 +82,10 @@ impl Handler<Tick> for RitaFastLoop {
         self.was_gateway = manage_gateway(self.was_gateway);
 
         let start = Instant::now();
+
+        // Update blockchain info put here because people really
+        // hate it when their deposits take a while to show up
+        Oracle::from_registry().do_send(Update());
 
         // watch neighbors for billing
         Arbiter::spawn(
