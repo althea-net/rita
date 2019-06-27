@@ -29,7 +29,7 @@ pub fn get_metric_factor(_req: HttpRequest) -> Result<HttpResponse, Error> {
     Ok(HttpResponse::Ok().json(ret))
 }
 
-pub fn set_local_fee(path: Path<u32>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+pub fn set_local_fee(path: Path<u32>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let new_fee = path.into_inner();
     debug!("/local_fee/{} POST hit", new_fee);
     let babel_port = SETTING.get_network().babel_port;
@@ -63,7 +63,7 @@ pub fn set_local_fee(path: Path<u32>) -> Box<Future<Item = HttpResponse, Error =
     }))
 }
 
-pub fn set_metric_factor(path: Path<u32>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+pub fn set_metric_factor(path: Path<u32>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let new_factor = path.into_inner();
     debug!("/metric_factor/{} POST hit", new_factor);
     let babel_port = SETTING.get_network().babel_port;

@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 
 /// gets the gateway ip for a given mesh IP
-pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Box<Future<Item = IpAddr, Error = Error>> {
+pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Box<dyn Future<Item = IpAddr, Error = Error>> {
     let babel_port = SETTING.get_network().babel_port;
 
     Box::new(
@@ -60,7 +60,7 @@ pub struct IpPair {
 /// not appear in the result vec
 pub fn get_gateway_ip_bulk(
     mesh_ip_list: Vec<IpAddr>,
-) -> Box<Future<Item = Vec<IpPair>, Error = Error>> {
+) -> Box<dyn Future<Item = Vec<IpPair>, Error = Error>> {
     let babel_port = SETTING.get_network().babel_port;
     trace!("getting gateway ip bulk");
 

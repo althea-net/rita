@@ -38,7 +38,7 @@ pub struct NodeInfo {
 /// The routes info might also belong in /exits or a dedicated /routes endpoint
 pub fn get_neighbor_info(
     _req: HttpRequest,
-) -> Box<Future<Item = Json<Vec<NodeInfo>>, Error = Error>> {
+) -> Box<dyn Future<Item = Json<Vec<NodeInfo>>, Error = Error>> {
     Box::new(
         DebtKeeper::from_registry()
             .send(Dump {})
