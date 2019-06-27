@@ -70,7 +70,9 @@ pub fn get_database_connection(
 ) -> impl Future<Item = PooledConnection<ConnectionManager<PgConnection>>, Error = Error> {
     match DB_POOL.read().unwrap().try_get() {
         Some(connection) => Box::new(future::ok(connection))
-            as Box<Future<Item = PooledConnection<ConnectionManager<PgConnection>>, Error = Error>>,
+            as Box<
+                dyn Future<Item = PooledConnection<ConnectionManager<PgConnection>>, Error = Error>,
+            >,
         None => {
             trace!("No available db connection sleeping!");
             let when = Instant::now() + Duration::from_millis(100);
@@ -180,7 +182,7 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
                             Ok(record) => record,
                             Err(e) => {
                                 return Box::new(future::err(e))
-                                    as Box<Future<Item = ExitState, Error = Error>>
+                                    as Box<dyn Future<Item = ExitState, Error = Error>>
                             }
                         };
 
@@ -525,7 +527,7 @@ pub fn setup_clients(
 /// ourselves from exceeding the upstream free tier. As an exit we are the upstream.
 pub fn enforce_exit_clients(
     clients_list: Vec<exit_db::models::Client>,
-) -> Box<Future<Item = (), Error = ()>> {
+) -> Box<dyn Future<Item = (), Error = ()>> {
     let start = Instant::now();
     Box::new(
         DebtKeeper::from_registry()

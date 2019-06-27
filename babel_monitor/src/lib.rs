@@ -124,7 +124,7 @@ fn read_babel(
             let output = String::from_utf8(buffer);
             if let Err(e) = output {
                 return Box::new(future::err(TokioError(format!("{:?}", e)).into()))
-                    as Box<Future<Item = (TcpStream, String), Error = Error>>;
+                    as Box<dyn Future<Item = (TcpStream, String), Error = Error>>;
             }
             let output = output.unwrap();
             let output = output.trim_matches(char::from(0));
@@ -148,7 +148,7 @@ fn read_babel(
                 return Box::new(future::err(
                     ReadFailed(format!("Babel read timed out!")).into(),
                 ))
-                    as Box<Future<Item = (TcpStream, String), Error = Error>>;
+                    as Box<dyn Future<Item = (TcpStream, String), Error = Error>>;
             } else if full_buffer {
                 // our buffer is full, we should recurse right away
                 warn!("Babel read larger than buffer! Consider increasing it's size");

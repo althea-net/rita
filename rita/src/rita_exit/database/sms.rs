@@ -127,7 +127,7 @@ pub fn handle_sms_registration(
                         })
                     }
                 })
-            })) as Box<Future<Item = ExitState, Error = Error>>
+            })) as Box<dyn Future<Item = ExitState, Error = Error>>
         }
         // user has exhausted attempts but is still not submitting code
         (Some(_number), None, true) => Box::new(future::ok(ExitState::Pending {
@@ -148,7 +148,7 @@ pub fn handle_sms_registration(
                         phone_code: None,
                     })
                 })
-            })) as Box<Future<Item = ExitState, Error = Error>>
+            })) as Box<dyn Future<Item = ExitState, Error = Error>>
         }
         // user has attempts remaining and is submitting a code
         (Some(number), Some(code), false) => {
@@ -178,12 +178,12 @@ pub fn handle_sms_registration(
                         })
                     }
                 })
-            })) as Box<Future<Item = ExitState, Error = Error>>
+            })) as Box<dyn Future<Item = ExitState, Error = Error>>
         }
         // user did not submit a phonenumber
         (None, _, _) => Box::new(future::ok(ExitState::Denied {
             message: "This exit requires a phone number to register!".to_string(),
-        })) as Box<Future<Item = ExitState, Error = Error>>,
+        })) as Box<dyn Future<Item = ExitState, Error = Error>>,
     }
 }
 
