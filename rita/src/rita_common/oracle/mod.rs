@@ -282,7 +282,7 @@ fn update_our_price() {
         .finish()
         .unwrap()
         .send()
-        .timeout(Duration::from_secs(1))
+        .timeout(ORACLE_TIMEOUT)
         .then(move |response| {
             match response {
                 Ok(response) => {
