@@ -312,33 +312,15 @@ pub fn ethernet_transform_mode(
             error_occured = true;
         }
     }
+    let locally_owned_ifname = ifname.to_string();
     if error_occured {
         let res = KI.uci_revert("network");
         bail!("Error running UCI commands! Revert attempted: {:?}", res);
     } else if mesh_add {
-        trace!("Mesh add! going to sleep for 60 seconds to get a local fe80 address");
-        let when = Instant::now() + Duration::from_secs(60);
-        let locally_owned_ifname = ifname.to_string();
-
-        // repeated in Listen added here to prevent config inconsistency
         SETTING
             .get_network_mut()
             .peer_interfaces
             .insert(locally_owned_ifname.clone());
-
-        let fut = Delay::new(when)
-            .map_err(|e| warn!("timer failed; err={:?}", e))
-            .and_then(move |_| {
-                trace!("rebooting router for {:?}", locally_owned_ifname);
-                // it's now safe to restart the router, return an error if that fails somehow
-                // do not remove this, we lose the multicast listeners on other mesh ports when
-                // we toggle network modes, this means we will clean up valid tunnels 15 minutes
-                // after the toggle unless we do this
-                let _ = KI.run_command("reboot", &[]);
-                Ok(())
-            });
-
-        Arbiter::spawn(fut);
     }
 
     KI.uci_commit(&"network")?;
@@ -348,6 +330,20 @@ pub fn ethernet_transform_mode(
     // We edited disk contents, force global sync
     KI.fs_sync()?;
     trace!("Successsfully transformed ethernet mode, rebooting in 60 seconds");
+    let when = Instant::now() + Duration::from_secs(60);
+    let fut = Delay::new(when)
+        .map_err(|e| warn!("timer failed; err={:?}", e))
+        .and_then(move |_| {
+            trace!("rebooting router for {:?}", locally_owned_ifname);
+            // it's now safe to restart the router, return an error if that fails somehow
+            // do not remove this, we lose the multicast listeners on other mesh ports when
+            // we toggle network modes, this means we will clean up valid tunnels 15 minutes
+            // after the toggle unless we do this
+            let _ = KI.run_command("reboot", &[]);
+            Ok(())
+        });
+
+    Arbiter::spawn(fut);
 
     Ok(())
 }
@@ -466,20 +462,11 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
             res_b
         );
     } else if mesh_add {
-        let when = Instant::now() + Duration::from_millis(60000);
-
-        let fut = Delay::new(when)
-            .map_err(|e| warn!("timer failed; err={:?}", e))
-            .and_then(move |_| {
-                // it's now safe to restart the router, return an error if that fails somehow
-                // do not remove this, we lose the multicast listeners on other mesh ports when
-                // we toggle network modes, this means we will clean up valid tunnels 15 minutes
-                // after the toggle unless we do this
-                let _ = KI.run_command("reboot", &[]);
-                Ok(())
-            });
-
-        Arbiter::spawn(fut);
+        let locally_owned_ifname = ifname.to_string();
+        SETTING
+            .get_network_mut()
+            .peer_interfaces
+            .insert(locally_owned_ifname.clone());
     }
 
     KI.uci_commit(&"wireless")?;
@@ -490,6 +477,20 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
+
+    let when = Instant::now() + Duration::from_millis(60000);
+    let fut = Delay::new(when)
+        .map_err(|e| warn!("timer failed; err={:?}", e))
+        .and_then(move |_| {
+            // it's now safe to restart the router, return an error if that fails somehow
+            // do not remove this, we lose the multicast listeners on other mesh ports when
+            // we toggle network modes, this means we will clean up valid tunnels 15 minutes
+            // after the toggle unless we do this
+            let _ = KI.run_command("reboot", &[]);
+            Ok(())
+        });
+
+    Arbiter::spawn(fut);
 
     Ok(())
 }
