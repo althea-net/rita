@@ -19,7 +19,7 @@ fn default_metric_factor() -> u32 {
 }
 
 fn default_usage_tracker_file() -> String {
-    "/var/rita-usage-tracker.json".to_string()
+    "/etc/rita-usage-tracker.json".to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
