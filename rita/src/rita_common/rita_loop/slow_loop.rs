@@ -101,13 +101,9 @@ fn set_babel_price() {
         open_babel_stream(babel_port)
             .from_err()
             .and_then(move |stream| {
-                println!("We opened the stream!");
                 start_connection(stream).and_then(move |stream| {
-                    println!("We started the connection!");
-                    set_local_fee(stream, local_fee).and_then(move |stream| {
-                        println!(" we set the local fee");
-                        Ok(set_metric_factor(stream, metric_factor))
-                    })
+                    set_local_fee(stream, local_fee)
+                        .and_then(move |stream| Ok(set_metric_factor(stream, metric_factor)))
                 })
             })
             .timeout(SLOW_LOOP_TIMEOUT)
