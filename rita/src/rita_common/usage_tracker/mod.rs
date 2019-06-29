@@ -30,7 +30,7 @@ use std::time::UNIX_EPOCH;
 
 /// On year worth of usage storage
 const MAX_ENTRIES: usize = 8760;
-/// Save every 24 hours
+/// Save every 4 hours
 const SAVE_FREQENCY: u64 = 4;
 
 /// In an effort to converge this module between the three possible bw tracking
@@ -159,6 +159,8 @@ impl Supervised for UsageTracker {}
 impl SystemService for UsageTracker {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("UsageTracker started");
+        // TODO: remove this in beta 7
+        SETTING.get_network_mut().usage_tracker_file = "/etc/rita-usage-tracker.json".to_string();
     }
 }
 
