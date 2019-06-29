@@ -20,28 +20,32 @@
 //!
 //!
 //! TickEvent:
-//!     State::Deposit:
+//!     State::Ready:
 //!         If there is a Dai balance, send it thru the bridge into xdai (this rescues stuck funds in Dai)
 //!
 //!         If there is an `eth_balance` that is greater than the `minimum_to_exchange` amount,
-//!         subtract the `reserve` amount and convert it through uniswap into DAI.
+//!         subtract the `reserve` amount and send it through uniswap into DAI. Change to State::Depositing.
 //!
-//!         Future waits on Uniswap, and upon successful swap, sends dai thru the bridge into xdai.
-//!
-//!     State::Withdraw { to, amount, timestamp}:
-//!         If the timestamp is expired, switch the state back into State::Deposit.
+//!     State::Depositing:
+//!         If there is a Dai balance, send it thru the bridge into xdai (this rescues stuck funds in Dai)
+//!         
+//!         Future waits on Uniswap, and upon successful swap, sends dai thru the bridge into xdai. If it
+//!         times out, change to State::Ready.
+//!  
+//!     State::Withdrawing { to, amount, timestamp}:
+//!         If the timestamp is expired, switch the state back into State::Ready.
 //!
 //!         If there is a dai balance greater or equal to the withdraw amount, send the withdraw
 //!         amount through uniswap.
 //!
 //!         Future waits on Uniswap and upon successful swap, sends eth to "to" address. Another future
-//!         waits on this transfer to complete. When it is complete, the state switches back to State::Deposit
+//!         waits on this transfer to complete. When it is complete, the state switches back to State::Ready
 //!
 //! WithdrawEvent:
-//!     State::Deposit:
-//!         Send amount into bridge, switch to State::Withdraw.
+//!     State::Ready:
+//!         Send amount into bridge, switch to State::Withdrawing.
 //!
-//!     State::Withdraw { to, amount, timestamp}:
+//!     State::Withdrawing { to, amount, timestamp}:
 //!         Nothing happens
 
 use crate::SETTING;
