@@ -85,6 +85,8 @@ impl Handler<Update> for Oracle {
         get_net_version(&web3, full_node);
         if oracle_enabled {
             update_our_price();
+        } else {
+            info!("User has disabled the price oracle");
         }
         self.last_updated = Instant::now();
     }
