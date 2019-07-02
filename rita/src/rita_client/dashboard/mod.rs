@@ -11,6 +11,7 @@ pub mod logging;
 pub mod mesh_ip;
 pub mod neighbors;
 pub mod notifications;
+pub mod release_feed;
 pub mod system_chain;
 pub mod update;
 pub mod usage;
