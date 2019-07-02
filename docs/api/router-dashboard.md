@@ -1404,3 +1404,59 @@ amounts are in wei
 `curl -v -XGET http://192.168.10.1:4877/usage/payments`
 
 ---
+
+## /release_feed/set/{feed}
+
+Sets the release feed for the router update process, there are 3 feeds in order of
+least to most stable. 
+
+ReleaseCandidate
+PreRelease
+GeneralAvailability
+
+- URL: `<rita ip>:<rita_dashboard_port>/release_feed/set/{feed}`
+- Method: `POST`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+()
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl -XPOST 127.0.0.1:<rita_dashboard_port>/release_feed/set/PreRelease`
+
+---
+
+## /release_feed/get
+
+Gets the release feed for the router update process, there are 3 feeds in order of
+least to most stable. 
+
+ReleaseCandidate
+PreRelease
+GeneralAvailability
+
+- URL: `<rita ip>:<rita_dashboard_port>/release_feed/get`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+()
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl http://192.168.10.1:4877/release_feed/get`
