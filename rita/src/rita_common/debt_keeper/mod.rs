@@ -22,10 +22,18 @@ use althea_types::{Identity, PaymentTx};
 use failure::Error;
 use num256::{Int256, Uint256};
 use num_traits::Signed;
+use serde_json::Error as SerdeError;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Error as IOError;
+use std::io::Read;
+use std::io::Write;
 use std::time::Duration;
 use std::time::Instant;
+
+/// Four hours
+const SAVE_FREQENCY: Duration = Duration::from_secs(14400);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodeDebtData {
@@ -72,7 +80,10 @@ impl NodeDebtData {
 
 pub type DebtData = HashMap<Identity, NodeDebtData>;
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DebtKeeper {
+    #[serde(skip_serializing, skip_deserializing)]
+    last_save: Option<Instant>,
     debt_data: DebtData,
 }
 
@@ -208,6 +219,8 @@ impl Handler<SendUpdate> for DebtKeeper {
 
     fn handle(&mut self, _msg: SendUpdate, _ctx: &mut Context<Self>) -> Self::Result {
         trace!("sending debt keeper update");
+        self.save_if_needed();
+
         // in order to keep from overloading actix when we have thousands of debts to process
         // (mainly on exits) we batch tunnel change operations before sending them over
         let mut debts_message = Vec::new();
@@ -248,18 +261,82 @@ impl Handler<SendUpdate> for DebtKeeper {
 
 impl Default for DebtKeeper {
     fn default() -> DebtKeeper {
-        Self::new()
+        assert!(SETTING.get_payment().pay_threshold >= Int256::from(0));
+        assert!(SETTING.get_payment().close_threshold <= Int256::from(0));
+        let file = File::open(SETTING.get_payment().debts_file.clone());
+        // if the loading process goes wrong for any reason, we just start again
+        let blank_usage_tracker = DebtKeeper {
+            last_save: Some(Instant::now()),
+            debt_data: HashMap::new(),
+        };
+
+        match file {
+            Ok(mut file) => {
+                let mut contents = String::new();
+                match file.read_to_string(&mut contents) {
+                    Ok(_bytes_read) => {
+                        let deserialized: Result<DebtKeeper, SerdeError> =
+                            serde_json::from_str(&contents);
+
+                        match deserialized {
+                            Ok(value) => value,
+                            Err(e) => {
+                                error!("Failed to deserialize usage tracker {:?}", e);
+                                blank_usage_tracker
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to read usage tracker file! {:?}", e);
+                        blank_usage_tracker
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to open usage tracker file! {:?}", e);
+                blank_usage_tracker
+            }
+        }
     }
 }
 
 impl DebtKeeper {
+    #[cfg(test)]
     pub fn new() -> Self {
         assert!(SETTING.get_payment().pay_threshold >= Int256::from(0));
         assert!(SETTING.get_payment().close_threshold <= Int256::from(0));
 
         DebtKeeper {
+            last_save: None,
             debt_data: DebtData::new(),
         }
+    }
+
+    fn save_if_needed(&mut self) {
+        match self.last_save {
+            Some(val) => {
+                if Instant::now() - val > SAVE_FREQENCY {
+                    if let Err(e) = self.save() {
+                        error!("Failed to save debts {:?}", e);
+                    } else {
+                        self.last_save = Some(Instant::now());
+                    }
+                }
+            }
+            None => {
+                if let Err(e) = self.save() {
+                    error!("Failed to save debts {:?}", e);
+                } else {
+                    self.last_save = Some(Instant::now());
+                }
+            }
+        }
+    }
+
+    fn save(&mut self) -> Result<(), IOError> {
+        let serialized = serde_json::to_string(self)?;
+        let mut file = File::create(SETTING.get_payment().debts_file.clone())?;
+        file.write_all(serialized.as_bytes())
     }
 
     fn get_debts(&self) -> DebtData {
