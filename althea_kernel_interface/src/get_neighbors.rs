@@ -16,8 +16,13 @@ impl dyn KernelInterface {
         trace!("Got {:?} from `ip neighbor`", output);
 
         let mut vec = Vec::new();
-        let re = Regex::new(r"(\S*).*dev (\S*).*lladdr (\S*).*(REACHABLE|STALE|DELAY)").unwrap();
-        for caps in re.captures_iter(&String::from_utf8(output.stdout)?) {
+
+        lazy_static! {
+            static ref RE: Regex =
+                Regex::new(r"(\S*).*dev (\S*).*lladdr (\S*).*(REACHABLE|STALE|DELAY)")
+                    .expect("Unable to compile regular expression");
+        }
+        for caps in RE.captures_iter(&String::from_utf8(output.stdout)?) {
             trace!("Regex captured {:?}", caps);
 
             vec.push((IpAddr::from_str(&caps[1])?, caps[2].to_string()));

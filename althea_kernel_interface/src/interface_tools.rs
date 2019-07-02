@@ -12,8 +12,12 @@ impl dyn KernelInterface {
         let links = String::from_utf8(self.run_command("ip", &["link"])?.stdout)?;
 
         let mut vec = Vec::new();
-        let re = Regex::new(r"[0-9]+: (.*?)(:|@)").unwrap();
-        for caps in re.captures_iter(&links) {
+
+        lazy_static! {
+            static ref RE: Regex =
+                Regex::new(r"[0-9]+: (.*?)(:|@)").expect("Unable to compile regular expression");
+        }
+        for caps in RE.captures_iter(&links) {
             vec.push(String::from(&caps[1]));
         }
 
@@ -40,8 +44,11 @@ impl dyn KernelInterface {
         let output = self.run_command("wg", &["show", name, "endpoints"])?;
         let stdout = String::from_utf8(output.stdout)?;
 
-        let reg = Regex::new(r"(?:([0-9a-f:]+)%)|(?:([0-9\.]+):)")?;
-        let cap = reg.captures(&stdout);
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r"(?:([0-9a-f:]+)%)|(?:([0-9\.]+):)")
+                .expect("Unable to compile regular expression");
+        }
+        let cap = RE.captures(&stdout);
 
         match cap {
             Some(cap) => {
