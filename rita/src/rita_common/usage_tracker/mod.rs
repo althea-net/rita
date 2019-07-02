@@ -159,8 +159,6 @@ impl Supervised for UsageTracker {}
 impl SystemService for UsageTracker {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("UsageTracker started");
-        // TODO: remove this in beta 7
-        SETTING.get_network_mut().usage_tracker_file = "/etc/rita-usage-tracker.json".to_string();
     }
 }
 
