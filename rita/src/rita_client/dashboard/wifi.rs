@@ -10,22 +10,22 @@ use serde_json::Value;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 
-// legal in the US and around the world, don't allow odd channels
+/// legal in the US and around the world, don't allow odd channels
 pub const ALLOWED_TWO: [u16; 3] = [1, 6, 11];
-// list of nonoverlapping 20mhz channels generally legal in NA, SA, EU, AU
+/// list of nonoverlapping 20mhz channels generally legal in NA, SA, EU, AU
 pub const ALLOWED_FIVE_20: [u16; 22] = [
     36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 132, 136, 140, 144, 149, 153, 157,
     161, 165,
 ];
 // Note: all channels wider than 20mhz are specified using the first channel they overlap
 //       rather than the center value, no idea who though that was a good idea
-// list of nonoverlapping 40mhz channels generally legal in NA, SA, EU, AU
+/// list of nonoverlapping 40mhz channels generally legal in NA, SA, EU, AU
 pub const ALLOWED_FIVE_40: [u16; 12] = [36, 44, 52, 60, 100, 108, 116, 124, 132, 140, 149, 157];
-// list of nonoverlapping 80mhz channels generally legal in NA, SA, EU, AU
+/// list of nonoverlapping 80mhz channels generally legal in NA, SA, EU, AU
 pub const ALLOWED_FIVE_80: [u16; 6] = [36, 52, 100, 116, 132, 149];
-// list of nonoverlapping 80mhz channels for the GLB1300
+/// list of nonoverlapping 80mhz channels for the GLB1300
 pub const ALLOWED_FIVE_80_B1300: [u16; 2] = [36, 149];
-// list of nonoverlapping 160mhz channels generally legal in NA, SA, EU, AU
+/// list of nonoverlapping 160mhz channels generally legal in NA, SA, EU, AU
 pub const ALLOWED_FIVE_160: [u16; 2] = [36, 100];
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -229,7 +229,8 @@ pub fn set_wifi_multi(wifi_changes: Json<Vec<WifiToken>>) -> Result<HttpResponse
     Ok(HttpResponse::Ok().json(()))
 }
 
-/// Validates that the channel is both correct and legal
+/// Validates that the channel is both correct and legal the underlying driver should prevent
+/// channels for the wrong region, but we go tht extra mile just in case
 fn validate_channel(
     old_val: u16,
     new_val: u16,

@@ -54,6 +54,7 @@ use crate::rita_client::dashboard::logging::*;
 use crate::rita_client::dashboard::mesh_ip::*;
 use crate::rita_client::dashboard::neighbors::*;
 use crate::rita_client::dashboard::notifications::*;
+use crate::rita_client::dashboard::release_feed::*;
 use crate::rita_client::dashboard::system_chain::*;
 use crate::rita_client::dashboard::update::*;
 use crate::rita_client::dashboard::usage::*;
@@ -299,6 +300,8 @@ fn start_client_dashboard() {
             .route("/usage/payments", Method::GET, get_payments)
             .route("/router/update", Method::POST, update_router)
             .route("/router/password", Method::POST, set_pass)
+            .route("/release_feed/get", Method::GET, get_release_feed)
+            .route("/release_feed/set/{feed}", Method::POST, set_release_feed)
             .route("/wipe", Method::POST, wipe)
             .route("/crash_actors", Method::POST, crash_actors)
     })
