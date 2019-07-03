@@ -55,8 +55,8 @@ use crate::rita_client::dashboard::mesh_ip::*;
 use crate::rita_client::dashboard::neighbors::*;
 use crate::rita_client::dashboard::notifications::*;
 use crate::rita_client::dashboard::release_feed::*;
+use crate::rita_client::dashboard::router::*;
 use crate::rita_client::dashboard::system_chain::*;
-use crate::rita_client::dashboard::update::*;
 use crate::rita_client::dashboard::usage::*;
 use crate::rita_client::dashboard::wifi::*;
 use crate::rita_common::dashboard::auth::*;
@@ -298,6 +298,7 @@ fn start_client_dashboard() {
             .route("/usage/relay", Method::GET, get_relay_usage)
             .route("/usage/client", Method::GET, get_client_usage)
             .route("/usage/payments", Method::GET, get_payments)
+            .route("/router/reboot", Method::POST, reboot_router)
             .route("/router/update", Method::POST, update_router)
             .route("/router/password", Method::POST, set_pass)
             .route("/release_feed/get", Method::GET, get_release_feed)
