@@ -1,9 +1,11 @@
 use crate::ARGS;
 use crate::KI;
 use crate::SETTING;
-use ::actix_web::{HttpRequest, HttpResponse, Json};
+use actix_web::{HttpRequest, HttpResponse, Json};
+use althea_types::ExitState;
 use clarity::PrivateKey;
 use failure::Error;
+use settings::client::RitaClientSettings;
 use settings::FileWrite;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
@@ -38,6 +40,11 @@ pub fn set_eth_private_key(data: Json<EthPrivateKey>) -> Result<HttpResponse, Er
     let pk: PrivateKey = data.into_inner().eth_private_key.parse()?;
     SETTING.get_payment_mut().eth_private_key = Some(pk);
     SETTING.get_payment_mut().eth_address = Some(pk.to_public_key()?);
+
+    let mut exits = SETTING.get_exits_mut();
+    for mut exit in exits.iter_mut() {
+        exit.1.info = ExitState::New;
+    }
 
     // try and save the config and fail if we can't
     if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
