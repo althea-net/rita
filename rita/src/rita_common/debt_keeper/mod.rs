@@ -507,9 +507,7 @@ impl DebtKeeper {
 
                 info!(
                     "debt {} is below close threshold {} for {}. suspending forwarding",
-                    debt_data.debt,
-                    close_threshold,
-                    ident.mesh_ip
+                    debt_data.debt, close_threshold, ident.mesh_ip
                 );
                 debt_data.action = DebtAction::SuspendTunnel;
                 Ok(DebtAction::SuspendTunnel)
