@@ -266,7 +266,7 @@ impl Default for DebtKeeper {
         let file = File::open(SETTING.get_payment().debts_file.clone());
         // if the loading process goes wrong for any reason, we just start again
         let blank_debt_keeper = DebtKeeper {
-            last_save: Some(Instant::now()),
+            last_save: None,
             debt_data: HashMap::new(),
         };
 
