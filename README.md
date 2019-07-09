@@ -5,17 +5,18 @@ This contains many (although confusingly not all) of the Rust components for the
 The primary binary crate in this repo is 'rita' which produces two binaries 'rita' and 'rita_exit'
 see the file headers for descriptions.
 
-This is primarily an infrastructure repo, to get a working version of Althea you should look at [installer](https://github.com/althea-mesh/installer) for desktop linux and [althea-firmware](https://github.com/althea-mesh/althea-firmware) for OpenWRT.
+This is primarily an infrastructure repo, to get a working version of Althea for real world use you should look at [installer](https://github.com/althea-mesh/installer) for desktop linux and [althea-firmware](https://github.com/althea-mesh/
+althea-firmware) for OpenWRT.
 
 ## Building
 
 Debian:
 
-    sudo apt-get install build-essential libssl-dev libsqlite3-dev pkg-config postgresql-dev
+    sudo apt-get install build-essential libssl-dev libsqlite3-dev pkg-config postgresql-server-dev-all
 
 Ubuntu:
 
-    sudo apt-get install build-essential libssl-dev libsqlite3-dev pkg-config postgresql-dev
+    sudo apt-get install build-essential libssl-dev libsqlite3-dev pkg-config postgresql-server-dev-all
 
 Centos:
 
@@ -39,9 +40,22 @@ If you want to build a development build that contains unsafe options that are n
 
     cargo build --all --features development
 
-## Development
+## Testing
 
-Please install required git hooks before contributing. Those hooks are responsible for making the codebase consistent.
+If you wish to test a commit you are developing, or just see Rita in action locally run
+
+    bash scripts/test.sh
+
+This runs both the unit and integration tests you will need to have installed the depenencies listed in the Building section
+as well as docker and have the [WireGuard](https://www.wireguard.com/install/) kernel module loaded for your operating system.
+
+## Contributing
+
+This codebase is formatted using rustfmt, you can format your commits manually with
+
+    cargo +stable fmt
+
+Or install our git hook to do it for you.
 
 ```sh
 rustup component add rustfmt-preview --toolchain nightly
