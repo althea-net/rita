@@ -265,7 +265,7 @@ impl Default for DebtKeeper {
         assert!(SETTING.get_payment().close_threshold <= Int256::from(0));
         let file = File::open(SETTING.get_payment().debts_file.clone());
         // if the loading process goes wrong for any reason, we just start again
-        let blank_usage_tracker = DebtKeeper {
+        let blank_debt_keeper = DebtKeeper {
             last_save: Some(Instant::now()),
             debt_data: HashMap::new(),
         };
@@ -282,19 +282,19 @@ impl Default for DebtKeeper {
                             Ok(value) => value,
                             Err(e) => {
                                 error!("Failed to deserialize debts file {:?}", e);
-                                blank_usage_tracker
+                                blank_debt_keeper
                             }
                         }
                     }
                     Err(e) => {
                         error!("Failed to read debts file! {:?}", e);
-                        blank_usage_tracker
+                        blank_debt_keeper
                     }
                 }
             }
             Err(e) => {
                 error!("Failed to open debts file! {:?}", e);
-                blank_usage_tracker
+                blank_debt_keeper
             }
         }
     }
