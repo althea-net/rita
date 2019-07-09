@@ -281,19 +281,19 @@ impl Default for DebtKeeper {
                         match deserialized {
                             Ok(value) => value,
                             Err(e) => {
-                                error!("Failed to deserialize usage tracker {:?}", e);
+                                error!("Failed to deserialize debts file {:?}", e);
                                 blank_usage_tracker
                             }
                         }
                     }
                     Err(e) => {
-                        error!("Failed to read usage tracker file! {:?}", e);
+                        error!("Failed to read debts file! {:?}", e);
                         blank_usage_tracker
                     }
                 }
             }
             Err(e) => {
-                error!("Failed to open usage tracker file! {:?}", e);
+                error!("Failed to open debts file! {:?}", e);
                 blank_usage_tracker
             }
         }
