@@ -1071,12 +1071,12 @@ def main():
 
     print("Check that tunnels have not been suspended")
 
-    assert_test(not check_log_contains("rita-n1.log", "debt is below close threshold"), "Suspension of 1 (A)")
-    assert_test(not check_log_contains("rita-n2.log", "debt is below close threshold"), "Suspension of 2 (B)")
-    assert_test(not check_log_contains("rita-n3.log", "debt is below close threshold"), "Suspension of 3 (C)")
-    assert_test(not check_log_contains("rita-n4.log", "debt is below close threshold"), "Suspension of 4 (D)")
-    assert_test(not check_log_contains("rita-n6.log", "debt is below close threshold"), "Suspension of 6 (F)")
-    assert_test(not check_log_contains("rita-n7.log", "debt is below close threshold"), "Suspension of 7 (G)")
+    assert_test(not check_log_contains("rita-n1.log", "suspending forwarding"), "Suspension of 1 (A)")
+    assert_test(not check_log_contains("rita-n2.log", "suspending forwarding"), "Suspension of 2 (B)")
+    assert_test(not check_log_contains("rita-n3.log", "suspending forwarding"), "Suspension of 3 (C)")
+    assert_test(not check_log_contains("rita-n4.log", "suspending forwarding"), "Suspension of 4 (D)")
+    assert_test(not check_log_contains("rita-n6.log", "suspending forwarding"), "Suspension of 6 (F)")
+    assert_test(not check_log_contains("rita-n7.log", "suspending forwarding"), "Suspension of 7 (G)")
 
     if DEBUG:
         print("Debug mode active, examine the mesh after tests and press " +
