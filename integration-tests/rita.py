@@ -26,6 +26,7 @@ BOUNTY_HUNTER_DEFAULT = os.path.join(os.path.dirname(__file__), '/tmp/bounty_hun
 
 # Envs for controlling postgres
 POSTGRES_USER = os.getenv('POSTGRES_USER')
+INITDB_BIN = os.getenv('INITDB_BIN')
 POSTGRES_BIN = os.getenv('POSTGRES_BIN')
 POSTGRES_CONFIG = os.getenv('POSTGRES_CONFIG')
 POSTGRES_DATABASE = os.getenv('POSTGRES_DATABASE')
@@ -525,10 +526,15 @@ class World:
         print("namespaces prepped")
 
         print("Starting postgres in exit namespace")
-        exec_or_exit("sudo ip netns exec {} sudo -u {} {} -D {} -c config_file={}".format(EXIT_NAMESPACE, POSTGRES_USER, POSTGRES_BIN, POSTGRES_DATABASE, POSTGRES_CONFIG), False)
+        if POSTGRES_DATABASE is not None:
+            exec_or_exit("sudo ip netns exec {} sudo -u {} {} -D {} -c config_file={}".format(EXIT_NAMESPACE, POSTGRES_USER, POSTGRES_BIN, POSTGRES_DATABASE, POSTGRES_CONFIG), False)
+            time.sleep(30)
+        else: 
+            exec_or_exit("sudo ip netns exec {} sudo -u {} PGDATA=/var/lib/postgresql/data {}".format(EXIT_NAMESPACE, POSTGRES_USER, INITDB_BIN), True)
+            exec_or_exit("sudo ip netns exec {} sudo -u {} PGDATA=/var/lib/postgresql/data {}".format(EXIT_NAMESPACE, POSTGRES_USER, POSTGRES_BIN), False)
+            time.sleep(30)
+            exec_or_exit("psql -c 'create database test;' -U postgres", True)
 
-
-        time.sleep(30)
 
         print("Perform initial database migrations")
         exec_or_exit('sudo ip netns exec {} diesel migration run --database-url="postgres://postgres@localhost/test" --migration-dir=../exit_db/migrations'.format(EXIT_NAMESPACE))
