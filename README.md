@@ -49,6 +49,8 @@ If you wish to test a commit you are developing, or just see Rita in action loca
 This runs both the unit and integration tests you will need to have installed the depenencies listed in the Building section
 as well as docker and have the [WireGuard](https://www.wireguard.com/install/) kernel module loaded for your operating system.
 
+Due to a gotcha in the docker container build you will need to have your changes commited for the integration tests to work.
+
 ## Contributing
 
 This codebase is formatted using rustfmt, you can format your commits manually with
