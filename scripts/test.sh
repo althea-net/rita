@@ -8,7 +8,17 @@ docker system prune -a
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 DOCKERFOLDER=$DIR/../integration-tests/container/
-git archive -v -o $DOCKERFOLDER/rita.tar.gz --format=tar.gz HEAD
+REPOFOLDER=$DIR/..
+tar --exclude $REPOFOLDER/target \
+    --exclude $REPOFOLDER/**/target \
+    --exclude $REPOFOLDER/integration-tests/althea_rs_a \
+    --exclude $REPOFOLDER/integration-tests/althea_rs_b \
+    --exclude $REPOFOLDER/integration-tests/target_a \
+    --exclude $REPOFOLDER/integration-tests/target_b \
+    --exclude $REPOFOLDER/integration-tests/deps \
+    --exclude $REPOFOLDER/integration-tests/container/rita.tar.gz \
+    --exclude $REPOFOLDER/scripts -czf $DOCKERFOLDER/rita.tar.gz $REPOFOLDER
+#git archive -v -o $DOCKERFOLDER/rita.tar.gz --format=tar.gz HEAD
 pushd $DOCKERFOLDER
 docker build -t rita-test .
 docker run --privileged -it rita-test

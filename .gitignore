@@ -23,3 +23,5 @@ integration-tests/target*
 integration-tests/mail/*
 integration-tests/bounty.db-journal
 *.pem
+*__pycache__*
+*.tar*
