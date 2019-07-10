@@ -148,7 +148,7 @@ fn create_or_update_user_record(
 ) -> Result<models::Client, Error> {
     use self::schema::clients::dsl::clients;
     let client_mesh_ip = client.global.mesh_ip;
-    if client_exists(&client_mesh_ip, conn)? {
+    if client_exists(&client, conn)? {
         update_client(&client, conn)?;
         Ok(get_client(client_mesh_ip, conn)?)
     } else {
@@ -234,7 +234,7 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
 
     trace!("Checking if record exists for {:?}", client.global.mesh_ip);
 
-    if client_exists(&client.global.mesh_ip, &conn)? {
+    if client_exists(&client, &conn)? {
         trace!("record exists, updating");
 
         let their_record = get_client(client_mesh_ip, &conn)?;
