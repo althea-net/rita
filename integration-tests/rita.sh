@@ -56,7 +56,7 @@ build_rev() {
 
   pushd $dir
     git checkout $revision
-    cargo build --verbose --all
+    cargo build --all
   popd
 }
 
@@ -102,9 +102,9 @@ if [ ! -z "${COMPAT_LAYOUT-}" ] ; then
   cp -r $DIR_B/target/* $target_dir
 else
   pushd ..
-    cargo build --verbose --all
+    cargo build --all
   popd
 fi
 
 
-sudo -E PATH="$PATH:$HOME/.cargo/bin" python3 rita.py $@
+sudo -E PATH="$PATH:$HOME/.cargo/bin" python3 integration-test-script/rita.py $@
