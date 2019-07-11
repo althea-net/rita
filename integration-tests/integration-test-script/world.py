@@ -24,6 +24,9 @@ from utils import start_babel
 from utils import start_bounty
 from utils import get_rita_settings
 from utils import assert_test
+from utils import ip_to_num
+from utils import num_to_ip
+from utils import fuzzy_match
 
 
 class World:
@@ -73,7 +76,8 @@ class World:
         exit_index = self.exit_id - 1
 
         if VERBOSE:
-            print("DB setup: bounty_hunter index: {}, exit index: {}".format(bounty_index, exit_index))
+            print("DB setup: bounty_hunter index: {}, exit index: {}".format(
+                bounty_index, exit_index))
 
         if COMPAT_LAYOUT:
             # Figure out whether release A or B was
@@ -85,7 +89,8 @@ class World:
             elif layout[exit_index] == 'b':
                 exit_repo_dir = DIR_B
             else:
-                print("DB setup: Unknown release {} assigned to exit".format(layout[exit_index]))
+                print("DB setup: Unknown release {} assigned to exit".format(
+                    layout[exit_index]))
                 sys.exit(1)
 
         # Save the current dir
@@ -97,17 +102,8 @@ class World:
             print("DB setup: Entering {}/bounty_hunter".format(bounty_repo_dir))
 
         os.system(("rm -rf test.db " +
-            "&& diesel migration run" +
-            "&& cp test.db {dest}").format(dest=os.path.join(cwd, "bounty.db")))
-
-        # Go to exit_db/ in the exit's release
-        os.chdir(os.path.join(cwd, exit_repo_dir, "exit_db"))
-        if VERBOSE:
-            print("DB setup: Entering {}/exit_db".format(exit_repo_dir))
-
-        os.system(("rm -rf test.db " +
-            "&& diesel migration run" +
-            "&& cp test.db {dest}").format(dest=os.path.join(cwd, "exit.db")))
+                   "&& diesel migration run" +
+                   "&& cp test.db {dest}").format(dest=os.path.join(cwd, "bounty.db")))
 
         # Go back to where we started
         os.chdir(cwd)
@@ -136,7 +132,8 @@ class World:
         print("network topology: {}".format(network))
 
         print(NETWORK_LAB)
-        proc = subprocess.Popen(['/bin/bash', NETWORK_LAB], stdin=subprocess.PIPE, universal_newlines=True)
+        proc = subprocess.Popen(
+            ['/bin/bash', NETWORK_LAB], stdin=subprocess.PIPE, universal_newlines=True)
         proc.stdin.write(network_string)
         proc.stdin.close()
 
@@ -151,18 +148,23 @@ class World:
 
         print("Starting postgres in exit namespace")
         if POSTGRES_DATABASE is not None:
-            exec_or_exit("sudo ip netns exec {} sudo -u {} {} -D {} -c config_file={}".format(EXIT_NAMESPACE, POSTGRES_USER, POSTGRES_BIN, POSTGRES_DATABASE, POSTGRES_CONFIG), False)
+            exec_or_exit("sudo ip netns exec {} sudo -u {} {} -D {} -c config_file={}".format(
+                EXIT_NAMESPACE, POSTGRES_USER, POSTGRES_BIN, POSTGRES_DATABASE, POSTGRES_CONFIG), False)
             time.sleep(30)
-        else: 
-            exec_no_exit("sudo ip netns exec {} sudo -u {} PGDATA=/var/lib/postgresql/data {}".format(EXIT_NAMESPACE, POSTGRES_USER, INITDB_BIN), True)
-            exec_or_exit("sudo ip netns exec {} sudo -u {} PGDATA=/var/lib/postgresql/data {}".format(EXIT_NAMESPACE, POSTGRES_USER, POSTGRES_BIN), False)
+        else:
+            exec_no_exit("sudo ip netns exec {} sudo -u {} PGDATA=/var/lib/postgresql/data {}".format(
+                EXIT_NAMESPACE, POSTGRES_USER, INITDB_BIN), True)
+            exec_or_exit("sudo ip netns exec {} sudo -u {} PGDATA=/var/lib/postgresql/data {}".format(
+                EXIT_NAMESPACE, POSTGRES_USER, POSTGRES_BIN), False)
             time.sleep(30)
+            exec_no_exit("psql -c 'drop database test;' -U postgres", True)
             exec_no_exit("psql -c 'create database test;' -U postgres", True)
-
 
         print("Perform initial database migrations")
         exec_or_exit('sudo ip netns exec {} diesel migration run --database-url="postgres://postgres@localhost/test" --migration-dir=../exit_db/migrations'.format(EXIT_NAMESPACE))
 
+        # redo the migration so that we can run several times
+        exec_or_exit('sudo ip netns exec {} diesel migration redo --database-url="postgres://postgres@localhost/test" --migration-dir=../exit_db/migrations'.format(EXIT_NAMESPACE))
 
         print("starting babel")
 
@@ -176,23 +178,27 @@ class World:
         print("DB setup OK")
 
         print("starting bounty hunter")
-        (RITA, RITA_EXIT, BOUNTY_HUNTER) = switch_binaries(self.bounty_id, VERBOSE, RITA, RITA_EXIT, BOUNTY_HUNTER, COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B, BOUNTY_HUNTER_A, BOUNTY_HUNTER_B)
+        (RITA, RITA_EXIT, BOUNTY_HUNTER) = switch_binaries(self.bounty_id, VERBOSE, RITA, RITA_EXIT, BOUNTY_HUNTER,
+                                                           COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B, BOUNTY_HUNTER_A, BOUNTY_HUNTER_B)
         start_bounty(self.bounty_id, BOUNTY_HUNTER)
         print("bounty hunter started")
 
-        (RITA, RITA_EXIT, BOUNTY_HUNTER) = switch_binaries(self.exit_id, VERBOSE, RITA, RITA_EXIT, BOUNTY_HUNTER, COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B, BOUNTY_HUNTER_A, BOUNTY_HUNTER_B)
+        (RITA, RITA_EXIT, BOUNTY_HUNTER) = switch_binaries(self.exit_id, VERBOSE, RITA, RITA_EXIT, BOUNTY_HUNTER,
+                                                           COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B, BOUNTY_HUNTER_A, BOUNTY_HUNTER_B)
         start_rita_exit(self.nodes[self.exit_id], dname, RITA_EXIT)
 
         time.sleep(1)
 
-        EXIT_SETTINGS["exits"]["exit_a"]["id"]["wg_public_key"] = get_rita_settings(self.exit_id)["network"]["wg_public_key"]
+        EXIT_SETTINGS["exits"]["exit_a"]["id"]["wg_public_key"] = get_rita_settings(
+            self.exit_id)["network"]["wg_public_key"]
 
         print("starting rita")
         for id, node in self.nodes.items():
             if id != self.exit_id and id != self.external:
-                (RITA, RITA_EXIT, BOUNTY_HUNTER) = switch_binaries(id, VERBOSE, RITA, RITA_EXIT, BOUNTY_HUNTER, COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B, BOUNTY_HUNTER_A, BOUNTY_HUNTER_B)
+                (RITA, RITA_EXIT, BOUNTY_HUNTER) = switch_binaries(id, VERBOSE, RITA, RITA_EXIT, BOUNTY_HUNTER,
+                                                                   COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B, BOUNTY_HUNTER_A, BOUNTY_HUNTER_B)
                 start_rita(node, dname, RITA, EXIT_SETTINGS)
-            time.sleep(0.5 + random.random() / 2) # wait 0.5s - 1s
+            time.sleep(0.5 + random.random() / 2)  # wait 0.5s - 1s
             print()
         print("rita started")
 
@@ -209,17 +215,16 @@ class World:
             for j in self.nodes.values():
                 if not assert_test(self.test_reach(i, j, PING6), "Reachability " +
                                    "from node {} ({}) to {} ({})".format(i.id,
-                                       i.revision, j.id, j.revision),
+                                                                         i.revision, j.id, j.revision),
                                    verbose=verbose, global_fail=global_fail):
                     return False
         return True
 
-    def test_routes(self, verbose=True, global_fail=True):
+    def test_routes(self, all_routes, verbose=True, global_fail=True):
         """
         Check the presence of all optimal routes.
         """
         result = True
-        nodes = self.nodes
 
         # Caution: all_routes directly relies on the layout of the netlab mesh.
         #
@@ -233,79 +238,20 @@ class World:
         #     [...]
         # }
 
-        all_routes = {
-                nodes[1]: [
-                    (nodes[2], 50, nodes[6]),
-                    (nodes[3], 60, nodes[6]),
-                    (nodes[4], 75, nodes[6]),
-                    (nodes[5], 60, nodes[6]),
-                    (nodes[6], 0, nodes[6]),
-                    (nodes[7], 50, nodes[6]),
-                    ],
-                nodes[2]: [
-                    (nodes[1], 50, nodes[6]),
-                    (nodes[3], 0, nodes[3]),
-                    (nodes[4], 0, nodes[4]),
-                    (nodes[5], 60, nodes[6]),
-                    (nodes[6], 0, nodes[6]),
-                    (nodes[7], 50, nodes[6]),
-                    ],
-                nodes[3]: [
-                    (nodes[1], 60, nodes[7]),
-                    (nodes[2], 0, nodes[2]),
-                    (nodes[4], 25, nodes[2]),
-                    (nodes[5], 10, nodes[7]),
-                    (nodes[6], 10, nodes[7]),
-                    (nodes[7], 0, nodes[7]),
-                    ],
-                nodes[4]: [
-                    (nodes[1], 75, nodes[2]),
-                    (nodes[2], 0, nodes[2]),
-                    (nodes[3], 25, nodes[2]),
-                    (nodes[5], 85, nodes[2]),
-                    (nodes[6], 25, nodes[2]),
-                    (nodes[7], 75, nodes[2]),
-                    ],
-                nodes[5]: [
-                    (nodes[1], 60, nodes[7]),
-                    (nodes[2], 60, nodes[7]),
-                    (nodes[3], 10, nodes[7]),
-                    (nodes[4], 85, nodes[7]),
-                    (nodes[6], 10, nodes[7]),
-                    (nodes[7], 0, nodes[7]),
-                    ],
-                nodes[6]: [
-                    (nodes[1], 0, nodes[1]),
-                    (nodes[2], 0, nodes[2]),
-                    (nodes[3], 10, nodes[7]),
-                    (nodes[4], 25, nodes[2]),
-                    (nodes[5], 10, nodes[7]),
-                    (nodes[7], 0, nodes[7]),
-                    ],
-                nodes[7]: [
-                    (nodes[1], 50, nodes[6]),
-                    (nodes[2], 50, nodes[6]),
-                    (nodes[3], 0, nodes[3]),
-                    (nodes[4], 75, nodes[6]),
-                    (nodes[5], 0, nodes[5]),
-                    (nodes[6], 0, nodes[6]),
-                    ],
-                }
-
         for node, routes in all_routes.items():
             for route in routes:
                 desc = ("Optimal route from node {} ({}) " +
                         "to {} ({}) with next-hop {} ({}) and price {}").format(
-                                node.id,
-                                node.revision,
-                                route[0].id,
-                                route[0].revision,
-                                route[2].id,
-                                route[2].revision,
-                                route[1])
+                    node.id,
+                    node.revision,
+                    route[0].id,
+                    route[0].revision,
+                    route[2].id,
+                    route[2].revision,
+                    route[1])
                 result = result and assert_test(node.has_route(*route,
                                                                verbose=verbose
-                                                ),
+                                                               ),
                                                 desc, verbose=verbose,
                                                 global_fail=global_fail)
         return result
@@ -325,8 +271,8 @@ class World:
                 print(colored("Hitting /neighbors:", "green"))
 
             result = subprocess.Popen(shlex.split("ip netns exec "
-                + "netlab-{} curl -sfg6 [::1]:4877/neighbors".format(node.id)),
-                stdout=subprocess.PIPE)
+                                                  + "netlab-{} curl -sfg6 [::1]:4877/neighbors".format(node.id)),
+                                      stdout=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /neighbors")
             stdout = result.stdout.read().decode('utf-8')
             try:
@@ -345,8 +291,8 @@ class World:
                 print(colored("Hitting /exits:", "green"))
 
             result = subprocess.Popen(shlex.split("ip netns exec "
-                + "netlab-{} curl -sfg6 [::1]:4877/exits".format(node.id)),
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                                  + "netlab-{} curl -sfg6 [::1]:4877/exits".format(node.id)),
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /exits")
             stdout = result.stdout.read().decode('utf-8')
             try:
@@ -365,8 +311,8 @@ class World:
                 print(colored("Hitting /info:", "green"))
 
             result = subprocess.Popen(shlex.split("ip netns exec "
-                + "netlab-{} curl -sfg6 [::1]:4877/info".format(node.id)),
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                                  + "netlab-{} curl -sfg6 [::1]:4877/info".format(node.id)),
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /info")
             stdout = result.stdout.read().decode('utf-8')
             try:
@@ -385,8 +331,8 @@ class World:
                 print(colored("Hitting /settings:", "green"))
 
             result = subprocess.Popen(shlex.split("ip netns exec "
-                + "netlab-{} curl -sfg6 [::1]:4877/settings".format(node.id)),
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                                  + "netlab-{} curl -sfg6 [::1]:4877/settings".format(node.id)),
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /settings")
             stdout = result.stdout.read().decode('utf-8')
             try:
@@ -400,79 +346,80 @@ class World:
                 print('Unable to decode JSON {!r}: {}'.format(stdout, e))
                 assert_test(False, "Decoding the settings JSON")
 
-
-    def get_balances(self):
-        # TODO make this work once bounty hunter works
-        status = subprocess.Popen(
-                 ["ip", "netns", "exec", "netlab-{}".format(self.bounty_id), "curl", "-s", "-g", "-6",
-                  "[::1]:8888/get_channel_state"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        status.wait()
-        output = status.stdout.read().decode("utf-8")
-        status = json.loads(output)
+    def get_debts(self):
+        """Creates a nested dictionary of balances, for example balances[1][3] is the balance node 1 has for node 3"""
+        status = True
         balances = {}
-        for i in status:
-            balances[int(i["ip"].replace("fd00::", ""))] = int(i["balance"])
+        n = 1
+
+        while True:
+            ip = num_to_ip(n)
+            status = subprocess.Popen(
+                ["ip", "netns", "exec", "netlab-{}".format(n), "curl", "-s", "-g", "-6",
+                 "[::1]:4877/debts"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            status.wait()
+            output = status.stdout.read().decode("utf-8")
+            if output is "":
+                break
+            status = json.loads(output)
+            balances[ip_to_num(ip)] = {}
+            for i in status:
+                peer_ip = i["identity"]["mesh_ip"]
+                peer_debt = int(i["payment_details"]["debt"])
+                balances[ip_to_num(ip)][ip_to_num(peer_ip)] = peer_debt
+            n += 1
 
         return balances
-
-        # Code for ensuring balances add up to 0
-
-        # while s != 0 and n < 1:
-        #     status = subprocess.Popen(
-        #         ["ip", "netns", "exec", "netlab-{}".format(self.bounty_id), "curl", "-s", "-g", "-6",
-        #          "[::1]:8888/list"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        #     status.wait()
-        #     output = status.stdout.read().decode("utf-8")
-        #     status = json.loads(output)
-        #     balances = {}
-        #     s = 0
-        #     m = 0
-        #     for i in status:
-        #         balances[int(i["ip"].replace("fd00::", ""))] = int(i["balance"])
-        #         s += int(i["balance"])
-        #         m += abs(int(i["balance"]))
-        #     n += 1
-        #     time.sleep(0.5)
-        #     print("time {}, value {}".format(n, s))
-
-        # print("tried {} times".format(n))
-        # print("sum = {}, magnitude = {}, error = {}".format(s, m, abs(s) / m))
-        # assert_test(s == 0 and m != 0, "Conservation of balance")
 
     def gen_traffic(self, from_node, to_node, bytes):
         if from_node.id == self.exit_id:
             server = subprocess.Popen(
                 ["ip", "netns", "exec", "netlab-{}".format(from_node.id), "iperf3", "-s", "-V"])
-            time.sleep(0.1)
+            time.sleep(2)
             client = subprocess.Popen(
                 ["ip", "netns", "exec", "netlab-{}".format(to_node.id), "iperf3", "-c",
-                 self.to_ip(from_node), "-V", "-n", str(bytes), "-Z", "-R"])
+                 self.to_ip(from_node), "--connect-timeout", "100", "-V", "-t 60", "-R", ])
 
         else:
             server = subprocess.Popen(
                 ["ip", "netns", "exec", "netlab-{}".format(to_node.id), "iperf3", "-s", "-V"])
-            time.sleep(0.1)
+            time.sleep(2)
             client = subprocess.Popen(
                 ["ip", "netns", "exec", "netlab-{}".format(from_node.id), "iperf3", "-c",
-                 self.to_ip(to_node), "-V", "-n", str(bytes), "-Z"])
-
+                 self.to_ip(to_node), "--connect-timeout", "100", "-V", "-n", "-t 60"])
         client.wait()
-        time.sleep(0.1)
         server.send_signal(signal.SIGINT)
         server.wait()
 
-    def test_traffic(self, from_node, to_node, results):
-        print("Test traffic...")
-        #t1 = self.get_balances()
-        #self.gen_traffic(from_node, to_node, 1e8)
-        #time.sleep(30)
+    def test_traffic(self, traffic_test_pairs):
+        """Generates test traffic from and to the specified nodes, then ensure that all nodes agree"""
+        for (from_node, to_node) in traffic_test_pairs:
+            print("Test traffic...")
+            t1 = self.get_debts()
+            print("Test pre-traffic blanace agreement...")
+            self.test_debts_reciprocal_matching(t1)
+            self.gen_traffic(from_node, to_node, 1e8)
+            time.sleep(30)
 
-        #t2 = self.get_balances()
-        #print("balance change from {}->{}:".format(from_node.id, to_node.id))
-        #diff = traffic_diff(t1, t2)
-        #print(diff)
+            t2 = self.get_debts()
+            print("Test post-traffic blanace agreement...")
+            self.test_debts_reciprocal_matching(t2)
+            print("balance change from {}->{}:".format(from_node.id, to_node.id))
+            print(t2)
 
-        #for node_id, balance in results.items():
-            #assert_test(fuzzy_traffic(diff[node_id], balance * 1e8),
-             #           "Balance of {} ({})".format(node_id,
-              #              self.nodes[node_id].revision))
+    def test_debts_reciprocal_matching(self, debts):
+        """Tests that in a network nodes generally agree on debts, within a few percent this is done by making sure that
+        debts[1][3] is within a few percent of debts[3][1]"""
+
+        for node in debts.keys():
+            for node_to_compare in debts[node].keys():
+                if node not in debts[node_to_compare]:
+                    print("Node {} has a debt for Node {} but not the other way around!".format(
+                        node, node_to_compare))
+                    continue
+                res = fuzzy_match(
+                    debts[node][node_to_compare], debts[node_to_compare][node])
+                if not res:
+                    print("Nodes {} and {} do not agree! {} has {} and {} has {}!".format(
+                        node, node_to_compare, node, debts[node][node_to_compare], node_to_compare, debts[node_to_compare][node]))
+                    # exit(1)

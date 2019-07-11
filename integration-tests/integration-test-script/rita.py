@@ -15,7 +15,7 @@ import sys
 import time
 import toml
 
-from connection import Connection 
+from connection import Connection
 from utils import exec_or_exit
 from utils import exec_no_exit
 from utils import get_rita_defaults
@@ -27,21 +27,22 @@ from utils import email_verif
 from utils import teardown
 from utils import check_log_contains
 from world import World
-from node import Node 
+from node import Node
 
 # find our own file, then go up one level
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(os.path.dirname(abspath))
 os.chdir(dname)
 
-EXIT_NAMESPACE="netlab-5"
+EXIT_NAMESPACE = "netlab-5"
 
 NETWORK_LAB = os.path.join(dname, 'deps/network-lab/network-lab.sh')
 BABELD = os.path.join(dname, 'deps/babeld/babeld')
 
 RITA_DEFAULT = os.path.join(dname, '../target/debug/rita')
 RITA_EXIT_DEFAULT = os.path.join(dname, '../target/debug/rita_exit')
-BOUNTY_HUNTER_DEFAULT = os.path.join(dname, '/tmp/bounty_hunter/target/debug/bounty_hunter')
+BOUNTY_HUNTER_DEFAULT = os.path.join(
+    dname, '/tmp/bounty_hunter/target/debug/bounty_hunter')
 
 # Envs for controlling postgres
 POSTGRES_USER = os.getenv('POSTGRES_USER')
@@ -106,21 +107,16 @@ EXIT_SELECT = {
     },
 }
 
-COMPAT_LAYOUTS = {
+
+def setup_seven_node_config():
+    COMPAT_LAYOUTS = {
         None: ['a'] * 7,  # Use *_A binaries for every node
         'old_exit': ['a'] * 4 + ['b'] + ['a'] * 2,  # The exit sports Rita B
         'new_exit': ['b'] * 4 + ['a'] + ['b'] * 2,  # Like above but opposite
         'inner_ring_old': ['a', 'b', 'b', 'a', 'a', 'b', 'b'],
         'inner_ring_new': ['b', 'a', 'a', 'b', 'b', 'a', 'a'],
         'random':   None,  # Randomize revisions used (filled at runtime)
-        }
-
-
-def main():
-    COMPAT_LAYOUTS["random"] = ['a' if random.randint(0, 1) else 'b' for _ in range(7)]
-
-    if VERBOSE:
-        print("Random compat test layout: {}".format(COMPAT_LAYOUTS["random"]))
+    }
 
     a1 = Node(1, 10, COMPAT_LAYOUT, COMPAT_LAYOUTS)
     b2 = Node(2, 25, COMPAT_LAYOUT, COMPAT_LAYOUTS)
@@ -153,9 +149,86 @@ def main():
     world.add_connection(Connection(e5, g7))
     # world.add_connection(Connection(e5, h8))
 
-    world.set_bounty(3)  # TODO: Who should be the bounty hunter?
+    traffic_test_pairs = [(c3, f6), (d4, a1), (a1, c3), (d4, e5),
+                          (e5, d4), (c3, e5), (e5, c3), (g7, e5), (e5, g7)]
 
-    world.create(VERBOSE, COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA, RITA_EXIT, BOUNTY_HUNTER, DIR_A, DIR_B, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B, BOUNTY_HUNTER_A, BOUNTY_HUNTER_B, NETWORK_LAB, BABELD, POSTGRES_DATABASE, POSTGRES_USER, POSTGRES_CONFIG, POSTGRES_BIN, INITDB_BIN, EXIT_NAMESPACE, EXIT_SETTINGS, dname)
+    nodes = world.nodes
+
+    all_routes = {
+        nodes[1]: [
+            (nodes[2], 50, nodes[6]),
+            (nodes[3], 60, nodes[6]),
+            (nodes[4], 75, nodes[6]),
+            (nodes[5], 60, nodes[6]),
+            (nodes[6], 0, nodes[6]),
+            (nodes[7], 50, nodes[6]),
+        ],
+        nodes[2]: [
+            (nodes[1], 50, nodes[6]),
+            (nodes[3], 0, nodes[3]),
+            (nodes[4], 0, nodes[4]),
+            (nodes[5], 60, nodes[6]),
+            (nodes[6], 0, nodes[6]),
+            (nodes[7], 50, nodes[6]),
+        ],
+        nodes[3]: [
+            (nodes[1], 60, nodes[7]),
+            (nodes[2], 0, nodes[2]),
+            (nodes[4], 25, nodes[2]),
+            (nodes[5], 10, nodes[7]),
+            (nodes[6], 10, nodes[7]),
+            (nodes[7], 0, nodes[7]),
+        ],
+        nodes[4]: [
+            (nodes[1], 75, nodes[2]),
+            (nodes[2], 0, nodes[2]),
+            (nodes[3], 25, nodes[2]),
+            (nodes[5], 85, nodes[2]),
+            (nodes[6], 25, nodes[2]),
+            (nodes[7], 75, nodes[2]),
+        ],
+        nodes[5]: [
+            (nodes[1], 60, nodes[7]),
+            (nodes[2], 60, nodes[7]),
+            (nodes[3], 10, nodes[7]),
+            (nodes[4], 85, nodes[7]),
+            (nodes[6], 10, nodes[7]),
+            (nodes[7], 0, nodes[7]),
+        ],
+        nodes[6]: [
+            (nodes[1], 0, nodes[1]),
+            (nodes[2], 0, nodes[2]),
+            (nodes[3], 10, nodes[7]),
+            (nodes[4], 25, nodes[2]),
+            (nodes[5], 10, nodes[7]),
+            (nodes[7], 0, nodes[7]),
+        ],
+        nodes[7]: [
+            (nodes[1], 50, nodes[6]),
+            (nodes[2], 50, nodes[6]),
+            (nodes[3], 0, nodes[3]),
+            (nodes[4], 75, nodes[6]),
+            (nodes[5], 0, nodes[5]),
+            (nodes[6], 0, nodes[6]),
+        ],
+    }
+
+    world.set_bounty(3)  # TODO: Who should be the bounty hunter?
+    return (COMPAT_LAYOUTS, all_routes, traffic_test_pairs, world)
+
+
+def main():
+    (COMPAT_LAYOUTS, all_routes, traffic_test_pairs,
+     world) = setup_seven_node_config()
+
+    COMPAT_LAYOUTS["random"] = [
+        'a' if random.randint(0, 1) else 'b' for _ in range(7)]
+
+    if VERBOSE:
+        print("Random compat test layout: {}".format(COMPAT_LAYOUTS["random"]))
+
+    world.create(VERBOSE, COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA, RITA_EXIT, BOUNTY_HUNTER, DIR_A, DIR_B, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B, BOUNTY_HUNTER_A,
+                 BOUNTY_HUNTER_B, NETWORK_LAB, BABELD, POSTGRES_DATABASE, POSTGRES_USER, POSTGRES_CONFIG, POSTGRES_BIN, INITDB_BIN, EXIT_NAMESPACE, EXIT_SETTINGS, dname)
 
     print("Waiting for network to stabilize")
     start_time = time.time()
@@ -171,8 +244,10 @@ def main():
 
     # While we're before convergence deadline
     while (time.time() - start_time) <= CONVERGENCE_DELAY:
-        all_reachable = world.test_reach_all(PING6, verbose=False, global_fail=False)
-        routes_ok = world.test_routes(verbose=False, global_fail=False)
+        all_reachable = world.test_reach_all(
+            PING6, verbose=False, global_fail=False)
+        routes_ok = world.test_routes(
+            all_routes, verbose=False, global_fail=False)
         if all_reachable and routes_ok:
             break      # We converged!
         time.sleep(interval)  # Let's check again after a delay
@@ -187,12 +262,12 @@ def main():
     duration = time.time() - start_time
 
     # Test (and fail if necessary) for real and print stats on success
-    if world.test_reach_all(PING6) and world.test_routes():
+    if world.test_reach_all(PING6) and world.test_routes(all_routes):
         print(("Converged in " + colored("%.2f seconds", "green")) % duration)
     else:
         print(("No convergence after more than " +
-        colored("%d seconds", "red") +
-        ", quitting...") % CONVERGENCE_DELAY)
+               colored("%d seconds", "red") +
+               ", quitting...") % CONVERGENCE_DELAY)
         sys.exit(1)
 
     print("Waiting for clients to get info from exits")
@@ -218,104 +293,22 @@ def main():
         if choice != 'y':
             sys.exit(0)
 
-    world.test_traffic(c3, f6, {
-        1: 0,
-        2: 0,
-        3: -10 * 1.05,
-        4: 0,
-        5: 0,
-        6: 0 * 1.05,
-        7: 10 * 1.05
-    })
-
-    world.test_traffic(d4, a1, {
-        1: 0 * 1.05,
-        2: 25 * 1.05,
-        3: 0,
-        4: -75 * 1.05,
-        5: 0,
-        6: 50 * 1.05,
-        7: 0
-    })
-
-    world.test_traffic(a1, c3, {
-        1: -60 * 1.05,
-        2: 0,
-        3: 0,
-        4: 0,
-        5: 0,
-        6: 50 * 1.05,
-        7: 10 * 1.05
-    })
-
-    world.test_traffic(d4, e5, {
-        1: 0,
-        2: 110 * 1.1,
-        3: 0,
-        4: -220 * 1.1,
-        5: 50 * 1.1,
-        6: 50 * 1.1,
-        7: 10 * 1.1
-    })
-
-    world.test_traffic(e5, d4, {
-        1: 0,
-        2: 25 * 1.1,
-        3: 0,
-        4: -135 * 1.1,
-        5: 50 * 1.1,
-        6: 50 * 1.1,
-        7: 10 * 1.1
-    })
-
-    world.test_traffic(c3, e5, {
-        1: 0,
-        2: 0,
-        3: -60 * 1.1,
-        4: 0,
-        5: 50 * 1.1,
-        6: 0,
-        7: 20 * 1.1
-    })
-
-    world.test_traffic(e5, c3, {
-        1: 0,
-        2: 0,
-        3: -60 * 1.1,
-        4: 0,
-        5: 50 * 1.1,
-        6: 0,
-        7: 10 * 1.1
-    })
-
-    world.test_traffic(g7, e5, {
-        1: 0,
-        2: 0,
-        3: 0,
-        4: 0,
-        5: 50 * 1.1,
-        6: 0,
-        7: -50 * 1.1
-    })
-
-    world.test_traffic(e5, g7, {
-        1: 0,
-        2: 0,
-        3: 0,
-        4: 0,
-        5: 50 * 1.1,
-        6: 0,
-        7: -50 * 1.1
-    })
+    world.test_traffic(traffic_test_pairs)
 
     print("Check that tunnels have not been suspended")
 
-    assert_test(not check_log_contains("rita-n1.log", "suspending forwarding"), "Suspension of 1 (A)")
-    assert_test(not check_log_contains("rita-n2.log", "suspending forwarding"), "Suspension of 2 (B)")
-    assert_test(not check_log_contains("rita-n3.log", "suspending forwarding"), "Suspension of 3 (C)")
-    assert_test(not check_log_contains("rita-n4.log", "suspending forwarding"), "Suspension of 4 (D)")
-    assert_test(not check_log_contains("rita-n6.log", "suspending forwarding"), "Suspension of 6 (F)")
-    assert_test(not check_log_contains("rita-n7.log", "suspending forwarding"), "Suspension of 7 (G)")
+    assert_test(not check_log_contains("rita-n1.log",
+                                       "suspending forwarding"), "Suspension of 1 (A)")
+    assert_test(not check_log_contains("rita-n2.log",
+                                       "suspending forwarding"), "Suspension of 2 (B)")
+    assert_test(not check_log_contains("rita-n3.log",
+                                       "suspending forwarding"), "Suspension of 3 (C)")
+    assert_test(not check_log_contains("rita-n4.log",
+                                       "suspending forwarding"), "Suspension of 4 (D)")
+    assert_test(not check_log_contains("rita-n6.log",
+                                       "suspending forwarding"), "Suspension of 6 (F)")
+    assert_test(not check_log_contains("rita-n7.log",
+                                       "suspending forwarding"), "Suspension of 7 (G)")
 
     if DEBUG:
         print("Debug mode active, examine the mesh after tests and press " +
