@@ -36,6 +36,10 @@ set -e
 set +e
 sudo killall -2 postgres
 set -e
+# clean up the mail from last time
+set +e
+rm -rf mail/
+set -e
 
 build_rev() {
   remote=$1

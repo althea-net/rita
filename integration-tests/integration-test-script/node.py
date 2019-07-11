@@ -13,6 +13,7 @@ import sys
 import time
 import toml
 
+
 class Node:
     def __init__(self, id, local_fee, COMPAT_LAYOUT, COMPAT_LAYOUTS):
         self.id = id
@@ -69,16 +70,16 @@ class Node:
         last_dump = last_dump_match.group(1)
         route_pat = re.compile(r'fd00::{d}.*price {p}.*fee {f}.*neigh fe80::{nh}.*(installed)'
                                .format(
-                                       d=dest.id,
-                                       p=price,
-                                       f=self.local_fee,
-                                       nh=next_hop.id
-                                       ))
+                                   d=dest.id,
+                                   p=price,
+                                   f=self.local_fee,
+                                   nh=next_hop.id
+                               ))
 
         if route_pat.search(last_dump) is None:
             if verbose:
                 print('{} not found in {}:\n{}'.format(route_pat, fname,
-                      last_dump),
+                                                       last_dump),
                       file=sys.stderr)
             return False
 
