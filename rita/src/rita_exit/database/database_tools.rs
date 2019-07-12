@@ -81,10 +81,6 @@ pub fn update_client(client: &ExitClientIdentity, conn: &PgConnection) -> Result
         .set(last_seen.eq(secs_since_unix_epoch() as i64))
         .execute(&*conn)?;
 
-    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
-        .set(last_seen.eq(secs_since_unix_epoch() as i64))
-        .execute(&*conn)?;
-
     Ok(())
 }
 
@@ -143,10 +139,17 @@ pub fn text_sent(client: &ExitClientIdentity, conn: &PgConnection, val: i32) -> 
     Ok(())
 }
 
-pub fn client_exists(ip: &IpAddr, conn: &PgConnection) -> Result<bool, Error> {
+pub fn client_exists(client: &ExitClientIdentity, conn: &PgConnection) -> Result<bool, Error> {
     use self::schema::clients::dsl::*;
     trace!("Checking if client exists");
-    Ok(select(exists(clients.filter(mesh_ip.eq(ip.to_string())))).get_result(&*conn)?)
+    let ip = client.global.mesh_ip;
+    let wg = client.global.wg_public_key;
+    let key = client.global.eth_address;
+    let filtered_list = clients
+        .filter(mesh_ip.eq(ip.to_string()))
+        .filter(wg_pubkey.eq(wg.to_string()))
+        .filter(eth_address.eq(key.to_string()));
+    Ok(select(exists(filtered_list)).get_result(&*conn)?)
 }
 
 pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<(), Error> {
@@ -195,6 +198,10 @@ pub fn update_low_balance_notification_time(
     conn: &PgConnection,
 ) -> Result<(), Error> {
     use self::schema::clients::dsl::{clients, last_balance_warning_time, wg_pubkey};
+    info!(
+        "Updating low balance notification time for {} {:?}",
+        client.global.wg_public_key, client
+    );
 
     diesel::update(clients.filter(wg_pubkey.eq(client.global.wg_public_key.to_string())))
         .set(last_balance_warning_time.eq(secs_since_unix_epoch()))
