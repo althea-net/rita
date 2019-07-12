@@ -92,7 +92,9 @@ impl Handler<Tick> for DAOManager {
 
                 let dao_identity = Identity {
                     eth_address: address,
-                    wg_public_key: "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF="
+                    // this key has no meaning, it's here so that we don't have to change
+                    // the identity indexing
+                    wg_public_key: "YJhxFPv+NVeU5e+eBmwIXFd/pVdgk61jUHojuSt8IU0="
                         .parse()
                         .unwrap(),
                     mesh_ip: "::1".parse().unwrap(),
