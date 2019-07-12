@@ -461,12 +461,12 @@ impl DebtKeeper {
         let debt_data = self.get_debt_data_mut(ident);
         // the debt we started this round with
 
-        trace!(
-            "send_update for {:?}: debt: {:?}, payment balance: {:?}",
-            ident.mesh_ip,
-            debt_data.debt,
-            debt_data.incoming_payments,
-        );
+        if debt_data.debt != Int256::from(0) {
+            info!(
+                "debt update for {}: debt: {}, payment balance: {}",
+                ident.wg_public_key, debt_data.debt, debt_data.incoming_payments,
+            );
+        }
 
         // reduce debt if it's negative to try and trend to zero
         // the edge case this is supposed to handle is if a node ran out of money and then
