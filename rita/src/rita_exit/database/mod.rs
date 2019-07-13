@@ -5,6 +5,7 @@
 use crate::rita_common::debt_keeper::DebtAction;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::GetDebtsList;
+use crate::rita_exit::database::database_tools::client_conflict;
 use crate::rita_exit::database::database_tools::client_exists;
 use crate::rita_exit::database::database_tools::delete_client;
 use crate::rita_exit::database::database_tools::get_client;
@@ -177,13 +178,25 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
         verify_ip(gateway_ip).and_then(move |verify_status| {
             get_country(gateway_ip).and_then(move |user_country| {
                 get_database_connection().and_then(move |conn| {
+                    // check if we have any users with conflicting details
+                    match client_conflict(&client, &conn) {
+                        Ok(true) => {
+                            return Box::new(future::ok(ExitState::Denied {
+                                message: format!(
+                                    "Partially changed registration details! Please re-register {}",
+                                    display_hashset(&SETTING.get_allowed_countries()),
+                                ),
+                            }))
+                                as Box<dyn Future<Item = ExitState, Error = Error>>
+                        }
+                        Ok(false) => {}
+                        Err(e) => return Box::new(future::err(e)),
+                    }
+
                     let their_record =
                         match create_or_update_user_record(&conn, &client, user_country) {
                             Ok(record) => record,
-                            Err(e) => {
-                                return Box::new(future::err(e))
-                                    as Box<dyn Future<Item = ExitState, Error = Error>>
-                            }
+                            Err(e) => return Box::new(future::err(e)),
                         };
 
                     // either update and grab an existing entry or create one

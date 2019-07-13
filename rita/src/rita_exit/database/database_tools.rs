@@ -152,6 +152,22 @@ pub fn client_exists(client: &ExitClientIdentity, conn: &PgConnection) -> Result
     Ok(select(exists(filtered_list)).get_result(&*conn)?)
 }
 
+/// True if there is any client with the same eth address, wg key, or ip address already registered
+pub fn client_conflict(client: &ExitClientIdentity, conn: &PgConnection) -> Result<bool, Error> {
+    use self::schema::clients::dsl::*;
+    trace!("Checking if client exists");
+    let ip = client.global.mesh_ip;
+    let wg = client.global.wg_public_key;
+    let key = client.global.eth_address;
+    let ip_match = clients.filter(mesh_ip.eq(ip.to_string()));
+    let wg_key_match = clients.filter(wg_pubkey.eq(wg.to_string()));
+    let eth_address_match = clients.filter(eth_address.eq(key.to_string()));
+    let ip_exists = select(exists(ip_match)).get_result(&*conn)?;
+    let wg_exists = select(exists(wg_key_match)).get_result(&*conn)?;
+    let eth_exists = select(exists(eth_address_match)).get_result(&*conn)?;
+    Ok(ip_exists || eth_exists || wg_exists)
+}
+
 pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<(), Error> {
     use self::schema::clients::dsl::*;
     info!("Deleting clients {:?} in database", client);
