@@ -155,6 +155,12 @@ pub fn client_exists(client: &ExitClientIdentity, conn: &PgConnection) -> Result
 /// True if there is any client with the same eth address, wg key, or ip address already registered
 pub fn client_conflict(client: &ExitClientIdentity, conn: &PgConnection) -> Result<bool, Error> {
     use self::schema::clients::dsl::*;
+    // we can't possibly have a conflict if we have exactly this client already
+    // since client exists checks all major details this is safe and will return false
+    // if it's not exactly the same client
+    if client_exists(client, conn)? {
+        return Ok(false);
+    }
     trace!("Checking if client exists");
     let ip = client.global.mesh_ip;
     let wg = client.global.wg_public_key;
