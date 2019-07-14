@@ -125,7 +125,6 @@ def setup_seven_node_config():
     e5 = Node(5, 0, COMPAT_LAYOUT, COMPAT_LAYOUTS)
     f6 = Node(6, 50, COMPAT_LAYOUT, COMPAT_LAYOUTS)
     g7 = Node(7, 10, COMPAT_LAYOUT, COMPAT_LAYOUTS)
-    # h8 = Node(8, 0)
 
     # Note: test_routes() relies heavily on this node and price layout not to
     # change. If you need to alter the test mesh, please update test_routes()
@@ -138,7 +137,6 @@ def setup_seven_node_config():
     world.add_exit_node(e5)
     world.add_node(f6)
     world.add_node(g7)
-    # world.add_external_node(h8)
 
     world.add_connection(Connection(a1, f6))
     world.add_connection(Connection(f6, g7))
@@ -147,7 +145,6 @@ def setup_seven_node_config():
     world.add_connection(Connection(b2, f6))
     world.add_connection(Connection(b2, d4))
     world.add_connection(Connection(e5, g7))
-    # world.add_connection(Connection(e5, h8))
 
     traffic_test_pairs = [(c3, f6), (d4, a1), (a1, c3), (d4, e5),
                           (e5, d4), (c3, e5), (e5, c3), (g7, e5), (e5, g7)]
@@ -296,20 +293,17 @@ def main():
     world.test_exit_reach_all()
     world.test_traffic(traffic_test_pairs)
 
+    # wait a few seconds after traffic generation for all nodes to update their debts
+    time.sleep(10)
+    traffic = world.get_debts()
+    print("Test post-traffic blanace agreement...")
+    world.test_debts_reciprocal_matching(traffic)
+
     print("Check that tunnels have not been suspended")
 
-    assert_test(not check_log_contains("rita-n1.log",
-                                       "suspending forwarding"), "Suspension of 1 (A)")
-    assert_test(not check_log_contains("rita-n2.log",
-                                       "suspending forwarding"), "Suspension of 2 (B)")
-    assert_test(not check_log_contains("rita-n3.log",
-                                       "suspending forwarding"), "Suspension of 3 (C)")
-    assert_test(not check_log_contains("rita-n4.log",
-                                       "suspending forwarding"), "Suspension of 4 (D)")
-    assert_test(not check_log_contains("rita-n6.log",
-                                       "suspending forwarding"), "Suspension of 6 (F)")
-    assert_test(not check_log_contains("rita-n7.log",
-                                       "suspending forwarding"), "Suspension of 7 (G)")
+    for node in world.nodes:
+        assert_test(not check_log_contains("rita-n{}.log".format(node.id),
+                                           "suspending forwarding"), "Suspension of {}".format(node.id))
 
     if DEBUG:
         print("Debug mode active, examine the mesh after tests and press " +

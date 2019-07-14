@@ -4,7 +4,7 @@ description = "just a normal althea exit"
 
 [payment]
 pay_threshold = "0"
-close_threshold = "-1000000000"
+close_threshold = "-10000000000000"
 close_fraction = "100"
 buffer_period = 3
 eth_address = "0x0101010101010101010101010101010101010101"
