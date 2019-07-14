@@ -210,6 +210,14 @@ class World:
         output = ping.stdout.read().decode("utf-8")
         return "1 packets transmitted, 1 received, 0% packet loss" in output
 
+    def test_exit_reach(self, node, exit_internal_ip):
+        ping = subprocess.Popen(
+            ["ip", "netns", "exec", "netlab-{}".format(node.id), "ping",
+             "{}".format(exit_internal_ip),
+             "-c", "1"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        output = ping.stdout.read().decode("utf-8")
+        return "1 packets transmitted, 1 received, 0% packet loss" in output
+
     def test_reach_all(self, PING6, verbose=True, global_fail=True):
         for i in self.nodes.values():
             for j in self.nodes.values():
@@ -218,6 +226,19 @@ class World:
                                                                          i.revision, j.id, j.revision),
                                    verbose=verbose, global_fail=global_fail):
                     return False
+        return True
+
+    def test_exit_reach_all(self, verbose=True, global_fail=True):
+        exit_internal_ip = get_rita_settings(
+            self.exit_id)["exit_network"]["own_internal_ip"]
+        for node in self.nodes.values():
+            if node.id == self.exit_id:
+                continue
+            if not assert_test(self.test_exit_reach(node, exit_internal_ip), "Exit Reachability " +
+                               "from node {} ({})".format(node.id,
+                                                          node.revision),
+                               verbose=verbose, global_fail=global_fail):
+                return False
         return True
 
     def test_routes(self, all_routes, verbose=True, global_fail=True):

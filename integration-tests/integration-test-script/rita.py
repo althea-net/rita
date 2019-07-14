@@ -293,6 +293,7 @@ def main():
         if choice != 'y':
             sys.exit(0)
 
+    world.test_exit_reach_all()
     world.test_traffic(traffic_test_pairs)
 
     print("Check that tunnels have not been suspended")
