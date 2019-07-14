@@ -190,7 +190,7 @@ class World:
         time.sleep(1)
 
         EXIT_SETTINGS["exits"]["exit_a"]["id"]["wg_public_key"] = get_rita_settings(
-            self.exit_id)["network"]["wg_public_key"]
+            self.exit_id)["exit_network"]["wg_public_key"]
 
         print("starting rita")
         for id, node in self.nodes.items():
