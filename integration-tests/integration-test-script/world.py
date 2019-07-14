@@ -26,7 +26,7 @@ from utils import get_rita_settings
 from utils import assert_test
 from utils import ip_to_num
 from utils import num_to_ip
-from utils import fuzzy_match
+from utils import fuzzy_traffic_match
 
 
 class World:
@@ -413,7 +413,7 @@ class World:
                     print("Node {} has a debt for Node {} but not the other way around!".format(
                         node, node_to_compare))
                     continue
-                res = fuzzy_match(
+                res = fuzzy_traffic_match(
                     debts[node][node_to_compare], debts[node_to_compare][node])
                 if not res:
                     print("Nodes {} and {} do not agree! {} has {} and {} has {}!".format(

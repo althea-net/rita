@@ -315,18 +315,36 @@ def num_to_ip(num):
     return "fd00::{}".format(num)
 
 
-def fuzzy_match(numA, numB):
+def fuzzy_traffic_match(numA, numB):
+    """A matching scheme with error margins for Rita traffic, allows up to 5% lower or in the case of
+    the paying party over-estimating (packet loss) it allows more"""
+    # ignore every small debts
+    if abs(numA) < 1000000 and abs(numB) < 1000000:
+        return True
     # signs must not match
     if numA > 0 and numB > 0 or numA < 0 and numB < 0:
         return False
-    numA = abs(numA)
-    numB = abs(numB)
+    if numA > 0:
+        pos = numA
+        neg = numB
+    if numB > 0:
+        pos = numB
+        neg = numA
+    pos_abs = abs(pos)
+    neg_abs = abs(neg)
     # 5%
-    allowed_delta = 0.5
-    low = 1 - allowed_delta
+    allowed_delta = 0.05
     high = 1 + allowed_delta
-    high_b = numA * high
-    low_b = numA * low
-    if numB < high_b and numB > low_b:
-        return True
-    return False
+    low = 1 - allowed_delta
+
+    # debt has been undercounted, the payer has a debt value less than
+    # 95% of the node being paid
+    undercounting = pos_abs < (neg_abs * low)
+    # overcounting, this is not an error, but it is worth warning about
+    # this should only happen if there is packet loss
+    overcounting = pos_abs > (neg_abs * high)
+    if overcounting:
+        print("Payer is overpaying, this is correct if there was significant packet loss")
+    if undercounting:
+        return False
+    return True

@@ -301,9 +301,9 @@ def main():
 
     print("Check that tunnels have not been suspended")
 
-    for node in world.nodes:
-        assert_test(not check_log_contains("rita-n{}.log".format(node.id),
-                                           "suspending forwarding"), "Suspension of {}".format(node.id))
+    for id in world.nodes:
+        assert_test(not check_log_contains("rita-n{}.log".format(id),
+                                           "suspending forwarding"), "Suspension of {}".format(id))
 
     if DEBUG:
         print("Debug mode active, examine the mesh after tests and press " +
