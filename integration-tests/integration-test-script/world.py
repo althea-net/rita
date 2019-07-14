@@ -66,11 +66,10 @@ class World:
         else:
             return "fd00::{}".format(node.id)
 
-    def setup_dbs(self, VERBOSE, COMPAT_LAYOUT, COMPAT_LAYOUTS, DIR_A, DIR_B):
+    def setup_bh_db(self, VERBOSE, COMPAT_LAYOUT, COMPAT_LAYOUTS, DIR_A, DIR_B):
         os.system("rm -rf bounty.db exit.db")
 
         bounty_repo_dir = "/tmp/bounty_hunter/"
-        exit_repo_dir = ".."
 
         bounty_index = self.bounty_id - 1
         exit_index = self.exit_id - 1
@@ -78,20 +77,6 @@ class World:
         if VERBOSE:
             print("DB setup: bounty_hunter index: {}, exit index: {}".format(
                 bounty_index, exit_index))
-
-        if COMPAT_LAYOUT:
-            # Figure out whether release A or B was
-            # assigned to the exit
-            layout = COMPAT_LAYOUTS[COMPAT_LAYOUT]
-
-            if layout[exit_index] == 'a':
-                exit_repo_dir = DIR_A
-            elif layout[exit_index] == 'b':
-                exit_repo_dir = DIR_B
-            else:
-                print("DB setup: Unknown release {} assigned to exit".format(
-                    layout[exit_index]))
-                sys.exit(1)
 
         # Save the current dir
         cwd = os.getcwd()
@@ -173,8 +158,8 @@ class World:
 
         print("babel started")
 
-        print("Setting up rita_exit and bounty_hunter databases")
-        self.setup_dbs(VERBOSE, COMPAT_LAYOUT, COMPAT_LAYOUTS, DIR_A, DIR_B)
+        print("Setting up bounty_hunter database")
+        self.setup_bh_db(VERBOSE, COMPAT_LAYOUT, COMPAT_LAYOUTS, DIR_A, DIR_B)
         print("DB setup OK")
 
         print("starting bounty hunter")
@@ -416,17 +401,7 @@ class World:
         """Generates test traffic from and to the specified nodes, then ensure that all nodes agree"""
         for (from_node, to_node) in traffic_test_pairs:
             print("Test traffic...")
-            t1 = self.get_debts()
-            print("Test pre-traffic blanace agreement...")
-            self.test_debts_reciprocal_matching(t1)
             self.gen_traffic(from_node, to_node, 1e8)
-            time.sleep(30)
-
-            t2 = self.get_debts()
-            print("Test post-traffic blanace agreement...")
-            self.test_debts_reciprocal_matching(t2)
-            print("balance change from {}->{}:".format(from_node.id, to_node.id))
-            print(t2)
 
     def test_debts_reciprocal_matching(self, debts):
         """Tests that in a network nodes generally agree on debts, within a few percent this is done by making sure that
