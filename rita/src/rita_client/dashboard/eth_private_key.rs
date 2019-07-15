@@ -4,6 +4,7 @@ use crate::SETTING;
 use actix_web::{HttpRequest, HttpResponse, Json};
 use althea_types::ExitState;
 use clarity::PrivateKey;
+use clu::linux_generate_mesh_ip;
 use failure::Error;
 use settings::client::RitaClientSettings;
 use settings::FileWrite;
@@ -44,9 +45,20 @@ pub fn set_eth_private_key(data: Json<EthPrivateKey>) -> Result<HttpResponse, Er
     payment_settings.eth_address = Some(pk.to_public_key()?);
     drop(payment_settings);
 
-    // remove the wg_public_key to force exit re-registration
+    // remove the wg_public_key and regenerate mesh_ip to force exit re-registration
     let mut network_settings = SETTING.get_network_mut();
     network_settings.wg_public_key = None;
+
+    match linux_generate_mesh_ip() {
+        Ok(ip) => {
+            network_settings.mesh_ip = Some(ip);
+        }
+        Err(e) => {
+            warn!("Unable to generate new mesh IP: {:?}", e);
+            return Err(e);
+        }
+    }
+
     drop(network_settings);
 
     // unset current exit
