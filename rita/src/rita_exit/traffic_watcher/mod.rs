@@ -96,7 +96,7 @@ fn get_babel_info(
 
                         destinations.insert(id.wg_public_key, u64::from(price));
                     }
-                    None => warn!("Can't find destination for client {:?}", ip.ip()),
+                    None => trace!("Can't find destination for client {:?}", ip.ip()),
                 }
             }
         }
