@@ -142,8 +142,9 @@ class World:
             exec_or_exit("sudo ip netns exec {} sudo -u {} PGDATA=/var/lib/postgresql/data {}".format(
                 EXIT_NAMESPACE, POSTGRES_USER, POSTGRES_BIN), False)
             time.sleep(30)
-            exec_no_exit("psql -c 'drop database test;' -U postgres", True)
-            exec_no_exit("psql -c 'create database test;' -U postgres", True)
+
+        exec_no_exit("psql -c 'drop database test;' -U postgres", True)
+        exec_no_exit("psql -c 'create database test;' -U postgres", True)
 
         print("Perform initial database migrations")
         exec_or_exit('sudo ip netns exec {} diesel migration run --database-url="postgres://postgres@localhost/test" --migration-dir=../exit_db/migrations'.format(EXIT_NAMESPACE))
@@ -392,7 +393,7 @@ class World:
             time.sleep(2)
             client = subprocess.Popen(
                 ["ip", "netns", "exec", "netlab-{}".format(from_node.id), "iperf3", "-c",
-                 self.to_ip(to_node), "-V", "-n", "-t 60"])
+                 self.to_ip(to_node), "-V", "-t 60"])
         client.wait()
         server.send_signal(signal.SIGINT)
         server.wait()
