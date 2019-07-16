@@ -179,7 +179,9 @@ impl Handler<Tick> for RitaFastLoop {
     }
 }
 
-/// Manages gateway functionaltiy and maintains the was_gateway parameter
+/// Manages gateway functionaltiy and maintains the was_gateway parameter, this is different from the gateway
+/// identification in rita_client because this must function even if we aren't registered for an exit it's also
+/// very prone to being true when the device has a wan port but no actual wan connection.
 fn manage_gateway(mut was_gateway: bool) -> bool {
     // Resolves the gateway client corner case
     // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
