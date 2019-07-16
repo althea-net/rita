@@ -344,7 +344,8 @@ def fuzzy_traffic_match(numA, numB):
     # this should only happen if there is packet loss
     overcounting = pos_abs > (neg_abs * high)
     if overcounting:
-        print("Payer is overpaying, this is correct if there was significant packet loss")
+        print("Payer is overpaying by {}%, this is correct if there was significant packet loss".format(
+            pos_abs/neg_abs))
     if undercounting:
         return False
     return True
