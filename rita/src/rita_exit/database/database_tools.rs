@@ -171,6 +171,10 @@ pub fn client_conflict(client: &ExitClientIdentity, conn: &PgConnection) -> Resu
     let ip_exists = select(exists(ip_match)).get_result(&*conn)?;
     let wg_exists = select(exists(wg_key_match)).get_result(&*conn)?;
     let eth_exists = select(exists(eth_address_match)).get_result(&*conn)?;
+    info!(
+        "Signup conflict ip {} eth {} wg {}",
+        ip_exists, eth_exists, wg_exists
+    );
     Ok(ip_exists || eth_exists || wg_exists)
 }
 

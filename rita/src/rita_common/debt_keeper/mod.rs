@@ -184,6 +184,32 @@ impl Handler<TrafficUpdate> for DebtKeeper {
     }
 }
 
+/// Special case traffic update for client gateway corner case, see rita client traffic watcher for more
+/// details. This updates a debt identity matching only ip address and eth address.
+#[derive(Message)]
+pub struct WgKeyInsensitiveTrafficUpdate {
+    pub traffic: Traffic,
+}
+
+impl Handler<WgKeyInsensitiveTrafficUpdate> for DebtKeeper {
+    type Result = ();
+
+    fn handle(
+        &mut self,
+        msg: WgKeyInsensitiveTrafficUpdate,
+        _: &mut Context<Self>,
+    ) -> Self::Result {
+        let partial_id = msg.traffic.from;
+        for (id, _) in self.debt_data.clone().iter() {
+            if id.eth_address == partial_id.eth_address && id.mesh_ip == partial_id.mesh_ip {
+                self.traffic_update(&id, msg.traffic.amount);
+                return;
+            }
+        }
+        error!("Wg key insensitive billing has not found a target! Gateway billing incorrect!");
+    }
+}
+
 /// A variant of traffic update that replaces one debts entry wholesale
 /// only used by the client to update it's own debt to the exit
 #[derive(Message)]

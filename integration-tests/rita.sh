@@ -19,18 +19,27 @@ set -euxo pipefail
 cd $(dirname $0) # Make the script runnable from anywhere
 
 # Loads module if not loaded and available, does nothing if already loaded and fails if not available
+set +e
 sudo modprobe wireguard
+set -e
 set -e
 # sets up bounty hunter cers
 openssl req -newkey rsa:2048 -nodes -keyform pem -keyout bh_key.pem -x509 -days 365 -outform pem -out bh_cert.pem -subj "/C=US/ST=Althea/L=Althea/O=Althea/OU=Althea/CN=Althea"
 export BOUNTY_HUNTER_CERT=$PWD/bh_cert.pem
 export BOUNTY_HUNTER_KEY=$PWD/bh_key.pem
-# prep postgres
-cargo install diesel_cli --force
+set +e
+cargo install diesel_cli
 sudo cp $(which diesel) /usr/bin
+set -e
 # we need to start the database again in the namespace, so we have to kill it out here
 # this sends sigint which should gracefully shut it down but terminate existing connections
+set +e
 sudo killall -2 postgres
+set -e
+# clean up the mail from last time
+set +e
+rm -rf mail/
+set -e
 
 build_rev() {
   remote=$1
@@ -51,7 +60,7 @@ build_rev() {
 
   pushd $dir
     git checkout $revision
-    cargo build --verbose --all
+    cargo build --all
   popd
 }
 
@@ -71,7 +80,7 @@ if [ ! -f "${BABELD_DIR-}/babeld" ]; then
 fi
 
 # Build BH if not built
-if [ ! -f "${BOUNTY_HUNTER_DIR-}/babeld" ]; then
+if [ ! -d "${BOUNTY_HUNTER_DIR}" ]; then
   rm -rf BOUNTY_HUNTER_DIR
   git clone -b master https://github.com/althea-net/bounty_hunter.git $BOUNTY_HUNTER_DIR
   pushd $BOUNTY_HUNTER_DIR
@@ -97,9 +106,9 @@ if [ ! -z "${COMPAT_LAYOUT-}" ] ; then
   cp -r $DIR_B/target/* $target_dir
 else
   pushd ..
-    cargo build --verbose --all
+    cargo build --all
   popd
 fi
 
 
-sudo -E PATH="$PATH:$HOME/.cargo/bin" python3 rita.py $@
+sudo -E PATH="$PATH:$HOME/.cargo/bin" python3 integration-test-script/rita.py $@
