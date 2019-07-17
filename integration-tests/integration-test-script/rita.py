@@ -35,6 +35,10 @@ dname = os.path.dirname(os.path.dirname(abspath))
 os.chdir(dname)
 
 EXIT_NAMESPACE = "netlab-5"
+EXIT_ID = 5
+
+GATEWAY_NAMESPACE = "netlab-7"
+GATEWAY_ID = 7
 
 NETWORK_LAB = os.path.join(dname, 'deps/network-lab/network-lab.sh')
 BABELD = os.path.join(dname, 'deps/babeld/babeld')
@@ -304,6 +308,9 @@ def main():
     for id in world.nodes:
         assert_test(not check_log_contains("rita-n{}.log".format(id),
                                            "suspending forwarding"), "Suspension of {}".format(id))
+
+    assert_test(not check_log_contains("rita-n{}.log".format(GATEWAY_ID),
+                                       "We are a gateway!, Acting accordingly"), "Successful gateway/exit detection")
 
     if DEBUG:
         print("Debug mode active, examine the mesh after tests and press " +
