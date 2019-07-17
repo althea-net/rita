@@ -385,7 +385,7 @@ class World:
             time.sleep(2)
             client = subprocess.Popen(
                 ["ip", "netns", "exec", "netlab-{}".format(to_node.id), "iperf3", "-c",
-                 self.to_ip(from_node), "-V", "-t 30", "-b 10M", "-R", ])
+                 self.to_ip(from_node), "-V", "-t 60", "-b 200M", "-R", ])
 
         else:
             server = subprocess.Popen(
@@ -393,9 +393,9 @@ class World:
             time.sleep(2)
             client = subprocess.Popen(
                 ["ip", "netns", "exec", "netlab-{}".format(from_node.id), "iperf3", "-c",
-                 self.to_ip(to_node), "-V", "-t 30", "-b 10M"])
+                 self.to_ip(to_node), "-V", "-t 60", "-b 200M"])
         client.wait()
-        server.send_signal(signal.SIGINT)
+        server.send_signal(signal.SIGTERM)
         server.wait()
 
     def test_traffic(self, traffic_test_pairs):
