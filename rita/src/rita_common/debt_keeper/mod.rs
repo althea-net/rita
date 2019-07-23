@@ -32,7 +32,7 @@ use std::io::Write;
 use std::time::Duration;
 use std::time::Instant;
 
-/// Four hours
+/// How often we save the nodes debt data, currently 4 hours
 const SAVE_FREQENCY: Duration = Duration::from_secs(14400);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
