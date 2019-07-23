@@ -86,7 +86,7 @@ type DebtDataSer = Vec<(Identity, NodeDebtData)>;
 fn debt_data_to_ser(input: DebtData) -> DebtDataSer {
     let mut ret = DebtDataSer::new();
     for (i, d) in input {
-        ret.push((i,d));
+        ret.push((i, d));
     }
     ret
 }
@@ -332,7 +332,7 @@ impl Default for DebtKeeper {
                         match deserialized {
                             Ok(value) => DebtKeeper {
                                 last_save: None,
-                                debt_data: ser_to_debt_data(value)
+                                debt_data: ser_to_debt_data(value),
                             },
                             Err(e) => {
                                 error!("Failed to deserialize debts file {:?}", e);
