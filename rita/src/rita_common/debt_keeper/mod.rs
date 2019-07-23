@@ -93,7 +93,13 @@ fn debt_data_to_ser(input: DebtData) -> DebtDataSer {
 
 fn ser_to_debt_data(input: DebtDataSer) -> DebtData {
     let mut ret = DebtData::new();
-    for (i, d) in input {
+    for (i, mut d) in input {
+        // zero out what is owed to us on reboot, this is a strategy to be
+        // more 'forgiving' while still remembering what we owe others. This
+        // may be removed after we see how problematic debts persistance is in prod
+        if d.debt < Int256::from(0) {
+            d.debt = Int256::from(0);
+        }
         ret.insert(i, d);
     }
     ret
