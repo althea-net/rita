@@ -179,7 +179,7 @@ impl CommandRunner for TestCommandRunner {
     }
 }
 
-pub trait KernelInterface: CommandRunner + Sync {}
+pub trait KernelInterface: CommandRunner + Sync + Send {}
 
 impl KernelInterface for LinuxCommandRunner {}
 impl KernelInterface for TestCommandRunner {}
