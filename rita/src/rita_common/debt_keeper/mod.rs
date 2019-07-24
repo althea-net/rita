@@ -32,7 +32,7 @@ use std::io::Write;
 use std::time::Duration;
 use std::time::Instant;
 
-/// Four hours
+/// How often we save the nodes debt data, currently 4 hours
 const SAVE_FREQENCY: Duration = Duration::from_secs(14400);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -79,6 +79,31 @@ impl NodeDebtData {
 }
 
 pub type DebtData = HashMap<Identity, NodeDebtData>;
+/// a datatype used only for the serializing of DebtData since
+/// serde does not support structs as keys in maps
+type DebtDataSer = Vec<(Identity, NodeDebtData)>;
+
+fn debt_data_to_ser(input: DebtData) -> DebtDataSer {
+    let mut ret = DebtDataSer::new();
+    for (i, d) in input {
+        ret.push((i, d));
+    }
+    ret
+}
+
+fn ser_to_debt_data(input: DebtDataSer) -> DebtData {
+    let mut ret = DebtData::new();
+    for (i, mut d) in input {
+        // zero out what is owed to us on reboot, this is a strategy to be
+        // more 'forgiving' while still remembering what we owe others. This
+        // may be removed after we see how problematic debts persistance is in prod
+        if d.debt < Int256::from(0) {
+            d.debt = Int256::from(0);
+        }
+        ret.insert(i, d);
+    }
+    ret
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DebtKeeper {
@@ -301,11 +326,14 @@ impl Default for DebtKeeper {
                 let mut contents = String::new();
                 match file.read_to_string(&mut contents) {
                     Ok(_bytes_read) => {
-                        let deserialized: Result<DebtKeeper, SerdeError> =
+                        let deserialized: Result<DebtDataSer, SerdeError> =
                             serde_json::from_str(&contents);
 
                         match deserialized {
-                            Ok(value) => value,
+                            Ok(value) => DebtKeeper {
+                                last_save: None,
+                                debt_data: ser_to_debt_data(value),
+                            },
                             Err(e) => {
                                 error!("Failed to deserialize debts file {:?}", e);
                                 blank_debt_keeper
@@ -360,7 +388,8 @@ impl DebtKeeper {
     }
 
     fn save(&mut self) -> Result<(), IOError> {
-        let serialized = serde_json::to_string(self)?;
+        // convert to the serializeable format and dump to the disk
+        let serialized = serde_json::to_string(&debt_data_to_ser(self.debt_data.clone()))?;
         let mut file = File::create(SETTING.get_payment().debts_file.clone())?;
         file.write_all(serialized.as_bytes())
     }
