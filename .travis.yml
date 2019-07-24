@@ -44,7 +44,7 @@ matrix:
         - cargo fmt --all -- --check
         # to stop opt level 3 from sneaking in
         - 'grep -q ''opt-level = "z"'' Cargo.toml'
-        - "cargo install cargo-audit --force && cargo audit"
+        #- "cargo install cargo-audit --force && cargo audit"
         - "cargo install cargo-geiger --force && cargo geiger"
     - script: ./integration-tests/rita.sh
       env: INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1 POSTGRES_USER=postgres POSTGRES_BIN=/usr/lib/postgresql/9.6/bin/postgres POSTGRES_DATABASE=/var/ramfs/postgresql/9.6/main POSTGRES_CONFIG=/etc/postgresql/9.6/main/postgresql.conf
