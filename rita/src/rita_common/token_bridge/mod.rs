@@ -23,13 +23,16 @@
 //!     State::Ready:
 //!         If there is a Dai balance, send it thru the bridge into xdai (this rescues stuck funds in Dai)
 //!
+//!         Change to State::Depositing.
+//!
 //!         If there is an `eth_balance` that is greater than the `minimum_to_exchange` amount,
-//!         subtract the `reserve` amount and send it through uniswap into DAI. Change to State::Depositing.
+//!         subtract the `reserve` amount and send it through uniswap into DAI. If not Change to State::Ready
+//!         Future waits on Uniswap, and upon successful swap, sends dai thru the bridge into xdai.
+//!         When the money is out of the Dai account and in the bridge, or if uniswap times out, change
+//!         to State::Ready.
 //!
 //!     State::Depositing:
-//!         Future (started in State::Ready) waits on Uniswap, and upon successful swap, sends dai
-//!         thru the bridge into xdai. When the money is out of the Dai account and in the bridge,
-//!         or if uniswap times out, change to State::Ready.
+//!         do nothing
 //!
 //!     State::Withdrawing { to, amount, timestamp}:
 //!         If the timestamp is expired, switch the state back into State::Ready.
@@ -148,7 +151,7 @@ fn rescue_dai(
     Box::new(bridge.get_dai_balance(our_address).and_then({
         move |dai_balance| {
             if dai_balance > eth_to_wei(minimum_stranded_dai_transfer.into()) {
-                println!("rescuing dais");
+                trace!("rescuing dais");
                 // Over the bridge into xDai
                 Box::new(
                     bridge
@@ -183,7 +186,7 @@ impl Handler<Tick> for TokenBridge {
         if let SystemChain::Xdai = system_chain {
             match self.state.clone() {
                 State::Ready {} => {
-                    println!(
+                    trace!(
                         "Ticking in State::Ready. Eth Address: {:x}",
                         bridge.own_address
                     );
@@ -192,7 +195,7 @@ impl Handler<Tick> for TokenBridge {
                     Arbiter::spawn(
                         rescue_dai(bridge.clone(), our_address, minimum_stranded_dai_transfer)
                             .and_then(move |_| {
-                                println!("rescued dai");
+                                trace!("rescued dai");
                                 bridge
                                     .dai_to_eth_price(eth_to_wei(1.into()))
                                     .join(bridge.eth_web3.eth_get_balance(our_address))
@@ -209,7 +212,7 @@ impl Handler<Tick> for TokenBridge {
                                         if eth_balance >= minimum_to_exchange {
                                             // Leave a reserve in the account to use for gas in the future
                                             let swap_amount = eth_balance - reserve;
-                                            println!("Converting to Dai");
+                                            trace!("Converting to Dai");
                                             Box::new(
                                                 bridge
                                                     // Convert to Dai in Uniswap
@@ -241,7 +244,7 @@ impl Handler<Tick> for TokenBridge {
                             }),
                     )
                 }
-                State::Depositing {} => println!("Tried to tick in State::Depositing"),
+                State::Depositing {} => trace!("Tried to tick in State::Depositing"),
                 State::Withdrawing {
                     to,
                     amount,
@@ -346,7 +349,7 @@ pub struct StateChange(State);
 impl Handler<StateChange> for TokenBridge {
     type Result = ();
     fn handle(&mut self, msg: StateChange, _ctx: &mut Context<Self>) -> Self::Result {
-        println!("Changing state to {:?}", msg.0);
+        trace!("Changing state to {:?}", msg.0);
         self.state = msg.0;
     }
 }
