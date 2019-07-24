@@ -80,7 +80,7 @@ fn eth_to_wei(eth: f64) -> Uint256 {
     wei.into()
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum State {
     Ready {},
     Depositing {},
@@ -128,8 +128,8 @@ impl Default for TokenBridge {
                 Address::from_str("0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359").unwrap(),
                 SETTING.get_payment().eth_address.unwrap(),
                 SETTING.get_payment().eth_private_key.unwrap(),
-                "https://eth.althea.org".into(),
-                "https://dai.althea.org".into(),
+                "https://mainnet.infura.io/v3/4bd80ea13e964a5a9f728a68567dc784".into(),
+                "https://dai.althea.net".into(),
             ),
             state: State::Ready {},
             // operation_in_progress: None,
@@ -140,7 +140,7 @@ impl Default for TokenBridge {
     }
 }
 
-fn rescue_xdai(
+fn rescue_dai(
     bridge: TokenBridgeCore,
     our_address: Address,
     minimum_stranded_dai_transfer: u32,
@@ -148,6 +148,7 @@ fn rescue_xdai(
     Box::new(bridge.get_dai_balance(our_address).and_then({
         move |dai_balance| {
             if dai_balance > eth_to_wei(minimum_stranded_dai_transfer.into()) {
+                println!("rescuing dais");
                 // Over the bridge into xDai
                 Box::new(
                     bridge
@@ -182,11 +183,16 @@ impl Handler<Tick> for TokenBridge {
         if let SystemChain::Xdai = system_chain {
             match self.state.clone() {
                 State::Ready {} => {
+                    println!(
+                        "Ticking in State::Ready. Eth Address: {:x}",
+                        bridge.own_address
+                    );
                     // Go into State::Depositing right away to prevent multiple attempts
                     TokenBridge::from_registry().do_send(StateChange(State::Depositing {}));
                     Arbiter::spawn(
-                        rescue_xdai(bridge.clone(), our_address, minimum_stranded_dai_transfer)
+                        rescue_dai(bridge.clone(), our_address, minimum_stranded_dai_transfer)
                             .and_then(move |_| {
+                                println!("rescued dai");
                                 bridge
                                     .dai_to_eth_price(eth_to_wei(1.into()))
                                     .join(bridge.eth_web3.eth_get_balance(our_address))
@@ -203,8 +209,7 @@ impl Handler<Tick> for TokenBridge {
                                         if eth_balance >= minimum_to_exchange {
                                             // Leave a reserve in the account to use for gas in the future
                                             let swap_amount = eth_balance - reserve;
-                                            // Temporarily changing this to debug
-                                            let swap_amount = 200000000000000u64.into();
+                                            println!("Converting to Dai");
                                             Box::new(
                                                 bridge
                                                     // Convert to Dai in Uniswap
@@ -212,7 +217,8 @@ impl Handler<Tick> for TokenBridge {
                                                     .and_then(move |dai_bought| {
                                                         // And over the bridge into xDai
                                                         bridge.dai_to_xdai_bridge(dai_bought)
-                                                    }),
+                                                    })
+                                                    .and_then(|_| Ok(())),
                                             )
                                                 as Box<Future<Item = (), Error = Error>>
                                         } else {
@@ -224,7 +230,7 @@ impl Handler<Tick> for TokenBridge {
                             })
                             .then(|res| {
                                 // It goes back into State::Ready once the dai
-                                // is in the bridge. This prevents multiple
+                                // is in the bridge or if failed. This prevents multiple simultaneous
                                 // attempts to bridge the same Dai.
                                 TokenBridge::from_registry().do_send(StateChange(State::Ready {}));
 
@@ -235,7 +241,7 @@ impl Handler<Tick> for TokenBridge {
                             }),
                     )
                 }
-                State::Depositing {} => {}
+                State::Depositing {} => println!("Tried to tick in State::Depositing"),
                 State::Withdrawing {
                     to,
                     amount,
@@ -262,7 +268,7 @@ impl Handler<Tick> for TokenBridge {
                                                         ETH_TRANSFER_TIMEOUT,
                                                     )
                                                 })
-                                                .then(|_| futures::future::ok(())),
+                                                .and_then(|_| Ok(())),
                                         )
                                             as Box<Future<Item = (), Error = Error>>
                                     } else {
@@ -339,8 +345,8 @@ pub struct StateChange(State);
 
 impl Handler<StateChange> for TokenBridge {
     type Result = ();
-
     fn handle(&mut self, msg: StateChange, _ctx: &mut Context<Self>) -> Self::Result {
+        println!("Changing state to {:?}", msg.0);
         self.state = msg.0;
     }
 }
