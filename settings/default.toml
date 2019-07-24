@@ -1,5 +1,5 @@
 [payment]
-pay_threshold = "0"
+pay_threshold = "10000000000000"
 close_threshold = "-10000000000000"
 close_fraction = "100"
 buffer_period = 3
