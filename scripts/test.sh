@@ -18,7 +18,7 @@ tar --exclude $REPOFOLDER/target \
     --exclude $REPOFOLDER/integration-tests/target_b \
     --exclude $REPOFOLDER/integration-tests/deps \
     --exclude $REPOFOLDER/integration-tests/container/rita.tar.gz \
-    --exclude $REPOFOLDER/scripts -czf $DOCKERFOLDER/rita.tar.gz $REPOFOLDER
+    --exclude $REPOFOLDER/scripts --dereference --hard-dereference -czf $DOCKERFOLDER/rita.tar.gz $REPOFOLDER
 pushd $DOCKERFOLDER
 time docker build -t rita-test .
 time docker run --privileged -it rita-test
