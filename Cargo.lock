@@ -243,6 +243,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "auto-bridge"
+version = "0.1.0"
+source = "git+https://github.com/althea-net/auto_bridge#57e00a7d03ea55032a3cde4f5a4042b99c1fe166"
+dependencies = [
+ "actix 0.7.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clarity 0.1.22 (registry+https://github.com/rust-lang/crates.io-index)",
+ "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures 0.1.27 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures-timer 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num256 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "web30 0.4.3 (git+https://github.com/althea-mesh/web30)",
+]
+
+[[package]]
 name = "autocfg"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1978,6 +1994,7 @@ dependencies = [
  "althea_kernel_interface 0.1.0",
  "althea_types 0.1.0",
  "arrayvec 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "auto-bridge 0.1.0 (git+https://github.com/althea-net/auto_bridge)",
  "babel_monitor 0.1.0",
  "byteorder 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "bytes 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1992,6 +2009,7 @@ dependencies = [
  "exit_db 0.1.0",
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.27 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures-timer 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "handlebars 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "hex-literal 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ipnetwork 0.14.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2019,7 +2037,7 @@ dependencies = [
  "tokio-codec 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio-io 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "trust-dns-resolver 0.10.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "web30 0.4.3 (git+https://github.com/althea-mesh/web30?rev=56b0068aa43eb563db996418eb96f3ade85ef73b)",
+ "web30 0.4.3 (git+https://github.com/althea-mesh/web30)",
 ]
 
 [[package]]
@@ -2864,7 +2882,7 @@ dependencies = [
 [[package]]
 name = "web30"
 version = "0.4.3"
-source = "git+https://github.com/althea-mesh/web30?rev=56b0068aa43eb563db996418eb96f3ade85ef73b#56b0068aa43eb563db996418eb96f3ade85ef73b"
+source = "git+https://github.com/althea-mesh/web30#830c9fc3181373a6df834a8a354ac6936bccfc23"
 dependencies = [
  "actix 0.7.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-web 0.7.19 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2994,6 +3012,7 @@ dependencies = [
 "checksum ascii_utils 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)" = "71938f30533e4d95a6d17aa530939da3842c2ab6f4f84b9dae68447e4129f74a"
 "checksum assert-json-diff 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "32946b6d31d50d0e35896c864907f9cb7e47b52bd875fa3c058618601cfdefb1"
 "checksum atty 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)" = "9a7d5b8723950951411ee34d271d99dddcc2035a16ab25310ea2c8cfd4369652"
+"checksum auto-bridge 0.1.0 (git+https://github.com/althea-net/auto_bridge)" = "<none>"
 "checksum autocfg 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)" = "0e49efa51329a5fd37e7c79db4621af617cd4e3e5bc224939808d076077077bf"
 "checksum backtrace 0.3.30 (registry+https://github.com/rust-lang/crates.io-index)" = "ada4c783bb7e7443c14e0480f429ae2cc99da95065aeab7ee1b81ada0419404f"
 "checksum backtrace-sys 0.1.28 (registry+https://github.com/rust-lang/crates.io-index)" = "797c830ac25ccc92a7f8a7b9862bde440715531514594a6154e3d4a54dd769b6"
@@ -3276,7 +3295,7 @@ dependencies = [
 "checksum vcpkg 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)" = "def296d3eb3b12371b2c7d0e83bfe1403e4db2d7a0bba324a12b21c4ee13143d"
 "checksum version_check 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "914b1a6776c4c929a602fafd8bc742e06365d4bcbe48c30f9cca5824f70dc9dd"
 "checksum walkdir 2.2.8 (registry+https://github.com/rust-lang/crates.io-index)" = "c7904a7e2bb3cdf0cf5e783f44204a85a37a93151738fa349f06680f59a98b45"
-"checksum web30 0.4.3 (git+https://github.com/althea-mesh/web30?rev=56b0068aa43eb563db996418eb96f3ade85ef73b)" = "<none>"
+"checksum web30 0.4.3 (git+https://github.com/althea-mesh/web30)" = "<none>"
 "checksum widestring 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7157704c2e12e3d2189c507b7482c52820a16dfa4465ba91add92f266667cadb"
 "checksum winapi 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)" = "167dc9d6949a9b857f3451275e911c3f44255842c1f7a76f33c55103a909087a"
 "checksum winapi 0.3.7 (registry+https://github.com/rust-lang/crates.io-index)" = "f10e386af2b13e47c89e7236a7a14a086791a2b88ebad6df9bf42040195cf770"

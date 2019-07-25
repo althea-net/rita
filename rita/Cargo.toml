@@ -22,7 +22,8 @@ exit_db = { path = "../exit_db" }
 num256 = "0.2"
 settings = { path = "../settings" }
 
-web30 = {git = "https://github.com/althea-mesh/web30", rev="56b0068aa43eb563db996418eb96f3ade85ef73b"}
+auto-bridge = {git = "https://github.com/althea-net/auto_bridge", branch = "master"}
+web30 = {git = "https://github.com/althea-mesh/web30", branch = "master"}
 syslog = "4"
 actix = "0.7"
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
@@ -64,6 +65,7 @@ phonenumber = "0.2"
 r2d2 = "0.8"
 sha3 = "0.8"
 hex-literal = "0.2"
+futures-timer = "0.1"
 
 [features]
 default = []

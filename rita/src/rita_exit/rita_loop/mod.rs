@@ -130,7 +130,6 @@ impl Handler<Tick> for RitaLoop {
         let ids = clients_to_ids(clients_list.clone());
 
         // watch and bill for traffic
-
         Arbiter::spawn(
             open_babel_stream(babel_port)
                 .from_err()
