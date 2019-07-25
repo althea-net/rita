@@ -296,14 +296,17 @@ impl Handler<Tick> for TokenBridge {
     }
 }
 
-#[derive(Message)]
 pub struct Withdraw {
-    to: Address,
-    amount: Uint256,
+    pub to: Address,
+    pub amount: Uint256,
+}
+
+impl Message for Withdraw {
+    type Result = Result<(), Error>;
 }
 
 impl Handler<Withdraw> for TokenBridge {
-    type Result = ();
+    type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: Withdraw, _ctx: &mut Context<Self>) -> Self::Result {
         let payment_settings = SETTING.get_payment();
@@ -317,12 +320,18 @@ impl Handler<Withdraw> for TokenBridge {
 
         if let SystemChain::Xdai = system_chain {
             match self.state.clone() {
-                State::Withdrawing { .. } => (
-                    // Cannot start a withdraw when one is in progress
-                ),
-                State::Depositing { .. } => (
-                    // Figure out something to do here
-                ),
+                State::Withdrawing { .. } => {
+                    (
+                        // Cannot start a withdraw when one is in progress
+                        bail!("Cannot start a withdraw when one is in progress")
+                    )
+                }
+                State::Depositing { .. } => {
+                    (
+                        // Figure out something to do here
+                        bail!("Cannot withdraw while depositing")
+                    )
+                }
                 State::Ready {} => {
                     Arbiter::spawn(bridge.xdai_to_dai_bridge(amount.clone()).then(move |res| {
                         if res.is_err() {
@@ -336,9 +345,12 @@ impl Handler<Withdraw> for TokenBridge {
                             }));
                         }
                         Ok(())
-                    }))
+                    }));
+                    Ok(())
                 }
             }
+        } else {
+            bail!("Not on Xdai chain!");
         }
     }
 }
