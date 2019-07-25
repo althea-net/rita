@@ -97,6 +97,7 @@ impl Handler<WeAreGatewayClient> for TrafficWatcher {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: WeAreGatewayClient, _: &mut Context<Self>) -> Self::Result {
+        info!("We are a gateway client: {}", msg.value);
         self.gateway_exit_client = msg.value;
         Ok(())
     }
