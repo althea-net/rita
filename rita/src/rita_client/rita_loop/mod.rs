@@ -101,7 +101,7 @@ fn check_for_gateway_client_billing_corner_case() -> impl Future<Item = (), Erro
         .send(GetNeighbors)
         .timeout(CLIENT_LOOP_TIMEOUT)
         .then(move |res| {
-            // strange notication lets us scope our access to SETTING and prevent
+            // strange notation lets us scope our access to SETTING and prevent
             // holding a readlock
             let exit_server = { SETTING.get_exit_client().get_current_exit().cloned() };
             let neighbors = res.unwrap().unwrap();
@@ -116,6 +116,7 @@ fn check_for_gateway_client_billing_corner_case() -> impl Future<Item = (), Erro
                         {
                             TrafficWatcher::from_registry()
                                 .do_send(WeAreGatewayClient { value: true });
+                            return Ok(());
                         }
                     }
                     TrafficWatcher::from_registry().do_send(WeAreGatewayClient { value: false });
