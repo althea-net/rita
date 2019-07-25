@@ -515,6 +515,12 @@ impl Message for PeersToContact {
 impl Handler<PeersToContact> for TunnelManager {
     type Result = ();
     fn handle(&mut self, msg: PeersToContact, _ctx: &mut Context<Self>) -> Self::Result {
+        let network_settings = SETTING.get_network();
+        let manual_peers = network_settings.manual_peers.clone();
+        let is_gateway = network_settings.is_gateway;
+        let rita_hello_port = network_settings.rita_hello_port;
+        drop(network_settings);
+
         trace!("TunnelManager contacting peers");
         for (_, peer) in msg.peers.iter() {
             let res = self.neighbor_inquiry(&peer);
@@ -523,14 +529,13 @@ impl Handler<PeersToContact> for TunnelManager {
             }
         }
         // Do not contact manual peers if we are not a gateway
-        if SETTING.get_network().is_gateway {
-            for manual_peer in SETTING.get_network().manual_peers.iter() {
+        if is_gateway {
+            for manual_peer in manual_peers.iter() {
                 let ip = manual_peer.parse::<IpAddr>();
-                let port = SETTING.get_network().rita_hello_port;
 
                 match ip {
                     Ok(ip) => {
-                        let socket = SocketAddr::new(ip, port);
+                        let socket = SocketAddr::new(ip, rita_hello_port);
                         let man_peer = Peer {
                             ifidx: 0,
                             contact_socket: socket,
@@ -669,6 +674,10 @@ impl TunnelManager {
     /// callback continue execution flow. But this function itself returns syncronously
     pub fn neighbor_inquiry_hostname(&mut self, their_hostname: String) -> Result<(), Error> {
         trace!("Getting tunnel, inq");
+        let network_settings = SETTING.get_network();
+        let is_gateway = network_settings.is_gateway;
+        let rita_hello_port = network_settings.rita_hello_port;
+        drop(network_settings);
 
         let our_port = match self.get_port(0) {
             Some(p) => p,
@@ -685,15 +694,14 @@ impl TunnelManager {
             .timeout(Duration::from_secs(1))
             .then(move |res| match res {
                 Ok(Ok(dnsresult)) => {
-                    let port = SETTING.get_network().rita_hello_port;
-                    let url = format!("http://[{}]:{}/hello", their_hostname, port);
+                    let url = format!("http://[{}]:{}/hello", their_hostname, rita_hello_port);
                     trace!("Saying hello to: {:?} at ip {:?}", url, dnsresult);
-                    if !dnsresult.is_empty() && SETTING.get_network().is_gateway {
+                    if !dnsresult.is_empty() && is_gateway {
                         // dns records may have many ip's if we get multiple it's a load
                         // balanced exit and we need to create tunnels to all of them
                         for dns_socket in dnsresult {
                             let their_ip = dns_socket.ip();
-                            let socket = SocketAddr::new(their_ip, port);
+                            let socket = SocketAddr::new(their_ip, rita_hello_port);
                             let man_peer = Peer {
                                 ifidx: 0,
                                 contact_socket: socket,
