@@ -107,6 +107,11 @@ pub struct PaymentSettings {
     pub price_oracle_url: String,
     #[serde(default = "default_system_chain")]
     pub system_chain: SystemChain,
+    /// defines the blockchain to use for currency withdraws, this may not
+    /// be the system chain in some cases such as when a user wants to withdraw eth
+    /// but has xdai
+    #[serde(default = "default_system_chain")]
+    pub withdraw_chain: SystemChain,
     /// Full file path for Debts storage
     #[serde(default = "default_debts_file")]
     pub debts_file: String,
@@ -135,6 +140,7 @@ impl Default for PaymentSettings {
             price_oracle_enabled: true,
             price_oracle_url: "https://updates.altheamesh.com/prices".to_string(),
             system_chain: SystemChain::Ethereum,
+            withdraw_chain: SystemChain::Ethereum,
             debts_file: default_debts_file(),
         }
     }
