@@ -47,7 +47,7 @@ pub fn set_eth_private_key(data: Json<EthPrivateKey>) -> Result<HttpResponse, Er
     // remove the wg_public_key and regenerate wg private key, we don't do that here
     // so it will happen on process restart. We could just call the linux client init
     // from clu but we would need to handle already deployed tunnels and it's just not
-    // worth the trouble. 
+    // worth the trouble.
     let mut network_settings = SETTING.get_network_mut();
     network_settings.wg_private_key = None;
     network_settings.wg_public_key = None;

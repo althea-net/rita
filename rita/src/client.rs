@@ -169,6 +169,11 @@ fn main() {
         env_logger::init();
     }
 
+    // remove in beta 9 where this info will be imported from the dao address oracle.
+    let mut payment_settings = SETTING.get_payment_mut();
+    payment_settings.withdraw_chain = payment_settings.system_chain;
+    drop(payment_settings);
+
     if cfg!(feature = "development") {
         println!("Warning!");
         println!("This build is meant only for development purposes.");
