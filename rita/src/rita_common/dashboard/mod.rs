@@ -2,8 +2,8 @@
 //! management and automation. They exist on port 4877 by default and should be firewalled
 //! from the outside world for obvious security reasons.
 
-use ::actix::prelude::*;
-use ::actix::registry::SystemService;
+use actix::prelude::*;
+use actix::registry::SystemService;
 
 pub mod auth;
 pub mod babel;
@@ -16,6 +16,7 @@ pub mod pricing;
 pub mod settings;
 pub mod usage;
 pub mod wallet;
+pub mod wg_public_key;
 
 pub struct Dashboard;
 
