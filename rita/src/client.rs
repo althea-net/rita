@@ -70,6 +70,7 @@ use crate::rita_common::dashboard::pricing::*;
 use crate::rita_common::dashboard::settings::*;
 use crate::rita_common::dashboard::usage::*;
 use crate::rita_common::dashboard::wallet::*;
+use crate::rita_common::dashboard::wg_public_key::*;
 use crate::rita_common::network_endpoints::*;
 
 #[derive(Debug, Deserialize, Default)]
@@ -260,6 +261,7 @@ fn start_client_dashboard() {
             .route("/settings", Method::GET, get_settings)
             .route("/settings", Method::POST, set_settings)
             .route("/version", Method::GET, version)
+            .route("/wg_public_key", Method::GET, get_wg_public_key)
             .route("/wifi_settings", Method::POST, set_wifi_multi)
             .route("/wifi_settings/pass", Method::POST, set_wifi_pass)
             .route("/wifi_settings/ssid", Method::POST, set_wifi_ssid)
