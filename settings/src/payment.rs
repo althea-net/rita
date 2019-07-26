@@ -1,6 +1,5 @@
 use althea_types::SystemChain;
 use clarity::{Address, PrivateKey};
-use std::collections::HashMap;
 
 use num256::{Int256, Uint256};
 
@@ -84,9 +83,6 @@ pub struct PaymentSettings {
     pub eth_private_key: Option<PrivateKey>,
     // Our own eth Address, derived from the private key on startup and not stored
     pub eth_address: Option<Address>,
-    // Denotes addresses that we have approved for uniswap
-    #[serde(default)]
-    pub approved_for_uniswap: HashMap<Address, bool>,
     #[serde(default)]
     pub balance: Uint256,
     #[serde(default)]
@@ -107,6 +103,11 @@ pub struct PaymentSettings {
     pub price_oracle_url: String,
     #[serde(default = "default_system_chain")]
     pub system_chain: SystemChain,
+    /// defines the blockchain to use for currency withdraws, this may not
+    /// be the system chain in some cases such as when a user wants to withdraw eth
+    /// but has xdai
+    #[serde(default = "default_system_chain")]
+    pub withdraw_chain: SystemChain,
     /// Full file path for Debts storage
     #[serde(default = "default_debts_file")]
     pub debts_file: String,
@@ -126,7 +127,6 @@ impl Default for PaymentSettings {
             balance_warning_level: (10_000_000_000_000_000u64).into(),
             eth_private_key: None,
             eth_address: None,
-            approved_for_uniswap: HashMap::new(),
             balance: 0u64.into(),
             nonce: 0u64.into(),
             gas_price: 10000000000u64.into(), // 10 gwei
@@ -135,6 +135,7 @@ impl Default for PaymentSettings {
             price_oracle_enabled: true,
             price_oracle_url: "https://updates.altheamesh.com/prices".to_string(),
             system_chain: SystemChain::Ethereum,
+            withdraw_chain: SystemChain::Ethereum,
             debts_file: default_debts_file(),
         }
     }

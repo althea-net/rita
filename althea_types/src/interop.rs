@@ -2,6 +2,8 @@ use crate::wg_key::WgKey;
 use arrayvec::ArrayString;
 use clarity::Address;
 use num256::Uint256;
+use std::fmt;
+use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::net::IpAddr;
 use std::str::FromStr;
@@ -62,6 +64,16 @@ pub enum SystemChain {
     Ethereum,
     Rinkeby,
     Xdai,
+}
+
+impl Display for SystemChain {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SystemChain::Ethereum => write!(f, "Ethereum"),
+            SystemChain::Rinkeby => write!(f, "Rinkeby"),
+            SystemChain::Xdai => write!(f, "Xday"),
+        }
+    }
 }
 
 impl Default for SystemChain {

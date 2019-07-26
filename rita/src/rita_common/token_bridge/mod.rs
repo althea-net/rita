@@ -131,7 +131,7 @@ impl Default for TokenBridge {
                 Address::from_str("0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359").unwrap(),
                 SETTING.get_payment().eth_address.unwrap(),
                 SETTING.get_payment().eth_private_key.unwrap(),
-                "https://mainnet.infura.io/v3/4bd80ea13e964a5a9f728a68567dc784".into(),
+                "https://eth.althea.org".into(),
                 "https://dai.althea.net".into(),
             ),
             state: State::Ready {},
@@ -150,6 +150,7 @@ fn rescue_dai(
 ) -> Box<Future<Item = (), Error = Error>> {
     Box::new(bridge.get_dai_balance(our_address).and_then({
         move |dai_balance| {
+            trace!("Our DAI balance is {}", dai_balance);
             if dai_balance > eth_to_wei(minimum_stranded_dai_transfer.into()) {
                 trace!("rescuing dais");
                 // Over the bridge into xDai
@@ -187,7 +188,7 @@ impl Handler<Tick> for TokenBridge {
             match self.state.clone() {
                 State::Ready {} => {
                     trace!(
-                        "Ticking in State::Ready. Eth Address: {:x}",
+                        "Ticking in State::Ready. Eth Address: {}",
                         bridge.own_address
                     );
                     // Go into State::Depositing right away to prevent multiple attempts
@@ -257,6 +258,7 @@ impl Handler<Tick> for TokenBridge {
                             bridge
                                 .get_dai_balance(our_address)
                                 .and_then(move |our_dai_balance| {
+                                    trace!("Our dai balance is {}", our_dai_balance);
                                     // This is how it knows the money has come over from the bridge
                                     if our_dai_balance >= amount {
                                         Box::new(
@@ -265,13 +267,16 @@ impl Handler<Tick> for TokenBridge {
                                                 .dai_to_eth_swap(amount, UNISWAP_TIMEOUT)
                                                 // And sends it to the recipient
                                                 .and_then(move |transferred_eth| {
+                                                    trace!("Converted dai back to eth!");
                                                     bridge.eth_transfer(
                                                         to,
                                                         transferred_eth,
                                                         ETH_TRANSFER_TIMEOUT,
                                                     )
                                                 })
-                                                .and_then(|_| Ok(())),
+                                                .and_then(|_| {
+                                                    trace!("Issued an eth transfer for withdraw! Now complete!");
+                                                    Ok(())}),
                                         )
                                             as Box<Future<Item = (), Error = Error>>
                                     } else {
@@ -296,14 +301,17 @@ impl Handler<Tick> for TokenBridge {
     }
 }
 
-#[derive(Message)]
 pub struct Withdraw {
-    to: Address,
-    amount: Uint256,
+    pub to: Address,
+    pub amount: Uint256,
+}
+
+impl Message for Withdraw {
+    type Result = Result<(), Error>;
 }
 
 impl Handler<Withdraw> for TokenBridge {
-    type Result = ();
+    type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: Withdraw, _ctx: &mut Context<Self>) -> Self::Result {
         let payment_settings = SETTING.get_payment();
@@ -317,12 +325,18 @@ impl Handler<Withdraw> for TokenBridge {
 
         if let SystemChain::Xdai = system_chain {
             match self.state.clone() {
-                State::Withdrawing { .. } => (
-                    // Cannot start a withdraw when one is in progress
-                ),
-                State::Depositing { .. } => (
-                    // Figure out something to do here
-                ),
+                State::Withdrawing { .. } => {
+                    (
+                        // Cannot start a withdraw when one is in progress
+                        bail!("Cannot start a withdraw when one is in progress")
+                    )
+                }
+                State::Depositing { .. } => {
+                    (
+                        // Figure out something to do here
+                        bail!("Cannot withdraw while depositing")
+                    )
+                }
                 State::Ready {} => {
                     Arbiter::spawn(bridge.xdai_to_dai_bridge(amount.clone()).then(move |res| {
                         if res.is_err() {
@@ -336,9 +350,12 @@ impl Handler<Withdraw> for TokenBridge {
                             }));
                         }
                         Ok(())
-                    }))
+                    }));
+                    Ok(())
                 }
             }
+        } else {
+            bail!("Not on Xdai chain!");
         }
     }
 }
