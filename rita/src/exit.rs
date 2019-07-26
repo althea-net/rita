@@ -69,6 +69,7 @@ use crate::rita_common::dashboard::pricing::*;
 use crate::rita_common::dashboard::settings::*;
 use crate::rita_common::dashboard::usage::*;
 use crate::rita_common::dashboard::wallet::*;
+use crate::rita_common::dashboard::wg_key::*;
 use crate::rita_common::network_endpoints::*;
 use crate::rita_exit::network_endpoints::*;
 
@@ -241,6 +242,7 @@ fn start_rita_exit_dashboard() {
             .route("/settings", Method::GET, get_settings)
             .route("/settings", Method::POST, set_settings)
             .route("/version", Method::GET, version)
+            .route("/wg_public_key", Method::GET, get_wg_public_key)
             .route("/wipe", Method::POST, wipe)
             .route("/database", Method::DELETE, nuke_db)
             .route("/debts", Method::GET, get_debts)
