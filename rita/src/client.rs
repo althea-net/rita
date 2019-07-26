@@ -70,7 +70,7 @@ use crate::rita_common::dashboard::pricing::*;
 use crate::rita_common::dashboard::settings::*;
 use crate::rita_common::dashboard::usage::*;
 use crate::rita_common::dashboard::wallet::*;
-use crate::rita_common::dashboard::wg_public_key::*;
+use crate::rita_common::dashboard::wg_key::*;
 use crate::rita_common::network_endpoints::*;
 
 #[derive(Debug, Deserialize, Default)]

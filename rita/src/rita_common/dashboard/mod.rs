@@ -16,7 +16,7 @@ pub mod pricing;
 pub mod settings;
 pub mod usage;
 pub mod wallet;
-pub mod wg_public_key;
+pub mod wg_key;
 
 pub struct Dashboard;
 
