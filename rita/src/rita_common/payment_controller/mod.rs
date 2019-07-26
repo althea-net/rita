@@ -72,12 +72,8 @@ impl PaymentController {
         let gas_price = payment_settings.gas_price.clone();
         let our_address = payment_settings.eth_address.unwrap();
         info!(
-            "current balance: {:?}, payment of {:?}, from address {:#x} to address {:#x} with nonce {}",
-            balance,
-            pmt.amount,
-            our_address,
-            pmt.to.eth_address,
-            nonce
+            "current balance: {:?}, payment of {:?}, from address {} to address {} with nonce {}",
+            balance, pmt.amount, our_address, pmt.to.eth_address, nonce
         );
         if balance < pmt.amount {
             warn!("Not enough money to pay debts! Cutoff immenient");
