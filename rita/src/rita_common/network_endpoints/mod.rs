@@ -50,7 +50,7 @@ pub fn make_payments(
     // we didn't get a txid, probably an old client.
     // why don't we need an Either up here? Because the types ultimately match?
     if txid.is_none() {
-        info!("Did not find txid, payment failed!");
+        error!("Did not find txid, payment failed!");
         return Box::new(future::ok(
             HttpResponse::new(StatusCode::from_u16(400u16).unwrap())
                 .into_builder()
