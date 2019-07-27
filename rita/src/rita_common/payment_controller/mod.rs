@@ -152,8 +152,8 @@ impl PaymentController {
                                     // return emtpy result, we're using messages anyways
                                     Ok(msg) => {
                                         info!(
-                                            "Payment with txid: {:#066x} is in the mempool with {:?}, using full node {} and amount {:?}",
-                                            tx_id, msg, full_node, pmt.amount
+                                            "Payment with txid: {:#066x} is in the mempool with {}, using full node {} and amount {:?}",
+                                            tx_id, msg.status(), full_node, pmt.amount
                                         );
                                         SETTING.get_payment_mut().nonce += 1u64.into();
 
