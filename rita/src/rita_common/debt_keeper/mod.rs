@@ -542,6 +542,12 @@ impl DebtKeeper {
         let should_close = debt_data.debt < close_threshold;
         let should_pay = debt_data.debt > SETTING.get_payment().pay_threshold;
         let payment_in_flight = debt_data.payment_in_flight;
+
+        if should_close {
+            // do not allow negative debt greater than a tiny bit larger than the close level
+            debt_data.debt = close_threshold.clone() - 1u32.into();
+        }
+
         match (should_close, should_pay, payment_in_flight) {
             (true, true, _) => panic!("Close threshold is less than pay threshold!"),
             (true, false, _) => {
