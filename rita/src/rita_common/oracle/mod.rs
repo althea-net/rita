@@ -72,11 +72,13 @@ impl Handler<Update> for Oracle {
 
     fn handle(&mut self, _msg: Update, _ctx: &mut Context<Self>) -> Self::Result {
         let payment_settings = SETTING.get_payment();
+        let dao_settings = SETTING.get_dao();
         let full_node = get_web3_server();
         let web3 = Web3::new(&full_node, ORACLE_TIMEOUT);
         let our_address = payment_settings.eth_address.expect("No address!");
-        let oracle_enabled = payment_settings.price_oracle_enabled;
+        let oracle_enabled = dao_settings.oracle_enabled;
         drop(payment_settings);
+        drop(dao_settings);
 
         info!("About to make web3 requests to {}", full_node);
         update_balance(our_address, &web3, full_node.clone());
@@ -84,9 +86,9 @@ impl Handler<Update> for Oracle {
         update_gas_price(&web3, full_node.clone());
         get_net_version(&web3, full_node);
         if oracle_enabled {
-            update_our_price();
+            update_oracle();
         } else {
-            info!("User has disabled the price oracle");
+            info!("User has disabled the Oracle!");
         }
         self.last_updated = Instant::now();
     }
@@ -266,19 +268,28 @@ struct PriceUpdate {
     fee_multiplier: u32,
 }
 
-/// This is a very simple and early version of an automated pricing system
-/// what it does right now is take the configured price_update_url from the settings
-/// and query it for a file containing a suggested gateway and intermediary node price
-/// the price the node charges is then set to this value.
-fn update_our_price() {
+/// This is a hacky version of the eventual on chain subnet DAO structure, since we can't get
+/// settings from the chain instead we use the subnet dao url to grab settings from a simple file server
+/// and then apply them. This is also taking the place of a pricing plugin, we eventually hope that routers
+/// will be able to adjust prices on their own and not require centralized input to know when it's best
+/// for the network to adjust bandwidth prices, that's not the case right now so the DAO suggested prices
+/// are taken at face value.
+fn update_oracle() {
     trace!("Starting price update");
-    let url = SETTING.get_payment().price_oracle_url.clone();
+    // if there's no url the user has not configured a DAO yet and
+    // we simply move on
+    let url = match SETTING.get_dao().oracle_url.clone() {
+        Some(url) => url,
+        None => return,
+    };
+
     let is_gateway = SETTING.get_network().is_gateway;
 
     if !url.starts_with("https://") {
         error!("Unsafe price update url, your must use https!");
         return;
     }
+
     let res = client::get(url)
         .header("User-Agent", "Actix-web")
         .finish()
@@ -319,10 +330,10 @@ fn update_our_price() {
                                                 dao.dao_fee = new_dao_fee;
                                             }
 
-                                            trace!("Successfully updated prices");
+                                            trace!("Successfully updated oracle");
                                         }
                                         Err(e) => warn!(
-                                            "Failed to deserialize price update message with {:?}",
+                                            "Failed to deserialize oracle update message with {:?}",
                                             e
                                         ),
                                     }
@@ -334,7 +345,7 @@ fn update_our_price() {
                     ))
                 }
                 Err(e) => Either::B({
-                    trace!("Failed to make price update request with {:?}", e);
+                    trace!("Failed to make oracle update request with {:?}", e);
                     // don't ask me why these types agree
                     future::ok(())
                 }),
