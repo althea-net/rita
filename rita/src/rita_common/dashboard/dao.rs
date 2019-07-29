@@ -22,8 +22,17 @@ pub fn add_to_dao_list(path: Path<(Address)>) -> Result<Json<()>, Error> {
             return Ok(Json(()));
         }
     }
-    SETTING.get_dao_mut().dao_addresses.push(provided_address);
+    let mut dao_settings = SETTING.get_dao_mut();
+    dao_settings.dao_addresses.push(provided_address);
 
+    // So the concept of devices like exits being on multiple DAO's is a bit confusing
+    // in the context of the oracle url, which we set for a single DAO because merging the oracle
+    // data is difficult and doesn't really make logical sense. Therefore we're going to set our
+    // oracle url based on the last added DAO address, for clients there will only ever be one
+    // and for exits or large nodes operating on many dao's they are intended to disable it.
+    dao_settings.oracle_url = Some(format!("https://updates.althea.net/{}", provided_address));
+
+    drop(dao_settings);
     // try and save the config and fail if we can't
     if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
         return Err(e);
