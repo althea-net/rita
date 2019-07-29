@@ -177,6 +177,10 @@ impl Handler<Tick> for TokenBridge {
         let payment_settings = SETTING.get_payment();
         let our_address = payment_settings.eth_address.unwrap();
         let system_chain = payment_settings.system_chain;
+
+        if !payment_settings.bridge_enabled {
+            return;
+        }
         drop(payment_settings);
 
         let bridge = self.bridge.clone();
