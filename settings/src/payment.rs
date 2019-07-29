@@ -30,6 +30,10 @@ fn default_price_oracle() -> bool {
     true
 }
 
+fn default_bridge_enabled() -> bool {
+    true
+}
+
 fn default_balance_warning_level() -> Uint256 {
     (10_000_000_000_000_000u64).into()
 }
@@ -111,6 +115,8 @@ pub struct PaymentSettings {
     /// Full file path for Debts storage
     #[serde(default = "default_debts_file")]
     pub debts_file: String,
+    #[serde(default = "default_bridge_enabled")]
+    pub bridge_enabled: bool,
 }
 
 impl Default for PaymentSettings {
@@ -137,6 +143,7 @@ impl Default for PaymentSettings {
             system_chain: SystemChain::Ethereum,
             withdraw_chain: SystemChain::Ethereum,
             debts_file: default_debts_file(),
+            bridge_enabled: true,
         }
     }
 }
