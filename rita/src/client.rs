@@ -188,7 +188,6 @@ fn main() {
     }
 
     // If we are an an OpenWRT device try and rescue it from update issues
-    // TODO remove in Beta 6
     if KI.is_openwrt() && KI.check_cron().is_err() {
         error!("Failed to setup cron!");
     }
