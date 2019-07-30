@@ -16,7 +16,7 @@ fn default_price_oracle() -> bool {
     true
 }
 fn default_oracle_url() -> Option<String> {
-    None
+    Some("https://updates.althea.net/prices".to_string())
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
