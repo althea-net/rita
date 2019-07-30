@@ -26,20 +26,12 @@ fn default_free_tier_throughput() -> u32 {
     1000
 }
 
-fn default_price_oracle() -> bool {
-    true
-}
-
 fn default_bridge_enabled() -> bool {
     true
 }
 
 fn default_balance_warning_level() -> Uint256 {
     (10_000_000_000_000_000u64).into()
-}
-
-fn default_oracle_url() -> String {
-    "https://updates.altheamesh.com/prices".to_string()
 }
 
 fn default_node_list() -> Vec<String> {
@@ -101,10 +93,6 @@ pub struct PaymentSettings {
     /// chains, provided in name:port format
     #[serde(default = "default_node_list")]
     pub node_list: Vec<String>,
-    #[serde(default = "default_price_oracle")]
-    pub price_oracle_enabled: bool,
-    #[serde(default = "default_oracle_url")]
-    pub price_oracle_url: String,
     #[serde(default = "default_system_chain")]
     pub system_chain: SystemChain,
     /// defines the blockchain to use for currency withdraws, this may not
@@ -138,8 +126,6 @@ impl Default for PaymentSettings {
             gas_price: 10000000000u64.into(), // 10 gwei
             net_version: None,
             node_list: Vec::new(),
-            price_oracle_enabled: true,
-            price_oracle_url: "https://updates.altheamesh.com/prices".to_string(),
             system_chain: SystemChain::Ethereum,
             withdraw_chain: SystemChain::Ethereum,
             debts_file: default_debts_file(),

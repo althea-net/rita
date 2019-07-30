@@ -43,9 +43,9 @@ mod middleware;
 mod rita_client;
 mod rita_common;
 
-use rita_client::rita_loop::check_rita_client_actors;
-use rita_common::rita_loop::check_rita_common_actors;
-use rita_common::rita_loop::start_core_rita_endpoints;
+use crate::rita_client::rita_loop::check_rita_client_actors;
+use crate::rita_common::rita_loop::check_rita_common_actors;
+use crate::rita_common::rita_loop::start_core_rita_endpoints;
 
 use crate::rita_client::dashboard::eth_private_key::*;
 use crate::rita_client::dashboard::exits::*;
@@ -174,6 +174,13 @@ fn main() {
     payment_settings.withdraw_chain = payment_settings.system_chain;
     drop(payment_settings);
 
+    // remove in beta 9 as this will already be set propertly
+    let mut dao_settings = SETTING.get_dao_mut();
+    if let Some(address) = dao_settings.dao_addresses.iter().last() {
+        dao_settings.oracle_url = Some(format!("https://updates.althea.net/{}", address));
+    }
+    drop(dao_settings);
+
     if cfg!(feature = "development") {
         println!("Warning!");
         println!("This build is meant only for development purposes.");
@@ -181,7 +188,6 @@ fn main() {
     }
 
     // If we are an an OpenWRT device try and rescue it from update issues
-    // TODO remove in Beta 6
     if KI.is_openwrt() && KI.check_cron().is_err() {
         error!("Failed to setup cron!");
     }
