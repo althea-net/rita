@@ -19,6 +19,7 @@ pub fn set_system_blockchain(path: Path<String>) -> Result<HttpResponse, Error> 
     }
     let id = id.unwrap();
 
+    let mut oracle_url;
     let mut payment = SETTING.get_payment_mut();
     if id == SystemChain::Ethereum {
         payment.node_list = vec![
@@ -28,6 +29,7 @@ pub fn set_system_blockchain(path: Path<String>) -> Result<HttpResponse, Error> 
         payment.net_version = Some(1);
         payment.system_chain = SystemChain::Ethereum;
         payment.withdraw_chain = SystemChain::Ethereum;
+        oracle_url = "https://updates.altheamesh.com/prices".to_string();
         // reset balance so that things take effect immediatley in the UI
         payment.balance = 0u32.into();
     } else if id == SystemChain::Xdai {
@@ -35,6 +37,7 @@ pub fn set_system_blockchain(path: Path<String>) -> Result<HttpResponse, Error> 
         payment.net_version = Some(100);
         payment.system_chain = SystemChain::Xdai;
         payment.withdraw_chain = SystemChain::Xdai;
+        oracle_url = "https://updates.altheamesh.com/xdaiprices".to_string();
         // reset balance so that things take effect immediatley in the UI
         payment.balance = 0u32.into();
     } else if id == SystemChain::Rinkeby {
@@ -43,6 +46,7 @@ pub fn set_system_blockchain(path: Path<String>) -> Result<HttpResponse, Error> 
         payment.net_version = Some(4);
         payment.system_chain = SystemChain::Rinkeby;
         payment.withdraw_chain = SystemChain::Rinkeby;
+        oracle_url = "https://updates.altheamesh.com/prices".to_string();
         // reset balance so that things take effect immediatley in the UI
         payment.balance = 0u32.into();
     } else {
@@ -53,6 +57,11 @@ pub fn set_system_blockchain(path: Path<String>) -> Result<HttpResponse, Error> 
     drop(payment);
 
     let mut dao = SETTING.get_dao_mut();
+    let have_dao = !dao.dao_addresses.is_empty();
+    // if there is no dao configured use the currency oracle value
+    if !have_dao {
+        dao.oracle_url = Some(oracle_url);
+    }
     if id == SystemChain::Ethereum {
         dao.node_list = vec![
             "https://eth.althea.org:443".to_string(),
