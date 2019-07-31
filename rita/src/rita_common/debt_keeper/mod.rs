@@ -523,19 +523,10 @@ impl DebtKeeper {
             );
         }
 
-        // reduce debt if it's negative to try and trend to zero
-        // the edge case this is supposed to handle is if a node ran out of money and then
-        // crashed so it doesn't know what it owes the exit and it may come back hours later
-        // the other side of this coin is that we're causing a node running on the free tier
-        // to bounce in and out of it, this value is hand tuned to take the average round overrun
-        // and bring it below the close treshold once every 3 hours. If the client router has been
-        // refilled it should return to full function then
-        // TODO replace with explcit timer system
-        // if debt_data.debt < Int256::from(0) {
-        //     debt_data.debt += 300_000_000u64.into();
-        // }
-
-        let close_threshold = SETTING.get_payment().close_threshold.clone();
+        let payment_settings = SETTING.get_payment();
+        let close_threshold = payment_settings.close_threshold.clone();
+        let fudge_factor = payment_settings.fudge_factor;
+        drop(payment_settings);
 
         trace!(
             "Debt is {} and close is {}",
@@ -568,11 +559,13 @@ impl DebtKeeper {
                 Ok(DebtAction::SuspendTunnel)
             }
             (false, true, false) => {
-                let to_pay: Uint256 = debt_data.debt.to_uint256().ok_or_else(|| {
+                let mut to_pay: Uint256 = debt_data.debt.to_uint256().ok_or_else(|| {
                     format_err!("Unable to convert debt data into unsigned 256 bit integer")
                 })?;
                 // overpay by 1% to encourage convergence
-                let to_pay = to_pay.clone() + (to_pay / 100u8.into());
+                if fudge_factor != 0 {
+                    to_pay = to_pay.clone() + (to_pay / fudge_factor.into());
+                }
 
                 debt_data.payment_in_flight = true;
                 debt_data.payment_in_flight_start = Some(Instant::now());

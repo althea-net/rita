@@ -22,6 +22,10 @@ fn default_dynamic_fee_multiplier() -> u32 {
     20
 }
 
+fn default_fudge_factor() -> u8 {
+    100
+}
+
 fn default_free_tier_throughput() -> u32 {
     1000
 }
@@ -117,6 +121,12 @@ pub struct PaymentSettings {
     pub debts_file: String,
     #[serde(default = "default_bridge_enabled")]
     pub bridge_enabled: bool,
+    /// A value used to divide and add to a payment, essentailly a cheating tool for
+    /// payment convergence. Computed as payment_amount + (payment_amount/fudge_factor)
+    /// so a factor of 100 would be a 1% overpayment this helps cover up errors in accounting
+    /// by pushing the system into overpayment and therefore convergence
+    #[serde(default = "default_fudge_factor")]
+    pub fudge_factor: u8,
 }
 
 impl Default for PaymentSettings {
@@ -144,6 +154,7 @@ impl Default for PaymentSettings {
             withdraw_chain: SystemChain::Ethereum,
             debts_file: default_debts_file(),
             bridge_enabled: true,
+            fudge_factor: 100u8,
         }
     }
 }
