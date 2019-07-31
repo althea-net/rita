@@ -23,7 +23,7 @@ fn default_dynamic_fee_multiplier() -> u32 {
 }
 
 fn default_fudge_factor() -> u8 {
-    100
+    0
 }
 
 fn default_free_tier_throughput() -> u32 {
@@ -154,7 +154,7 @@ impl Default for PaymentSettings {
             withdraw_chain: SystemChain::Ethereum,
             debts_file: default_debts_file(),
             bridge_enabled: true,
-            fudge_factor: 100u8,
+            fudge_factor: 0u8,
         }
     }
 }
