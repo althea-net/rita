@@ -266,6 +266,7 @@ struct PriceUpdate {
     dao_fee: u128,
     warning: u128,
     fee_multiplier: u32,
+    fudge_factor: u8,
 }
 
 /// This is a hacky version of the eventual on chain subnet DAO structure, since we can't get
@@ -321,6 +322,7 @@ fn update_oracle() {
                                                 new_prices.warning.into();
                                             payment.dynamic_fee_multiplier =
                                                 new_prices.fee_multiplier;
+                                            payment.fudge_factor = new_prices.fudge_factor;
                                             drop(payment);
 
                                             let new_dao_fee = Uint256::from(new_prices.dao_fee);
