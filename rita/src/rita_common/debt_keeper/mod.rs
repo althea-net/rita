@@ -568,21 +568,23 @@ impl DebtKeeper {
                 Ok(DebtAction::SuspendTunnel)
             }
             (false, true, false) => {
-                let d: Uint256 = debt_data.debt.to_uint256().ok_or_else(|| {
+                let to_pay: Uint256 = debt_data.debt.to_uint256().ok_or_else(|| {
                     format_err!("Unable to convert debt data into unsigned 256 bit integer")
                 })?;
+                // overpay by 1% to encourage convergence
+                let to_pay = to_pay.clone() + (to_pay / 100u8.into());
 
                 debt_data.payment_in_flight = true;
                 debt_data.payment_in_flight_start = Some(Instant::now());
 
                 debt_data.action = DebtAction::MakePayment {
                     to: *ident,
-                    amount: d.clone(),
+                    amount: to_pay.clone(),
                 };
 
                 Ok(DebtAction::MakePayment {
                     to: *ident,
-                    amount: d,
+                    amount: to_pay,
                 })
             }
             (false, false, _) => {
