@@ -63,34 +63,58 @@ pub fn get_next_client_ip(conn: &PgConnection) -> Result<IpAddr, Error> {
 
 /// updates the last seen time
 pub fn update_client(client: &ExitClientIdentity, conn: &PgConnection) -> Result<(), Error> {
-    use self::schema::clients::dsl::{clients, email, last_seen, phone};
+    use self::schema::clients::dsl::{
+        clients, email, eth_address, last_seen, mesh_ip, phone, wg_pubkey,
+    };
+    let ip = client.global.mesh_ip;
+    let wg = client.global.wg_public_key;
+    let key = client.global.eth_address;
+    let filtered_list = clients
+        .filter(mesh_ip.eq(ip.to_string()))
+        .filter(wg_pubkey.eq(wg.to_string()))
+        .filter(eth_address.eq(key.to_string()));
 
     if let Some(mail) = client.reg_details.email.clone() {
-        diesel::update(clients.find(&client.global.mesh_ip.to_string()))
+        diesel::update(filtered_list.clone())
             .set(email.eq(mail))
             .execute(&*conn)?;
     }
 
     if let Some(number) = client.reg_details.phone.clone() {
-        diesel::update(clients.find(&client.global.mesh_ip.to_string()))
+        diesel::update(filtered_list.clone())
             .set(phone.eq(number))
             .execute(&*conn)?;
     }
 
-    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
+    diesel::update(filtered_list)
         .set(last_seen.eq(secs_since_unix_epoch() as i64))
         .execute(&*conn)?;
 
     Ok(())
 }
 
-pub fn get_client(ip: IpAddr, conn: &PgConnection) -> Result<models::Client, Error> {
-    use self::schema::clients::dsl::{clients, mesh_ip};
-    match clients
-        .filter(mesh_ip.eq(&ip.to_string()))
-        .load::<models::Client>(conn)
-    {
-        Ok(entry) => Ok(entry[0].clone()),
+pub fn get_client(
+    client: &ExitClientIdentity,
+    conn: &PgConnection,
+) -> Result<models::Client, Error> {
+    use self::schema::clients::dsl::{clients, eth_address, mesh_ip, wg_pubkey};
+    let ip = client.global.mesh_ip;
+    let wg = client.global.wg_public_key;
+    let key = client.global.eth_address;
+    let filtered_list = clients
+        .filter(mesh_ip.eq(ip.to_string()))
+        .filter(wg_pubkey.eq(wg.to_string()))
+        .filter(eth_address.eq(key.to_string()));
+    match filtered_list.load::<models::Client>(conn) {
+        Ok(entry) => {
+            if entry.len() > 1 {
+                error!(
+                    "More than one exact match with wg: {} eth: {} ip: {}",
+                    wg, key, ip
+                );
+            }
+            Ok(entry[0].clone())
+        }
         Err(e) => {
             error!("We failed to lookup the client {:?} with{:?}", mesh_ip, e);
             bail!("We failed to lookup the client!")
@@ -105,8 +129,15 @@ pub fn verify_client(
     conn: &PgConnection,
 ) -> Result<(), Error> {
     use self::schema::clients::dsl::*;
+    let ip = client.global.mesh_ip;
+    let wg = client.global.wg_public_key;
+    let key = client.global.eth_address;
+    let filtered_list = clients
+        .filter(mesh_ip.eq(ip.to_string()))
+        .filter(wg_pubkey.eq(wg.to_string()))
+        .filter(eth_address.eq(key.to_string()));
 
-    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
+    diesel::update(filtered_list)
         .set(verified.eq(client_verified))
         .execute(&*conn)?;
 
@@ -120,8 +151,15 @@ pub fn verify_db_client(
     conn: &PgConnection,
 ) -> Result<(), Error> {
     use self::schema::clients::dsl::*;
+    let ip = &client.mesh_ip;
+    let wg = &client.wg_pubkey;
+    let key = &client.eth_address;
+    let filtered_list = clients
+        .filter(mesh_ip.eq(ip.to_string()))
+        .filter(wg_pubkey.eq(wg.to_string()))
+        .filter(eth_address.eq(key.to_string()));
 
-    diesel::update(clients.find(&client.mesh_ip))
+    diesel::update(filtered_list)
         .set(verified.eq(client_verified))
         .execute(&*conn)?;
 
@@ -131,8 +169,15 @@ pub fn verify_db_client(
 /// Increments the text message sent count in the database
 pub fn text_sent(client: &ExitClientIdentity, conn: &PgConnection, val: i32) -> Result<(), Error> {
     use self::schema::clients::dsl::*;
+    let ip = client.global.mesh_ip;
+    let wg = client.global.wg_public_key;
+    let key = client.global.eth_address;
+    let filtered_list = clients
+        .filter(mesh_ip.eq(ip.to_string()))
+        .filter(wg_pubkey.eq(wg.to_string()))
+        .filter(eth_address.eq(key.to_string()));
 
-    diesel::update(clients.find(&client.global.mesh_ip.to_string()))
+    diesel::update(filtered_list)
         .set(text_sent.eq(val + 1))
         .execute(&*conn)?;
 
