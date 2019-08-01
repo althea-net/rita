@@ -148,10 +148,9 @@ fn create_or_update_user_record(
     user_country: String,
 ) -> Result<models::Client, Error> {
     use self::schema::clients::dsl::clients;
-    let client_mesh_ip = client.global.mesh_ip;
     if client_exists(&client, conn)? {
         update_client(&client, conn)?;
-        Ok(get_client(client_mesh_ip, conn)?)
+        Ok(get_client(&client, conn)?)
     } else {
         info!(
             "record for {} does not exist, creating",
@@ -243,14 +242,12 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
 
 /// Gets the status of a client and updates it in the database
 pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<ExitState, Error> {
-    let client_mesh_ip = client.global.mesh_ip;
-
     trace!("Checking if record exists for {:?}", client.global.mesh_ip);
 
     if client_exists(&client, &conn)? {
         trace!("record exists, updating");
 
-        let their_record = get_client(client_mesh_ip, &conn)?;
+        let their_record = get_client(&client, &conn)?;
 
         if !verif_done(&their_record) {
             return Ok(ExitState::Pending {
