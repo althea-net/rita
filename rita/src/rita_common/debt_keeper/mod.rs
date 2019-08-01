@@ -32,8 +32,8 @@ use std::io::Write;
 use std::time::Duration;
 use std::time::Instant;
 
-/// How often we save the nodes debt data, currently 4 hours
-const SAVE_FREQENCY: Duration = Duration::from_secs(14400);
+/// How often we save the nodes debt data, currently 30 minutes
+const SAVE_FREQENCY: Duration = Duration::from_secs(1800);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodeDebtData {
