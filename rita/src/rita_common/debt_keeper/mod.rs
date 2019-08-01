@@ -226,7 +226,10 @@ impl Handler<WgKeyInsensitiveTrafficUpdate> for DebtKeeper {
     ) -> Self::Result {
         let partial_id = msg.traffic.from;
         for (id, _) in self.debt_data.clone().iter() {
-            if id.eth_address == partial_id.eth_address && id.mesh_ip == partial_id.mesh_ip {
+            if id.eth_address == partial_id.eth_address
+                && id.mesh_ip == partial_id.mesh_ip
+                && id.wg_public_key != partial_id.wg_public_key
+            {
                 self.traffic_update(&id, msg.traffic.amount);
                 return;
             }
