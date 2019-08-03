@@ -561,6 +561,7 @@ pub fn enforce_exit_clients(
                                         let res = if debt_entry.payment_details.action
                                             == DebtAction::SuspendTunnel
                                         {
+                                            info!("Exit is enforcing on {}", client.wg_pubkey);
                                             KI.set_class_limit(
                                                 "wg_exit",
                                                 free_tier_limit,
