@@ -29,7 +29,7 @@ use crate::rita_common::usage_tracker::UsageTracker;
 use crate::rita_common::usage_tracker::UsageType;
 use crate::KI;
 use crate::SETTING;
-use ::actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
+use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use actix_web::client;
 use actix_web::client::Connection;
 use actix_web::HttpMessage;
@@ -40,6 +40,7 @@ use failure::Error;
 use futures::future::ok as future_ok;
 use futures::future::Future;
 use num256::Int256;
+use num_traits::identities::Zero;
 use settings::RitaCommonSettings;
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
@@ -166,8 +167,11 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
                                         start.elapsed().as_secs(),
                                         start.elapsed().subsec_millis()
                                     );
-                                    if !gateway_exit_client {
-                                        let exit_replace = TrafficReplace {
+                                    let we_are_not_a_gateway = !gateway_exit_client;
+                                    let we_owe_exit = debt >= Int256::zero();
+                                    match (we_are_not_a_gateway, we_owe_exit) {
+                                        (true, true) => {
+                                          let exit_replace = TrafficReplace {
                                             traffic: Traffic {
                                                 from: exit_id,
                                                 amount: debt,
@@ -175,9 +179,11 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
                                         };
 
                                         DebtKeeper::from_registry().do_send(exit_replace);
-                                    }
-                                    else {
-                                        info!("We are a gateway!, Acting accordingly");
+                                    },
+                                        // the exit should never tell us it owes us, that doesn't make sense outside of the gateway
+                                        // client corner case
+                                        (true, false) => warn!("We're probably a gateway but haven't detected it yet"),
+                                        (false, _) => info!("We are a gateay!, Acting accordingly"),
                                     }
                                 }
                                 Err(e) => {
