@@ -4,6 +4,7 @@
 //!
 //! For more documentation on specific functions see the router-dashboard file in the docs folder
 
+pub mod backup_created;
 pub mod eth_private_key;
 pub mod exits;
 pub mod interfaces;

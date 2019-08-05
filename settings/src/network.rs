@@ -92,11 +92,15 @@ pub struct NetworkSettings {
     /// Full file path for usage tracker storage
     #[serde(default = "default_usage_tracker_file")]
     pub usage_tracker_file: String,
+    #[serde(skip_deserializing, default)]
+    // Set to true by the dashboard when the user indicates they've made a backup
+    pub backup_created: bool,
 }
 
 impl Default for NetworkSettings {
     fn default() -> Self {
         NetworkSettings {
+            backup_created: false,
             metric_factor: 1900,
             mesh_ip: None,
             bounty_ip: "fd00::3".parse().unwrap(),
