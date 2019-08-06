@@ -7,30 +7,22 @@
 //! operates by simply grabbing a text file from a configured server and adjusting prices
 //! to match. More advanced pricing systems may be broken out into their own file some day
 
+use crate::rita_common::rita_loop::get_web3_server;
+use crate::SETTING;
 use ::actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use actix_web::error::PayloadError;
 use actix_web::{client, Either, HttpMessage, Result};
+use althea_types::SystemChain;
 use bytes::Bytes;
+use clarity::Address;
+use futures::{future, Future};
+use num256::Int256;
 use num256::Uint256;
 use num_traits::Zero;
+use settings::RitaCommonSettings;
 use std::time::Duration;
 use std::time::Instant;
-
-use futures::{future, Future};
-
-use num256::Int256;
-
 use web30::client::Web3;
-
-use clarity::Address;
-
-use settings::RitaCommonSettings;
-
-use althea_types::SystemChain;
-
-use crate::rita_common::rita_loop::get_web3_server;
-
-use crate::SETTING;
 
 pub struct Oracle {
     last_updated: Instant,
@@ -258,7 +250,7 @@ fn update_gas_price(web3: &Web3, full_node: String) {
     Arbiter::spawn(res);
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct PriceUpdate {
     client: u32,
     gateway: u32,
@@ -269,6 +261,8 @@ struct PriceUpdate {
     fudge_factor: u8,
     system_chain: SystemChain,
     withdraw_chain: SystemChain,
+    /// A json payload to be merged into the existing settings
+    merge_json: serde_json::Value,
 }
 
 /// This is a hacky version of the eventual on chain subnet DAO structure, since we can't get
@@ -310,30 +304,42 @@ fn update_oracle() {
                                     // transparently actix requests need to get the body and deserialize using serde_json in
                                     // an explicit fashion
                                     match serde_json::from_slice::<PriceUpdate>(&new_prices) {
-                                        Ok(new_prices) => {
-                                            // TODO this always seemed to have a lot of false positives, bet that
-                                            // causes intermediaries to get priced like gateways
+                                        Ok(new_settings) => {
                                             let mut payment = SETTING.get_payment_mut();
+                                            // This will be true on devices that have integrated switches
+                                            // and a wan port configured. Mostly not a problem since we stopped
+                                            // shipping wan ports by default
                                             if is_gateway {
-                                                payment.local_fee = new_prices.gateway;
+                                                payment.local_fee = new_settings.gateway;
                                             } else {
-                                                payment.local_fee = new_prices.client;
+                                                payment.local_fee = new_settings.client;
                                             }
-                                            payment.max_fee = new_prices.max;
+                                            payment.max_fee = new_settings.max;
                                             payment.balance_warning_level =
-                                                new_prices.warning.into();
+                                                new_settings.warning.into();
                                             payment.dynamic_fee_multiplier =
-                                                new_prices.fee_multiplier;
-                                            payment.fudge_factor = new_prices.fudge_factor;
-                                            payment.system_chain = new_prices.system_chain;
-                                            payment.withdraw_chain = new_prices.withdraw_chain;
+                                                new_settings.fee_multiplier;
+                                            payment.fudge_factor = new_settings.fudge_factor;
+                                            payment.system_chain = new_settings.system_chain;
+                                            payment.withdraw_chain = new_settings.withdraw_chain;
                                             drop(payment);
 
-                                            let new_dao_fee = Uint256::from(new_prices.dao_fee);
+                                            let new_dao_fee = Uint256::from(new_settings.dao_fee);
                                             let current_dao_fee = SETTING.get_dao().dao_fee.clone();
                                             if new_dao_fee > current_dao_fee {
                                                 let mut dao = SETTING.get_dao_mut();
                                                 dao.dao_fee = new_dao_fee;
+                                            }
+                                            // merge in arbitrary setting change string if it's not blank
+                                            if new_settings.merge_json != "" {
+                                                match SETTING.merge(new_settings.merge_json.clone())
+                                                {
+                                                    Ok(_) => {}
+                                                    Err(e) => error!(
+                                                        "Failed to merge oracle settings {:?} {:?}",
+                                                        new_settings.merge_json, e
+                                                    ),
+                                                }
                                             }
 
                                             trace!("Successfully updated oracle");
