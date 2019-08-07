@@ -66,11 +66,13 @@ use futures::future;
 use futures::future::Future;
 use num256::Uint256;
 use settings::RitaCommonSettings;
+use std::fmt;
+use std::fmt::Display;
 use std::str::FromStr;
 use std::time::Duration;
 use std::time::Instant;
 
-const BRIDGE_TIMEOUT: Duration = Duration::from_secs(600);
+const BRIDGE_TIMEOUT: Duration = Duration::from_secs(3600);
 const UNISWAP_TIMEOUT: u64 = 600u64;
 const ETH_TRANSFER_TIMEOUT: u64 = 600u64;
 
@@ -83,15 +85,39 @@ fn eth_to_wei(eth: f64) -> Uint256 {
     wei.into()
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum State {
-    Ready {},
+    Ready {
+        /// used to ensure that only the future chain that started an operation can end it
+        former_state: Option<Box<State>>,
+    },
     Depositing {},
     Withdrawing {
         amount: Uint256,
         to: Address,
         timestamp: Instant,
     },
+}
+
+impl Display for State {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            State::Ready {
+                former_state: Some(_),
+            } => write!(f, "Ready{{Some()}}"),
+            State::Ready { former_state: None } => write!(f, "Ready{{None}}"),
+            State::Depositing { .. } => write!(f, "Depositing"),
+            State::Withdrawing {
+                amount: a,
+                to: t,
+                timestamp: ti,
+            } => write!(
+                f,
+                "Withdrawing:{{amount: {}, to: {}, timestamp: {:?}}}",
+                a, t, ti
+            ),
+        }
+    }
 }
 
 pub struct TokenBridge {
@@ -134,9 +160,8 @@ impl Default for TokenBridge {
                 "https://eth.althea.org".into(),
                 "https://dai.althea.net".into(),
             ),
-            state: State::Ready {},
-            // operation_in_progress: None,
-            minimum_to_exchange: 10,
+            state: State::Ready { former_state: None },
+            minimum_to_exchange: 2,
             reserve_amount: 1,
             minimum_stranded_dai_transfer: 1,
         }
@@ -190,7 +215,7 @@ impl Handler<Tick> for TokenBridge {
 
         if let SystemChain::Xdai = system_chain {
             match self.state.clone() {
-                State::Ready {} => {
+                State::Ready { .. } => {
                     trace!(
                         "Ticking in State::Ready. Eth Address: {}",
                         bridge.own_address
@@ -240,11 +265,13 @@ impl Handler<Tick> for TokenBridge {
                                 // It goes back into State::Ready once the dai
                                 // is in the bridge or if failed. This prevents multiple simultaneous
                                 // attempts to bridge the same Dai.
-                                TokenBridge::from_registry().do_send(StateChange(State::Ready {}));
 
                                 if res.is_err() {
                                     error!("Error in State::Deposit Tick handler: {:?}", res);
                                 }
+                                TokenBridge::from_registry().do_send(StateChange(State::Ready {
+                                    former_state: Some(Box::new(State::Depositing {})),
+                                }));
                                 Ok(())
                             }),
                     )
@@ -256,8 +283,10 @@ impl Handler<Tick> for TokenBridge {
                     timestamp,
                 } => {
                     if is_timed_out(timestamp) {
-                        TokenBridge::from_registry().do_send(StateChange(State::Ready {}));
+                        error!("Withdraw timed out!");
+                        TokenBridge::from_registry().do_send(StateChange(State::Ready {former_state: Some(Box::new(State::Withdrawing{to, amount, timestamp}))}));
                     } else {
+                        let amount_a = amount.clone();
                         Arbiter::spawn(
                             bridge
                                 .get_dai_balance(our_address)
@@ -278,12 +307,15 @@ impl Handler<Tick> for TokenBridge {
                                                         ETH_TRANSFER_TIMEOUT,
                                                     )
                                                 })
-                                                .and_then(|_| {
+                                                .and_then(move |_| {
                                                     trace!("Issued an eth transfer for withdraw! Now complete!");
+                                                    // we only exit withdraw on success or timeout
+                                                    TokenBridge::from_registry().do_send(StateChange(State::Ready {former_state: Some(Box::new(State::Withdrawing{to, amount: amount_a, timestamp}))}));
                                                     Ok(())}),
                                         )
                                             as Box<Future<Item = (), Error = Error>>
                                     } else {
+                                        info!("withdraw is waiting on bridge");
                                         Box::new(futures::future::ok(()))
                                             as Box<Future<Item = (), Error = Error>>
                                     }
@@ -292,9 +324,6 @@ impl Handler<Tick> for TokenBridge {
                                     if res.is_err() {
                                         error!("Error in State::Withdraw Tick handler: {:?}", res);
                                     }
-                                    // Change to Deposit whether or not there was an error
-                                    TokenBridge::from_registry()
-                                        .do_send(StateChange(State::Ready {}));
                                     Ok(())
                                 }),
                         )
@@ -335,13 +364,7 @@ impl Handler<Withdraw> for TokenBridge {
                         bail!("Cannot start a withdraw when one is in progress")
                     )
                 }
-                State::Depositing { .. } => {
-                    (
-                        // Figure out something to do here
-                        bail!("Cannot withdraw while depositing")
-                    )
-                }
-                State::Ready {} => {
+                _ => {
                     Arbiter::spawn(bridge.xdai_to_dai_bridge(amount.clone()).then(move |res| {
                         if res.is_err() {
                             error!("Error in State::Deposit Withdraw handler: {:?}", res);
@@ -365,12 +388,23 @@ impl Handler<Withdraw> for TokenBridge {
 }
 
 #[derive(Message)]
-pub struct StateChange(State);
+struct StateChange(State);
 
 impl Handler<StateChange> for TokenBridge {
     type Result = ();
     fn handle(&mut self, msg: StateChange, _ctx: &mut Context<Self>) -> Self::Result {
-        trace!("Changing state to {:?}", msg.0);
-        self.state = msg.0;
+        trace!("Changing state to {}", msg.0);
+        let new_state = msg.0;
+        if let State::Ready {
+            former_state: Some(f),
+        } = new_state.clone()
+        {
+            trace!("checking if we should change the state");
+            if self.state != *f {
+                trace!("{} != {}", self.state, *f);
+                return;
+            }
+        }
+        self.state = new_state;
     }
 }
