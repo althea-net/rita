@@ -12,15 +12,18 @@ use althea_types::SystemChain;
 use clarity::{Address, Transaction};
 use failure::Error;
 use futures::{future, Future};
+use num256::Uint256;
 use std::boxed::Box;
 use std::time::Duration;
 use web30::client::Web3;
 
 pub const WITHDRAW_TIMEOUT: Duration = Duration::from_secs(10);
 
-pub fn withdraw(path: Path<(Address, u64)>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+pub fn withdraw(
+    path: Path<(Address, Uint256)>,
+) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let address = path.0;
-    let amount = path.1;
+    let amount = path.1.clone();
     debug!("/withdraw/{:#x}/{} hit", address, amount);
     let payment_settings = SETTING.get_payment();
     let system_chain = payment_settings.system_chain;
@@ -46,7 +49,7 @@ pub fn withdraw(path: Path<(Address, u64)>) -> Box<dyn Future<Item = HttpRespons
 /// Withdraw for eth compatible chains
 fn eth_compatable_withdraw(
     address: Address,
-    amount: u64,
+    amount: Uint256,
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let full_node = get_web3_server();
     let web3 = Web3::new(&full_node, WITHDRAW_TIMEOUT);
@@ -67,7 +70,7 @@ fn eth_compatable_withdraw(
         gas_price: payment_settings.gas_price.clone(),
         gas_limit: "21000".parse().unwrap(),
         to: address,
-        value: amount.into(),
+        value: amount,
         data: Vec::new(),
         signature: None,
     };
@@ -118,13 +121,13 @@ fn eth_compatable_withdraw(
 /// Cross chain bridge withdraw from Xdai -> ETH
 fn xdai_to_eth_withdraw(
     address: Address,
-    amount: u64,
+    amount: Uint256,
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     Box::new(
         TokenBridge::from_registry()
             .send(Withdraw {
                 to: address,
-                amount: amount.into(),
+                amount,
             })
             .then(|val| match val {
                 Ok(_) => Box::new(future::ok(
