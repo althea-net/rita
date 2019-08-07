@@ -169,18 +169,6 @@ fn main() {
         env_logger::init();
     }
 
-    // remove in beta 9 where this info will be imported from the dao address oracle.
-    let mut payment_settings = SETTING.get_payment_mut();
-    payment_settings.withdraw_chain = payment_settings.system_chain;
-    drop(payment_settings);
-
-    // remove in beta 9 as this will already be set propertly
-    let mut dao_settings = SETTING.get_dao_mut();
-    if let Some(address) = dao_settings.dao_addresses.iter().last() {
-        dao_settings.oracle_url = Some(format!("https://updates.althea.net/{}", address));
-    }
-    drop(dao_settings);
-
     if cfg!(feature = "development") {
         println!("Warning!");
         println!("This build is meant only for development purposes.");
