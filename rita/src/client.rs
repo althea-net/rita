@@ -68,6 +68,7 @@ use crate::rita_common::dashboard::nickname::*;
 use crate::rita_common::dashboard::own_info::*;
 use crate::rita_common::dashboard::pricing::*;
 use crate::rita_common::dashboard::settings::*;
+use crate::rita_common::dashboard::token_bridge::*;
 use crate::rita_common::dashboard::usage::*;
 use crate::rita_common::dashboard::wallet::*;
 use crate::rita_common::dashboard::wg_key::*;
@@ -299,6 +300,7 @@ fn start_client_dashboard() {
             .route("/usage/relay", Method::GET, get_relay_usage)
             .route("/usage/client", Method::GET, get_client_usage)
             .route("/usage/payments", Method::GET, get_payments)
+            .route("/token_bridge/status", Method::GET, get_bridge_status)
             .route("/router/reboot", Method::POST, reboot_router)
             .route("/router/update", Method::POST, update_router)
             .route("/router/password", Method::POST, set_pass)

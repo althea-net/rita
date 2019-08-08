@@ -67,6 +67,7 @@ use crate::rita_common::dashboard::nickname::*;
 use crate::rita_common::dashboard::own_info::*;
 use crate::rita_common::dashboard::pricing::*;
 use crate::rita_common::dashboard::settings::*;
+use crate::rita_common::dashboard::token_bridge::*;
 use crate::rita_common::dashboard::usage::*;
 use crate::rita_common::dashboard::wallet::*;
 use crate::rita_common::dashboard::wg_key::*;
@@ -266,6 +267,7 @@ fn start_rita_exit_dashboard() {
             .route("/router/password/", Method::POST, set_pass)
             .route("/crash_actors", Method::POST, crash_actors)
             .route("/usage/payments", Method::GET, get_payments)
+            .route("/token_bridge/status", Method::GET, get_bridge_status)
     })
     .bind(format!(
         "[::0]:{}",
