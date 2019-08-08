@@ -80,9 +80,18 @@ fn is_timed_out(started: Instant) -> bool {
     Instant::now() - started > BRIDGE_TIMEOUT
 }
 
-fn eth_to_wei(eth: f64) -> Uint256 {
-    let wei = (eth * 1_000_000_000_000_000_000_f64) as u64;
+fn eth_to_wei(eth: u64) -> Uint256 {
+    let wei = (eth * 1_000_000_000_000_000_000_u64) as u64;
     wei.into()
+}
+
+fn wei_dai_to_dai(dai_wei: Uint256) -> Uint256 {
+    dai_wei / 1_000_000_000_000_000_000_u64.into()
+}
+
+/// Provided an amount in DAI (wei dai so 1*10^18 per dollar) returns the equal amount in wei (or ETH if divided by 1*10^18)
+fn eth_equal(dai_in_wei: Uint256, wei_per_dollar: Uint256) -> Uint256 {
+    wei_dai_to_dai(dai_in_wei) * wei_per_dollar
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -183,7 +192,7 @@ fn rescue_dai(
                 // Over the bridge into xDai
                 Box::new(
                     bridge
-                        .dai_to_xdai_bridge(dai_balance)
+                        .dai_to_xdai_bridge(dai_balance, ETH_TRANSFER_TIMEOUT)
                         .and_then(|_res| Ok(())),
                 )
             } else {
@@ -229,7 +238,7 @@ impl Handler<Tick> for TokenBridge {
                             .and_then(move |_| {
                                 trace!("rescued dai");
                                 bridge
-                                    .dai_to_eth_price(eth_to_wei(1.into()))
+                                    .dai_to_eth_price(eth_to_wei(1u8.into()))
                                     .join(bridge.eth_web3.eth_get_balance(our_address))
                                     .and_then(move |(wei_per_dollar, eth_balance)| {
                                         // These statements convert the reserve_amount and minimum_to_exchange
@@ -251,7 +260,10 @@ impl Handler<Tick> for TokenBridge {
                                             Box::new(
                                                 bridge
                                                     // Convert to Dai in Uniswap
-                                                    .eth_to_dai_swap(swap_amount, 600)
+                                                    .eth_to_dai_swap(
+                                                        swap_amount,
+                                                        ETH_TRANSFER_TIMEOUT,
+                                                    )
                                                     .and_then(move |dai_bought| {
                                                         TokenBridge::from_registry().do_send(
                                                             DetailedStateChange(
@@ -259,7 +271,10 @@ impl Handler<Tick> for TokenBridge {
                                                             ),
                                                         );
                                                         // And over the bridge into xDai
-                                                        bridge.dai_to_xdai_bridge(dai_bought)
+                                                        bridge.dai_to_xdai_bridge(
+                                                            dai_bought,
+                                                            ETH_TRANSFER_TIMEOUT,
+                                                        )
                                                     })
                                                     .and_then(|_| Ok(())),
                                             )
@@ -311,33 +326,36 @@ impl Handler<Tick> for TokenBridge {
                         Arbiter::spawn(
                             bridge
                                 .get_dai_balance(our_address)
-                                .and_then(move |our_dai_balance| {
-                                    trace!("Our dai balance is {}", our_dai_balance);
-                                    // This is how it knows the money has come over from the bridge
+                                .join(bridge.eth_web3.eth_get_balance(our_address))
+                                .join(bridge.dai_to_eth_price(eth_to_wei(1u8.into())))
+                                .and_then(move |((our_dai_balance, our_eth_balance), wei_per_dollar)| {
+                                    trace!("withdraw state is {} dai {} eth {} wei per dollar", our_dai_balance, our_eth_balance, wei_per_dollar);
+                                    let transferred_eth = eth_equal(amount_a.clone(), wei_per_dollar);
+                                    // Money has come over the bridge
                                     if our_dai_balance >= amount {
                                         TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::DaiToEth));
                                         Box::new(
                                             bridge
                                                 // Then it converts to eth
-                                                .dai_to_eth_swap(amount, UNISWAP_TIMEOUT)
-                                                // And sends it to the recipient
-                                                .and_then(move |transferred_eth| {
-                                                    trace!("Converted dai back to eth!");
+                                                .dai_to_eth_swap(amount, UNISWAP_TIMEOUT).and_then(|_| Ok(()))
+                                        )
+                                            as Box<Future<Item = (), Error = Error>>
+                                    // all other steps are done and the eth is sitting and waiting
+                                    } else if our_eth_balance >= transferred_eth {
+                                        trace!("Converted dai back to eth!");
+
                                                    TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::EthToDest));
-                                                    bridge.eth_transfer(
+                                                   Box::new(bridge.eth_transfer(
                                                         to,
                                                         transferred_eth,
                                                         ETH_TRANSFER_TIMEOUT,
                                                     )
-                                                })
                                                 .and_then(move |_| {
                                                     trace!("Issued an eth transfer for withdraw! Now complete!");
-                                                    // we only exit withdraw on success or timeout
+                                                    // we only exit the withdraw state on success or timeout
                                                     TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::NoOp));
                                                     TokenBridge::from_registry().do_send(StateChange(State::Ready {former_state: Some(Box::new(State::Withdrawing{to, amount: amount_a, timestamp}))}));
-                                                    Ok(())}),
-                                        )
-                                            as Box<Future<Item = (), Error = Error>>
+                                                    Ok(())}))
                                     } else {
                                         info!("withdraw is waiting on bridge");
                                         TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::XdaiToDai));
@@ -449,7 +467,7 @@ struct DetailedStateChange(DetailedBridgeState);
 impl Handler<DetailedStateChange> for TokenBridge {
     type Result = ();
     fn handle(&mut self, msg: DetailedStateChange, _ctx: &mut Context<Self>) -> Self::Result {
-        trace!("Changing state to {:?}", msg.0);
+        trace!("Changing detailed state to {:?}", msg.0);
         let new_state = msg.0;
         self.detailed_state = new_state;
     }
@@ -479,6 +497,7 @@ pub enum DetailedBridgeState {
 #[derive(Clone, Debug, Eq, PartialEq, Copy, Serialize)]
 pub struct BridgeStatus {
     reserve_amount: u32,
+    minimum_deposit: u32,
     withdraw_chain: SystemChain,
     state: DetailedBridgeState,
 }
@@ -496,6 +515,7 @@ impl Handler<GetBridgeStatus> for TokenBridge {
         let withdraw_chain = payment_settings.withdraw_chain;
         let ret = BridgeStatus {
             reserve_amount: self.reserve_amount,
+            minimum_deposit: self.minimum_to_exchange,
             withdraw_chain,
             state: self.detailed_state,
         };
