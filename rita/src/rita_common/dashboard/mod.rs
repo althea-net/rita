@@ -14,6 +14,7 @@ pub mod nickname;
 pub mod own_info;
 pub mod pricing;
 pub mod settings;
+pub mod token_bridge;
 pub mod usage;
 pub mod wallet;
 pub mod wg_key;

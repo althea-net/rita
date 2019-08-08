@@ -1408,7 +1408,7 @@ amounts are in wei
 ## /release_feed/set/{feed}
 
 Sets the release feed for the router update process, there are 3 feeds in order of
-least to most stable. 
+least to most stable.
 
 ReleaseCandidate
 PreRelease
@@ -1437,7 +1437,7 @@ GeneralAvailability
 ## /release_feed/get
 
 Gets the release feed for the router update process, there are 3 feeds in order of
-least to most stable. 
+least to most stable.
 
 ReleaseCandidate
 PreRelease
@@ -1452,7 +1452,7 @@ GeneralAvailability
   - Contents:
 
 ```
-()
+ReleaseCandidate
 ```
 
 - Error Response: `500 Server Error`
@@ -1460,3 +1460,31 @@ GeneralAvailability
 - Sample Call:
 
 `curl http://192.168.10.1:4877/release_feed/get`
+
+---
+
+## /token_bridge/status
+
+Gets the status of the token bridge
+
+Reserve amount is always in DAI (dollars), withdraw chain represents how withdraws will be performed.
+The state is the DetailedBridgeState object in `rita_common/token_bridge/mod.rs` and you should consult
+the code there for all of it's many possible states
+
+- URL: `<rita ip>:<rita_dashboard_port>/token_bridge/status`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+{"reserve_amount":1,"withdraw_chain":"Ethereum","state":"NoOp"}
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl http://192.168.10.1:4877/token_bridge/status`
