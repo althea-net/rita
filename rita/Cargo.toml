@@ -42,7 +42,7 @@ ipnetwork = "0.14"
 lazy_static = "1.3"
 log = "0.4"
 minihttpse = "0.1"
-mockito = "0.19"
+mockito = "0.20"
 mockstream = { git = "https://github.com/lazy-bitfield/rust-mockstream.git" }
 rand = "0.7"
 serde = "1.0"
