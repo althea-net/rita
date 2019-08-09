@@ -1488,3 +1488,52 @@ the code there for all of it's many possible states
 - Sample Call:
 
 `curl http://192.168.10.1:4877/token_bridge/status`
+
+---
+
+## /backup_created
+
+Return whether or not a backup of the router's private keys has been created
+
+- URL: `<rita ip>:<rita_dashboard_port>/backup_created`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+()
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl 127.0.0.1:<rita_dashboard_port>/backup_created`
+
+---
+
+## /backup_created/{status}
+
+Set whether or not a backup has been created. 
+
+- URL: `<rita ip>:<rita_dashboard_port>/backup_created/{status}`
+- Method: `POST`
+- URL Params: 
+  - status: `true` or `false`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+()
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl http://192.168.10.1:4877/backup_created/true`
