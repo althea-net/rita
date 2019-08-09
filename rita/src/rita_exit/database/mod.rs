@@ -182,7 +182,7 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
                         Ok(true) => {
                             return Box::new(future::ok(ExitState::Denied {
                                 message: format!(
-                                    "Partially changed registration details! Please re-register {}",
+                                    "Partially changed registration details! Please reset your router and re-register with all new details. Backup your key first! {}",
                                     display_hashset(&SETTING.get_allowed_countries()),
                                 ),
                             }))

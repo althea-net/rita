@@ -68,6 +68,7 @@ use crate::rita_common::dashboard::nickname::*;
 use crate::rita_common::dashboard::own_info::*;
 use crate::rita_common::dashboard::pricing::*;
 use crate::rita_common::dashboard::settings::*;
+use crate::rita_common::dashboard::token_bridge::*;
 use crate::rita_common::dashboard::usage::*;
 use crate::rita_common::dashboard::wallet::*;
 use crate::rita_common::dashboard::wg_key::*;
@@ -168,18 +169,6 @@ fn main() {
     if !SETTING.get_log().enabled || env_vars_contains("NO_REMOTE_LOG") {
         env_logger::init();
     }
-
-    // remove in beta 9 where this info will be imported from the dao address oracle.
-    let mut payment_settings = SETTING.get_payment_mut();
-    payment_settings.withdraw_chain = payment_settings.system_chain;
-    drop(payment_settings);
-
-    // remove in beta 9 as this will already be set propertly
-    let mut dao_settings = SETTING.get_dao_mut();
-    if let Some(address) = dao_settings.dao_addresses.iter().last() {
-        dao_settings.oracle_url = Some(format!("https://updates.althea.net/{}", address));
-    }
-    drop(dao_settings);
 
     if cfg!(feature = "development") {
         println!("Warning!");
@@ -311,6 +300,7 @@ fn start_client_dashboard() {
             .route("/usage/relay", Method::GET, get_relay_usage)
             .route("/usage/client", Method::GET, get_client_usage)
             .route("/usage/payments", Method::GET, get_payments)
+            .route("/token_bridge/status", Method::GET, get_bridge_status)
             .route("/router/reboot", Method::POST, reboot_router)
             .route("/router/update", Method::POST, update_router)
             .route("/router/password", Method::POST, set_pass)
