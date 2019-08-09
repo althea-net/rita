@@ -47,6 +47,7 @@ use crate::rita_client::rita_loop::check_rita_client_actors;
 use crate::rita_common::rita_loop::check_rita_common_actors;
 use crate::rita_common::rita_loop::start_core_rita_endpoints;
 
+use crate::rita_client::dashboard::backup_created::*;
 use crate::rita_client::dashboard::eth_private_key::*;
 use crate::rita_client::dashboard::exits::*;
 use crate::rita_client::dashboard::interfaces::*;
@@ -214,6 +215,8 @@ fn start_client_dashboard() {
         App::new()
             .middleware(middleware::Headers)
             .middleware(middleware::Auth)
+            .route("/backup_created", Method::GET, get_backup_created)
+            .route("/backup_created/{status}", Method::POST, set_backup_created)
             .route("/dao_list", Method::GET, get_dao_list)
             .route("/dao_list/add/{address}", Method::POST, add_to_dao_list)
             .route(
