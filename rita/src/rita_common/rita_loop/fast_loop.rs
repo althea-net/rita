@@ -1,5 +1,6 @@
 use crate::rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 use crate::rita_common::oracle::{Oracle, Update};
+use crate::rita_common::payment_validator::{PaymentValidator, Validate};
 use crate::rita_common::peer_listener::GetPeers;
 use crate::rita_common::peer_listener::PeerListener;
 use crate::rita_common::traffic_watcher::{TrafficWatcher, Watch};
@@ -86,6 +87,11 @@ impl Handler<Tick> for RitaFastLoop {
         // Update blockchain info put here because people really
         // hate it when their deposits take a while to show up
         Oracle::from_registry().do_send(Update());
+
+        // Check on payments, only really needs to be run this quickly
+        // on large nodes where very high variation in throughput can result
+        // in blowing through the entire grace in less than a minute
+        PaymentValidator::from_registry().do_send(Validate());
 
         // watch neighbors for billing
         Arbiter::spawn(
