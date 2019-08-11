@@ -1,6 +1,5 @@
 use crate::rita_common::dao_manager::DAOManager;
 use crate::rita_common::dao_manager::Tick as DAOTick;
-use crate::rita_common::payment_validator::{PaymentValidator, Validate};
 use crate::rita_common::token_bridge::Tick as TokenBridgeTick;
 use crate::rita_common::token_bridge::TokenBridge;
 use crate::rita_common::tunnel_manager::{TriggerGC, TunnelManager};
@@ -79,9 +78,6 @@ impl Handler<Tick> for RitaSlowLoop {
 
         // Check DAO payments
         DAOManager::from_registry().do_send(DAOTick);
-
-        // Check payments
-        PaymentValidator::from_registry().do_send(Validate());
 
         TunnelManager::from_registry().do_send(TriggerGC(Duration::from_secs(
             SETTING.get_network().tunnel_timeout_seconds,
