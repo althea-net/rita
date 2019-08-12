@@ -2,6 +2,8 @@ use base64;
 use serde::de::{Deserialize, Error, Unexpected, Visitor};
 use serde::ser::{Serialize, Serializer};
 use serde::Deserializer;
+use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
+use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
 use std::fmt;
 use std::str::FromStr;
 
@@ -11,6 +13,27 @@ pub struct WgKey([u8; 32]);
 impl AsRef<[u8]> for WgKey {
     fn as_ref(&self) -> &[u8] {
         &self.0[..]
+    }
+}
+
+/// This is somewhat dangerous, since libsodium provides seperate
+/// public and private key types while we don't have those here.
+/// Be very careful not to use this on the public key! That would be bad
+impl From<WgKey> for SecretKey {
+    fn from(val: WgKey) -> SecretKey {
+        SecretKey(val.0)
+    }
+}
+
+impl From<WgKey> for PublicKey {
+    fn from(val: WgKey) -> PublicKey {
+        PublicKey(val.0)
+    }
+}
+
+impl From<[u8; 32]> for WgKey {
+    fn from(val: [u8; 32]) -> WgKey {
+        WgKey(val)
     }
 }
 
