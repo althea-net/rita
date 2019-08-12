@@ -208,7 +208,13 @@ pub fn start_rita_exit_endpoints(workers: usize) {
     server::new(|| {
         App::new()
             .resource("/setup", |r| r.method(Method::POST).with(setup_request))
+            .resource("/secure_setup", |r| {
+                r.method(Method::POST).with(secure_setup_request)
+            })
             .resource("/status", |r| r.method(Method::POST).with(status_request))
+            .resource("/secure_status", |r| {
+                r.method(Method::POST).with(secure_status_request)
+            })
             .resource("/exit_info", |r| {
                 r.method(Method::GET).with(get_exit_info_http)
             })

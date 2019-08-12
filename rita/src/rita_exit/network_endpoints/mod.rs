@@ -9,6 +9,7 @@ use crate::rita_exit::database::db_client::DbClient;
 use crate::rita_exit::database::db_client::TruncateTables;
 use crate::rita_exit::database::get_database_connection;
 use crate::rita_exit::database::{client_status, get_exit_info, signup_client};
+use crate::SETTING;
 use ::actix_web::{AsyncResponder, HttpRequest, HttpResponse, Json, Result};
 #[cfg(feature = "development")]
 use actix::SystemService;
@@ -16,13 +17,177 @@ use actix::SystemService;
 #[cfg(feature = "development")]
 use actix_web::AsyncResponder;
 use althea_types::Identity;
-use althea_types::{ExitClientIdentity, ExitState, RTTimestamps};
+use althea_types::{
+    EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState, RTTimestamps,
+};
 use failure::Error;
 use futures::future;
 use futures::Future;
 use num256::Int256;
+use settings::exit::RitaExitSettings;
+use sodiumoxide::crypto::box_;
+use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
+use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
+use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
 use std::net::SocketAddr;
 use std::time::SystemTime;
+
+/// helper function for returning from secure_setup_request()
+fn secure_setup_return(
+    ret: ExitState,
+    our_secretkey: &SecretKey,
+    their_pubkey: PublicKey,
+) -> Json<EncryptedExitState> {
+    let plaintext = serde_json::to_string(&ret)
+        .expect("Failed to serialize ExitState!")
+        .into_bytes();
+    // TODO this will repeat approx every 2.6 years, figure out how bad that is
+    let nonce = box_::gen_nonce();
+    let ciphertext = box_::seal(&plaintext, &nonce, &their_pubkey, our_secretkey);
+    Json(EncryptedExitState {
+        nonce: nonce.0,
+        encrypted_exit_state: ciphertext,
+    })
+}
+
+enum DecryptResult {
+    Success(ExitClientIdentity),
+    Failure(Box<dyn Future<Item = Json<EncryptedExitState>, Error = Error>>),
+}
+
+fn decrypt_exit_client_id(
+    val: EncryptedExitClientIdentity,
+    our_secretkey: &SecretKey,
+) -> DecryptResult {
+    let their_wg_pubkey = val.pubkey;
+    let their_nacl_pubkey = val.pubkey.into();
+    let their_nonce = Nonce(val.nonce);
+    let chipertext = val.encrypted_exit_client_id.as_bytes();
+
+    let decrypted_bytes =
+        match box_::open(&chipertext, &their_nonce, &their_nacl_pubkey, our_secretkey) {
+            Ok(value) => value,
+            Err(e) => {
+                error!(
+                    "Error decrypting exit setup request for {} with {:?}",
+                    their_wg_pubkey, e
+                );
+                let state = ExitState::Denied {
+                    message: "could not decrypt your message!".to_string(),
+                };
+                return DecryptResult::Failure(Box::new(future::ok(secure_setup_return(
+                    state,
+                    our_secretkey,
+                    their_nacl_pubkey,
+                ))));
+            }
+        };
+
+    let decrypted_string = match String::from_utf8(decrypted_bytes) {
+        Ok(value) => value,
+        Err(e) => {
+            error!(
+                "Error decrypting exit setup request for {} with {:?}",
+                their_wg_pubkey, e
+            );
+            let state = ExitState::Denied {
+                message: "could not decrypt your message!".to_string(),
+            };
+            return DecryptResult::Failure(Box::new(future::ok(secure_setup_return(
+                state,
+                our_secretkey,
+                their_nacl_pubkey,
+            ))));
+        }
+    };
+
+    let decrypted_id: ExitClientIdentity = match serde_json::from_str(&decrypted_string) {
+        Ok(value) => value,
+        Err(e) => {
+            error!(
+                "Error deserializing exit setup request for {} with {:?}",
+                their_wg_pubkey, e
+            );
+            let state = ExitState::Denied {
+                message: "could not deserialize your message!".to_string(),
+            };
+            return DecryptResult::Failure(Box::new(future::ok(secure_setup_return(
+                state,
+                our_secretkey,
+                their_nacl_pubkey,
+            ))));
+        }
+    };
+
+    DecryptResult::Success(decrypted_id)
+}
+
+pub fn secure_setup_request(
+    request: (Json<EncryptedExitClientIdentity>, HttpRequest),
+) -> Box<dyn Future<Item = Json<EncryptedExitState>, Error = Error>> {
+    let exit_network = SETTING.get_exit_network();
+    let our_secretkey = exit_network.wg_private_key.into();
+    drop(exit_network);
+
+    let their_wg_pubkey = request.0.pubkey;
+    let their_nacl_pubkey = request.0.pubkey.into();
+    let socket = request.1;
+    let decrypted_id = match decrypt_exit_client_id(request.0.into_inner(), &our_secretkey) {
+        DecryptResult::Success(val) => val,
+        DecryptResult::Failure(val) => {
+            return val;
+        }
+    };
+
+    info!("Received Encrypted setup request from, {}", their_wg_pubkey);
+
+    let remote_mesh_socket: SocketAddr = match socket.connection_info().remote() {
+        Some(val) => match val.parse() {
+            Ok(val) => val,
+            Err(e) => {
+                error!(
+                    "Error in exit setup for {} malformed packet header {:?}!",
+                    their_wg_pubkey, e
+                );
+                return Box::new(future::err(format_err!("Invalid packet!")));
+            }
+        },
+        None => {
+            error!(
+                "Error in exit setup for {} invalid remote_mesh_sender!",
+                their_wg_pubkey
+            );
+            return Box::new(future::err(format_err!("Invalid packet!")));
+        }
+    };
+
+    let client_mesh_ip = decrypted_id.global.mesh_ip;
+    let client = decrypted_id;
+
+    let remote_mesh_ip = remote_mesh_socket.ip();
+    if remote_mesh_ip == client_mesh_ip {
+        Box::new(signup_client(client).then(move |result| match result {
+            Ok(exit_state) => Ok(secure_setup_return(
+                exit_state,
+                &our_secretkey,
+                their_nacl_pubkey,
+            )),
+            Err(e) => {
+                error!("Signup client failed with {:?}", e);
+                Err(format_err!("There was an internal server error!"))
+            }
+        }))
+    } else {
+        let state = ExitState::Denied {
+            message: "The request ip does not match the signup ip".to_string(),
+        };
+        Box::new(future::ok(secure_setup_return(
+            state,
+            &our_secretkey,
+            their_nacl_pubkey,
+        )))
+    }
+}
 
 pub fn setup_request(
     their_id: (Json<ExitClientIdentity>, HttpRequest),
@@ -71,6 +236,41 @@ pub fn status_request(
     Box::new(
         get_database_connection().and_then(move |conn| Ok(Json(client_status(client, &conn)?))),
     )
+}
+
+pub fn secure_status_request(
+    request: Json<EncryptedExitClientIdentity>,
+) -> Box<dyn Future<Item = Json<EncryptedExitState>, Error = Error>> {
+    let exit_network = SETTING.get_exit_network();
+    let our_secretkey = exit_network.wg_private_key.into();
+    drop(exit_network);
+
+    let their_wg_pubkey = request.pubkey;
+    let their_nacl_pubkey = request.pubkey.into();
+    let decrypted_id = match decrypt_exit_client_id(request.into_inner(), &our_secretkey) {
+        DecryptResult::Success(val) => val,
+        DecryptResult::Failure(val) => {
+            return val;
+        }
+    };
+
+    Box::new(get_database_connection().and_then(move |conn| {
+        let state = match client_status(decrypted_id, &conn) {
+            Ok(state) => state,
+            Err(e) => {
+                error!(
+                    "Internal error in client status for {} with {:?}",
+                    their_wg_pubkey, e
+                );
+                return Err(format_err!("There was an internal error!"));
+            }
+        };
+        Ok(secure_setup_return(
+            state,
+            &our_secretkey,
+            their_nacl_pubkey,
+        ))
+    }))
 }
 
 pub fn get_exit_info_http(_req: HttpRequest) -> Result<Json<ExitState>, Error> {
