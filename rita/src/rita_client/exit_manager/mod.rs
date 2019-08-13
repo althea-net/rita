@@ -27,6 +27,8 @@ use ::actix_web::client::Connection;
 use ::actix_web::{client, HttpMessage, Result};
 use althea_types::ExitClientDetails;
 use althea_types::ExitDetails;
+use althea_types::WgKey;
+use althea_types::{EncryptedExitClientIdentity, EncryptedExitState};
 use althea_types::{ExitClientIdentity, ExitState, ExitVerifMode};
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
@@ -39,6 +41,9 @@ use log::LevelFilter;
 use settings::client::ExitServer;
 use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;
+use sodiumoxide::crypto::box_;
+use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
+use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -114,11 +119,71 @@ pub fn get_exit_info(to: &SocketAddr) -> impl Future<Item = ExitState, Error = E
     })
 }
 
-pub fn send_exit_setup_request(
+fn encrypt_exit_client_id(
+    exit_pubkey: &PublicKey,
+    id: ExitClientIdentity,
+) -> EncryptedExitClientIdentity {
+    let network_settings = SETTING.get_network();
+    let our_publickey = network_settings.wg_public_key.expect("No public key?");
+    let our_secretkey = network_settings
+        .wg_private_key
+        .expect("No private key?")
+        .into();
+    drop(network_settings);
+
+    let plaintext = serde_json::to_string(&id)
+        .expect("Failed to serialize ExitState!")
+        .into_bytes();
+    let nonce = box_::gen_nonce();
+    let ciphertext = box_::seal(&plaintext, &nonce, exit_pubkey, &our_secretkey);
+    EncryptedExitClientIdentity {
+        nonce: nonce.0,
+        pubkey: our_publickey,
+        encrypted_exit_client_id: ciphertext,
+    }
+}
+
+fn decrypt_exit_state(
+    exit_state: EncryptedExitState,
+    exit_pubkey: PublicKey,
+) -> Result<ExitState, Error> {
+    let network_settings = SETTING.get_network();
+    let our_secretkey = network_settings
+        .wg_private_key
+        .expect("No private key?")
+        .into();
+    drop(network_settings);
+    let chipertext = exit_state.encrypted_exit_state;
+    let nonce = Nonce(exit_state.nonce);
+    let decrypted_exit_state: ExitState =
+        match box_::open(&chipertext, &nonce, &exit_pubkey, &our_secretkey) {
+            Ok(decrypted_bytes) => match String::from_utf8(decrypted_bytes) {
+                Ok(json_string) => match serde_json::from_str(&json_string) {
+                    Ok(exit_state) => exit_state,
+                    Err(e) => {
+                        return Err(e.into());
+                    }
+                },
+                Err(e) => {
+                    error!("Could not deserialize exit state with {:?}", e);
+                    return Err(e.into());
+                }
+            },
+            Err(_) => {
+                error!("Could not decrypt exit state");
+                return Err(format_err!("Could not decrypt exit state"));
+            }
+        };
+    Ok(decrypted_exit_state)
+}
+
+fn send_exit_setup_request(
+    exit_pubkey: WgKey,
     to: &SocketAddr,
     ident: ExitClientIdentity,
 ) -> impl Future<Item = ExitState, Error = Error> {
-    let endpoint = format!("http://[{}]:{}/setup", to.ip(), to.port());
+    let endpoint = format!("http://[{}]:{}/secure_setup", to.ip(), to.port());
+    let ident = encrypt_exit_client_id(&exit_pubkey.into(), ident);
 
     let stream = TokioTcpStream::connect(to);
 
@@ -130,15 +195,24 @@ pub fn send_exit_setup_request(
             .unwrap()
             .send()
             .from_err()
-            .and_then(|response| response.json().from_err().and_then(Ok))
+            .and_then(move |response| {
+                response
+                    .json()
+                    .from_err()
+                    .and_then(move |value: EncryptedExitState| {
+                        decrypt_exit_state(value, exit_pubkey.into())
+                    })
+            })
     })
 }
 
-pub fn send_exit_status_request(
+fn send_exit_status_request(
+    exit_pubkey: WgKey,
     to: &SocketAddr,
     ident: ExitClientIdentity,
 ) -> impl Future<Item = ExitState, Error = Error> {
-    let endpoint = format!("http://[{}]:{}/status", to.ip(), to.port());
+    let endpoint = format!("http://[{}]:{}/secure_status", to.ip(), to.port());
+    let ident = encrypt_exit_client_id(&exit_pubkey.into(), ident);
 
     let stream = TokioTcpStream::connect(to);
 
@@ -150,7 +224,14 @@ pub fn send_exit_status_request(
             .unwrap()
             .send()
             .from_err()
-            .and_then(|response| response.json().from_err().and_then(Ok))
+            .and_then(move |response| {
+                response
+                    .json()
+                    .from_err()
+                    .and_then(move |value: EncryptedExitState| {
+                        decrypt_exit_state(value, exit_pubkey.into())
+                    })
+            })
     })
 }
 
@@ -203,6 +284,7 @@ pub fn exit_setup_request(
         None => return Box::new(future::err(format_err!("Exit is not ready to be setup!"))),
     };
     let exit_server = current_exit.id.mesh_ip;
+    let exit_pubkey = current_exit.id.wg_public_key;
     let mut reg_details = SETTING.get_exit_client().reg_details.clone().unwrap();
     match exit_auth_type {
         ExitVerifMode::Email => {
@@ -238,7 +320,7 @@ pub fn exit_setup_request(
     );
 
     Box::new(
-        send_exit_setup_request(&endpoint, ident)
+        send_exit_setup_request(exit_pubkey, &endpoint, ident)
             .from_err()
             .and_then(move |exit_response| {
                 let mut exits = SETTING.get_exits_mut();
@@ -272,6 +354,7 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
     };
 
     let exit_server = current_exit.id.mesh_ip;
+    let exit_pubkey = current_exit.id.wg_public_key;
     let ident = ExitClientIdentity {
         global: match SETTING.get_identity() {
             Some(id) => id,
@@ -294,20 +377,21 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
         endpoint
     );
 
-    let r = send_exit_status_request(&endpoint, ident).and_then(move |exit_response| {
-        let mut exits = SETTING.get_exits_mut();
+    let r =
+        send_exit_status_request(exit_pubkey, &endpoint, ident).and_then(move |exit_response| {
+            let mut exits = SETTING.get_exits_mut();
 
-        let current_exit = match exits.get_mut(&exit) {
-            Some(exit_struct) => exit_struct,
-            None => bail!("Could not find exit {:?}", exit),
-        };
+            let current_exit = match exits.get_mut(&exit) {
+                Some(exit_struct) => exit_struct,
+                None => bail!("Could not find exit {:?}", exit),
+            };
 
-        current_exit.info = exit_response.clone();
+            current_exit.info = exit_response.clone();
 
-        trace!("Got exit status response {:?}", exit_response.clone());
+            trace!("Got exit status response {:?}", exit_response.clone());
 
-        Ok(())
-    });
+            Ok(())
+        });
     Box::new(r)
 }
 

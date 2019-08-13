@@ -209,7 +209,7 @@ pub struct ExitClientIdentity {
 pub struct EncryptedExitClientIdentity {
     pub pubkey: WgKey,
     pub nonce: [u8; 24],
-    pub encrypted_exit_client_id: String,
+    pub encrypted_exit_client_id: Vec<u8>,
 }
 
 /// Wrapper for secure box containing an exit state
