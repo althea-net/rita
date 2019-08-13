@@ -204,6 +204,21 @@ pub struct ExitClientIdentity {
     pub low_balance: Option<bool>,
 }
 
+/// Wrapper for secure box containing an exit client identity
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct EncryptedExitClientIdentity {
+    pub pubkey: WgKey,
+    pub nonce: [u8; 24],
+    pub encrypted_exit_client_id: Vec<u8>,
+}
+
+/// Wrapper for secure box containing an exit state
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct EncryptedExitState {
+    pub nonce: [u8; 24],
+    pub encrypted_exit_state: Vec<u8>,
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum ExitVerifMode {
     Phone,
@@ -221,7 +236,6 @@ pub struct ExitDetails {
     pub netmask: u8,
     pub wg_exit_port: u16,
     pub exit_price: u64,
-    // TODO remove this in Beta 3
     #[serde(default = "default_system_chain")]
     pub exit_currency: SystemChain,
     pub description: String,

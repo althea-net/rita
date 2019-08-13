@@ -294,6 +294,8 @@ pub fn exit_init(platform: &str, settings: Arc<RwLock<settings::exit::RitaExitSe
 #[cfg(test)]
 mod tests {
     use crate::validate_mesh_ip;
+    use althea_types::WgKey;
+    use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
     use std::net::IpAddr;
 
     #[test]
@@ -302,5 +304,20 @@ mod tests {
         let bad_ip = "192.168.1.1".parse::<IpAddr>().unwrap();
         assert_eq!(validate_mesh_ip(&good_ip), true);
         assert_eq!(validate_mesh_ip(&bad_ip), false);
+    }
+
+    #[test]
+    fn libsodium_wg_compat() {
+        let wg_gen_secret: WgKey = "aMLGOa3Z4Rjmfq7lUVTnc01wA/oh0OImoMxiFMbLtG0="
+            .parse()
+            .unwrap();
+        let wg_gen_pub: WgKey = "ODxLQWc+ZrHqmPuGx/NWH8IfgBWJGZDsHOls16EaJF0="
+            .parse()
+            .unwrap();
+        let libsodium_secret: SecretKey = wg_gen_secret.into();
+        let libsodium_pub = libsodium_secret.public_key();
+        let libsodium_generated_public_key: WgKey = libsodium_pub.0.into();
+        println!("{} vs {}", wg_gen_pub, libsodium_generated_public_key);
+        assert_eq!(libsodium_generated_public_key, wg_gen_pub);
     }
 }
