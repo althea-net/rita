@@ -198,7 +198,7 @@ fn read_babel_sync(output: &str) -> Result<String, BabelMonitorError> {
             _ => continue,
         }
     }
-    warn!(
+    trace!(
         "Terminator was never found; full output:\n{:?}\nEND OF BABEL OUTPUT",
         ret
     );
