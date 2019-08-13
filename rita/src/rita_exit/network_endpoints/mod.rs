@@ -41,7 +41,6 @@ fn secure_setup_return(
     let plaintext = serde_json::to_string(&ret)
         .expect("Failed to serialize ExitState!")
         .into_bytes();
-    // TODO this will repeat approx every 2.6 years, figure out how bad that is
     let nonce = box_::gen_nonce();
     let ciphertext = box_::seal(&plaintext, &nonce, &their_pubkey, our_secretkey);
     Json(EncryptedExitState {
@@ -62,7 +61,7 @@ fn decrypt_exit_client_id(
     let their_wg_pubkey = val.pubkey;
     let their_nacl_pubkey = val.pubkey.into();
     let their_nonce = Nonce(val.nonce);
-    let chipertext = val.encrypted_exit_client_id.as_bytes();
+    let chipertext = val.encrypted_exit_client_id;
 
     let decrypted_bytes =
         match box_::open(&chipertext, &their_nonce, &their_nacl_pubkey, our_secretkey) {
