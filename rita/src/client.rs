@@ -26,6 +26,7 @@ extern crate arrayvec;
 
 use actix_web::http::Method;
 use actix_web::{http, server, App};
+use althea_types::SystemChain;
 use docopt::Docopt;
 use env_logger;
 use openssl_probe;
@@ -171,6 +172,32 @@ fn main() {
     if !SETTING.get_log().enabled || env_vars_contains("NO_REMOTE_LOG") {
         env_logger::init();
     }
+
+    // remove in beta 9 where this info will be imported from the dao address oracle.
+    let mut payment_settings = SETTING.get_payment_mut();
+    let system_chain = payment_settings.system_chain;
+    payment_settings.withdraw_chain = system_chain;
+    drop(payment_settings);
+
+    // remove in beta 9 as this will already be set propertly
+    let mut dao_settings = SETTING.get_dao_mut();
+    if let Some(address) = dao_settings.dao_addresses.iter().last() {
+        dao_settings.oracle_url = Some(format!("https://updates.althea.net/{}", address));
+    } else {
+        match system_chain {
+            SystemChain::Ethereum => {
+                dao_settings.oracle_url = Some("https://updates.altheamesh.com/prices".to_string())
+            }
+            SystemChain::Xdai => {
+                dao_settings.oracle_url =
+                    Some("https://updates.altheamesh.com/xdaiprices".to_string())
+            }
+            SystemChain::Rinkeby => {
+                dao_settings.oracle_url = Some("https://updates.altheamesh.com/prices".to_string())
+            }
+        }
+    }
+    drop(dao_settings);
 
     if cfg!(feature = "development") {
         println!("Warning!");
