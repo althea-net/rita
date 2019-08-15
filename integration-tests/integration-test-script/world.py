@@ -21,7 +21,6 @@ from utils import switch_binaries
 from utils import start_rita_exit
 from utils import start_rita
 from utils import start_babel
-from utils import start_bounty
 from utils import get_rita_settings
 from utils import assert_test
 from utils import ip_to_num
@@ -57,46 +56,15 @@ class World:
         connection.a.add_neighbor(connection.b.id)
         connection.b.add_neighbor(connection.a.id)
 
-    def set_bounty(self, bounty_id):
-        self.bounty_id = bounty_id
-
     def to_ip(self, node):
         if self.exit_id == node.id:
             return "172.168.1.254"
         else:
             return "fd00::{}".format(node.id)
 
-    def setup_bh_db(self, VERBOSE, COMPAT_LAYOUT, COMPAT_LAYOUTS, DIR_A, DIR_B):
-        os.system("rm -rf bounty.db exit.db")
-
-        bounty_repo_dir = "/tmp/bounty_hunter/"
-
-        bounty_index = self.bounty_id - 1
-        exit_index = self.exit_id - 1
-
-        if VERBOSE:
-            print("DB setup: bounty_hunter index: {}, exit index: {}".format(
-                bounty_index, exit_index))
-
-        # Save the current dir
-        cwd = os.getcwd()
-
-        # Go to bounty_hunter/ in the bounty's release
-        os.chdir(bounty_repo_dir)
-        if VERBOSE:
-            print("DB setup: Entering {}/bounty_hunter".format(bounty_repo_dir))
-
-        os.system(("rm -rf test.db " +
-                   "&& diesel migration run" +
-                   "&& cp test.db {dest}").format(dest=os.path.join(cwd, "bounty.db")))
-
-        # Go back to where we started
-        os.chdir(cwd)
-
-    def create(self, VERBOSE, COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA, RITA_EXIT, BOUNTY_HUNTER, DIR_A, DIR_B, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B, BOUNTY_HUNTER_A, BOUNTY_HUNTER_B, NETWORK_LAB, BABELD, POSTGRES_DATABASE, POSTGRES_USER, POSTGRES_CONFIG, POSTGRES_BIN, INITDB_BIN, EXIT_NAMESPACE, EXIT_SETTINGS, dname):
+    def create(self, VERBOSE, COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA, RITA_EXIT, DIR_A, DIR_B, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B, NETWORK_LAB, BABELD, POSTGRES_DATABASE, POSTGRES_USER, POSTGRES_CONFIG, POSTGRES_BIN, INITDB_BIN, EXIT_NAMESPACE, EXIT_SETTINGS, dname):
         cleanup()
 
-        assert self.bounty_id
         nodes = {}
         for id in self.nodes:
             nodes[str(id)] = {"ip": "fd00::{}".format(id)}
@@ -159,18 +127,8 @@ class World:
 
         print("babel started")
 
-        print("Setting up bounty_hunter database")
-        self.setup_bh_db(VERBOSE, COMPAT_LAYOUT, COMPAT_LAYOUTS, DIR_A, DIR_B)
-        print("DB setup OK")
-
-        print("starting bounty hunter")
-        (RITA, RITA_EXIT, BOUNTY_HUNTER) = switch_binaries(self.bounty_id, VERBOSE, RITA, RITA_EXIT, BOUNTY_HUNTER,
-                                                           COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B, BOUNTY_HUNTER_A, BOUNTY_HUNTER_B)
-        start_bounty(self.bounty_id, BOUNTY_HUNTER)
-        print("bounty hunter started")
-
-        (RITA, RITA_EXIT, BOUNTY_HUNTER) = switch_binaries(self.exit_id, VERBOSE, RITA, RITA_EXIT, BOUNTY_HUNTER,
-                                                           COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B, BOUNTY_HUNTER_A, BOUNTY_HUNTER_B)
+        (RITA, RITA_EXIT) = switch_binaries(self.exit_id, VERBOSE, RITA, RITA_EXIT,
+                                            COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B)
         start_rita_exit(self.nodes[self.exit_id], dname, RITA_EXIT)
 
         time.sleep(1)
@@ -181,8 +139,8 @@ class World:
         print("starting rita")
         for id, node in self.nodes.items():
             if id != self.exit_id and id != self.external:
-                (RITA, RITA_EXIT, BOUNTY_HUNTER) = switch_binaries(id, VERBOSE, RITA, RITA_EXIT, BOUNTY_HUNTER,
-                                                                   COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B, BOUNTY_HUNTER_A, BOUNTY_HUNTER_B)
+                (RITA, RITA_EXIT) = switch_binaries(id, VERBOSE, RITA, RITA_EXIT,
+                                                    COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B)
                 start_rita(node, dname, RITA, EXIT_SETTINGS)
             time.sleep(0.5 + random.random() / 2)  # wait 0.5s - 1s
             print()

@@ -36,16 +36,16 @@ def get_rita_settings(id):
     return toml.load(open("rita-settings-n{}.toml".format(id)))
 
 
-def switch_binaries(node_id, VERBOSE, RITA, RITA_EXIT, BOUNTY_HUNTER, COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B, BOUNTY_HUNTER_A, BOUNTY_HUNTER_B):
+def switch_binaries(node_id, VERBOSE, RITA, RITA_EXIT, COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B):
     """
-    Switch the Rita, exit Rita and bounty hunter binaries assigned to node with ID
+    Switch the Rita and exit Rita binaries assigned to node with ID
     :data:`node_id`.
 
     :param int node_id: Node ID for which we're changing binaries
     """
     if VERBOSE:
-        print(("Previous binary paths:\nRITA:\t\t{}\nRITA_EXIT:\t{}\n" +
-               "BOUNTY_HUNTER:\t{}").format(RITA, RITA_EXIT, BOUNTY_HUNTER))
+        print(("Previous binary paths:\nRITA:\t\t{}\nRITA_EXIT:\t{}\n").format(
+            RITA, RITA_EXIT))
 
     release = COMPAT_LAYOUTS[COMPAT_LAYOUT][node_id - 1]
 
@@ -54,22 +54,20 @@ def switch_binaries(node_id, VERBOSE, RITA, RITA_EXIT, BOUNTY_HUNTER, COMPAT_LAY
             print("Using A for node {}...".format(node_id))
         RITA = RITA_A
         RITA_EXIT = RITA_EXIT_A
-        BOUNTY_HUNTER = BOUNTY_HUNTER_A
     elif release == 'b':
         if VERBOSE:
             print("Using B for node {}...".format(node_id))
         RITA = RITA_B
         RITA_EXIT = RITA_EXIT_B
-        BOUNTY_HUNTER = BOUNTY_HUNTER_B
     else:
         print("Unknown revision kind \"{}\" for node {}".format(release, node_id))
         sys.exit(1)
 
     if VERBOSE:
-        print(("New binary paths:\nRITA:\t\t{}\nRITA_EXIT:\t{}\n" +
-               "BOUNTY_HUNTER:\t{}").format(RITA, RITA_EXIT, BOUNTY_HUNTER))
+        print(("New binary paths:\nRITA:\t\t{}\nRITA_EXIT:\t{}\n").format(
+            RITA, RITA_EXIT))
 
-    return (RITA, RITA_EXIT, BOUNTY_HUNTER)
+    return (RITA, RITA_EXIT)
 
 
 def register_to_exit(node):
@@ -251,12 +249,6 @@ def start_babel(node, BABELD):
         ).format(babeld_path=BABELD, ifaces=node.get_interfaces(), id=node.id),
         blocking=False
     )
-
-
-def start_bounty(id, BOUNTY_HUNTER):
-    os.system(
-        '(RUST_BACKTRACE=full ip netns exec netlab-{id} {bounty} & echo $! > bounty-n{id}.pid) | grep -Ev "<unknown>|mio|tokio_reactor" > bounty-n{id}.log &'.format(
-            id=id, bounty=BOUNTY_HUNTER))
 
 
 def start_rita(node, dname, RITA, EXIT_SETTINGS):
