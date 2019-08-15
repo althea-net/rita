@@ -19,7 +19,7 @@ pub fn set_system_blockchain(path: Path<String>) -> Result<HttpResponse, Error> 
     }
     let id = id.unwrap();
 
-    let mut oracle_url;
+    let oracle_url;
     let mut payment = SETTING.get_payment_mut();
     if id == SystemChain::Ethereum {
         payment.node_list = vec![
