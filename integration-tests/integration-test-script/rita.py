@@ -214,7 +214,6 @@ def setup_seven_node_config():
         ],
     }
 
-    world.set_bounty(3)  # TODO: Who should be the bounty hunter?
     return (COMPAT_LAYOUTS, all_routes, traffic_test_pairs, world)
 
 
@@ -228,8 +227,8 @@ def main():
     if VERBOSE:
         print("Random compat test layout: {}".format(COMPAT_LAYOUTS["random"]))
 
-    world.create(VERBOSE, COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA, RITA_EXIT, BOUNTY_HUNTER, DIR_A, DIR_B, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B, BOUNTY_HUNTER_A,
-                 BOUNTY_HUNTER_B, NETWORK_LAB, BABELD, POSTGRES_DATABASE, POSTGRES_USER, POSTGRES_CONFIG, POSTGRES_BIN, INITDB_BIN, EXIT_NAMESPACE, EXIT_SETTINGS, dname)
+    world.create(VERBOSE, COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA, RITA_EXIT, DIR_A, DIR_B, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B, NETWORK_LAB,
+                 BABELD, POSTGRES_DATABASE, POSTGRES_USER, POSTGRES_CONFIG, POSTGRES_BIN, INITDB_BIN, EXIT_NAMESPACE, EXIT_SETTINGS, dname)
 
     print("Waiting for network to stabilize")
     start_time = time.time()
