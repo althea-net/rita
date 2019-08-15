@@ -93,16 +93,23 @@ fn debt_data_to_ser(input: DebtData) -> DebtDataSer {
 
 fn ser_to_debt_data(input: DebtDataSer) -> DebtData {
     let mut ret = DebtData::new();
-    for (i, mut d) in input {
-        // zero out what is owed to us on reboot, this is a strategy to be
-        // more 'forgiving' while still remembering what we owe others. This
-        // may be removed after we see how problematic debts persistance is in prod
-        if d.debt < Int256::from(0) {
-            d.debt = Int256::from(0);
-        }
+    for (i, d) in input {
         ret.insert(i, d);
     }
     ret
+}
+
+/// used to prevent debts from growing higher than the enforcement limit in either direction
+/// if the debt is more negative or more positive than the ABS of close_threshold we set it to
+/// one more than that value
+fn debt_limit(debt: Int256, close_threshold: Int256) -> Int256 {
+    if debt < close_threshold {
+        close_threshold - 1u8.into()
+    } else if debt > close_threshold.abs() {
+        close_threshold.abs() + 1u8.into()
+    } else {
+        debt
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -528,7 +535,9 @@ impl DebtKeeper {
 
         let payment_settings = SETTING.get_payment();
         let close_threshold = payment_settings.close_threshold.clone();
+        let pay_threshold = payment_settings.pay_threshold.clone();
         let fudge_factor = payment_settings.fudge_factor;
+        let debt_limit_enabled = payment_settings.debt_limit_enabled;
         drop(payment_settings);
 
         trace!(
@@ -538,14 +547,12 @@ impl DebtKeeper {
         );
         // negative debt means they owe us so when the debt is more negative than
         // the close treshold we should enforce.
-
         let should_close = debt_data.debt < close_threshold;
-        let should_pay = debt_data.debt > SETTING.get_payment().pay_threshold;
+        let should_pay = debt_data.debt > pay_threshold;
         let payment_in_flight = debt_data.payment_in_flight;
 
-        if should_close {
-            // do not allow negative debt greater than a tiny bit larger than the close level
-            debt_data.debt = close_threshold.clone() - 1u32.into();
+        if debt_limit_enabled {
+            debt_data.debt = debt_limit(debt_data.debt.clone(), close_threshold.clone());
         }
 
         match (should_close, should_pay, payment_in_flight) {
@@ -702,6 +709,7 @@ mod tests {
     fn test_single_pay() {
         SETTING.get_payment_mut().pay_threshold = Int256::from(5);
         SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().debt_limit_enabled = false;
 
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
@@ -712,6 +720,26 @@ mod tests {
             d.send_update(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(100u32),
+                to: ident,
+            }
+        );
+    }
+
+    #[test]
+    fn test_single_pay_limited() {
+        SETTING.get_payment_mut().pay_threshold = Int256::from(5);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().debt_limit_enabled = true;
+
+        let mut d = DebtKeeper::new();
+        let ident = get_test_identity();
+
+        d.traffic_update(&ident, Int256::from(100));
+
+        assert_eq!(
+            d.send_update(&ident).unwrap(),
+            DebtAction::MakePayment {
+                amount: Uint256::from(11u32),
                 to: ident,
             }
         );
@@ -738,6 +766,7 @@ mod tests {
     fn test_multi_pay() {
         SETTING.get_payment_mut().pay_threshold = Int256::from(5);
         SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().debt_limit_enabled = false;
 
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
@@ -750,6 +779,28 @@ mod tests {
             d.send_update(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(10000u32),
+                to: ident,
+            }
+        );
+    }
+
+    #[test]
+    fn test_multi_pay_lmited() {
+        SETTING.get_payment_mut().pay_threshold = Int256::from(5);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().debt_limit_enabled = true;
+
+        let mut d = DebtKeeper::new();
+        let ident = get_test_identity();
+
+        for _ in 0..100 {
+            d.traffic_update(&ident, Int256::from(100))
+        }
+
+        assert_eq!(
+            d.send_update(&ident).unwrap(),
+            DebtAction::MakePayment {
+                amount: Uint256::from(11u32),
                 to: ident,
             }
         );
@@ -798,6 +849,7 @@ mod tests {
     fn test_credit_reopen() {
         SETTING.get_payment_mut().pay_threshold = Int256::from(5);
         SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().debt_limit_enabled = false;
 
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
@@ -820,9 +872,39 @@ mod tests {
     }
 
     #[test]
+    fn test_credit_reopen_limited() {
+        SETTING.get_payment_mut().pay_threshold = Int256::from(10);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-100);
+        SETTING.get_payment_mut().debt_limit_enabled = true;
+
+        let mut d = DebtKeeper::new();
+        let ident = get_test_identity();
+
+        // when the debt limit is enabled these tests have to get a little more real
+        // the values stop making sense once you eceed the close_threshold because that's
+        // the desired behavior of a system with the debt limit on, so you can't add in
+        // big numbers and expect conservation to make sense. Instead what we do here is
+        // more realistic and reflects a slight underpayment until enforcement starts followed
+        // by a smaller payment to reopen
+        for _ in 0..100 {
+            d.payment_received(&ident, Uint256::from(25u64)).unwrap();
+            assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+            d.traffic_update(&ident, Int256::from(-26i64));
+        }
+        // negative debt is now -105 so a payment of 100 shouldn't open unless limiting is working
+        d.traffic_update(&ident, Int256::from(-5i64));
+        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::SuspendTunnel);
+
+        d.payment_received(&ident, Uint256::from(100u64)).unwrap();
+
+        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+    }
+
+    #[test]
     fn test_payment_fail() {
         SETTING.get_payment_mut().pay_threshold = Int256::from(5);
         SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().debt_limit_enabled = false;
 
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
@@ -886,6 +968,83 @@ mod tests {
             d.send_update(&ident).unwrap(),
             DebtAction::MakePayment {
                 amount: Uint256::from(10000u32),
+                to: ident,
+            }
+        );
+        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+        assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+    }
+
+    #[test]
+    fn test_payment_fail_limited() {
+        SETTING.get_payment_mut().pay_threshold = Int256::from(5);
+        SETTING.get_payment_mut().close_threshold = Int256::from(-10);
+        SETTING.get_payment_mut().debt_limit_enabled = true;
+
+        // same as above except debt is limited, so we will be paying much
+        // smaller amounts than we are setup to 'owe'
+
+        let mut d = DebtKeeper::new();
+        let ident = get_test_identity();
+
+        // generate a bunch of traffic
+        for _ in 0..100 {
+            d.traffic_update(&ident, Int256::from(100))
+        }
+        // make sure that the update response is to pay
+        assert_eq!(
+            d.send_update(&ident).unwrap(),
+            DebtAction::MakePayment {
+                amount: Uint256::from(11u32),
+                to: ident,
+            }
+        );
+        // simulate a payment failure
+        d.payment_failed(&ident).unwrap();
+
+        // make sure we haven't marked any payments as sent (because the payment failed)
+        assert_eq!(
+            d.get_debts()[&ident].total_payment_sent,
+            Uint256::from(0u32)
+        );
+
+        // mark the payment as a success
+        d.payment_succeeded(&ident, Uint256::from(11u32)).unwrap();
+        // make sure the payment sent value is updated
+        assert_eq!(
+            d.get_debts()[&ident].total_payment_sent,
+            Uint256::from(11u32)
+        );
+
+        // more traffic
+        for _ in 0..100 {
+            d.traffic_update(&ident, Int256::from(100))
+        }
+        // another payment, to make sure the state was all set right after
+        // the failure then success
+        assert_eq!(
+            d.send_update(&ident).unwrap(),
+            DebtAction::MakePayment {
+                amount: Uint256::from(11u32),
+                to: ident,
+            }
+        );
+        d.payment_succeeded(&ident, Uint256::from(11u32)).unwrap();
+        assert_eq!(
+            d.get_debts()[&ident].total_payment_sent,
+            Uint256::from(22u32)
+        );
+
+        // finally lets make sure we don't send any payments while
+        // a payment is in flight
+        for _ in 0..100 {
+            d.traffic_update(&ident, Int256::from(100))
+        }
+        assert_eq!(
+            d.send_update(&ident).unwrap(),
+            DebtAction::MakePayment {
+                amount: Uint256::from(11u32),
                 to: ident,
             }
         );
