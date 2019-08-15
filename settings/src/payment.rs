@@ -34,6 +34,10 @@ fn default_bridge_enabled() -> bool {
     true
 }
 
+fn default_debt_limit_enabled() -> bool {
+    true
+}
+
 fn default_balance_warning_level() -> Uint256 {
     (10_000_000_000_000_000u64).into()
 }
@@ -112,9 +116,15 @@ pub struct PaymentSettings {
     /// A value used to divide and add to a payment, essentailly a cheating tool for
     /// payment convergence. Computed as payment_amount + (payment_amount/fudge_factor)
     /// so a factor of 100 would be a 1% overpayment this helps cover up errors in accounting
-    /// by pushing the system into overpayment and therefore convergence
+    /// by pushing the system into overpayment and therefore convergence. Currently not used
+    /// probably should be axed as cruft
     #[serde(default = "default_fudge_factor")]
     pub fudge_factor: u8,
+    /// This prevents nodes from building large debts beyond the debt
+    /// limit, this prevents situations where large negative debts will drain balances
+    /// on deposit
+    #[serde(default = "default_debt_limit_enabled")]
+    pub debt_limit_enabled: bool,
 }
 
 impl Default for PaymentSettings {
@@ -141,6 +151,7 @@ impl Default for PaymentSettings {
             debts_file: default_debts_file(),
             bridge_enabled: true,
             fudge_factor: 0u8,
+            debt_limit_enabled: true,
         }
     }
 }
