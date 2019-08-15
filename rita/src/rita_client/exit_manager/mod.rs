@@ -153,10 +153,10 @@ fn decrypt_exit_state(
         .expect("No private key?")
         .into();
     drop(network_settings);
-    let chipertext = exit_state.encrypted_exit_state;
+    let ciphertext = exit_state.encrypted_exit_state;
     let nonce = Nonce(exit_state.nonce);
     let decrypted_exit_state: ExitState =
-        match box_::open(&chipertext, &nonce, &exit_pubkey, &our_secretkey) {
+        match box_::open(&ciphertext, &nonce, &exit_pubkey, &our_secretkey) {
             Ok(decrypted_bytes) => match String::from_utf8(decrypted_bytes) {
                 Ok(json_string) => match serde_json::from_str(&json_string) {
                     Ok(exit_state) => exit_state,
