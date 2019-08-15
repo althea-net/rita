@@ -187,7 +187,7 @@ fn rescue_dai(
     bridge: TokenBridgeCore,
     our_address: Address,
     minimum_stranded_dai_transfer: u32,
-) -> Box<Future<Item = (), Error = Error>> {
+) -> Box<dyn Future<Item = (), Error = Error>> {
     Box::new(bridge.get_dai_balance(our_address).and_then({
         move |dai_balance| {
             trace!("Our DAI balance is {}", dai_balance);
@@ -201,7 +201,7 @@ fn rescue_dai(
                 )
             } else {
                 // we don't have a lot of dai, we shouldn't do anything
-                Box::new(future::ok(())) as Box<Future<Item = (), Error = Error>>
+                Box::new(future::ok(())) as Box<dyn Future<Item = (), Error = Error>>
             }
         }
     }))
@@ -291,7 +291,7 @@ impl Handler<Tick> for TokenBridge {
                                                     })
                                                     .and_then(|_| Ok(())),
                                             )
-                                                as Box<Future<Item = (), Error = Error>>
+                                                as Box<dyn Future<Item = (), Error = Error>>
                                         } else {
                                             TokenBridge::from_registry().do_send(
                                                 DetailedStateChange(DetailedBridgeState::NoOp {
@@ -301,7 +301,7 @@ impl Handler<Tick> for TokenBridge {
                                             );
                                             // we don't have a lot of eth, we shouldn't do anything
                                             Box::new(future::ok(()))
-                                                as Box<Future<Item = (), Error = Error>>
+                                                as Box<dyn Future<Item = (), Error = Error>>
                                         }
                                     })
                             })
@@ -362,7 +362,7 @@ impl Handler<Tick> for TokenBridge {
                                                 // Then it converts to eth
                                                 .dai_to_eth_swap(amount, UNISWAP_TIMEOUT).and_then(|_| Ok(()))
                                         )
-                                            as Box<Future<Item = (), Error = Error>>
+                                            as Box<dyn Future<Item = (), Error = Error>>
                                     // all other steps are done and the eth is sitting and waiting
                                     } else if our_eth_balance >= transferred_eth {
                                         trace!("Converted dai back to eth!");
@@ -387,7 +387,7 @@ impl Handler<Tick> for TokenBridge {
                                         info!("withdraw is waiting on bridge");
                                         TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::XdaiToDai{amount}));
                                         Box::new(futures::future::ok(()))
-                                            as Box<Future<Item = (), Error = Error>>
+                                            as Box<dyn Future<Item = (), Error = Error>>
                                     }
                                 })
                                 .then(|res| {
