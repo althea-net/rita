@@ -1128,6 +1128,36 @@ Withdraws the given amount in wei to the provided address.
 
 ---
 
+## /withdraw_all/{address}
+
+Computes the maximum possible withdraw for the given blockchain and sends it.
+
+To fully withdraw both Xdai to Eth you need to first perform a withdraw all the Xdai
+and wait for that to complete, then you must change the system blockchain to eth to finish
+the process.
+
+- URL: `<rita ip>:<rita_dashboard_port>/withdraw/{address}`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+{
+  txid: 0x0000000000
+}
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl -v -XPOST http://192.168.10.1:4877/withdraw_all/0x31B98D14007bDEe637298086988A0bBd31184523`
+
+---
+
 ## /auto_price/enabled
 
 Returns if auto pricing is enabled or not
@@ -1517,11 +1547,11 @@ Return whether or not a backup of the router's private keys has been created
 
 ## /backup_created/{status}
 
-Set whether or not a backup has been created. 
+Set whether or not a backup has been created.
 
 - URL: `<rita ip>:<rita_dashboard_port>/backup_created/{status}`
 - Method: `POST`
-- URL Params: 
+- URL Params:
   - status: `true` or `false`
 - Data Params: `None`
 - Success Response:

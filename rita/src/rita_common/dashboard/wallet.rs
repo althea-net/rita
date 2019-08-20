@@ -46,6 +46,34 @@ pub fn withdraw(
     }
 }
 
+pub fn withdraw_all(path: Path<Address>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+    let address = path.into_inner();
+    let payment_settings = SETTING.get_payment();
+    let system_chain = payment_settings.system_chain;
+    let withdraw_chain = payment_settings.withdraw_chain;
+    let gas_price = payment_settings.gas_price.clone();
+    let balance = payment_settings.balance.clone();
+    drop(payment_settings);
+
+    let tx_gas = 21000u32.into();
+    let tx_cost = gas_price * tx_gas;
+    let amount = balance - tx_cost;
+    match (system_chain, withdraw_chain) {
+        (SystemChain::Ethereum, SystemChain::Ethereum) => eth_compatable_withdraw(address, amount),
+        (SystemChain::Rinkeby, SystemChain::Rinkeby) => eth_compatable_withdraw(address, amount),
+        (SystemChain::Xdai, SystemChain::Xdai) => eth_compatable_withdraw(address, amount),
+        (SystemChain::Xdai, SystemChain::Ethereum) => xdai_to_eth_withdraw(address, amount),
+        (_, _) => Box::new(future::ok(
+            HttpResponse::new(StatusCode::from_u16(504u16).unwrap())
+                .into_builder()
+                .json(format!(
+                    "System chain is {} but withdraw chain is {}, withdraw impossible!",
+                    system_chain, withdraw_chain
+                )),
+        )),
+    }
+}
+
 /// Withdraw for eth compatible chains
 fn eth_compatable_withdraw(
     address: Address,
@@ -68,7 +96,7 @@ fn eth_compatable_withdraw(
     let tx = Transaction {
         nonce: payment_settings.nonce.clone(),
         gas_price: payment_settings.gas_price.clone(),
-        gas_limit: "21000".parse().unwrap(),
+        gas_limit: 21000u32.into(),
         to: address,
         value: amount,
         data: Vec::new(),

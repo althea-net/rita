@@ -257,6 +257,7 @@ fn start_rita_exit_dashboard() {
                 remove_from_dao_list,
             )
             .route("/withdraw/{address}/{amount}", Method::POST, withdraw)
+            .route("/withdraw_all/{address}", Method::POST, withdraw_all)
             .route(
                 "/auto_price/enabled/{status}",
                 Method::POST,
