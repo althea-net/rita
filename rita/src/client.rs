@@ -304,6 +304,7 @@ fn start_client_dashboard() {
             )
             .route("/wifi_settings", Method::GET, get_wifi_config)
             .route("/withdraw/{address}/{amount}", Method::POST, withdraw)
+            .route("/withdraw_all/{address}", Method::POST, withdraw_all)
             .route(
                 "/auto_price/enabled/{status}",
                 Method::POST,
