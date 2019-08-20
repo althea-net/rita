@@ -121,29 +121,35 @@ fn generate_helper_maps(
     Ok((identities, id_from_ip))
 }
 
-fn counters_logging(counters: &HashMap<WgKey, WgUsage>, exit_fee: u32) {
+fn counters_logging(
+    counters: &HashMap<WgKey, WgUsage>,
+    history: &HashMap<WgKey, WgUsage>,
+    exit_fee: u32,
+) {
     trace!("exit counters: {:?}", counters);
 
     let mut total_in: u64 = 0;
     for entry in counters.iter() {
-        trace!(
-            "Exit accounted {} uploaded {} bytes",
-            entry.0,
-            entry.1.download
-        );
-        let input = entry.1;
-        total_in += input.download;
+        let key = entry.0;
+        let val = entry.1;
+        if let Some(history_val) = history.get(key) {
+            let moved_bytes = val.download - history_val.download;
+            trace!("Exit accounted {} uploaded {} bytes", key, moved_bytes,);
+            total_in += moved_bytes;
+        }
     }
+
     info!("Total Exit input of {} bytes this round", total_in);
+
     let mut total_out: u64 = 0;
     for entry in counters.iter() {
-        trace!(
-            "Exit accounted {} downloaded {} bytes",
-            entry.0,
-            entry.1.upload
-        );
-        let output = entry.1;
-        total_out += output.upload;
+        let key = entry.0;
+        let val = entry.1;
+        if let Some(history_val) = history.get(key) {
+            let moved_bytes = val.upload - history_val.upload;
+            trace!("Exit accounted {} downloaded {} bytes", key, moved_bytes);
+            total_out += moved_bytes;
+        }
     }
 
     // update the usage tracker with the details of this round's usage
@@ -229,10 +235,10 @@ pub fn watch(
         }
     };
 
-    counters_logging(&counters, our_price as u32);
-
     // creates new usage entires does not actualy update the values
     update_usage_history(&counters, usage_history);
+
+    counters_logging(&counters, &usage_history, our_price as u32);
 
     let mut debts = HashMap::new();
 
