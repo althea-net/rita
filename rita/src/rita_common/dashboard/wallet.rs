@@ -172,7 +172,7 @@ fn eth_compatable_withdraw(
     let tx = Transaction {
         nonce: payment_settings.nonce.clone(),
         gas_price: payment_settings.gas_price.clone(),
-        gas_limit: 21000u32.into(),
+        gas_limit: 21_000u32.into(),
         to: address,
         value: amount,
         data: Vec::new(),
