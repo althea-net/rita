@@ -352,7 +352,8 @@ impl Handler<Tick> for TokenBridge {
                                 .get_dai_balance(our_address)
                                 .join(bridge.eth_web3.eth_get_balance(our_address))
                                 .join(bridge.dai_to_eth_price(eth_to_wei(1u8.into())))
-                                .and_then(move |((our_dai_balance, our_eth_balance), wei_per_dollar)| {
+                                .join(bridge.eth_web3.eth_gas_price())
+                                .and_then(move |(((our_dai_balance, our_eth_balance), wei_per_dollar), eth_gas_price)| {
                                     trace!("withdraw state is {} dai {} eth {} wei per dollar", our_dai_balance, our_eth_balance, wei_per_dollar);
                                     let transferred_eth = eth_equal(amount_a.clone(), wei_per_dollar.clone());
                                     // Money has come over the bridge
@@ -373,7 +374,7 @@ impl Handler<Tick> for TokenBridge {
                                         let withdraw_amount = if withdraw_all {
                                             // this only works because the gas price is hardcoded in auto_bridge
                                             // that should be fixed someday and this should use dynamic gas
-                                            let gas_price: Uint256 = 23_000_000_000u128.into();
+                                            let gas_price = eth_gas_price;
                                             let tx_gas: Uint256 = 21_000u32.into();
                                             let tx_cost = gas_price * tx_gas;
                                             our_eth_balance.clone() - tx_cost
