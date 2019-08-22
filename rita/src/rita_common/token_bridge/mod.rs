@@ -373,7 +373,7 @@ impl Handler<Tick> for TokenBridge {
                                         let withdraw_amount = if withdraw_all {
                                             // this only works because the gas price is hardcoded in auto_bridge
                                             // that should be fixed someday and this should use dynamic gas
-                                            let gas_price: Uint256 = 23_000u32.into();
+                                            let gas_price: Uint256 = 23_000_000_000u128.into();
                                             let tx_gas: Uint256 = 21_000u32.into();
                                             let tx_cost = gas_price * tx_gas;
                                             our_eth_balance.clone() - tx_cost

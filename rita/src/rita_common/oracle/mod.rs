@@ -18,7 +18,6 @@ use clarity::Address;
 use futures::{future, Future};
 use num256::Int256;
 use num256::Uint256;
-use num_traits::Zero;
 use settings::RitaCommonSettings;
 use std::time::Duration;
 use std::time::Instant;
