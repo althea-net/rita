@@ -75,13 +75,13 @@ use std::time::Instant;
 
 const BRIDGE_TIMEOUT: Duration = Duration::from_secs(3600);
 const UNISWAP_TIMEOUT: u64 = 600u64;
-const ETH_TRANSFER_TIMEOUT: u64 = 600u64;
+pub const ETH_TRANSFER_TIMEOUT: u64 = 600u64;
 
 fn is_timed_out(started: Instant) -> bool {
     Instant::now() - started > BRIDGE_TIMEOUT
 }
 
-fn eth_to_wei(eth: u64) -> Uint256 {
+pub fn eth_to_wei(eth: u64) -> Uint256 {
     let wei = (eth * 1_000_000_000_000_000_000_u64) as u64;
     wei.into()
 }
@@ -91,7 +91,7 @@ fn wei_dai_to_dai(dai_wei: Uint256) -> Uint256 {
 }
 
 /// Provided an amount in DAI (wei dai so 1*10^18 per dollar) returns the equal amount in wei (or ETH if divided by 1*10^18)
-fn eth_equal(dai_in_wei: Uint256, wei_per_dollar: Uint256) -> Uint256 {
+pub fn eth_equal(dai_in_wei: Uint256, wei_per_dollar: Uint256) -> Uint256 {
     wei_dai_to_dai(dai_in_wei) * wei_per_dollar
 }
 
@@ -106,6 +106,7 @@ pub enum State {
         amount: Uint256,
         to: Address,
         timestamp: Instant,
+        withdraw_all: bool,
     },
 }
 
@@ -121,10 +122,11 @@ impl Display for State {
                 amount: a,
                 to: t,
                 timestamp: ti,
+                withdraw_all: w,
             } => write!(
                 f,
-                "Withdrawing:{{amount: {}, to: {}, timestamp: {:?}}}",
-                a, t, ti
+                "Withdrawing:{{amount: {}, to: {}, timestamp: {:?}, withdraw_all: {}}}",
+                a, t, ti, w
             ),
         }
     }
@@ -325,6 +327,7 @@ impl Handler<Tick> for TokenBridge {
                     to,
                     amount,
                     timestamp,
+                    withdraw_all,
                 } => {
                     if is_timed_out(timestamp) {
                         error!("Withdraw timed out!");
@@ -339,6 +342,7 @@ impl Handler<Tick> for TokenBridge {
                                 to,
                                 amount,
                                 timestamp,
+                                withdraw_all,
                             })),
                         }));
                     } else {
@@ -366,23 +370,31 @@ impl Handler<Tick> for TokenBridge {
                                     // all other steps are done and the eth is sitting and waiting
                                     } else if our_eth_balance >= transferred_eth {
                                         trace!("Converted dai back to eth!");
+                                        let withdraw_amount = if withdraw_all {
+                                            // this only works because the gas price is hardcoded in auto_bridge
+                                            // that should be fixed someday and this should use dynamic gas
+                                            let gas_price: Uint256 = 23_000u32.into();
+                                            let tx_gas: Uint256 = 21_000u32.into();
+                                            let tx_cost = gas_price * tx_gas;
+                                            our_eth_balance.clone() - tx_cost
+                                            } else { transferred_eth };
 
-                                                   TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::EthToDest{
-                                                       amount_of_eth: transferred_eth.clone(),
-                                                       wei_per_dollar: wei_per_dollar.clone(),
-                                                       dest_address: to
-                                                   }));
-                                                   Box::new(bridge.eth_transfer(
-                                                        to,
-                                                        transferred_eth,
-                                                        ETH_TRANSFER_TIMEOUT,
-                                                    )
-                                                .and_then(move |_| {
-                                                    trace!("Issued an eth transfer for withdraw! Now complete!");
-                                                    // we only exit the withdraw state on success or timeout
-                                                    TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::NoOp{eth_balance: our_eth_balance, wei_per_dollar}));
-                                                    TokenBridge::from_registry().do_send(StateChange(State::Ready {former_state: Some(Box::new(State::Withdrawing{to, amount: amount_a, timestamp}))}));
-                                                    Ok(())}))
+                                        TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::EthToDest{
+                                            amount_of_eth: withdraw_amount.clone(),
+                                            wei_per_dollar: wei_per_dollar.clone(),
+                                            dest_address: to
+                                        }));
+                                        Box::new(bridge.eth_transfer(
+                                            to,
+                                            withdraw_amount,
+                                            ETH_TRANSFER_TIMEOUT,
+                                        )
+                                        .and_then(move |_| {
+                                            trace!("Issued an eth transfer for withdraw! Now complete!");
+                                            // we only exit the withdraw state on success or timeout
+                                            TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::NoOp{eth_balance: our_eth_balance, wei_per_dollar}));
+                                            TokenBridge::from_registry().do_send(StateChange(State::Ready {former_state: Some(Box::new(State::Withdrawing{to, amount: amount_a, timestamp, withdraw_all}))}));
+                                            Ok(())}))
                                     } else {
                                         info!("withdraw is waiting on bridge");
                                         TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::XdaiToDai{amount}));
@@ -404,9 +416,12 @@ impl Handler<Tick> for TokenBridge {
     }
 }
 
+/// Withdraw state struct for the bridge, if withdraw_all is true, the eth will be
+/// cleaned up on the way out as well
 pub struct Withdraw {
     pub to: Address,
     pub amount: Uint256,
+    pub withdraw_all: bool,
 }
 
 impl Message for Withdraw {
@@ -423,6 +438,7 @@ impl Handler<Withdraw> for TokenBridge {
 
         let to = msg.to;
         let amount = msg.amount.clone();
+        let withdraw_all = msg.withdraw_all;
 
         let bridge = self.bridge.clone();
 
@@ -449,6 +465,7 @@ impl Handler<Withdraw> for TokenBridge {
                                 to,
                                 amount,
                                 timestamp: Instant::now(),
+                                withdraw_all,
                             }));
                         }
                         Ok(())
@@ -563,5 +580,23 @@ impl Handler<GetBridgeStatus> for TokenBridge {
             state: self.detailed_state.clone(),
         };
         Ok(ret)
+    }
+}
+
+/// used to get the bridge object and manipulate eth elsewhere, returns
+/// the reserve amount in eth and the TokenBridge struct
+#[derive(Debug, Eq, PartialEq, Clone, Serialize)]
+pub struct GetBridge();
+
+impl Message for GetBridge {
+    type Result = Result<(TokenBridgeCore, Uint256), Error>;
+}
+
+impl Handler<GetBridge> for TokenBridge {
+    type Result = Result<(TokenBridgeCore, Uint256), Error>;
+    fn handle(&mut self, _msg: GetBridge, _ctx: &mut Context<Self>) -> Self::Result {
+        let bridge = self.bridge.clone();
+        let reserve_amount = eth_to_wei(self.reserve_amount.into());
+        Ok((bridge, reserve_amount))
     }
 }
