@@ -84,7 +84,7 @@ pub enum WifiToken {
 }
 
 /// A string of characters which we don't let users use because of corrupted UCI configs
-static FORBIDDEN_CHARS: &'static str = "'/\"\\";
+static FORBIDDEN_CHARS: &str = "'/\"\\";
 
 static MINIMUM_PASS_CHARS: usize = 8;
 

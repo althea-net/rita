@@ -258,18 +258,18 @@ pub fn reset_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Err
     if let Some(exit) = exits.get_mut(&exit_name) {
         info!("Changing exit {:?} state to New", exit_name);
         exit.info = ExitState::New;
-        return Box::new(future::ok(HttpResponse::Ok().json(ret)));
+        Box::new(future::ok(HttpResponse::Ok().json(ret)))
     } else {
         error!("Requested a reset on unknown exit {:?}", exit_name);
         ret.insert(
             "error".to_owned(),
             format!("Requested reset on unknown exit {:?}", exit_name),
         );
-        return Box::new(future::ok(
+        Box::new(future::ok(
             HttpResponse::new(StatusCode::BAD_REQUEST)
                 .into_builder()
                 .json(ret),
-        ));
+        ))
     }
 }
 
