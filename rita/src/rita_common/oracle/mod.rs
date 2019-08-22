@@ -99,11 +99,7 @@ fn update_balance(our_address: Address, web3: &Web3, full_node: String) {
                     full_node, value
                 );
                 let our_balance = &mut SETTING.get_payment_mut().balance;
-                // if our balance is not zero and the response we get from the full node
-                // is zero either we very carefully emptied our wallet or it's that annoying Geth bug
-                if !(*our_balance != Uint256::zero() && value == Uint256::zero()) {
-                    *our_balance = value;
-                }
+                *our_balance = value;
                 Ok(())
             }
             Err(e) => {
