@@ -133,7 +133,7 @@ pub fn withdraw_eth(
                                                 .into_builder()
                                                 .json(format!("Transfer error {:?}", e)))
                                             } else {
-                                                Ok(HttpResponse::Ok().json(format!("Success!")))
+                                                Ok(HttpResponse::Ok().json("Success!".to_string()))
                                             }
                                         }),
                                 )
@@ -141,7 +141,7 @@ pub fn withdraw_eth(
                                 Box::new(future::ok(
                                     HttpResponse::new(StatusCode::from_u16(400u16).unwrap())
                                         .into_builder()
-                                        .json(format!("Insufficient balance")),
+                                        .json("Insufficient balance".to_string()),
                                 ))
                             }
                         }),
