@@ -259,6 +259,11 @@ fn start_rita_exit_dashboard() {
             .route("/withdraw/{address}/{amount}", Method::POST, withdraw)
             .route("/withdraw_all/{address}", Method::POST, withdraw_all)
             .route(
+                "/withdraw_eth/{address}/{amount}",
+                Method::POST,
+                withdraw_eth,
+            )
+            .route(
                 "/auto_price/enabled/{status}",
                 Method::POST,
                 set_auto_pricing,
