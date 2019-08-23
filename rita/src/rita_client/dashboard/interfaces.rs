@@ -11,6 +11,7 @@ use futures::Future;
 use settings::FileWrite;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
+use std::net::Ipv4Addr;
 use std::time::{Duration, Instant};
 use tokio::timer::Delay;
 
@@ -25,6 +26,13 @@ pub enum InterfaceMode {
     Mesh,
     LAN,
     WAN,
+    /// StaticWAN is used to set interfaces but once set isn't
+    /// seen as any different than WAN elsewhere in the system
+    StaticWAN {
+        netmask: Ipv4Addr,
+        ipaddr: Ipv4Addr,
+        gateway: Ipv4Addr,
+    },
     Meshpoint, //combo of lan and mesh
     Unknown,   // Ambiguous wireless modes like monitor or promiscuous
 }
@@ -36,6 +44,7 @@ impl ToString for InterfaceMode {
             InterfaceMode::Meshpoint => "Meshpoint".to_owned(),
             InterfaceMode::LAN => "LAN".to_owned(),
             InterfaceMode::WAN => "WAN".to_owned(),
+            InterfaceMode::StaticWAN { .. } => "StaticWAN".to_owned(),
             InterfaceMode::Unknown => "unknown".to_owned(),
         }
     }
@@ -232,7 +241,7 @@ pub fn ethernet_transform_mode(
 
     match a {
         // Wan is very simple, just delete it
-        InterfaceMode::WAN => {
+        InterfaceMode::WAN | InterfaceMode::StaticWAN { .. } => {
             let ret = KI.del_uci_var("network.backhaul");
             SETTING.get_network_mut().external_nic = None;
             return_codes.push(ret);
@@ -265,6 +274,25 @@ pub fn ethernet_transform_mode(
             let ret = KI.set_uci_var("network.backhaul.ifname", ifname);
             return_codes.push(ret);
             let ret = KI.set_uci_var("network.backhaul.proto", "dhcp");
+            return_codes.push(ret);
+        }
+        InterfaceMode::StaticWAN {
+            netmask,
+            ipaddr,
+            gateway,
+        } => {
+            SETTING.get_network_mut().external_nic = Some(ifname.to_string());
+            let ret = KI.set_uci_var("network.backhaul", "interface");
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.backhaul.ifname", ifname);
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.backhaul.proto", "static");
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.backhaul.netmask", &format!("{}", netmask));
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.backhaul.ipaddr", &format!("{}", ipaddr));
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.backhaul.gateway", &format!("{}", gateway));
             return_codes.push(ret);
         }
         // since we left lan mostly unomidifed we just pop in the ifname
@@ -387,6 +415,7 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
 
     match a {
         InterfaceMode::WAN => unimplemented!(),
+        InterfaceMode::StaticWAN { .. } => unimplemented!(),
         // nothing to do here we overwrite everything we need later
         InterfaceMode::LAN => {}
         // for mesh we need to send an unlisten and delete the static interface we made
@@ -401,6 +430,7 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
 
     match b {
         InterfaceMode::WAN => unimplemented!(),
+        InterfaceMode::StaticWAN { .. } => unimplemented!(),
         // since we left lan mostly unomidifed we just pop in the ifname
         InterfaceMode::LAN => {
             let ret = KI.set_uci_var(&format!("wireless.{}.network", network_section), "lan");
