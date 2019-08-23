@@ -59,8 +59,8 @@ pub fn get_interfaces() -> Result<HashMap<String, InterfaceMode>, Error> {
         // Only non-loopback non-bridge interface names should get past
         if setting_name.contains("ifname") && !value.contains("backhaul") && value != "lo" {
             // it's a list and we need to handle that
-            if value.contains(',') {
-                for list_member in value.split(',') {
+            if value.contains(' ') {
+                for list_member in value.split(' ') {
                     retval.insert(
                         list_member.replace(" ", "").to_string(),
                         ethernet2mode(&value, &setting_name)?,
@@ -183,22 +183,15 @@ fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), Error
     let interfaces = get_interfaces()?;
     let current_mode = get_current_interface_mode(&interfaces, iface_name);
     if !interfaces.contains_key(iface_name) {
-        bail!("Attempted to configure non-existant or unavailable itnerface!");
+        bail!("Attempted to configure non-existant or unavailable interface!");
     } else if target_mode == InterfaceMode::WAN {
         // we can only have one WAN interface, check for others
+        // StaticWAN entires are not identified seperately but if they ever are
+        // you'll have to handle them here
         for entry in interfaces {
             let mode = entry.1;
             if mode == InterfaceMode::WAN {
                 bail!("There can only be one WAN interface!");
-            }
-        }
-    } else if target_mode == InterfaceMode::LAN && !iface_name.contains("wlan") {
-        // we can only have one LAN ethernet interface, check for others
-        for entry in interfaces {
-            let name = entry.0;
-            let mode = entry.1;
-            if mode == InterfaceMode::LAN && !name.contains("wlan") {
-                bail!("There can only be one LAN ethernet interface!");
             }
         }
     }
@@ -250,7 +243,7 @@ pub fn ethernet_transform_mode(
         // may depend on it so we only remove the ifname entry
         InterfaceMode::LAN => {
             let list = KI.get_uci_var("network.lan.ifname")?;
-            let new_list = comma_list_remove(&list, ifname);
+            let new_list = list_remove(&list, ifname);
             let ret = KI.set_uci_var("network.lan.ifname", &new_list);
             return_codes.push(ret);
         }
@@ -302,7 +295,7 @@ pub fn ethernet_transform_mode(
             match ret {
                 Ok(list) => {
                     trace!("The existing LAN interfaces list is {:?}", list);
-                    let new_list = comma_list_add(&list, &ifname);
+                    let new_list = list_add(&list, &ifname);
                     trace!("Setting the new list {:?}", new_list);
                     let ret = KI.set_uci_var("network.lan.ifname", &new_list);
                     return_codes.push(ret);
@@ -525,19 +518,19 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
     Ok(())
 }
 
-/// A helper function for adding entires to a comma deliminated list
-pub fn comma_list_add(list: &str, entry: &str) -> String {
+/// A helper function for adding entries to a list
+pub fn list_add(list: &str, entry: &str) -> String {
     if !list.is_empty() {
-        format!("{}, {}", list, entry)
+        format!("{} {}", list, entry)
     } else {
         entry.to_string()
     }
 }
 
-/// A helper function for removing entires to a comma deliminated list
-pub fn comma_list_remove(list: &str, entry: &str) -> String {
+/// A helper function for removing entries from a list
+pub fn list_remove(list: &str, entry: &str) -> String {
     if !list.is_empty() {
-        let split = list.split(',');
+        let split = list.split(' ');
         let mut new_list = "".to_string();
         let mut first = true;
         for item in split {
@@ -549,7 +542,7 @@ pub fn comma_list_remove(list: &str, entry: &str) -> String {
                     new_list = tmp_list + &filtered_item.to_string();
                     first = false;
                 } else {
-                    new_list = tmp_list + &format!(", {}", filtered_item);
+                    new_list = tmp_list + &format!(" {}", filtered_item);
                 }
             }
         }
@@ -578,37 +571,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_comma_list_remove() {
-        let a = "eth0.3, eth1, eth2, eth3, eth4";
+    fn test_list_remove() {
+        let a = "eth0.3 eth1 eth2 eth3 eth4";
 
-        let b = comma_list_remove(a, "eth1");
-        assert_eq!(b, "eth0.3, eth2, eth3, eth4");
+        let b = list_remove(a, "eth1");
+        assert_eq!(b, "eth0.3 eth2 eth3 eth4");
 
-        let b = comma_list_remove(&b, "eth0.3");
-        assert_eq!(b, "eth2, eth3, eth4");
+        let b = list_remove(&b, "eth0.3");
+        assert_eq!(b, "eth2 eth3 eth4");
 
-        let b = comma_list_remove(&b, "eth4");
-        assert_eq!(b, "eth2, eth3");
+        let b = list_remove(&b, "eth4");
+        assert_eq!(b, "eth2 eth3");
 
-        let b = comma_list_remove(&b, "eth2");
+        let b = list_remove(&b, "eth2");
         assert_eq!(b, "eth3");
 
-        let b = comma_list_remove(&b, "eth3");
+        let b = list_remove(&b, "eth3");
         assert_eq!(b, "");
     }
 
     #[test]
-    fn test_comma_list_add() {
+    fn test_list_add() {
         let a = "";
 
-        let b = comma_list_add(a, "eth1");
+        let b = list_add(a, "eth1");
         assert_eq!(b, "eth1");
 
-        let b = comma_list_add(&b, "eth0.3");
-        assert_eq!(b, "eth1, eth0.3");
+        let b = list_add(&b, "eth0.3");
+        assert_eq!(b, "eth1 eth0.3");
 
-        let b = comma_list_add(&b, "eth4");
-        assert_eq!(b, "eth1, eth0.3, eth4");
+        let b = list_add(&b, "eth4");
+        assert_eq!(b, "eth1 eth0.3 eth4");
     }
 }
 
