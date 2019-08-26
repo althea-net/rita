@@ -1163,7 +1163,7 @@ To fully withdraw both Xdai to Eth you need to first perform a withdraw all the 
 and wait for that to complete, then you must change the system blockchain to eth to finish
 the process.
 
-- URL: `<rita ip>:<rita_dashboard_port>/withdraw/{address}`
+- URL: `<rita ip>:<rita_dashboard_port>/withdraw_all/{address}`
 - Method: `GET`
 - URL Params: `None`
 - Data Params: `None`

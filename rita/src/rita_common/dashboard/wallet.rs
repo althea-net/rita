@@ -1,10 +1,10 @@
 use crate::rita_common::oracle::update_nonce;
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::rita_common::token_bridge::eth_equal;
-use crate::rita_common::token_bridge::eth_to_wei;
 use crate::rita_common::token_bridge::GetBridge;
 use crate::rita_common::token_bridge::TokenBridge;
 use crate::rita_common::token_bridge::Withdraw;
+use crate::rita_common::token_bridge::DAI_WEI_CENT;
 use crate::rita_common::token_bridge::ETH_TRANSFER_TIMEOUT;
 use crate::SETTING;
 use ::actix::SystemService;
@@ -109,7 +109,7 @@ pub fn withdraw_eth(
                     bridge
                         .eth_web3
                         .eth_get_balance(our_address)
-                        .join(bridge.dai_to_eth_price(eth_to_wei(1u8.into())))
+                        .join(bridge.dai_to_eth_price(DAI_WEI_CENT.into()))
                         .then(move |res| {
                             if let Err(e) = res {
                                 return Box::new(future::ok(
@@ -119,8 +119,8 @@ pub fn withdraw_eth(
                                 ))
                                     as Box<dyn Future<Item = HttpResponse, Error = Error>>;
                             }
-                            let (our_eth_balance, wei_per_dollar) = res.unwrap();
-                            let reserve_amount_eth = eth_equal(reserve_amount, wei_per_dollar);
+                            let (our_eth_balance, wei_per_cent) = res.unwrap();
+                            let reserve_amount_eth = eth_equal(reserve_amount, wei_per_cent);
                             if our_eth_balance - reserve_amount_eth > withdraw_amount {
                                 Box::new(
                                     bridge
