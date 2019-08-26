@@ -404,7 +404,6 @@ impl Handler<Tick> for TokenBridge {
                                         .and_then(move |_| {
                                             trace!("Issued an eth transfer for withdraw! Now complete!");
                                             // we only exit the withdraw state on success or timeout
-                                            TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::NoOp{eth_balance: our_eth_balance, wei_per_dollar}));
                                             TokenBridge::from_registry().do_send(StateChange(State::Ready {former_state: Some(Box::new(State::Withdrawing{to, amount: amount_a, timestamp, withdraw_all}))}));
                                             Ok(())}))
                                     } else {
