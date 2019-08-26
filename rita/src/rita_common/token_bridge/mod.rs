@@ -76,6 +76,8 @@ use std::time::Instant;
 const BRIDGE_TIMEOUT: Duration = Duration::from_secs(3600);
 const UNISWAP_TIMEOUT: u64 = 600u64;
 pub const ETH_TRANSFER_TIMEOUT: u64 = 600u64;
+/// 1c in of dai in wei
+pub const DAI_WEI_CENT: u128 = 10_000_000_000_000_000u128;
 
 fn is_timed_out(started: Instant) -> bool {
     Instant::now() - started > BRIDGE_TIMEOUT
@@ -86,13 +88,13 @@ pub fn eth_to_wei(eth: u64) -> Uint256 {
     wei.into()
 }
 
-fn wei_dai_to_dai(dai_wei: Uint256) -> Uint256 {
-    dai_wei / 1_000_000_000_000_000_000_u64.into()
+fn wei_dai_to_dai_cents(dai_wei: Uint256) -> Uint256 {
+    dai_wei / DAI_WEI_CENT.into()
 }
 
 /// Provided an amount in DAI (wei dai so 1*10^18 per dollar) returns the equal amount in wei (or ETH if divided by 1*10^18)
-pub fn eth_equal(dai_in_wei: Uint256, wei_per_dollar: Uint256) -> Uint256 {
-    wei_dai_to_dai(dai_in_wei) * wei_per_dollar
+pub fn eth_equal(dai_in_wei: Uint256, wei_per_cent: Uint256) -> Uint256 {
+    wei_dai_to_dai_cents(dai_in_wei) * wei_per_cent
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -185,6 +187,9 @@ impl Default for TokenBridge {
     }
 }
 
+/// If some part of the depositing chain is disrupted due to a failure we may end up
+/// with a stranded dai balance, this function detects that balance and 'rescues' stranded
+/// dai
 fn rescue_dai(
     bridge: TokenBridgeCore,
     our_address: Address,
@@ -195,6 +200,11 @@ fn rescue_dai(
             trace!("Our DAI balance is {}", dai_balance);
             if dai_balance > eth_to_wei(minimum_stranded_dai_transfer.into()) {
                 trace!("rescuing dais");
+                TokenBridge::from_registry().do_send(DetailedStateChange(
+                    DetailedBridgeState::DaiToXdai {
+                        amount: dai_balance.clone(),
+                    },
+                ));
                 // Over the bridge into xDai
                 Box::new(
                     bridge
@@ -350,12 +360,13 @@ impl Handler<Tick> for TokenBridge {
                         Arbiter::spawn(
                             bridge
                                 .get_dai_balance(our_address)
-                                .join(bridge.eth_web3.eth_get_balance(our_address))
-                                .join(bridge.dai_to_eth_price(eth_to_wei(1u8.into())))
-                                .join(bridge.eth_web3.eth_gas_price())
-                                .and_then(move |(((our_dai_balance, our_eth_balance), wei_per_dollar), eth_gas_price)| {
+                                .join5(bridge.eth_web3.eth_get_balance(our_address),
+                                bridge.dai_to_eth_price(eth_to_wei(1u8.into())),
+                                bridge.dai_to_eth_price(DAI_WEI_CENT.into()),
+                                bridge.eth_web3.eth_gas_price())
+                                .and_then(move |(our_dai_balance, our_eth_balance, wei_per_dollar, wei_per_cent, eth_gas_price)| {
                                     trace!("withdraw state is {} dai {} eth {} wei per dollar", our_dai_balance, our_eth_balance, wei_per_dollar);
-                                    let transferred_eth = eth_equal(amount_a.clone(), wei_per_dollar.clone());
+                                    let transferred_eth = eth_equal(amount_a.clone(), wei_per_cent);
                                     // Money has come over the bridge
                                     if our_dai_balance >= amount {
                                         TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::DaiToEth{
