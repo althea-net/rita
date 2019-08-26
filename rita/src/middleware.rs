@@ -45,7 +45,9 @@ impl<S> Middleware<S> for Auth {
         let password = SETTING.get_network().rita_dashboard_password.clone();
         let mut config = Config::default();
 
-        if password.is_none() {
+        // the /exits path is exempted from authenticaiton so that the
+        // checkup.ash cron script can continue to query it without issue
+        if password.is_none() || req.request().path() == "/exits" {
             return Ok(Started::Done);
         }
 
