@@ -88,7 +88,7 @@ EXIT_SETTINGS = {
         "exit_a": {
             "id": {
                 "mesh_ip": "fd00::5",
-                "eth_address": "0x0101010101010101010101010101010101010101",
+                "eth_address": "0xbe398dc24de37c73cec974d688018e58f94d6e0a",
                 "wg_public_key": "fd00::5",
             },
             "registration_port": 4875,
@@ -308,8 +308,8 @@ def main():
         assert_test(not check_log_contains("rita-n{}.log".format(id),
                                            "suspending forwarding"), "Suspension of {}".format(id))
 
-    assert_test(not check_log_contains("rita-n{}.log".format(GATEWAY_ID),
-                                       "We are a gateway!, Acting accordingly"), "Successful gateway/exit detection")
+    assert_test(check_log_contains("rita-n{}.log".format(GATEWAY_ID),
+                                   "We are a gateway!, Acting accordingly"), "Successful gateway/exit detection")
 
     if DEBUG:
         print("Debug mode active, examine the mesh after tests and press " +

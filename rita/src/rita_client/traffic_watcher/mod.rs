@@ -183,7 +183,7 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
                                         // the exit should never tell us it owes us, that doesn't make sense outside of the gateway
                                         // client corner case
                                         (true, false) => warn!("We're probably a gateway but haven't detected it yet"),
-                                        (false, _) => info!("We are a gateay!, Acting accordingly"),
+                                        (false, _) => info!("We are a gateway!, Acting accordingly"),
                                     }
                                 }
                                 Err(e) => {
