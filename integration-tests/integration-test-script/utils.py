@@ -15,11 +15,11 @@ import toml
 
 
 def get_rita_defaults():
-    return toml.load(open("../settings/default.toml"))
+    return toml.load(open("../settings/test.toml"))
 
 
 def get_rita_exit_defaults():
-    return toml.load(open("../settings/default_exit.toml"))
+    return toml.load(open("../settings/test_exit.toml"))
 
 
 def save_rita_settings(id, x):
