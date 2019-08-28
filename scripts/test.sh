@@ -2,7 +2,12 @@
 set -eux
 RUST_TEST_THREADS=1 cargo test --all
 
-modprobe wireguard || echo "Please install WireGuard https://www.wireguard.com/ and load the kernel module using 'sudo modprobe wireguard'"
+if ! modprobe wireguard ; then
+	echo "The container can't load modules into the host kernel"
+	echo "Please install WireGuard https://www.wireguard.com/ and load the kernel module using 'sudo modprobe wireguard'"
+	exit 1
+fi
+
 # cleanup docker junk or this script will quickly run you out of room in /
 echo "Docker images take up a lot of space in root if you are running out of space select Yes"
 docker system prune -a -f
