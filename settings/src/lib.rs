@@ -171,18 +171,19 @@ mod tests {
     use crate::exit::RitaExitSettingsStruct;
 
     #[test]
+    fn test_settings_test() {
+        RitaSettingsStruct::new("test.toml").unwrap();
+    }
+
+    #[test]
     fn test_settings_example() {
         RitaSettingsStruct::new("example.toml").unwrap();
     }
 
-    #[test]
-    fn test_settings_default() {
-        RitaSettingsStruct::new("default.toml").unwrap();
-    }
 
     #[test]
-    fn test_exit_settings_default() {
-        RitaExitSettingsStruct::new("default_exit.toml").unwrap();
+    fn test_exit_settings_test() {
+        RitaExitSettingsStruct::new("test_exit.toml").unwrap();
     }
 
     #[test]
