@@ -136,7 +136,7 @@ pub struct EmailVerifSettings {
 }
 
 fn default_balance_notification_text_body() -> String {
-    String::from("Your Althea router has a low balance! Your service will be slow until more funds are added. Visit althea.org/top-up")
+    String::from("Your Althea router has a low balance! Your service will be slow until more funds are added. Visit althea.net/add-funds")
 }
 
 /// These are the settings for text message verification using the twillio api
