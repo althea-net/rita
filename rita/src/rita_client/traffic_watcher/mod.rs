@@ -258,6 +258,7 @@ pub fn watch(
     gateway_exit_client: bool,
 ) -> Result<(), Error> {
     let exit_route = find_exit_route_capped(exit.mesh_ip, routes)?;
+    info!("Exit metric: {}", exit_route.metric);
 
     let counter = match KI.read_wg_counters("wg_exit") {
         Ok(res) => {
