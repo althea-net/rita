@@ -180,7 +180,6 @@ mod tests {
         RitaSettingsStruct::new("example.toml").unwrap();
     }
 
-
     #[test]
     fn test_exit_settings_test() {
         RitaExitSettingsStruct::new("test_exit.toml").unwrap();
