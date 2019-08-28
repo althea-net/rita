@@ -346,7 +346,7 @@ class World:
             time.sleep(2)
             client = subprocess.Popen(
                 ["ip", "netns", "exec", "netlab-{}".format(to_node.id), "iperf3", "-c",
-                 self.to_ip(from_node), "-V", "-t 60", "-b 200M", "-R", ])
+                 self.to_ip(from_node), "-V", "-t 15", "-b 200M", "-R", ])
 
         else:
             server = subprocess.Popen(
@@ -354,7 +354,7 @@ class World:
             time.sleep(2)
             client = subprocess.Popen(
                 ["ip", "netns", "exec", "netlab-{}".format(from_node.id), "iperf3", "-c",
-                 self.to_ip(to_node), "-V", "-t 60", "-b 200M"])
+                 self.to_ip(to_node), "-V", "-t 15", "-b 200M"])
         client.wait()
         server.send_signal(signal.SIGTERM)
         server.wait()
