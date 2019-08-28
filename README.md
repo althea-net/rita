@@ -5,8 +5,7 @@ This contains many (although confusingly not all) of the Rust components for the
 The primary binary crate in this repo is 'rita' which produces two binaries 'rita' and 'rita_exit'
 see the file headers for descriptions.
 
-This is primarily an infrastructure repo, to get a working version of Althea for real world use you should look at [installer](https://github.com/althea-mesh/installer) for desktop linux and [althea-firmware](https://github.com/althea-mesh/
-althea-firmware) for OpenWRT.
+This is primarily an infrastructure repo, to get a working version of Althea for real world use you should look at [installer](https://github.com/althea-mesh/installer) for desktop linux and [althea-firmware](https://github.com/althea-mesh/althea-firmware) for OpenWRT.
 
 ## Building
 
