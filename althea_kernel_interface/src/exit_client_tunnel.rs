@@ -201,4 +201,49 @@ impl dyn KernelInterface {
 
         Ok(())
     }
+
+    pub fn delete_client_nat_rules(&self, lan_nic: &str) -> Result<(), Error> {
+        self.add_iptables_rule(
+            "iptables",
+            &[
+                "-t",
+                "nat",
+                "-D",
+                "POSTROUTING",
+                "-o",
+                "wg_exit",
+                "-j",
+                "MASQUERADE",
+            ],
+        )?;
+        self.add_iptables_rule(
+            "iptables",
+            &[
+                "-D", "FORWARD", "-i", &lan_nic, "-o", "wg_exit", "-j", "ACCEPT",
+            ],
+        )?;
+        self.add_iptables_rule(
+            "iptables",
+            &[
+                "-D", "FORWARD", "-i", "wg_exit", "-o", &lan_nic, "-j", "ACCEPT",
+            ],
+        )?;
+        self.add_iptables_rule(
+            "iptables",
+            &[
+                "-D",
+                "FORWARD",
+                "-p",
+                "tcp",
+                "--tcp-flags",
+                "SYN,RST",
+                "SYN",
+                "-j",
+                "TCPMSS",
+                "--clamp-mss-to-pmtu", //should be the same as --set-mss 1300
+            ],
+        )?;
+
+        Ok(())
+    }
 }
