@@ -6,7 +6,6 @@ use althea_types::WgKey;
 use arrayvec::ArrayString;
 
 fn default_discovery_ip() -> Ipv6Addr {
-    warn!("Add discovery_ip to network, removed in the next version!");
     Ipv6Addr::new(0xff02, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x8)
 }
 
