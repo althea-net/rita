@@ -30,6 +30,10 @@ fn default_free_tier_throughput() -> u32 {
     1000
 }
 
+fn default_client_can_use_free_tier() -> bool {
+    true
+}
+
 fn default_bridge_enabled() -> bool {
     true
 }
@@ -74,6 +78,10 @@ pub struct PaymentSettings {
     /// Throughput of the free tier that this node provides in kbit/s
     #[serde(default = "default_free_tier_throughput")]
     pub free_tier_throughput: u32,
+    /// If this is True the user may perform regular web browsing on the free tier, if it is
+    /// false the NAT rule will be removed while the router is in the low balance state
+    #[serde(default = "default_client_can_use_free_tier")]
+    pub client_can_use_free_tier: bool,
     /// The threshold above which we will kick off a payment
     #[serde(default = "default_pay_threshold")]
     pub pay_threshold: Int256,
@@ -134,6 +142,7 @@ impl Default for PaymentSettings {
             max_fee: default_max_fee(),
             dynamic_fee_multiplier: default_dynamic_fee_multiplier(),
             free_tier_throughput: default_free_tier_throughput(),
+            client_can_use_free_tier: default_client_can_use_free_tier(),
             // computed as 10x the standard transaction cost on 12/2/18
             pay_threshold: default_pay_threshold(),
             // computed as 10x the pay threshold
