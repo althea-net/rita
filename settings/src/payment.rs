@@ -130,28 +130,28 @@ pub struct PaymentSettings {
 impl Default for PaymentSettings {
     fn default() -> Self {
         PaymentSettings {
-            local_fee: 3000000,
-            max_fee: 73333333,
-            dynamic_fee_multiplier: 20,
-            free_tier_throughput: 1000,
+            local_fee: default_local_fee(),
+            max_fee: default_max_fee(),
+            dynamic_fee_multiplier: default_dynamic_fee_multiplier(),
+            free_tier_throughput: default_free_tier_throughput(),
             // computed as 10x the standard transaction cost on 12/2/18
-            pay_threshold: 840_000_000_000_000i64.into(),
+            pay_threshold: default_pay_threshold(),
             // computed as 10x the pay threshold
-            close_threshold: (-8_400_000_000_000_000i64).into(),
-            balance_warning_level: (10_000_000_000_000_000u64).into(),
+            close_threshold: default_close_threshold(),
+            balance_warning_level: default_balance_warning_level(),
             eth_private_key: None,
             eth_address: None,
             balance: 0u64.into(),
             nonce: 0u64.into(),
-            gas_price: 10000000000u64.into(), // 10 gwei
+            gas_price: 0u64.into(), // 10 gwei
             net_version: None,
             node_list: Vec::new(),
-            system_chain: SystemChain::Ethereum,
-            withdraw_chain: SystemChain::Ethereum,
+            system_chain: default_system_chain(),
+            withdraw_chain: default_system_chain(),
             debts_file: default_debts_file(),
-            bridge_enabled: true,
+            bridge_enabled: default_bridge_enabled(),
             fudge_factor: 0u8,
-            debt_limit_enabled: true,
+            debt_limit_enabled: default_debt_limit_enabled(),
         }
     }
 }
