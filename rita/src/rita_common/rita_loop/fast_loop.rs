@@ -24,13 +24,11 @@ use std::time::{Duration, Instant};
 pub const FAST_LOOP_SPEED: u64 = 5;
 pub const FAST_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
 
-pub struct RitaFastLoop {
-    was_gateway: bool,
-}
+pub struct RitaFastLoop {}
 
 impl Default for RitaFastLoop {
     fn default() -> RitaFastLoop {
-        RitaFastLoop { was_gateway: false }
+        RitaFastLoop {}
     }
 }
 
@@ -80,7 +78,7 @@ impl Handler<Tick> for RitaFastLoop {
     fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
         trace!("Common tick!");
 
-        self.was_gateway = manage_gateway(self.was_gateway);
+        manage_gateway();
 
         let start = Instant::now();
 
@@ -188,7 +186,7 @@ impl Handler<Tick> for RitaFastLoop {
 /// Manages gateway functionaltiy and maintains the was_gateway parameter, this is different from the gateway
 /// identification in rita_client because this must function even if we aren't registered for an exit it's also
 /// very prone to being true when the device has a wan port but no actual wan connection.
-fn manage_gateway(mut was_gateway: bool) -> bool {
+fn manage_gateway() {
     // Resolves the gateway client corner case
     // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
     let gateway = match SETTING.get_network().external_nic {
@@ -202,7 +200,7 @@ fn manage_gateway(mut was_gateway: bool) -> bool {
     info!("We are a Gateway: {}", gateway);
     SETTING.get_network_mut().is_gateway = gateway;
 
-    if SETTING.get_network().is_gateway {
+    if gateway {
         match KI.get_resolv_servers() {
             Ok(s) => {
                 for ip in s.iter() {
@@ -213,8 +211,5 @@ fn manage_gateway(mut was_gateway: bool) -> bool {
             }
             Err(e) => warn!("Failed to add DNS routes with {:?}", e),
         }
-    } else {
-        was_gateway = false
     }
-    was_gateway
 }
