@@ -11,7 +11,7 @@ fn default_discovery_ip() -> Ipv6Addr {
 }
 
 fn default_tunnel_timeout() -> u64 {
-    900 // 15 minutes
+    300 // 5 minutes
 }
 
 fn default_metric_factor() -> u32 {
