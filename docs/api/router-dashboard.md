@@ -1594,3 +1594,52 @@ Set whether or not a backup has been created.
 - Sample Call:
 
 `curl http://192.168.10.1:4877/backup_created/true`
+
+---
+
+## /remote_access
+
+Returns the remote access tatus
+
+- URL: `<rita ip>:<rita_dashboard_port>/remote_access`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+true
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl 127.0.0.1:<rita_dashboard_port>/remote_access`
+
+---
+
+## /remote_access/{status}
+
+Enables remote access for debugging and user use, only usable from the local mesh
+
+- URL: `<rita ip>:<rita_dashboard_port>/remote_access/{status}`
+- Method: `POST`
+- URL Params:
+  - status: `true` or `false`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+()
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl http://192.168.10.1:4877/remote_access/true`
