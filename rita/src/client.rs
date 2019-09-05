@@ -58,6 +58,7 @@ use crate::rita_client::dashboard::mesh_ip::*;
 use crate::rita_client::dashboard::neighbors::*;
 use crate::rita_client::dashboard::notifications::*;
 use crate::rita_client::dashboard::release_feed::*;
+use crate::rita_client::dashboard::remote_access::*;
 use crate::rita_client::dashboard::router::*;
 use crate::rita_client::dashboard::system_chain::*;
 use crate::rita_client::dashboard::usage::*;
@@ -341,6 +342,12 @@ fn start_client_dashboard() {
             .route("/router/password", Method::POST, set_pass)
             .route("/release_feed/get", Method::GET, get_release_feed)
             .route("/release_feed/set/{feed}", Method::POST, set_release_feed)
+            .route("/remote_access", Method::GET, get_remote_access_status)
+            .route(
+                "/remote_access/{status}",
+                Method::POST,
+                set_remote_access_status,
+            )
             .route("/wipe", Method::POST, wipe)
             .route("/crash_actors", Method::POST, crash_actors)
     })
