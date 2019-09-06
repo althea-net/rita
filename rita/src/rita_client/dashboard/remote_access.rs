@@ -10,6 +10,7 @@ use failure::Error;
 use settings::RitaCommonSettings;
 
 static DROPBEAR_CONFIG: &str = "/etc/config/dropbear";
+static FIREWALL_CONFIG: &str = "/etc/config/firewall";
 
 pub fn get_remote_access_status(_req: HttpRequest) -> Result<HttpResponse, Error> {
     if !KI.is_openwrt() {
@@ -39,6 +40,21 @@ pub fn set_remote_access_status(path: Path<bool>) -> Result<HttpResponse, Error>
 
     write_out(DROPBEAR_CONFIG, lines)?;
     KI.run_command("/etc/init.d/dropbear", &["restart"])?;
+
+    let mut firewall_lines = get_lines(FIREWALL_CONFIG)?;
+    for line in firewall_lines.iter() {
+        if line.contains("Allow-Mesh-SSH") {
+            return Ok(HttpResponse::Ok().json(()));
+        }
+    }
+    firewall_lines.push("".to_string());
+    firewall_lines.push("config rule".to_string());
+    firewall_lines.push("        option name             Allow-Mesh-SSH".to_string());
+    firewall_lines.push("        option src              mesh".to_string());
+    firewall_lines.push("        option dest_port        22".to_string());
+    firewall_lines.push("        option target           ACCEPT".to_string());
+    write_out(FIREWALL_CONFIG, firewall_lines)?;
+    KI.run_command("reboot", &[])?;
 
     Ok(HttpResponse::Ok().json(()))
 }
