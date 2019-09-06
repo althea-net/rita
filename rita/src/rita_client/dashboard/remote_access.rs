@@ -18,10 +18,10 @@ pub fn get_remote_access_status(_req: HttpRequest) -> Result<HttpResponse, Error
     let lines = get_lines(DROPBEAR_CONFIG)?;
     for line in lines.iter() {
         if line.contains("option Interface") {
-            return Ok(HttpResponse::Ok().json(true));
+            return Ok(HttpResponse::Ok().json(false));
         }
     }
-    Ok(HttpResponse::Ok().json(false))
+    Ok(HttpResponse::Ok().json(true))
 }
 
 pub fn set_remote_access_status(path: Path<bool>) -> Result<HttpResponse, Error> {
