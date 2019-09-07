@@ -4,16 +4,13 @@ use crate::rita_common::peer_listener::UnListen;
 use crate::ARGS;
 use crate::KI;
 use crate::SETTING;
-use ::actix::{Arbiter, SystemService};
+use ::actix::SystemService;
 use ::actix_web::{HttpRequest, HttpResponse, Json};
 use failure::Error;
-use futures::Future;
 use settings::FileWrite;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
-use std::time::{Duration, Instant};
-use tokio::timer::Delay;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InterfaceToSet {
@@ -203,8 +200,7 @@ fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), Error
         wlan_transform_mode(iface_name, current_mode, target_mode)
     } else {
         trace!("Transforming ethernet");
-        ethernet_transform_mode(iface_name, current_mode, target_mode)?;
-        Ok(())
+        ethernet_transform_mode(iface_name, current_mode, target_mode)
     }
 }
 
@@ -350,21 +346,9 @@ pub fn ethernet_transform_mode(
 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
-    trace!("Successsfully transformed ethernet mode, rebooting in 60 seconds");
-    let when = Instant::now() + Duration::from_secs(60);
-    let fut = Delay::new(when)
-        .map_err(|e| warn!("timer failed; err={:?}", e))
-        .and_then(move |_| {
-            trace!("rebooting router for {:?}", locally_owned_ifname);
-            // it's now safe to restart the router, return an error if that fails somehow
-            // do not remove this, we lose the multicast listeners on other mesh ports when
-            // we toggle network modes, this means we will clean up valid tunnels 15 minutes
-            // after the toggle unless we do this
-            let _ = KI.run_command("reboot", &[]);
-            Ok(())
-        });
 
-    Arbiter::spawn(fut);
+    trace!("Successsfully transformed ethernet mode, rebooting");
+    KI.run_command("reboot", &[])?;
 
     Ok(())
 }
@@ -501,19 +485,8 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
 
-    let when = Instant::now() + Duration::from_millis(60000);
-    let fut = Delay::new(when)
-        .map_err(|e| warn!("timer failed; err={:?}", e))
-        .and_then(move |_| {
-            // it's now safe to restart the router, return an error if that fails somehow
-            // do not remove this, we lose the multicast listeners on other mesh ports when
-            // we toggle network modes, this means we will clean up valid tunnels 15 minutes
-            // after the toggle unless we do this
-            let _ = KI.run_command("reboot", &[]);
-            Ok(())
-        });
-
-    Arbiter::spawn(fut);
+    trace!("Successsfully transformed wlan mode, rebooting");
+    KI.run_command("reboot", &[])?;
 
     Ok(())
 }
