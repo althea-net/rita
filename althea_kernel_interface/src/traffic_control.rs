@@ -111,7 +111,7 @@ impl dyn KernelInterface {
         let output = self.run_command(
             "tc",
             &[
-                "qdisc", "add", "dev", iface_name, "root", "handle", "1:", "cake",
+                "qdisc", "add", "dev", iface_name, "root", "handle", "1:", "cake", "metro",
             ],
         )?;
 
@@ -122,6 +122,7 @@ impl dyn KernelInterface {
                 "tc",
                 &[
                     "qdisc", "add", "dev", iface_name, "root", "handle", "1:", "fq_codel",
+                    "target", "10ms",
                 ],
             )?;
 
