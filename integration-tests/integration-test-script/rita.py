@@ -81,6 +81,12 @@ INITIAL_POLL_INTERVAL = float(os.getenv('INITIAL_POLL_INTERVAL', 1))
 PING6 = os.getenv('PING6', 'ping6')
 VERBOSE = os.getenv('VERBOSE', None)
 
+# bandwidth test vars
+# in seconds
+TIME = 15
+# in Mbit/s
+SPEED = 200
+
 TEST_PASSES = True
 
 EXIT_SETTINGS = {
@@ -102,6 +108,9 @@ EXIT_SETTINGS = {
         "email": "1234@gmail.com"
     }
 }
+
+# set in the example config
+EXIT_PRICE = 40
 
 EXIT_SELECT = {
     "exits": {
@@ -294,13 +303,15 @@ def main():
             sys.exit(0)
 
     world.test_exit_reach_all()
-    world.test_traffic(traffic_test_pairs)
+    world.test_traffic(traffic_test_pairs, TIME, SPEED)
 
     # wait a few seconds after traffic generation for all nodes to update their debts
     time.sleep(10)
     traffic = world.get_debts()
     print("Test post-traffic blanace agreement...")
     world.test_debts_reciprocal_matching(traffic)
+    world.test_debts_values(traffic_test_pairs, TIME,
+                            SPEED, traffic, all_routes, EXIT_ID, EXIT_PRICE)
 
     print("Check that tunnels have not been suspended")
 
