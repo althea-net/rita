@@ -132,7 +132,7 @@ impl Handler<Tick> for DAOManager {
                 // we will just underpay when that occurs
                 Arbiter::spawn(transaction_status.then(move |res| match res {
                     Ok(txid) => {
-                        info!("Successfully paid the subnet dao!");
+                        info!("Successfully paid the subnet dao {:#066x}!", txid);
                         UsageTracker::from_registry().do_send(UpdatePayments {
                             payment: PaymentTx {
                                 to: dao_identity,
