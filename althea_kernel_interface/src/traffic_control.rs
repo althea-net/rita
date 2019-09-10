@@ -262,11 +262,33 @@ impl dyn KernelInterface {
             ],
         )?;
 
+        if !output.status.success() {
+            let res = String::from_utf8(output.stderr)?;
+            bail!("Failed to update qdisc class limit! {:?}", res);
+        }
+
+        let output = self.run_command(
+            "tc",
+            &[
+                "qdisc",
+                modifier,
+                "dev",
+                iface_name,
+                "parent",
+                &format!("1:{}", class_id),
+                "handle",
+                &format!("{}:", class_id),
+                "fq_codel",
+                "quantum",
+                "1354",
+            ],
+        )?;
+
         if output.status.success() {
             Ok(())
         } else {
             let res = String::from_utf8(output.stderr)?;
-            bail!("Failed to update qdisc class limit! {:?}", res);
+            bail!("Failed to update qdisc codel leaf limit! {:?}", res);
         }
     }
 
