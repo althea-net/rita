@@ -26,6 +26,7 @@ from utils import assert_test
 from utils import ip_to_num
 from utils import num_to_ip
 from utils import fuzzy_traffic_match
+from utils import fuzzy_match
 
 
 class World:
@@ -339,14 +340,14 @@ class World:
 
         return balances
 
-    def gen_traffic(self, from_node, to_node, bytes):
+    def gen_traffic(self, from_node, to_node, duration, speed):
         if from_node.id == self.exit_id:
             server = subprocess.Popen(
                 ["ip", "netns", "exec", "netlab-{}".format(from_node.id), "iperf3", "-s", "-V"])
             time.sleep(2)
             client = subprocess.Popen(
                 ["ip", "netns", "exec", "netlab-{}".format(to_node.id), "iperf3", "-c",
-                 self.to_ip(from_node), "-V", "-t 15", "-b 200M", "-R", ])
+                 self.to_ip(from_node), "-V", "-t {}".format(duration), "-b {}M".format(speed), "-R", ])
 
         else:
             server = subprocess.Popen(
@@ -354,16 +355,63 @@ class World:
             time.sleep(2)
             client = subprocess.Popen(
                 ["ip", "netns", "exec", "netlab-{}".format(from_node.id), "iperf3", "-c",
-                 self.to_ip(to_node), "-V", "-t 15", "-b 200M"])
+                 self.to_ip(to_node), "-V", "-t {}".format(duration), "-b {}M".format(speed)])
         client.wait()
         server.send_signal(signal.SIGTERM)
         server.wait()
 
-    def test_traffic(self, traffic_test_pairs):
+    def test_traffic(self, traffic_test_pairs, time, speed):
         """Generates test traffic from and to the specified nodes, then ensure that all nodes agree"""
         for (from_node, to_node) in traffic_test_pairs:
             print("Test traffic...")
-            self.gen_traffic(from_node, to_node, 1e8)
+            self.gen_traffic(from_node, to_node, time, speed)
+
+    def test_debts_values(self, test_traffic_pairs, time, speed, debts, all_routes, exit_id, exit_price):
+        """Uses the traffic pairs and the provided time and speed to compute what every node should owe every other node"""
+        intended_debts = {}
+        # the data transferred by each test, remember some tests overlap in paths
+        # prices are in wei/byte so this is in bytes
+        expected_data_transfer = (time * speed * 1000000) / 8
+        for (from_node, to_node) in test_traffic_pairs:
+            last_via = from_node
+            via = from_node
+            while True:
+                (via, price) = self.get_best_route(all_routes, via, to_node)
+                if via.id == to_node.id:
+                    break
+                if from_node.id == exit_id or to_node.id == exit_id:
+                    price = price + exit_price
+                if last_via not in intended_debts:
+                    intended_debts[last_via] = {}
+                if via not in intended_debts[last_via]:
+                    intended_debts[last_via][via] = 0
+                # we add what's owed to the first node, but now we must
+                # follow the entire path adding smaller amounts each time
+                print("Adding debts to {} {}, price {} data {}".format(
+                    last_via.id, via.id, price, expected_data_transfer))
+                intended_debts[last_via][via] += \
+                    price * expected_data_transfer
+                last_via = via
+
+        for node in intended_debts.keys():
+            for owed in intended_debts[node].keys():
+                if not fuzzy_match(debts[node.id][owed.id], intended_debts[node][owed]):
+                    print("{} has a predicted debt of {} for {} but actual debt is {}".format(
+                        node.id, intended_debts[node][owed], owed.id, debts[node.id][owed.id]))
+                    exit(1)
+
+    def get_best_route(self, all_routes, from_node, target_node):
+        """Very simple utility function to find routes"""
+        best = 99999999
+        best_route = None
+        for (to, price, via) in all_routes[from_node]:
+            if price < best and to is target_node:
+                best_route = via
+                best = price
+        if best_route is None:
+            print("There's a problem with the provided all_routes values!")
+            exit(1)
+        return (best_route, best)
 
     def test_debts_reciprocal_matching(self, debts):
         """Tests that in a network nodes generally agree on debts, within a few percent this is done by making sure that
@@ -380,4 +428,4 @@ class World:
                 if not res:
                     print("Nodes {} and {} do not agree! {} has {} and {} has {}!".format(
                         node, node_to_compare, node, debts[node][node_to_compare], node_to_compare, debts[node_to_compare][node]))
-                    # exit(1)
+                    exit(1)

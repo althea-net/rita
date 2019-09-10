@@ -307,10 +307,28 @@ def num_to_ip(num):
     return "fd00::{}".format(num)
 
 
+def fuzzy_match(numA, numB):
+    # ignore small debts
+    if abs(numA) < 1000000 and abs(numB) < 1000000:
+        return True
+    # signs must match
+    if numA > 0 and numB < 0 or numA > 0 and numB < 0:
+        return False
+    # 5%
+    allowed_delta = 0.05
+    high = 1 + allowed_delta
+    low = 1 - allowed_delta
+
+    if numA < numB * high and numA > numB * low:
+        return True
+    else:
+        return False
+
+
 def fuzzy_traffic_match(numA, numB):
     """A matching scheme with error margins for Rita traffic, allows up to 5% lower or in the case of
     the paying party over-estimating (packet loss) it allows more"""
-    # ignore every small debts
+    # ignore small debts
     if abs(numA) < 1000000 and abs(numB) < 1000000:
         return True
     # signs must not match
