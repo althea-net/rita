@@ -352,3 +352,9 @@ impl dyn KernelInterface {
         }
     }
 }
+
+#[test]
+fn get_id() {
+    use crate::KI;
+    println!("{}", KI.get_class_id(&"172.168.4.121".parse().unwrap()));
+}
