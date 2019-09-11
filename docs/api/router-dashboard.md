@@ -947,6 +947,30 @@ Format:
 
 ---
 
+## /remote_logging/enabled
+
+Returns whether remote logging is enabled or not
+
+- URL: `<rita ip>:<rita_dashboard_port>/logging/enabled`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: None
+  - Contents: `{}`
+- Error Response: `400 Bad Request`
+- Error Contents:
+
+```json
+{
+  "error": "<description>"
+}
+```
+
+- Sample Call:
+
+`curl 127.0.0.1:4877/remote_logging/enabled`
+
 ## /remote_logging/enabled/{bool}
 
 Enables or disables remote logging, if enabled on next boot
