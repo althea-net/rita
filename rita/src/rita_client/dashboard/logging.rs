@@ -1,18 +1,27 @@
 use crate::ARGS;
 use crate::KI;
 use crate::SETTING;
-use ::actix_web::http::StatusCode;
-use ::actix_web::{HttpResponse, Path};
+use actix_web::http::StatusCode;
+use actix_web::{HttpRequest, HttpResponse, Path};
 use failure::Error;
 use log::LevelFilter;
 use settings::client::RitaClientSettings;
 use settings::FileWrite;
+
+pub fn get_remote_logging(_req: HttpRequest) -> Result<HttpResponse, Error> {
+    Ok(HttpResponse::Ok().json(SETTING.get_log().enabled))
+}
 
 pub fn remote_logging(path: Path<bool>) -> Result<HttpResponse, Error> {
     let enabled = path.into_inner();
     debug!("/loging/enable/{} hit", enabled);
 
     SETTING.get_log_mut().enabled = enabled;
+
+    // try and save the config and fail if we can't
+    if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+        return Err(e);
+    }
 
     if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
         return Err(e);
