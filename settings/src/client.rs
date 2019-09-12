@@ -15,7 +15,7 @@ use failure::Error;
 
 use crate::dao::SubnetDAOSettings;
 use crate::json_merge;
-use crate::loging::LoggingSettings;
+use crate::logging::LoggingSettings;
 use crate::network::NetworkSettings;
 use crate::payment::PaymentSettings;
 use crate::spawn_watch_thread;

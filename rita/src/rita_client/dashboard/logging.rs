@@ -14,7 +14,7 @@ pub fn get_remote_logging(_req: HttpRequest) -> Result<HttpResponse, Error> {
 
 pub fn remote_logging(path: Path<bool>) -> Result<HttpResponse, Error> {
     let enabled = path.into_inner();
-    debug!("/loging/enable/{} hit", enabled);
+    debug!("/remote_logging/enable/{} hit", enabled);
 
     SETTING.get_log_mut().enabled = enabled;
 
@@ -30,9 +30,14 @@ pub fn remote_logging(path: Path<bool>) -> Result<HttpResponse, Error> {
     Ok(HttpResponse::Ok().json(()))
 }
 
+pub fn get_remote_logging_level(_req: HttpRequest) -> Result<HttpResponse, Error> {
+    let level = &SETTING.get_log().level;
+    Ok(HttpResponse::Ok().json(level))
+}
+
 pub fn remote_logging_level(path: Path<String>) -> Result<HttpResponse, Error> {
     let level = path.into_inner();
-    debug!("/loging/level/{}", level);
+    debug!("/remote_logging/level/{}", level);
 
     let log_level: LevelFilter = match level.parse() {
         Ok(level) => level,
