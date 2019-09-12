@@ -51,7 +51,7 @@ use failure::Error;
 pub mod client;
 pub mod dao;
 pub mod exit;
-pub mod loging;
+pub mod logging;
 pub mod network;
 pub mod payment;
 

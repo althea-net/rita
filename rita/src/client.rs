@@ -285,6 +285,11 @@ fn start_client_dashboard() {
                 remote_logging,
             )
             .route(
+                "/remote_logging/level",
+                Method::GET,
+                get_remote_logging_level,
+            )
+            .route(
                 "/remote_logging/level/{level}",
                 Method::POST,
                 remote_logging_level,
