@@ -4,15 +4,13 @@ use crate::rita_common::peer_listener::UnListen;
 use crate::ARGS;
 use crate::KI;
 use crate::SETTING;
-use ::actix::{Arbiter, SystemService};
+use ::actix::SystemService;
 use ::actix_web::{HttpRequest, HttpResponse, Json};
 use failure::Error;
-use futures::Future;
 use settings::FileWrite;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
-use tokio::timer::Delay;
+use std::net::Ipv4Addr;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InterfaceToSet {
@@ -25,6 +23,13 @@ pub enum InterfaceMode {
     Mesh,
     LAN,
     WAN,
+    /// StaticWAN is used to set interfaces but once set isn't
+    /// seen as any different than WAN elsewhere in the system
+    StaticWAN {
+        netmask: Ipv4Addr,
+        ipaddr: Ipv4Addr,
+        gateway: Ipv4Addr,
+    },
     Meshpoint, //combo of lan and mesh
     Unknown,   // Ambiguous wireless modes like monitor or promiscuous
 }
@@ -36,6 +41,7 @@ impl ToString for InterfaceMode {
             InterfaceMode::Meshpoint => "Meshpoint".to_owned(),
             InterfaceMode::LAN => "LAN".to_owned(),
             InterfaceMode::WAN => "WAN".to_owned(),
+            InterfaceMode::StaticWAN { .. } => "StaticWAN".to_owned(),
             InterfaceMode::Unknown => "unknown".to_owned(),
         }
     }
@@ -50,8 +56,8 @@ pub fn get_interfaces() -> Result<HashMap<String, InterfaceMode>, Error> {
         // Only non-loopback non-bridge interface names should get past
         if setting_name.contains("ifname") && !value.contains("backhaul") && value != "lo" {
             // it's a list and we need to handle that
-            if value.contains(',') {
-                for list_member in value.split(',') {
+            if value.contains(' ') {
+                for list_member in value.split(' ') {
                     retval.insert(
                         list_member.replace(" ", "").to_string(),
                         ethernet2mode(&value, &setting_name)?,
@@ -174,22 +180,15 @@ fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), Error
     let interfaces = get_interfaces()?;
     let current_mode = get_current_interface_mode(&interfaces, iface_name);
     if !interfaces.contains_key(iface_name) {
-        bail!("Attempted to configure non-existant or unavailable itnerface!");
+        bail!("Attempted to configure non-existant or unavailable interface!");
     } else if target_mode == InterfaceMode::WAN {
         // we can only have one WAN interface, check for others
+        // StaticWAN entires are not identified seperately but if they ever are
+        // you'll have to handle them here
         for entry in interfaces {
             let mode = entry.1;
             if mode == InterfaceMode::WAN {
                 bail!("There can only be one WAN interface!");
-            }
-        }
-    } else if target_mode == InterfaceMode::LAN && !iface_name.contains("wlan") {
-        // we can only have one LAN ethernet interface, check for others
-        for entry in interfaces {
-            let name = entry.0;
-            let mode = entry.1;
-            if mode == InterfaceMode::LAN && !name.contains("wlan") {
-                bail!("There can only be one LAN ethernet interface!");
             }
         }
     }
@@ -201,8 +200,7 @@ fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), Error
         wlan_transform_mode(iface_name, current_mode, target_mode)
     } else {
         trace!("Transforming ethernet");
-        ethernet_transform_mode(iface_name, current_mode, target_mode)?;
-        Ok(())
+        ethernet_transform_mode(iface_name, current_mode, target_mode)
     }
 }
 
@@ -232,7 +230,7 @@ pub fn ethernet_transform_mode(
 
     match a {
         // Wan is very simple, just delete it
-        InterfaceMode::WAN => {
+        InterfaceMode::WAN | InterfaceMode::StaticWAN { .. } => {
             let ret = KI.del_uci_var("network.backhaul");
             SETTING.get_network_mut().external_nic = None;
             return_codes.push(ret);
@@ -241,7 +239,7 @@ pub fn ethernet_transform_mode(
         // may depend on it so we only remove the ifname entry
         InterfaceMode::LAN => {
             let list = KI.get_uci_var("network.lan.ifname")?;
-            let new_list = comma_list_remove(&list, ifname);
+            let new_list = list_remove(&list, ifname);
             let ret = KI.set_uci_var("network.lan.ifname", &new_list);
             return_codes.push(ret);
         }
@@ -267,6 +265,25 @@ pub fn ethernet_transform_mode(
             let ret = KI.set_uci_var("network.backhaul.proto", "dhcp");
             return_codes.push(ret);
         }
+        InterfaceMode::StaticWAN {
+            netmask,
+            ipaddr,
+            gateway,
+        } => {
+            SETTING.get_network_mut().external_nic = Some(ifname.to_string());
+            let ret = KI.set_uci_var("network.backhaul", "interface");
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.backhaul.ifname", ifname);
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.backhaul.proto", "static");
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.backhaul.netmask", &format!("{}", netmask));
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.backhaul.ipaddr", &format!("{}", ipaddr));
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.backhaul.gateway", &format!("{}", gateway));
+            return_codes.push(ret);
+        }
         // since we left lan mostly unomidifed we just pop in the ifname
         InterfaceMode::LAN => {
             trace!("Converting interface to lan with ifname {:?}", ifname);
@@ -274,7 +291,7 @@ pub fn ethernet_transform_mode(
             match ret {
                 Ok(list) => {
                     trace!("The existing LAN interfaces list is {:?}", list);
-                    let new_list = comma_list_add(&list, &ifname);
+                    let new_list = list_add(&list, &ifname);
                     trace!("Setting the new list {:?}", new_list);
                     let ret = KI.set_uci_var("network.lan.ifname", &new_list);
                     return_codes.push(ret);
@@ -329,21 +346,9 @@ pub fn ethernet_transform_mode(
 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
-    trace!("Successsfully transformed ethernet mode, rebooting in 60 seconds");
-    let when = Instant::now() + Duration::from_secs(60);
-    let fut = Delay::new(when)
-        .map_err(|e| warn!("timer failed; err={:?}", e))
-        .and_then(move |_| {
-            trace!("rebooting router for {:?}", locally_owned_ifname);
-            // it's now safe to restart the router, return an error if that fails somehow
-            // do not remove this, we lose the multicast listeners on other mesh ports when
-            // we toggle network modes, this means we will clean up valid tunnels 15 minutes
-            // after the toggle unless we do this
-            let _ = KI.run_command("reboot", &[]);
-            Ok(())
-        });
 
-    Arbiter::spawn(fut);
+    trace!("Successsfully transformed ethernet mode, rebooting");
+    KI.run_command("reboot", &[])?;
 
     Ok(())
 }
@@ -387,6 +392,7 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
 
     match a {
         InterfaceMode::WAN => unimplemented!(),
+        InterfaceMode::StaticWAN { .. } => unimplemented!(),
         // nothing to do here we overwrite everything we need later
         InterfaceMode::LAN => {}
         // for mesh we need to send an unlisten and delete the static interface we made
@@ -401,6 +407,7 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
 
     match b {
         InterfaceMode::WAN => unimplemented!(),
+        InterfaceMode::StaticWAN { .. } => unimplemented!(),
         // since we left lan mostly unomidifed we just pop in the ifname
         InterfaceMode::LAN => {
             let ret = KI.set_uci_var(&format!("wireless.{}.network", network_section), "lan");
@@ -478,36 +485,25 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
 
-    let when = Instant::now() + Duration::from_millis(60000);
-    let fut = Delay::new(when)
-        .map_err(|e| warn!("timer failed; err={:?}", e))
-        .and_then(move |_| {
-            // it's now safe to restart the router, return an error if that fails somehow
-            // do not remove this, we lose the multicast listeners on other mesh ports when
-            // we toggle network modes, this means we will clean up valid tunnels 15 minutes
-            // after the toggle unless we do this
-            let _ = KI.run_command("reboot", &[]);
-            Ok(())
-        });
-
-    Arbiter::spawn(fut);
+    trace!("Successsfully transformed wlan mode, rebooting");
+    KI.run_command("reboot", &[])?;
 
     Ok(())
 }
 
-/// A helper function for adding entires to a comma deliminated list
-pub fn comma_list_add(list: &str, entry: &str) -> String {
+/// A helper function for adding entries to a list
+pub fn list_add(list: &str, entry: &str) -> String {
     if !list.is_empty() {
-        format!("{}, {}", list, entry)
+        format!("{} {}", list, entry)
     } else {
         entry.to_string()
     }
 }
 
-/// A helper function for removing entires to a comma deliminated list
-pub fn comma_list_remove(list: &str, entry: &str) -> String {
+/// A helper function for removing entries from a list
+pub fn list_remove(list: &str, entry: &str) -> String {
     if !list.is_empty() {
-        let split = list.split(',');
+        let split = list.split(' ');
         let mut new_list = "".to_string();
         let mut first = true;
         for item in split {
@@ -519,7 +515,7 @@ pub fn comma_list_remove(list: &str, entry: &str) -> String {
                     new_list = tmp_list + &filtered_item.to_string();
                     first = false;
                 } else {
-                    new_list = tmp_list + &format!(", {}", filtered_item);
+                    new_list = tmp_list + &format!(" {}", filtered_item);
                 }
             }
         }
@@ -548,37 +544,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_comma_list_remove() {
-        let a = "eth0.3, eth1, eth2, eth3, eth4";
+    fn test_list_remove() {
+        let a = "eth0.3 eth1 eth2 eth3 eth4";
 
-        let b = comma_list_remove(a, "eth1");
-        assert_eq!(b, "eth0.3, eth2, eth3, eth4");
+        let b = list_remove(a, "eth1");
+        assert_eq!(b, "eth0.3 eth2 eth3 eth4");
 
-        let b = comma_list_remove(&b, "eth0.3");
-        assert_eq!(b, "eth2, eth3, eth4");
+        let b = list_remove(&b, "eth0.3");
+        assert_eq!(b, "eth2 eth3 eth4");
 
-        let b = comma_list_remove(&b, "eth4");
-        assert_eq!(b, "eth2, eth3");
+        let b = list_remove(&b, "eth4");
+        assert_eq!(b, "eth2 eth3");
 
-        let b = comma_list_remove(&b, "eth2");
+        let b = list_remove(&b, "eth2");
         assert_eq!(b, "eth3");
 
-        let b = comma_list_remove(&b, "eth3");
+        let b = list_remove(&b, "eth3");
         assert_eq!(b, "");
     }
 
     #[test]
-    fn test_comma_list_add() {
+    fn test_list_add() {
         let a = "";
 
-        let b = comma_list_add(a, "eth1");
+        let b = list_add(a, "eth1");
         assert_eq!(b, "eth1");
 
-        let b = comma_list_add(&b, "eth0.3");
-        assert_eq!(b, "eth1, eth0.3");
+        let b = list_add(&b, "eth0.3");
+        assert_eq!(b, "eth1 eth0.3");
 
-        let b = comma_list_add(&b, "eth4");
-        assert_eq!(b, "eth1, eth0.3, eth4");
+        let b = list_add(&b, "eth4");
+        assert_eq!(b, "eth1 eth0.3 eth4");
     }
 }
 

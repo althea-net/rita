@@ -64,7 +64,6 @@ phonenumber = "0.2"
 r2d2 = "0.8"
 sha3 = "0.8"
 hex-literal = "0.2"
-futures-timer = "0.1"
 sodiumoxide = "0.2"
 
 [dependencies.regex]
