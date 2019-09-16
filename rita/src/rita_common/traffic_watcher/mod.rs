@@ -105,7 +105,6 @@ pub fn get_babel_info(routes: Vec<Route>) -> Result<(HashMap<IpAddr, i128>, u32)
                     route.price
                 };
 
-                //TODO gracefully handle exceeding max price
                 trace!(
                     "Inserting {} into the destinations map",
                     IpAddr::V6(ip.ip())

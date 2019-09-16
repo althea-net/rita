@@ -109,9 +109,6 @@ EXIT_SETTINGS = {
     }
 }
 
-# set in the example config
-EXIT_PRICE = 40
-
 EXIT_SELECT = {
     "exits": {
         "exit_a": {
@@ -159,8 +156,9 @@ def setup_seven_node_config():
     world.add_connection(Connection(b2, d4))
     world.add_connection(Connection(e5, g7))
 
-    traffic_test_pairs = [(c3, f6), (d4, a1), (a1, c3), (d4, e5),
-                          (e5, d4), (c3, e5), (e5, c3), (g7, e5), (e5, g7)]
+    # traffic_test_pairs = [(c3, f6), (d4, a1), (a1, c3), (d4, e5),
+    #                       (e5, d4), (c3, e5), (e5, c3), (g7, e5), (e5, g7)]
+    traffic_test_pairs = [(e5, c3)]
 
     nodes = world.nodes
 
@@ -311,7 +309,7 @@ def main():
     print("Test post-traffic blanace agreement...")
     world.test_debts_reciprocal_matching(traffic)
     world.test_debts_values(traffic_test_pairs, TIME,
-                            SPEED, traffic, all_routes, EXIT_ID, EXIT_PRICE)
+                            SPEED, traffic, all_routes, EXIT_ID, world.exit_price)
 
     print("Check that tunnels have not been suspended")
 

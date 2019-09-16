@@ -314,12 +314,12 @@ def fuzzy_match(numA, numB):
     # signs must match
     if numA > 0 and numB < 0 or numA > 0 and numB < 0:
         return False
-    # 5%
-    allowed_delta = 0.05
+    # 10%
+    allowed_delta = 0.10
     high = 1 + allowed_delta
     low = 1 - allowed_delta
 
-    if numA < numB * high and numA > numB * low:
+    if numA/numB > low and numA/numB < high:
         return True
     else:
         return False

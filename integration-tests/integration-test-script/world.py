@@ -134,6 +134,9 @@ class World:
 
         time.sleep(1)
 
+        self.exit_price = get_rita_settings(
+            self.exit_id)["exit_network"]["exit_price"]
+
         EXIT_SETTINGS["exits"]["exit_a"]["id"]["wg_public_key"] = get_rita_settings(
             self.exit_id)["exit_network"]["wg_public_key"]
         EXIT_SETTINGS["exits"]["exit_a"]["payment"] = {}
@@ -373,32 +376,44 @@ class World:
         # prices are in wei/byte so this is in bytes
         expected_data_transfer = (time * speed * 1000000) / 8
         for (from_node, to_node) in test_traffic_pairs:
+            # exit fees are owed independently of routing to the destination
+            if to_node.id == exit_id or from_node.id == exit_id:
+                exit_node = self.get_node(to_node, from_node, exit_id)
+                other_node = self.get_not_node(to_node, from_node, exit_id)
+                self.init_pair(intended_debts, from_node, to_node)
+                self.init_pair(intended_debts, to_node, from_node)
+                # exit is owed
+                intended_debts[exit_node][other_node] -= exit_price * \
+                    expected_data_transfer
+                # client owes
+                intended_debts[other_node][exit_node] += exit_price * \
+                    expected_data_transfer
+
             last_via = from_node
             via = from_node
             while True:
                 (via, price) = self.get_best_route(all_routes, via, to_node)
                 if via.id == to_node.id:
                     break
-                if from_node.id == exit_id or to_node.id == exit_id:
-                    price = price + exit_price
-                if last_via not in intended_debts:
-                    intended_debts[last_via] = {}
-                if via not in intended_debts[last_via]:
-                    intended_debts[last_via][via] = 0
+                self.init_pair(intended_debts, last_via, via)
+                self.init_pair(intended_debts, via, last_via)
                 # we add what's owed to the first node, but now we must
                 # follow the entire path adding smaller amounts each time
                 print("Adding debts to {} {}, price {} data {}".format(
                     last_via.id, via.id, price, expected_data_transfer))
                 intended_debts[last_via][via] += \
                     price * expected_data_transfer
+                intended_debts[via][last_via] -= \
+                    price * expected_data_transfer
                 last_via = via
-
         for node in intended_debts.keys():
             for owed in intended_debts[node].keys():
+                print("{} has a predicted debt of {} for {} actual debt is {}".format(
+                    node.id, intended_debts[node][owed], owed.id, debts[node.id][owed.id]))
                 if not fuzzy_match(debts[node.id][owed.id], intended_debts[node][owed]):
                     print("{} has a predicted debt of {} for {} but actual debt is {}".format(
                         node.id, intended_debts[node][owed], owed.id, debts[node.id][owed.id]))
-                    exit(1)
+                    # exit(1)
 
     def get_best_route(self, all_routes, from_node, target_node):
         """Very simple utility function to find routes"""
@@ -412,6 +427,29 @@ class World:
             print("There's a problem with the provided all_routes values!")
             exit(1)
         return (best_route, best)
+
+    def init_pair(self, d, a, b):
+        """helper function to create zero entires for nested dicts"""
+        if a not in d:
+            d[a] = {}
+        if b not in d[a]:
+            d[a][b] = 0
+
+    def get_node(self, a, b, id):
+        if a.id == id:
+            return a
+        elif b.id == id:
+            return b
+        else:
+            exit(1)
+
+    def get_not_node(self, a, b, id):
+        if a.id != id:
+            return a
+        elif b.id != id:
+            return b
+        else:
+            exit(1)
 
     def test_debts_reciprocal_matching(self, debts):
         """Tests that in a network nodes generally agree on debts, within a few percent this is done by making sure that
@@ -428,4 +466,5 @@ class World:
                 if not res:
                     print("Nodes {} and {} do not agree! {} has {} and {} has {}!".format(
                         node, node_to_compare, node, debts[node][node_to_compare], node_to_compare, debts[node_to_compare][node]))
-                    exit(1)
+                    # exit(1)
+        print("All debts match their reciprocal!")
