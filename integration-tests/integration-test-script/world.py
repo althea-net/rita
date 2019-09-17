@@ -350,7 +350,7 @@ class World:
             time.sleep(2)
             client = subprocess.Popen(
                 ["ip", "netns", "exec", "netlab-{}".format(to_node.id), "iperf3", "-c",
-                 self.to_ip(from_node), "-V", "-t {}".format(duration), "-b {}M".format(speed), "-R", ])
+                 self.to_ip(from_node), "-V", "-u", "-t {}".format(duration), "-b {}M".format(speed), "-R", ])
 
         else:
             server = subprocess.Popen(
@@ -358,7 +358,7 @@ class World:
             time.sleep(2)
             client = subprocess.Popen(
                 ["ip", "netns", "exec", "netlab-{}".format(from_node.id), "iperf3", "-c",
-                 self.to_ip(to_node), "-V", "-t {}".format(duration), "-b {}M".format(speed)])
+                 self.to_ip(to_node), "-V", "-u", "-t {}".format(duration), "-b {}M".format(speed)])
         client.wait()
         server.send_signal(signal.SIGTERM)
         server.wait()
@@ -395,12 +395,17 @@ class World:
                 (via, price) = self.get_best_route(all_routes, via, to_node)
                 if via.id == to_node.id:
                     break
+                if last_via.id == exit_id:
+                    exit = from_node
+                    client = to_node
+                    intended_debts[exit][client] -= \
+                       price * expected_data_transfer
+                    intended_debts[client][exit] += \
+                       price * expected_data_transfer
                 self.init_pair(intended_debts, last_via, via)
                 self.init_pair(intended_debts, via, last_via)
                 # we add what's owed to the first node, but now we must
                 # follow the entire path adding smaller amounts each time
-                print("Adding debts to {} {}, price {} data {}".format(
-                    last_via.id, via.id, price, expected_data_transfer))
                 intended_debts[last_via][via] += \
                     price * expected_data_transfer
                 intended_debts[via][last_via] -= \
@@ -408,11 +413,11 @@ class World:
                 last_via = via
         for node in intended_debts.keys():
             for owed in intended_debts[node].keys():
-                print("{} has a predicted debt of {} for {} actual debt is {}".format(
-                    node.id, intended_debts[node][owed], owed.id, debts[node.id][owed.id]))
-                if not fuzzy_match(debts[node.id][owed.id], intended_debts[node][owed]):
-                    print("{} has a predicted debt of {} for {} but actual debt is {}".format(
-                        node.id, intended_debts[node][owed], owed.id, debts[node.id][owed.id]))
+                print("{} has a predicted debt of {} for {} actual debt is {} {:.2%} accurate".format(
+                        node.id, intended_debts[node][owed], owed.id, debts[node.id][owed.id], intended_debts[node][owed]/debts[node.id][owed.id]))
+                #if not fuzzy_match(debts[node.id][owed.id], intended_debts[node][owed]):
+                    #print("{} has a predicted debt of {} for {} but actual debt is {} {:.2%} accurate".format(
+                    #    node.id, intended_debts[node][owed], owed.id, debts[node.id][owed.id], intended_debts[node][owed]/debts[node.id][owed.id]))
                     # exit(1)
 
     def get_best_route(self, all_routes, from_node, target_node):
