@@ -156,9 +156,8 @@ def setup_seven_node_config():
     world.add_connection(Connection(b2, d4))
     world.add_connection(Connection(e5, g7))
 
-    # traffic_test_pairs = [(c3, f6), (d4, a1), (a1, c3), (d4, e5),
-    #                       (e5, d4), (c3, e5), (e5, c3), (g7, e5), (e5, g7)]
-    traffic_test_pairs = [(e5, c3)]
+    traffic_test_pairs = [(c3, f6), (d4, a1), (a1, c3), (d4, e5),
+                          (e5, d4), (c3, e5), (e5, c3), (g7, e5), (e5, g7)]
 
     nodes = world.nodes
 
