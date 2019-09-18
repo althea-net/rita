@@ -48,7 +48,8 @@ build_rev() {
 
   pushd $dir
     git checkout $revision
-    cargo build --all
+    RUSTFLAGS="-C target-cpu=native"
+    cargo build --all --release
   popd
 }
 
@@ -70,19 +71,20 @@ fi
 # Only care about revisions if a compat layout was picked
 if [ ! -z "${COMPAT_LAYOUT-}" ] ; then
   build_rev $REMOTE_A "$REVISION_A" $DIR_A $TARGET_DIR_A
-  export RITA_A="$target_dir/debug/rita"
-  export RITA_EXIT_A="$target_dir/debug/rita_exit"
+  export RITA_A="$target_dir/release/rita"
+  export RITA_EXIT_A="$target_dir/release/rita_exit"
   export DIR_A=$DIR_A
   cp -r $DIR_A/target/* $target_dir
  
   build_rev $REMOTE_B "$REVISION_B" $DIR_B $TARGET_DIR_B
-  export RITA_B="$target_dir/debug/rita"
-  export RITA_EXIT_B="$target_dir/debug/rita_exit"
+  export RITA_B="$target_dir/release/rita"
+  export RITA_EXIT_B="$target_dir/release/rita_exit"
   export DIR_B=$DIR_B
   cp -r $DIR_B/target/* $target_dir
 else
   pushd ..
-    cargo build --all
+    RUSTFLAGS="-C target-cpu=native"
+    cargo build --all --release
   popd
 fi
 
