@@ -274,7 +274,7 @@ def start_rita(node, dname, RITA, EXIT_SETTINGS):
 
     EXIT_SETTINGS["reg_details"]["email"] = "{}@example.com".format(id)
 
-    os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
+    os.system("ip netns exec netlab-{id} curl --retry 5 --retry-connrefused -m 60 -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
               .format(id=id, data=json.dumps({"exit_client": EXIT_SETTINGS})))
 
 
@@ -300,11 +300,24 @@ def start_rita_exit(node, dname, RITA_EXIT):
 
 
 def ip_to_num(ip):
-    return int(ip.replace("fd00::", ""))
+    if ip is "fd00::":
+        return 0
+    else:
+        return int(ip.replace("fd00::", ""))
 
 
 def num_to_ip(num):
-    return "fd00::{}".format(num)
+    if num is 0:
+        return "fd00::"
+    else:
+        return "fd00::{}".format(num)
+
+
+def num_to_linklocal_ip(num):
+    if num is 0:
+        return "fe80::"
+    else:
+        return "fe80::{}".format(num)
 
 
 def fuzzy_match(numA, numB):

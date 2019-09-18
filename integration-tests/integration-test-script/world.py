@@ -212,6 +212,8 @@ class World:
 
         for node, routes in all_routes.items():
             for route in routes:
+                if node.id == route[0].id:
+                    continue
                 desc = ("Optimal route from node {} ({}) " +
                         "to {} ({}) with next-hop {} ({}) and price {}").format(
                     node.id,
@@ -229,6 +231,7 @@ class World:
         return result
 
     def test_endpoints_all(self, VERBOSE):
+        curl_args = "curl -sfg6 --retry 5 --retry-connrefused -m 60 "
         for node in self.nodes.values():
 
             # We don't expect the exit to work the same as others
@@ -243,7 +246,7 @@ class World:
                 print(colored("Hitting /neighbors:", "green"))
 
             result = subprocess.Popen(shlex.split("ip netns exec "
-                                                  + "netlab-{} curl -sfg6 [::1]:4877/neighbors".format(node.id)),
+                                                  + "netlab-{} {} [::1]:4877/neighbors".format(node.id, curl_args)),
                                       stdout=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /neighbors")
             stdout = result.stdout.read().decode('utf-8')
@@ -263,7 +266,7 @@ class World:
                 print(colored("Hitting /exits:", "green"))
 
             result = subprocess.Popen(shlex.split("ip netns exec "
-                                                  + "netlab-{} curl -sfg6 [::1]:4877/exits".format(node.id)),
+                                                  + "netlab-{} {} [::1]:4877/exits".format(node.id, curl_args)),
                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /exits")
             stdout = result.stdout.read().decode('utf-8')
@@ -283,7 +286,7 @@ class World:
                 print(colored("Hitting /info:", "green"))
 
             result = subprocess.Popen(shlex.split("ip netns exec "
-                                                  + "netlab-{} curl -sfg6 [::1]:4877/info".format(node.id)),
+                                                  + "netlab-{} {} [::1]:4877/info".format(node.id, curl_args)),
                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /info")
             stdout = result.stdout.read().decode('utf-8')
@@ -303,7 +306,7 @@ class World:
                 print(colored("Hitting /settings:", "green"))
 
             result = subprocess.Popen(shlex.split("ip netns exec "
-                                                  + "netlab-{} curl -sfg6 [::1]:4877/settings".format(node.id)),
+                                                  + "netlab-{} {} [::1]:4877/settings".format(node.id, curl_args)),
                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /settings")
             stdout = result.stdout.read().decode('utf-8')

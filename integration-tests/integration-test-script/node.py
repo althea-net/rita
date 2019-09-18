@@ -13,6 +13,9 @@ import sys
 import time
 import toml
 
+from utils import num_to_ip
+from utils import num_to_linklocal_ip
+
 
 class Node:
     def __init__(self, id, local_fee, COMPAT_LAYOUT, COMPAT_LAYOUTS):
@@ -37,7 +40,7 @@ class Node:
             interfaces.append("veth-{}-{}".format(self.id, i))
         return interfaces
 
-    def has_route(self, dest, price, next_hop, backlog=10000, verbose=False):
+    def has_route(self, dest, price, next_hop, backlog=100000, verbose=False):
         """
         This function takes :data:`self` and returns ``True`` if a specified
         route is installed in the last :data:`backlog` characters of the node's
@@ -68,12 +71,12 @@ class Node:
             return False
 
         last_dump = last_dump_match.group(1)
-        route_pat = re.compile(r'fd00::{d}.*price {p}.*fee {f}.*neigh fe80::{nh}.*(installed)'
+        route_pat = re.compile(r'{d}.*price {p}.*fee {f}.*neigh {nh}.*(installed)'
                                .format(
-                                   d=dest.id,
+                                   d=num_to_ip(dest.id),
                                    p=price,
                                    f=self.local_fee,
-                                   nh=next_hop.id
+                                   nh=num_to_linklocal_ip(next_hop.id)
                                ))
 
         if route_pat.search(last_dump) is None:
