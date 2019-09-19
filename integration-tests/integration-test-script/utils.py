@@ -75,6 +75,17 @@ def register_to_exit(node):
                "127.0.0.1:4877/exits/exit_a/register").format(node.id))
 
 
+def no_email_verif(node):
+    """Checks that an exit registration email has not been sent to this node"""
+    email_text = read_email(node)
+
+    code = re.search(r"\[([0-9]+)\]", email_text).group(1)
+    if code is not None:
+        return False
+    else:
+        return True
+
+
 def email_verif(node):
     email_text = read_email(node)
 

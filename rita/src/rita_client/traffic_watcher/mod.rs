@@ -21,9 +21,7 @@
 //! with the ones the exit computes. While we'll never be able to totally eliminate the ability for the exit to defraud the user
 //! with fake packet loss we can at least prevent the exit from presenting insane values.
 
-use crate::rita_common::debt_keeper::{
-    DebtKeeper, Traffic, TrafficReplace, WgKeyInsensitiveTrafficUpdate,
-};
+use crate::rita_common::debt_keeper::{DebtKeeper, Traffic, TrafficReplace};
 use crate::rita_common::usage_tracker::UpdateUsage;
 use crate::rita_common::usage_tracker::UsageTracker;
 use crate::rita_common::usage_tracker::UsageType;
@@ -52,9 +50,6 @@ pub struct TrafficWatcher {
     last_read_input: u64,
     // last read upload
     last_read_output: u64,
-    /// handles the gateway exit client corner case where we need to reconcile client
-    /// and relay debts
-    gateway_exit_client: bool,
 }
 
 impl Actor for TrafficWatcher {
@@ -66,7 +61,6 @@ impl SystemService for TrafficWatcher {
         info!("Client traffic watcher started");
         self.last_read_input = 0;
         self.last_read_output = 0;
-        self.gateway_exit_client = false;
     }
 }
 impl Default for TrafficWatcher {
@@ -74,33 +68,7 @@ impl Default for TrafficWatcher {
         TrafficWatcher {
             last_read_input: 0,
             last_read_output: 0,
-            gateway_exit_client: false,
         }
-    }
-}
-
-/// There is a complicated corner case where the gateway is a client and a relay to
-/// the same exit, this will produce incorrect billing data as we need to reconcile the
-/// relay bills (under the exit relay id) and the client bills (under the exit id) versus
-/// the exit who just has the single billing id for the client and is combining debts
-/// This function grabs neighbors and etermines if we have a neighbor with the same mesh ip
-/// and eth adress as our selected exit, if we do we trigger the special case handling
-/// this is called in rita client loop when this condition is discovered to set it here
-pub struct WeAreGatewayClient {
-    pub value: bool,
-}
-
-impl Message for WeAreGatewayClient {
-    type Result = Result<(), Error>;
-}
-
-impl Handler<WeAreGatewayClient> for TrafficWatcher {
-    type Result = Result<(), Error>;
-
-    fn handle(&mut self, msg: WeAreGatewayClient, _: &mut Context<Self>) -> Self::Result {
-        info!("We are a gateway client: {}", msg.value);
-        self.gateway_exit_client = msg.value;
-        Ok(())
     }
 }
 
@@ -133,7 +101,6 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
     fn handle(&mut self, msg: QueryExitDebts, _: &mut Context<Self>) -> Self::Result {
         trace!("About to query the exit for client debts");
 
-        let gateway_exit_client = self.gateway_exit_client;
         let start = Instant::now();
         let exit_addr = msg.exit_internal_addr;
         let exit_id = msg.exit_id;
@@ -167,10 +134,8 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
                                         start.elapsed().as_secs(),
                                         start.elapsed().subsec_millis()
                                     );
-                                    let we_are_not_a_gateway = !gateway_exit_client;
                                     let we_owe_exit = debt >= Int256::zero();
-                                    match (we_are_not_a_gateway, we_owe_exit) {
-                                        (true, true) => {
+                                    if we_owe_exit {
                                           let exit_replace = TrafficReplace {
                                             traffic: Traffic {
                                                 from: exit_id,
@@ -179,11 +144,9 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
                                         };
 
                                         DebtKeeper::from_registry().do_send(exit_replace);
-                                    },
-                                        // the exit should never tell us it owes us, that doesn't make sense outside of the gateway
-                                        // client corner case
-                                        (true, false) => warn!("We're probably a gateway but haven't detected it yet"),
-                                        (false, _) => info!("We are a gateway!, Acting accordingly"),
+                                    }
+                                    else {
+                                        error!("Exit owes us?")
                                     }
                                 }
                                 Err(e) => {
@@ -240,13 +203,7 @@ impl Handler<Watch> for TrafficWatcher {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        watch(
-            self,
-            &msg.exit_id,
-            msg.exit_price,
-            msg.routes,
-            self.gateway_exit_client,
-        )
+        watch(self, &msg.exit_id, msg.exit_price, msg.routes)
     }
 }
 
@@ -255,7 +212,6 @@ pub fn watch(
     exit: &Identity,
     exit_price: u64,
     routes: Vec<Route>,
-    gateway_exit_client: bool,
 ) -> Result<(), Error> {
     let exit_route = find_exit_route_capped(exit.mesh_ip, routes)?;
     info!("Exit metric: {}", exit_route.metric);
@@ -339,17 +295,6 @@ pub fn watch(
 
     if owes_exit > 0 {
         info!("Total client debt of {} this round", owes_exit);
-
-        if gateway_exit_client {
-            let exit_replace = WgKeyInsensitiveTrafficUpdate {
-                traffic: Traffic {
-                    from: *exit,
-                    amount: Int256::from(owes_exit),
-                },
-            };
-
-            DebtKeeper::from_registry().do_send(exit_replace);
-        }
 
         // update the usage tracker with the details of this round's usage
         UsageTracker::from_registry().do_send(UpdateUsage {

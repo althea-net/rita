@@ -24,6 +24,7 @@ from utils import get_rita_exit_defaults
 from utils import assert_test
 from utils import register_to_exit
 from utils import email_verif
+from utils import no_email_verif
 from utils import teardown
 from utils import check_log_contains
 from world import World
@@ -157,7 +158,7 @@ def setup_seven_node_config():
     world.add_connection(Connection(e5, g7))
 
     traffic_test_pairs = [(c3, f6), (d4, a1), (a1, c3), (d4, e5),
-                          (e5, d4), (c3, e5), (e5, c3)]
+                          (e5, d4), (c3, e5), (e5, c3), (e5, f6), (b2, e5), (e5, b2)]
 
     nodes = world.nodes
 
@@ -287,7 +288,7 @@ def main():
     time.sleep(5)
 
     for k, v in world.nodes.items():
-        if k != world.exit_id and k != world.gateway_id:
+        if k != world.exit_id:
             register_to_exit(v)
 
     print("waiting for emails to be sent")
@@ -296,6 +297,10 @@ def main():
     for k, v in world.nodes.items():
         if k != world.exit_id and k != world.gateway_id:
             email_verif(v)
+
+    if not no_email_verif(world.gateway_id):
+        print("Gateway successfully registered to the exit! This is not allowed!")
+        exit(1)
 
     world.test_endpoints_all(VERBOSE)
 
@@ -322,9 +327,6 @@ def main():
     for id in world.nodes:
         assert_test(not check_log_contains("rita-n{}.log".format(id),
                                            "suspending forwarding"), "Suspension of {}".format(id))
-
-    assert_test(check_log_contains("rita-n{}.log".format(GATEWAY_ID),
-                                   "We are a gateway!, Acting accordingly"), "Successful gateway/exit detection")
 
     if DEBUG:
         print("Debug mode active, examine the mesh after tests and press " +

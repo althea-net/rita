@@ -5,6 +5,8 @@
 use crate::rita_common::debt_keeper::DebtAction;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::GetDebtsList;
+use crate::rita_common::tunnel_manager::GetNeighbors;
+use crate::rita_common::tunnel_manager::TunnelManager;
 use crate::rita_exit::database::database_tools::client_conflict;
 use crate::rita_exit::database::database_tools::client_exists;
 use crate::rita_exit::database::database_tools::delete_client;
@@ -173,7 +175,16 @@ fn create_or_update_user_record(
 /// ip and then sends out an email of phone message
 pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState, Error = Error> {
     trace!("got setup request {:?}", client);
-    get_gateway_ip_single(client.global.mesh_ip).and_then(move |gateway_ip| {
+    TunnelManager::from_registry()
+        .send(GetNeighbors).from_err().and_then(move |neighbors| {
+            for neigh in neighbors.unwrap() {
+                if neigh.identity.global.mesh_ip == client.global.mesh_ip {
+                    return Box::new(future::ok(ExitState::Denied {
+                            message: "Gateways can not register to exits!".to_string()
+                        }))  as Box<dyn Future<Item = ExitState, Error = Error>>;
+                }
+            }
+    Box::new(get_gateway_ip_single(client.global.mesh_ip).and_then(move |gateway_ip| {
         verify_ip(gateway_ip).and_then(move |verify_status| {
             get_country(gateway_ip).and_then(move |user_country| {
                 get_database_connection().and_then(move |conn| {
@@ -237,6 +248,7 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
                 })
             })
         })
+    }))
     })
 }
 
