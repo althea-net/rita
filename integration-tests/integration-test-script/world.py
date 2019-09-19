@@ -413,11 +413,9 @@ class World:
                 last_via = via
         for node in intended_debts.keys():
             for owed in intended_debts[node].keys():
-                print("{} has a predicted debt of {} for {} actual debt is {} {:.2%} accurate".format(
-                    node.id, intended_debts[node][owed], owed.id, debts[node.id][owed.id], intended_debts[node][owed]/debts[node.id][owed.id]))
-                # if not fuzzy_match(debts[node.id][owed.id], intended_debts[node][owed]):
-                # print("{} has a predicted debt of {} for {} but actual debt is {} {:.2%} accurate".format(
-                #    node.id, intended_debts[node][owed], owed.id, debts[node.id][owed.id], intended_debts[node][owed]/debts[node.id][owed.id]))
+                if not fuzzy_match(debts[node.id][owed.id], intended_debts[node][owed]):
+                    print("{} has a predicted debt of {} for {} but actual debt is {} {:.2%} accurate".format(
+                        node.id, intended_debts[node][owed], owed.id, debts[node.id][owed.id], intended_debts[node][owed]/debts[node.id][owed.id]))
                 # exit(1)
 
     def get_best_route(self, all_routes, from_node, target_node):
