@@ -1,4 +1,6 @@
 use crate::rita_common::debt_keeper::{DebtKeeper, SendUpdate};
+use crate::rita_common::network_monitor::NetworkMonitor;
+use crate::rita_common::network_monitor::Tick as NetworkMonitorTick;
 use crate::rita_common::oracle::{Oracle, Update};
 use crate::rita_common::payment_validator::{PaymentValidator, Validate};
 use crate::rita_common::peer_listener::GetPeers;
@@ -13,6 +15,7 @@ use actix::{
     SystemService,
 };
 use babel_monitor::open_babel_stream;
+use babel_monitor::parse_neighs;
 use babel_monitor::parse_routes;
 use babel_monitor::start_connection;
 use failure::Error;
@@ -76,6 +79,7 @@ impl Message for Tick {
 impl Handler<Tick> for RitaFastLoop {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
+        let babel_port = SETTING.get_network().babel_port;
         trace!("Common tick!");
 
         manage_gateway();
@@ -99,7 +103,6 @@ impl Handler<Tick> for RitaFastLoop {
                 .then(move |res| {
                     trace!("Currently open tunnels: {:?}", res);
                     let neighbors = res.unwrap().unwrap();
-                    let babel_port = SETTING.get_network().babel_port;
 
                     let neigh = Instant::now();
                     info!(
@@ -135,6 +138,35 @@ impl Handler<Tick> for RitaFastLoop {
                         })
                 }),
         );
+
+        // Observe the dataplane for status and problems
+        Arbiter::spawn(TunnelManager::from_registry().send(GetNeighbors).then(
+            move |rita_neighbors| {
+                let rita_neighbors = rita_neighbors.unwrap().unwrap();
+                open_babel_stream(babel_port)
+                    .from_err()
+                    .and_then(move |stream| {
+                        start_connection(stream).and_then(move |stream| {
+                            parse_routes(stream).and_then(move |(stream, babel_routes)| {
+                                parse_neighs(stream).and_then(move |(_stream, babel_neighbors)| {
+                                    NetworkMonitor::from_registry().do_send(NetworkMonitorTick {
+                                        rita_neighbors,
+                                        babel_routes,
+                                        babel_neighbors,
+                                    });
+                                    Ok(())
+                                })
+                            })
+                        })
+                    })
+                    .then(|ret| {
+                        if let Err(e) = ret {
+                            error!("Failed to watch network latency with {:?}", e)
+                        }
+                        Ok(())
+                    })
+            },
+        ));
 
         // Update debts
         DebtKeeper::from_registry().do_send(SendUpdate {});
