@@ -157,7 +157,7 @@ def setup_seven_node_config():
     world.add_connection(Connection(e5, g7))
 
     traffic_test_pairs = [(c3, f6), (d4, a1), (a1, c3), (d4, e5),
-                          (e5, d4), (c3, e5), (e5, c3), (g7, e5), (e5, g7)]
+                          (e5, d4), (c3, e5), (e5, c3)]
 
     nodes = world.nodes
 
@@ -225,6 +225,7 @@ def setup_seven_node_config():
 
     GATEWAY_NAMESPACE = "netlab-7"
     GATEWAY_ID = 7
+    world.gateway_id = GATEWAY_ID
 
     return (COMPAT_LAYOUTS, all_routes, traffic_test_pairs, world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID)
 
@@ -286,14 +287,14 @@ def main():
     time.sleep(5)
 
     for k, v in world.nodes.items():
-        if k != world.exit_id:
+        if k != world.exit_id and k != world.gateway_id:
             register_to_exit(v)
 
     print("waiting for emails to be sent")
     time.sleep(16)
 
     for k, v in world.nodes.items():
-        if k != world.exit_id:
+        if k != world.exit_id and k != world.gateway_id:
             email_verif(v)
 
     world.test_endpoints_all(VERBOSE)

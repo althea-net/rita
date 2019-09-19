@@ -35,6 +35,7 @@ class World:
         self.connections = {}
         self.bounty_id = None
         self.exit_id = None
+        self.gateway_id = None
         self.external = None
 
     def add_node(self, node):
@@ -183,7 +184,7 @@ class World:
         exit_internal_ip = get_rita_settings(
             self.exit_id)["exit_network"]["own_internal_ip"]
         for node in self.nodes.values():
-            if node.id == self.exit_id:
+            if node.id == self.exit_id or node.id == self.gateway_id:
                 continue
             if not assert_test(self.test_exit_reach(node, exit_internal_ip), "Exit Reachability " +
                                "from node {} ({})".format(node.id,
