@@ -360,7 +360,7 @@ class World:
                 ["ip", "netns", "exec", "netlab-{}".format(from_node.id), "iperf3", "-c",
                  self.to_ip(to_node), "-V", "-u", "-t {}".format(duration), "-b {}M".format(speed)])
         client.wait()
-        server.send_signal(signal.SIGTERM)
+        server.send_signal(signal.SIGKILL)
         server.wait()
 
     def test_traffic(self, traffic_test_pairs, time, speed):
