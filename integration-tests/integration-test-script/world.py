@@ -399,9 +399,9 @@ class World:
                     exit = from_node
                     client = to_node
                     intended_debts[exit][client] -= \
-                       price * expected_data_transfer
+                        price * expected_data_transfer
                     intended_debts[client][exit] += \
-                       price * expected_data_transfer
+                        price * expected_data_transfer
                 self.init_pair(intended_debts, last_via, via)
                 self.init_pair(intended_debts, via, last_via)
                 # we add what's owed to the first node, but now we must
@@ -414,11 +414,11 @@ class World:
         for node in intended_debts.keys():
             for owed in intended_debts[node].keys():
                 print("{} has a predicted debt of {} for {} actual debt is {} {:.2%} accurate".format(
-                        node.id, intended_debts[node][owed], owed.id, debts[node.id][owed.id], intended_debts[node][owed]/debts[node.id][owed.id]))
-                #if not fuzzy_match(debts[node.id][owed.id], intended_debts[node][owed]):
-                    #print("{} has a predicted debt of {} for {} but actual debt is {} {:.2%} accurate".format(
-                    #    node.id, intended_debts[node][owed], owed.id, debts[node.id][owed.id], intended_debts[node][owed]/debts[node.id][owed.id]))
-                    # exit(1)
+                    node.id, intended_debts[node][owed], owed.id, debts[node.id][owed.id], intended_debts[node][owed]/debts[node.id][owed.id]))
+                # if not fuzzy_match(debts[node.id][owed.id], intended_debts[node][owed]):
+                # print("{} has a predicted debt of {} for {} but actual debt is {} {:.2%} accurate".format(
+                #    node.id, intended_debts[node][owed], owed.id, debts[node.id][owed.id], intended_debts[node][owed]/debts[node.id][owed.id]))
+                # exit(1)
 
     def get_best_route(self, all_routes, from_node, target_node):
         """Very simple utility function to find routes"""
