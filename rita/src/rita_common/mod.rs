@@ -2,6 +2,7 @@ pub mod dao_manager;
 pub mod dashboard;
 pub mod debt_keeper;
 pub mod hello_handler;
+pub mod latency_manager;
 pub mod network_endpoints;
 pub mod oracle;
 pub mod payment_controller;

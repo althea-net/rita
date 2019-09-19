@@ -19,6 +19,9 @@ use failure::Error;
 use futures::Future;
 use settings::RitaCommonSettings;
 use std::time::{Duration, Instant};
+use babel_monitor::parse_neighs;
+use crate::rita_common::latency_manager::Tick as LatencyManagerTick;
+use crate::rita_common::latency_manager::LatencyManager;
 
 // the speed in seconds for the common loop
 pub const FAST_LOOP_SPEED: u64 = 5;
@@ -76,6 +79,7 @@ impl Message for Tick {
 impl Handler<Tick> for RitaFastLoop {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
+        let babel_port = SETTING.get_network().babel_port;
         trace!("Common tick!");
 
         manage_gateway();
@@ -99,7 +103,6 @@ impl Handler<Tick> for RitaFastLoop {
                 .then(move |res| {
                     trace!("Currently open tunnels: {:?}", res);
                     let neighbors = res.unwrap().unwrap();
-                    let babel_port = SETTING.get_network().babel_port;
 
                     let neigh = Instant::now();
                     info!(
@@ -135,6 +138,30 @@ impl Handler<Tick> for RitaFastLoop {
                         })
                 }),
         );
+
+        // Manage latency
+        Arbiter::spawn(TunnelManager::from_registry().send(GetNeighbors).then(
+            move |rita_neighbors| {
+                let rita_neighbors = rita_neighbors.unwrap().unwrap();
+                open_babel_stream(babel_port).then(move |stream| {
+                    let stream = stream.expect("Failed to connect to babel!");
+                    start_connection(stream).then(move |stream| {
+                        let stream = stream.expect("Failed to connect to babel!");
+                        parse_neighs(stream).then(move |res| {
+                            if let Ok((_stream, babel_neighbors)) = res {
+                              LatencyManager::from_registry().do_send(LatencyManagerTick{
+                                  rita_neighbors,
+                                  babel_neighbors,
+                              });
+                            } else {
+                                error!("Failed to parse neighbors for latency observation!");
+                            }
+                            Ok(())
+                        })
+                    })
+                })
+            },
+        ));
 
         // Update debts
         DebtKeeper::from_registry().do_send(SendUpdate {});
