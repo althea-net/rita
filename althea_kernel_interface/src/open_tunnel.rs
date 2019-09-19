@@ -64,17 +64,12 @@ impl dyn KernelInterface {
         private_key_path: &Path,
         own_ip: &IpAddr,
         external_nic: Option<String>,
-        settings_default_route: &mut Vec<String>,
     ) -> Result<(), Error> {
-        let external_peer;
-
         let phy_name = match self.get_device_name(endpoint.ip()) {
             Ok(phy_name) => {
-                external_peer = false;
                 Some(phy_name)
             }
             Err(_) => {
-                external_peer = true;
                 external_nic
             }
         };
@@ -121,10 +116,6 @@ impl dyn KernelInterface {
                 &interface,
             ],
         )?;
-
-        if external_peer {
-            self.manual_peers_route(&endpoint.ip(), settings_default_route)?;
-        }
 
         let output = self.run_command("ip", &["link", "set", "dev", &interface, "up"])?;
         if !output.stderr.is_empty() {
@@ -307,7 +298,6 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
         &private_key_path,
         &own_mesh_ip,
         None,
-        &mut vec![],
     )
     .unwrap();
 }

@@ -87,9 +87,11 @@ def no_email_verif(node):
 
 
 def email_verif(node):
-    email_text = read_email(node)
+    email_text = read_email(node.id)
 
     code = re.search(r"\[([0-9]+)\]", email_text).group(1)
+    if code is None:
+        raise Exception("cannot find email for node {}".format(id))
 
     print("Email code for node {} is {}".format(node.id, code))
 
@@ -100,7 +102,7 @@ def email_verif(node):
 
 
 def read_email(node):
-    id = node.id
+    id = node
     # TODO: this is O(n^2)
     for mail in os.listdir("mail"):
         with open(os.path.join("mail", mail)) as mail_file_handle:
@@ -110,7 +112,7 @@ def read_email(node):
                 if "low balance" in message:
                     continue
                 return message
-    raise Exception("cannot find email for node {}".format(id))
+    return None
 
 
 def assert_test(x, description, verbose=True, global_fail=True):

@@ -81,8 +81,6 @@ fn linux_setup_exit_tunnel(
     general_details: &ExitDetails,
     our_details: &ExitClientDetails,
 ) -> Result<(), Error> {
-    KI.update_settings_route(&mut SETTING.get_network_mut().default_route)?;
-
     KI.setup_wg_if_named("wg_exit")?;
     KI.set_client_exit_tunnel_config(
         SocketAddr::new(current_exit.id.mesh_ip, general_details.wg_exit_port),

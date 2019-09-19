@@ -170,7 +170,6 @@ impl Tunnel {
                 None => bail!("No mesh IP configured yet"),
             },
             network.external_nic.clone(),
-            &mut SETTING.get_network_mut().default_route,
         )?;
         KI.set_codel_shaping(&self.iface_name)
     }
@@ -566,11 +565,6 @@ impl Handler<PeersToContact> for TunnelManager {
 /// Sets out to contact a neighbor, takes a speculative port (only assigned if the neighbor
 /// responds successfully)
 fn contact_neighbor(peer: &Peer, our_port: u16) -> Result<(), Error> {
-    KI.manual_peers_route(
-        &peer.contact_socket.ip(),
-        &mut SETTING.get_network_mut().default_route,
-    )?;
-
     HelloHandler::from_registry().do_send(Hello {
         my_id: LocalIdentity {
             global: SETTING

@@ -6,7 +6,6 @@ use crate::rita_common::peer_listener::PeerListener;
 use crate::rita_common::traffic_watcher::{TrafficWatcher, Watch};
 use crate::rita_common::tunnel_manager::PeersToContact;
 use crate::rita_common::tunnel_manager::{GetNeighbors, TunnelManager};
-use crate::KI;
 use crate::SETTING;
 use actix::{
     Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
@@ -77,8 +76,6 @@ impl Handler<Tick> for RitaFastLoop {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
         trace!("Common tick!");
-
-        manage_gateway();
 
         let start = Instant::now();
 
@@ -180,36 +177,5 @@ impl Handler<Tick> for RitaFastLoop {
         );
 
         Ok(())
-    }
-}
-
-/// Manages gateway functionaltiy and maintains the was_gateway parameter, this is different from the gateway
-/// identification in rita_client because this must function even if we aren't registered for an exit it's also
-/// very prone to being true when the device has a wan port but no actual wan connection.
-fn manage_gateway() {
-    // Resolves the gateway client corner case
-    // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
-    let gateway = match SETTING.get_network().external_nic {
-        Some(ref external_nic) => match KI.is_iface_up(external_nic) {
-            Some(val) => val,
-            None => false,
-        },
-        None => false,
-    };
-
-    info!("We are a Gateway: {}", gateway);
-    SETTING.get_network_mut().is_gateway = gateway;
-
-    if gateway {
-        match KI.get_resolv_servers() {
-            Ok(s) => {
-                for ip in s.iter() {
-                    trace!("Resolv route {:?}", ip);
-                    KI.manual_peers_route(&ip, &mut SETTING.get_network_mut().default_route)
-                        .unwrap();
-                }
-            }
-            Err(e) => warn!("Failed to add DNS routes with {:?}", e),
-        }
     }
 }

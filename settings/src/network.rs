@@ -70,9 +70,6 @@ pub struct NetworkSettings {
     /// such as for connecting to external peers from gateways or to peer 2 althea nodes with a
     /// complex network in between
     pub manual_peers: Vec<String>,
-    /// This is a route in the format of `ip route` which is set by default (assuming it will reach
-    /// the internet), used to tunnel manual peers over a specific route
-    pub default_route: Vec<String>,
     /// This is the NIC which connects to the internet, used by gateways/exits to find its
     /// globally routable ip
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -119,7 +116,6 @@ impl Default for NetworkSettings {
             peer_interfaces: HashSet::new(),
             manual_peers: Vec::new(),
             external_nic: None,
-            default_route: Vec::new(),
             is_gateway: false,
             tunnel_timeout_seconds: default_tunnel_timeout(),
             device: None,
