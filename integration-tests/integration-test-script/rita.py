@@ -83,9 +83,9 @@ VERBOSE = os.getenv('VERBOSE', None)
 
 # bandwidth test vars
 # in seconds
-TIME = 15
+TIME = int(os.getenv('SPEEDTEST_DURATION'))
 # in Mbit/s
-SPEED = 200
+SPEED = int(os.getenv('SPEEDTEST_THROUGHPUT'))
 
 TEST_PASSES = True
 
