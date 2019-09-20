@@ -81,6 +81,12 @@ INITIAL_POLL_INTERVAL = float(os.getenv('INITIAL_POLL_INTERVAL', 1))
 PING6 = os.getenv('PING6', 'ping6')
 VERBOSE = os.getenv('VERBOSE', None)
 
+# bandwidth test vars
+# in seconds
+TIME = int(os.getenv('SPEEDTEST_DURATION'))
+# in Mbit/s
+SPEED = int(os.getenv('SPEEDTEST_THROUGHPUT'))
+
 TEST_PASSES = True
 
 EXIT_SETTINGS = {
@@ -214,12 +220,18 @@ def setup_seven_node_config():
         ],
     }
 
-    return (COMPAT_LAYOUTS, all_routes, traffic_test_pairs, world)
+    EXIT_NAMESPACE = "netlab-5"
+    EXIT_ID = 5
+
+    GATEWAY_NAMESPACE = "netlab-7"
+    GATEWAY_ID = 7
+
+    return (COMPAT_LAYOUTS, all_routes, traffic_test_pairs, world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID)
 
 
 def main():
     (COMPAT_LAYOUTS, all_routes, traffic_test_pairs,
-     world) = setup_seven_node_config()
+     world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID) = setup_seven_node_config()
 
     COMPAT_LAYOUTS["random"] = [
         'a' if random.randint(0, 1) else 'b' for _ in range(7)]
@@ -294,13 +306,15 @@ def main():
             sys.exit(0)
 
     world.test_exit_reach_all()
-    world.test_traffic(traffic_test_pairs)
+    world.test_traffic(traffic_test_pairs, TIME, SPEED)
 
     # wait a few seconds after traffic generation for all nodes to update their debts
     time.sleep(10)
     traffic = world.get_debts()
     print("Test post-traffic blanace agreement...")
     world.test_debts_reciprocal_matching(traffic)
+    world.test_debts_values(traffic_test_pairs, TIME,
+                            SPEED, traffic, all_routes, EXIT_ID, world.exit_price)
 
     print("Check that tunnels have not been suspended")
 

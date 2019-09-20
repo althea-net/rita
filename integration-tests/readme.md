@@ -10,8 +10,8 @@ Where 5 is the exit and 7 is the gateway
     7
    / \
   3   6
- / \ / \
-4   2   1
+   \ / \
+4 - 2   1
 ```
 
 ```

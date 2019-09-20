@@ -47,8 +47,8 @@ matrix:
         #- "cargo install cargo-audit --force && cargo audit"
         - "cargo install cargo-geiger --force && cargo geiger"
     - script: ./integration-tests/rita.sh
-      env: INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1 POSTGRES_USER=postgres POSTGRES_BIN=/usr/lib/postgresql/9.6/bin/postgres POSTGRES_DATABASE=/var/ramfs/postgresql/9.6/main POSTGRES_CONFIG=/etc/postgresql/9.6/main/postgresql.conf
+      env: SPEEDTEST_THROUGHPUT="20" SPEEDTEST_DURATION="15" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1 POSTGRES_USER=postgres POSTGRES_BIN=/usr/lib/postgresql/9.6/bin/postgres POSTGRES_DATABASE=/var/ramfs/postgresql/9.6/main POSTGRES_CONFIG=/etc/postgresql/9.6/main/postgresql.conf
     - script: ./integration-tests/rita.sh
-      env: REVISION_B=release REMOTE_A=.. REMOTE_B="https://github.com/althea-mesh/althea_rs.git" COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1 POSTGRES_USER=postgres POSTGRES_BIN=/usr/lib/postgresql/9.6/bin/postgres POSTGRES_DATABASE=/var/ramfs/postgresql/9.6/main POSTGRES_CONFIG=/etc/postgresql/9.6/main/postgresql.conf
+      env: SPEEDTEST_THROUGHPUT="20" SPEEDTEST_DURATION="15" REVISION_B=release REMOTE_A=.. REMOTE_B="https://github.com/althea-mesh/althea_rs.git" COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1 POSTGRES_USER=postgres POSTGRES_BIN=/usr/lib/postgresql/9.6/bin/postgres POSTGRES_DATABASE=/var/ramfs/postgresql/9.6/main POSTGRES_CONFIG=/etc/postgresql/9.6/main/postgresql.conf
     - script: ./integration-tests/rita.sh
-      env: REVISION_B=master REMOTE_A=.. REMOTE_B="https://github.com/althea-mesh/althea_rs.git" COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1 POSTGRES_USER=postgres POSTGRES_BIN=/usr/lib/postgresql/9.6/bin/postgres POSTGRES_DATABASE=/var/ramfs/postgresql/9.6/main POSTGRES_CONFIG=/etc/postgresql/9.6/main/postgresql.conf
+      env: SPEEDTEST_THROUGHPUT="20" SPEEDTEST_DURATION="15" REVISION_B=master REMOTE_A=.. REMOTE_B="https://github.com/althea-mesh/althea_rs.git" COMPAT_LAYOUT="inner_ring_old" INITIAL_POLL_INTERVAL=5 BACKOFF_FACTOR="1.5" VERBOSE=1 POSTGRES_USER=postgres POSTGRES_BIN=/usr/lib/postgresql/9.6/bin/postgres POSTGRES_DATABASE=/var/ramfs/postgresql/9.6/main POSTGRES_CONFIG=/etc/postgresql/9.6/main/postgresql.conf

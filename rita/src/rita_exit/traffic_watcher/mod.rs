@@ -104,10 +104,12 @@ fn get_babel_info(
     Ok(destinations)
 }
 
-fn generate_helper_maps(
-    our_id: &Identity,
-    clients: &[Identity],
-) -> Result<(HashMap<WgKey, Identity>, HashMap<IpAddr, Identity>), Error> {
+struct HelperMapReturn {
+    wg_to_id: HashMap<WgKey, Identity>,
+    ip_to_id: HashMap<IpAddr, Identity>,
+}
+
+fn generate_helper_maps(our_id: &Identity, clients: &[Identity]) -> Result<HelperMapReturn, Error> {
     let mut identities: HashMap<WgKey, Identity> = HashMap::new();
     let mut id_from_ip: HashMap<IpAddr, Identity> = HashMap::new();
     let our_settings = SETTING.get_network();
@@ -118,7 +120,10 @@ fn generate_helper_maps(
         id_from_ip.insert(ident.mesh_ip, *ident);
     }
 
-    Ok((identities, id_from_ip))
+    Ok(HelperMapReturn {
+        wg_to_id: identities,
+        ip_to_id: id_from_ip,
+    })
 }
 
 fn counters_logging(
@@ -221,7 +226,9 @@ pub fn watch(
         }
     };
 
-    let (identities, id_from_ip) = generate_helper_maps(&our_id, clients)?;
+    let ret = generate_helper_maps(&our_id, clients)?;
+    let identities = ret.wg_to_id;
+    let id_from_ip = ret.ip_to_id;
     let destinations = get_babel_info(routes, our_id, id_from_ip)?;
 
     let counters = match KI.read_wg_counters("wg_exit") {
