@@ -413,9 +413,10 @@ class World:
                 last_via = via
         for node in intended_debts.keys():
             for owed in intended_debts[node].keys():
-                if node.id not in debts or owed.id not in debts[node.id][owed.id]:
+                if node.id not in debts or owed.id not in debts[node.id]:
                     print("Debts map is incomplete! {} Has a predicted debt of {} for {} but not actual debt".format(
                         node.id, intended_debts[node][owed], owed.id))
+                    continue
                 if not fuzzy_match(debts[node.id][owed.id], intended_debts[node][owed]):
                     print("{} has a predicted debt of {} for {} but actual debt is {} {:.2%} accurate".format(
                         node.id, intended_debts[node][owed], owed.id, debts[node.id][owed.id], intended_debts[node][owed]/debts[node.id][owed.id]))
