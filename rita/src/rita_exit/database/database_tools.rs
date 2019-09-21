@@ -229,7 +229,7 @@ pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<()
 
     let mesh_ip_string = client.mesh_ip.to_string();
     let statement = clients.find(&mesh_ip_string);
-    r#try!(delete(statement).execute(connection));
+    delete(statement).execute(connection)?;
     Ok(())
 }
 
