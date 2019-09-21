@@ -65,7 +65,7 @@ r2d2 = "0.8"
 sha3 = "0.8"
 hex-literal = "0.2"
 sodiumoxide = "0.2"
-compressed_log = { path = "../../compressed_log"}
+compressed_log = {git = "https://github.com/althea-net/compressed_log", tag = "v0.2.2"}
 
 [dependencies.regex]
 version = "1.3"
