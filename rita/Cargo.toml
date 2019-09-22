@@ -43,7 +43,7 @@ lazy_static = "1.4"
 log = "0.4"
 minihttpse = "0.1"
 mockito = "0.20"
-mockstream = { git = "https://github.com/lazy-bitfield/rust-mockstream.git" }
+mockstream = "0.0"
 rand = "0.7"
 serde = "1.0"
 serde_derive = "1.0"
