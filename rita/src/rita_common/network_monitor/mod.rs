@@ -1,4 +1,5 @@
-//! Latency manager is an experimental system to apply traffic shaping to neighbors based on the neighbor rtt
+//! NetworkMonitor is an experimental system to apply traffic shaping to neighbors based on the neighbor rtt
+//! it also monitors various network properties to display to the user and to log for later investigation
 
 use crate::rita_common::rita_loop::fast_loop::FAST_LOOP_SPEED;
 use crate::rita_common::tunnel_manager::Neighbor as RitaNeighbor;
