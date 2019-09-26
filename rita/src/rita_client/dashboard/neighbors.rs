@@ -22,7 +22,9 @@ use std::collections::HashMap;
 #[derive(Serialize)]
 pub struct NodeInfo {
     pub nickname: String,
+    // TODO: Remove this once the dashboard no longer depends on it.
     pub ip: String,
+    pub id: Identity,
     pub route_metric_to_exit: u16,
     pub route_metric: u16,
     pub total_payments: Uint256,
@@ -94,8 +96,9 @@ fn generate_neighbors_list(
         if maybe_route.is_err() {
             output.push(nonviable_node_info(
                 nickname,
-                0,
+                u16::max_value(),
                 identity.mesh_ip.to_string(),
+                *identity,
             ));
             continue;
         }
@@ -114,6 +117,7 @@ fn generate_neighbors_list(
                     nickname,
                     neigh_route.metric,
                     identity.mesh_ip.to_string(),
+                    *identity,
                 ));
                 continue;
             }
@@ -122,7 +126,8 @@ fn generate_neighbors_list(
 
             output.push(NodeInfo {
                 nickname: nickname.to_string(),
-                ip: serde_json::to_string(&identity.mesh_ip).unwrap(),
+                ip: identity.mesh_ip.to_string(),
+                id: *identity,
                 route_metric_to_exit: exit_route.metric,
                 route_metric: neigh_route.metric,
                 total_payments: debt_info.total_payment_received.clone(),
@@ -133,8 +138,9 @@ fn generate_neighbors_list(
         } else {
             output.push(nonviable_node_info(
                 nickname,
-                0,
+                neigh_route.metric,
                 identity.mesh_ip.to_string(),
+                *identity,
             ));
         }
     }
@@ -154,10 +160,16 @@ fn merge_debts_and_neighbors(
     }
 }
 
-fn nonviable_node_info(nickname: ArrayString<[u8; 32]>, neigh_metric: u16, ip: String) -> NodeInfo {
+fn nonviable_node_info(
+    nickname: ArrayString<[u8; 32]>,
+    neigh_metric: u16,
+    ip: String,
+    id: Identity,
+) -> NodeInfo {
     NodeInfo {
         nickname: nickname.to_string(),
         ip,
+        id,
         total_payments: 0u32.into(),
         debt: 0.into(),
         link_cost: 0,
