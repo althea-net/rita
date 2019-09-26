@@ -19,4 +19,4 @@ failure = "0.1"
 owning_ref = "0.4"
 lazy_static = "1.4"
 clarity = "0.1"
-arrayvec = {version= "0.4", features = ["serde-1"]}
+arrayvec = {version= "0.5", features = ["serde"]}
