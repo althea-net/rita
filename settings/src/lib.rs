@@ -189,5 +189,4 @@ mod tests {
     fn test_exit_settings_example() {
         RitaExitSettingsStruct::new("example_exit.toml").unwrap();
     }
-
 }
