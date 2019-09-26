@@ -9,10 +9,10 @@ use failure::Error;
 pub fn get_nickname(_req: HttpRequest) -> Result<HttpResponse, Error> {
     let nick = SETTING.get_network().nickname;
 
-    if nick.is_none() {
-        bail!("Nickname not set!")
+    if let Some(nick) = nick {
+        Ok(HttpResponse::Ok().json(nick.to_string()))
     } else {
-        Ok(HttpResponse::Ok().json(nick.unwrap().to_string()))
+        bail!("Nickname not set!")
     }
 }
 

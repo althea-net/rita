@@ -22,7 +22,9 @@ use std::collections::HashMap;
 #[derive(Serialize)]
 pub struct NodeInfo {
     pub nickname: String,
+    // TODO: Remove this once the dashboard no longer depends on it.
     pub ip: String,
+    pub id: Identity,
     pub route_metric_to_exit: u16,
     pub route_metric: u16,
     pub total_payments: Uint256,
@@ -49,8 +51,7 @@ pub fn get_neighbor_info(
                     .from_err()
                     .and_then(|neighbors| {
                         let mut debts = debts.unwrap();
-                        if neighbors.is_ok() {
-                            let neighbors = neighbors.unwrap();
+                        if let Ok(neighbors) = neighbors {
                             merge_debts_and_neighbors(neighbors, &mut debts);
                         }
 
@@ -94,15 +95,16 @@ fn generate_neighbors_list(
         if maybe_route.is_err() {
             output.push(nonviable_node_info(
                 nickname,
-                0,
+                u16::max_value(),
                 identity.mesh_ip.to_string(),
+                *identity,
             ));
             continue;
         }
         let neigh_route = maybe_route.unwrap();
 
-        if current_exit.is_some() {
-            let exit_ip = current_exit.unwrap().id.mesh_ip;
+        if let Some(current_exit) = current_exit {
+            let exit_ip = current_exit.id.mesh_ip;
             let maybe_exit_route =
                 get_route_via_neigh(identity.mesh_ip, exit_ip, &route_table_sample);
 
@@ -114,6 +116,7 @@ fn generate_neighbors_list(
                     nickname,
                     neigh_route.metric,
                     identity.mesh_ip.to_string(),
+                    *identity,
                 ));
                 continue;
             }
@@ -122,7 +125,8 @@ fn generate_neighbors_list(
 
             output.push(NodeInfo {
                 nickname: nickname.to_string(),
-                ip: serde_json::to_string(&identity.mesh_ip).unwrap(),
+                ip: identity.mesh_ip.to_string(),
+                id: *identity,
                 route_metric_to_exit: exit_route.metric,
                 route_metric: neigh_route.metric,
                 total_payments: debt_info.total_payment_received.clone(),
@@ -133,8 +137,9 @@ fn generate_neighbors_list(
         } else {
             output.push(nonviable_node_info(
                 nickname,
-                0,
+                neigh_route.metric,
                 identity.mesh_ip.to_string(),
+                *identity,
             ));
         }
     }
@@ -154,10 +159,16 @@ fn merge_debts_and_neighbors(
     }
 }
 
-fn nonviable_node_info(nickname: ArrayString<[u8; 32]>, neigh_metric: u16, ip: String) -> NodeInfo {
+fn nonviable_node_info(
+    nickname: ArrayString<[u8; 32]>,
+    neigh_metric: u16,
+    ip: String,
+    id: Identity,
+) -> NodeInfo {
     NodeInfo {
         nickname: nickname.to_string(),
         ip,
+        id,
         total_payments: 0u32.into(),
         debt: 0.into(),
         link_cost: 0,
