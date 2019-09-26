@@ -51,8 +51,7 @@ pub fn get_neighbor_info(
                     .from_err()
                     .and_then(|neighbors| {
                         let mut debts = debts.unwrap();
-                        if neighbors.is_ok() {
-                            let neighbors = neighbors.unwrap();
+                        if let Ok(neighbors) = neighbors {
                             merge_debts_and_neighbors(neighbors, &mut debts);
                         }
 
@@ -104,8 +103,8 @@ fn generate_neighbors_list(
         }
         let neigh_route = maybe_route.unwrap();
 
-        if current_exit.is_some() {
-            let exit_ip = current_exit.unwrap().id.mesh_ip;
+        if let Some(current_exit) = current_exit {
+            let exit_ip = current_exit.id.mesh_ip;
             let maybe_exit_route =
                 get_route_via_neigh(identity.mesh_ip, exit_ip, &route_table_sample);
 

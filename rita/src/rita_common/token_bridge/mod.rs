@@ -265,7 +265,7 @@ fn eth_bridge(_state: State, bridge: &TokenBridge) {
                     // Money has come over the bridge
                     if our_xdai_balance > 0u32.into() {
                         Box::new(bridge.xdai_to_dai_bridge(our_xdai_balance.clone()).then(
-                            move |res| {
+                            move |_res| {
                                 TokenBridge::from_registry().do_send(DetailedStateChange(
                                     DetailedBridgeState::XdaiToDai {
                                         amount: our_xdai_balance.clone(),
