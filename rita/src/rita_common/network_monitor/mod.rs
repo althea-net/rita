@@ -103,7 +103,7 @@ impl RunningPacketLossStats {
         self.total_lost += u32::from(lost_packets);
         self.total_packets += u32::from(SAMPLE_PERIOD);
         self.five_minute_loss[self.front] = lost_packets;
-        self.front += 1 % SAMPLES_IN_FIVE_MINUTES;
+        self.front = (self.front + 1) % SAMPLES_IN_FIVE_MINUTES;
     }
     pub fn get_avg(&self) -> Option<f32> {
         if self.total_packets > 0 {
