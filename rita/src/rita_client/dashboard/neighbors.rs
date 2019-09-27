@@ -1,9 +1,10 @@
 use crate::rita_common::debt_keeper::{DebtKeeper, Dump, NodeDebtData};
+use crate::rita_common::network_monitor::{GetStats, IfaceStats, NetworkMonitor, Stats};
 use crate::rita_common::tunnel_manager::{GetNeighbors, Neighbor, TunnelManager};
 use crate::SETTING;
-use ::actix::SystemService;
-use ::actix_web::AsyncResponder;
-use ::actix_web::{HttpRequest, Json};
+use actix::SystemService;
+use actix_web::AsyncResponder;
+use actix_web::{HttpRequest, Json};
 use althea_types::Identity;
 use arrayvec::ArrayString;
 use babel_monitor::get_installed_route;
@@ -31,6 +32,7 @@ pub struct NodeInfo {
     pub debt: Int256,
     pub link_cost: u16,
     pub price_to_exit: u32,
+    pub stats: IfaceStats,
 }
 
 /// Gets info about neighbors, including interested data about what their route
@@ -51,6 +53,7 @@ pub fn get_neighbor_info(
                     .from_err()
                     .and_then(|neighbors| {
                         let mut debts = debts.unwrap();
+
                         if let Ok(neighbors) = neighbors {
                             merge_debts_and_neighbors(neighbors, &mut debts);
                         }
@@ -62,11 +65,22 @@ pub fn get_neighbor_info(
                             .and_then(move |stream| {
                                 start_connection(stream).and_then(move |stream| {
                                     parse_routes(stream)
-                                        .and_then(move |routes| {
-                                            let route_table_sample = routes.1;
-                                            let output =
-                                                generate_neighbors_list(route_table_sample, debts);
-                                            Ok(Json(output))
+                                        .and_then(|(_stream, routes)| {
+                                            let route_table_sample = routes.clone();
+
+                                            NetworkMonitor::from_registry()
+                                                .send(GetStats {})
+                                                .from_err()
+                                                .and_then(|stats| {
+                                                    let stats = stats.unwrap();
+                                                    let output = generate_neighbors_list(
+                                                        stats,
+                                                        route_table_sample,
+                                                        debts,
+                                                    );
+
+                                                    Ok(Json(output))
+                                                })
                                         })
                                         .responder()
                                 })
@@ -78,6 +92,7 @@ pub fn get_neighbor_info(
 
 /// generates a list of neighbors coorelated with the quality of the route to the exit they provide
 fn generate_neighbors_list(
+    stats: Stats,
     route_table_sample: Vec<Route>,
     debts: HashMap<Identity, NodeDebtData>,
 ) -> Vec<NodeInfo> {
@@ -103,7 +118,8 @@ fn generate_neighbors_list(
         }
         let neigh_route = maybe_route.unwrap();
 
-        if let Some(current_exit) = current_exit {
+        let tup = (current_exit, stats.get(&neigh_route.iface));
+        if let (Some(current_exit), Some(stats_entry)) = tup {
             let exit_ip = current_exit.id.mesh_ip;
             let maybe_exit_route =
                 get_route_via_neigh(identity.mesh_ip, exit_ip, &route_table_sample);
@@ -133,6 +149,7 @@ fn generate_neighbors_list(
                 debt: debt_info.debt.clone(),
                 link_cost: exit_route.refmetric,
                 price_to_exit: exit_route.price,
+                stats: *stats_entry,
             })
         } else {
             output.push(nonviable_node_info(
@@ -175,5 +192,6 @@ fn nonviable_node_info(
         price_to_exit: 0,
         route_metric_to_exit: u16::max_value(),
         route_metric: neigh_metric,
+        stats: IfaceStats::default(),
     }
 }
