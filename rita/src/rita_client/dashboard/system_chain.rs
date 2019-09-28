@@ -46,7 +46,7 @@ pub fn set_system_blockchain(path: Path<String>) -> Result<HttpResponse, Error> 
         payment.net_version = Some(4);
         payment.system_chain = SystemChain::Rinkeby;
         payment.withdraw_chain = SystemChain::Rinkeby;
-        oracle_url = "https://updates.altheamesh.com/prices".to_string();
+        oracle_url = "https://updates.altheamesh.com/testprices".to_string();
         // reset balance so that things take effect immediatley in the UI
         payment.balance = 0u32.into();
     } else {
