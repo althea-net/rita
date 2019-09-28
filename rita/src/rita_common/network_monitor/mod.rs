@@ -12,6 +12,7 @@ use actix::SystemService;
 use althea_types::WgKey;
 use babel_monitor::Neighbor as BabelNeighbor;
 use babel_monitor::Route as BabelRoute;
+use failure::Error;
 use std::collections::HashMap;
 
 const SAMPLE_PERIOD: u8 = FAST_LOOP_SPEED as u8;
@@ -19,7 +20,8 @@ const SAMPLES_IN_FIVE_MINUTES: usize = 300 / SAMPLE_PERIOD as usize;
 
 /// Implements https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
 /// to keep track of neighbor latency in an online fashion
-struct RunningLatencyStats {
+#[derive(Clone)]
+pub struct RunningLatencyStats {
     count: u32,
     mean: f32,
     m2: f32,
@@ -76,7 +78,8 @@ impl RunningLatencyStats {
 /// more data processing to get correct values. 'Reach' is a 16 second bitvector of hello/IHU
 /// outcomes, but we're sampling every 5 seconds, in order to keep samples from interfering with
 /// each other we take the top 5 bits and use that to compute packet loss.
-struct RunningPacketLossStats {
+#[derive(Clone)]
+pub struct RunningPacketLossStats {
     /// the number of packets lost during each 5 second sample period over the last five minutes
     five_minute_loss: [u8; SAMPLES_IN_FIVE_MINUTES],
     /// the 'front' of the looping five minute sample queue
@@ -144,6 +147,7 @@ fn has_packet_loss(sample: u16) -> bool {
     lost_packets > 0
 }
 
+#[derive(Clone)]
 pub struct NetworkMonitor {
     latency_history: HashMap<String, RunningLatencyStats>,
     packet_loss_history: HashMap<String, RunningPacketLossStats>,
@@ -177,6 +181,62 @@ impl NetworkMonitor {
 impl Default for NetworkMonitor {
     fn default() -> NetworkMonitor {
         NetworkMonitor::new()
+    }
+}
+
+#[derive(Default, Serialize, Copy, Clone)]
+pub struct LatencyStats {
+    avg: Option<f32>,
+    std_dev: Option<f32>,
+}
+
+#[derive(Default, Serialize, Copy, Clone)]
+pub struct PacketLossStats {
+    avg: Option<f32>,
+    five_min_avg: f32,
+}
+
+pub struct GetStats {}
+
+#[derive(Serialize, Default, Copy, Clone)]
+pub struct IfaceStats {
+    latency: LatencyStats,
+    packet_loss: PacketLossStats,
+}
+
+impl Message for GetStats {
+    type Result = Result<Stats, Error>;
+}
+
+pub type Stats = HashMap<String, IfaceStats>;
+
+impl Handler<GetStats> for NetworkMonitor {
+    type Result = Result<Stats, Error>;
+
+    fn handle(&mut self, _msg: GetStats, _ctx: &mut Context<Self>) -> Self::Result {
+        let mut stats = Stats::new();
+
+        for (iface, latency_stats) in self.latency_history.iter() {
+            if let Some(packet_loss_stats) = self.packet_loss_history.get(iface) {
+                stats.insert(
+                    iface.clone(),
+                    IfaceStats {
+                        latency: LatencyStats {
+                            avg: latency_stats.get_avg(),
+                            std_dev: latency_stats.get_std_dev(),
+                        },
+                        packet_loss: PacketLossStats {
+                            avg: packet_loss_stats.get_avg(),
+                            five_min_avg: packet_loss_stats.get_five_min_average(),
+                        },
+                    },
+                );
+            } else {
+                error!("Found entry in one that's not in the other ")
+            }
+        }
+
+        Ok(stats)
     }
 }
 
