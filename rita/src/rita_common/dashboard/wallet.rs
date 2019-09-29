@@ -1,4 +1,6 @@
 use crate::rita_common::oracle::update_nonce;
+use crate::rita_common::oracle::Oracle;
+use crate::rita_common::oracle::ZeroWindowStart;
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::rita_common::token_bridge::eth_equal;
 use crate::rita_common::token_bridge::GetBridge;
@@ -59,6 +61,8 @@ pub fn withdraw_all(path: Path<Address>) -> Box<dyn Future<Item = HttpResponse, 
     let gas_price = payment_settings.gas_price.clone();
     let balance = payment_settings.balance.clone();
     drop(payment_settings);
+
+    Oracle::from_registry().do_send(ZeroWindowStart());
 
     let tx_gas = 21000u32.into();
     let tx_cost = gas_price * tx_gas;
