@@ -18,13 +18,20 @@ use clarity::Address;
 use futures::{future, Future};
 use num256::Int256;
 use num256::Uint256;
+use num_traits::identities::Zero;
 use settings::RitaCommonSettings;
 use std::time::Duration;
 use std::time::Instant;
 use web30::client::Web3;
 
 pub struct Oracle {
-    last_updated: Instant,
+    /// An instant representing the start of a short period where the balance can
+    /// actually go to zero. This is becuase full nodes (incluing Infura) have an infuriating
+    /// chance of returning a zero balance if they are not fully synced, causing all sorts of
+    /// disruption. So instead when we manually zero the balance (send a withdraw_all) we open
+    /// up a short five minute window during which we will actually trust the full node if it
+    /// hands us a zero balance
+    zero_window: Option<Instant>,
 }
 
 impl Actor for Oracle {
@@ -40,15 +47,25 @@ impl SystemService for Oracle {
 
 impl Oracle {
     pub fn new() -> Self {
-        Oracle {
-            last_updated: Instant::now(),
-        }
+        Oracle { zero_window: None }
     }
 }
 
 impl Default for Oracle {
     fn default() -> Oracle {
         Oracle::new()
+    }
+}
+
+const ZERO_WINDOW_TIME: Duration = Duration::from_secs(300);
+
+#[derive(Message)]
+pub struct ZeroWindowStart();
+
+impl Handler<ZeroWindowStart> for Oracle {
+    type Result = ();
+    fn handle(&mut self, _msg: ZeroWindowStart, _ctx: &mut Context<Self>) -> Self::Result {
+        self.zero_window = Some(Instant::now());
     }
 }
 
@@ -72,7 +89,7 @@ impl Handler<Update> for Oracle {
         drop(dao_settings);
 
         info!("About to make web3 requests to {}", full_node);
-        update_balance(our_address, &web3, full_node.clone());
+        update_balance(our_address, &web3, full_node.clone(), self.zero_window);
         update_nonce(our_address, &web3, full_node.clone());
         update_gas_price(&web3, full_node.clone());
         get_net_version(&web3, full_node);
@@ -81,14 +98,18 @@ impl Handler<Update> for Oracle {
         } else {
             info!("User has disabled the Oracle!");
         }
-        self.last_updated = Instant::now();
     }
 }
 
 /// Gets the balance for the provided eth address and updates it
 /// in the global SETTING variable, do not use this function as a generic
 /// balance getter.
-fn update_balance(our_address: Address, web3: &Web3, full_node: String) {
+fn update_balance(
+    our_address: Address,
+    web3: &Web3,
+    full_node: String,
+    zero_window: Option<Instant>,
+) {
     let res = web3
         .eth_get_balance(our_address)
         .then(move |balance| match balance {
@@ -98,10 +119,18 @@ fn update_balance(our_address: Address, web3: &Web3, full_node: String) {
                     full_node, value
                 );
                 let our_balance = &mut SETTING.get_payment_mut().balance;
-                // if our balance is not zero and the response we get from the full node
-                // is zero either we very carefully emptied our wallet or it's that annoying Geth bug
-                if !(*our_balance != Uint256::zero() && value == Uint256::zero()) {
-                    *our_balance = value;
+                // our balance was not previously zero and we now have a zero
+                let zeroed = *our_balance != Uint256::zero() && value == Uint256::zero();
+                match (zeroed, zero_window) {
+                    (false, _) => {
+                        *our_balance = value;
+                    }
+                    (true, Some(time)) => {
+                        if Instant::now() - time <= ZERO_WINDOW_TIME {
+                            *our_balance = value;
+                        }
+                    }
+                    (true, None) => {}
                 }
                 Ok(())
             }
