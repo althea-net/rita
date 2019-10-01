@@ -63,11 +63,16 @@ impl RunningLatencyStats {
         let avg = self.get_avg();
         let std_dev = self.get_std_dev();
         match (avg, std_dev) {
-            (Some(avg), Some(std_dev)) => std_dev > avg * 4f32,
+            (Some(avg), Some(std_dev)) => std_dev > avg * 10f32,
             (Some(_avg), None) => false,
             (None, Some(_std_dev)) => false,
             (None, None) => false,
         }
+    }
+    pub fn reset(&mut self) {
+        self.count = 0u32;
+        self.mean = 0f32;
+        self.m2 = 0f32;
     }
 }
 
@@ -289,6 +294,9 @@ fn observe_network(
                 TunnelManager::from_registry().do_send(GotBloat {
                     iface: iface.to_string(),
                 });
+                // reset the values for this entry because we have modified
+                // the qdisc and it's no longer an accurate representation
+                running_stats.reset();
             }
             (false, Some(key), Some(avg), Some(std_dev)) => info!(
                 "Neighbor {} is ok with AVG {} STDDEV {} and CV {}",
