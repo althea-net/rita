@@ -103,15 +103,20 @@ impl dyn KernelInterface {
 
     /// This sets up latency protecting flow control, either cake on openwrt
     /// or fq_codel on older devices/kernels
-    pub fn set_codel_shaping(&self, iface_name: &str) -> Result<(), Error> {
+    pub fn set_codel_shaping(&self, iface_name: &str, speed: Option<usize>) -> Result<(), Error> {
         if self.has_qdisc(iface_name)? {
             self.delete_qdisc(iface_name)?;
         }
+        let bandwidth = match speed {
+            Some(val) => format!("bandwidth {}mbps", val),
+            None => "unlimited".to_string(),
+        };
 
         let output = self.run_command(
             "tc",
             &[
                 "qdisc", "add", "dev", iface_name, "root", "handle", "1:", "cake", "metro",
+                &bandwidth,
             ],
         )?;
 
