@@ -289,6 +289,12 @@ fn eth_bridge(_state: State, bridge: &TokenBridge) {
                         ) as Box<dyn Future<Item = (), Error = Error>>
                     // all other steps are done and the eth is sitting and waiting
                     } else {
+                        TokenBridge::from_registry().do_send(DetailedStateChange(
+                            DetailedBridgeState::NoOp {
+                                eth_balance: our_eth_balance,
+                                wei_per_dollar,
+                            },
+                        ));
                         Box::new(futures::future::ok(()))
                             as Box<dyn Future<Item = (), Error = Error>>
                     }
