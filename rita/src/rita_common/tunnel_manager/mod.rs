@@ -792,6 +792,8 @@ impl TunnelManager {
                             tunnel
                         );
                         tunnel.last_contact = Instant::now();
+                        // update the nickname in case they changed it live
+                        tunnel.neigh_id.global.nickname = their_localid.global.nickname;
                     }
                 }
             }
