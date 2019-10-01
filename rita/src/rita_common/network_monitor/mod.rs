@@ -56,20 +56,15 @@ impl RunningLatencyStats {
         let delta2 = sample - self.mean;
         self.m2 += delta * delta2;
     }
-    /// returns true if a variable is greater than two std-dev above the mean
-    pub fn is_outlier(&self, sample: f32) -> Option<bool> {
-        if self.count > 2 {
-            let std_dev = self.get_std_dev().unwrap();
-            let avg = self.get_avg().unwrap();
-            let two_deviations = std_dev + std_dev;
-            let two_deviations_above_mean = avg + two_deviations;
-            if sample > two_deviations_above_mean {
-                Some(true)
-            } else {
-                Some(false)
-            }
-        } else {
-            None
+    /// A hand tuned heuristic used to determine if a connection is bloated
+    pub fn is_bloated(&self) -> bool {
+        let avg = self.get_avg();
+        let std_dev = self.get_std_dev();
+        match (avg, std_dev) {
+            (Some(avg), Some(std_dev)) => std_dev > avg * 4f32,
+            (Some(_avg), None) => false,
+            (None, Some(_std_dev)) => false,
+            (None, None) => false,
         }
     }
 }
@@ -278,14 +273,24 @@ fn observe_network(
         }
         let running_stats = latency_history.get_mut(iface).unwrap();
         match (
-            running_stats.is_outlier(neigh.rtt),
+            running_stats.is_bloated(),
             get_wg_key_by_ifname(neigh, rita_neighbors),
+            running_stats.get_avg(),
+            running_stats.get_std_dev(),
         ) {
-            (Some(true), Some(key)) => info!("Latency spike of {}ms to {}", neigh.rtt, key),
-            (Some(true), None) => {
-                error!("We have a latency spike to {} but no Rita neighbor!", iface)
-            }
-            (_, _) => {}
+            (true, Some(key), Some(avg), Some(std_dev)) => info!(
+                "{} is now defined as bloated with AVG {} STDDEV {} and CV {}!",
+                key, avg, std_dev, neigh.rtt
+            ),
+            (false, Some(key), Some(avg), Some(std_dev)) => info!(
+                "Neighbor {} is ok with AVG {} STDDEV {} and CV {}",
+                key, avg, std_dev, neigh.rtt
+            ),
+            (true, None, _, _) => error!(
+                "We have a bloated connection to {} but no Rita neighbor!",
+                iface
+            ),
+            (_, _, _, _) => {}
         }
         running_stats.add_sample(neigh.rtt);
     }
