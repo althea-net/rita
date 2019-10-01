@@ -466,19 +466,26 @@ impl Handler<PortCallback> for TunnelManager {
 
 pub struct GetNeighbors;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Neighbor {
     pub identity: LocalIdentity,
     pub iface_name: String,
     pub tunnel_ip: IpAddr,
+    pub speed_limit: Option<usize>,
 }
 
 impl Neighbor {
-    fn new(identity: LocalIdentity, iface_name: String, tunnel_ip: IpAddr) -> Neighbor {
+    fn new(
+        identity: LocalIdentity,
+        iface_name: String,
+        tunnel_ip: IpAddr,
+        speed_limit: Option<usize>,
+    ) -> Neighbor {
         Neighbor {
             identity,
             iface_name,
             tunnel_ip,
+            speed_limit,
         }
     }
 }
@@ -497,6 +504,7 @@ impl Handler<GetNeighbors> for TunnelManager {
                     tunnel.neigh_id,
                     tunnel.iface_name.clone(),
                     tunnel.ip,
+                    tunnel.speed_limit,
                 ));
             }
         }

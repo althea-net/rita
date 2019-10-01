@@ -32,6 +32,7 @@ pub struct NodeInfo {
     pub debt: Int256,
     pub link_cost: u16,
     pub price_to_exit: u32,
+    pub speed_limit: Option<usize>,
     pub stats: IfaceStats,
 }
 
@@ -52,11 +53,10 @@ pub fn get_neighbor_info(
                     .send(GetNeighbors {})
                     .from_err()
                     .and_then(|neighbors| {
-                        let mut debts = debts.unwrap();
+                        let debts = debts.unwrap();
+                        let neighbors = neighbors.unwrap();
 
-                        if let Ok(neighbors) = neighbors {
-                            merge_debts_and_neighbors(neighbors, &mut debts);
-                        }
+                        let combined_list = merge_debts_and_neighbors(neighbors, debts);
 
                         let babel_port = SETTING.get_network().babel_port;
 
@@ -76,7 +76,7 @@ pub fn get_neighbor_info(
                                                     let output = generate_neighbors_list(
                                                         stats,
                                                         route_table_sample,
-                                                        debts,
+                                                        combined_list,
                                                     );
 
                                                     Ok(Json(output))
@@ -94,14 +94,14 @@ pub fn get_neighbor_info(
 fn generate_neighbors_list(
     stats: Stats,
     route_table_sample: Vec<Route>,
-    debts: HashMap<Identity, NodeDebtData>,
+    debts: HashMap<Identity, (NodeDebtData, Neighbor)>,
 ) -> Vec<NodeInfo> {
     let mut output = Vec::new();
 
     let exit_client = SETTING.get_exit_client();
     let current_exit = exit_client.get_current_exit();
 
-    for (identity, debt_info) in debts.iter() {
+    for (identity, (debt_info, neigh)) in debts.iter() {
         let nickname = match identity.nickname {
             Some(val) => val,
             None => ArrayString::<[u8; 32]>::from("No Nickname").unwrap(),
@@ -113,6 +113,7 @@ fn generate_neighbors_list(
                 u16::max_value(),
                 identity.mesh_ip.to_string(),
                 *identity,
+                neigh.speed_limit,
             ));
             continue;
         }
@@ -133,6 +134,7 @@ fn generate_neighbors_list(
                     neigh_route.metric,
                     identity.mesh_ip.to_string(),
                     *identity,
+                    neigh.speed_limit,
                 ));
                 continue;
             }
@@ -145,6 +147,7 @@ fn generate_neighbors_list(
                 id: *identity,
                 route_metric_to_exit: exit_route.metric,
                 route_metric: neigh_route.metric,
+                speed_limit: neigh.speed_limit,
                 total_payments: debt_info.total_payment_received.clone(),
                 debt: debt_info.debt.clone(),
                 link_cost: exit_route.refmetric,
@@ -157,6 +160,7 @@ fn generate_neighbors_list(
                 neigh_route.metric,
                 identity.mesh_ip.to_string(),
                 *identity,
+                neigh.speed_limit,
             ));
         }
     }
@@ -168,12 +172,18 @@ fn generate_neighbors_list(
 /// the debts list is extended to include it
 fn merge_debts_and_neighbors(
     neighbors: Vec<Neighbor>,
-    debts: &mut HashMap<Identity, NodeDebtData>,
-) {
-    for neighbor in neighbors {
+    debts: HashMap<Identity, NodeDebtData>,
+) -> HashMap<Identity, (NodeDebtData, Neighbor)> {
+    let mut res = HashMap::new();
+    for neighbor in neighbors.iter() {
         let id = neighbor.identity.global;
-        debts.entry(id).or_insert_with(NodeDebtData::new);
+        if let Some(debts) = debts.get(&id) {
+            let local_debts = (*debts).clone();
+            let local_neighbor = (*neighbor).clone();
+            res.insert(id, (local_debts, local_neighbor));
+        }
     }
+    res
 }
 
 fn nonviable_node_info(
@@ -181,6 +191,7 @@ fn nonviable_node_info(
     neigh_metric: u16,
     ip: String,
     id: Identity,
+    speed_limit: Option<usize>,
 ) -> NodeInfo {
     NodeInfo {
         nickname: nickname.to_string(),
@@ -192,6 +203,7 @@ fn nonviable_node_info(
         price_to_exit: 0,
         route_metric_to_exit: u16::max_value(),
         route_metric: neigh_metric,
+        speed_limit,
         stats: IfaceStats::default(),
     }
 }
