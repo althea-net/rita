@@ -22,6 +22,18 @@ fn default_usage_tracker_file() -> String {
     "/etc/rita-usage-tracker.json".to_string()
 }
 
+fn default_bandwidth_limit_enabled() -> bool {
+    true
+}
+
+fn default_minimum_bandwidth_limit() -> usize {
+    50
+}
+
+fn default_starting_bandwidth_limit() -> usize {
+    10_000
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
     /// How much non-financial metrics matter compared to a route's cost. By default a 2x more
@@ -93,15 +105,28 @@ pub struct NetworkSettings {
     #[serde(default = "default_usage_tracker_file")]
     pub usage_tracker_file: String,
     #[serde(skip_deserializing, default)]
-    // Set to true by the dashboard when the user indicates they've made a backup
+    /// Set to true by the dashboard when the user indicates they've made a backup
     pub backup_created: bool,
+    /// Determines if this device will try and shape interface speeds
+    #[serde(default = "default_bandwidth_limit_enabled")]
+    pub bandwidth_limit_enabled: bool,
+    /// The minimum to which this device will shape an interface
+    #[serde(default = "default_minimum_bandwidth_limit")]
+    pub minimum_bandwidth_limit: usize,
+    /// The starting value for banwidth interface shaping, should be equal to or greater than
+    /// the maximum bandwidth of the fastest interface of the device.
+    #[serde(default = "default_starting_bandwidth_limit")]
+    pub starting_bandwidth_limit: usize,
 }
 
 impl Default for NetworkSettings {
     fn default() -> Self {
         NetworkSettings {
+            bandwidth_limit_enabled: default_bandwidth_limit_enabled(),
+            minimum_bandwidth_limit: default_minimum_bandwidth_limit(),
+            starting_bandwidth_limit: default_starting_bandwidth_limit(),
             backup_created: false,
-            metric_factor: 1900,
+            metric_factor: default_metric_factor(),
             mesh_ip: None,
             bounty_ip: "fd00::3".parse().unwrap(),
             discovery_ip: default_discovery_ip(),

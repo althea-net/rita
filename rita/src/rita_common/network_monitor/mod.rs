@@ -2,7 +2,9 @@
 //! it also monitors various network properties to display to the user and to log for later investigation
 
 use crate::rita_common::rita_loop::fast_loop::FAST_LOOP_SPEED;
+use crate::rita_common::tunnel_manager::GotBloat;
 use crate::rita_common::tunnel_manager::Neighbor as RitaNeighbor;
+use crate::rita_common::tunnel_manager::TunnelManager;
 use actix::Actor;
 use actix::Context;
 use actix::Handler;
@@ -278,10 +280,16 @@ fn observe_network(
             running_stats.get_avg(),
             running_stats.get_std_dev(),
         ) {
-            (true, Some(key), Some(avg), Some(std_dev)) => info!(
-                "{} is now defined as bloated with AVG {} STDDEV {} and CV {}!",
-                key, avg, std_dev, neigh.rtt
-            ),
+            (true, Some(key), Some(avg), Some(std_dev)) => {
+                info!(
+                    "{} is now defined as bloated with AVG {} STDDEV {} and CV {}!",
+                    key, avg, std_dev, neigh.rtt
+                );
+                // shape the misbehaving tunnel
+                TunnelManager::from_registry().do_send(GotBloat {
+                    iface: iface.to_string(),
+                });
+            }
             (false, Some(key), Some(avg), Some(std_dev)) => info!(
                 "Neighbor {} is ok with AVG {} STDDEV {} and CV {}",
                 key, avg, std_dev, neigh.rtt

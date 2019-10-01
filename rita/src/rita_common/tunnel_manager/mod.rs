@@ -124,12 +124,13 @@ fn test_payment_state() {
 
 #[derive(PartialEq, Debug, Clone, Eq, Hash)]
 pub struct Tunnel {
-    pub ip: IpAddr,              // Tunnel endpoint
-    pub iface_name: String,      // name of wg#
-    pub listen_ifidx: u32,       // the physical interface this tunnel is listening on
-    pub listen_port: u16,        // the local port this tunnel is listening on
-    pub neigh_id: LocalIdentity, // the identity of the counterparty tunnel
-    pub last_contact: Instant,   // When's the last we heard from the other end of this tunnel?
+    pub ip: IpAddr,                 // Tunnel endpoint
+    pub iface_name: String,         // name of wg#
+    pub listen_ifidx: u32,          // the physical interface this tunnel is listening on
+    pub listen_port: u16,           // the local port this tunnel is listening on
+    pub neigh_id: LocalIdentity,    // the identity of the counterparty tunnel
+    pub last_contact: Instant,      // When's the last we heard from the other end of this tunnel?
+    pub speed_limit: Option<usize>, // banwidth limit in mbps, used for Codel shaping
     state: TunnelState,
 }
 
@@ -148,6 +149,7 @@ impl Tunnel {
             listen_port: our_listen_port,
             neigh_id: their_id,
             last_contact: Instant::now(),
+            speed_limit: None,
             // By default new tunnels are in Registered state
             state: TunnelState {
                 payment_state: PaymentState::Paid,
@@ -172,7 +174,7 @@ impl Tunnel {
             network.external_nic.clone(),
             &mut SETTING.get_network_mut().default_route,
         )?;
-        KI.set_codel_shaping(&self.iface_name)
+        KI.set_codel_shaping(&self.iface_name, None)
     }
 
     /// Register this tunnel into Babel monitor
@@ -265,6 +267,71 @@ impl SystemService for TunnelManager {
 impl Default for TunnelManager {
     fn default() -> TunnelManager {
         TunnelManager::new()
+    }
+}
+
+/// Message sent by network monitor when it determines that an iface is bloated
+pub struct GotBloat {
+    pub iface: String,
+}
+
+impl Message for GotBloat {
+    type Result = ();
+}
+
+impl Handler<GotBloat> for TunnelManager {
+    type Result = ();
+
+    fn handle(&mut self, msg: GotBloat, _: &mut Context<Self>) -> Self::Result {
+        let network_settings = SETTING.get_network();
+        let minimum_bandwidth_limit = network_settings.minimum_bandwidth_limit;
+        let starting_bandwidth_limit = network_settings.starting_bandwidth_limit;
+        let bandwidth_limit_enabled = network_settings.bandwidth_limit_enabled;
+        drop(network_settings);
+        if !bandwidth_limit_enabled {
+            return;
+        }
+
+        let iface = msg.iface;
+        for (id, tunnel_list) in self.tunnels.iter_mut() {
+            for tunnel in tunnel_list {
+                if tunnel.iface_name == iface {
+                    match tunnel.speed_limit {
+                        // start at the startin glimit
+                        None => {
+                            tunnel.speed_limit = Some(starting_bandwidth_limit);
+                            set_shaping_or_error(&iface, starting_bandwidth_limit)
+                        }
+                        // after that cut the value by 20% each time
+                        Some(val) => {
+                            let new_val = (val as f32 * 0.8f32) as usize;
+                            if new_val < minimum_bandwidth_limit {
+                                error!("Interface {} for peer {} is showing bloat but we can't reduce it's bandwidth any further. Current value {}", iface, id.wg_public_key, val);
+                            } else {
+                                info!(
+                                    "Interface {} for peer {} is showing bloat new speed value {}",
+                                    iface, id.wg_public_key, new_val
+                                );
+                                set_shaping_or_error(&iface, new_val)
+                            }
+                        }
+                    }
+
+                    return;
+                }
+            }
+        }
+        error!(
+            "Could not find tunnel for banwdith limit with iface {}",
+            iface
+        );
+    }
+}
+
+/// tiny little helper function for GotBloat() limit is in mbps
+fn set_shaping_or_error(iface: &str, limit: usize) {
+    if let Err(e) = KI.set_codel_shaping(iface, Some(limit)) {
+        error!("Failed to shape tunnel for bloat! {}", e);
     }
 }
 
@@ -1045,7 +1112,7 @@ fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, Vec<Tunnel>>) -> Result<()
             if *payment_state == PaymentState::Overdue {
                 KI.set_classless_limit(iface_name, bw_per_iface)?;
             } else if *payment_state == PaymentState::Paid && has_limit {
-                KI.set_codel_shaping(iface_name)?;
+                KI.set_codel_shaping(iface_name, None)?;
             }
         }
     }
