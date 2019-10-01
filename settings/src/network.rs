@@ -104,7 +104,7 @@ pub struct NetworkSettings {
     /// Full file path for usage tracker storage
     #[serde(default = "default_usage_tracker_file")]
     pub usage_tracker_file: String,
-    #[serde(skip_deserializing, default)]
+    #[serde(default)]
     /// Set to true by the dashboard when the user indicates they've made a backup
     pub backup_created: bool,
     /// Determines if this device will try and shape interface speeds
