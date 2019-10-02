@@ -368,12 +368,18 @@ fn network_stats(babel_routes: &[BabelRoute], babel_neighbors: &[BabelNeighbor])
     }
 }
 
+/// Extracts the full path rtt for Neighbors
 fn extract_rtt(neighbors: &[BabelNeighbor]) -> Vec<f32> {
     neighbors.iter().map(|neigh| neigh.rtt).collect()
 }
 
+/// Extracts the full path rtt for installed routes
 fn extract_fp_rtt(routes: &[BabelRoute]) -> Vec<f32> {
-    routes.iter().map(|route| route.full_path_rtt).collect()
+    routes
+        .iter()
+        .filter(|route| route.installed)
+        .map(|route| route.full_path_rtt)
+        .collect()
 }
 
 fn mean(data: &[f32]) -> Option<f32> {
