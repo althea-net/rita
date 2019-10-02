@@ -103,17 +103,45 @@ impl dyn KernelInterface {
 
     /// This sets up latency protecting flow control, either cake on openwrt
     /// or fq_codel on older devices/kernels
-    pub fn set_codel_shaping(&self, iface_name: &str) -> Result<(), Error> {
+    pub fn set_codel_shaping(&self, iface_name: &str, speed: Option<usize>) -> Result<(), Error> {
         if self.has_qdisc(iface_name)? {
             self.delete_qdisc(iface_name)?;
         }
-
-        let output = self.run_command(
-            "tc",
-            &[
-                "qdisc", "add", "dev", iface_name, "root", "handle", "1:", "cake", "metro",
-            ],
-        )?;
+        // we need to duplicate most of this array because the borrow checker gets confused
+        // by references to vecs with contents of &str
+        let output = match speed {
+            Some(val) => self.run_command(
+                "tc",
+                &[
+                    "qdisc",
+                    "add",
+                    "dev",
+                    iface_name,
+                    "root",
+                    "handle",
+                    "1:",
+                    "cake",
+                    "bandwidth",
+                    &format!("{}mbit", val),
+                    "metro",
+                ],
+            )?,
+            None => self.run_command(
+                "tc",
+                &[
+                    "qdisc",
+                    "add",
+                    "dev",
+                    iface_name,
+                    "root",
+                    "handle",
+                    "1:",
+                    "cake",
+                    "unlimited",
+                    "metro",
+                ],
+            )?,
+        };
 
         if !output.status.success() {
             warn!("No support for the cake qdisc is detected, falling back to fq_codel");

@@ -2,7 +2,9 @@
 //! it also monitors various network properties to display to the user and to log for later investigation
 
 use crate::rita_common::rita_loop::fast_loop::FAST_LOOP_SPEED;
+use crate::rita_common::tunnel_manager::GotBloat;
 use crate::rita_common::tunnel_manager::Neighbor as RitaNeighbor;
+use crate::rita_common::tunnel_manager::TunnelManager;
 use actix::Actor;
 use actix::Context;
 use actix::Handler;
@@ -61,11 +63,16 @@ impl RunningLatencyStats {
         let avg = self.get_avg();
         let std_dev = self.get_std_dev();
         match (avg, std_dev) {
-            (Some(avg), Some(std_dev)) => std_dev > avg * 4f32,
+            (Some(avg), Some(std_dev)) => std_dev > avg * 10f32,
             (Some(_avg), None) => false,
             (None, Some(_std_dev)) => false,
             (None, None) => false,
         }
+    }
+    pub fn reset(&mut self) {
+        self.count = 0u32;
+        self.mean = 0f32;
+        self.m2 = 0f32;
     }
 }
 
@@ -278,10 +285,19 @@ fn observe_network(
             running_stats.get_avg(),
             running_stats.get_std_dev(),
         ) {
-            (true, Some(key), Some(avg), Some(std_dev)) => info!(
-                "{} is now defined as bloated with AVG {} STDDEV {} and CV {}!",
-                key, avg, std_dev, neigh.rtt
-            ),
+            (true, Some(key), Some(avg), Some(std_dev)) => {
+                info!(
+                    "{} is now defined as bloated with AVG {} STDDEV {} and CV {}!",
+                    key, avg, std_dev, neigh.rtt
+                );
+                // shape the misbehaving tunnel
+                TunnelManager::from_registry().do_send(GotBloat {
+                    iface: iface.to_string(),
+                });
+                // reset the values for this entry because we have modified
+                // the qdisc and it's no longer an accurate representation
+                running_stats.reset();
+            }
             (false, Some(key), Some(avg), Some(std_dev)) => info!(
                 "Neighbor {} is ok with AVG {} STDDEV {} and CV {}",
                 key, avg, std_dev, neigh.rtt
@@ -352,12 +368,18 @@ fn network_stats(babel_routes: &[BabelRoute], babel_neighbors: &[BabelNeighbor])
     }
 }
 
+/// Extracts the full path rtt for Neighbors
 fn extract_rtt(neighbors: &[BabelNeighbor]) -> Vec<f32> {
     neighbors.iter().map(|neigh| neigh.rtt).collect()
 }
 
+/// Extracts the full path rtt for installed routes
 fn extract_fp_rtt(routes: &[BabelRoute]) -> Vec<f32> {
-    routes.iter().map(|route| route.full_path_rtt).collect()
+    routes
+        .iter()
+        .filter(|route| route.installed)
+        .map(|route| route.full_path_rtt)
+        .collect()
 }
 
 fn mean(data: &[f32]) -> Option<f32> {
