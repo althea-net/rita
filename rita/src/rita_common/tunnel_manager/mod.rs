@@ -312,7 +312,8 @@ impl Handler<GotBloat> for TunnelManager {
                                     "Interface {} for peer {} is showing bloat new speed value {}",
                                     iface, id.wg_public_key, new_val
                                 );
-                                set_shaping_or_error(&iface, new_val)
+                                set_shaping_or_error(&iface, new_val);
+                                tunnel.speed_limit = Some(new_val);
                             }
                         }
                     }
