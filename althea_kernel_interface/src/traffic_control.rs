@@ -107,18 +107,41 @@ impl dyn KernelInterface {
         if self.has_qdisc(iface_name)? {
             self.delete_qdisc(iface_name)?;
         }
-        let bandwidth = match speed {
-            Some(val) => format!("bandwidth {}mbps", val),
-            None => "unlimited".to_string(),
+        // we need to duplicate most of this array because the borrow checker gets confused
+        // by references to vecs with contents of &str
+        let output = match speed {
+            Some(val) => self.run_command(
+                "tc",
+                &[
+                    "qdisc",
+                    "add",
+                    "dev",
+                    iface_name,
+                    "root",
+                    "handle",
+                    "1:",
+                    "cake",
+                    "bandwidth",
+                    &format!("{}mbit", val),
+                    "metro",
+                ],
+            )?,
+            None => self.run_command(
+                "tc",
+                &[
+                    "qdisc",
+                    "add",
+                    "dev",
+                    iface_name,
+                    "root",
+                    "handle",
+                    "1:",
+                    "cake",
+                    "unlimited",
+                    "metro",
+                ],
+            )?,
         };
-
-        let output = self.run_command(
-            "tc",
-            &[
-                "qdisc", "add", "dev", iface_name, "root", "handle", "1:", "cake", "metro",
-                &bandwidth,
-            ],
-        )?;
 
         if !output.status.success() {
             warn!("No support for the cake qdisc is detected, falling back to fq_codel");
