@@ -1058,6 +1058,9 @@ fn tunnel_state_change(
                                 );
                                 tunnel.state.payment_state = PaymentState::Paid;
                                 tunnel_bw_limits_need_change = true;
+                                // latency detector probably got confused while enforcement
+                                // occurred
+                                tunnel.speed_limit = None;
                             }
                         }
                     }
