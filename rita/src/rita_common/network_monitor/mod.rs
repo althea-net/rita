@@ -76,7 +76,7 @@ impl RunningLatencyStats {
     }
 }
 
-/// Due to the way babel communicates packet loss the fucntions here require slightly
+/// Due to the way babel communicates packet loss the functions here require slightly
 /// more data processing to get correct values. 'Reach' is a 16 second bitvector of hello/IHU
 /// outcomes, but we're sampling every 5 seconds, in order to keep samples from interfering with
 /// each other we take the top 5 bits and use that to compute packet loss.
