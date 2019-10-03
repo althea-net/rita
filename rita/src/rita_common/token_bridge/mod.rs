@@ -257,23 +257,27 @@ fn eth_bridge(_state: State, bridge: &TokenBridge) {
             .and_then(
                 move |(our_dai_balance, our_eth_balance, wei_per_dollar, our_xdai_balance)| {
                     trace!(
-                        "xdai rescue state is {} dai {} eth {} wei per dollar",
+                        "xdai rescue state is {} dai {} eth {} xdai {} wei per dollar",
                         our_dai_balance,
                         our_eth_balance,
+                        our_xdai_balance,
                         wei_per_dollar
                     );
+                    let tx_gas: Uint256 = 21000u32.into();
+                    // if you actually ask for the gas price you'll get an incorrect value
+                    let xdai_gas_price: Uint256 = 60_000_000_000u128.into();
+                    let xdai_tx_cost = xdai_gas_price * tx_gas;
                     // Money has come over the bridge
-                    if our_xdai_balance > 0u32.into() {
-                        Box::new(bridge.xdai_to_dai_bridge(our_xdai_balance.clone()).then(
-                            move |_res| {
-                                TokenBridge::from_registry().do_send(DetailedStateChange(
-                                    DetailedBridgeState::XdaiToDai {
-                                        amount: our_xdai_balance.clone(),
-                                    },
-                                ));
-                                Ok(())
-                            },
-                        )) as Box<dyn Future<Item = (), Error = Error>>
+                    if our_xdai_balance > xdai_tx_cost {
+                        let amount = our_xdai_balance - xdai_tx_cost;
+                        Box::new(bridge.xdai_to_dai_bridge(amount.clone()).then(move |_res| {
+                            TokenBridge::from_registry().do_send(DetailedStateChange(
+                                DetailedBridgeState::XdaiToDai {
+                                    amount: amount.clone(),
+                                },
+                            ));
+                            Ok(())
+                        })) as Box<dyn Future<Item = (), Error = Error>>
                     } else if our_dai_balance > 0u32.into() {
                         TokenBridge::from_registry().do_send(DetailedStateChange(
                             DetailedBridgeState::DaiToEth {
