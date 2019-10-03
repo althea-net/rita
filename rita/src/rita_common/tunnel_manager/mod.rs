@@ -289,6 +289,15 @@ impl Handler<GotBloat> for TunnelManager {
         let bandwidth_limit_enabled = network_settings.bandwidth_limit_enabled;
         drop(network_settings);
         if !bandwidth_limit_enabled {
+            // removes shaping without requiring a restart
+            for (_id, tunnel_list) in self.tunnels.iter_mut() {
+                for tunnel in tunnel_list {
+                    if tunnel.speed_limit != None {
+                        set_shaping_or_error(&tunnel.iface_name, None);
+                        tunnel.speed_limit = None;
+                    }
+                }
+            }
             return;
         }
 
@@ -300,7 +309,7 @@ impl Handler<GotBloat> for TunnelManager {
                         // start at the startin glimit
                         None => {
                             tunnel.speed_limit = Some(starting_bandwidth_limit);
-                            set_shaping_or_error(&iface, starting_bandwidth_limit)
+                            set_shaping_or_error(&iface, Some(starting_bandwidth_limit))
                         }
                         // after that cut the value by 20% each time
                         Some(val) => {
@@ -312,7 +321,7 @@ impl Handler<GotBloat> for TunnelManager {
                                     "Interface {} for peer {} is showing bloat new speed value {}",
                                     iface, id.wg_public_key, new_val
                                 );
-                                set_shaping_or_error(&iface, new_val);
+                                set_shaping_or_error(&iface, Some(new_val));
                                 tunnel.speed_limit = Some(new_val);
                             }
                         }
@@ -330,8 +339,8 @@ impl Handler<GotBloat> for TunnelManager {
 }
 
 /// tiny little helper function for GotBloat() limit is in mbps
-fn set_shaping_or_error(iface: &str, limit: usize) {
-    if let Err(e) = KI.set_codel_shaping(iface, Some(limit)) {
+fn set_shaping_or_error(iface: &str, limit: Option<usize>) {
+    if let Err(e) = KI.set_codel_shaping(iface, limit) {
         error!("Failed to shape tunnel for bloat! {}", e);
     }
 }
