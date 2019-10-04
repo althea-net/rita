@@ -5,8 +5,8 @@ RUN apt-get update && apt-get install -y sudo iputils-ping iproute2 jq vim netca
 RUN apt-get install -y -t unstable iperf3
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 ENV POSTGRES_USER=postgres
-ENV POSTGRES_BIN=/usr/lib/postgresql/11/bin/postgres
-ENV INITDB_BIN=/usr/lib/postgresql/11/bin/initdb
+ENV POSTGRES_BIN=/usr/lib/postgresql/12/bin/postgres
+ENV INITDB_BIN=/usr/lib/postgresql/12/bin/initdb
 RUN PATH=$PATH:$HOME/.cargo/bin cargo install diesel_cli --force
 # we pull in the git tar instead of the local folder becuase the raw code is much much smaller
 # note that changes have to be checked in to be pulled in and tested! we pull this in near
