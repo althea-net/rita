@@ -21,6 +21,7 @@ use settings::RitaCommonSettings;
 use std::fs::File;
 use std::io::Read;
 use std::net::IpAddr;
+use std::net::Ipv6Addr;
 use std::path::Path;
 use std::str;
 use std::sync::{Arc, RwLock};
@@ -31,11 +32,19 @@ pub enum CluError {
     RuntimeError(String),
 }
 
+<<<<<<< HEAD
 pub fn generate_mesh_ip() -> Result<IpAddr, Error> {
+=======
+pub fn linux_generate_mesh_ip() -> Result<Ipv6Addr, Error> {
+>>>>>>> 67514d0a... Use ipv4 and v6 variants where appropriate
     let seed: String = thread_rng().sample_iter(&Alphanumeric).take(50).collect();
     let mesh_ip = match ipgen::ip(&seed, "fd00::/8") {
         Ok(ip) => ip,
         Err(msg) => bail!(msg), // For some reason, ipgen devs decided to use Strings for all errors
+    };
+    let mesh_ip = match mesh_ip {
+        IpAddr::V4(_ip) => bail!("bad address!"),
+        IpAddr::V6(ip) => ip,
     };
 
     info!("Generated a new mesh IP address: {}", mesh_ip);
@@ -43,8 +52,8 @@ pub fn generate_mesh_ip() -> Result<IpAddr, Error> {
     Ok(mesh_ip)
 }
 
-pub fn validate_mesh_ip(ip: &IpAddr) -> bool {
-    ip.is_ipv6() && !ip.is_unspecified()
+pub fn validate_mesh_ip(ip: &Ipv6Addr) -> bool {
+    !ip.is_unspecified()
 }
 
 /// Called before anything is started to delete existing wireguard per hop tunnels
@@ -296,14 +305,12 @@ mod tests {
     use crate::validate_mesh_ip;
     use althea_types::WgKey;
     use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
-    use std::net::IpAddr;
+    use std::net::Ipv6Addr;
 
     #[test]
     fn test_validate_mesh_ip() {
-        let good_ip = "fd44:94c:41e2::9e6".parse::<IpAddr>().unwrap();
-        let bad_ip = "192.168.1.1".parse::<IpAddr>().unwrap();
+        let good_ip = "fd44:94c:41e2::9e6".parse::<Ipv6Addr>().unwrap();
         assert_eq!(validate_mesh_ip(&good_ip), true);
-        assert_eq!(validate_mesh_ip(&bad_ip), false);
     }
 
     #[test]

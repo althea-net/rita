@@ -191,7 +191,7 @@ impl Tunnel {
             &self.neigh_id.global.wg_public_key,
             Path::new(&network.wg_private_key_path),
             &match network.mesh_ip {
-                Some(ip) => ip,
+                Some(ip) => ip.into(),
                 None => bail!("No mesh IP configured yet"),
             },
             network.external_nic.clone(),
@@ -1220,7 +1220,7 @@ mod tests {
 
         // Create dummy identity
         let id = Identity::new(
-            "0.0.0.0".parse().unwrap(),
+            "fd80::001".parse().unwrap(),
             Address::from_str("ffffffffffffffffffffffffffffffffffffffff").unwrap(),
             "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
                 .parse()
@@ -1235,7 +1235,7 @@ mod tests {
             .entry(id)
             .or_insert_with(Vec::new)
             .push(Tunnel::new(
-                "0.0.0.0".parse().unwrap(),
+                "fd80::001".parse().unwrap(),
                 "iface".into(),
                 65535,
                 0,

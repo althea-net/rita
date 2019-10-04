@@ -1,15 +1,23 @@
+use crate::dao::SubnetDAOSettings;
+use crate::json_merge;
+use crate::network::NetworkSettings;
+use crate::payment::PaymentSettings;
+use crate::spawn_watch_thread;
+use crate::RitaCommonSettings;
+use althea_types::Identity;
 use althea_types::WgKey;
 use config;
+use config::Config;
 use core::str::FromStr;
-
-use serde_json;
-
+use failure::Error;
 use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
-
+use serde_json;
 use std::collections::HashSet;
 use std::net::Ipv4Addr;
+use std::net::Ipv6Addr;
 use std::sync::{Arc, RwLock};
 
+<<<<<<< HEAD
 use config::Config;
 
 use althea_types::Identity;
@@ -24,6 +32,8 @@ use crate::payment::PaymentSettings;
 use crate::spawn_watch_thread;
 use crate::RitaCommonSettings;
 
+=======
+>>>>>>> 67514d0a... Use ipv4 and v6 variants where appropriate
 /// This is the network settings specific to rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitNetworkSettings {
@@ -36,6 +46,8 @@ pub struct ExitNetworkSettings {
     pub exit_price: u64,
     /// This is the exit's own ip/gateway ip in the exit wireguard tunnel
     pub own_internal_ip: Ipv4Addr,
+    /// This is the exit's own ip/gateway ip in the exit wireguard tunnel
+    pub own_internal_ipv6: Ipv6Addr,
     /// This is the start of the exit tunnel's internal address allocation to clients, incremented
     /// by 1 every time a new client is added
     pub exit_start_ip: Ipv4Addr,
@@ -66,6 +78,7 @@ impl ExitNetworkSettings {
             wg_tunnel_port: 59999,
             exit_price: 10,
             own_internal_ip: "172.16.255.254".parse().unwrap(),
+            own_internal_ipv6: "fd80::001".parse().unwrap(),
             exit_start_ip: "172.16.0.0".parse().unwrap(),
             netmask: 12,
             entry_timeout: 0,

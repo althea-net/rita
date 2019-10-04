@@ -127,7 +127,7 @@ impl dyn KernelInterface {
         Ok(())
     }
 
-    pub fn set_route_to_tunnel(&self, gateway: &IpAddr) -> Result<(), Error> {
+    pub fn set_route_to_tunnel(&self, gateway: &Ipv4Addr) -> Result<(), Error> {
         match self.run_command("ip", &["route", "del", "default"]) {
             Err(e) => warn!("Failed to delete default route {:?}", e),
             _ => (),

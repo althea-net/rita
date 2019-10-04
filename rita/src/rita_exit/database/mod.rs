@@ -64,7 +64,8 @@ pub const ONE_DAY: i64 = 86400;
 
 pub fn get_exit_info() -> ExitDetails {
     ExitDetails {
-        server_internal_ip: SETTING.get_exit_network().own_internal_ip.into(),
+        server_internal_ip: SETTING.get_exit_network().own_internal_ip,
+        server_internal_ipv6: SETTING.get_exit_network().own_internal_ipv6,
         wg_exit_port: SETTING.get_exit_network().wg_tunnel_port,
         exit_price: SETTING.get_exit_network().exit_price,
         exit_currency: SETTING.get_payment().system_chain,

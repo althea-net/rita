@@ -17,6 +17,7 @@ use ipnetwork::IpNetwork;
 use serde::Serialize;
 use std::iter::Iterator;
 use std::net::IpAddr;
+use std::net::Ipv6Addr;
 use std::net::SocketAddr;
 use std::str;
 use std::time::Duration;
@@ -580,8 +581,8 @@ pub fn parse_routes_sync(babel_out: String) -> Result<Vec<Route>, Error> {
 /// via that neighbor. This could be dramatically more efficient if we had the neighbors
 /// local ip lying around somewhere.
 pub fn get_route_via_neigh(
-    neigh_mesh_ip: IpAddr,
-    dest_mesh_ip: IpAddr,
+    neigh_mesh_ip: Ipv6Addr,
+    dest_mesh_ip: Ipv6Addr,
     routes: &Vec<Route>,
 ) -> Result<Route, Error> {
     // First find the neighbors route to itself to get the local address
@@ -604,7 +605,7 @@ pub fn get_route_via_neigh(
     Err(NoNeighbor(neigh_mesh_ip.to_string()).into())
 }
 /// Checks if Babel has an installed route to the given destination
-pub fn do_we_have_route(mesh_ip: &IpAddr, routes: &Vec<Route>) -> Result<bool, Error> {
+pub fn do_we_have_route(mesh_ip: &Ipv6Addr, routes: &Vec<Route>) -> Result<bool, Error> {
     for route in routes.iter() {
         if let IpNetwork::V6(ref ip) = route.prefix {
             if ip.ip() == *mesh_ip && route.installed {
@@ -615,7 +616,7 @@ pub fn do_we_have_route(mesh_ip: &IpAddr, routes: &Vec<Route>) -> Result<bool, E
     Ok(false)
 }
 /// Returns the installed route to a given destination
-pub fn get_installed_route(mesh_ip: &IpAddr, routes: &Vec<Route>) -> Result<Route, Error> {
+pub fn get_installed_route(mesh_ip: &Ipv6Addr, routes: &Vec<Route>) -> Result<Route, Error> {
     let mut exit_route = None;
     for route in routes.iter() {
         // Only ip6

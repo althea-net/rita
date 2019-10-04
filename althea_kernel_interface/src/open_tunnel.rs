@@ -25,18 +25,15 @@ fn test_to_wg_local() {
     )
 }
 
-pub fn is_link_local(ip: IpAddr) -> bool {
-    if let IpAddr::V6(ip) = ip {
-        return (ip.segments()[0] & 0xffc0) == 0xfe80;
-    }
-    false
+pub fn is_link_local(ip: Ipv6Addr) -> bool {
+    return (ip.segments()[0] & 0xffc0) == 0xfe80;
 }
 
 /// socket to string with interface id support
 fn socket_to_string(endpoint: &SocketAddr, interface_name: Option<String>) -> String {
     match endpoint {
         &SocketAddr::V6(endpoint) => {
-            if is_link_local(IpAddr::V6(endpoint.ip().clone())) {
+            if is_link_local(endpoint.ip().clone()) {
                 format!(
                     "[{}%{}]:{}",
                     endpoint.ip(),

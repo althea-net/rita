@@ -21,6 +21,7 @@ use ipnetwork::IpNetwork;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::net::Ipv6Addr;
 
 pub struct TrafficWatcher;
 
@@ -73,8 +74,8 @@ impl Handler<Watch> for TrafficWatcher {
 
 pub fn prepare_helper_maps(
     neighbors: &[Neighbor],
-) -> (HashMap<IpAddr, Identity>, HashMap<String, Identity>) {
-    let mut identities: HashMap<IpAddr, Identity> = HashMap::new();
+) -> (HashMap<Ipv6Addr, Identity>, HashMap<String, Identity>) {
+    let mut identities: HashMap<Ipv6Addr, Identity> = HashMap::new();
     let mut if_to_id: HashMap<String, Identity> = HashMap::new();
 
     for neigh in neighbors {
@@ -86,7 +87,7 @@ pub fn prepare_helper_maps(
     (identities, if_to_id)
 }
 
-pub fn get_babel_info(routes: Vec<Route>) -> Result<(HashMap<IpAddr, i128>, u32), Error> {
+pub fn get_babel_info(routes: Vec<Route>) -> Result<(HashMap<Ipv6Addr, i128>, u32), Error> {
     trace!("Got {} routes: {:?}", routes.len(), routes);
     let mut destinations = HashMap::new();
     // we assume this matches what is actually set it babel becuase we
@@ -109,7 +110,7 @@ pub fn get_babel_info(routes: Vec<Route>) -> Result<(HashMap<IpAddr, i128>, u32)
                     "Inserting {} into the destinations map",
                     IpAddr::V6(ip.ip())
                 );
-                destinations.insert(IpAddr::V6(ip.ip()), i128::from(price + local_fee));
+                destinations.insert(ip.ip(), i128::from(price + local_fee));
             }
         }
     }
@@ -127,7 +128,7 @@ pub fn get_babel_info(routes: Vec<Route>) -> Result<(HashMap<IpAddr, i128>, u32)
     Ok((destinations, local_fee))
 }
 
-pub fn get_input_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
+pub fn get_input_counters() -> Result<HashMap<(Ipv6Addr, String), u64>, Error> {
     let mut total_input_counters = HashMap::new();
     trace!("Getting input counters");
     let input_counters = match KI.read_counters(&FilterTarget::Input) {
@@ -181,7 +182,7 @@ pub fn get_input_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
     Ok(total_input_counters)
 }
 
-pub fn get_output_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
+pub fn get_output_counters() -> Result<HashMap<(Ipv6Addr, String), u64>, Error> {
     let mut total_output_counters = HashMap::new();
     trace!("Getting ouput counters");
     let output_counters = match KI.read_counters(&FilterTarget::Output) {
@@ -237,8 +238,8 @@ pub fn get_output_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
 
 /// Takes and sumns the input and output counters for logging
 fn update_usage(
-    input: &HashMap<(IpAddr, String), u64>,
-    output: &HashMap<(IpAddr, String), u64>,
+    input: &HashMap<(Ipv6Addr, String), u64>,
+    output: &HashMap<(Ipv6Addr, String), u64>,
     our_fee: u32,
 ) {
     let mut total_in = 0;

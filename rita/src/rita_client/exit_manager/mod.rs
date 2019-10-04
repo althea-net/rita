@@ -58,7 +58,7 @@ fn linux_setup_exit_tunnel(
 
     KI.setup_wg_if_named("wg_exit")?;
     KI.set_client_exit_tunnel_config(
-        SocketAddr::new(current_exit.id.mesh_ip, general_details.wg_exit_port),
+        SocketAddr::new(current_exit.id.mesh_ip.into(), general_details.wg_exit_port),
         current_exit.id.wg_public_key,
         SETTING.get_network().wg_private_key_path.clone(),
         SETTING.get_exit_client().wg_listen_port,
@@ -217,7 +217,10 @@ fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = 
         }
     };
 
-    let endpoint = SocketAddr::new(current_exit.id.mesh_ip, current_exit.registration_port);
+    let endpoint = SocketAddr::new(
+        current_exit.id.mesh_ip.into(),
+        current_exit.registration_port,
+    );
 
     trace!("sending exit general details request to {}", exit);
 
@@ -283,7 +286,7 @@ pub fn exit_setup_request(
         low_balance: None,
     };
 
-    let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
+    let endpoint = SocketAddr::new(exit_server.into(), current_exit.registration_port);
 
     trace!(
         "sending exit setup request {:?} to {}, using {:?}",
@@ -342,7 +345,7 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
         low_balance: Some(balance_notification),
     };
 
-    let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
+    let endpoint = SocketAddr::new(exit_server.into(), current_exit.registration_port);
 
     trace!(
         "sending exit status request to {} using {:?}",
@@ -464,7 +467,7 @@ impl Handler<Tick> for ExitManager {
                 // run billing at all times when an exit is setup
                 if signed_up_for_exit {
                     let exit_price = general_details.exit_price;
-                    let exit_internal_addr = general_details.server_internal_ip;
+                    let exit_internal_addr = general_details.server_internal_ip.into();
                     let exit_port = exit.registration_port;
                     let exit_id = exit.id;
                     let babel_port = SETTING.get_network().babel_port;

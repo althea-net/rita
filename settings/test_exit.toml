@@ -35,6 +35,7 @@ wg_tunnel_port = 59999
 exit_hello_port = 4875
 exit_price = 50
 own_internal_ip = "172.168.1.254"
+own_internal_ipv6 = "fd::001"
 exit_start_ip = "172.168.1.100"
 netmask = 24
 entry_timeout = 7776000

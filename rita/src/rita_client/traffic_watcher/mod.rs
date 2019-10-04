@@ -42,6 +42,7 @@ use futures01::future::Future;
 use num256::Int256;
 use num_traits::identities::Zero;
 use settings::RitaCommonSettings;
+use std::net::Ipv6Addr;
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 use std::time::Instant;
@@ -266,7 +267,7 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
 }
 
 /// Returns the babel route to a given mesh ip with the properly capped price
-fn find_exit_route_capped(exit_mesh_ip: IpAddr, routes: Vec<Route>) -> Result<Route, Error> {
+fn find_exit_route_capped(exit_mesh_ip: Ipv6Addr, routes: Vec<Route>) -> Result<Route, Error> {
     let max_fee = SETTING.get_payment().max_fee;
     let mut exit_route = get_installed_route(&exit_mesh_ip, &routes)?;
     if exit_route.price > max_fee {

@@ -1,7 +1,7 @@
 use super::KernelInterface;
 
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::Ipv6Addr;
 use std::str::FromStr;
 
 use regex::Regex;
@@ -66,7 +66,7 @@ fn test_filter_table_table() {
     assert_eq!(FilterTarget::ForwardInput.table(), "FORWARD");
 }
 
-fn parse_ipset(input: &str) -> Result<HashMap<(IpAddr, String), u64>, Error> {
+fn parse_ipset(input: &str) -> Result<HashMap<(Ipv6Addr, String), u64>, Error> {
     lazy_static! {
         static ref RE: Regex =
             Regex::new(r"(?m)^add \S+ ([a-f0-9:]+),(wg\d+) packets (\d+) bytes (\d+)")
@@ -78,7 +78,7 @@ fn parse_ipset(input: &str) -> Result<HashMap<(IpAddr, String), u64>, Error> {
 
     for caps in RE.captures_iter(input) {
         map.insert(
-            (IpAddr::from_str(&caps[1])?, String::from(&caps[2])),
+            (Ipv6Addr::from_str(&caps[1])?, String::from(&caps[2])),
             caps[4].parse::<u64>()? + caps[3].parse::<u64>()? * 40,
         );
     }
@@ -100,7 +100,7 @@ add zxcv 1234:5678:9801:2345:6789:0123:4567:8902,wg0 packets 123456789 bytes 987
             );
             assert_eq!(result.len(), 2);
             let value1 = result
-                .get(&(IpAddr::V6(addr1), "wg42".into()))
+                .get(&(addr1, "wg42".into()))
                 .expect("Unable to find key");
             assert_eq!(value1, &(987654321u64 + 123456789u64 * 40));
 
@@ -108,7 +108,7 @@ add zxcv 1234:5678:9801:2345:6789:0123:4567:8902,wg0 packets 123456789 bytes 987
                 0x1234, 0x5678, 0x9801, 0x2345, 0x6789, 0x0123, 0x4567, 0x8902,
             );
             let value2 = result
-                .get(&(IpAddr::V6(addr2), "wg0".into()))
+                .get(&(addr2, "wg0".into()))
                 .expect("Unable to find key");
             assert_eq!(value2, &(987654320u64 + 123456789u64 * 40));
         }
@@ -157,7 +157,7 @@ impl dyn KernelInterface {
     pub fn read_counters(
         &self,
         target: &FilterTarget,
-    ) -> Result<HashMap<(IpAddr, String), u64>, Error> {
+    ) -> Result<HashMap<(Ipv6Addr, String), u64>, Error> {
         self.run_command(
             "ipset",
             &[
@@ -327,7 +327,7 @@ add xxx fd00::dead:beef,wg42 packets 111 bytes 222
 
     let value = result
         .get(&(
-            IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0xdead, 0xbeef)),
+            Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0xdead, 0xbeef),
             "wg42".into(),
         ))
         .expect("Unable to find key");

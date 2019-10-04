@@ -15,9 +15,10 @@ use settings::exit::RitaExitSettings;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::net::Ipv6Addr;
 
 /// gets the gateway ip for a given mesh IP
-pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Box<dyn Future<Item = IpAddr, Error = Error>> {
+pub fn get_gateway_ip_single(mesh_ip: Ipv6Addr) -> Box<dyn Future<Item = IpAddr, Error = Error>> {
     let babel_port = SETTING.get_network().babel_port;
 
     Box::new(

@@ -1,5 +1,9 @@
 use std::collections::HashSet;
+<<<<<<< HEAD
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+=======
+use std::net::Ipv6Addr;
+>>>>>>> 67514d0a... Use ipv4 and v6 variants where appropriate
 
 use althea_types::WgKey;
 
@@ -46,7 +50,7 @@ pub struct NetworkSettings {
     pub metric_factor: u32,
     /// The static IP used on mesh interfaces
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub mesh_ip: Option<IpAddr>,
+    pub mesh_ip: Option<Ipv6Addr>,
     /// Broadcast ip address used for peer discovery (in ff02::/8)
     #[serde(default = "default_discovery_ip")]
     pub discovery_ip: Ipv6Addr,

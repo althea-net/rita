@@ -27,7 +27,7 @@ use ipnetwork::IpNetwork;
 use settings::exit::RitaExitSettings;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::Ipv6Addr;
 
 pub struct TrafficWatcher {
     last_seen_bytes: HashMap<WgKey, WgUsage>,
@@ -71,7 +71,7 @@ impl Handler<Watch> for TrafficWatcher {
 fn get_babel_info(
     routes: &[Route],
     our_id: Identity,
-    id_from_ip: HashMap<IpAddr, Identity>,
+    id_from_ip: HashMap<Ipv6Addr, Identity>,
 ) -> Result<HashMap<WgKey, u64>, Error> {
     // we assume this matches what is actually set it babel becuase we
     // panic on startup if it does not get set correctly
@@ -87,7 +87,7 @@ fn get_babel_info(
         if let IpNetwork::V6(ref ip) = route.prefix {
             // Only host addresses and installed routes
             if ip.prefix() == 128 && route.installed {
-                match id_from_ip.get(&IpAddr::V6(ip.ip())) {
+                match id_from_ip.get(&ip.ip()) {
                     Some(id) => {
                         let price = if route.price > max_fee {
                             max_fee
@@ -107,12 +107,12 @@ fn get_babel_info(
 
 struct HelperMapReturn {
     wg_to_id: HashMap<WgKey, Identity>,
-    ip_to_id: HashMap<IpAddr, Identity>,
+    ip_to_id: HashMap<Ipv6Addr, Identity>,
 }
 
 fn generate_helper_maps(our_id: &Identity, clients: &[Identity]) -> Result<HelperMapReturn, Error> {
     let mut identities: HashMap<WgKey, Identity> = HashMap::new();
-    let mut id_from_ip: HashMap<IpAddr, Identity> = HashMap::new();
+    let mut id_from_ip: HashMap<Ipv6Addr, Identity> = HashMap::new();
     let our_settings = SETTING.get_network();
     id_from_ip.insert(our_settings.mesh_ip.unwrap(), our_id.clone());
 

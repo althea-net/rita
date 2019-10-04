@@ -7,7 +7,11 @@ use std::fmt;
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::net::IpAddr;
+<<<<<<< HEAD
 use std::net::Ipv4Addr;
+=======
+use std::net::{Ipv4Addr, Ipv6Addr};
+>>>>>>> 67514d0a... Use ipv4 and v6 variants where appropriate
 use std::str::FromStr;
 
 #[cfg(feature = "actix")]
@@ -16,7 +20,7 @@ use actix::Message;
 /// This is how nodes are identified.
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct Identity {
-    pub mesh_ip: IpAddr,
+    pub mesh_ip: Ipv6Addr,
     pub eth_address: Address,
     pub wg_public_key: WgKey,
     pub nickname: Option<ArrayString<[u8; 32]>>,
@@ -24,7 +28,7 @@ pub struct Identity {
 
 impl Identity {
     pub fn new(
-        mesh_ip: IpAddr,
+        mesh_ip: Ipv6Addr,
         eth_address: Address,
         wg_public_key: WgKey,
         nickname: Option<ArrayString<[u8; 32]>>,
@@ -234,7 +238,8 @@ fn default_verif_mode() -> ExitVerifMode {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct ExitDetails {
-    pub server_internal_ip: IpAddr,
+    pub server_internal_ip: Ipv4Addr,
+    pub server_internal_ipv6: Ipv6Addr,
     pub netmask: u8,
     pub wg_exit_port: u16,
     pub exit_price: u64,

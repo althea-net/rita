@@ -6,7 +6,7 @@ use failure::Error;
 use settings::FileWrite;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::Ipv6Addr;
 
 pub fn get_mesh_ip(_req: HttpRequest) -> Result<HttpResponse, Error> {
     debug!("/mesh_ip GET hit");
@@ -33,9 +33,9 @@ pub fn set_mesh_ip(mesh_ip_data: Json<HashMap<String, String>>) -> Result<HttpRe
     let mut ret = HashMap::new();
 
     match mesh_ip_data.into_inner().get("mesh_ip") {
-        Some(ip_str) => match ip_str.parse::<IpAddr>() {
+        Some(ip_str) => match ip_str.parse::<Ipv6Addr>() {
             Ok(parsed) => {
-                if parsed.is_ipv6() && !parsed.is_unspecified() {
+                if !parsed.is_unspecified() {
                     SETTING.get_network_mut().mesh_ip = Some(parsed);
                 } else {
                     let error_msg = format!(
