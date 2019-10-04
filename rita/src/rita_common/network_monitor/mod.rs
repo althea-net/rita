@@ -343,7 +343,7 @@ fn observe_network(
 
 fn get_wg_key_by_ifname(neigh: &BabelNeighbor, rita_neighbors: &[RitaNeighbor]) -> Option<WgKey> {
     for rita_neigh in rita_neighbors.iter() {
-        if neigh.iface == rita_neigh.iface_name {
+        if rita_neigh.iface_name.contains(&neigh.iface) {
             return Some(rita_neigh.identity.global.wg_public_key);
         }
     }
