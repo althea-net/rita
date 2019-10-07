@@ -1,5 +1,12 @@
 //! NetworkMonitor is an experimental system to apply traffic shaping to neighbors based on the neighbor rtt
 //! it also monitors various network properties to display to the user and to log for later investigation
+//! TODO: NetworkMonitor curently has a couple of major deficiencies, we base our throttling choices off of
+//! round trip time, but that means that if the other side has been rebooted and the latency spike is due to them
+//! uploading we may further limit the connection from our side without any good reason. This can be solved by
+//! communcating the current throttle value in the hello seqence. The other problem is that we will respond to latency
+//! spikes that are not correlated with traffic. This could lead to limiting connection throughput for reasons as mundane
+//! as a bird flying through the connection rather than actual bloat. The solution here would be to also collect stats
+//! on traffic over every interface and base our action off of spikes in throughput as well as spikes in latency.
 
 use crate::rita_common::rita_loop::fast_loop::FAST_LOOP_SPEED;
 use crate::rita_common::tunnel_manager::GotBloat;
