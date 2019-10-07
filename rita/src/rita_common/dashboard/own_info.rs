@@ -1,10 +1,10 @@
 use crate::rita_common::oracle::low_balance;
 use crate::SETTING;
-use ::settings::RitaCommonSettings;
 use actix_web::{HttpRequest, Json};
 use clarity::Address;
 use failure::Error;
 use num256::{Int256, Uint256};
+use settings::RitaCommonSettings;
 
 pub static READABLE_VERSION: &str = "Beta 9 RC3";
 
@@ -20,6 +20,7 @@ pub struct OwnInfo {
     pub device: Option<String>,
     pub rita_version: String,
     pub version: String,
+    pub is_gateway: bool,
 }
 
 pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
@@ -34,6 +35,7 @@ pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
     let local_fee = SETTING.get_payment().local_fee;
     let metric_factor = SETTING.get_network().metric_factor;
     let device = network_settings.device.clone();
+    let is_gateway = network_settings.is_gateway.clone();
 
     let reply = OwnInfo {
         address: eth_address,
@@ -46,6 +48,7 @@ pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
         device,
         rita_version: env!("CARGO_PKG_VERSION").to_string(),
         version: READABLE_VERSION.to_string(),
+        is_gateway,
     };
     Ok(Json(reply))
 }
