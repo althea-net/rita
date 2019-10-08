@@ -2,13 +2,14 @@ use super::{KernelInterface, KernelInterfaceError};
 use althea_types::WgKey;
 use failure::Error;
 use std::collections::HashSet;
-use std::net::IpAddr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct ExitClient {
-    pub internal_ip: IpAddr,
+    pub internal_ip: Ipv4Addr,
+    pub internal_ipv6: Ipv6Addr,
     pub public_key: WgKey,
-    pub mesh_ip: IpAddr,
+    pub mesh_ip: Ipv6Addr,
     pub port: u16,
 }
 
@@ -64,13 +65,9 @@ impl dyn KernelInterface {
         // only get the flows list once
         let flows = self.get_flows("wg_exit")?;
         for c in clients.iter() {
-            match c.internal_ip {
-                IpAddr::V4(addr) => {
-                    if !self.has_flow_bulk(&addr, &flows) {
-                        self.create_flow_by_ip("wg_exit", &addr)?
-                    }
-                }
-                _ => panic!("Could not derive ipv4 addr for client! Corrupt DB!"),
+            let addr = c.internal_ip;
+            if !self.has_flow_bulk(&addr, &flows) {
+                self.create_flow_by_ip("wg_exit", &addr)?
             }
         }
 
@@ -78,13 +75,29 @@ impl dyn KernelInterface {
     }
 
     /// Performs the one time startup tasks for the rita_exit clients loop
-    pub fn one_time_exit_setup(&self, local_ip: &IpAddr, netmask: u8) -> Result<(), Error> {
+    pub fn one_time_exit_setup(
+        &self,
+        local_ip: &Ipv4Addr,
+        local_ipv6: &Ipv6Addr,
+        netmask: u8,
+        netmask_v6: u8,
+    ) -> Result<(), Error> {
         let _output = self.run_command(
             "ip",
             &[
                 "address",
                 "add",
                 &format!("{}/{}", local_ip, netmask),
+                "dev",
+                "wg_exit",
+            ],
+        )?;
+        let _output = self.run_command(
+            "ip",
+            &[
+                "address",
+                "add",
+                &format!("{}/{}", local_ipv6, netmask_v6),
                 "dev",
                 "wg_exit",
             ],

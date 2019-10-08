@@ -5,6 +5,7 @@ table! {
         wg_port -> Int4,
         eth_address -> Varchar,
         internal_ip -> Varchar,
+        internal_ipv6 -> Varchar,
         nickname -> Varchar,
         email -> Varchar,
         phone -> Varchar,

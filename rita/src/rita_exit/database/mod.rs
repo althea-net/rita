@@ -10,7 +10,12 @@ use crate::rita_exit::database::database_tools::client_conflict;
 use crate::rita_exit::database::database_tools::create_or_update_user_record;
 use crate::rita_exit::database::database_tools::delete_client;
 use crate::rita_exit::database::database_tools::get_client;
+<<<<<<< HEAD
 use crate::rita_exit::database::database_tools::get_database_connection;
+=======
+use crate::rita_exit::database::database_tools::get_next_client_ipv4;
+use crate::rita_exit::database::database_tools::get_next_client_ipv6;
+>>>>>>> 6aaf144d... Exit ipv6 vars and helper functions
 use crate::rita_exit::database::database_tools::set_client_timestamp;
 use crate::rita_exit::database::database_tools::update_client;
 use crate::rita_exit::database::database_tools::update_low_balance_notification_time;
@@ -48,6 +53,8 @@ use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::IpAddr;
+use std::net::Ipv4Addr;
+use std::net::Ipv6Addr;
 use std::time::Instant;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::util::FutureExt;
@@ -88,6 +95,64 @@ pub fn secs_since_unix_epoch() -> i64 {
     since_the_epoch.as_secs() as i64
 }
 
+<<<<<<< HEAD
+=======
+fn client_to_new_db_client(
+    client: &ExitClientIdentity,
+    new_ipv4: Ipv4Addr,
+    new_ipv6: Ipv6Addr,
+    country: String,
+) -> models::Client {
+    let mut rng = rand::thread_rng();
+    let rand_code: u64 = rng.gen_range(0, 999_999);
+    models::Client {
+        wg_port: i32::from(client.wg_port),
+        mesh_ip: client.global.mesh_ip.to_string(),
+        wg_pubkey: client.global.wg_public_key.to_string(),
+        eth_address: client.global.eth_address.to_string(),
+        nickname: client.global.nickname.unwrap_or_default().to_string(),
+        internal_ip: new_ipv4.to_string(),
+        internal_ipv6: new_ipv6.to_string(),
+        email: client.reg_details.email.clone().unwrap_or_default(),
+        phone: client.reg_details.phone.clone().unwrap_or_default(),
+        country,
+        email_code: format!("{:06}", rand_code),
+        text_sent: 0,
+        verified: false,
+        email_sent_time: 0,
+        last_seen: 0,
+        last_balance_warning_time: 0,
+    }
+}
+
+fn create_or_update_user_record(
+    conn: &PgConnection,
+    client: &ExitClientIdentity,
+    user_country: String,
+) -> Result<models::Client, Error> {
+    use self::schema::clients::dsl::clients;
+    if client_exists(&client, conn)? {
+        update_client(&client, conn)?;
+        Ok(get_client(&client, conn)?)
+    } else {
+        info!(
+            "record for {} does not exist, creating",
+            client.global.wg_public_key
+        );
+
+        let new_ip = get_next_client_ipv4(conn)?;
+        let new_ipv6 = get_next_client_ipv6(conn)?;
+
+        let c = client_to_new_db_client(&client, new_ip, new_ipv6, user_country);
+
+        info!("Inserting new client {}", client.global.wg_public_key);
+        diesel::insert_into(clients).values(&c).execute(conn)?;
+
+        Ok(c)
+    }
+}
+
+>>>>>>> 6aaf144d... Exit ipv6 vars and helper functions
 /// Handles a new client registration api call. Performs a geoip lookup
 /// on their registration ip to make sure that they are coming from a valid gateway
 /// ip and then sends out an email of phone message
@@ -140,9 +205,13 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
                                 Ok(ip) => ip,
                                 Err(e) => return Box::new(future::err(format_err!("{:?}", e))),
                             };
+                            let client_internal_ipv6 = match their_record.internal_ipv6.parse() {
+                                Ok(ip) => ip,
+                                Err(e) => return Box::new(future::err(format_err!("{:?}", e))),
+                            };
 
                             Box::new(future::ok(ExitState::Registered {
-                                our_details: ExitClientDetails { client_internal_ip },
+                                our_details: ExitClientDetails { client_internal_ip, client_internal_ipv6 },
                                 general_details: get_exit_info(),
                                 message: "Registration OK".to_string(),
                             }))
@@ -176,14 +245,21 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
             });
         }
 
-        let current_ip = their_record.internal_ip.parse()?;
+        let current_ip: Ipv4Addr = their_record.internal_ip.parse()?;
+        let current_ipv6: Ipv6Addr = their_record.internal_ipv6.parse()?;
 
         let current_subnet = IpNetwork::new(
             SETTING.get_exit_network().own_internal_ip.into(),
             SETTING.get_exit_network().netmask,
         )?;
+        let current_subnetv6 = IpNetwork::new(
+            SETTING.get_exit_network().own_internal_ipv6.into(),
+            SETTING.get_exit_network().netmaskv6,
+        )?;
 
-        if !current_subnet.contains(current_ip) {
+        if !current_subnet.contains(current_ip.into())
+            || !current_subnetv6.contains(current_ipv6.into())
+        {
             return Ok(ExitState::Registering {
                 general_details: get_exit_info(),
                 message: "Registration reset because of IP range change".to_string(),
@@ -197,6 +273,7 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
         Ok(ExitState::Registered {
             our_details: ExitClientDetails {
                 client_internal_ip: current_ip,
+                client_internal_ipv6: current_ipv6,
             },
             general_details: get_exit_info(),
             message: "Registration OK".to_string(),

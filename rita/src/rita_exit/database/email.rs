@@ -87,8 +87,15 @@ pub fn handle_email_registration(
             Ok(ip) => ip,
             Err(e) => return future::err(format_err!("{:?}", e)),
         };
+        let client_internal_ipv6 = match their_record.internal_ipv6.parse() {
+            Ok(ip) => ip,
+            Err(e) => return future::err(format_err!("{:?}", e)),
+        };
         future::ok(ExitState::Registered {
-            our_details: ExitClientDetails { client_internal_ip },
+            our_details: ExitClientDetails {
+                client_internal_ip,
+                client_internal_ipv6,
+            },
             general_details: get_exit_info(),
             message: "Registration OK".to_string(),
         })

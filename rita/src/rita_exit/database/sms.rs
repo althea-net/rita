@@ -114,6 +114,7 @@ pub fn handle_sms_registration(
                         Ok(ExitState::Registered {
                             our_details: ExitClientDetails {
                                 client_internal_ip: their_record.internal_ip.parse()?,
+                                client_internal_ipv6: their_record.internal_ipv6.parse()?,
                             },
                             general_details: get_exit_info(),
                             message: "Registration OK".to_string(),
@@ -165,6 +166,7 @@ pub fn handle_sms_registration(
                         Ok(ExitState::Registered {
                             our_details: ExitClientDetails {
                                 client_internal_ip: their_record.internal_ip.parse()?,
+                                client_internal_ipv6: their_record.internal_ipv6.parse()?,
                             },
                             general_details: get_exit_info(),
                             message: "Registration OK".to_string(),

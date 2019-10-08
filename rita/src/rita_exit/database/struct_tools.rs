@@ -23,6 +23,7 @@ pub fn to_exit_client(client: Client) -> Result<ExitClient, Error> {
     Ok(ExitClient {
         mesh_ip: client.mesh_ip.parse()?,
         internal_ip: client.internal_ip.parse()?,
+        internal_ipv6: client.internal_ipv6.parse()?,
         port: client.wg_port as u16,
         public_key: client.wg_pubkey.parse()?,
     })

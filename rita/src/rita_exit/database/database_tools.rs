@@ -1,4 +1,9 @@
+<<<<<<< HEAD
 use crate::rita_common::utils::ip_increment::increment;
+=======
+use crate::rita_exit::database::ip_increment::increment_subnetv6;
+use crate::rita_exit::database::ip_increment::incrementv4;
+>>>>>>> 6aaf144d... Exit ipv6 vars and helper functions
 use crate::rita_exit::database::secs_since_unix_epoch;
 use crate::rita_exit::database::struct_tools::client_to_new_db_client;
 use crate::rita_exit::database::ONE_DAY;
@@ -18,12 +23,15 @@ use failure::Error;
 use futures01::future;
 use futures01::future::Future;
 use settings::exit::RitaExitSettings;
-use std::net::IpAddr;
 use std::net::Ipv4Addr;
+<<<<<<< HEAD
 use std::time::Duration;
 use std::time::Instant;
 use tokio::timer::Delay;
 use tokio::util::FutureExt;
+=======
+use std::net::Ipv6Addr;
+>>>>>>> 6aaf144d... Exit ipv6 vars and helper functions
 
 /// Takes a list of clients and returns a sorted list of ip addresses spefically v4 since it
 /// can implement comparison operators
@@ -41,9 +49,26 @@ fn get_internal_ips(clients: &[exit_db::models::Client]) -> Vec<Ipv4Addr> {
     list
 }
 
+/// Takes a list of clients and returns a sorted list of ip addresses spefically v4 since it
+/// can implement comparison operators, these are the starting points of client_subnets, which
+/// are assumed to be consistent beucase the client subnet size never changes
+fn get_internal_v6ips(clients: &[exit_db::models::Client]) -> Vec<Ipv6Addr> {
+    let mut list = Vec::with_capacity(clients.len());
+    for client in clients {
+        let client_internal_ip = client.internal_ipv6.parse();
+        match client_internal_ip {
+            Ok(address) => list.push(address),
+            Err(_e) => error!("Bad database entry! {:?}", client),
+        }
+    }
+    // this list should come sorted from the database, this just double checks
+    list.sort();
+    list
+}
+
 /// Gets the next available client ip, takes about O(n) time, we could make it faster by
 /// sorting on the database side but I've left that optimization on the vine for now
-pub fn get_next_client_ip(conn: &PgConnection) -> Result<IpAddr, Error> {
+pub fn get_next_client_ipv4(conn: &PgConnection) -> Result<Ipv4Addr, Error> {
     use self::schema::clients::dsl::clients;
     let exit_settings = SETTING.get_exit_network();
     let netmask = exit_settings.netmask as u8;
@@ -54,13 +79,49 @@ pub fn get_next_client_ip(conn: &PgConnection) -> Result<IpAddr, Error> {
 
     let clients_list = clients.load::<models::Client>(conn)?;
     let ips_list = get_internal_ips(&clients_list);
-    let mut new_ip: IpAddr = start_ip.into();
+    let mut new_ip: Ipv4Addr = start_ip;
 
     // iterate until we find an open spot, yes converting to string and back is quite awkward
     while ips_list.contains(&new_ip.to_string().parse()?) {
-        new_ip = increment(new_ip, netmask)?;
+        new_ip = incrementv4(new_ip, netmask)?;
         if new_ip == gateway_ip {
-            new_ip = increment(new_ip, netmask)?;
+            new_ip = incrementv4(new_ip, netmask)?;
+        }
+    }
+    trace!(
+        "The new client's ip is {} selected using {:?}",
+        new_ip,
+        ips_list
+    );
+
+    Ok(new_ip)
+}
+
+/// Gets the next available client ip, takes about O(n) time, we could make it faster by
+/// sorting on the database side but I've left that optimization on the vine for now
+pub fn get_next_client_ipv6(conn: &PgConnection) -> Result<Ipv6Addr, Error> {
+    use self::schema::clients::dsl::clients;
+    let exit_settings = SETTING.get_exit_network();
+    let client_netmask = exit_settings.client_netmaskv6;
+    let netmask = exit_settings.netmaskv6;
+    let start_ip = exit_settings.exit_start_ipv6;
+    let gateway_ip = exit_settings.own_internal_ipv6;
+    let stop_ip = increment_subnetv6(start_ip, netmask);
+    // drop here to free up the settings lock, this codepath runs in parallel
+    drop(exit_settings);
+
+    let clients_list = clients.load::<models::Client>(conn)?;
+    let ips_list = get_internal_v6ips(&clients_list);
+    let mut new_ip: Ipv6Addr = start_ip;
+
+    // iterate until we find an open spot, yes converting to string and back is quite awkward
+    while ips_list.contains(&new_ip.to_string().parse()?) {
+        new_ip = increment_subnetv6(new_ip, client_netmask);
+        if new_ip == gateway_ip {
+            new_ip = increment_subnetv6(new_ip, client_netmask);
+        }
+        if new_ip > stop_ip {
+            bail!("Address space in this subnet exhausted!");
         }
     }
     trace!(

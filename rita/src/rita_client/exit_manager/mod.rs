@@ -62,7 +62,7 @@ fn linux_setup_exit_tunnel(
         current_exit.id.wg_public_key,
         SETTING.get_network().wg_private_key_path.clone(),
         SETTING.get_exit_client().wg_listen_port,
-        our_details.client_internal_ip,
+        our_details.client_internal_ip.into(),
         general_details.netmask,
         SETTING.get_network().rita_hello_port,
     )?;

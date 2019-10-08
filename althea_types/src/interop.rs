@@ -6,10 +6,13 @@ use num256::Uint256;
 use std::fmt;
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
+<<<<<<< HEAD
 use std::net::IpAddr;
 <<<<<<< HEAD
 use std::net::Ipv4Addr;
 =======
+=======
+>>>>>>> 6aaf144d... Exit ipv6 vars and helper functions
 use std::net::{Ipv4Addr, Ipv6Addr};
 >>>>>>> 67514d0a... Use ipv4 and v6 variants where appropriate
 use std::str::FromStr;
@@ -252,7 +255,8 @@ pub struct ExitDetails {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct ExitClientDetails {
-    pub client_internal_ip: IpAddr,
+    pub client_internal_ip: Ipv4Addr,
+    pub client_internal_ipv6: Ipv6Addr,
 }
 
 #[cfg(feature = "actix")]

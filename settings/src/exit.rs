@@ -53,6 +53,13 @@ pub struct ExitNetworkSettings {
     pub exit_start_ip: Ipv4Addr,
     /// The netmask, in bits to mask out, for the exit tunnel
     pub netmask: u8,
+    /// This is the starting ip for the allocation of ipv6 netmasks of the size
+    /// netmaskv6
+    pub exit_start_ipv6: Ipv6Addr,
+    /// The netmask for the exit ipv6 subnet
+    pub netmaskv6: u8,
+    /// The size of client netmasks for ipv6 /64 in all normal cases
+    pub client_netmaskv6: u8,
     /// Time in seconds before user is dropped from the db due to inactivity
     /// 0 means disabled
     pub entry_timeout: u32,
@@ -81,6 +88,9 @@ impl ExitNetworkSettings {
             own_internal_ipv6: "fd80::001".parse().unwrap(),
             exit_start_ip: "172.16.0.0".parse().unwrap(),
             netmask: 12,
+            exit_start_ipv6: "fd80::001".parse().unwrap(),
+            netmaskv6: 32,
+            client_netmaskv6: 64,
             entry_timeout: 0,
             geoip_api_user: None,
             geoip_api_key: None,
