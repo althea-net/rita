@@ -256,8 +256,16 @@ pub fn reset_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Err
     let mut ret = HashMap::new();
 
     if let Some(exit) = exits.get_mut(&exit_name) {
-        info!("Changing exit {:?} state to New", exit_name);
+        info!(
+            "Changing exit {:?} state to New, and deleting wg_exit tunnel",
+            exit_name
+        );
         exit.info = ExitState::New;
+
+        if let Err(e) = KI.del_interface("wg_exit") {
+            error!("Failed to delete wg_exit {:?}", e)
+        };
+
         Box::new(future::ok(HttpResponse::Ok().json(ret)))
     } else {
         error!("Requested a reset on unknown exit {:?}", exit_name);
