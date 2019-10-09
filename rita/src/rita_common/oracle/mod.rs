@@ -232,7 +232,7 @@ fn update_gas_price(web3: &Web3, full_node: String) {
                 let mut payment_settings = SETTING.get_payment_mut();
 
                 if payment_settings.system_chain == SystemChain::Xdai {
-                    payment_settings.gas_price = 60_000_000_000u128.into();
+                    payment_settings.gas_price = 240_000_000_000u128.into();
                 } else {
                     // use 105% of the gas price provided by the full node, this is designed
                     // to keep us above the median price provided by the full node.
