@@ -510,7 +510,7 @@ impl DebtKeeper {
         ) {
             (true, _) => {}
             (false, Some(val)) => {
-                if Instant::now() - val > Duration::from_secs(60) {
+                if Instant::now() - val > Duration::from_secs(15) {
                     debt_data.debt = amount;
                 }
             }
