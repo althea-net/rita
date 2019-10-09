@@ -35,7 +35,7 @@ pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
     let local_fee = SETTING.get_payment().local_fee;
     let metric_factor = SETTING.get_network().metric_factor;
     let device = network_settings.device.clone();
-    let is_gateway = network_settings.is_gateway.clone();
+    let is_gateway = network_settings.is_gateway;
 
     let reply = OwnInfo {
         address: eth_address,
