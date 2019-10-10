@@ -116,12 +116,12 @@ def setup_arbitrary_node_config(nodes):
         None: ['a'] * nodes
     }
     world = World()
-    for n in range(nodes - 1):
-        node = Node(n, 10, COMPAT_LAYOUT, COMPAT_LAYOUTS)
-        world.add_node(node)
-    node = Node((nodes - 1), random.randint(0, 500),
-                COMPAT_LAYOUT, COMPAT_LAYOUTS)
-    world.add_exit_node(node)
+    for n in range(nodes):
+        node = Node(n, random.randint(0, 500), COMPAT_LAYOUT, COMPAT_LAYOUTS)
+        if n == 5:
+            world.add_exit_node(node)
+        else:
+            world.add_node(node)
 
     # generates graphs with small world properties, as such it simulates micropops well
     # https://en.wikipedia.org/wiki/Watts%E2%80%93Strogatz_model
@@ -171,8 +171,8 @@ def setup_arbitrary_node_config(nodes):
     EXIT_NAMESPACE = "netlab-{}".format(world.exit_id)
     EXIT_ID = world.exit_id
 
-    GATEWAY_NAMESPACE = "netlab-7"
-    GATEWAY_ID = 7
+    GATEWAY_NAMESPACE = "netlab-0"
+    GATEWAY_ID = 0
 
     return (COMPAT_LAYOUTS, all_routes, traffic_test_pairs, world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID)
 
@@ -319,7 +319,7 @@ def main():
     # (COMPAT_LAYOUTS, all_routes, traffic_test_pairs,
     #  world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID) = setup_seven_node_config()
     (COMPAT_LAYOUTS, all_routes, traffic_test_pairs,
-     world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID) = setup_arbitrary_node_config(25)
+     world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID) = setup_arbitrary_node_config(8)
 
     COMPAT_LAYOUTS["random"] = [
         'a' if random.randint(0, 1) else 'b' for _ in range(7)]
@@ -357,7 +357,7 @@ def main():
                   (time.time() - start_time, CONVERGENCE_DELAY, interval))
 
     print("Test reachabibility and optimum routes...")
-    time.sleep(60)
+    time.sleep(30)
 
     duration = time.time() - start_time
 
@@ -371,7 +371,7 @@ def main():
         sys.exit(1)
 
     print("Waiting for clients to get info from exits")
-    time.sleep(5)
+    time.sleep(15)
 
     for k, v in world.nodes.items():
         if k != world.exit_id:

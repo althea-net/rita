@@ -71,7 +71,7 @@ class Node:
             return False
 
         last_dump = last_dump_match.group(1)
-        route_pat = re.compile(r'{d}.*price {p}.*fee {f}.*neigh {nh}.*(installed)'
+        route_pat = re.compile(r'{d}.*price {p}.*fee {f}.*neigh {nh}.*(installed)|(feasible)'
                                .format(
                                    d=num_to_ip(dest.id),
                                    p=price,
