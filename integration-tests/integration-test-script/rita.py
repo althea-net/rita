@@ -146,7 +146,6 @@ def setup_arbitrary_node_config(nodes):
 
         for neighbor in neighbors:
             world.add_connection(Connection(rita_node, world.nodes[neighbor]))
-            neighbor = {"weight": rita_node.local_fee}
 
     # generate the all_routes list of routes to use for testing
     all_routes = {}
@@ -154,7 +153,7 @@ def setup_arbitrary_node_config(nodes):
         rita_node = world.nodes[rita_node]
         all_routes[rita_node] = []
         for n in world.nodes:
-            (next_hop, cost) = next_hop_and_cost(ws, rita_node.id, n)
+            (next_hop, cost) = next_hop_and_cost(ws, rita_node.id, n, world)
             next_hop = world.nodes[next_hop]
             n = world.nodes[n]
             all_routes[rita_node].append((n, cost, next_hop))
@@ -189,14 +188,15 @@ def get_neighbors(node, ajacency_list):
     return neighs
 
 
-def next_hop_and_cost(graph, start, finish):
+def next_hop_and_cost(graph, start, finish, world):
     """Returns the path cost computed in the Althea style"""
     path = nx.dijkstra_path(graph, start, finish)
     cost = 0
     for node in path:
         if node == start or node == finish:
             continue
-        cost += graph[node]["weight"]
+        print(world.nodes)
+        cost += world.nodes[node].local_fee
     if len(path) is 1:
         return (path[0], 0)
     if len(path) >= 2:
