@@ -300,8 +300,7 @@ def start_rita_exit(node, dname, RITA_EXIT):
 
 
 def ip_to_num(ip):
-    print(ip)
-    if ip in "fd00::":
+    if ip in "fd00::00":
         return 0
     else:
         return int(ip.replace("fd00::", ""))

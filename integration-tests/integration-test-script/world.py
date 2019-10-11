@@ -156,7 +156,7 @@ class World:
     def test_reach(self, node_from, node_to, PING6):
         ping = subprocess.Popen(
             ["ip", "netns", "exec", "netlab-{}".format(node_from.id), PING6,
-             "fd00::{}".format(node_to.id),
+             num_to_ip(node_to.id),
              "-c", "1"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         output = ping.stdout.read().decode("utf-8")
         return "1 packets transmitted, 1 received, 0% packet loss" in output
@@ -325,10 +325,11 @@ class World:
         """Creates a nested dictionary of balances, for example balances[1][3] is the balance node 1 has for node 3"""
         status = True
         balances = {}
-        n = 1
+        n = 0
 
         while True:
             ip = num_to_ip(n)
+            print("Using ip {} to get debts".format(ip))
             status = subprocess.Popen(
                 ["ip", "netns", "exec", "netlab-{}".format(n), "curl", "-s", "-g", "-6",
                  "[::1]:4877/debts"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -338,6 +339,7 @@ class World:
                 break
             status = json.loads(output)
             balances[ip_to_num(ip)] = {}
+            print("Storing debts for ip {} as {}".format(ip, ip_to_num(ip)))
             for i in status:
                 peer_ip = i["identity"]["mesh_ip"]
                 peer_debt = int(i["payment_details"]["debt"])
@@ -467,7 +469,11 @@ class World:
 
         for node in debts.keys():
             for node_to_compare in debts[node].keys():
-                if node not in debts[node_to_compare]:
+                if node_to_compare not in debts:
+                    print("{} is not in the debts list".format(
+                        node_to_compare))
+                    continue
+                elif node not in debts[node_to_compare]:
                     print("Node {} has a debt for Node {} but not the other way around!".format(
                         node, node_to_compare))
                     continue
