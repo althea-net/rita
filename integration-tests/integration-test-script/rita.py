@@ -17,6 +17,7 @@ import toml
 import random
 import networkx as nx
 import matplotlib.pyplot as plt
+import multiprocessing
 
 from connection import Connection
 from utils import exec_or_exit
@@ -31,6 +32,8 @@ from utils import teardown
 from utils import check_log_contains
 from world import World
 from node import Node
+from joblib import Parallel, delayed
+
 
 # find our own file, then go up one level
 abspath = os.path.abspath(__file__)
@@ -67,7 +70,7 @@ RITA_EXIT = RITA_EXIT_DEFAULT
 COMPAT_LAYOUT = os.getenv('COMPAT_LAYOUT', None)
 
 BACKOFF_FACTOR = float(os.getenv('BACKOFF_FACTOR', 1))
-CONVERGENCE_DELAY = float(os.getenv('CONVERGENCE_DELAY', 50))
+CONVERGENCE_DELAY = float(os.getenv('CONVERGENCE_DELAY', 300))
 DEBUG = os.getenv('DEBUG') is not None
 INITIAL_POLL_INTERVAL = float(os.getenv('INITIAL_POLL_INTERVAL', 1))
 PING6 = os.getenv('PING6', 'ping6')
@@ -319,7 +322,7 @@ def main():
     # (COMPAT_LAYOUTS, all_routes, traffic_test_pairs,
     #  world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID) = setup_seven_node_config()
     (COMPAT_LAYOUTS, all_routes, traffic_test_pairs,
-     world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID) = setup_arbitrary_node_config(50)
+     world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID) = setup_arbitrary_node_config(100)
 
     COMPAT_LAYOUTS["random"] = [
         'a' if random.randint(0, 1) else 'b' for _ in range(7)]
