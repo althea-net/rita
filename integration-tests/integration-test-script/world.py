@@ -403,6 +403,8 @@ class World:
                 if last_via.id == exit_id:
                     exit = from_node
                     client = to_node
+                    self.init_pair(intended_debts, client, exit)
+                    self.init_pair(intended_debts, exit, client)
                     intended_debts[exit][client] -= \
                         price * expected_data_transfer
                     intended_debts[client][exit] += \
