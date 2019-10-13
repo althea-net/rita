@@ -319,10 +319,10 @@ def setup_seven_node_config():
 
 
 def main():
-    # (COMPAT_LAYOUTS, all_routes, traffic_test_pairs,
-    #  world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID) = setup_seven_node_config()
     (COMPAT_LAYOUTS, all_routes, traffic_test_pairs,
-     world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID) = setup_arbitrary_node_config(100)
+     world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID) = setup_seven_node_config()
+    # (COMPAT_LAYOUTS, all_routes, traffic_test_pairs,
+    #  world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID) = setup_arbitrary_node_config(100)
 
     COMPAT_LAYOUTS["random"] = [
         'a' if random.randint(0, 1) else 'b' for _ in range(7)]
