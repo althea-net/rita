@@ -335,8 +335,13 @@ class World:
                  "[::1]:4877/debts"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             status.wait()
             output = status.stdout.read().decode("utf-8")
-            if output is "":
+            # not zero is a hack to deal with the fact that the 7 node format is
+            # one indexed and the arbitrary node one is zero indexed
+            if output is "" and n is not 0:
                 break
+            elif output is "" and n is 0:
+                n += 1
+                continue
             status = json.loads(output)
             balances[ip_to_num(ip)] = {}
             print("Storing debts for ip {} as {}".format(ip, ip_to_num(ip)))
@@ -421,7 +426,7 @@ class World:
         for node in intended_debts.keys():
             for owed in intended_debts[node].keys():
                 if node.id not in debts or owed.id not in debts[node.id]:
-                    print("Debts map is incomplete! {} Has a predicted debt of {} for {} but not actual debt".format(
+                    print("Debts map is incomplete! {} Has a predicted debt of {} for {} but no actual debt".format(
                         node.id, intended_debts[node][owed], owed.id))
                     continue
                 if not fuzzy_match(debts[node.id][owed.id], intended_debts[node][owed]):
