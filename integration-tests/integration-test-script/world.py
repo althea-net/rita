@@ -231,7 +231,7 @@ class World:
         return result
 
     def test_endpoints_all(self, VERBOSE):
-        curl_args = "curl -sfg6 --retry 5 --retry-connrefused -m 60 "
+        curl_args = "curl -sfg6 --retry 5 -m 60 "
         for node in self.nodes.values():
 
             # We don't expect the exit to work the same as others
