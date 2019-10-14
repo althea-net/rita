@@ -274,7 +274,7 @@ def start_rita(node, dname, RITA, EXIT_SETTINGS):
 
     EXIT_SETTINGS["reg_details"]["email"] = "{}@example.com".format(id)
 
-    os.system("ip netns exec netlab-{id} curl --retry 5 --retry-connrefused -m 60 -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
+    os.system("ip netns exec netlab-{id} curl --retry 5 -m 60 -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
               .format(id=id, data=json.dumps({"exit_client": EXIT_SETTINGS})))
 
 
