@@ -242,6 +242,14 @@ impl Tunnel {
                                 Ok(())
                             });
                         Arbiter::spawn(fut);
+                    } else {
+                        // We must wait until we have flushed the interface before deleting it
+                        // otherwise we will experience this error
+                        // https://github.com/sudomesh/bugs/issues/24
+                        if let Err(e) = KI.del_interface(&tunnel.iface_name) {
+                            error!("Failed to delete wg interface! {:?}", e);
+                        }
+                        TunnelManager::from_registry().do_send(PortCallback(tunnel.listen_port));
                     }
                     Ok(())
                 }),
@@ -572,8 +580,6 @@ impl Handler<TriggerGC> for TunnelManager {
                 // In the same spirit, we return the port to the free port pool only after tunnel
                 // deletion goes well.
                 tunnel.unmonitor(0);
-                KI.del_interface(&tunnel.iface_name)?;
-                self.free_ports.push(tunnel.listen_port);
             }
         }
 
