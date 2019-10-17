@@ -547,6 +547,7 @@ pub fn enforce_exit_clients(
                 Ok(list) => {
                     let mut clients_by_id = HashMap::new();
                     let free_tier_limit = SETTING.get_payment().free_tier_throughput;
+                    let close_threshold = SETTING.get_payment().close_threshold.clone();
                     for client in clients_list.iter() {
                         if let Ok(id) = to_identity(client) {
                             clients_by_id.insert(id, client);
@@ -561,7 +562,7 @@ pub fn enforce_exit_clients(
                                         let res = if debt_entry.payment_details.action
                                             == DebtAction::SuspendTunnel
                                         {
-                                            info!("Exit is enforcing on {}", client.wg_pubkey);
+                                            info!("Exit is enforcing on {} because their debt of {} is greater than the limit of {}", client.wg_pubkey, debt_entry.payment_details.debt, close_threshold);
                                             KI.set_class_limit(
                                                 "wg_exit",
                                                 free_tier_limit,
