@@ -396,7 +396,8 @@ def main():
         if choice != 'y':
             sys.exit(0)
 
-    world.test_exit_reach_all()
+    world.test_exit_reach_all(global_fail=True)
+
     world.test_traffic(traffic_test_pairs, TIME, SPEED)
 
     # wait a few seconds after traffic generation for all nodes to update their debts
