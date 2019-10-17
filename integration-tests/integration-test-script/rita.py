@@ -75,6 +75,7 @@ DEBUG = os.getenv('DEBUG') is not None
 INITIAL_POLL_INTERVAL = float(os.getenv('INITIAL_POLL_INTERVAL', 1))
 PING6 = os.getenv('PING6', 'ping6')
 VERBOSE = os.getenv('VERBOSE', None)
+NODES = os.getenv('NODES', None)
 
 # bandwidth test vars
 # in seconds
@@ -319,10 +320,14 @@ def setup_seven_node_config():
 
 
 def main():
-    (COMPAT_LAYOUTS, all_routes, traffic_test_pairs,
-     world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID) = setup_seven_node_config()
-    # (COMPAT_LAYOUTS, all_routes, traffic_test_pairs,
-    #  world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID) = setup_arbitrary_node_config(100)
+    if NODES is None or 'None' in NODES:
+        nodes = 7
+        (COMPAT_LAYOUTS, all_routes, traffic_test_pairs,
+         world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID) = setup_seven_node_config()
+    else:
+        nodes = int(NODES)
+        (COMPAT_LAYOUTS, all_routes, traffic_test_pairs,
+         world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID) = setup_arbitrary_node_config(nodes)
 
     COMPAT_LAYOUTS["random"] = [
         'a' if random.randint(0, 1) else 'b' for _ in range(7)]
