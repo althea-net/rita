@@ -360,7 +360,7 @@ def main():
                   (time.time() - start_time, CONVERGENCE_DELAY, interval))
 
     print("Test reachabibility and optimum routes...")
-    time.sleep(30)
+    time.sleep(120)
 
     duration = time.time() - start_time
 
@@ -374,18 +374,20 @@ def main():
         sys.exit(1)
 
     print("Waiting for clients to get info from exits")
-    time.sleep(15)
+    time.sleep(5)
 
     for k, v in world.nodes.items():
         if k != world.exit_id:
             register_to_exit(v)
 
     print("waiting for emails to be sent")
-    time.sleep(16)
+    time.sleep(15)
 
     for k, v in world.nodes.items():
         if k != world.exit_id:
             email_verif(v)
+
+    time.sleep(15)
 
     world.test_endpoints_all(VERBOSE)
 
