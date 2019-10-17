@@ -182,15 +182,18 @@ class World:
     def test_exit_reach_all(self, verbose=True, global_fail=True):
         exit_internal_ip = get_rita_settings(
             self.exit_id)["exit_network"]["own_internal_ip"]
+        ret = True
         for node in self.nodes.values():
             if node.id == self.exit_id:
                 continue
-            if not assert_test(self.test_exit_reach(node, exit_internal_ip), "Exit Reachability " +
+            elif not assert_test(self.test_exit_reach(node, exit_internal_ip), "Exit Reachability " +
                                "from node {} ({})".format(node.id,
                                                           node.revision),
                                verbose=verbose, global_fail=global_fail):
-                return False
-        return True
+                ret = False
+        if global_fail and not ret:
+            exit(1)
+        return ret
 
     def test_routes(self, all_routes, verbose=True, global_fail=True):
         """
