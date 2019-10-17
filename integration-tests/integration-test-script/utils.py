@@ -270,7 +270,7 @@ def start_rita(node, dname, RITA, EXIT_SETTINGS):
         'grep -Ev "<unknown>|mio|tokio_core|tokio_reactor|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA,
                                                                                             pwd=dname)
     )
-    time.sleep(1.5)
+    time.sleep(5)
 
     EXIT_SETTINGS["reg_details"]["email"] = "{}@example.com".format(id)
 
