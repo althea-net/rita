@@ -1,5 +1,7 @@
 #!/bin/bash
 set -eux
+NODES=${NODES:='None'}
+
 RUST_TEST_THREADS=1 cargo test --all
 
 if ! modprobe wireguard ; then
@@ -25,7 +27,7 @@ tar --exclude $REPOFOLDER/target \
     --exclude $REPOFOLDER/integration-tests/container/rita.tar.gz \
     --exclude $REPOFOLDER/scripts --dereference --hard-dereference -czf $DOCKERFOLDER/rita.tar.gz $REPOFOLDER
 pushd $DOCKERFOLDER
-time docker build -t rita-test .
+time docker build -t rita-test --build-arg NODES=$NODES .
 time docker run --privileged -it rita-test
 rm rita.tar.gz
 popd

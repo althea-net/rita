@@ -8,6 +8,8 @@ ENV POSTGRES_USER=postgres
 ENV POSTGRES_BIN=/usr/lib/postgresql/12/bin/postgres
 ENV INITDB_BIN=/usr/lib/postgresql/12/bin/initdb
 RUN PATH=$PATH:$HOME/.cargo/bin cargo install diesel_cli --force
+ARG NODES
+ENV NODES=$NODES
 # we pull in the git tar instead of the local folder becuase the raw code is much much smaller
 # note that changes have to be checked in to be pulled in and tested! we pull this in near
 # the bottom to maximize caching of earlier containers
