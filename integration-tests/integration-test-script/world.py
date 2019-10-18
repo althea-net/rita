@@ -156,7 +156,7 @@ class World:
     def test_reach(self, node_from, node_to, PING6):
         ping = subprocess.Popen(
             ["ip", "netns", "exec", "netlab-{}".format(node_from.id), PING6,
-             "fd00::{}".format(node_to.id),
+             num_to_ip(node_to.id),
              "-c", "1"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         output = ping.stdout.read().decode("utf-8")
         return "1 packets transmitted, 1 received, 0% packet loss" in output
@@ -182,15 +182,18 @@ class World:
     def test_exit_reach_all(self, verbose=True, global_fail=True):
         exit_internal_ip = get_rita_settings(
             self.exit_id)["exit_network"]["own_internal_ip"]
+        ret = True
         for node in self.nodes.values():
             if node.id == self.exit_id:
                 continue
-            if not assert_test(self.test_exit_reach(node, exit_internal_ip), "Exit Reachability " +
+            elif not assert_test(self.test_exit_reach(node, exit_internal_ip), "Exit Reachability " +
                                "from node {} ({})".format(node.id,
                                                           node.revision),
                                verbose=verbose, global_fail=global_fail):
-                return False
-        return True
+                ret = False
+        if global_fail and not ret:
+            exit(1)
+        return ret
 
     def test_routes(self, all_routes, verbose=True, global_fail=True):
         """
@@ -212,6 +215,8 @@ class World:
 
         for node, routes in all_routes.items():
             for route in routes:
+                if node.id == route[0].id:
+                    continue
                 desc = ("Optimal route from node {} ({}) " +
                         "to {} ({}) with next-hop {} ({}) and price {}").format(
                     node.id,
@@ -229,6 +234,7 @@ class World:
         return result
 
     def test_endpoints_all(self, VERBOSE):
+        curl_args = "curl -sfg6 --retry 5 -m 60 "
         for node in self.nodes.values():
 
             # We don't expect the exit to work the same as others
@@ -243,7 +249,7 @@ class World:
                 print(colored("Hitting /neighbors:", "green"))
 
             result = subprocess.Popen(shlex.split("ip netns exec "
-                                                  + "netlab-{} curl -sfg6 [::1]:4877/neighbors".format(node.id)),
+                                                  + "netlab-{} {} [::1]:4877/neighbors".format(node.id, curl_args)),
                                       stdout=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /neighbors")
             stdout = result.stdout.read().decode('utf-8')
@@ -263,7 +269,7 @@ class World:
                 print(colored("Hitting /exits:", "green"))
 
             result = subprocess.Popen(shlex.split("ip netns exec "
-                                                  + "netlab-{} curl -sfg6 [::1]:4877/exits".format(node.id)),
+                                                  + "netlab-{} {} [::1]:4877/exits".format(node.id, curl_args)),
                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /exits")
             stdout = result.stdout.read().decode('utf-8')
@@ -283,7 +289,7 @@ class World:
                 print(colored("Hitting /info:", "green"))
 
             result = subprocess.Popen(shlex.split("ip netns exec "
-                                                  + "netlab-{} curl -sfg6 [::1]:4877/info".format(node.id)),
+                                                  + "netlab-{} {} [::1]:4877/info".format(node.id, curl_args)),
                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /info")
             stdout = result.stdout.read().decode('utf-8')
@@ -303,7 +309,7 @@ class World:
                 print(colored("Hitting /settings:", "green"))
 
             result = subprocess.Popen(shlex.split("ip netns exec "
-                                                  + "netlab-{} curl -sfg6 [::1]:4877/settings".format(node.id)),
+                                                  + "netlab-{} {} [::1]:4877/settings".format(node.id, curl_args)),
                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             assert_test(not result.wait(), "curl-ing /settings")
             stdout = result.stdout.read().decode('utf-8')
@@ -322,19 +328,26 @@ class World:
         """Creates a nested dictionary of balances, for example balances[1][3] is the balance node 1 has for node 3"""
         status = True
         balances = {}
-        n = 1
+        n = 0
 
         while True:
             ip = num_to_ip(n)
+            print("Using ip {} to get debts".format(ip))
             status = subprocess.Popen(
                 ["ip", "netns", "exec", "netlab-{}".format(n), "curl", "-s", "-g", "-6",
                  "[::1]:4877/debts"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             status.wait()
             output = status.stdout.read().decode("utf-8")
-            if output is "":
+            # not zero is a hack to deal with the fact that the 7 node format is
+            # one indexed and the arbitrary node one is zero indexed
+            if output is "" and n is not 0:
                 break
+            elif output is "" and n is 0:
+                n += 1
+                continue
             status = json.loads(output)
             balances[ip_to_num(ip)] = {}
+            print("Storing debts for ip {} as {}".format(ip, ip_to_num(ip)))
             for i in status:
                 peer_ip = i["identity"]["mesh_ip"]
                 peer_debt = int(i["payment_details"]["debt"])
@@ -398,6 +411,8 @@ class World:
                 if last_via.id == exit_id:
                     exit = from_node
                     client = to_node
+                    self.init_pair(intended_debts, client, exit)
+                    self.init_pair(intended_debts, exit, client)
                     intended_debts[exit][client] -= \
                         price * expected_data_transfer
                     intended_debts[client][exit] += \
@@ -414,7 +429,7 @@ class World:
         for node in intended_debts.keys():
             for owed in intended_debts[node].keys():
                 if node.id not in debts or owed.id not in debts[node.id]:
-                    print("Debts map is incomplete! {} Has a predicted debt of {} for {} but not actual debt".format(
+                    print("Debts map is incomplete! {} Has a predicted debt of {} for {} but no actual debt".format(
                         node.id, intended_debts[node][owed], owed.id))
                     continue
                 if not fuzzy_match(debts[node.id][owed.id], intended_debts[node][owed]):
@@ -464,7 +479,11 @@ class World:
 
         for node in debts.keys():
             for node_to_compare in debts[node].keys():
-                if node not in debts[node_to_compare]:
+                if node_to_compare not in debts:
+                    print("{} is not in the debts list".format(
+                        node_to_compare))
+                    continue
+                elif node not in debts[node_to_compare]:
                     print("Node {} has a debt for Node {} but not the other way around!".format(
                         node, node_to_compare))
                     continue

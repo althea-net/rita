@@ -14,6 +14,10 @@ import subprocess
 import sys
 import time
 import toml
+import random
+import networkx as nx
+import matplotlib.pyplot as plt
+import multiprocessing
 
 from connection import Connection
 from utils import exec_or_exit
@@ -28,25 +32,19 @@ from utils import teardown
 from utils import check_log_contains
 from world import World
 from node import Node
+from joblib import Parallel, delayed
+
 
 # find our own file, then go up one level
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(os.path.dirname(abspath))
 os.chdir(dname)
 
-EXIT_NAMESPACE = "netlab-5"
-EXIT_ID = 5
-
-GATEWAY_NAMESPACE = "netlab-7"
-GATEWAY_ID = 7
-
 NETWORK_LAB = os.path.join(dname, 'deps/network-lab/network-lab.sh')
 BABELD = os.path.join(dname, 'deps/babeld/babeld')
 
-RITA_DEFAULT = os.path.join(dname, '../target/debug/rita')
-RITA_EXIT_DEFAULT = os.path.join(dname, '../target/debug/rita_exit')
-BOUNTY_HUNTER_DEFAULT = os.path.join(
-    dname, '/tmp/bounty_hunter/target/debug/bounty_hunter')
+RITA_DEFAULT = os.path.join(dname, '../target/release/rita')
+RITA_EXIT_DEFAULT = os.path.join(dname, '../target/release/rita_exit')
 
 # Envs for controlling postgres
 POSTGRES_USER = os.getenv('POSTGRES_USER')
@@ -58,28 +56,26 @@ POSTGRES_DATABASE = os.getenv('POSTGRES_DATABASE')
 # Envs for controlling compat testing
 RITA_A = os.getenv('RITA_A', RITA_DEFAULT)
 RITA_EXIT_A = os.getenv('RITA_EXIT_A', RITA_EXIT_DEFAULT)
-BOUNTY_HUNTER_A = os.getenv('BOUNTY_HUNTER_A', BOUNTY_HUNTER_DEFAULT)
 DIR_A = os.getenv('DIR_A', 'althea_rs_a')
 RITA_B = os.getenv('RITA_B', RITA_DEFAULT)
 RITA_EXIT_B = os.getenv('RITA_EXIT_B', RITA_EXIT_DEFAULT)
-BOUNTY_HUNTER_B = os.getenv('BOUNTY_HUNTER_B', BOUNTY_HUNTER_DEFAULT)
 DIR_B = os.getenv('DIR_B', 'althea_rs_b')
 
 # Current binary paths (They change to *_A or *_B depending on which node is
 # going to be run at a given moment, according to the layout)
 RITA = RITA_DEFAULT
 RITA_EXIT = RITA_EXIT_DEFAULT
-BOUNTY_HUNTER = BOUNTY_HUNTER_DEFAULT
 
 # COMPAT_LAYOUTS[None] sets everything to *_A
 COMPAT_LAYOUT = os.getenv('COMPAT_LAYOUT', None)
 
 BACKOFF_FACTOR = float(os.getenv('BACKOFF_FACTOR', 1))
-CONVERGENCE_DELAY = float(os.getenv('CONVERGENCE_DELAY', 50))
+CONVERGENCE_DELAY = float(os.getenv('CONVERGENCE_DELAY', 300))
 DEBUG = os.getenv('DEBUG') is not None
 INITIAL_POLL_INTERVAL = float(os.getenv('INITIAL_POLL_INTERVAL', 1))
 PING6 = os.getenv('PING6', 'ping6')
 VERBOSE = os.getenv('VERBOSE', None)
+NODES = os.getenv('NODES', None)
 
 # bandwidth test vars
 # in seconds
@@ -116,6 +112,100 @@ EXIT_SELECT = {
         }
     },
 }
+
+
+def setup_arbitrary_node_config(nodes):
+    """Generates an arbitrarily sized test network"""
+    COMPAT_LAYOUTS = {
+        None: ['a'] * nodes
+    }
+    world = World()
+    for n in range(nodes):
+        node = Node(n, random.randint(0, 500), COMPAT_LAYOUT, COMPAT_LAYOUTS)
+        if n == 5:
+            world.add_exit_node(node)
+        else:
+            world.add_node(node)
+
+    # generates graphs with small world properties, as such it simulates micropops well
+    # https://en.wikipedia.org/wiki/Watts%E2%80%93Strogatz_model
+    ws = nx.connected_watts_strogatz_graph(
+        nodes, random.randint(2, int(nodes/4)), 0.1)
+    nx.draw(ws)
+    plt.savefig("graph.png")
+
+    # associate the nodes list with it's generated prices with
+    # the networkx graph and it's generated topolgoy
+    for graph_node, rita_node in zip(ws.nodes, world.nodes):
+        print("Associating {} with {}".format(graph_node, rita_node))
+        neighbors = get_neighbors(graph_node, ws.edges)
+        if len(neighbors) is 0:
+            print("Disconnected node!")
+            exit(1)
+
+        rita_node = world.nodes[rita_node]
+        graph_node = ws[graph_node]
+        graph_node = {
+            "weight": rita_node.local_fee, "id": rita_node.id}
+
+        for neighbor in neighbors:
+            world.add_connection(Connection(rita_node, world.nodes[neighbor]))
+
+    # generate the all_routes list of routes to use for testing
+    all_routes = {}
+    for rita_node in world.nodes:
+        rita_node = world.nodes[rita_node]
+        all_routes[rita_node] = []
+        for n in world.nodes:
+            (next_hop, cost) = next_hop_and_cost(ws, rita_node.id, n, world)
+            next_hop = world.nodes[next_hop]
+            n = world.nodes[n]
+            all_routes[rita_node].append((n, cost, next_hop))
+
+    traffic_test_pairs = []
+    for _ in range(10):
+        index_a = random.randint(0, nodes - 1)
+        index_b = random.randint(0, nodes - 1)
+        if index_a == index_b:
+            continue
+        a = world.nodes[index_a]
+        b = world.nodes[index_b]
+        traffic_test_pairs.append((a, b))
+
+    EXIT_NAMESPACE = "netlab-{}".format(world.exit_id)
+    EXIT_ID = world.exit_id
+
+    GATEWAY_NAMESPACE = "netlab-0"
+    GATEWAY_ID = 0
+
+    return (COMPAT_LAYOUTS, all_routes, traffic_test_pairs, world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID)
+
+
+def get_neighbors(node, ajacency_list):
+    """Networkx only provides the very large adjaceny list, this filters that down"""
+    neighs = set()
+    for (a, b) in ajacency_list:
+        if a == node:
+            neighs.add(b)
+        elif b == node:
+            neighs.add(a)
+    return neighs
+
+
+def next_hop_and_cost(graph, start, finish, world):
+    """Returns the path cost computed in the Althea style"""
+    path = nx.dijkstra_path(graph, start, finish)
+    cost = 0
+    for node in path:
+        if node == start or node == finish:
+            continue
+        print(world.nodes)
+        cost += world.nodes[node].local_fee
+    if len(path) is 1:
+        return (path[0], 0)
+    if len(path) >= 2:
+        print(path)
+        return (path[1], cost)
 
 
 def setup_seven_node_config():
@@ -230,8 +320,14 @@ def setup_seven_node_config():
 
 
 def main():
-    (COMPAT_LAYOUTS, all_routes, traffic_test_pairs,
-     world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID) = setup_seven_node_config()
+    if NODES is None or 'None' in NODES:
+        nodes = 7
+        (COMPAT_LAYOUTS, all_routes, traffic_test_pairs,
+         world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID) = setup_seven_node_config()
+    else:
+        nodes = int(NODES)
+        (COMPAT_LAYOUTS, all_routes, traffic_test_pairs,
+         world, EXIT_NAMESPACE, EXIT_ID, GATEWAY_NAMESPACE, GATEWAY_ID) = setup_arbitrary_node_config(nodes)
 
     COMPAT_LAYOUTS["random"] = [
         'a' if random.randint(0, 1) else 'b' for _ in range(7)]
@@ -290,11 +386,13 @@ def main():
             register_to_exit(v)
 
     print("waiting for emails to be sent")
-    time.sleep(16)
+    time.sleep(15)
 
     for k, v in world.nodes.items():
         if k != world.exit_id:
             email_verif(v)
+
+    time.sleep(15)
 
     world.test_endpoints_all(VERBOSE)
 
@@ -305,7 +403,8 @@ def main():
         if choice != 'y':
             sys.exit(0)
 
-    world.test_exit_reach_all()
+    world.test_exit_reach_all(global_fail=True)
+
     world.test_traffic(traffic_test_pairs, TIME, SPEED)
 
     # wait a few seconds after traffic generation for all nodes to update their debts
