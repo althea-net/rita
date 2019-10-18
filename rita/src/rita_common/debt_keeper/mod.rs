@@ -50,6 +50,7 @@ pub struct NodeDebtData {
     /// The last thing we did, this value is updated but does not actual affect controll flow
     /// do not use it to affect control flow!
     pub action: DebtAction,
+    #[serde(skip_deserializing)]
     /// If we have an outgoing payment to a node in flight
     pub payment_in_flight: bool,
     #[serde(skip_serializing, skip_deserializing)]
