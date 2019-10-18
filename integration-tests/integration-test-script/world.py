@@ -148,7 +148,7 @@ class World:
             if id != self.exit_id and id != self.external:
                 (RITA, RITA_EXIT) = switch_binaries(id, VERBOSE, RITA, RITA_EXIT,
                                                     COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B)
-                start_rita(node, dname, RITA, EXIT_SETTINGS)
+                start_rita(node, dname, RITA, EXIT_SETTINGS, len(self.nodes) > 7)
             time.sleep(0.5 + random.random() / 2)  # wait 0.5s - 1s
             print()
         print("rita started")

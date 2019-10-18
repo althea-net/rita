@@ -251,7 +251,7 @@ def start_babel(node, BABELD):
     )
 
 
-def start_rita(node, dname, RITA, EXIT_SETTINGS):
+def start_rita(node, dname, RITA, EXIT_SETTINGS, retry):
     id = node.id
     settings = get_rita_defaults()
 
@@ -270,11 +270,16 @@ def start_rita(node, dname, RITA, EXIT_SETTINGS):
         'grep -Ev "<unknown>|mio|tokio_core|tokio_reactor|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA,
                                                                                             pwd=dname)
     )
-    time.sleep(5)
+    time.sleep(1)
 
     EXIT_SETTINGS["reg_details"]["email"] = "{}@example.com".format(id)
 
-    os.system("ip netns exec netlab-{id} curl --retry 5 -m 60 -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
+    # only enabled for large configs, becuase curl is not always up to date enough to have this option
+    if retry:
+        os.system("ip netns exec netlab-{id} curl --retry 5 --retry-connrefused -m 60 -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
+              .format(id=id, data=json.dumps({"exit_client": EXIT_SETTINGS})))
+    else:
+        os.system("ip netns exec netlab-{id} curl -XPOST 127.0.0.1:4877/settings -H 'Content-Type: application/json' -i -d '{data}'"
               .format(id=id, data=json.dumps({"exit_client": EXIT_SETTINGS})))
 
 
