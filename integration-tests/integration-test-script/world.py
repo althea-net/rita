@@ -332,7 +332,6 @@ class World:
 
         while True:
             ip = num_to_ip(n)
-            print("Using ip {} to get debts".format(ip))
             status = subprocess.Popen(
                 ["ip", "netns", "exec", "netlab-{}".format(n), "curl", "-s", "-g", "-6",
                  "[::1]:4877/debts"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -347,7 +346,6 @@ class World:
                 continue
             status = json.loads(output)
             balances[ip_to_num(ip)] = {}
-            print("Storing debts for ip {} as {}".format(ip, ip_to_num(ip)))
             for i in status:
                 peer_ip = i["identity"]["mesh_ip"]
                 peer_debt = int(i["payment_details"]["debt"])
