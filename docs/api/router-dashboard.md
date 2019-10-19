@@ -76,6 +76,42 @@ This file documents the dashboard API found in Rita client.
 
 ---
 
+## /routes
+
+- URL: `<rita ip>:<rita_dashboard_port>/routes`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+
+```
+[
+  {
+    "id": "3b2340",
+    "iface": "wg13",
+    "xroute": false,
+    "installed": true,
+    "neigh_ip": "fe80::13ad:e310:196e:2adc",
+    "prefix": "fd00::1337:e2f/128",
+    "metric": 96,
+    "refmetric": 0,
+    "full_path_rtt": 8.315,
+    "price": 0,
+    "fee": 277777
+  }
+]
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl 127.0.0.1:4877/routes`
+
+---
+
 ## /exits
 
 - URL: `<rita ip>:<rita_dashboard_port>/exits'
