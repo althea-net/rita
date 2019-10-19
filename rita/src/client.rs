@@ -278,6 +278,7 @@ fn start_client_dashboard() {
             .route("/mesh_ip", Method::GET, get_mesh_ip)
             .route("/mesh_ip", Method::POST, set_mesh_ip)
             .route("/neighbors", Method::GET, get_neighbor_info)
+            .route("/routes", Method::GET, get_routes)
             .route("/remote_logging/enabled", Method::GET, get_remote_logging)
             .route(
                 "/remote_logging/enabled/{enabled}",
