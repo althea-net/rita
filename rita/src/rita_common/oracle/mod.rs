@@ -300,13 +300,13 @@ struct PriceUpdate {
 /// for the network to adjust bandwidth prices, that's not the case right now so the DAO suggested prices
 /// are taken at face value.
 fn update_oracle() {
-    trace!("Starting price update");
     // if there's no url the user has not configured a DAO yet and
     // we simply move on
     let url = match SETTING.get_dao().oracle_url.clone() {
         Some(url) => url,
         None => return,
     };
+    info!("Starting oracle updating using {}", url);
 
     let is_gateway = SETTING.get_network().is_gateway;
 
