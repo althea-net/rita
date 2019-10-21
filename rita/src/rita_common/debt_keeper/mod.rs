@@ -94,7 +94,15 @@ fn debt_data_to_ser(input: DebtData) -> DebtDataSer {
 
 fn ser_to_debt_data(input: DebtDataSer) -> DebtData {
     let mut ret = DebtData::new();
-    for (i, d) in input {
+    for (i, mut d) in input {
+        // Don't load negative debts, essentailly means that all debt will be
+        // forgiven on reboot, but each node will still try and pay it's debts
+        // in good faith. Although it's tempting to remove this and not let people
+        // get away with unpaid bills service not working for arbitrary bad data reasons
+        // is much worse
+        if d.debt < Int256::from(0) {
+            d.debt = Int256::from(0);
+        }
         ret.insert(i, d);
     }
     ret
