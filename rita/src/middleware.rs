@@ -18,16 +18,25 @@ impl<S> Middleware<S> for Headers {
     }
 
     fn response(&self, req: &HttpRequest<S>, mut resp: HttpResponse) -> Result<Response> {
-        let url = req.connection_info().host().to_owned();
-        let re = Regex::new(r"^(.*):").unwrap();
-        let url_no_port = re.captures(&url).unwrap()[1].to_string();
+        let origin = req.headers().get("origin").unwrap();
+        let url_no_port = if origin == &"http://althea.net" {
+            "althea.net".to_string()
+        } else {
+            let url = req.connection_info().host().to_owned();
+            let re = Regex::new(r"^(.*):").unwrap();
+            re.captures(&url).unwrap()[1].to_string()
+        };
+
         if req.method() == Method::OPTIONS {
             *resp.status_mut() = StatusCode::OK;
         }
-        resp.headers_mut().insert(
-            header::HeaderName::try_from("Access-Control-Allow-Origin").unwrap(),
-            header::HeaderValue::from_str(&format!("http://{}", url_no_port)).unwrap(),
-        );
+
+        if url_no_port != "" {
+            resp.headers_mut().insert(
+                header::HeaderName::try_from("Access-Control-Allow-Origin").unwrap(),
+                header::HeaderValue::from_str(&format!("http://{}", url_no_port)).unwrap(),
+            );
+        }
         resp.headers_mut().insert(
             header::HeaderName::try_from("Access-Control-Allow-Headers").unwrap(),
             header::HeaderValue::from_static("authorization, content-type"),
