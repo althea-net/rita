@@ -189,8 +189,8 @@ fn setup_exit_wg_tunnel() {
         warn!("exit setup returned {}", e)
     }
     KI.one_time_exit_setup(
-        &SETTING.get_exit_network().own_internal_ip.into(),
-        &SETTING.get_exit_network().own_internal_ipv6.into(),
+        &SETTING.get_exit_network().own_internal_ip,
+        &SETTING.get_exit_network().own_internal_ipv6,
         SETTING.get_exit_network().netmask,
         SETTING.get_exit_network().netmaskv6,
     )

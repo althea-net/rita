@@ -38,6 +38,7 @@ description = "ExitA"
 description = "just a normal althea exit"
 exit_price = 50
 netmask = 24
+netmaskv6 = 32
 server_internal_ip = "172.168.1.254"
 server_internal_ipv6 = "fd::001"
 wg_exit_port = 59999
@@ -49,6 +50,7 @@ wg_public_key = "twSLk4SyWO7rlW6OqJPxFzx6tXUFcVD07tpd0AUCPgE="
 
 [exit_client.exits.exit_a.our_details]
 client_internal_ip = "172.168.1.103"
+client_internal_ipv6 = "fd::1001"
 
 [exit_client.exits.exit_b]
 message = "Got info ok"
@@ -61,6 +63,7 @@ description = "ExitB"
 description = "just a normal althea exit"
 exit_price = 50
 netmask = 24
+netmaskv6 = 32
 server_internal_ip = "172.168.1.254"
 server_internal_ipv6 = "fd::001"
 wg_exit_port = 59999
@@ -80,6 +83,7 @@ description = "ExitC"
 description = "just a normal althea exit"
 exit_price = 50
 netmask = 24
+netmaskv6 = 32
 server_internal_ip = "172.168.1.254"
 server_internal_ipv6 = "fd::001"
 wg_exit_port = 59999

@@ -244,6 +244,7 @@ pub struct ExitDetails {
     pub server_internal_ip: Ipv4Addr,
     pub server_internal_ipv6: Ipv6Addr,
     pub netmask: u8,
+    pub netmaskv6: u8,
     pub wg_exit_port: u16,
     pub exit_price: u64,
     #[serde(default = "default_system_chain")]

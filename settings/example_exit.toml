@@ -40,8 +40,11 @@ exit_hello_port = 4875
 exit_price = 50
 own_internal_ip = "172.168.1.254"
 own_internal_ipv6 = "fd::001"
+exit_start_ipv6 = "fd::101"
 exit_start_ip = "172.168.1.100"
 netmask = 24
+netmaskv6 = 32
+client_netmaskv6 = 64
 entry_timeout = 7776000
 wg_public_key = "H/ABwzXk834OwGYU8CZGfFxNZOd+BAJEaVDHiEiWWhU="
 wg_private_key = "ALxcZm2r58gY0sB4vIfnjShc86qBoVK3f32H9VrwqWU="

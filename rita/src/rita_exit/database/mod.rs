@@ -77,6 +77,7 @@ pub fn get_exit_info() -> ExitDetails {
         exit_price: SETTING.get_exit_network().exit_price,
         exit_currency: SETTING.get_payment().system_chain,
         netmask: SETTING.get_exit_network().netmask,
+        netmaskv6: SETTING.get_exit_network().client_netmaskv6,
         description: SETTING.get_description(),
         verif_mode: match SETTING.get_verif_settings() {
             Some(ExitVerifSettings::Email(_mailer_settings)) => ExitVerifMode::Email,
@@ -524,6 +525,7 @@ pub fn setup_clients(
     // setup all the tunnels
     let exit_status = KI.set_exit_wg_config(
         &wg_clients,
+        SETTING.get_exit_network().client_netmaskv6,
         SETTING.get_exit_network().wg_tunnel_port,
         &SETTING.get_exit_network().wg_private_key_path,
     );

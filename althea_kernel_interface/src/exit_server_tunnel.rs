@@ -17,6 +17,7 @@ impl dyn KernelInterface {
     pub fn set_exit_wg_config(
         &self,
         clients: &HashSet<ExitClient>,
+        client_netmaskv6: u8,
         listen_port: u16,
         private_key_path: &str,
     ) -> Result<(), Error> {
@@ -38,7 +39,8 @@ impl dyn KernelInterface {
             args.push("endpoint".into());
             args.push(format!("[{}]:{}", c.mesh_ip, c.port));
             args.push("allowed-ips".into());
-            args.push(format!("{}", c.internal_ip));
+            args.push(format!("{},", c.internal_ip));
+            args.push(format!("{}/{}", c.internal_ipv6, client_netmaskv6));
             args.push("persistent-keepalive".into());
             args.push("5".into());
 
@@ -48,6 +50,24 @@ impl dyn KernelInterface {
         let arg_str: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
 
         self.run_command(&command, &arg_str[..])?;
+
+        // Assign routes to all the client subnets
+        // we don't clean these up when a client is removed becuase they
+        // won't be routable anyways and if a new client is created and assigned
+        // this address it will route correctly to the new client
+        for c in clients.iter() {
+            let command = "ip";
+            let route_args = [
+                "route",
+                "add",
+                &format!("{}/{}", c.internal_ipv6, client_netmaskv6),
+                "via",
+                &c.internal_ipv6.to_string(),
+                "dev",
+                "wg_exit",
+            ];
+            let _res = self.run_command(command, &route_args);
+        }
 
         let wg_peers = self.get_peers("wg_exit")?;
         info!("wg_exit has {} peers", wg_peers.len());
@@ -80,7 +100,7 @@ impl dyn KernelInterface {
         local_ip: &Ipv4Addr,
         local_ipv6: &Ipv6Addr,
         netmask: u8,
-        netmask_v6: u8,
+        client_netmask_v6: u8,
     ) -> Result<(), Error> {
         let _output = self.run_command(
             "ip",
@@ -97,7 +117,7 @@ impl dyn KernelInterface {
             &[
                 "address",
                 "add",
-                &format!("{}/{}", local_ipv6, netmask_v6),
+                &format!("{}/{}", local_ipv6, client_netmask_v6),
                 "dev",
                 "wg_exit",
             ],
