@@ -14,6 +14,7 @@ use futures::future::result as future_result;
 use futures::future::Either;
 use futures::future::Future;
 use ipnetwork::IpNetwork;
+use serde::Serialize;
 use std::iter::Iterator;
 use std::net::IpAddr;
 use std::net::SocketAddr;
@@ -67,7 +68,7 @@ fn find_babel_val(val: &str, line: &str) -> Result<String, Error> {
     return Err(VariableNotFound(String::from(val), String::from(line)).into());
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Route {
     pub id: String,
     pub iface: String,

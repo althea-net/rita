@@ -36,6 +36,21 @@ pub struct NodeInfo {
     pub stats: IfaceStats,
 }
 
+pub fn get_routes(_req: HttpRequest) -> Box<dyn Future<Item = Json<Vec<Route>>, Error = Error>> {
+    let babel_port = SETTING.get_network().babel_port;
+    Box::new(
+        open_babel_stream(babel_port)
+            .from_err()
+            .and_then(move |stream| {
+                start_connection(stream).and_then(move |stream| {
+                    parse_routes(stream)
+                        .and_then(|(_stream, routes)| Ok(Json(routes)))
+                        .responder()
+                })
+            }),
+    )
+}
+
 /// Gets info about neighbors, including interested data about what their route
 /// price is to the exit and how much we may owe them. The debt data is now legacy
 /// since the /debts endpoint was introduced, and should be removed when it can be
