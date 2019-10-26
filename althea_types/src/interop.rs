@@ -239,11 +239,16 @@ fn default_verif_mode() -> ExitVerifMode {
     ExitVerifMode::Off
 }
 
+fn default_netmaskv6() -> u8 {
+    32
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct ExitDetails {
     pub server_internal_ip: Ipv4Addr,
     pub server_internal_ipv6: Ipv6Addr,
     pub netmask: u8,
+    #[serde(default = "default_netmaskv6")]
     pub netmaskv6: u8,
     pub wg_exit_port: u16,
     pub exit_price: u64,
@@ -257,7 +262,7 @@ pub struct ExitDetails {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct ExitClientDetails {
     pub client_internal_ip: Ipv4Addr,
-    pub client_internal_ipv6: Ipv6Addr,
+    pub client_internal_ipv6: Option<Ipv6Addr>,
 }
 
 #[cfg(feature = "actix")]

@@ -207,7 +207,7 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
                                 Err(e) => return Box::new(future::err(format_err!("{:?}", e))),
                             };
                             let client_internal_ipv6 = match their_record.internal_ipv6.parse() {
-                                Ok(ip) => ip,
+                                Ok(ip) => Some(ip),
                                 Err(e) => return Box::new(future::err(format_err!("{:?}", e))),
                             };
 
@@ -237,6 +237,12 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
     if let Some(their_record) = get_client(&client, &conn)? {
         trace!("record exists, updating");
 
+<<<<<<< HEAD
+=======
+        // TODO handle lack of ipv6 addresses for existing clients here
+        let their_record = get_client(&client, &conn)?;
+
+>>>>>>> 2de865df... Deal with unassigned client ipv6
         if !verif_done(&their_record) {
             return Ok(ExitState::Pending {
                 general_details: get_exit_info(),
@@ -274,7 +280,7 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
         Ok(ExitState::Registered {
             our_details: ExitClientDetails {
                 client_internal_ip: current_ip,
-                client_internal_ipv6: current_ipv6,
+                client_internal_ipv6: Some(current_ipv6),
             },
             general_details: get_exit_info(),
             message: "Registration OK".to_string(),

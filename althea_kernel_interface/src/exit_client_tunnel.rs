@@ -11,7 +11,7 @@ impl dyn KernelInterface {
         private_key_path: String,
         listen_port: u16,
         local_ip: Ipv4Addr,
-        local_ipv6: Ipv6Addr,
+        local_ipv6: Option<Ipv6Addr>,
         netmask: u8,
         netmaskv6: u8,
     ) -> Result<(), Error> {
@@ -87,8 +87,8 @@ impl dyn KernelInterface {
                 )?;
             }
         }
-        match prev_ipv6 {
-            Ok(prev_ipv6) => {
+        match (prev_ipv6, local_ipv6) {
+            (Ok(prev_ipv6), Some(local_ipv6)) => {
                 if prev_ipv6 != local_ipv6 {
                     self.run_command(
                         "ip",
@@ -113,7 +113,7 @@ impl dyn KernelInterface {
                     )?;
                 }
             }
-            Err(e) => {
+            (Err(e), Some(local_ipv6)) => {
                 warn!("Finding wg exit's current v6 IP returned {}", e);
                 self.run_command(
                     "ip",
@@ -126,6 +126,7 @@ impl dyn KernelInterface {
                     ],
                 )?;
             }
+            (_, None) => trace!("No assigned ipv6 address, not setting up"),
         }
 
         let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "mtu", "1340"])?;

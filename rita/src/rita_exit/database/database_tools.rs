@@ -49,8 +49,8 @@ fn get_internal_ips(clients: &[exit_db::models::Client]) -> Vec<Ipv4Addr> {
     list
 }
 
-/// Takes a list of clients and returns a sorted list of ip addresses spefically v4 since it
-/// can implement comparison operators, these are the starting points of client_subnets, which
+/// Takes a list of clients and returns a sorted list of ip addresses
+/// these are the starting points of client_subnets, which
 /// are assumed to be consistent beucase the client subnet size never changes
 fn get_internal_v6ips(clients: &[exit_db::models::Client]) -> Vec<Ipv6Addr> {
     let mut list = Vec::with_capacity(clients.len());
@@ -211,7 +211,17 @@ pub fn get_client(
             } else if entry.is_empty() {
                 return Ok(None);
             }
+<<<<<<< HEAD
             Ok(Some(entry[0].clone()))
+=======
+            let mut value = entry[0].clone();
+            // TODO remove this once everyone is transtioned.
+            if value.internal_ipv6.is_empty() {
+                warn!("Found client {} missing internal ipv6 address, generating, this should only happen once!", wg);
+                value.internal_ipv6 = get_next_client_ipv6(conn)?.to_string();
+            }
+            Ok(value)
+>>>>>>> 2de865df... Deal with unassigned client ipv6
         }
         Err(e) => {
             error!("We failed to lookup the client {:?} with{:?}", mesh_ip, e);

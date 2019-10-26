@@ -88,7 +88,9 @@ pub fn handle_email_registration(
             Err(e) => return future::err(format_err!("{:?}", e)),
         };
         let client_internal_ipv6 = match their_record.internal_ipv6.parse() {
-            Ok(ip) => ip,
+            // the option can be removed once all clients have upgraded, right
+            // now we need it to handle old clients checking in and getting new ipv6 assignments
+            Ok(ip) => Some(ip),
             Err(e) => return future::err(format_err!("{:?}", e)),
         };
         future::ok(ExitState::Registered {
