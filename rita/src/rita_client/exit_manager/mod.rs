@@ -62,11 +62,15 @@ fn linux_setup_exit_tunnel(
         current_exit.id.wg_public_key,
         SETTING.get_network().wg_private_key_path.clone(),
         SETTING.get_exit_client().wg_listen_port,
-        our_details.client_internal_ip.into(),
+        our_details.client_internal_ip,
+        our_details.client_internal_ipv6,
         general_details.netmask,
-        SETTING.get_network().rita_hello_port,
+        general_details.netmaskv6,
     )?;
-    KI.set_route_to_tunnel(&general_details.server_internal_ip)?;
+    KI.set_route_to_tunnel(
+        &general_details.server_internal_ip,
+        &general_details.server_internal_ipv6,
+    )?;
 
     let lan_nics = &SETTING.get_exit_client().lan_nics;
     for nic in lan_nics {
