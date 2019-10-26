@@ -46,23 +46,6 @@ impl dyn KernelInterface {
             }
         }
 
-        // block rita hello port on the exit tunnel
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-I",
-                "OUTPUT",
-                "-o",
-                "wg_exit",
-                "-p",
-                "tcp",
-                "--dport",
-                &format!("{}", rita_hello_port),
-                "-j",
-                "DROP",
-            ],
-        )?;
-
         let prev_ip: Result<Ipv4Addr, Error> = self.get_global_device_ip_v4("wg_exit");
 
         match prev_ip {
