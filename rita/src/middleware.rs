@@ -18,13 +18,21 @@ impl<S> Middleware<S> for Headers {
     }
 
     fn response(&self, req: &HttpRequest<S>, mut resp: HttpResponse) -> Result<Response> {
-        let origin = req.headers().get("origin").unwrap();
-        let url_no_port = if origin == &"http://althea.net" {
-            "althea.net".to_string()
-        } else {
-            let url = req.connection_info().host().to_owned();
-            let re = Regex::new(r"^(.*):").unwrap();
-            re.captures(&url).unwrap()[1].to_string()
+        let url_no_port = match req.headers().get("origin") {
+            Some(origin) => {
+                if origin == &"http://althea.net" {
+                    "althea.net".to_string()
+                } else {
+                    let url = req.connection_info().host().to_owned();
+                    let re = Regex::new(r"^(.*):").unwrap();
+                    re.captures(&url).unwrap()[1].to_string()
+                }
+            }
+            None => {
+                let url = req.connection_info().host().to_owned();
+                let re = Regex::new(r"^(.*):").unwrap();
+                re.captures(&url).unwrap()[1].to_string()
+            }
         };
 
         if req.method() == Method::OPTIONS {
