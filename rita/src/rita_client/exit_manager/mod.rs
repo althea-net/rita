@@ -374,10 +374,6 @@ pub struct ExitManager {
     last_exit: Option<ExitServer>,
     // the logging destination
     dest_url: String,
-    // used to store the logging state on startup so we don't double init logging
-    // as that would cause a panic
-    remote_logging_setting: bool,
-    remote_logging_already_started: bool,
     // if we are currently limiting our own connection speed due to a low balance.
     local_limiting: bool,
 }
@@ -391,9 +387,7 @@ impl SystemService for ExitManager {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("Exit Manager started");
         self.last_exit = None;
-        self.remote_logging_setting = SETTING.get_log().enabled;
         self.dest_url = SETTING.get_log().dest_url.clone();
-        self.remote_logging_already_started = false;
         self.local_limiting = false;
     }
 }
