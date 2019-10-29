@@ -9,7 +9,7 @@
 
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::SETTING;
-use ::actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
+use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use actix_web::error::PayloadError;
 use actix_web::{client, Either, HttpMessage, Result};
 use althea_types::SystemChain;
@@ -80,24 +80,17 @@ impl Handler<Update> for Oracle {
 
     fn handle(&mut self, _msg: Update, _ctx: &mut Context<Self>) -> Self::Result {
         let payment_settings = SETTING.get_payment();
-        let dao_settings = SETTING.get_dao();
         let full_node = get_web3_server();
         let web3 = Web3::new(&full_node, ORACLE_TIMEOUT);
         let our_address = payment_settings.eth_address.expect("No address!");
-        let oracle_enabled = dao_settings.oracle_enabled;
         drop(payment_settings);
-        drop(dao_settings);
 
         info!("About to make web3 requests to {}", full_node);
         update_balance(our_address, &web3, full_node.clone(), self.zero_window);
         update_nonce(our_address, &web3, full_node.clone());
         update_gas_price(&web3, full_node.clone());
         get_net_version(&web3, full_node);
-        if oracle_enabled {
-            update_oracle();
-        } else {
-            info!("User has disabled the Oracle!");
-        }
+        update_oracle();
     }
 }
 
@@ -334,14 +327,23 @@ fn update_oracle() {
                                     match serde_json::from_slice::<PriceUpdate>(&new_prices) {
                                         Ok(new_settings) => {
                                             let mut payment = SETTING.get_payment_mut();
-                                            // This will be true on devices that have integrated switches
-                                            // and a wan port configured. Mostly not a problem since we stopped
-                                            // shipping wan ports by default
-                                            if is_gateway {
-                                                payment.local_fee = new_settings.gateway;
+
+                                            let dao_settings = SETTING.get_dao();
+                                            let oracle_enabled = dao_settings.oracle_enabled;
+                                            drop(dao_settings);
+                                            if oracle_enabled {
+                                                // This will be true on devices that have integrated switches
+                                                // and a wan port configured. Mostly not a problem since we stopped
+                                                // shipping wan ports by default
+                                                if is_gateway {
+                                                    payment.local_fee = new_settings.gateway;
+                                                } else {
+                                                    payment.local_fee = new_settings.client;
+                                                }
                                             } else {
-                                                payment.local_fee = new_settings.client;
+                                                info!("User has disabled the Oracle!");
                                             }
+
                                             payment.max_fee = new_settings.max;
                                             payment.balance_warning_level =
                                                 new_settings.warning.into();
