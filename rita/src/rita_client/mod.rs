@@ -19,7 +19,7 @@ pub fn enable_remote_logging() -> Result<(), Error> {
     let key = SETTING
         .get_network()
         .wg_public_key
-        .expect("Tried to init remove logging without WgKey!");
+        .expect("Tried to init remote logging without WgKey!");
     let logging_url = &log.dest_url;
     let level: LevelFilter = match log.level.parse() {
         Ok(level) => level,
