@@ -262,12 +262,32 @@ impl dyn KernelInterface {
             ],
         )?;
 
-        if output.status.success() {
-            Ok(())
-        } else {
+        if !output.status.success() {
             let res = String::from_utf8(output.stderr)?;
             bail!("Failed to update qdisc class limit! {:?}", res);
         }
+
+        let output = self.run_command(
+            "tc",
+            &[
+                "qdisc",
+                modifier,
+                "dev",
+                iface_name,
+                "parent",
+                &format!("1:{}", class_id),
+                "handle",
+                &format!("{}:", class_id),
+                "cake",
+                "metro",
+            ],
+        )?;
+
+        if !output.status.success() {
+            let res = String::from_utf8(output.stderr)?;
+            warn!("Operating system does not support cake :( {:?}", res);
+        }
+        Ok(())
     }
 
     /// Generates a unique traffic class id for a exit user, essentially a really dumb hashing function
@@ -329,4 +349,10 @@ impl dyn KernelInterface {
             bail!("Failed to delete qdisc limit!");
         }
     }
+}
+
+#[test]
+fn get_id() {
+    use crate::KI;
+    println!("{}", KI.get_class_id(&"172.168.4.121".parse().unwrap()));
 }
