@@ -278,18 +278,16 @@ impl dyn KernelInterface {
                 &format!("1:{}", class_id),
                 "handle",
                 &format!("{}:", class_id),
-                "fq_codel",
-                "quantum",
-                "1354",
+                "cake",
+                "metro",
             ],
         )?;
 
-        if output.status.success() {
-            Ok(())
-        } else {
+        if !output.status.success() {
             let res = String::from_utf8(output.stderr)?;
-            bail!("Failed to update qdisc codel leaf limit! {:?}", res);
+            warn!("Operating system does not support cake :( {:?}", res);
         }
+        Ok(())
     }
 
     /// Generates a unique traffic class id for a exit user, essentially a really dumb hashing function
