@@ -1,6 +1,6 @@
 CREATE TABLE clients
 (
-    mesh_ip varchar(40) CONSTRAINT firstkey PRIMARY KEY,
+    mesh_ip varchar(40) PRIMARY KEY,
     wg_pubkey varchar(44) NOT NULL,
     wg_port integer NOT NULL,
     eth_address varchar(64) NOT NULL,
