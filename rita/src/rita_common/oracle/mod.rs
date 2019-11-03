@@ -326,11 +326,11 @@ fn update_oracle() {
                                     // an explicit fashion
                                     match serde_json::from_slice::<PriceUpdate>(&new_prices) {
                                         Ok(new_settings) => {
-                                            let mut payment = SETTING.get_payment_mut();
-
                                             let dao_settings = SETTING.get_dao();
                                             let oracle_enabled = dao_settings.oracle_enabled;
                                             drop(dao_settings);
+                                            let mut payment = SETTING.get_payment_mut();
+
                                             if oracle_enabled {
                                                 // This will be true on devices that have integrated switches
                                                 // and a wan port configured. Mostly not a problem since we stopped
