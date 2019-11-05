@@ -351,8 +351,12 @@ fn start_client_dashboard() {
             .route("/router/reboot", Method::POST, reboot_router)
             .route("/router/update", Method::POST, update_router)
             .route("/router/password", Method::POST, set_pass)
-            .route("/release_feed/get", Method::GET, get_release_feed)
-            .route("/release_feed/set/{feed}", Method::POST, set_release_feed)
+            .route("/release_feed/get", Method::GET, get_release_feed_http)
+            .route(
+                "/release_feed/set/{feed}",
+                Method::POST,
+                set_release_feed_http,
+            )
             .route("/remote_access", Method::GET, get_remote_access_status)
             .route(
                 "/remote_access/{status}",

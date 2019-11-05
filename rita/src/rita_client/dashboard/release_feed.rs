@@ -31,23 +31,27 @@ impl FromStr for ReleaseStatus {
     }
 }
 
-pub fn get_release_feed(_req: HttpRequest) -> Result<HttpResponse, Error> {
+pub fn get_release_feed_http(_req: HttpRequest) -> Result<HttpResponse, Error> {
     if !KI.is_openwrt() {
         return Ok(HttpResponse::new(StatusCode::BAD_REQUEST));
     }
+    let res = get_release_feed()?;
+    Ok(HttpResponse::Ok().json(res))
+}
 
+pub fn get_release_feed() -> Result<ReleaseStatus, Error> {
     let lines = get_lines(CUSTOMFEEDS)?;
     for line in lines.iter() {
         if line.contains(&"/rc/".to_string()) && line.contains(&FEED_NAME.to_string()) {
-            return Ok(HttpResponse::Ok().json(ReleaseStatus::ReleaseCandidate));
+            return Ok(ReleaseStatus::ReleaseCandidate);
         } else if line.contains(&"/pr/".to_string()) && line.contains(&FEED_NAME.to_string()) {
-            return Ok(HttpResponse::Ok().json(ReleaseStatus::PreRelease));
+            return Ok(ReleaseStatus::PreRelease);
         }
     }
-    Ok(HttpResponse::Ok().json(ReleaseStatus::GeneralAvailability))
+    Ok(ReleaseStatus::GeneralAvailability)
 }
 
-pub fn set_release_feed(path: Path<String>) -> Result<HttpResponse, Error> {
+pub fn set_release_feed_http(path: Path<String>) -> Result<HttpResponse, Error> {
     if !KI.is_openwrt() {
         return Ok(HttpResponse::new(StatusCode::BAD_REQUEST));
     }
@@ -62,7 +66,16 @@ pub fn set_release_feed(path: Path<String>) -> Result<HttpResponse, Error> {
             )));
     }
     let val = val.unwrap();
+    if let Err(e) = set_release_feed(val) {
+        return Ok(HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+            .into_builder()
+            .json(format!("Failed to write new release feed with {:?}", e)));
+    }
 
+    Ok(HttpResponse::Ok().json(()))
+}
+
+pub fn set_release_feed(val: ReleaseStatus) -> Result<(), Error> {
     let mut lines = get_lines(CUSTOMFEEDS)?;
 
     for line in lines.iter_mut() {
@@ -86,8 +99,7 @@ pub fn set_release_feed(path: Path<String>) -> Result<HttpResponse, Error> {
         }
     }
     write_out(CUSTOMFEEDS, lines)?;
-
-    Ok(HttpResponse::Ok().json(()))
+    Ok(())
 }
 
 fn get_arch(line: &str) -> Result<String, Error> {
