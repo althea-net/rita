@@ -16,4 +16,5 @@ eui48 = { git = "https://github.com/althea-mesh/eui48", features = ["serde"] }
 actix = { version = "0.7", optional = true}
 clarity = "0.1"
 arrayvec = {version= "0.5", features = ["serde"]}
+failure = "0.1"
 

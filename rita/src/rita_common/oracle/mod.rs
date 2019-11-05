@@ -12,6 +12,9 @@ use crate::SETTING;
 use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use actix_web::error::PayloadError;
 use actix_web::{client, Either, HttpMessage, Result};
+use althea_kernel_interface::opkg_feeds::get_release_feed;
+use althea_kernel_interface::opkg_feeds::set_release_feed;
+use althea_types::ReleaseStatus;
 use althea_types::SystemChain;
 use bytes::Bytes;
 use clarity::Address;
@@ -70,6 +73,8 @@ impl Handler<ZeroWindowStart> for Oracle {
 }
 
 /// How long we wait for a response from the full node
+/// this value must be less than or equal to the FAST_LOOP_SPEED
+/// in the rita_common fast loop
 pub const ORACLE_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Message)]
@@ -272,7 +277,7 @@ fn update_gas_price(web3: &Web3, full_node: String) {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct PriceUpdate {
+struct OracleUpdate {
     client: u32,
     gateway: u32,
     max: u32,
@@ -282,6 +287,9 @@ struct PriceUpdate {
     fudge_factor: u8,
     system_chain: SystemChain,
     withdraw_chain: SystemChain,
+    /// A release feed to be applied to the /etc/opkg/customfeeds.config, None means do not
+    /// change the currently configured release feed
+    release_feed: Option<ReleaseStatus>,
     /// A json payload to be merged into the existing settings
     merge_json: serde_json::Value,
 }
@@ -324,7 +332,7 @@ fn update_oracle() {
                                     // .json() only works on application/json content types unlike reqwest which handles bytes
                                     // transparently actix requests need to get the body and deserialize using serde_json in
                                     // an explicit fashion
-                                    match serde_json::from_slice::<PriceUpdate>(&new_prices) {
+                                    match serde_json::from_slice::<OracleUpdate>(&new_prices) {
                                         Ok(new_settings) => {
                                             let dao_settings = SETTING.get_dao();
                                             let oracle_enabled = dao_settings.oracle_enabled;
@@ -369,6 +377,24 @@ fn update_oracle() {
                                                         "Failed to merge oracle settings {:?} {:?}",
                                                         new_settings.merge_json, e
                                                     ),
+                                                }
+                                            }
+
+                                            // update the release feed to the provided release
+                                            match (new_settings.release_feed, get_release_feed()) {
+                                                (None, _) => {}
+                                                (Some(_new_feed), Err(e)) => {
+                                                    error!(
+                                                        "Failed to read current release feed! {:?}",
+                                                        e
+                                                    );
+                                                }
+                                                (Some(new_feed), Ok(old_feed)) => {
+                                                    if new_feed != old_feed {
+                                                        if let Err(e) = set_release_feed(new_feed) {
+                                                            error!("Failed to set new release feed! {:?}", e);
+                                                        }
+                                                    }
                                                 }
                                             }
 
