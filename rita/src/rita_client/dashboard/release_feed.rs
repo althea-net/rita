@@ -12,21 +12,32 @@ use std::str::FromStr;
 static CUSTOMFEEDS: &str = "/etc/opkg/customfeeds.conf";
 static FEED_NAME: &str = "openwrt_althea";
 
-#[derive(Serialize, Deserialize, Clone, Debug, Copy)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub enum ReleaseStatus {
+    Custom(String),
     ReleaseCandidate,
     PreRelease,
     GeneralAvailability,
 }
 
 impl FromStr for ReleaseStatus {
-    type Err = ();
-    fn from_str(s: &str) -> Result<ReleaseStatus, ()> {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<ReleaseStatus, Error> {
         match s {
+            "rc" => Ok(ReleaseStatus::ReleaseCandidate),
+            "pr" => Ok(ReleaseStatus::PreRelease),
             "ReleaseCandidate" => Ok(ReleaseStatus::ReleaseCandidate),
             "PreRelease" => Ok(ReleaseStatus::PreRelease),
             "GeneralAvailability" => Ok(ReleaseStatus::GeneralAvailability),
-            _ => Err(()),
+            _ => {
+                if !s.is_empty() {
+                    Ok(ReleaseStatus::Custom(s.to_string()))
+                } else {
+                    Err(format_err!(
+                        "Empty string can't possibly be a valid release!"
+                    ))
+                }
+            }
         }
     }
 }
@@ -42,13 +53,13 @@ pub fn get_release_feed_http(_req: HttpRequest) -> Result<HttpResponse, Error> {
 pub fn get_release_feed() -> Result<ReleaseStatus, Error> {
     let lines = get_lines(CUSTOMFEEDS)?;
     for line in lines.iter() {
-        if line.contains(&"/rc/".to_string()) && line.contains(&FEED_NAME.to_string()) {
-            return Ok(ReleaseStatus::ReleaseCandidate);
-        } else if line.contains(&"/pr/".to_string()) && line.contains(&FEED_NAME.to_string()) {
-            return Ok(ReleaseStatus::PreRelease);
+        // there may be other custom feeds configured, if it's not openwrt_althea skip it
+        if !line.contains(&FEED_NAME.to_string()) {
+            continue;
         }
+        return get_feed(line);
     }
-    Ok(ReleaseStatus::GeneralAvailability)
+    Err(format_err!("No feed openwrt_althea found!"))
 }
 
 pub fn set_release_feed_http(path: Path<String>) -> Result<HttpResponse, Error> {
@@ -94,6 +105,10 @@ pub fn set_release_feed(val: ReleaseStatus) -> Result<(), Error> {
                     "src/gz openwrt_althea https://updates.altheamesh.com/rc/packages/{}/althea",
                     arch
                 ),
+                ReleaseStatus::Custom(ref s) => format!(
+                    "src/gz openwrt_althea https://updates.altheamesh.com/{}/packages/{}/althea",
+                    s, arch
+                ),
             };
             *line = src_line;
         }
@@ -113,6 +128,53 @@ fn get_arch(line: &str) -> Result<String, Error> {
         .replace("althea", "")
         .replace("/", "");
     Ok(arch)
+}
+
+fn get_feed(line: &str) -> Result<ReleaseStatus, Error> {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r"/(([A-Za-z0-9\-_]+)/packages/)")
+            .expect("Unable to compile regular expression");
+    }
+    if let Some(feed) = RE.captures(&line) {
+        if let Some(val) = feed.get(0) {
+            let a: Vec<&str> = val.as_str().split('/').collect();
+            let feed = a[1];
+            return Ok(feed.parse()?);
+        }
+    }
+    Ok(ReleaseStatus::GeneralAvailability)
+}
+
+#[test]
+fn test_feed_feed_rc() {
+    let val = get_feed(
+        "src/gz openwrt_althea https://updates.altheamesh.com/rc/packages/mipsel_24kc/althea",
+    );
+    assert_eq!(val.unwrap(), ReleaseStatus::ReleaseCandidate)
+}
+
+#[test]
+fn test_feed_feed_ga() {
+    let val = get_feed(
+        "src/gz openwrt_althea https://updates.altheamesh.com/packages/mipsel_24kc/althea",
+    );
+    assert_eq!(val.unwrap(), ReleaseStatus::GeneralAvailability)
+}
+
+#[test]
+fn test_feed_feed_pr() {
+    let val = get_feed(
+        "src/gz openwrt_althea https://updates.altheamesh.com/pr/packages/mipsel_24kc/althea",
+    );
+    assert_eq!(val.unwrap(), ReleaseStatus::PreRelease)
+}
+
+#[test]
+fn test_feed_feed_custom() {
+    let val = get_feed(
+        "src/gz openwrt_althea https://updates.altheamesh.com/customVal/packages/mipsel_24kc/althea",
+    );
+    assert_eq!(val.unwrap(), ReleaseStatus::Custom("customVal".to_string()))
 }
 
 #[test]
