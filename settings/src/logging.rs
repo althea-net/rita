@@ -27,9 +27,9 @@ pub struct LoggingSettings {
 impl Default for LoggingSettings {
     fn default() -> Self {
         LoggingSettings {
-            enabled: true,
-            level: "INFO".to_string(),
-            dest_url: "https://stats.altheamesh.com:9999/sink/".to_string(),
+            enabled: default_logging(),
+            level: default_logging_level(),
+            dest_url: default_logging_dest_url(),
         }
     }
 }

@@ -6,7 +6,6 @@ use althea_types::WgKey;
 use arrayvec::ArrayString;
 
 fn default_discovery_ip() -> Ipv6Addr {
-    warn!("Add discovery_ip to network, removed in the next version!");
     Ipv6Addr::new(0xff02, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x8)
 }
 
@@ -44,8 +43,6 @@ pub struct NetworkSettings {
     /// The static IP used on mesh interfaces
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mesh_ip: Option<IpAddr>,
-    /// Mesh IP of bounty hunter (in fd00::/8)
-    pub bounty_ip: IpAddr,
     /// Broadcast ip address used for peer discovery (in ff02::/8)
     #[serde(default = "default_discovery_ip")]
     pub discovery_ip: Ipv6Addr,
@@ -128,7 +125,6 @@ impl Default for NetworkSettings {
             backup_created: false,
             metric_factor: default_metric_factor(),
             mesh_ip: None,
-            bounty_ip: "fd00::3".parse().unwrap(),
             discovery_ip: default_discovery_ip(),
             babel_port: 6872,
             rita_hello_port: 4876,

@@ -370,12 +370,9 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
 /// An actor which pays the exit
 #[derive(Default)]
 pub struct ExitManager {
-    // used to determine if we need to change the logging state
+    // used to determine if we've changed exits
     last_exit: Option<ExitServer>,
-    // the logging destination
-    dest_url: String,
-    // if we are currently limiting our own connection speed due to a low balance.
-    local_limiting: bool,
+    nat_setup: bool,
 }
 
 impl Actor for ExitManager {
@@ -387,8 +384,6 @@ impl SystemService for ExitManager {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("Exit Manager started");
         self.last_exit = None;
-        self.dest_url = SETTING.get_log().dest_url.clone();
-        self.local_limiting = false;
     }
 }
 
@@ -396,8 +391,10 @@ impl Handler<Tick> for ExitManager {
     type Result = ResponseFuture<(), Error>;
 
     fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
-        // strange notication lets us scope our access to SETTING and prevent
+        // scopes our access to SETTING and prevent
         // holding a readlock while exit tunnel setup requires a write lock
+        // roughly the same as a drop(); inline
+        let client_can_use_free_tier = { SETTING.get_payment().client_can_use_free_tier };
         let exit_server = { SETTING.get_exit_client().get_current_exit().cloned() };
 
         // code that connects to the current exit server
@@ -406,39 +403,65 @@ impl Handler<Tick> for ExitManager {
             trace!("We have selected an exit!");
             if let Some(general_details) = exit.info.clone().general_details() {
                 trace!("We have details for the selected exit!");
-                // only run if we have our own details and we either have no setup exit or the chosen
-                // exit has changed, if all of that is good we check if the default route is still correct
-                // and change it again if it's not.
-                if exit.info.our_details().is_some()
-                    && !(self.last_exit.is_some() && self.last_exit.clone().unwrap() == exit)
-                {
-                    trace!("Exit change, setting up exit tunnel");
-                    linux_setup_exit_tunnel(
-                        &exit,
-                        &general_details.clone(),
-                        &exit.info.our_details().unwrap(),
-                    )
-                    .expect("failure setting up exit tunnel");
 
-                    self.last_exit = Some(exit.clone());
-                } else if exit.info.our_details().is_some()
-                    && !KI
-                        .get_default_route()
-                        .unwrap_or_default()
-                        .contains(&String::from("wg_exit"))
-                {
-                    trace!("DHCP overwrite setup exit tunnel again");
-                    trace!("Exit change, setting up exit tunnel");
-                    linux_setup_exit_tunnel(
-                        &exit,
-                        &general_details.clone(),
-                        &exit.info.our_details().unwrap(),
-                    )
-                    .expect("failure setting up exit tunnel");
+                let signed_up_for_exit = exit.info.our_details().is_some();
+                let exit_has_changed =
+                    !(self.last_exit.is_some() && self.last_exit.clone().unwrap() == exit);
+                let correct_default_route = KI
+                    .get_default_route()
+                    .unwrap_or_default()
+                    .contains(&String::from("wg_exit"));
+
+                match (signed_up_for_exit, exit_has_changed, correct_default_route) {
+                    (true, true, _) => {
+                        trace!("Exit change, setting up exit tunnel");
+                        linux_setup_exit_tunnel(
+                            &exit,
+                            &general_details.clone(),
+                            &exit.info.our_details().unwrap(),
+                        )
+                        .expect("failure setting up exit tunnel");
+                        self.nat_setup = true;
+                        self.last_exit = Some(exit.clone());
+                    }
+                    (true, false, false) => {
+                        trace!("DHCP overwrite setup exit tunnel again");
+                        linux_setup_exit_tunnel(
+                            &exit,
+                            &general_details.clone(),
+                            &exit.info.our_details().unwrap(),
+                        )
+                        .expect("failure setting up exit tunnel");
+                        self.nat_setup = true;
+                    }
+                    _ => {}
+                }
+
+                // Adds and removes the nat rules in low balance situations
+                // this prevents the free tier from being confusing (partially working)
+                // when deployments are not interested in having a sufficiently fast one
+                let low_balance = low_balance();
+                let nat_setup = self.nat_setup;
+                match (low_balance, client_can_use_free_tier, nat_setup) {
+                    (true, false, true) => {
+                        let lan_nics = &SETTING.get_exit_client().lan_nics;
+                        for nic in lan_nics {
+                            KI.delete_client_nat_rules(&nic).unwrap();
+                        }
+                        self.nat_setup = false;
+                    }
+                    (false, _, false) => {
+                        let lan_nics = &SETTING.get_exit_client().lan_nics;
+                        for nic in lan_nics {
+                            KI.add_client_nat_rules(&nic).unwrap();
+                        }
+                        self.nat_setup = true;
+                    }
+                    _ => {}
                 }
 
                 // run billing at all times when an exit is setup
-                if self.last_exit.is_some() {
+                if signed_up_for_exit {
                     let exit_price = general_details.exit_price;
                     let exit_internal_addr = general_details.server_internal_ip;
                     let exit_port = exit.registration_port;
