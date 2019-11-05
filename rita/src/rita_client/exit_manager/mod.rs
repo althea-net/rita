@@ -370,11 +370,9 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
 /// An actor which pays the exit
 #[derive(Default)]
 pub struct ExitManager {
-    // used to determine if we need to change the logging state and if we've changed exits
+    // used to determine if we've changed exits
     last_exit: Option<ExitServer>,
     nat_setup: bool,
-    // if we are currently limiting our own connection speed due to a low balance.
-    local_limiting: bool,
 }
 
 impl Actor for ExitManager {
@@ -386,7 +384,6 @@ impl SystemService for ExitManager {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("Exit Manager started");
         self.last_exit = None;
-        self.local_limiting = false;
     }
 }
 
