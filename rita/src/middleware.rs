@@ -20,7 +20,7 @@ impl<S> Middleware<S> for Headers {
     fn response(&self, req: &HttpRequest<S>, mut resp: HttpResponse) -> Result<Response> {
         let url_no_port = match req.headers().get("origin") {
             Some(origin) => {
-                if origin == &"http://althea.net" {
+                if origin == "http://althea.net" {
                     "althea.net".to_string()
                 } else {
                     let url = req.connection_info().host().to_owned();
