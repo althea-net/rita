@@ -380,27 +380,13 @@ fn update_oracle() {
                                             }
 
                                             // update the release feed to the provided release
-                                            match (new_settings.release_feed, get_release_feed()) {
-                                                (None, _) => {}
-                                                (Some(_new_feed), Err(e)) => {
-                                                    error!(
-                                                        "Failed to read current release feed! {:?}",
-                                                        e
-                                                    );
-                                                }
-                                                (Some(new_feed), Ok(old_feed)) => {
-                                                    // we parse rather than just matching on a ReleaseState enum because
-                                                    // that's the easiest way to get the Custom(val) variant to deserialize
-                                                    // since from_str is implemented in althea types to work well with that
-                                                    // case, serde can't handle it well in the general case for various reasons
-                                                    if let Ok(new_feed) = new_feed.parse() {
-                                                        if new_feed != old_feed {
-                                                            if let Err(e) = set_release_feed(new_feed) {
-                                                                error!("Failed to set new release feed! {:?}", e);
-                                                            }
-                                                        }
-                                                    }
-                                                }
+                                            // gated on "None" to prevent reading a file if there is
+                                            // no update. Maybe someday match will be smart enough to
+                                            // avoid that on it's own
+                                            if new_settings.release_feed.is_some() {
+                                                handle_release_feed_update(
+                                                    new_settings.release_feed,
+                                                );
                                             }
 
                                             trace!("Successfully updated oracle");
@@ -436,4 +422,26 @@ pub fn low_balance() -> bool {
     let balance_warning_level = payment_settings.balance_warning_level.clone();
 
     balance < balance_warning_level
+}
+
+fn handle_release_feed_update(val: Option<String>) {
+    match (val, get_release_feed()) {
+        (None, _) => {}
+        (Some(_new_feed), Err(e)) => {
+            error!("Failed to read current release feed! {:?}", e);
+        }
+        (Some(new_feed), Ok(old_feed)) => {
+            // we parse rather than just matching on a ReleaseState enum because
+            // that's the easiest way to get the Custom(val) variant to deserialize
+            // since from_str is implemented in althea types to work well with that
+            // case, serde can't handle it well in the general case for various reasons
+            if let Ok(new_feed) = new_feed.parse() {
+                if new_feed != old_feed {
+                    if let Err(e) = set_release_feed(new_feed) {
+                        error!("Failed to set new release feed! {:?}", e);
+                    }
+                }
+            }
+        }
+    }
 }
