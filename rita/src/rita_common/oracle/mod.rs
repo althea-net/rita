@@ -14,7 +14,6 @@ use actix_web::error::PayloadError;
 use actix_web::{client, Either, HttpMessage, Result};
 use althea_kernel_interface::opkg_feeds::get_release_feed;
 use althea_kernel_interface::opkg_feeds::set_release_feed;
-use althea_types::ReleaseStatus;
 use althea_types::SystemChain;
 use bytes::Bytes;
 use clarity::Address;
@@ -289,7 +288,7 @@ struct OracleUpdate {
     withdraw_chain: SystemChain,
     /// A release feed to be applied to the /etc/opkg/customfeeds.config, None means do not
     /// change the currently configured release feed
-    release_feed: Option<ReleaseStatus>,
+    release_feed: Option<String>,
     /// A json payload to be merged into the existing settings
     merge_json: serde_json::Value,
 }
@@ -390,9 +389,15 @@ fn update_oracle() {
                                                     );
                                                 }
                                                 (Some(new_feed), Ok(old_feed)) => {
-                                                    if new_feed != old_feed {
-                                                        if let Err(e) = set_release_feed(new_feed) {
-                                                            error!("Failed to set new release feed! {:?}", e);
+                                                    // we parse rather than just matching on a ReleaseState enum because
+                                                    // that's the easiest way to get the Custom(val) variant to deserialize
+                                                    // since from_str is implemented in althea types to work well with that
+                                                    // case, serde can't handle it well in the general case for various reasons
+                                                    if let Ok(new_feed) = new_feed.parse() {
+                                                        if new_feed != old_feed {
+                                                            if let Err(e) = set_release_feed(new_feed) {
+                                                                error!("Failed to set new release feed! {:?}", e);
+                                                            }
                                                         }
                                                     }
                                                 }

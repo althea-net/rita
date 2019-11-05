@@ -293,6 +293,7 @@ impl FromStr for ReleaseStatus {
         match s {
             "rc" => Ok(ReleaseStatus::ReleaseCandidate),
             "pr" => Ok(ReleaseStatus::PreRelease),
+            "ga" => Ok(ReleaseStatus::GeneralAvailability),
             "ReleaseCandidate" => Ok(ReleaseStatus::ReleaseCandidate),
             "PreRelease" => Ok(ReleaseStatus::PreRelease),
             "GeneralAvailability" => Ok(ReleaseStatus::GeneralAvailability),
