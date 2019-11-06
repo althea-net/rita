@@ -20,10 +20,14 @@ pub fn to_identity(client: &Client) -> Result<Identity, Error> {
 }
 
 pub fn to_exit_client(client: Client) -> Result<ExitClient, Error> {
+    let internal_ipv6 = match client.internal_ipv6.parse() {
+        Ok(val) => Some(val),
+        Err(_e) => None,
+    };
     Ok(ExitClient {
         mesh_ip: client.mesh_ip.parse()?,
         internal_ip: client.internal_ip.parse()?,
-        internal_ipv6: client.internal_ipv6.parse()?,
+        internal_ipv6,
         port: client.wg_port as u16,
         public_key: client.wg_pubkey.parse()?,
     })

@@ -239,17 +239,19 @@ fn default_verif_mode() -> ExitVerifMode {
     ExitVerifMode::Off
 }
 
-fn default_netmaskv6() -> u8 {
-    32
+fn default_netmaskv6() -> Option<u8> {
+    None
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct ExitDetails {
     pub server_internal_ip: Ipv4Addr,
-    pub server_internal_ipv6: Ipv6Addr,
+    pub server_internal_ipv6: Option<Ipv6Addr>,
     pub netmask: u8,
+    /// Note this is the client assigned netmask versus the server netmask
+    /// we refer to as 'netmask' over in Rita exit code
     #[serde(default = "default_netmaskv6")]
-    pub netmaskv6: u8,
+    pub netmaskv6: Option<u8>,
     pub wg_exit_port: u16,
     pub exit_price: u64,
     #[serde(default = "default_system_chain")]

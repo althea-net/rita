@@ -5,7 +5,11 @@
 use crate::rita_common::debt_keeper::DebtAction;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::GetDebtsList;
+<<<<<<< HEAD
 use crate::rita_common::payment_validator::TRANSACTION_VERIFICATION_TIMEOUT;
+=======
+use crate::rita_exit::database::database_tools::add_client_ipv6;
+>>>>>>> a75ff7de... Make ipv6 for exits totally optional
 use crate::rita_exit::database::database_tools::client_conflict;
 use crate::rita_exit::database::database_tools::create_or_update_user_record;
 use crate::rita_exit::database::database_tools::delete_client;
@@ -70,14 +74,26 @@ pub mod struct_tools;
 pub const ONE_DAY: i64 = 86400;
 
 pub fn get_exit_info() -> ExitDetails {
+    let own_internal_ipv6;
+    let client_netmaskv6;
+    match SETTING.get_exit_network().ipv6 {
+        Some(ipv6) => {
+            own_internal_ipv6 = Some(ipv6.own_internal_ipv6);
+            client_netmaskv6 = Some(ipv6.client_netmaskv6);
+        }
+        None => {
+            own_internal_ipv6 = None;
+            client_netmaskv6 = None;
+        }
+    }
     ExitDetails {
         server_internal_ip: SETTING.get_exit_network().own_internal_ip,
-        server_internal_ipv6: SETTING.get_exit_network().own_internal_ipv6,
+        server_internal_ipv6: own_internal_ipv6,
         wg_exit_port: SETTING.get_exit_network().wg_tunnel_port,
         exit_price: SETTING.get_exit_network().exit_price,
         exit_currency: SETTING.get_payment().system_chain,
         netmask: SETTING.get_exit_network().netmask,
-        netmaskv6: SETTING.get_exit_network().client_netmaskv6,
+        netmaskv6: client_netmaskv6,
         description: SETTING.get_description(),
         verif_mode: match SETTING.get_verif_settings() {
             Some(ExitVerifSettings::Email(_mailer_settings)) => ExitVerifMode::Email,
@@ -101,11 +117,15 @@ pub fn secs_since_unix_epoch() -> i64 {
 fn client_to_new_db_client(
     client: &ExitClientIdentity,
     new_ipv4: Ipv4Addr,
-    new_ipv6: Ipv6Addr,
+    new_ipv6: Option<Ipv6Addr>,
     country: String,
 ) -> models::Client {
     let mut rng = rand::thread_rng();
     let rand_code: u64 = rng.gen_range(0, 999_999);
+    let new_ipv6 = match new_ipv6 {
+        Some(v) => v.to_string(),
+        None => String::new(),
+    };
     models::Client {
         wg_port: i32::from(client.wg_port),
         mesh_ip: client.global.mesh_ip.to_string(),
@@ -113,7 +133,7 @@ fn client_to_new_db_client(
         eth_address: client.global.eth_address.to_string(),
         nickname: client.global.nickname.unwrap_or_default().to_string(),
         internal_ip: new_ipv4.to_string(),
-        internal_ipv6: new_ipv6.to_string(),
+        internal_ipv6: new_ipv6,
         email: client.reg_details.email.clone().unwrap_or_default(),
         phone: client.reg_details.phone.clone().unwrap_or_default(),
         country,
@@ -142,7 +162,11 @@ fn create_or_update_user_record(
         );
 
         let new_ip = get_next_client_ipv4(conn)?;
-        let new_ipv6 = get_next_client_ipv6(conn)?;
+        let new_ipv6 = if SETTING.get_exit_network().ipv6.is_some() {
+            Some(get_next_client_ipv6(conn)?)
+        } else {
+            None
+        };
 
         let c = client_to_new_db_client(&client, new_ip, new_ipv6, user_country);
 
@@ -208,7 +232,7 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
                             };
                             let client_internal_ipv6 = match their_record.internal_ipv6.parse() {
                                 Ok(ip) => Some(ip),
-                                Err(e) => return Box::new(future::err(format_err!("{:?}", e))),
+                                Err(_e) => None,
                             };
 
                             Box::new(future::ok(ExitState::Registered {
@@ -238,8 +262,11 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
         trace!("record exists, updating");
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
         // TODO handle lack of ipv6 addresses for existing clients here
+=======
+>>>>>>> a75ff7de... Make ipv6 for exits totally optional
         let their_record = get_client(&client, &conn)?;
 
 >>>>>>> 2de865df... Deal with unassigned client ipv6
@@ -252,35 +279,51 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
             });
         }
 
+        add_client_ipv6(their_record.clone(), conn)?;
+
+        let exit_network = SETTING.get_exit_network();
+
         let current_ip: Ipv4Addr = their_record.internal_ip.parse()?;
-        let current_ipv6: Ipv6Addr = their_record.internal_ipv6.parse()?;
+        let current_ipv6: Option<Ipv6Addr> = match exit_network.ipv6 {
+            Some(_ipv6) => Some(their_record.internal_ipv6.parse()?),
+            None => None,
+        };
 
-        let current_subnet = IpNetwork::new(
-            SETTING.get_exit_network().own_internal_ip.into(),
-            SETTING.get_exit_network().netmask,
-        )?;
-        let current_subnetv6 = IpNetwork::new(
-            SETTING.get_exit_network().own_internal_ipv6.into(),
-            SETTING.get_exit_network().netmaskv6,
-        )?;
+        let v4_subnet_change = {
+            let current_subnet =
+                IpNetwork::new(exit_network.own_internal_ip.into(), exit_network.netmask)?;
+            !current_subnet.contains(current_ip.into())
+        };
+        let v6_subnet_change = match exit_network.ipv6 {
+            Some(ipv6) => {
+                let current_ipv6: Ipv6Addr = their_record.internal_ipv6.parse()?;
+                let current_subnetv6 =
+                    IpNetwork::new(ipv6.own_internal_ipv6.into(), ipv6.netmaskv6)?;
+                !current_subnetv6.contains(current_ipv6.into())
+            }
+            None => false,
+        };
+        drop(exit_network);
 
-        if !current_subnet.contains(current_ip.into())
-            || !current_subnetv6.contains(current_ipv6.into())
-        {
+        if v4_subnet_change || v6_subnet_change {
             return Ok(ExitState::Registering {
                 general_details: get_exit_info(),
                 message: "Registration reset because of IP range change".to_string(),
             });
         }
 
+<<<<<<< HEAD
         update_client(&client, &their_record, &conn)?;
 
+=======
+        update_client(&client, &conn)?;
+>>>>>>> a75ff7de... Make ipv6 for exits totally optional
         low_balance_notification(client, &their_record, SETTING.get_verif_settings(), &conn);
 
         Ok(ExitState::Registered {
             our_details: ExitClientDetails {
                 client_internal_ip: current_ip,
-                client_internal_ipv6: Some(current_ipv6),
+                client_internal_ipv6: current_ipv6,
             },
             general_details: get_exit_info(),
             message: "Registration OK".to_string(),
@@ -528,10 +571,14 @@ pub fn setup_clients(
         return Ok(wg_clients);
     }
 
+    let client_netmaskv6 = match SETTING.get_exit_network().ipv6 {
+        Some(ipv6) => Some(ipv6.client_netmaskv6),
+        None => None,
+    };
     // setup all the tunnels
     let exit_status = KI.set_exit_wg_config(
         &wg_clients,
-        SETTING.get_exit_network().client_netmaskv6,
+        client_netmaskv6,
         SETTING.get_exit_network().wg_tunnel_port,
         &SETTING.get_exit_network().wg_private_key_path,
     );

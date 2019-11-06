@@ -68,8 +68,8 @@ fn linux_setup_exit_tunnel(
         general_details.netmaskv6,
     )?;
     KI.set_route_to_tunnel(
-        &general_details.server_internal_ip,
-        &general_details.server_internal_ipv6,
+        general_details.server_internal_ip,
+        general_details.server_internal_ipv6,
     )?;
 
     let lan_nics = &SETTING.get_exit_client().lan_nics;

@@ -18,6 +18,7 @@ use std::net::Ipv6Addr;
 use std::sync::{Arc, RwLock};
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 use config::Config;
 
 use althea_types::Identity;
@@ -34,6 +35,25 @@ use crate::RitaCommonSettings;
 
 =======
 >>>>>>> 67514d0a... Use ipv4 and v6 variants where appropriate
+=======
+/// Because many hosting providers hand out ridiculous subnets like /124
+/// or even /128 we can't garuntee that every exit will be able to provide ipv6
+/// addresses, this struct contains all ipv6 stuff in a single struct to hide behind
+/// an option
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Copy)]
+pub struct ExitIpv6Settings {
+    /// This is the exit's own ip/gateway ip in the exit wireguard tunnel
+    pub own_internal_ipv6: Ipv6Addr,
+    /// This is the starting ip for the allocation of ipv6 netmasks of the size
+    /// netmaskv6
+    pub exit_start_ipv6: Ipv6Addr,
+    /// The netmask for the exit ipv6 subnet
+    pub netmaskv6: u8,
+    /// The size of client netmasks for ipv6 /64 in all normal cases
+    pub client_netmaskv6: u8,
+}
+
+>>>>>>> a75ff7de... Make ipv6 for exits totally optional
 /// This is the network settings specific to rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitNetworkSettings {
@@ -46,20 +66,11 @@ pub struct ExitNetworkSettings {
     pub exit_price: u64,
     /// This is the exit's own ip/gateway ip in the exit wireguard tunnel
     pub own_internal_ip: Ipv4Addr,
-    /// This is the exit's own ip/gateway ip in the exit wireguard tunnel
-    pub own_internal_ipv6: Ipv6Addr,
     /// This is the start of the exit tunnel's internal address allocation to clients, incremented
     /// by 1 every time a new client is added
     pub exit_start_ip: Ipv4Addr,
     /// The netmask, in bits to mask out, for the exit tunnel
     pub netmask: u8,
-    /// This is the starting ip for the allocation of ipv6 netmasks of the size
-    /// netmaskv6
-    pub exit_start_ipv6: Ipv6Addr,
-    /// The netmask for the exit ipv6 subnet
-    pub netmaskv6: u8,
-    /// The size of client netmasks for ipv6 /64 in all normal cases
-    pub client_netmaskv6: u8,
     /// Time in seconds before user is dropped from the db due to inactivity
     /// 0 means disabled
     pub entry_timeout: u32,
@@ -73,6 +84,8 @@ pub struct ExitNetworkSettings {
     pub wg_private_key: WgKey,
     /// path for the exit tunnel keyfile must be distinct from the common tunnel path!
     pub wg_private_key_path: String,
+    /// Optional exit settings for assigning ipv6 to clients
+    pub ipv6: Option<ExitIpv6Settings>,
 }
 
 impl ExitNetworkSettings {
@@ -85,12 +98,8 @@ impl ExitNetworkSettings {
             wg_tunnel_port: 59999,
             exit_price: 10,
             own_internal_ip: "172.16.255.254".parse().unwrap(),
-            own_internal_ipv6: "fd80::001".parse().unwrap(),
             exit_start_ip: "172.16.0.0".parse().unwrap(),
             netmask: 12,
-            exit_start_ipv6: "fd80::001".parse().unwrap(),
-            netmaskv6: 32,
-            client_netmaskv6: 64,
             entry_timeout: 0,
             geoip_api_user: None,
             geoip_api_key: None,
@@ -98,6 +107,7 @@ impl ExitNetworkSettings {
             wg_private_key: WgKey::from_str("mFFBLqQYrycxfHo10P9l8I2G7zbw8tia4WkGGgjGCn8=")
                 .unwrap(),
             wg_private_key_path: String::new(),
+            ipv6: None,
         }
     }
 }

@@ -102,10 +102,14 @@ pub fn get_next_client_ipv4(conn: &PgConnection) -> Result<Ipv4Addr, Error> {
 pub fn get_next_client_ipv6(conn: &PgConnection) -> Result<Ipv6Addr, Error> {
     use self::schema::clients::dsl::clients;
     let exit_settings = SETTING.get_exit_network();
-    let client_netmask = exit_settings.client_netmaskv6;
-    let netmask = exit_settings.netmaskv6;
-    let start_ip = exit_settings.exit_start_ipv6;
-    let gateway_ip = exit_settings.own_internal_ipv6;
+    if exit_settings.ipv6.is_none() {
+        bail!("Ipv6 is not configured!");
+    }
+    let ipv6 = exit_settings.ipv6.unwrap();
+    let client_netmask = ipv6.client_netmaskv6;
+    let netmask = ipv6.netmaskv6;
+    let start_ip = ipv6.exit_start_ipv6;
+    let gateway_ip = ipv6.own_internal_ipv6;
     let stop_ip = increment_subnetv6(start_ip, netmask);
     // drop here to free up the settings lock, this codepath runs in parallel
     drop(exit_settings);
@@ -133,12 +137,17 @@ pub fn get_next_client_ipv6(conn: &PgConnection) -> Result<Ipv6Addr, Error> {
     Ok(new_ip)
 }
 
+<<<<<<< HEAD
 /// updates the last seen time
 pub fn update_client(
     client: &ExitClientIdentity,
     their_record: &models::Client,
     conn: &PgConnection,
 ) -> Result<(), Error> {
+=======
+/// updates the last seen time, phone number and email address, things which may change often
+pub fn update_client(client: &ExitClientIdentity, conn: &PgConnection) -> Result<(), Error> {
+>>>>>>> a75ff7de... Make ipv6 for exits totally optional
     use self::schema::clients::dsl::{
         clients, email, eth_address, last_seen, mesh_ip, phone, wg_pubkey,
     };
@@ -187,6 +196,27 @@ pub fn update_client(
     Ok(())
 }
 
+/// Checks if this exit has ipv6 enabled but the client has no ipv6 address assigned
+/// if this is the case it will assign one and save the new address to the database record
+pub fn add_client_ipv6(their_record: models::Client, conn: &PgConnection) -> Result<(), Error> {
+    use self::schema::clients::dsl::{clients, eth_address, internal_ipv6, mesh_ip, wg_pubkey};
+    // we need to be very sure SETTING is dropped here, so we scope, otherwise we hold both
+    // a SETTING lock and a database worker lock
+    let ipv6_enabled = { SETTING.get_exit_network().ipv6.is_some() };
+
+    if ipv6_enabled && their_record.internal_ipv6.parse::<Ipv6Addr>().is_err() {
+        let new_ip = get_next_client_ipv6(conn)?.to_string();
+        let filtered_list = clients
+            .filter(mesh_ip.eq(their_record.mesh_ip))
+            .filter(wg_pubkey.eq(their_record.wg_pubkey))
+            .filter(eth_address.eq(their_record.eth_address));
+        diesel::update(filtered_list.clone())
+            .set(internal_ipv6.eq(new_ip))
+            .execute(&*conn)?;
+    }
+    Ok(())
+}
+
 pub fn get_client(
     client: &ExitClientIdentity,
     conn: &PgConnection,
@@ -212,6 +242,7 @@ pub fn get_client(
                 return Ok(None);
             }
 <<<<<<< HEAD
+<<<<<<< HEAD
             Ok(Some(entry[0].clone()))
 =======
             let mut value = entry[0].clone();
@@ -220,6 +251,9 @@ pub fn get_client(
                 warn!("Found client {} missing internal ipv6 address, generating, this should only happen once!", wg);
                 value.internal_ipv6 = get_next_client_ipv6(conn)?.to_string();
             }
+=======
+            let value = entry[0].clone();
+>>>>>>> a75ff7de... Make ipv6 for exits totally optional
             Ok(value)
 >>>>>>> 2de865df... Deal with unassigned client ipv6
         }

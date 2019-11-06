@@ -13,7 +13,7 @@ impl dyn KernelInterface {
         local_ip: Ipv4Addr,
         local_ipv6: Option<Ipv6Addr>,
         netmask: u8,
-        netmaskv6: u8,
+        netmaskv6: Option<u8>,
     ) -> Result<(), Error> {
         self.run_command(
             "wg",
@@ -87,8 +87,8 @@ impl dyn KernelInterface {
                 )?;
             }
         }
-        match (prev_ipv6, local_ipv6) {
-            (Ok(prev_ipv6), Some(local_ipv6)) => {
+        match (prev_ipv6, local_ipv6, netmaskv6) {
+            (Ok(prev_ipv6), Some(local_ipv6), Some(netmaskv6)) => {
                 if prev_ipv6 != local_ipv6 {
                     self.run_command(
                         "ip",
@@ -113,7 +113,7 @@ impl dyn KernelInterface {
                     )?;
                 }
             }
-            (Err(e), Some(local_ipv6)) => {
+            (Err(e), Some(local_ipv6), Some(netmaskv6)) => {
                 warn!("Finding wg exit's current v6 IP returned {}", e);
                 self.run_command(
                     "ip",
@@ -126,7 +126,9 @@ impl dyn KernelInterface {
                     ],
                 )?;
             }
-            (_, None) => trace!("No assigned ipv6 address, not setting up"),
+            (_, None, Some(_nm)) => error!("Bad client ipv6 state!"),
+            (_, Some(_), None) => error!("Bad client ipv6 state!"),
+            (_, None, None) => trace!("No assigned ipv6 address, not setting up"),
         }
 
         let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "mtu", "1340"])?;
@@ -152,8 +154,8 @@ impl dyn KernelInterface {
 
     pub fn set_route_to_tunnel(
         &self,
-        gateway: &Ipv4Addr,
-        gatewayv6: &Ipv6Addr,
+        gateway: Ipv4Addr,
+        gatewayv6: Option<Ipv6Addr>,
     ) -> Result<(), Error> {
         match self.run_command("ip", &["route", "del", "default"]) {
             Err(e) => warn!("Failed to delete default route {:?}", e),
@@ -179,24 +181,26 @@ impl dyn KernelInterface {
             ))
             .into());
         }
-        let output = self.run_command(
-            "ip",
-            &[
-                "route",
-                "add",
-                "default",
-                "via",
-                &gatewayv6.to_string(),
-                "dev",
-                "wg_exit",
-            ],
-        )?;
-        if !output.stderr.is_empty() {
-            return Err(KernelInterfaceError::RuntimeError(format!(
-                "received error setting ip route: {}",
-                String::from_utf8(output.stderr)?
-            ))
-            .into());
+        if let Some(gatewayv6) = gatewayv6 {
+            let output = self.run_command(
+                "ip",
+                &[
+                    "route",
+                    "add",
+                    "default",
+                    "via",
+                    &gatewayv6.to_string(),
+                    "dev",
+                    "wg_exit",
+                ],
+            )?;
+            if !output.stderr.is_empty() {
+                return Err(KernelInterfaceError::RuntimeError(format!(
+                    "received error setting ip route: {}",
+                    String::from_utf8(output.stderr)?
+                ))
+                .into());
+            }
         }
 
         Ok(())

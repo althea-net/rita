@@ -7,7 +7,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct ExitClient {
     pub internal_ip: Ipv4Addr,
-    pub internal_ipv6: Ipv6Addr,
+    pub internal_ipv6: Option<Ipv6Addr>,
     pub public_key: WgKey,
     pub mesh_ip: Ipv6Addr,
     pub port: u16,
@@ -17,7 +17,7 @@ impl dyn KernelInterface {
     pub fn set_exit_wg_config(
         &self,
         clients: &HashSet<ExitClient>,
-        client_netmaskv6: u8,
+        client_netmaskv6: Option<u8>,
         listen_port: u16,
         private_key_path: &str,
     ) -> Result<(), Error> {
@@ -40,7 +40,9 @@ impl dyn KernelInterface {
             args.push(format!("[{}]:{}", c.mesh_ip, c.port));
             args.push("allowed-ips".into());
             args.push(format!("{},", c.internal_ip));
-            args.push(format!("{}/{}", c.internal_ipv6, client_netmaskv6));
+            if let (Some(ip), Some(nm)) = (c.internal_ipv6, client_netmaskv6) {
+                args.push(format!("{}/{}", ip, nm));
+            }
             args.push("persistent-keepalive".into());
             args.push("5".into());
 
@@ -51,22 +53,24 @@ impl dyn KernelInterface {
 
         self.run_command(&command, &arg_str[..])?;
 
-        // Assign routes to all the client subnets
+        // Assign ipv6 routes to all the client subnets
         // we don't clean these up when a client is removed becuase they
         // won't be routable anyways and if a new client is created and assigned
         // this address it will route correctly to the new client
         for c in clients.iter() {
-            let command = "ip";
-            let route_args = [
-                "route",
-                "add",
-                &format!("{}/{}", c.internal_ipv6, client_netmaskv6),
-                "via",
-                &c.internal_ipv6.to_string(),
-                "dev",
-                "wg_exit",
-            ];
-            let _res = self.run_command(command, &route_args);
+            if let (Some(ip), Some(nm)) = (c.internal_ipv6, client_netmaskv6) {
+                let command = "ip";
+                let route_args = [
+                    "route",
+                    "add",
+                    &format!("{}/{}", ip, nm),
+                    "via",
+                    &ip.to_string(),
+                    "dev",
+                    "wg_exit",
+                ];
+                let _res = self.run_command(command, &route_args);
+            }
         }
 
         let wg_peers = self.get_peers("wg_exit")?;
@@ -97,10 +101,10 @@ impl dyn KernelInterface {
     /// Performs the one time startup tasks for the rita_exit clients loop
     pub fn one_time_exit_setup(
         &self,
-        local_ip: &Ipv4Addr,
-        local_ipv6: &Ipv6Addr,
+        local_ip: Ipv4Addr,
+        local_ipv6: Option<Ipv6Addr>,
         netmask: u8,
-        client_netmask_v6: u8,
+        client_netmask_v6: Option<u8>,
     ) -> Result<(), Error> {
         let _output = self.run_command(
             "ip",
@@ -112,16 +116,18 @@ impl dyn KernelInterface {
                 "wg_exit",
             ],
         )?;
-        let _output = self.run_command(
-            "ip",
-            &[
-                "address",
-                "add",
-                &format!("{}/{}", local_ipv6, client_netmask_v6),
-                "dev",
-                "wg_exit",
-            ],
-        )?;
+        if let (Some(local_ipv6), Some(client_netmask_v6)) = (local_ipv6, client_netmask_v6) {
+            let _output = self.run_command(
+                "ip",
+                &[
+                    "address",
+                    "add",
+                    &format!("{}/{}", local_ipv6, client_netmask_v6),
+                    "dev",
+                    "wg_exit",
+                ],
+            )?;
+        }
 
         let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "mtu", "1340"])?;
         if !output.stderr.is_empty() {

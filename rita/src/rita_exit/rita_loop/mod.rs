@@ -188,11 +188,15 @@ fn setup_exit_wg_tunnel() {
     if let Err(e) = KI.setup_wg_if_named("wg_exit") {
         warn!("exit setup returned {}", e)
     }
+    let (own_internal_ipv6, netmaskv6) = match SETTING.get_exit_network().ipv6 {
+        Some(ipv6) => (Some(ipv6.own_internal_ipv6), Some(ipv6.netmaskv6)),
+        None => (None, None),
+    };
     KI.one_time_exit_setup(
-        &SETTING.get_exit_network().own_internal_ip,
-        &SETTING.get_exit_network().own_internal_ipv6,
+        SETTING.get_exit_network().own_internal_ip,
+        own_internal_ipv6,
         SETTING.get_exit_network().netmask,
-        SETTING.get_exit_network().netmaskv6,
+        netmaskv6,
     )
     .expect("Failed to setup wg_exit!");
     KI.setup_nat(&SETTING.get_network().external_nic.clone().unwrap())
