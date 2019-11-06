@@ -1,6 +1,7 @@
 use crate::wg_key::WgKey;
 use arrayvec::ArrayString;
 use clarity::Address;
+use failure::Error;
 use num256::Uint256;
 use std::fmt;
 use std::fmt::Display;
@@ -276,4 +277,35 @@ pub struct PaymentTx {
     pub amount: Uint256,
     // populated when transaction is published
     pub txid: Option<Uint256>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub enum ReleaseStatus {
+    Custom(String),
+    ReleaseCandidate,
+    PreRelease,
+    GeneralAvailability,
+}
+
+impl FromStr for ReleaseStatus {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<ReleaseStatus, Error> {
+        match s {
+            "rc" => Ok(ReleaseStatus::ReleaseCandidate),
+            "pr" => Ok(ReleaseStatus::PreRelease),
+            "ga" => Ok(ReleaseStatus::GeneralAvailability),
+            "ReleaseCandidate" => Ok(ReleaseStatus::ReleaseCandidate),
+            "PreRelease" => Ok(ReleaseStatus::PreRelease),
+            "GeneralAvailability" => Ok(ReleaseStatus::GeneralAvailability),
+            _ => {
+                if !s.is_empty() {
+                    Ok(ReleaseStatus::Custom(s.to_string()))
+                } else {
+                    Err(format_err!(
+                        "Empty string can't possibly be a valid release!"
+                    ))
+                }
+            }
+        }
+    }
 }

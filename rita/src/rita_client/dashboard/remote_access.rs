@@ -1,11 +1,11 @@
-use crate::rita_client::dashboard::get_lines;
-use crate::rita_client::dashboard::write_out;
 use crate::KI;
 use crate::SETTING;
 use actix_web::http::StatusCode;
 use actix_web::HttpRequest;
 use actix_web::HttpResponse;
 use actix_web::Path;
+use althea_kernel_interface::file_io::get_lines;
+use althea_kernel_interface::file_io::write_out;
 use failure::Error;
 use settings::RitaCommonSettings;
 
