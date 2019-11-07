@@ -6,6 +6,7 @@
 //! the DAO fee amount and preventing the router from drastically making a large payment
 
 use crate::rita_common::payment_controller::TRANSACTION_SUBMISSON_TIMEOUT;
+use crate::rita_common::rita_loop::get_web3_server;
 use crate::rita_common::usage_tracker::UpdatePayments;
 use crate::rita_common::usage_tracker::UsageTracker;
 use crate::SETTING;
@@ -16,8 +17,6 @@ use clarity::Transaction;
 use futures::future::Future;
 use num256::Int256;
 use num_traits::Signed;
-use rand::thread_rng;
-use rand::Rng;
 use settings::RitaCommonSettings;
 use std::time::Instant;
 use web30::client::Web3;
@@ -152,18 +151,4 @@ impl Handler<Tick> for DAOManager {
             self.last_payment_time = Instant::now();
         }
     }
-}
-
-/// Checks the list of full nodes, panics if none exist, if there exist
-/// one or more a random entry from the list is returned in an attempt
-/// to load balance across fullnodes
-fn get_web3_server() -> String {
-    if SETTING.get_dao().node_list.is_empty() {
-        panic!("No full nodes available for DAO queries!");
-    }
-    let node_list = SETTING.get_dao().node_list.clone();
-    let mut rng = thread_rng();
-    let val = rng.gen_range(0, node_list.len());
-
-    node_list[val].clone()
 }

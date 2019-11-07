@@ -21,38 +21,38 @@ pub fn set_system_blockchain(path: Path<String>) -> Result<HttpResponse, Error> 
 
     let oracle_url;
     let mut payment = SETTING.get_payment_mut();
-    if id == SystemChain::Ethereum {
-        payment.node_list = vec![
-            "https://eth.althea.org:443".to_string(),
-            "https://mainnet.infura.io/v3/6b080f02d7004a8394444cdf232a7081".to_string(),
-        ];
-        payment.net_version = Some(1);
-        payment.system_chain = SystemChain::Ethereum;
-        payment.withdraw_chain = SystemChain::Ethereum;
-        oracle_url = "https://updates.altheamesh.com/prices".to_string();
-        // reset balance so that things take effect immediatley in the UI
-        payment.balance = 0u32.into();
-    } else if id == SystemChain::Xdai {
-        payment.node_list = vec!["https://dai.althea.org/".to_string()];
-        payment.net_version = Some(100);
-        payment.system_chain = SystemChain::Xdai;
-        payment.withdraw_chain = SystemChain::Xdai;
-        oracle_url = "https://updates.altheamesh.com/xdaiprices".to_string();
-        // reset balance so that things take effect immediatley in the UI
-        payment.balance = 0u32.into();
-    } else if id == SystemChain::Rinkeby {
-        payment.node_list =
-            vec!["https://rinkeby.infura.io/v3/174d2ebf288a452fab8a8f90eab57be7".to_string()];
-        payment.net_version = Some(4);
-        payment.system_chain = SystemChain::Rinkeby;
-        payment.withdraw_chain = SystemChain::Rinkeby;
-        oracle_url = "https://updates.altheamesh.com/testprices".to_string();
-        // reset balance so that things take effect immediatley in the UI
-        payment.balance = 0u32.into();
-    } else {
-        return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
-            .into_builder()
-            .json(format!("No known chain by the identifier {:?}", id)));
+    match id {
+        SystemChain::Ethereum => {
+            payment.node_list = vec![
+                "https://eth.althea.org:443".to_string(),
+                "https://mainnet.infura.io/v3/6b080f02d7004a8394444cdf232a7081".to_string(),
+            ];
+            payment.net_version = Some(1);
+            payment.system_chain = SystemChain::Ethereum;
+            payment.withdraw_chain = SystemChain::Ethereum;
+            oracle_url = "https://updates.altheamesh.com/prices".to_string();
+            // reset balance so that things take effect immediatley in the UI
+            payment.balance = 0u32.into();
+        }
+        SystemChain::Xdai => {
+            payment.node_list = vec!["https://dai.althea.org/".to_string()];
+            payment.net_version = Some(100);
+            payment.system_chain = SystemChain::Xdai;
+            payment.withdraw_chain = SystemChain::Xdai;
+            oracle_url = "https://updates.altheamesh.com/xdaiprices".to_string();
+            // reset balance so that things take effect immediatley in the UI
+            payment.balance = 0u32.into();
+        }
+        SystemChain::Rinkeby => {
+            payment.node_list =
+                vec!["https://rinkeby.infura.io/v3/174d2ebf288a452fab8a8f90eab57be7".to_string()];
+            payment.net_version = Some(4);
+            payment.system_chain = SystemChain::Rinkeby;
+            payment.withdraw_chain = SystemChain::Rinkeby;
+            oracle_url = "https://updates.altheamesh.com/testprices".to_string();
+            // reset balance so that things take effect immediatley in the UI
+            payment.balance = 0u32.into();
+        }
     }
     drop(payment);
 
@@ -61,21 +61,6 @@ pub fn set_system_blockchain(path: Path<String>) -> Result<HttpResponse, Error> 
     // if there is no dao configured use the currency oracle value
     if !have_dao {
         dao.oracle_url = Some(oracle_url);
-    }
-    if id == SystemChain::Ethereum {
-        dao.node_list = vec![
-            "https://eth.althea.org:443".to_string(),
-            "https://mainnet.infura.io/v3/6b080f02d7004a8394444cdf232a7081".to_string(),
-        ];
-    } else if id == SystemChain::Xdai {
-        dao.node_list = vec!["https://dai.althea.org/".to_string()];
-    } else if id == SystemChain::Rinkeby {
-        dao.node_list =
-            vec!["https://rinkeby.infura.io/v3/174d2ebf288a452fab8a8f90eab57be7".to_string()];
-    } else {
-        return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
-            .into_builder()
-            .json(format!("No known chain by the identifier {:?}", id)));
     }
     drop(dao);
 
