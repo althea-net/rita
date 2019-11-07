@@ -13,6 +13,7 @@ use futures01::future::Either;
 use futures01::future::Future;
 use phonenumber::PhoneNumber;
 use settings::exit::PhoneVerifSettings;
+use std::time::Duration;
 
 #[derive(Serialize)]
 pub struct SmsCheck {
@@ -71,6 +72,7 @@ fn send_text(number: String, api_key: String) -> impl Future<Item = ClientRespon
     };
     Either::B(
         actix_client::post(&url)
+            .timeout(Duration::from_secs(10))
             .form(&SmsRequest {
                 api_key,
                 via: "sms".to_string(),
@@ -140,7 +142,9 @@ pub fn handle_sms_registration(
         // user has attempts remaining and is requesting the code be resent
         (Some(number), None, false) => {
             Box::new(send_text(number, api_key).and_then(move |_result| {
+                trace!("Back from send text");
                 get_database_connection().and_then(move |conn| {
+                    trace!("Marking text as sent and exiting");
                     text_sent(&client, &conn, text_num)?;
                     Ok(ExitState::Pending {
                         general_details: get_exit_info(),
