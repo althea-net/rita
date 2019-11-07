@@ -4,8 +4,10 @@ use failure::Error;
 
 impl dyn KernelInterface {
     pub fn add_iptables_rule(&self, command: &str, rule: &[&str]) -> Result<(), Error> {
-        assert!(rule.contains(&"-A") || rule.contains(&"-I"));
+        assert!(rule.contains(&"-A") || rule.contains(&"-I") || rule.contains(&"-D"));
 
+        // we replace the add or delete commands with a check command so that we can see if the rule is actually present
+        // if it is then we don't need to do anything
         let mut new_command = Vec::new();
         let mut i_pos_skip = None;
         for i in 0..rule.len() {
