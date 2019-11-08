@@ -48,6 +48,9 @@ pub fn enable_remote_logging() -> Result<(), Error> {
     log::set_boxed_logger(Box::new(logger))?;
     log::set_max_level(level);
 
-    info!("Remote compressed logging enabled");
+    println!(
+        "Remote compressed logging enabled with target {}",
+        logging_url
+    );
     Ok(())
 }
