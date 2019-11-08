@@ -5,9 +5,14 @@ fn default_dao_address() -> Vec<Address> {
     Vec::new()
 }
 
-fn default_price_oracle() -> bool {
+fn default_oracle_enabled() -> bool {
     true
 }
+
+fn default_use_oracle_price() -> bool {
+    true
+}
+
 fn default_oracle_url() -> Option<String> {
     Some("https://updates.althea.net/prices".to_string())
 }
@@ -25,8 +30,12 @@ pub struct SubnetDAOSettings {
     /// the DAO from kicking them out when they for example fail to pay or exceed the maximum allowed
     /// price. Neither of those are implemented yet so for now it's a get out of jail free card until
     /// the human organizer notices.
-    #[serde(default = "default_price_oracle")]
+    #[serde(default = "default_oracle_enabled")]
     pub oracle_enabled: bool,
+    /// It's possible the user wants to ignore the suggested price but still take the suggested settings
+    /// at which point they should change this option.
+    #[serde(default = "default_use_oracle_price")]
+    pub use_oracle_price: bool,
     /// The oracle used to just be for pricing, now we are using it as a proxy for
     /// the DAO's ability to help generate consensus on router settings so it contains
     /// price as well as other updates. A None here would indicate that there's no oracle

@@ -300,6 +300,11 @@ struct OracleUpdate {
 /// for the network to adjust bandwidth prices, that's not the case right now so the DAO suggested prices
 /// are taken at face value.
 fn update_oracle() {
+    // check if the oracle is enabled
+    if !SETTING.get_dao().oracle_enabled {
+        return;
+    }
+
     // if there's no url the user has not configured a DAO yet and
     // we simply move on
     let url = match SETTING.get_dao().oracle_url.clone() {
@@ -334,11 +339,11 @@ fn update_oracle() {
                                     match serde_json::from_slice::<OracleUpdate>(&new_prices) {
                                         Ok(new_settings) => {
                                             let dao_settings = SETTING.get_dao();
-                                            let oracle_enabled = dao_settings.oracle_enabled;
+                                            let use_oracle_price = dao_settings.use_oracle_price;
                                             drop(dao_settings);
                                             let mut payment = SETTING.get_payment_mut();
 
-                                            if oracle_enabled {
+                                            if use_oracle_price {
                                                 // This will be true on devices that have integrated switches
                                                 // and a wan port configured. Mostly not a problem since we stopped
                                                 // shipping wan ports by default
