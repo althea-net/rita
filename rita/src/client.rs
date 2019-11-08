@@ -174,7 +174,7 @@ fn main() {
         env_logger::init();
     } else {
         let res = enable_remote_logging();
-        info!("logging status {:?}", res);
+        println!("logging status {:?}", res);
     }
 
     if cfg!(feature = "development") {
@@ -197,7 +197,6 @@ fn main() {
     // to get errors before lazy static
     RitaSettingsStruct::new(&settings_file).expect("Settings parse failure");
 
-    trace!("Starting");
     info!(
         "crate ver {}, git hash {}",
         env!("CARGO_PKG_VERSION"),
