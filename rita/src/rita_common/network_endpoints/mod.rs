@@ -105,7 +105,7 @@ pub fn hello_response(
             .and_then(|tunnel| {
                 let tunnel = match tunnel {
                     Some(val) => val,
-                    None => return Err(format_err!("tunnel open failure!"))
+                    None => return Err(format_err!("tunnel open failure!")),
                 };
 
                 Ok(Json(LocalIdentity {
