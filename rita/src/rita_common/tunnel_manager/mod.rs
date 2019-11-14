@@ -10,9 +10,9 @@ use crate::rita_common::peer_listener::Peer;
 use crate::KI;
 use crate::SETTING;
 #[cfg(test)]
-use ::actix::actors::mocker::Mocker;
-use ::actix::actors::resolver;
-use ::actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
+use actix::actors::mocker::Mocker;
+use actix::actors::resolver;
+use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use althea_types::Identity;
 use althea_types::LocalIdentity;
 use babel_monitor::monitor;
@@ -26,6 +26,7 @@ use rand::Rng;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::fmt;
+use std::fmt::Display;
 use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -132,6 +133,22 @@ pub struct Tunnel {
     pub last_contact: Instant,      // When's the last we heard from the other end of this tunnel?
     pub speed_limit: Option<usize>, // banwidth limit in mbps, used for Codel shaping
     state: TunnelState,
+}
+
+impl Display for Tunnel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Tunnel: IP: {} IFACE_NAME: {} IFIDX: {}, PORT: {} WG: {} ETH: {} MESH_IP: {} LAST_SEEN {}, SPEED_LIMIT {:?}, STATE: {:?}" , 
+        self.ip,
+        self.iface_name,
+        self.listen_ifidx,
+        self.listen_port,
+        self.neigh_id.global.wg_public_key,
+        self.neigh_id.global.eth_address,
+        self.neigh_id.global.mesh_ip,
+        (Instant::now() - self.last_contact).as_secs(),
+        self.speed_limit,
+        self.state)
+    }
 }
 
 impl Tunnel {
@@ -876,9 +893,9 @@ impl TunnelManager {
                 let tunnels = self.tunnels.get_mut(&key).unwrap();
                 for tunnel in tunnels.iter_mut() {
                     if tunnel.listen_ifidx == peer.ifidx && tunnel.ip == peer.contact_socket.ip() {
-                        trace!("We already have a tunnel for {:?}", tunnel);
+                        trace!("We already have a tunnel for {}", tunnel);
                         trace!(
-                            "Bumping timestamp after {}s for tunnel: {:?}",
+                            "Bumping timestamp after {}s for tunnel: {}",
                             tunnel.last_contact.elapsed().as_secs(),
                             tunnel
                         );
