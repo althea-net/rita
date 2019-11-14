@@ -103,7 +103,11 @@ pub fn hello_response(
             .send(IdentityCallback::new(their_id, peer, None))
             .from_err()
             .and_then(|tunnel| {
-                let tunnel = tunnel.unwrap();
+                let tunnel = match tunnel {
+                    Some(val) => val,
+                    None => return Err(format_err!("tunnel open failure!"))
+                };
+
                 Ok(Json(LocalIdentity {
                     global: match SETTING.get_identity() {
                         Some(id) => id,
