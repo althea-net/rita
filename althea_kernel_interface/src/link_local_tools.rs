@@ -125,7 +125,7 @@ impl dyn KernelInterface {
             )
         }
     }
-    /// Returns all existing interfaces
+    /// Returns the ifidx of the provided interface
     pub fn get_iface_index(&self, name: &str) -> Result<u32, Error> {
         let links = String::from_utf8(self.run_command("ip", &["link"])?.stdout)?;
 
