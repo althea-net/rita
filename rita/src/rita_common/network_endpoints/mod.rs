@@ -78,13 +78,14 @@ pub fn hello_response(
 ) -> Box<dyn Future<Item = Json<LocalIdentity>, Error = Error>> {
     let their_id = *req.0;
 
-    let socket = req
-        .1
-        .connection_info()
-        .remote()
-        .unwrap()
-        .parse::<SocketAddr>()
-        .unwrap();
+    let err_mesg = "Malformed hello tcp packet!";
+    let socket = match req.1.connection_info().remote() {
+        Some(val) => match val.parse::<SocketAddr>() {
+            Ok(val) => val,
+            Err(_e) => return Box::new(future::err(format_err!("{}", err_mesg))),
+        },
+        None => return Box::new(future::err(format_err!("{}", err_mesg))),
+    };
 
     trace!("Got Hello from {:?}", req.1.connection_info().remote());
     trace!("opening tunnel in hello_response for {:?}", their_id);
