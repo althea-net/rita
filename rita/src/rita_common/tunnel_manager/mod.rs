@@ -180,6 +180,7 @@ impl Tunnel {
         let network = SETTING.get_network().clone();
         KI.open_tunnel(
             &self.iface_name,
+            self.listen_ifidx,
             self.listen_port,
             &SocketAddr::new(self.ip, self.neigh_id.wg_port),
             &self.neigh_id.global.wg_public_key,

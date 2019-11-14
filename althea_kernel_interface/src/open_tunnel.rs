@@ -7,13 +7,13 @@ use althea_types::WgKey;
 
 use failure::Error;
 
-fn to_wg_local(ip: &IpAddr) -> IpAddr {
+fn to_wg_local(ip: &IpAddr, ifidx: u32) -> IpAddr {
     match ip {
         &IpAddr::V6(ip) => {
             let seg = ip.segments();
             assert_eq!((seg[0] & 0xfd00), 0xfd00);
             IpAddr::V6(Ipv6Addr::new(
-                0xfe80, 0x0, 0x0, 0x0, seg[4], seg[5], seg[6], seg[7],
+                0xfe80, 0x0, 0x0, 0x0, seg[4], seg[5], seg[6], seg[7]^(ifidx as u16),
             ))
         }
         _ => unreachable!(),
@@ -23,7 +23,7 @@ fn to_wg_local(ip: &IpAddr) -> IpAddr {
 #[test]
 fn test_to_wg_local() {
     assert_eq!(
-        to_wg_local(&"fd00::1".parse().unwrap()),
+        to_wg_local(&"fd00::1".parse().unwrap(), 0),
         "fe80::1".parse::<IpAddr>().unwrap()
     )
 }
@@ -58,6 +58,7 @@ impl dyn KernelInterface {
     pub fn open_tunnel(
         &self,
         interface: &String,
+        ifidx: u32,
         port: u16,
         endpoint: &SocketAddr,
         remote_pub_key: &WgKey,
@@ -116,7 +117,7 @@ impl dyn KernelInterface {
             &[
                 "address",
                 "add",
-                &format!("{}/64", to_wg_local(own_ip)),
+                &format!("{}/64", to_wg_local(own_ip, ifidx)),
                 "dev",
                 &interface,
             ],
@@ -243,6 +244,7 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
 
     KI.open_tunnel(
         &interface,
+        0,
         8088,
         &endpoint,
         &remote_pub_key,
