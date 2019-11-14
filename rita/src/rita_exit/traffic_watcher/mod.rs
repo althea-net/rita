@@ -169,7 +169,7 @@ fn counters_logging(
 }
 
 fn debts_logging(debts: &HashMap<Identity, i128>) {
-    info!("Collated total exit debts: {:?}", debts);
+    trace!("Collated total exit debts: {:?}", debts);
 
     info!("Computed exit debts for {:?} clients", debts.len());
     let mut total_income = 0i128;

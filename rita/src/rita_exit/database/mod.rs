@@ -582,7 +582,9 @@ pub fn enforce_exit_clients(
                                 };
                             }
                             None => {
-                                warn!("Could not find {:?} to suspend!", debt_entry.identity);
+                                // this can happen when clients are connected but not registered
+                                // to this specific exit
+                                trace!("Could not find {:?} to suspend!", debt_entry.identity);
                             }
                         }
                     }
