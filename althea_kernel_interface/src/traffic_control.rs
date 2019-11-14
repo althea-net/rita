@@ -285,7 +285,7 @@ impl dyn KernelInterface {
 
         if !output.status.success() {
             let res = String::from_utf8(output.stderr)?;
-            warn!("Operating system does not support cake :( {:?}", res);
+            trace!("Operating system does not support cake :( {:?}", res);
         }
         Ok(())
     }
