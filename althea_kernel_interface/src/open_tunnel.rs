@@ -138,7 +138,6 @@ impl dyn KernelInterface {
         }
         Ok(())
     }
-
 }
 
 #[test]
