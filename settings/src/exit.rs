@@ -18,6 +18,7 @@ use failure::Error;
 
 use crate::dao::SubnetDAOSettings;
 use crate::json_merge;
+use crate::localization::LocalizationSettings;
 use crate::network::NetworkSettings;
 use crate::payment::PaymentSettings;
 use crate::spawn_watch_thread;
@@ -178,6 +179,8 @@ pub struct RitaExitSettingsStruct {
     workers: u32,
     description: String,
     payment: PaymentSettings,
+    #[serde(default)]
+    localization: LocalizationSettings,
     dao: SubnetDAOSettings,
     network: NetworkSettings,
     exit_network: ExitNetworkSettings,
@@ -201,6 +204,7 @@ impl RitaExitSettingsStruct {
             description: "".to_string(),
             payment: PaymentSettings::default(),
             dao: SubnetDAOSettings::default(),
+            localization: LocalizationSettings::default(),
             network: NetworkSettings::default(),
             exit_network: ExitNetworkSettings::test_default(),
             allowed_countries: HashSet::new(),
@@ -297,6 +301,23 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
         &'me self,
     ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, SubnetDAOSettings> {
         RwLockReadGuardRef::new(self.read().expect("Failed to read DAO settings!")).map(|g| &g.dao)
+    }
+
+    fn get_localization_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, LocalizationSettings> {
+        RwLockWriteGuardRefMut::new(
+            self.write()
+                .expect("Failed to write localization settings!"),
+        )
+        .map_mut(|g| &mut g.localization)
+    }
+
+    fn get_localization<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, LocalizationSettings> {
+        RwLockReadGuardRef::new(self.read().expect("Failed to read localization settings!"))
+            .map(|g| &g.localization)
     }
 
     fn get_dao_mut<'ret, 'me: 'ret>(

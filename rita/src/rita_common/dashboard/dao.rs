@@ -1,12 +1,12 @@
 use crate::ARGS;
 use crate::SETTING;
-use ::actix_web::Path;
-use ::actix_web::{HttpRequest, HttpResponse, Json, Result};
-use ::settings::FileWrite;
-use ::settings::RitaCommonSettings;
+use actix_web::Path;
+use actix_web::{HttpRequest, HttpResponse, Json, Result};
 use clarity::Address;
 use failure::Error;
 use num256::Uint256;
+use settings::FileWrite;
+use settings::RitaCommonSettings;
 use std::collections::HashMap;
 
 pub fn get_dao_list(_req: HttpRequest) -> Result<Json<Vec<Address>>, Error> {

@@ -53,6 +53,7 @@ use crate::rita_client::dashboard::backup_created::*;
 use crate::rita_client::dashboard::eth_private_key::*;
 use crate::rita_client::dashboard::exits::*;
 use crate::rita_client::dashboard::interfaces::*;
+use crate::rita_client::dashboard::localization::*;
 use crate::rita_client::dashboard::logging::*;
 use crate::rita_client::dashboard::mesh_ip::*;
 use crate::rita_client::dashboard::neighbors::*;
@@ -339,6 +340,7 @@ fn start_client_dashboard() {
             )
             .route("/wipe", Method::POST, wipe)
             .route("/crash_actors", Method::POST, crash_actors)
+            .route("/localization", Method::GET, get_localization)
     })
     .workers(1)
     .bind(format!(

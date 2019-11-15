@@ -51,11 +51,13 @@ use failure::Error;
 pub mod client;
 pub mod dao;
 pub mod exit;
+pub mod localization;
 pub mod logging;
 pub mod network;
 pub mod payment;
 
 use crate::dao::SubnetDAOSettings;
+use crate::localization::LocalizationSettings;
 use crate::network::NetworkSettings;
 use crate::payment::PaymentSettings;
 
@@ -80,6 +82,13 @@ pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
     fn get_payment_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, T, PaymentSettings>;
+
+    fn get_localization<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockReadGuardRef<'ret, T, LocalizationSettings>;
+    fn get_localization_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, T, LocalizationSettings>;
 
     fn get_dao<'ret, 'me: 'ret>(&'me self) -> RwLockReadGuardRef<'ret, T, SubnetDAOSettings>;
     fn get_dao_mut<'ret, 'me: 'ret>(
