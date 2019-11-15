@@ -1703,3 +1703,26 @@ Enables remote access for debugging and user use, only usable from the local mes
 - Sample Call:
 
 `curl http://192.168.10.1:4877/remote_access/true`
+
+## /localization
+
+Returns a struct of localization settings for the router
+
+- URL: `<rita ip>:<rita_dashboard_port>/localization`
+- Method: `GET`
+- URL Params: `None`
+- Data Params: `None`
+- Success Response:
+  - Code: 200 OK
+  - Contents:
+      { "wyre_enabled": bool }
+
+```
+()
+```
+
+- Error Response: `500 Server Error`
+
+- Sample Call:
+
+`curl http://192.168.10.1:4877/localization`

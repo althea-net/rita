@@ -15,6 +15,7 @@ use failure::Error;
 
 use crate::dao::SubnetDAOSettings;
 use crate::json_merge;
+use crate::localization::LocalizationSettings;
 use crate::logging::LoggingSettings;
 use crate::network::NetworkSettings;
 use crate::payment::PaymentSettings;
@@ -178,6 +179,8 @@ pub struct RitaSettingsStruct {
     dao: SubnetDAOSettings,
     #[serde(default)]
     log: LoggingSettings,
+    #[serde(default)]
+    localization: LocalizationSettings,
     network: NetworkSettings,
     exit_client: ExitClientSettings,
     #[serde(skip)]
@@ -207,6 +210,18 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, SubnetDAOSettings> {
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.dao)
+    }
+
+    fn get_localization<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, LocalizationSettings> {
+        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.localization)
+    }
+
+    fn get_localization_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, LocalizationSettings> {
+        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.localization)
     }
 
     fn get_network<'ret, 'me: 'ret>(

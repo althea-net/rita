@@ -8,6 +8,7 @@ pub mod backup_created;
 pub mod eth_private_key;
 pub mod exits;
 pub mod interfaces;
+pub mod localization;
 pub mod logging;
 pub mod mesh_ip;
 pub mod neighbors;
