@@ -18,31 +18,31 @@ impl<S> Middleware<S> for Headers {
     }
 
     fn response(&self, req: &HttpRequest<S>, mut resp: HttpResponse) -> Result<Response> {
-        let url_no_port = match req.headers().get("origin") {
+        let url = req.connection_info().host().to_owned();
+        let re = Regex::new(r"^(.*):").unwrap();
+        let url_no_port = re.captures(&url).unwrap()[1].to_string();
+
+        let origin = match req.headers().get("origin") {
             Some(origin) => {
                 if origin == "http://althea.net" {
                     "althea.net".to_string()
+                } else if origin == "http://althearouter.net" {
+                    "althearouter.net".to_string()
                 } else {
-                    let url = req.connection_info().host().to_owned();
-                    let re = Regex::new(r"^(.*):").unwrap();
-                    re.captures(&url).unwrap()[1].to_string()
+                    url_no_port
                 }
             }
-            None => {
-                let url = req.connection_info().host().to_owned();
-                let re = Regex::new(r"^(.*):").unwrap();
-                re.captures(&url).unwrap()[1].to_string()
-            }
+            None => url_no_port,
         };
 
         if req.method() == Method::OPTIONS {
             *resp.status_mut() = StatusCode::OK;
         }
 
-        if url_no_port != "" {
+        if origin != "" {
             resp.headers_mut().insert(
                 header::HeaderName::try_from("Access-Control-Allow-Origin").unwrap(),
-                header::HeaderValue::from_str(&format!("http://{}", url_no_port)).unwrap(),
+                header::HeaderValue::from_str(&format!("http://{}", origin)).unwrap(),
             );
         }
         resp.headers_mut().insert(
