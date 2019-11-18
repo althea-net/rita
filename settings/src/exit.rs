@@ -133,6 +133,9 @@ pub struct EmailVerifSettings {
     pub smtp_password: String,
     /// time in seconds between notifications
     pub balance_notification_interval: u32,
+
+    /// True if the exit should notify clients when they have a low balance
+    pub notify_low_balance: bool,
 }
 
 fn default_balance_notification_text_body() -> String {
@@ -158,6 +161,8 @@ pub struct PhoneVerifSettings {
     pub balance_notification_body: String,
     /// time in seconds between notifications
     pub balance_notification_interval: u32,
+    /// True if the exit should notify clients when they have a low balance
+    pub notify_low_balance: bool,
 }
 
 /// Struct containing the different types of supported verification

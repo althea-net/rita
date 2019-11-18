@@ -299,6 +299,23 @@ fn low_balance_notification(
     conn: &PgConnection,
 ) {
     trace!("Checking low balance nofication");
+
+    // maybe this needs a trait 'enabled'?
+    if let Some(ref config) = config {
+        match config {
+            ExitVerifSettings::Phone(ref val) => {
+                if !val.notify_low_balance {
+                    return;
+                }
+            }
+            ExitVerifSettings::Email(ref val) => {
+                if !val.notify_low_balance {
+                    return;
+                }
+            }
+        }
+    }
+
     let time_since_last_notification =
         secs_since_unix_epoch() - their_record.last_balance_warning_time;
 
@@ -343,7 +360,7 @@ fn low_balance_notification(
                 }
             }
             (Some(_), false) => {}
-            (None, _) => error!("Client is registered but has no phone number!"),
+            (None, _) => error!("No notification method to notify of low balance!"),
         },
         (_, _) => {}
     }
