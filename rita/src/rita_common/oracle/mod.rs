@@ -291,7 +291,6 @@ struct OracleUpdate {
     /// A release feed to be applied to the /etc/opkg/customfeeds.config, None means do not
     /// change the currently configured release feed
     release_feed: Option<String>,
-    wyre_enabled: Option<bool>,
     /// A json payload to be merged into the existing settings
     merge_json: serde_json::Value,
 }
@@ -344,14 +343,6 @@ fn update_oracle() {
                                             let dao = SETTING.get_dao();
                                             let use_oracle_price = dao.use_oracle_price;
                                             drop(dao);
-
-                                            let mut localization = SETTING.get_localization_mut();
-                                            localization.wyre_enabled =
-                                                match new_settings.wyre_enabled {
-                                                    Some(val) => val,
-                                                    None => false,
-                                                };
-                                            drop(localization);
 
                                             let mut payment = SETTING.get_payment_mut();
                                             let starting_token_bridge_core =
