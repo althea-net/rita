@@ -69,7 +69,6 @@ use num_traits::identities::Zero;
 use settings::RitaCommonSettings;
 use std::fmt;
 use std::fmt::Display;
-use std::str::FromStr;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -162,19 +161,25 @@ impl SystemService for TokenBridge {
     }
 }
 
+fn token_bridge_core_from_settings() -> TokenBridgeCore {
+    let payment_settings = SETTING.get_payment();
+    let addresses = payment_settings.bridge_addresses.clone();
+    TokenBridgeCore::new(
+        addresses.uniswap_address,
+        addresses.xdai_foreign_bridge_address,
+        addresses.xdai_home_bridge_address,
+        addresses.foreign_dai_contract_address,
+        payment_settings.eth_address.unwrap(),
+        payment_settings.eth_private_key.unwrap(),
+        addresses.eth_full_node_url,
+        addresses.xdai_full_node_url,
+    )
+}
+
 impl Default for TokenBridge {
     fn default() -> TokenBridge {
         TokenBridge {
-            bridge: TokenBridgeCore::new(
-                Address::from_str("0x09cabEC1eAd1c0Ba254B09efb3EE13841712bE14").unwrap(),
-                Address::from_str("0x7301CFA0e1756B71869E93d4e4Dca5c7d0eb0AA6").unwrap(),
-                Address::from_str("0x4aa42145Aa6Ebf72e164C9bBC74fbD3788045016").unwrap(),
-                Address::from_str("0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359").unwrap(),
-                SETTING.get_payment().eth_address.unwrap(),
-                SETTING.get_payment().eth_private_key.unwrap(),
-                "https://eth.althea.org".into(),
-                "https://dai.althea.net".into(),
-            ),
+            bridge: token_bridge_core_from_settings(),
             state: State::Ready { former_state: None },
             minimum_to_exchange: 2,
             reserve_amount: 1,
@@ -683,5 +688,20 @@ impl Handler<GetBridge> for TokenBridge {
         let bridge = self.bridge.clone();
         let reserve_amount = eth_to_wei(self.reserve_amount.into());
         Ok((bridge, reserve_amount))
+    }
+}
+
+/// Used to indicate that the source addresses should be reloaded from the config
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Copy)]
+pub struct ReloadAddresses();
+
+impl Message for ReloadAddresses {
+    type Result = ();
+}
+
+impl Handler<ReloadAddresses> for TokenBridge {
+    type Result = ();
+    fn handle(&mut self, _msg: ReloadAddresses, _ctx: &mut Context<Self>) -> Self::Result {
+        self.bridge = token_bridge_core_from_settings();
     }
 }
