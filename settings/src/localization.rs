@@ -8,4 +8,7 @@ pub struct LocalizationSettings {
     // cryptocurrency through Wyre as part of the funding flow.
     #[serde(default = "default_wyre_enabled")]
     pub wyre_enabled: bool,
+    // Wyre account_id used to associate transactions with a specific Wyre account
+    #[serde(default)]
+    pub wyre_account_id: String,
 }
