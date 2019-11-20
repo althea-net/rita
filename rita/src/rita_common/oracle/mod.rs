@@ -25,6 +25,8 @@ use settings::RitaCommonSettings;
 use std::time::Duration;
 use std::time::Instant;
 use web30::client::Web3;
+use crate::rita_common::token_bridge::TokenBridge;
+use crate::rita_common::token_bridge::ReloadAddresses;
 
 pub struct Oracle {
     /// An instant representing the start of a short period where the balance can
@@ -352,6 +354,7 @@ fn update_oracle() {
                                             drop(localization);
 
                                             let mut payment = SETTING.get_payment_mut();
+                                            let starting_token_bridge_core = payment.bridge_addresses.clone();
 
                                             if use_oracle_price {
                                                 // This will be true on devices that have integrated switches
@@ -403,6 +406,10 @@ fn update_oracle() {
                                                     new_settings.release_feed,
                                                 );
                                             }
+                                            // Sends a message to reload bridge addresses live if needed
+                                            if SETTING.get_payment().bridge_addresses != starting_token_bridge_core {
+                                                TokenBridge::from_registry().do_send(ReloadAddresses());
+                                            }
 
                                             trace!("Successfully updated oracle");
                                         }
@@ -439,6 +446,8 @@ pub fn low_balance() -> bool {
     balance < balance_warning_level
 }
 
+/// Allows for online updating of the release feed, note that this not run
+/// on every device startup meaning just editing it the config is not sufficient
 fn handle_release_feed_update(val: Option<String>) {
     match (val, get_release_feed()) {
         (None, _) => {}
