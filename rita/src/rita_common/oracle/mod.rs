@@ -8,6 +8,8 @@
 //! to match. More advanced pricing systems may be broken out into their own file some day
 
 use crate::rita_common::rita_loop::get_web3_server;
+use crate::rita_common::token_bridge::ReloadAddresses;
+use crate::rita_common::token_bridge::TokenBridge;
 use crate::SETTING;
 use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use actix_web::error::PayloadError;
@@ -25,8 +27,6 @@ use settings::RitaCommonSettings;
 use std::time::Duration;
 use std::time::Instant;
 use web30::client::Web3;
-use crate::rita_common::token_bridge::TokenBridge;
-use crate::rita_common::token_bridge::ReloadAddresses;
 
 pub struct Oracle {
     /// An instant representing the start of a short period where the balance can
@@ -354,7 +354,8 @@ fn update_oracle() {
                                             drop(localization);
 
                                             let mut payment = SETTING.get_payment_mut();
-                                            let starting_token_bridge_core = payment.bridge_addresses.clone();
+                                            let starting_token_bridge_core =
+                                                payment.bridge_addresses.clone();
 
                                             if use_oracle_price {
                                                 // This will be true on devices that have integrated switches
@@ -407,8 +408,11 @@ fn update_oracle() {
                                                 );
                                             }
                                             // Sends a message to reload bridge addresses live if needed
-                                            if SETTING.get_payment().bridge_addresses != starting_token_bridge_core {
-                                                TokenBridge::from_registry().do_send(ReloadAddresses());
+                                            if SETTING.get_payment().bridge_addresses
+                                                != starting_token_bridge_core
+                                            {
+                                                TokenBridge::from_registry()
+                                                    .do_send(ReloadAddresses());
                                             }
 
                                             trace!("Successfully updated oracle");
