@@ -5,22 +5,17 @@
 //! peer listener gets udp ImHere -> TunnelManager tries to contact peer with hello
 //! -> hello manager actually manages that request -> hello manager calls back to tunnel manager
 
-use tokio::net::TcpStream as TokioTcpStream;
-
-use ::actix::prelude::*;
-use ::actix::registry::SystemService;
-use actix_web::*;
-
+use crate::rita_common::peer_listener::Peer;
+use crate::rita_common::tunnel_manager::id_callback::IdentityCallback;
+use crate::rita_common::tunnel_manager::{PortCallback, TunnelManager};
+use actix::{Context, Message, Supervised, SystemService, Actor, ResponseFuture, Handler};
+use actix_web::client::Connection;
+use actix_web::{client, HttpMessage, Result};
+use althea_types::LocalIdentity;
+use failure::Error;
 use futures01::future::ok as future_ok;
 use futures01::Future;
-
-use althea_types::LocalIdentity;
-
-use crate::rita_common::peer_listener::Peer;
-use crate::rita_common::tunnel_manager::{IdentityCallback, PortCallback, TunnelManager};
-
-use actix_web::client::Connection;
-use failure::Error;
+use tokio::net::TcpStream as TokioTcpStream;
 
 #[derive(Default)]
 pub struct HelloHandler;
