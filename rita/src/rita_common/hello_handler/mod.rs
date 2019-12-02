@@ -8,7 +8,7 @@
 use crate::rita_common::peer_listener::Peer;
 use crate::rita_common::tunnel_manager::id_callback::IdentityCallback;
 use crate::rita_common::tunnel_manager::{PortCallback, TunnelManager};
-use actix::{Context, Message, Supervised, SystemService, Actor, ResponseFuture, Handler};
+use actix::{Actor, Context, Handler, Message, ResponseFuture, Supervised, SystemService};
 use actix_web::client::Connection;
 use actix_web::{client, HttpMessage, Result};
 use althea_types::LocalIdentity;
@@ -96,6 +96,7 @@ impl Handler<Hello> for HelloHandler {
                                 val,
                                 peer,
                                 Some(wg_port),
+                                None,
                             ));
                             Ok(())
                         }

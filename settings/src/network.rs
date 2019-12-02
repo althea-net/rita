@@ -33,6 +33,10 @@ fn default_starting_bandwidth_limit() -> usize {
     10_000
 }
 
+fn default_light_client_hello_port() -> u16 {
+    4874
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
     /// How much non-financial metrics matter compared to a route's cost. By default a 2x more
@@ -51,6 +55,10 @@ pub struct NetworkSettings {
     /// Port on which rita starts the per hop tunnel handshake on (needs to be constant across an
     /// entire althea deployment)
     pub rita_hello_port: u16,
+    /// Port on which phones will contact Rita, this SHOULD be firewalled from the rest of the mesh
+    /// network
+    #[serde(default = "default_light_client_hello_port")]
+    pub light_client_hello_port: u16,
     /// Port on which rita contacts other althea nodes over the mesh (needs to be constant across an
     /// entire althea deployment)
     pub rita_contact_port: u16,
@@ -127,10 +135,11 @@ impl Default for NetworkSettings {
             mesh_ip: None,
             discovery_ip: default_discovery_ip(),
             babel_port: 6872,
+            rita_contact_port: 4875,
             rita_hello_port: 4876,
+            light_client_hello_port: 4874,
             rita_dashboard_port: 4877,
             rita_dashboard_password: None,
-            rita_contact_port: 4875,
             bounty_port: 8888,
             rita_tick_interval: 5,
             wg_private_key: None,

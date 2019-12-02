@@ -1,11 +1,8 @@
 use super::{KernelInterface, KernelInterfaceError};
-
-use std::net::{IpAddr, Ipv6Addr, SocketAddr};
-use std::path::Path;
-
 use althea_types::WgKey;
-
 use failure::Error;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::path::Path;
 
 fn to_wg_local(ip: &IpAddr) -> IpAddr {
     match ip {
@@ -64,10 +61,10 @@ impl dyn KernelInterface {
         private_key_path: &Path,
         own_ip: &IpAddr,
         external_nic: Option<String>,
-        conf_link_local: bool,
+        settings_default_route: &mut Vec<String>,
+        allowed_ipv4_address: Option<Ipv4Addr>,
     ) -> Result<(), Error> {
         let external_peer;
-
         let phy_name = match self.get_device_name(endpoint.ip()) {
             Ok(phy_name) => {
                 external_peer = false;
@@ -78,6 +75,12 @@ impl dyn KernelInterface {
                 external_nic
             }
         };
+
+        let allowed_addresses = match allowed_ipv4_address {
+            None => "::/0".to_string(),
+            Some(addr) => format!("::/0,{}/32", addr),
+        };
+
         let socket_connect_str = socket_to_string(endpoint, phy_name);
         trace!("socket conenct string: {}", socket_connect_str);
         let output = self.run_command(
@@ -94,7 +97,7 @@ impl dyn KernelInterface {
                 "endpoint",
                 &socket_connect_str,
                 "allowed-ips",
-                "::/0",
+                &allowed_addresses,
                 "persistent-keepalive",
                 "5",
             ],
@@ -251,6 +254,7 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
         &own_mesh_ip,
         None,
         &mut vec![],
+        None,
     )
     .unwrap();
 }

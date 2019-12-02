@@ -29,7 +29,7 @@ use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Display;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
 use std::time::{Duration, Instant};
 use tokio::timer::Delay;
@@ -127,19 +127,20 @@ fn test_payment_state() {
 
 #[derive(PartialEq, Debug, Clone, Eq, Hash)]
 pub struct Tunnel {
-    pub ip: IpAddr,                 // Tunnel endpoint
-    pub iface_name: String,         // name of wg#
-    pub listen_ifidx: u32,          // the physical interface this tunnel is listening on
-    pub listen_port: u16,           // the local port this tunnel is listening on
-    pub neigh_id: LocalIdentity,    // the identity of the counterparty tunnel
-    pub last_contact: Instant,      // When's the last we heard from the other end of this tunnel?
+    pub ip: IpAddr,                             // Tunnel endpoint
+    pub iface_name: String,                     // name of wg#
+    pub listen_ifidx: u32, // the physical interface this tunnel is listening on
+    pub listen_port: u16,  // the local port this tunnel is listening on
+    pub neigh_id: LocalIdentity, // the identity of the counterparty tunnel
+    pub last_contact: Instant, // When's the last we heard from the other end of this tunnel?
     pub speed_limit: Option<usize>, // banwidth limit in mbps, used for Codel shaping
+    pub light_client_details: Option<Ipv4Addr>, // if Some this tunnel is for a light client
     state: TunnelState,
 }
 
 impl Display for Tunnel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Tunnel: IP: {} IFACE_NAME: {} IFIDX: {}, PORT: {} WG: {} ETH: {} MESH_IP: {} LAST_SEEN {}, SPEED_LIMIT {:?}, STATE: {:?}" , 
+        write!(f, "Tunnel: IP: {} IFACE_NAME: {} IFIDX: {}, PORT: {} WG: {} ETH: {} MESH_IP: {} LAST_SEEN {}, SPEED_LIMIT {:?}, LC {:?}, STATE: {:?}" , 
         self.ip,
         self.iface_name,
         self.listen_ifidx,
@@ -149,6 +150,7 @@ impl Display for Tunnel {
         self.neigh_id.global.mesh_ip,
         (Instant::now() - self.last_contact).as_secs(),
         self.speed_limit,
+        self.light_client_details,
         self.state)
     }
 }
@@ -160,6 +162,7 @@ impl Tunnel {
         our_listen_port: u16,
         ifidx: u32,
         their_id: LocalIdentity,
+        light_client_details: Option<Ipv4Addr>,
     ) -> Tunnel {
         Tunnel {
             ip,
@@ -169,6 +172,7 @@ impl Tunnel {
             neigh_id: their_id,
             last_contact: Instant::now(),
             speed_limit: None,
+            light_client_details,
             // By default new tunnels are in Registered state
             state: TunnelState {
                 payment_state: PaymentState::Paid,
@@ -178,7 +182,7 @@ impl Tunnel {
     }
 
     /// Open a real tunnel to match the virtual tunnel we store in memory
-    pub fn open(&self) -> Result<(), Error> {
+    pub fn open(&self, light_client_details: Option<Ipv4Addr>) -> Result<(), Error> {
         let network = SETTING.get_network().clone();
         KI.open_tunnel(
             &self.iface_name,
@@ -192,6 +196,7 @@ impl Tunnel {
             },
             network.external_nic.clone(),
             &mut SETTING.get_network_mut().default_route,
+            light_client_details,
         )?;
         KI.set_codel_shaping(&self.iface_name, None)
     }
@@ -273,6 +278,23 @@ impl Tunnel {
                     Ok(())
                 }),
         )
+    }
+
+    pub fn close_light_client_tunnel(&self) {
+        if let Err(e) = KI.del_interface(&self.iface_name) {
+            error!("Failed to delete wg interface! {:?}", e);
+        }
+        if let Err(e) = KI.del_if_from_bridge("br-phone-net", &self.iface_name) {
+            error!("Failed to delete wg interface! {:?}", e);
+        }
+        TunnelManager::from_registry().do_send(PortCallback(self.listen_port));
+        // this doesn't exist in Rita exit so we add it in or remove it at compile time
+        #[cfg(bin = "rita")]
+        crate::rita_client::light_client_handler::LightClientManager::from_registry().do_send(
+            crate::rita_client::light_client_handler::ReturnAddress(
+                self.light_client_details.unwrap(),
+            ),
+        );
     }
 }
 
@@ -540,9 +562,16 @@ impl Handler<TriggerGC> for TunnelManager {
 
         for (_ident, tunnels) in timed_out {
             for tunnel in tunnels {
-                // In the same spirit, we return the port to the free port pool only after tunnel
-                // deletion goes well.
-                tunnel.unmonitor(0);
+                match tunnel.light_client_details {
+                    None => {
+                        // In the same spirit, we return the port to the free port pool only after tunnel
+                        // deletion goes well.
+                        tunnel.unmonitor(0);
+                    }
+                    Some(_) => {
+                        tunnel.close_light_client_tunnel();
+                    }
+                }
             }
         }
 
@@ -816,6 +845,7 @@ impl TunnelManager {
         their_localid: LocalIdentity,
         peer: Peer,
         our_port: u16,
+        light_client_details: Option<Ipv4Addr>,
     ) -> Result<(Tunnel, bool), Error> {
         trace!("getting existing tunnel or opening a new one");
         // ifidx must be a part of the key so that we can open multiple tunnels
@@ -915,24 +945,14 @@ impl TunnelManager {
             peer.contact_socket.ip(),
             peer.ifidx,
         );
-        // Create new tunnel
-        let tunnel = Tunnel::new(
+
+        let (new_key, tunnel) = create_new_tunnel(
             peer.contact_socket.ip(),
-            KI.setup_wg_if().unwrap(),
             our_port,
             peer.ifidx,
             their_localid,
-        );
-        // Open tunnel
-        match tunnel.open() {
-            Ok(_) => trace!("Tunnel {:?} is open", tunnel),
-            Err(e) => {
-                error!("Unable to open tunnel {:?}: {}", tunnel, e);
-                return Err(e);
-            }
-        }
-        let new_key = tunnel.neigh_id.global;
-        tunnel.monitor(0);
+            light_client_details,
+        )?;
 
         self.tunnels
             .entry(new_key)
@@ -940,6 +960,44 @@ impl TunnelManager {
             .push(tunnel.clone());
         Ok((tunnel, return_bool))
     }
+}
+
+fn create_new_tunnel(
+    peer_ip: IpAddr,
+    our_port: u16,
+    ifidx: u32,
+    their_localid: LocalIdentity,
+    light_client_details: Option<Ipv4Addr>,
+) -> Result<(Identity, Tunnel), Error> {
+    // Create new tunnel
+    let tunnel = Tunnel::new(
+        peer_ip,
+        KI.setup_wg_if().unwrap(),
+        our_port,
+        ifidx,
+        their_localid,
+        light_client_details,
+    );
+    let new_key = tunnel.neigh_id.global;
+
+    // actually create the tunnel
+    match tunnel.open(light_client_details) {
+        Ok(_) => trace!("Tunnel {:?} is open", tunnel),
+        Err(e) => {
+            error!("Unable to open tunnel {:?}: {}", tunnel, e);
+            return Err(e);
+        }
+    }
+    match light_client_details {
+        None => {
+            // attach babel, the argument indicates that this is attempt zero
+            tunnel.monitor(0);
+        }
+        Some(_) => {
+            // TODO insted of monitoring attach tunnel to br-phone-net
+        }
+    }
+    Ok((new_key, tunnel))
 }
 
 pub struct TunnelChange {
@@ -1009,7 +1067,9 @@ fn tunnel_state_change(
                         trace!("Membership for identity {:?} is expired", id);
                         match tunnel.state.registration_state {
                             RegistrationState::Registered => {
-                                tunnel.unmonitor(0);
+                                if tunnel.light_client_details.is_none() {
+                                    tunnel.unmonitor(0);
+                                }
                                 tunnel.state.registration_state = RegistrationState::NotRegistered;
                             }
                             RegistrationState::NotRegistered => {
@@ -1169,6 +1229,7 @@ mod tests {
                     have_tunnel: Some(true),
                     global: id,
                 },
+                None,
             ));
         {
             let existing_tunnel =

@@ -3,11 +3,13 @@ use crate::rita_common::tunnel_manager::Tunnel;
 use crate::rita_common::tunnel_manager::TunnelManager;
 use actix::{Context, Handler, Message};
 use althea_types::LocalIdentity;
+use std::net::Ipv4Addr;
 
 pub struct IdentityCallback {
     pub local_identity: LocalIdentity,
     pub peer: Peer,
     pub our_port: Option<u16>,
+    pub light_client_details: Option<Ipv4Addr>,
 }
 
 impl IdentityCallback {
@@ -15,11 +17,13 @@ impl IdentityCallback {
         local_identity: LocalIdentity,
         peer: Peer,
         our_port: Option<u16>,
+        light_client_details: Option<Ipv4Addr>,
     ) -> IdentityCallback {
         IdentityCallback {
             local_identity,
             peer,
             our_port,
+            light_client_details,
         }
     }
 }
@@ -49,7 +53,12 @@ impl Handler<IdentityCallback> for TunnelManager {
             },
         };
 
-        let res = self.open_tunnel(msg.local_identity, msg.peer, our_port);
+        let res = self.open_tunnel(
+            msg.local_identity,
+            msg.peer,
+            our_port,
+            msg.light_client_details,
+        );
         match res {
             Ok(res) => Some(res),
             Err(e) => {

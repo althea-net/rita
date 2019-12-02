@@ -7,10 +7,11 @@ use std::fmt;
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::net::IpAddr;
+use std::net::Ipv4Addr;
 use std::str::FromStr;
 
 #[cfg(feature = "actix")]
-use actix::*;
+use actix::{ActorFuture, ActorStream, Message};
 
 /// This is how nodes are identified.
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -255,6 +256,7 @@ impl Message for Identity {
 }
 
 /// This is all the data we need to give a neighbor to open a wg connection
+/// this is also known as a "hello" packet or message
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct LocalIdentity {
     pub wg_port: u16,
@@ -264,6 +266,20 @@ pub struct LocalIdentity {
 
 #[cfg(feature = "actix")]
 impl Message for LocalIdentity {
+    type Result = ();
+}
+
+/// This is all the data a light client needs to open a light client tunnel
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct LightClientLocalIdentity {
+    pub wg_port: u16,
+    pub have_tunnel: Option<bool>, // If we have an existing tunnel, None if we don't know
+    pub global: Identity,
+    pub tunnel_address: Ipv4Addr, // we have to replicate dhcp ourselves due to the android vpn api
+}
+
+#[cfg(feature = "actix")]
+impl Message for LightClientLocalIdentity {
     type Result = ();
 }
 
