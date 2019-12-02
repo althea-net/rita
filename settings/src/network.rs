@@ -34,7 +34,7 @@ fn default_starting_bandwidth_limit() -> usize {
 }
 
 fn default_light_client_hello_port() -> u16 {
-    4874
+    4878
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -135,9 +135,9 @@ impl Default for NetworkSettings {
             mesh_ip: None,
             discovery_ip: default_discovery_ip(),
             babel_port: 6872,
-            rita_contact_port: 4875,
+            rita_contact_port: 4874,
             rita_hello_port: 4876,
-            light_client_hello_port: 4874,
+            light_client_hello_port: default_light_client_hello_port(),
             rita_dashboard_port: 4877,
             rita_dashboard_password: None,
             bounty_port: 8888,
