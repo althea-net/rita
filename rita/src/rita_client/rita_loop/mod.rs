@@ -5,6 +5,7 @@
 //! tunnel if the signup was successful on the selected exit.
 
 use crate::rita_client::exit_manager::ExitManager;
+use crate::rita_client::light_client_handler::light_client_hello_response;
 use crate::rita_client::traffic_watcher::TrafficWatcher;
 use crate::rita_client::traffic_watcher::WeAreGatewayClient;
 use crate::rita_common::tunnel_manager::GetNeighbors;
@@ -15,14 +16,15 @@ use actix::{
     Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
     SystemService,
 };
+use actix_web::http::Method;
+use actix_web::{server, App};
 use althea_types::ExitState;
 use failure::Error;
 use futures01::future::Future;
 use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;
-use std::net::SocketAddr;
-use std::net::UdpSocket;
 use std::time::{Duration, Instant};
+use std::net::{UdpSocket, SocketAddr};
 type Resolver = resolver::Resolver;
 
 #[derive(Default)]
@@ -188,4 +190,23 @@ fn check_for_gateway_client_billing_corner_case() -> impl Future<Item = (), Erro
             }
             Ok(())
         })
+}
+
+pub fn start_rita_client_endpoints(workers: usize) {
+    server::new(|| {
+        App::new().resource("/mobile_hello", |r| {
+            r.method(Method::POST).with(light_client_hello_response)
+        })
+        // .resource("/mobile_debt", |r| {
+        //     r.method(Method::POST).with(get_client_debt)
+        // })
+    })
+    .workers(workers)
+    .bind(format!(
+        "[::0]:{}",
+        SETTING.get_network().light_client_hello_port
+    ))
+    .unwrap()
+    .shutdown_timeout(0)
+    .start();
 }

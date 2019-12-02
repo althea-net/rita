@@ -1,4 +1,4 @@
-use crate::rita_exit::database::ip_increment::increment;
+use crate::rita_common::utils::ip_increment::increment;
 use crate::rita_exit::database::secs_since_unix_epoch;
 use crate::SETTING;
 use ::actix_web::Result;

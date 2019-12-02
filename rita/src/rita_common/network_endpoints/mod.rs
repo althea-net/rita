@@ -93,7 +93,7 @@ pub fn hello_response(
     // the wrong time.
     Box::new(
         TunnelManager::from_registry()
-            .send(IdentityCallback::new(their_id, peer, None))
+            .send(IdentityCallback::new(their_id, peer, None, None))
             .from_err()
             .and_then(|tunnel| {
                 let tunnel = match tunnel {

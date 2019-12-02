@@ -61,7 +61,6 @@ mod database_tools;
 pub mod db_client;
 mod email;
 mod geoip;
-mod ip_increment;
 mod sms;
 pub mod struct_tools;
 
