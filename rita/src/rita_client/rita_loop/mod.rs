@@ -23,8 +23,8 @@ use failure::Error;
 use futures01::future::Future;
 use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;
+use std::net::{SocketAddr, UdpSocket};
 use std::time::{Duration, Instant};
-use std::net::{UdpSocket, SocketAddr};
 type Resolver = resolver::Resolver;
 
 #[derive(Default)]

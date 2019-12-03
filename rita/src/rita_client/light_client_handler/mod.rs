@@ -136,7 +136,7 @@ pub struct LightClientManager {
 impl Default for LightClientManager {
     fn default() -> LightClientManager {
         LightClientManager {
-            start_address: "192.168.80.1".parse().unwrap(),
+            start_address: "192.168.20.1".parse().unwrap(),
             prefix: 24,
             assigned_addresses: HashSet::new(),
         }
