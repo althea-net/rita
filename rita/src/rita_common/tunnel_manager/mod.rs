@@ -284,7 +284,7 @@ impl Tunnel {
         if let Err(e) = KI.del_interface(&self.iface_name) {
             error!("Failed to delete wg interface! {:?}", e);
         }
-        if let Err(e) = KI.del_if_from_bridge("br-phone-net", &self.iface_name) {
+        if let Err(e) = KI.del_if_from_bridge("br-phone_net", &self.iface_name) {
             error!("Failed to delete wg interface! {:?}", e);
         }
         TunnelManager::from_registry().do_send(PortCallback(self.listen_port));
@@ -994,7 +994,7 @@ fn create_new_tunnel(
             tunnel.monitor(0);
         }
         Some(_) => {
-            // TODO insted of monitoring attach tunnel to br-phone-net
+            KI.add_if_to_bridge("br-phone_net", &tunnel.iface_name)?;
         }
     }
     Ok((new_key, tunnel))

@@ -11,7 +11,7 @@ use std::net::Ipv4Addr;
 use std::str::FromStr;
 
 #[cfg(feature = "actix")]
-use actix::{ActorFuture, ActorStream, Message};
+use actix::Message;
 
 /// This is how nodes are identified.
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
