@@ -213,6 +213,7 @@ fn main() {
     start_client_dashboard();
 
     system.run();
+    info!("Started Rita Client!");
 }
 
 fn start_client_dashboard() {
