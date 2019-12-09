@@ -7,7 +7,7 @@ use ::actix::SystemService;
 use ::actix_web::{AsyncResponder, HttpRequest, HttpResponse, Json};
 use althea_types::Identity;
 use failure::Error;
-use futures::Future;
+use futures01::Future;
 use std::boxed::Box;
 
 pub fn get_debts(

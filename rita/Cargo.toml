@@ -35,7 +35,8 @@ docopt = "1.1"
 dotenv = "0.14"
 env_logger = "0.7"
 failure = "0.1"
-futures = "0.1"
+futures01 = { package = "futures", version = "0.1"}
+futures = { version = "0.3", features = ["compat"] }
 handlebars = "2.0"
 ipnetwork = "0.14"
 lazy_static = "1.4"

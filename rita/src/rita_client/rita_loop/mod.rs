@@ -16,7 +16,7 @@ use actix::{
 };
 use althea_types::ExitState;
 use failure::Error;
-use futures::future::Future;
+use futures01::future::Future;
 use settings::client::RitaClientSettings;
 use std::time::{Duration, Instant};
 

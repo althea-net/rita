@@ -14,7 +14,7 @@ use babel_monitor::parse_routes;
 use babel_monitor::start_connection;
 use babel_monitor::Route;
 use failure::Error;
-use futures::Future;
+use futures01::Future;
 use num256::{Int256, Uint256};
 use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;

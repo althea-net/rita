@@ -14,7 +14,7 @@ use ::actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemServi
 use althea_types::Identity;
 use althea_types::PaymentTx;
 use clarity::Transaction;
-use futures::future::Future;
+use futures01::future::Future;
 use num256::Int256;
 use num_traits::Signed;
 use settings::RitaCommonSettings;

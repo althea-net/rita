@@ -20,7 +20,7 @@ use babel_monitor::open_babel_stream;
 use babel_monitor::start_connection;
 use babel_monitor::unmonitor;
 use failure::Error;
-use futures::Future;
+use futures01::Future;
 use rand::thread_rng;
 use rand::Rng;
 use settings::RitaCommonSettings;
