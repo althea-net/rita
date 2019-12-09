@@ -10,6 +10,7 @@ use crate::rita_client::traffic_watcher::WeAreGatewayClient;
 use crate::rita_common::tunnel_manager::GetNeighbors;
 use crate::rita_common::tunnel_manager::TunnelManager;
 use crate::SETTING;
+use actix::actors::resolver;
 use actix::{
     Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
     SystemService,
@@ -18,7 +19,11 @@ use althea_types::ExitState;
 use failure::Error;
 use futures::future::Future;
 use settings::client::RitaClientSettings;
+use settings::RitaCommonSettings;
+use std::net::SocketAddr;
+use std::net::UdpSocket;
 use std::time::{Duration, Instant};
+type Resolver = resolver::Resolver;
 
 #[derive(Default)]
 pub struct RitaLoop;
@@ -76,6 +81,10 @@ impl Handler<Tick> for RitaLoop {
 
         Arbiter::spawn(check_for_gateway_client_billing_corner_case());
 
+        if SETTING.get_log().enabled {
+            send_udp_heartbeat();
+        }
+
         info!(
             "Rita Client loop completed in {}s {}ms",
             start.elapsed().as_secs(),
@@ -83,6 +92,61 @@ impl Handler<Tick> for RitaLoop {
         );
         Ok(())
     }
+}
+
+pub fn send_udp_heartbeat() {
+    let res = Resolver::from_registry()
+        .send(resolver::Resolve::host(
+            SETTING.get_log().heartbeat_url.clone(),
+        ))
+        .timeout(Duration::from_secs(1))
+        .then(move |res| match res {
+            Ok(Ok(dnsresult)) => {
+                if !dnsresult.is_empty() {
+                    for dns_socket in dnsresult {
+                        let local = SocketAddr::from(([0, 0, 0, 0], 33333));
+                        let socket =
+                            UdpSocket::bind(&local).expect("Couldn't bind to UDP heartbeat socket");
+
+                        let remote_ip = dns_socket.ip();
+                        let remote = SocketAddr::new(remote_ip, 33333);
+
+                        trace!("Sending heartbeat to {:?}", remote_ip);
+
+                        let message = SETTING
+                            .get_network()
+                            .wg_public_key
+                            .clone()
+                            .expect("No key?")
+                            .to_string()
+                            .into_bytes();
+
+                        socket
+                            .set_write_timeout(Some(Duration::new(0, 100)))
+                            .expect("Couldn't set socket timeout");
+
+                        socket
+                            .send_to(&message, &remote)
+                            .expect("Couldn't send heartbeat");
+                    }
+                } else {
+                    trace!("Got zero length dns response: {:?}", dnsresult);
+                }
+                Ok(())
+            }
+
+            Err(e) => {
+                warn!("Actor mailbox failure from DNS resolver! {:?}", e);
+                Ok(())
+            }
+
+            Ok(Err(e)) => {
+                warn!("DNS resolution failed with {:?}", e);
+                Ok(())
+            }
+        });
+
+    Arbiter::spawn(res);
 }
 
 pub fn check_rita_client_actors() {
