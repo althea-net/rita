@@ -6,7 +6,7 @@ use ::actix::registry::SystemService;
 use actix_web::http::StatusCode;
 use actix_web::*;
 
-use futures::{future, Future};
+use futures01::{future, Future};
 
 use failure::Error;
 

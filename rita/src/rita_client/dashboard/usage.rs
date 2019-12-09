@@ -5,7 +5,7 @@ use crate::rita_common::usage_tracker::UsageType;
 use ::actix::registry::SystemService;
 use ::actix_web::{AsyncResponder, HttpRequest, Json};
 use failure::Error;
-use futures::Future;
+use futures01::Future;
 use std::boxed::Box;
 use std::collections::VecDeque;
 

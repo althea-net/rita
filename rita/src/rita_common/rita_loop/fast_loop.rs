@@ -19,7 +19,7 @@ use babel_monitor::parse_neighs;
 use babel_monitor::parse_routes;
 use babel_monitor::start_connection;
 use failure::Error;
-use futures::Future;
+use futures01::Future;
 use settings::RitaCommonSettings;
 use std::time::{Duration, Instant};
 

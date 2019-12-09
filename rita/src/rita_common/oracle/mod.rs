@@ -19,7 +19,7 @@ use althea_kernel_interface::opkg_feeds::set_release_feed;
 use althea_types::SystemChain;
 use bytes::Bytes;
 use clarity::Address;
-use futures::{future, Future};
+use futures01::{future, Future};
 use num256::Int256;
 use num256::Uint256;
 use num_traits::identities::Zero;

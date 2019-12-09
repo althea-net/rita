@@ -17,7 +17,7 @@ use ::settings::RitaCommonSettings;
 use althea_types::SystemChain;
 use clarity::{Address, Transaction};
 use failure::Error;
-use futures::{future, Future};
+use futures01::{future, Future};
 use num256::Uint256;
 use std::boxed::Box;
 use std::time::Duration;

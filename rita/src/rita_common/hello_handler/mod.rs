@@ -11,8 +11,8 @@ use ::actix::prelude::*;
 use ::actix::registry::SystemService;
 use actix_web::*;
 
-use futures::future::ok as future_ok;
-use futures::Future;
+use futures01::future::ok as future_ok;
+use futures01::Future;
 
 use althea_types::LocalIdentity;
 

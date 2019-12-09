@@ -62,8 +62,8 @@ use althea_types::SystemChain;
 use auto_bridge::TokenBridge as TokenBridgeCore;
 use clarity::Address;
 use failure::Error;
-use futures::future;
-use futures::future::Future;
+use futures01::future;
+use futures01::future::Future;
 use num256::Uint256;
 use num_traits::identities::Zero;
 use settings::RitaCommonSettings;
@@ -301,7 +301,7 @@ fn eth_bridge(_state: State, bridge: &TokenBridge) {
                                 wei_per_dollar,
                             },
                         ));
-                        Box::new(futures::future::ok(()))
+                        Box::new(futures01::future::ok(()))
                             as Box<dyn Future<Item = (), Error = Error>>
                     }
                 },
@@ -487,7 +487,7 @@ fn xdai_bridge(state: State, bridge: &TokenBridge) {
                                     } else {
                                         info!("withdraw is waiting on bridge");
                                         TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::XdaiToDai{amount}));
-                                        Box::new(futures::future::ok(()))
+                                        Box::new(futures01::future::ok(()))
                                             as Box<dyn Future<Item = (), Error = Error>>
                                     }
                                 })

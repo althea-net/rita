@@ -12,7 +12,7 @@ use diesel::dsl::delete;
 use diesel::*;
 use exit_db::schema;
 use failure::Error;
-use futures::future::Future;
+use futures01::future::Future;
 
 #[derive(Default)]
 pub struct DbClient;

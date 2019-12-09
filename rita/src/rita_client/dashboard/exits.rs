@@ -20,7 +20,7 @@ use babel_monitor::parse_routes;
 use babel_monitor::start_connection;
 use bytes::Bytes;
 use failure::Error;
-use futures::{future, Future};
+use futures01::{future, Future};
 use settings::client::{ExitServer, RitaClientSettings};
 use settings::FileWrite;
 use settings::RitaCommonSettings;

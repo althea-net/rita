@@ -21,8 +21,8 @@ use althea_types::{
     EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState, RTTimestamps,
 };
 use failure::Error;
-use futures::future;
-use futures::Future;
+use futures01::future;
+use futures01::Future;
 use num256::Int256;
 use settings::exit::RitaExitSettings;
 use sodiumoxide::crypto::box_;
