@@ -18,8 +18,6 @@ use althea_types::ExitState;
 use failure::Error;
 use futures::future::Future;
 use settings::client::RitaClientSettings;
-use settings::RitaCommonSettings;
-use std::net::UdpSocket;
 use std::time::{Duration, Instant};
 
 #[derive(Default)]
@@ -75,11 +73,8 @@ impl Handler<Tick> for RitaLoop {
         trace!("Client Tick!");
 
         ExitManager::from_registry().do_send(Tick {});
-        Arbiter::spawn(check_for_gateway_client_billing_corner_case());
 
-        if SETTING.get_log().enabled {
-            send_udp_heartbeat();
-        }
+        Arbiter::spawn(check_for_gateway_client_billing_corner_case());
 
         info!(
             "Rita Client loop completed in {}s {}ms",
@@ -93,26 +88,6 @@ impl Handler<Tick> for RitaLoop {
 pub fn check_rita_client_actors() {
     assert!(crate::rita_client::rita_loop::RitaLoop::from_registry().connected());
     assert!(crate::rita_client::exit_manager::ExitManager::from_registry().connected());
-}
-
-fn send_udp_heartbeat() {
-    match UdpSocket::bind("0.0.0.0:33333") {
-        Ok(socket) => {
-            match SETTING.get_network().wg_public_key.clone() {
-                Some(key) => {
-                    match socket.send_to(
-                        &key.to_string().into_bytes(),
-                        &SETTING.get_log().heartbeat_url,
-                    ) {
-                        Ok(_) => info!("Successfully sent UDP heartbeat"),
-                        Err(e) => error!("Error sending UDP heartbeat: {:?}", e),
-                    }
-                }
-                None => (),
-            };
-        }
-        Err(e) => error!("Couldn't bind to UDP heartbeat monitor socket: {:?}", e),
-    }
 }
 
 /// There is a complicated corner case where the gateway is a client and a relay to
