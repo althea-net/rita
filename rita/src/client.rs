@@ -33,6 +33,7 @@ use settings::client::{RitaClientSettings, RitaSettingsStruct};
 use settings::RitaCommonSettings;
 use std::env;
 use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
 
 #[cfg(not(test))]
 use settings::FileWrite;
@@ -166,6 +167,25 @@ fn env_vars_contains(var_name: &str) -> bool {
     false
 }
 
+/// Some devices (n600/n750) will provide junk file reads during disk init
+/// post flashing, this ads in retry for the settings file read for up to
+/// two minutes
+fn wait_for_settings(settings_file: &str) -> RitaSettingsStruct {
+    let start = Instant::now();
+    let timeout = Duration::from_secs(120);
+    let mut res = RitaSettingsStruct::new(settings_file);
+    while (Instant::now() - start) < timeout {
+        if let Ok(val) = res {
+            return val;
+        }
+        res = RitaSettingsStruct::new(settings_file);
+    }
+    match res {
+        Ok(val) => val,
+        Err(e) => panic!("Settings parse failure {:?}", e),
+    }
+}
+
 fn main() {
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
@@ -195,8 +215,9 @@ fn main() {
 
     let settings_file = args.flag_config;
 
-    // to get errors before lazy static
-    RitaSettingsStruct::new(&settings_file).expect("Settings parse failure");
+    // to get errors before lazy static and make sure the config is ready to
+    // be read
+    wait_for_settings(&settings_file);
 
     info!(
         "crate ver {}, git hash {}",
