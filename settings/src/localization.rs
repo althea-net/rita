@@ -2,6 +2,10 @@ fn default_wyre_enabled() -> bool {
     false
 }
 
+fn default_wyre_account_id() -> String {
+    "AC_2J6LWQEGW8P".to_string()
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct LocalizationSettings {
     // A flag indicating whether or not the dashboard should give users the option to purchase
@@ -9,6 +13,6 @@ pub struct LocalizationSettings {
     #[serde(default = "default_wyre_enabled")]
     pub wyre_enabled: bool,
     // Wyre account_id used to associate transactions with a specific Wyre account
-    #[serde(default)]
+    #[serde(default = "default_wyre_account_id")]
     pub wyre_account_id: String,
 }
