@@ -5,7 +5,7 @@ authors = ["Ben <wangben3@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-config = "0.9"
+config = "0.10"
 althea_types = { path = "../althea_types", features = ["actix"]}
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 eui48 = {git="https://github.com/althea-mesh/eui48.git"}
