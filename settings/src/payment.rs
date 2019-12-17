@@ -54,7 +54,7 @@ fn default_node_list() -> Vec<String> {
 }
 
 fn default_system_chain() -> SystemChain {
-    SystemChain::Ethereum
+    SystemChain::Xdai
 }
 
 fn default_debts_file() -> String {
