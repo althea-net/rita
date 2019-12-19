@@ -993,9 +993,7 @@ fn create_new_tunnel(
             // attach babel, the argument indicates that this is attempt zero
             tunnel.monitor(0);
         }
-        Some(_) => {
-            KI.add_if_to_bridge("br-phone_net", &tunnel.iface_name)?;
-        }
+        Some(_) => {}
     }
     Ok((new_key, tunnel))
 }
@@ -1055,7 +1053,9 @@ fn tunnel_state_change(
                         );
                         match tunnel.state.registration_state {
                             RegistrationState::NotRegistered => {
-                                tunnel.monitor(0);
+                                if tunnel.light_client_details.is_none() {
+                                    tunnel.monitor(0);
+                                }
                                 tunnel.state.registration_state = RegistrationState::Registered;
                             }
                             RegistrationState::Registered => {
