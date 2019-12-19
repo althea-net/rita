@@ -194,7 +194,7 @@ fn check_for_gateway_client_billing_corner_case() -> impl Future<Item = (), Erro
 
 pub fn start_rita_client_endpoints(workers: usize) {
     server::new(|| {
-        App::new().resource("/mobile_hello", |r| {
+        App::new().resource("/light_client_hello", |r| {
             r.method(Method::POST).with(light_client_hello_response)
         })
         // .resource("/mobile_debt", |r| {
