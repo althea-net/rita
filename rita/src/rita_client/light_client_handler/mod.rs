@@ -8,6 +8,7 @@ use crate::rita_common::peer_listener::Peer;
 use crate::rita_common::tunnel_manager::id_callback::IdentityCallback;
 use crate::rita_common::tunnel_manager::TunnelManager;
 use crate::rita_common::utils::ip_increment::incrementv4;
+use crate::KI;
 use crate::SETTING;
 use actix::{Actor, Context, Handler, Message, Supervised, SystemService};
 use actix_web::http::StatusCode;
@@ -21,6 +22,13 @@ use std::boxed::Box;
 use std::collections::HashSet;
 use std::net::Ipv4Addr;
 use std::net::SocketAddr;
+
+/// Sets up a variant of the exit tunnel nat rules, assumes that the exit
+/// tunnel is already created and doesn't change the system routing table
+fn setup_light_client_forwarding(nic: &str) -> Result<(), Error> {
+    KI.add_client_nat_rules(nic)?;
+    Ok(())
+}
 
 /// Response to the light_client_hello endpoint on the Rita client module with a modified hello packet
 /// this modified packet includes an ipv4 address and opens a modified tunnel that is attached to the
@@ -99,8 +107,7 @@ pub fn light_client_hello_response(
                         ))
                         .from_err()
                         .and_then(move |tunnel| {
-                            //let tunnel = tunnel.unwrap();
-                            let tunnel = match tunnel {
+                            let (tunnel, have_tunnel) = match tunnel {
                                 Some(val) => val,
                                 None => return Err(format_err!("tunnel open failure!")),
                             };
@@ -114,10 +121,11 @@ pub fn light_client_hello_response(
                                         ))
                                     }
                                 },
-                                wg_port: tunnel.0.listen_port,
-                                have_tunnel: Some(tunnel.1),
+                                wg_port: tunnel.listen_port,
+                                have_tunnel: Some(have_tunnel),
                                 tunnel_address: light_client_address,
                             };
+                            setup_light_client_forwarding(&tunnel.iface_name)?;
 
                             let response = HttpResponse::Ok().json(lci);
                             Ok(response)

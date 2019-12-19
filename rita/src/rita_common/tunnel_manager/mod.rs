@@ -284,7 +284,7 @@ impl Tunnel {
         if let Err(e) = KI.del_interface(&self.iface_name) {
             error!("Failed to delete wg interface! {:?}", e);
         }
-        if let Err(e) = KI.del_if_from_bridge("br-phone_net", &self.iface_name) {
+        if let Err(e) = KI.delete_client_nat_rules(&self.iface_name) {
             error!("Failed to delete wg interface! {:?}", e);
         }
         TunnelManager::from_registry().do_send(PortCallback(self.listen_port));

@@ -78,7 +78,7 @@ impl dyn KernelInterface {
 
         let allowed_addresses = match allowed_ipv4_address {
             None => "::/0".to_string(),
-            Some(addr) => format!("::/0,{}/32", addr),
+            Some(_) => format!("::/0,0.0.0.0/0"),
         };
 
         let socket_connect_str = socket_to_string(endpoint, phy_name);
