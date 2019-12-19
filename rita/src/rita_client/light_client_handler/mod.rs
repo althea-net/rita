@@ -173,6 +173,7 @@ impl Handler<GetAddress> for LightClientManager {
         while self.assigned_addresses.contains(&new_address) {
             new_address = incrementv4(new_address, self.prefix)?;
         }
+        self.assigned_addresses.insert(new_address);
         Ok(new_address)
     }
 }
