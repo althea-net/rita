@@ -5,7 +5,7 @@
 //! tunnel if the signup was successful on the selected exit.
 
 use crate::rita_client::exit_manager::ExitManager;
-use crate::rita_client::light_client_handler::light_client_hello_response;
+use crate::rita_client::light_client_manager::light_client_hello_response;
 use crate::rita_client::traffic_watcher::TrafficWatcher;
 use crate::rita_client::traffic_watcher::WeAreGatewayClient;
 use crate::rita_common::tunnel_manager::GetNeighbors;
