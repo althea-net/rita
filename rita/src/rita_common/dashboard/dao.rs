@@ -14,7 +14,7 @@ pub fn get_dao_list(_req: HttpRequest) -> Result<Json<Vec<Address>>, Error> {
     Ok(Json(SETTING.get_dao().dao_addresses.clone()))
 }
 
-pub fn add_to_dao_list(path: Path<(Address)>) -> Result<Json<()>, Error> {
+pub fn add_to_dao_list(path: Path<Address>) -> Result<Json<()>, Error> {
     trace!("Add to dao list: Hit");
     let provided_address = path.into_inner();
     for address in SETTING.get_dao().dao_addresses.iter() {
@@ -40,7 +40,7 @@ pub fn add_to_dao_list(path: Path<(Address)>) -> Result<Json<()>, Error> {
     Ok(Json(()))
 }
 
-pub fn remove_from_dao_list(path: Path<(Address)>) -> Result<Json<()>, Error> {
+pub fn remove_from_dao_list(path: Path<Address>) -> Result<Json<()>, Error> {
     trace!("Remove from dao list: Hit");
     let provided_address = path.into_inner();
     let mut iter = 0;
