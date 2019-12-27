@@ -31,7 +31,7 @@ pub enum CluError {
     RuntimeError(String),
 }
 
-pub fn linux_generate_mesh_ip() -> Result<IpAddr, Error> {
+pub fn generate_mesh_ip() -> Result<IpAddr, Error> {
     let seed: String = thread_rng().sample_iter(&Alphanumeric).take(50).collect();
     let mesh_ip = match ipgen::ip(&seed, "fd00::/8") {
         Ok(ip) => ip,
@@ -91,7 +91,7 @@ fn linux_init(config: Arc<RwLock<settings::client::RitaSettingsStruct>>) -> Resu
                     existing_mesh_ip
                 );
                 network_settings.mesh_ip =
-                    Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
+                    Some(generate_mesh_ip().expect("failed to generate a new mesh IP"));
             } else {
                 info!("Mesh IP is {}", existing_mesh_ip);
             }
@@ -99,7 +99,7 @@ fn linux_init(config: Arc<RwLock<settings::client::RitaSettingsStruct>>) -> Resu
         None => {
             info!("There's no mesh IP configured, generating");
             network_settings.mesh_ip =
-                Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
+                Some(generate_mesh_ip().expect("failed to generate a new mesh IP"));
         }
     }
 
@@ -208,7 +208,7 @@ fn linux_exit_init(
                     existing_mesh_ip
                 );
                 network_settings.mesh_ip =
-                    Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
+                    Some(generate_mesh_ip().expect("failed to generate a new mesh IP"));
             } else {
                 info!("Mesh IP is {}", existing_mesh_ip);
             }
@@ -217,7 +217,7 @@ fn linux_exit_init(
         None => {
             info!("There's no mesh IP configured, generating");
             network_settings.mesh_ip =
-                Some(linux_generate_mesh_ip().expect("failed to generate a new mesh IP"));
+                Some(generate_mesh_ip().expect("failed to generate a new mesh IP"));
         }
     }
 
