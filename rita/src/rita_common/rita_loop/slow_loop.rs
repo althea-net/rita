@@ -13,7 +13,7 @@ use babel_monitor::set_local_fee;
 use babel_monitor::set_metric_factor;
 use babel_monitor::start_connection;
 use failure::Error;
-use futures::future::Future;
+use futures01::future::Future;
 use settings::RitaCommonSettings;
 use std::time::Duration;
 use tokio::util::FutureExt;

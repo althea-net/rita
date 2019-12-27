@@ -10,7 +10,7 @@ use babel_monitor::set_local_fee as babel_set_local_fee;
 use babel_monitor::set_metric_factor as babel_set_metric_factor;
 use babel_monitor::start_connection;
 use failure::Error;
-use futures::future::Future;
+use futures01::future::Future;
 use std::collections::HashMap;
 
 pub fn get_local_fee(_req: HttpRequest) -> Result<HttpResponse, Error> {

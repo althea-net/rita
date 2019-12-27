@@ -8,9 +8,9 @@ use actix_web::client as actix_client;
 use actix_web::client::ClientResponse;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState};
 use failure::Error;
-use futures::future;
-use futures::future::Either;
-use futures::future::Future;
+use futures01::future;
+use futures01::future::Either;
+use futures01::future::Future;
 use phonenumber::PhoneNumber;
 use settings::exit::PhoneVerifSettings;
 

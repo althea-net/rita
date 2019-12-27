@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 diesel = { version = "1.4", features = ["postgres"] }
-dotenv = "0.14"
+dotenv = "0.15"
 althea_types = { path = "../althea_types", features = ["actix"]}
 serde = "1.0"
 serde_derive = "1.0"

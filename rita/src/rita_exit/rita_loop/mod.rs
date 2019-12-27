@@ -44,7 +44,7 @@ use diesel::r2d2::PooledConnection;
 use diesel::PgConnection;
 use exit_db::models;
 use failure::Error;
-use futures::future::Future;
+use futures01::future::Future;
 use settings::exit::RitaExitSettings;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
