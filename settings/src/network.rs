@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use althea_types::WgKey;
 
@@ -31,6 +31,10 @@ fn default_minimum_bandwidth_limit() -> usize {
 
 fn default_starting_bandwidth_limit() -> usize {
     10_000
+}
+
+fn default_manual_dialing_cidr() -> String {
+    "192.168.37.0/24".to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -114,6 +118,13 @@ pub struct NetworkSettings {
     /// the maximum bandwidth of the fastest interface of the device.
     #[serde(default = "default_starting_bandwidth_limit")]
     pub starting_bandwidth_limit: usize,
+    /// Manual dialing address, used to contact router over ipv4 only antennas, used
+    /// to generate the address to be used
+    #[serde(default = "default_manual_dialing_cidr")]
+    pub manual_dialing_cidr: String,
+    /// Used to contact router over ipv4 only antennas, generated on startup then
+    /// added to all mesh interfaces
+    pub manual_dialing_address: Option<Ipv4Addr>,
 }
 
 impl Default for NetworkSettings {
@@ -146,6 +157,8 @@ impl Default for NetworkSettings {
             device: None,
             nickname: None,
             usage_tracker_file: default_usage_tracker_file(),
+            manual_dialing_cidr: default_manual_dialing_cidr(),
+            manual_dialing_address: None,
         }
     }
 }
