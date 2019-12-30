@@ -5,14 +5,14 @@ use crate::rita_common::dashboard::Dashboard;
 use crate::ARGS;
 use crate::KI;
 use crate::SETTING;
-use ::actix::{Handler, Message, ResponseFuture, SystemService};
-use ::actix_web::client;
-use ::actix_web::http::StatusCode;
-use ::actix_web::AsyncResponder;
-use ::actix_web::Path;
-use ::actix_web::{HttpRequest, HttpResponse, Json};
+use actix::{Handler, Message, ResponseFuture, SystemService};
+use actix_web::client;
 use actix_web::error::PayloadError;
+use actix_web::http::StatusCode;
+use actix_web::AsyncResponder;
 use actix_web::HttpMessage;
+use actix_web::Path;
+use actix_web::{HttpRequest, HttpResponse, Json};
 use althea_types::ExitState;
 use babel_monitor::do_we_have_route;
 use babel_monitor::open_babel_stream;
@@ -190,24 +190,27 @@ pub fn exits_sync(
                         Ok(mut new_exits) => {
                             info!("exit_sync list: {:#?}", new_exits);
 
-                            let exits = &mut SETTING.get_exit_client_mut().exits;
+                            let mut exit_client = SETTING.get_exit_client_mut();
 
                             // if the entry already exists copy the registration info over
                             for new_exit in new_exits.iter_mut() {
                                 let nick = new_exit.0;
                                 let new_settings = new_exit.1;
-                                if let Some(old_exit) = exits.get(nick) {
+                                if let Some(old_exit) = exit_client.exits.get(nick) {
                                     new_settings.info = old_exit.info.clone();
                                 }
                             }
-                            exits.extend(new_exits);
+                            exit_client.exits.extend(new_exits);
+                            let exits = exit_client.exits.clone();
+                            drop(exit_client);
 
                             // try and save the config and fail if we can't
                             if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+                                trace!("Failed to write settings");
                                 return Box::new(future::err(e));
                             }
 
-                            Box::new(future::ok(HttpResponse::Ok().json(exits.clone())))
+                            Box::new(future::ok(HttpResponse::Ok().json(exits)))
                         }
                         Err(e) => {
                             let mut ret = HashMap::<String, String>::new();
