@@ -25,8 +25,23 @@ use std::net::SocketAddr;
 
 /// Sets up a variant of the exit tunnel nat rules, assumes that the exit
 /// tunnel is already created and doesn't change the system routing table
-fn setup_light_client_forwarding(nic: &str) -> Result<(), Error> {
+fn setup_light_client_forwarding(client_addr: Ipv4Addr, nic: &str) -> Result<(), Error> {
+    // the way this works is pretty heavy on the routes and iptables rules
+    // it wouldn't be feasible if we expected more than a few dozen phone
+    // clients on a single device. Instead of having an aggregating network
+    // like br-lan to allow us to treat multiple interfaces as a single nic
+    // we manipulate routes and iptables rules for the wg tunnels directly
+    // this is easier to manage programatically but as mentioned before
+    // doesn't exactly scale well.
+    // Key points to note here is that the routes and addresses
+    // get cleaned up on their own whent the interface is deleted I'm not
+    // so sure about the iptables rules yet
     KI.add_client_nat_rules(nic)?;
+    KI.add_ipv4("192.168.20.0".parse().unwrap(), nic)?;
+    KI.set_route(
+        &format!("{}/32", client_addr),
+        &vec!["dev".to_string(), nic.to_string()],
+    )?;
     Ok(())
 }
 
@@ -125,7 +140,10 @@ pub fn light_client_hello_response(
                                 have_tunnel: Some(have_tunnel),
                                 tunnel_address: light_client_address,
                             };
-                            setup_light_client_forwarding(&tunnel.iface_name)?;
+                            setup_light_client_forwarding(
+                                light_client_address,
+                                &tunnel.iface_name,
+                            )?;
 
                             let response = HttpResponse::Ok().json(lci);
                             Ok(response)
@@ -174,14 +192,20 @@ impl Handler<GetAddress> for LightClientManager {
     type Result = Result<Ipv4Addr, Error>;
 
     fn handle(&mut self, _msg: GetAddress, _: &mut Context<Self>) -> Self::Result {
+        trace!("Assigning light client address");
         // get the first unused address this is kinda inefficient, I'm sure we could do this in all O(1) operations
         // but at the cost of more memory usage, which I'd rather avoid. Either way it's trivial
         // both in terms of memory and cpu at the scale of only 16 bits of address space (ipv4 private range size)
         let mut new_address: Ipv4Addr = self.start_address;
         while self.assigned_addresses.contains(&new_address) {
+            trace!("light client address {} is already assigned", new_address);
             new_address = incrementv4(new_address, self.prefix)?;
         }
         self.assigned_addresses.insert(new_address);
+        trace!(
+            "finished selecting light client address, it is {}",
+            new_address
+        );
         Ok(new_address)
     }
 }
