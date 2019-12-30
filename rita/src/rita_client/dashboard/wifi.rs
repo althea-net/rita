@@ -252,27 +252,27 @@ fn validate_channel(
     } else if new_is_two && !ALLOWED_TWO.contains(&new_val) {
         Err(ValidationError::BadChannel(
             "20".to_string(),
-            format!("{:?}", ALLOWED_TWO).to_string(),
+            format!("{:?}", ALLOWED_TWO),
         ))
     } else if new_is_five && channel_width_is_20 && !ALLOWED_FIVE_20.contains(&new_val) {
         Err(ValidationError::BadChannel(
             "20".to_string(),
-            format!("{:?}", ALLOWED_FIVE_20).to_string(),
+            format!("{:?}", ALLOWED_FIVE_20),
         ))
     } else if new_is_five && channel_width_is_40 && !ALLOWED_FIVE_40.contains(&new_val) {
         Err(ValidationError::BadChannel(
             "40".to_string(),
-            format!("{:?}", ALLOWED_FIVE_40).to_string(),
+            format!("{:?}", ALLOWED_FIVE_40),
         ))
     } else if new_is_five && channel_width_is_80 && !ALLOWED_FIVE_80.contains(&new_val) {
         Err(ValidationError::BadChannel(
             "80".to_string(),
-            format!("{:?}", ALLOWED_FIVE_80).to_string(),
+            format!("{:?}", ALLOWED_FIVE_80),
         ))
     } else if new_is_five && channel_width_is_160 && !ALLOWED_FIVE_160.contains(&new_val) {
         Err(ValidationError::BadChannel(
             "160".to_string(),
-            format!("{:?}", ALLOWED_FIVE_160).to_string(),
+            format!("{:?}", ALLOWED_FIVE_160),
         ))
     // model specific restrictions below this point
     } else if model.is_some()
@@ -283,7 +283,7 @@ fn validate_channel(
     {
         Err(ValidationError::BadChannel(
             "80".to_string(),
-            format!("{:?}", ALLOWED_FIVE_80_B1300).to_string(),
+            format!("{:?}", ALLOWED_FIVE_80_B1300),
         ))
     } else {
         Ok(())

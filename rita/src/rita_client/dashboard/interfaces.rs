@@ -337,7 +337,7 @@ pub fn ethernet_transform_mode(
         SETTING
             .get_network_mut()
             .peer_interfaces
-            .insert(locally_owned_ifname.clone());
+            .insert(locally_owned_ifname);
     }
 
     KI.uci_commit(&"network")?;
@@ -473,7 +473,7 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
         SETTING
             .get_network_mut()
             .peer_interfaces
-            .insert(locally_owned_ifname.clone());
+            .insert(locally_owned_ifname);
     }
 
     KI.uci_commit(&"wireless")?;
@@ -519,7 +519,7 @@ pub fn list_remove(list: &str, entry: &str) -> String {
                 }
             }
         }
-        new_list.to_string()
+        new_list
     } else {
         "".to_string()
     }

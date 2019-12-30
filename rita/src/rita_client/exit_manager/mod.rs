@@ -304,7 +304,7 @@ pub fn exit_setup_request(
 
                 current_exit.info = exit_response.clone();
 
-                trace!("Got exit setup response {:?}", exit_response.clone());
+                trace!("Got exit setup response {:?}", exit_response);
 
                 Ok(())
             }),
@@ -360,7 +360,7 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
 
             current_exit.info = exit_response.clone();
 
-            trace!("Got exit status response {:?}", exit_response.clone());
+            trace!("Got exit status response {:?}", exit_response);
 
             Ok(())
         });
