@@ -7,6 +7,8 @@
 //! off the queue. These are turned into Peer structs which are passed to TunnelManager to do
 //! whatever remaining work there may be.
 
+mod message;
+
 use crate::rita_common::rita_loop::fast_loop::Tick;
 use crate::KI;
 use crate::SETTING;
@@ -16,7 +18,6 @@ use failure::Error;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
-mod message;
 use self::message::PeerMessage;
 
 #[derive(Debug)]
@@ -140,7 +141,7 @@ impl Handler<Listen> for PeerListener {
                     .get_network_mut()
                     .peer_interfaces
                     .insert(new_iface_name.clone());
-                self.interfaces.insert(new_iface_name.clone(), n);
+                self.interfaces.insert(new_iface_name, n);
             }
             Err(e) => {
                 error!("Peer listener failed to listen on {:?}", e);

@@ -275,7 +275,7 @@ fn eth_bridge(_state: State, bridge: &TokenBridge) {
                         Box::new(bridge.xdai_to_dai_bridge(amount.clone()).then(move |_res| {
                             TokenBridge::from_registry().do_send(DetailedStateChange(
                                 DetailedBridgeState::XdaiToDai {
-                                    amount: amount.clone(),
+                                    amount,
                                 },
                             ));
                             Ok(())
@@ -284,7 +284,7 @@ fn eth_bridge(_state: State, bridge: &TokenBridge) {
                         TokenBridge::from_registry().do_send(DetailedStateChange(
                             DetailedBridgeState::DaiToEth {
                                 amount_of_dai: our_dai_balance.clone(),
-                                wei_per_dollar: wei_per_dollar.clone(),
+                                wei_per_dollar,
                             },
                         ));
                         Box::new(
@@ -449,7 +449,7 @@ fn xdai_bridge(state: State, bridge: &TokenBridge) {
                                     if our_dai_balance >= amount {
                                         TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::DaiToEth{
                                             amount_of_dai: amount_a.clone(),
-                                            wei_per_dollar: wei_per_dollar.clone()
+                                            wei_per_dollar
                                         }));
                                         Box::new(
                                             bridge
@@ -466,12 +466,12 @@ fn xdai_bridge(state: State, bridge: &TokenBridge) {
                                             let gas_price = eth_gas_price;
                                             let tx_gas: Uint256 = 21_000u32.into();
                                             let tx_cost = gas_price * tx_gas;
-                                            our_eth_balance.clone() - tx_cost
+                                            our_eth_balance - tx_cost
                                             } else { transferred_eth };
 
                                         TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::EthToDest{
                                             amount_of_eth: withdraw_amount.clone(),
-                                            wei_per_dollar: wei_per_dollar.clone(),
+                                            wei_per_dollar,
                                             dest_address: to
                                         }));
                                         Box::new(bridge.eth_transfer(

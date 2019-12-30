@@ -253,7 +253,7 @@ pub fn update_mail_sent_time(
 ) -> Result<(), Error> {
     use self::schema::clients::dsl::{clients, email, email_sent_time};
     let mail_addr = match client.clone().reg_details.email {
-        Some(mail) => mail.clone(),
+        Some(mail) => mail,
         None => bail!("Cloud not find email for {:?}", client.clone()),
     };
 

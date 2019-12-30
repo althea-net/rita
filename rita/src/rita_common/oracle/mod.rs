@@ -252,7 +252,7 @@ fn update_gas_price(web3: &Web3, full_node: String) {
                         .ok_or_else(|| {
                             format_err!("gas price is too high to fit into 256 signed bit integer")
                         })?
-                    * dynamic_fee_factor.clone();
+                    * dynamic_fee_factor;
                 trace!(
                     "Dynamically set pay threshold to {:?}",
                     payment_settings.pay_threshold

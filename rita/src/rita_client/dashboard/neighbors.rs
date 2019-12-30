@@ -81,7 +81,7 @@ pub fn get_neighbor_info(
                                 start_connection(stream).and_then(move |stream| {
                                     parse_routes(stream)
                                         .and_then(|(_stream, routes)| {
-                                            let route_table_sample = routes.clone();
+                                            let route_table_sample = routes;
 
                                             NetworkMonitor::from_registry()
                                                 .send(GetStats {})

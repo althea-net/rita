@@ -31,7 +31,7 @@ pub struct JsonStatusResponse {
 impl JsonStatusResponse {
     pub fn new(ret_val: Result<String, Error>) -> Result<Json<JsonStatusResponse>, Error> {
         let res_string = match ret_val {
-            Ok(msg) => msg.clone(),
+            Ok(msg) => msg,
             Err(e) => format!("{}", e),
         };
 
