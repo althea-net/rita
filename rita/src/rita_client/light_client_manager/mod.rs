@@ -19,6 +19,7 @@ use futures01::future::Either;
 use futures01::{future, Future};
 use settings::RitaCommonSettings;
 use std::boxed::Box;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::Ipv4Addr;
 use std::net::SocketAddr;
@@ -36,11 +37,12 @@ fn setup_light_client_forwarding(client_addr: Ipv4Addr, nic: &str) -> Result<(),
     // Key points to note here is that the routes and addresses
     // get cleaned up on their own whent the interface is deleted I'm not
     // so sure about the iptables rules yet
+    trace!("adding light client nat rules");
     KI.add_client_nat_rules(nic)?;
     KI.add_ipv4("192.168.20.0".parse().unwrap(), nic)?;
-    KI.set_route(
-        &format!("{}/32", client_addr),
-        &vec!["dev".to_string(), nic.to_string()],
+    KI.run_command(
+        "ip",
+        &["route", "add", &format!("{}/32", client_addr), "dev", nic],
     )?;
     Ok(())
 }
@@ -51,13 +53,12 @@ fn setup_light_client_forwarding(client_addr: Ipv4Addr, nic: &str) -> Result<(),
 pub fn light_client_hello_response(
     req: (Json<LocalIdentity>, HttpRequest),
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+    let their_id = *req.0;
     Box::new(
         LightClientManager::from_registry()
-            .send(GetAddress())
+            .send(GetAddress(their_id))
             .from_err()
             .and_then(move |light_client_address| {
-                let their_id = *req.0;
-
                 let err_mesg = "Malformed light client hello tcp packet!";
                 let socket = match req.1.connection_info().remote() {
                     Some(val) => match val.parse::<SocketAddr>() {
@@ -140,10 +141,23 @@ pub fn light_client_hello_response(
                                 have_tunnel: Some(have_tunnel),
                                 tunnel_address: light_client_address,
                             };
-                            setup_light_client_forwarding(
-                                light_client_address,
-                                &tunnel.iface_name,
-                            )?;
+                            // Two bools -> 4 state truth table, in 3 of
+                            // those states we need to re-add these rules
+                            // router phone
+                            // false false  we need to add rules to new tunnel
+                            // true  false  tunnel will be re-created so new rules
+                            // false true   new tunnel on our side new rules
+                            // true  true   only case where we don't need to run this
+                            if let Some(they_have_tunnel) = their_id.have_tunnel {
+                                if !(have_tunnel && they_have_tunnel) {
+                                    setup_light_client_forwarding(
+                                        light_client_address,
+                                        &tunnel.iface_name,
+                                    )?;
+                                }
+                            } else {
+                                error!("Light clients should never send the none tunnel option!");
+                            }
 
                             let response = HttpResponse::Ok().json(lci);
                             Ok(response)
@@ -156,7 +170,7 @@ pub fn light_client_hello_response(
 pub struct LightClientManager {
     start_address: Ipv4Addr,
     prefix: u8,
-    assigned_addresses: HashSet<Ipv4Addr>,
+    assigned_addresses: HashMap<LocalIdentity, Ipv4Addr>,
 }
 
 impl Default for LightClientManager {
@@ -164,7 +178,7 @@ impl Default for LightClientManager {
         LightClientManager {
             start_address: "192.168.20.1".parse().unwrap(),
             prefix: 24,
-            assigned_addresses: HashSet::new(),
+            assigned_addresses: HashMap::new(),
         }
     }
 }
@@ -182,7 +196,7 @@ impl SystemService for LightClientManager {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {}
 }
 
-pub struct GetAddress();
+pub struct GetAddress(LocalIdentity);
 
 impl Message for GetAddress {
     type Result = Result<Ipv4Addr, Error>;
@@ -191,17 +205,30 @@ impl Message for GetAddress {
 impl Handler<GetAddress> for LightClientManager {
     type Result = Result<Ipv4Addr, Error>;
 
-    fn handle(&mut self, _msg: GetAddress, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: GetAddress, _: &mut Context<Self>) -> Self::Result {
+        let requester_id = msg.0;
         trace!("Assigning light client address");
+        // we already have an ip for this id on record, send the same one out
+        if let Some(ip) = self.assigned_addresses.get(&requester_id) {
+            return Ok(*ip);
+        }
+        let assigned_ips = {
+            let mut set = HashSet::new();
+            for (_id, ip) in self.assigned_addresses.iter() {
+                set.insert(ip);
+            }
+            set
+        };
+
         // get the first unused address this is kinda inefficient, I'm sure we could do this in all O(1) operations
         // but at the cost of more memory usage, which I'd rather avoid. Either way it's trivial
         // both in terms of memory and cpu at the scale of only 16 bits of address space (ipv4 private range size)
         let mut new_address: Ipv4Addr = self.start_address;
-        while self.assigned_addresses.contains(&new_address) {
+        while assigned_ips.contains(&new_address) {
             trace!("light client address {} is already assigned", new_address);
             new_address = incrementv4(new_address, self.prefix)?;
         }
-        self.assigned_addresses.insert(new_address);
+        self.assigned_addresses.insert(requester_id, new_address);
         trace!(
             "finished selecting light client address, it is {}",
             new_address
@@ -221,6 +248,16 @@ impl Handler<ReturnAddress> for LightClientManager {
 
     fn handle(&mut self, msg: ReturnAddress, _: &mut Context<Self>) -> Self::Result {
         let returned_address = msg.0;
-        self.assigned_addresses.remove(&returned_address);
+        let mut key_to_remove: Option<LocalIdentity> = None;
+        for (key, ip) in self.assigned_addresses.iter() {
+            if *ip == returned_address {
+                key_to_remove = Some(*key);
+            }
+        }
+        if let Some(val) = key_to_remove {
+            self.assigned_addresses.remove(&val);
+        } else {
+            error!("Failed to free address {}", returned_address);
+        }
     }
 }
