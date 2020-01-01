@@ -27,12 +27,12 @@ web30 = {git = "https://github.com/althea-mesh/web30", branch = "master"}
 actix = "0.7"
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
 actix-web-httpauth = {git = "https://github.com/althea-mesh/actix-web-httpauth"}
-actix_derive = "0.4"
+actix_derive = "0.5"
 bytes = "0.4"
-config = "0.9"
+config = "0.10"
 diesel = { version = "1.4", features = ["postgres", "r2d2"] }
 docopt = "1.1"
-dotenv = "0.14"
+dotenv = "0.15"
 env_logger = "0.7"
 failure = "0.1"
 futures01 = { package = "futures", version = "0.1"}
@@ -42,7 +42,7 @@ ipnetwork = "0.14"
 lazy_static = "1.4"
 log = { version = "0.4", features = ["release_max_level_info"] }
 minihttpse = "0.1"
-mockito = "0.21"
+mockito = "0.22"
 mockstream = "0.0"
 rand = "0.7"
 serde = "1.0"
