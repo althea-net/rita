@@ -1,6 +1,6 @@
 [package]
 name = "rita"
-version = "0.5.27"
+version = "0.5.28"
 authors = ["Jehan <jehan.tremback@gmail.com>", "Ben <wangben3@gmail.com>"]
 build = "build.rs"
 edition = "2018"
