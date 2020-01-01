@@ -356,7 +356,7 @@ fn xdai_bridge(state: State, bridge: &TokenBridge) {
                                 TokenBridge::from_registry().do_send(DetailedStateChange(
                                     DetailedBridgeState::EthToDai {
                                         amount_of_eth: swap_amount.clone(),
-                                        wei_per_dollar: wei_per_dollar.clone(),
+                                        wei_per_dollar,
                                     },
                                 ));
 
