@@ -2164,6 +2164,7 @@ dependencies = [
  "eui48 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "exit_db 0.1.0",
  "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "flate2 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "handlebars 2.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
