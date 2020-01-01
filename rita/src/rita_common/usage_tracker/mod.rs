@@ -16,14 +16,20 @@ use actix::SystemService;
 use althea_types::Identity;
 use althea_types::PaymentTx;
 use failure::Error;
+use flate2::read::ZlibDecoder;
+use flate2::write::ZlibEncoder;
+use flate2::Compression;
 use num256::Uint256;
 use serde::{Deserialize, Serialize};
 use serde_json::Error as SerdeError;
 use settings::RitaCommonSettings;
 use std::collections::VecDeque;
 use std::fs::File;
+use std::io;
 use std::io::Error as IOError;
 use std::io::Read;
+use std::io::Seek;
+use std::io::SeekFrom;
 use std::io::Write;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
@@ -115,17 +121,54 @@ impl Default for UsageTracker {
 
         match file {
             Ok(mut file) => {
-                let mut contents = String::new();
-                match file.read_to_string(&mut contents) {
+                let mut byte_contents = Vec::new();
+                // try compressed
+                match file.read_to_end(&mut byte_contents) {
                     Ok(_bytes_read) => {
-                        let deserialized: Result<UsageTracker, SerdeError> =
-                            serde_json::from_str(&contents);
-
-                        match deserialized {
-                            Ok(value) => value,
+                        let mut decoder = ZlibDecoder::new(&byte_contents[..]);
+                        let mut contents = Vec::new();
+                        let mut contents_str = String::new();
+                        // Extract data from decoder
+                        trace!("attempting to unzip or read bw history");
+                        match io::copy(&mut decoder, &mut contents) {
+                            Ok(_bytes) => {
+                                trace!("found a compressed json stream");
+                                let deserialized: Result<UsageTracker, SerdeError> =
+                                    serde_json::from_slice(&contents);
+                                match deserialized {
+                                    Ok(value) => value,
+                                    Err(e) => {
+                                        error!("Failed to deserialize bytes in compressed bw history {:?}", e);
+                                        blank_usage_tracker
+                                    }
+                                }
+                            }
                             Err(e) => {
-                                error!("Failed to deserialize usage tracker {:?}", e);
-                                blank_usage_tracker
+                                info!("Failed to decompress with, trying flatfile {:?}", e);
+                                file.seek(SeekFrom::Start(0))
+                                    .expect("Failed to return to start of file!");
+                                match file.read_to_string(&mut contents_str) {
+                                    Ok(_bytes_read) => {
+                                        trace!("failed to inflate, trying raw string");
+                                        let deserialized: Result<UsageTracker, SerdeError> =
+                                            serde_json::from_str(&contents_str);
+
+                                        match deserialized {
+                                            Ok(value) => value,
+                                            Err(e) => {
+                                                error!("Failed to deserialize usage tracker from flatfile {:?}", e);
+                                                blank_usage_tracker
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        error!(
+                                            "Failed to read usage tracker file to string! {:?}",
+                                            e
+                                        );
+                                        blank_usage_tracker
+                                    }
+                                }
                             }
                         }
                     }
@@ -145,9 +188,13 @@ impl Default for UsageTracker {
 
 impl UsageTracker {
     fn save(&mut self) -> Result<(), IOError> {
-        let serialized = serde_json::to_string(self)?;
+        let serialized = serde_json::to_vec(self)?;
         let mut file = File::create(SETTING.get_network().usage_tracker_file.clone())?;
-        file.write_all(serialized.as_bytes())
+        let buffer: Vec<u8> = Vec::new();
+        let mut encoder = ZlibEncoder::new(buffer, Compression::fast());
+        encoder.write_all(&serialized)?;
+        let compressed_bytes = encoder.finish()?;
+        file.write_all(&compressed_bytes)
     }
 }
 
