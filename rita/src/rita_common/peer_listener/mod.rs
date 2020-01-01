@@ -9,6 +9,7 @@
 
 mod message;
 
+use self::message::PeerMessage;
 use crate::rita_common::rita_loop::fast_loop::Tick;
 use crate::KI;
 use crate::SETTING;
@@ -18,7 +19,6 @@ use failure::Error;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
-use self::message::PeerMessage;
 
 #[derive(Debug)]
 pub struct PeerListener {

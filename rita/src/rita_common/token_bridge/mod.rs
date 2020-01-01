@@ -274,9 +274,7 @@ fn eth_bridge(_state: State, bridge: &TokenBridge) {
                         let amount = our_xdai_balance - xdai_tx_cost;
                         Box::new(bridge.xdai_to_dai_bridge(amount.clone()).then(move |_res| {
                             TokenBridge::from_registry().do_send(DetailedStateChange(
-                                DetailedBridgeState::XdaiToDai {
-                                    amount,
-                                },
+                                DetailedBridgeState::XdaiToDai { amount },
                             ));
                             Ok(())
                         })) as Box<dyn Future<Item = (), Error = Error>>
