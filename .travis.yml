@@ -7,7 +7,7 @@ before_install:
   - sudo add-apt-repository universe
   - sudo apt-get -qq update
   - sudo apt-get install -y iperf3 libsqlite3-dev postgresql-client-11 postgresql-server-dev-11 libpq-dev python3-pip bridge-utils wireguard linux-source linux-headers-$(uname -r) curl git libssl-dev pkg-config build-essential ipset python3-setuptools python3-wheel
-  - cargo install --git https://github.com/rust-embedded/cross --force
+  - cargo install cross --force
 
 env:
   matrix:
@@ -32,6 +32,7 @@ script:
 matrix:
   allow_failures:
     - rust: nightly
+    - rust: beta
   fast_finish: true
 
   include:
