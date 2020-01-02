@@ -26,8 +26,15 @@ use std::time::{Duration, Instant};
 use web30::client::Web3;
 use web30::types::TransactionResponse;
 
-// How long we will wait for full node responses
-const TRANSACTION_VERIFICATION_TIMEOUT: Duration = Duration::from_secs(1);
+// How long we will wait for full node responses, set to a much more conservative
+// value on the client to prevent memory usage growth, but on the server we experience
+// far less dynamic network conditions and it's far more important that we validate payments
+// even at the cost of memory or the risk of an emergency restart if we slow down too much
+#[cfg(not(feature = "server"))]
+const TRANSACTION_VERIFICATION_TIMEOUT: Duration = Duration::from_secs(4);
+#[cfg(feature = "server")]
+const TRANSACTION_VERIFICATION_TIMEOUT: Duration = Duration::from_secs(60);
+
 // Discard payments after 15 minutes of failing to find txid
 pub const PAYMENT_TIMEOUT: Duration = Duration::from_secs(900u64);
 // How many blocks before we assume finality

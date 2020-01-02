@@ -6,6 +6,7 @@ edition = "2018"
 
 [features]
 development = ["rita/development"]
+server = ["rita/server"]
 
 [dependencies]
 rita = { path = "./rita" }

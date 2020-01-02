@@ -611,6 +611,20 @@ pub fn enforce_exit_clients(
                         start.elapsed().as_secs(),
                         start.elapsed().subsec_millis(),
                     );
+
+                    // TODO this is a hacky emergency kill switch for when we detect that
+                    // the actix loop may be running too slowly, when that happens requests to
+                    // the full node timeout and transactions will not be processed resulting in
+                    // wallet drain, this is worse than the possiblity of the exit not coming back up
+                    // As a method of detection this is just a decent proxy not a 100% acurate method
+                    // as it seems that http requests and anything that touches shelling out slow down
+                    // the most in these situations. Hopefully we can figure out more about why the
+                    // futures loop starts acting stragely.
+                    if start.elapsed().as_secs() > 2 {
+                       let fail_mesg = "Exit enforcement took more than 2 seconds!";
+                       error!("{}", fail_mesg);
+                       panic!("{}", fail_mesg);
+                    }
                     Ok(())
                 }
                 Err(e) => {
