@@ -63,7 +63,7 @@ fn default_debts_file() -> String {
 
 fn default_bridge_addresses() -> TokenBridgeAddresses {
     TokenBridgeAddresses {
-        uniswap_address: Address::from_str("0x09cabEC1eAd1c0Ba254B09efb3EE13841712bE14").unwrap(),
+        uniswap_address: Address::from_str("0x2a1530C4C41db0B0b2bB646CB5Eb1A67b7158667").unwrap(),
         xdai_foreign_bridge_address: Address::from_str(
             "0x7301CFA0e1756B71869E93d4e4Dca5c7d0eb0AA6",
         )
@@ -71,11 +71,11 @@ fn default_bridge_addresses() -> TokenBridgeAddresses {
         xdai_home_bridge_address: Address::from_str("0x4aa42145Aa6Ebf72e164C9bBC74fbD3788045016")
             .unwrap(),
         foreign_dai_contract_address: Address::from_str(
-            "0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359",
+            "0x6b175474e89094c44da98b954eedeac495271d0f",
         )
         .unwrap(),
         eth_full_node_url: "https://eth.althea.org".into(),
-        xdai_full_node_url: "https://dai.althea.net".into(),
+        xdai_full_node_url: "https://dai.althea.org".into(),
     }
 }
 
