@@ -21,7 +21,6 @@ use settings::RitaCommonSettings;
 use std::fs::File;
 use std::io::Read;
 use std::net::IpAddr;
-use std::net::Ipv4Addr;
 use std::path::Path;
 use std::str;
 use std::sync::{Arc, RwLock};
@@ -30,24 +29,6 @@ use std::sync::{Arc, RwLock};
 pub enum CluError {
     #[fail(display = "Runtime Error: {:?}", _0)]
     RuntimeError(String),
-}
-
-/// In the rare case that a radio does not allow ipv6 traffic (so far only encountered
-/// with VJJT) a ipv4 address on a hardcoded subnet is generated and used to allow one device
-/// on each side of any link to configure that host as a 'manual peer'
-pub fn generate_manual_dialing_address(subnet: &str) -> Result<Ipv4Addr, Error> {
-    let seed: String = thread_rng().sample_iter(&Alphanumeric).take(50).collect();
-    let dialer_ip = match ipgen::ip(&seed, subnet) {
-        Ok(ip) => ip,
-        Err(msg) => bail!(msg), // For some reason, ipgen devs decided to use Strings for all errors
-    };
-
-    info!("Generated a new mesh IP address: {}", dialer_ip);
-
-    match dialer_ip {
-        IpAddr::V6(_val) => Err(format_err!("Got v6 from v4 seed")),
-        IpAddr::V4(val) => Ok(val),
-    }
 }
 
 pub fn generate_mesh_ip() -> Result<IpAddr, Error> {
@@ -101,9 +82,6 @@ fn linux_init(config: Arc<RwLock<settings::client::RitaSettingsStruct>>) -> Resu
     let wg_pubkey_option = network_settings.wg_public_key.clone();
     let wg_privkey_option = network_settings.wg_private_key.clone();
     let device_option = network_settings.device.clone();
-    let dialer_ip_option = network_settings.manual_dialing_address.clone();
-    let dialer_ip_cidr = network_settings.manual_dialing_cidr.clone();
-    let listen_interfaces = network_settings.peer_interfaces.clone();
 
     match mesh_ip_option {
         Some(existing_mesh_ip) => {
@@ -160,26 +138,6 @@ fn linux_init(config: Arc<RwLock<settings::client::RitaSettingsStruct>>) -> Resu
             if network_settings.device.is_none() {
                 warn!("Device name could not be read from {}", release_file_path);
             }
-        }
-    }
-
-    let dialer_ip = match dialer_ip_option {
-        Some(val) => {
-            info!("Manual Dialer ip is {}", val);
-            val
-        }
-        None => {
-            let ip = generate_manual_dialing_address(&dialer_ip_cidr)
-                .expect("Failed to generate dialer address!");
-            network_settings.manual_dialing_address = Some(ip);
-            ip
-        }
-    };
-    for iface in listen_interfaces {
-        trace!("addding dialer ip to {}", iface);
-        let res = KI.add_ipv4(dialer_ip, &iface);
-        if let Err(e) = res {
-            error!("Failed to add ipv4 address to {:?}", e);
         }
     }
 
