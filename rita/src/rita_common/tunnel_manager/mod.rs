@@ -636,27 +636,30 @@ impl Handler<PeersToContact> for TunnelManager {
                 warn!("Neighbor inqury for {:?} failed! with {:?}", peer, res);
             }
         }
-        // Do not contact manual peers if we are not a gateway
-        if is_gateway {
-            for manual_peer in manual_peers.iter() {
-                let ip = manual_peer.parse::<IpAddr>();
+        for manual_peer in manual_peers.iter() {
+            let ip = manual_peer.parse::<IpAddr>();
 
-                match ip {
-                    Ok(ip) => {
-                        let socket = SocketAddr::new(ip, rita_hello_port);
-                        let man_peer = Peer {
-                            ifidx: 0,
-                            contact_socket: socket,
-                        };
-                        let res = self.neighbor_inquiry(&man_peer);
-                        if res.is_err() {
-                            warn!(
-                                "Neighbor inqury for {:?} failed with: {:?}",
-                                manual_peer, res
-                            );
-                        }
+            match ip {
+                Ok(ip) => {
+                    let socket = SocketAddr::new(ip, rita_hello_port);
+                    let man_peer = Peer {
+                        ifidx: 0,
+                        contact_socket: socket,
+                    };
+                    let res = self.neighbor_inquiry(&man_peer);
+                    if res.is_err() {
+                        warn!(
+                            "Neighbor inqury for {:?} failed with: {:?}",
+                            manual_peer, res
+                        );
                     }
-                    Err(_) => {
+                }
+                Err(_) => {
+                    // Do not contact manual peers on the internet if we are not a gateway
+                    // it will just fill the logs with faild dns resolution attempts or result
+                    // in bad behavior, we do allow the addressing of direct ip address gateways
+                    // for the special case that the user is attempting some special behavior
+                    if is_gateway {
                         let res = self.neighbor_inquiry_hostname(manual_peer.to_string());
                         if res.is_err() {
                             warn!(
