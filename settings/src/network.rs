@@ -34,7 +34,7 @@ fn default_starting_bandwidth_limit() -> usize {
 }
 
 fn default_manual_dialing_cidr() -> String {
-    "192.168.37.0/24".to_string()
+    "192.168.100.0/18".to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
