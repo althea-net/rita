@@ -56,7 +56,7 @@ fn test_add_ipv4() {
 
     KI.set_mock(Box::new(move |program, args| {
         assert_eq!(program, "ip");
-        assert_eq!(args, &["addr", "add", "192.168.31.2/32", "dev", "eth0"]);
+        assert_eq!(args, &["addr", "add", "192.168.31.2/24", "dev", "eth0"]);
 
         Ok(Output {
             stdout: b"".to_vec(),
@@ -71,7 +71,7 @@ fn test_add_ipv4() {
 
     KI.set_mock(Box::new(move |program, args| {
         assert_eq!(program, "ip");
-        assert_eq!(args, &["addr", "add", "192.168.31.2/32", "dev", "eth0"]);
+        assert_eq!(args, &["addr", "add", "192.168.31.2/24", "dev", "eth0"]);
 
         Ok(Output {
             stdout: b"".to_vec(),
@@ -84,7 +84,7 @@ fn test_add_ipv4() {
 
     KI.set_mock(Box::new(move |program, args| {
         assert_eq!(program, "ip");
-        assert_eq!(args, &["addr", "add", "192.168.31.2/32", "dev", "eth0"]);
+        assert_eq!(args, &["addr", "add", "192.168.31.2/24", "dev", "eth0"]);
 
         Ok(Output {
             stdout: b"".to_vec(),
