@@ -84,7 +84,10 @@ pub fn get_database_connection(
                     .timeout(Duration::from_secs(1))
                     .then(|result| match result {
                         Ok(v) => Ok(v),
-                        Err(e) => Err(format_err!("{:?}", e)),
+                        Err(e) => {
+                            error!("Failed to get DB connection with {:?}", e);
+                            Err(format_err!("{:?}", e))
+                        }
                     }),
             )
         }
@@ -339,7 +342,10 @@ fn low_balance_notification(
                 }
             }
             (Some(_), false) => {}
-            (None, _) => error!("Client is registered but has no phone number!"),
+            (None, _) => error!(
+                "Client {} is registered but has no phone number!",
+                client.global.wg_public_key
+            ),
         },
         (Some(true), Some(ExitVerifSettings::Email(val))) => match (
             client.reg_details.email.clone(),
