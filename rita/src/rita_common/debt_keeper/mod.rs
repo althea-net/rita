@@ -113,8 +113,16 @@ fn ser_to_debt_data(input: DebtDataSer) -> DebtData {
 /// one more than that value
 fn debt_limit(debt: Int256, close_threshold: Int256) -> Int256 {
     if debt < close_threshold {
+        info!(
+            "Forgiving {} wei to enforce debt limit",
+            debt - close_threshold.clone()
+        );
         close_threshold - 1u8.into()
     } else if debt > close_threshold.abs() {
+        info!(
+            "Not paying {} wei to enforce debt limit",
+            debt - close_threshold.clone()
+        );
         close_threshold.abs() + 1u8.into()
     } else {
         debt
