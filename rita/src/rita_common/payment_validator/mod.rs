@@ -250,8 +250,8 @@ fn handle_tx_messaging(
         // we where successfully paid
         (true, false, true) => {
             info!(
-                "payment {:#066x}  from {} successfully validated!",
-                txid, from_address
+                "payment {:#066x} from {} for {} wei successfully validated!",
+                txid, from_address, amount
             );
             DebtKeeper::from_registry().do_send(PaymentReceived {
                 from: pmt.from,
@@ -268,8 +268,8 @@ fn handle_tx_messaging(
         // we suceessfully paid someone
         (false, true, true) => {
             info!(
-                "payment {:#066x}  from {} successfully sent!",
-                txid, from_address
+                "payment {:#066x} from {} for {} wei successfully sent!",
+                txid, from_address, amount
             );
             DebtKeeper::from_registry().do_send(PaymentSucceeded {
                 to: pmt.to,
