@@ -16,6 +16,7 @@ use crate::rita_common::usage_tracker::UsageTracker;
 use crate::rita_common::usage_tracker::UsageType;
 use crate::SETTING;
 use ::actix::{Actor, Context, Handler, Message, Supervised, SystemService};
+use althea_kernel_interface::wg_iface_counter::prepare_usage_history;
 use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_kernel_interface::KI;
 use althea_types::Identity;
@@ -184,33 +185,6 @@ fn debts_logging(debts: &HashMap<Identity, i128>) {
     }
 }
 
-pub fn update_usage_history(
-    counters: &HashMap<WgKey, WgUsage>,
-    usage_history: &mut HashMap<WgKey, WgUsage>,
-) {
-    for (wg_key, bytes) in counters.iter() {
-        match usage_history.get_mut(&wg_key) {
-            Some(history) => {
-                // tunnel has been reset somehow, reset usage
-                if history.download > bytes.download {
-                    history.download = 0;
-                }
-                if history.upload > bytes.upload {
-                    history.download = 0;
-                }
-            }
-            None => {
-                trace!(
-                    "We have not seen {:?} before, starting counter off at {:?}",
-                    wg_key,
-                    bytes
-                );
-                usage_history.insert(wg_key.clone(), bytes.clone());
-            }
-        }
-    }
-}
-
 /// This traffic watcher watches how much traffic each we send and receive from each client.
 pub fn watch(
     usage_history: &mut HashMap<WgKey, WgUsage>,
@@ -243,7 +217,7 @@ pub fn watch(
     };
 
     // creates new usage entires does not actualy update the values
-    update_usage_history(&counters, usage_history);
+    prepare_usage_history(&counters, usage_history);
 
     counters_logging(&counters, &usage_history, our_price as u32);
 

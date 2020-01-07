@@ -6,9 +6,12 @@
 
 use crate::rita_client::exit_manager::ExitManager;
 use crate::rita_client::light_client_manager::light_client_hello_response;
+use crate::rita_client::light_client_manager::LightClientManager;
+use crate::rita_client::light_client_manager::Watch;
 use crate::rita_client::traffic_watcher::TrafficWatcher;
 use crate::rita_client::traffic_watcher::WeAreGatewayClient;
 use crate::rita_common::tunnel_manager::GetNeighbors;
+use crate::rita_common::tunnel_manager::GetTunnels;
 use crate::rita_common::tunnel_manager::TunnelManager;
 use crate::SETTING;
 use actix::actors::resolver;
@@ -82,6 +85,18 @@ impl Handler<Tick> for RitaLoop {
         ExitManager::from_registry().do_send(Tick {});
 
         Arbiter::spawn(check_for_gateway_client_billing_corner_case());
+
+        Arbiter::spawn(
+            TunnelManager::from_registry()
+                .send(GetTunnels)
+                .timeout(CLIENT_LOOP_TIMEOUT)
+                .then(move |res| {
+                    let tunnels = res.unwrap().unwrap();
+                    LightClientManager::from_registry()
+                        .send(Watch { tunnels })
+                        .then(|_res| Ok(()))
+                }),
+        );
 
         if SETTING.get_log().enabled {
             send_udp_heartbeat();

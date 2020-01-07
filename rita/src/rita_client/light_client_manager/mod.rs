@@ -4,8 +4,12 @@
 //! especially since the client traffic exits unencrypted at one point on the participating Rita Client router. Sadly this is unavoidable as
 //! far as I can tell due to the restrictive nature of how and when Android allows ipv6 routing.
 
+use crate::rita_common::debt_keeper;
+use crate::rita_common::debt_keeper::DebtKeeper;
+use crate::rita_common::debt_keeper::Traffic;
 use crate::rita_common::peer_listener::Peer;
 use crate::rita_common::tunnel_manager::id_callback::IdentityCallback;
+use crate::rita_common::tunnel_manager::Tunnel;
 use crate::rita_common::tunnel_manager::TunnelManager;
 use crate::rita_common::utils::ip_increment::incrementv4;
 use crate::KI;
@@ -13,7 +17,9 @@ use crate::SETTING;
 use actix::{Actor, Context, Handler, Message, Supervised, SystemService};
 use actix_web::http::StatusCode;
 use actix_web::{HttpRequest, HttpResponse, Json};
-use althea_types::{LightClientLocalIdentity, LocalIdentity};
+use althea_kernel_interface::wg_iface_counter::prepare_usage_history;
+use althea_kernel_interface::wg_iface_counter::WgUsage;
+use althea_types::{Identity, LightClientLocalIdentity, LocalIdentity, WgKey};
 use failure::Error;
 use futures01::future::Either;
 use futures01::{future, Future};
@@ -171,6 +177,7 @@ pub struct LightClientManager {
     start_address: Ipv4Addr,
     prefix: u8,
     assigned_addresses: HashMap<LocalIdentity, Ipv4Addr>,
+    last_seen_bytes: HashMap<WgKey, WgUsage>,
 }
 
 impl Default for LightClientManager {
@@ -179,6 +186,7 @@ impl Default for LightClientManager {
             start_address: "192.168.20.1".parse().unwrap(),
             prefix: 24,
             assigned_addresses: HashMap::new(),
+            last_seen_bytes: HashMap::new(),
         }
     }
 }
@@ -259,5 +267,66 @@ impl Handler<ReturnAddress> for LightClientManager {
         } else {
             error!("Failed to free address {}", returned_address);
         }
+    }
+}
+
+/// Traffic watcher implementation for light clients, this is conceptually
+/// very simple, just iterate over tunnels from tunnel manager, determine
+/// which ones are light clients, those that are check their usage and shoot
+/// off a message to debt keeper with an updated debt total. Conceptually similar
+/// to the exit billing system. Biggest difference is that the phone client doesn't
+/// need to concern itself with full route prices. Because this data is not being
+/// 'forwarded' but instead sent over the exit tunnel and paid for in the same way
+/// client usage is.
+pub struct Watch {
+    pub tunnels: Vec<Tunnel>,
+}
+
+impl Message for Watch {
+    type Result = ();
+}
+
+impl Handler<Watch> for LightClientManager {
+    type Result = ();
+
+    fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
+        let our_price = SETTING.get_payment().local_fee;
+        let tunnels = msg.tunnels;
+        let mut debts: HashMap<Identity, i128> = HashMap::new();
+        for tunnel in tunnels.iter() {
+            if let Some(_val) = tunnel.light_client_details {
+                if let Ok(counter) = KI.read_wg_counters(&tunnel.iface_name) {
+                    prepare_usage_history(&counter, &mut self.last_seen_bytes);
+                    // there should only be one, more than one client on a single
+                    // interface is not supported
+                    assert!(counter.len() == 1);
+                    // get only the first element
+                    let (_key, usage) = counter.iter().next().unwrap();
+                    let debt = ((usage.upload + usage.download) * our_price as u64) as i128;
+                    subtract_or_insert_and_subtract(&mut debts, tunnel.neigh_id.global, debt);
+                }
+            }
+        }
+
+        let mut traffic_vec = Vec::new();
+        for (from, amount) in debts {
+            traffic_vec.push(Traffic {
+                from,
+                amount: amount.into(),
+            })
+        }
+        let update = debt_keeper::TrafficUpdate {
+            traffic: traffic_vec,
+        };
+        DebtKeeper::from_registry().do_send(update);
+    }
+}
+
+/// inserts and also negates since negative means they owe us and we can never owe phone clients
+fn subtract_or_insert_and_subtract(data: &mut HashMap<Identity, i128>, i: Identity, debt: i128) {
+    if let Some(val) = data.get_mut(&i) {
+        *val -= debt;
+    } else {
+        data.insert(i, -debt);
     }
 }
