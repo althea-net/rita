@@ -515,6 +515,25 @@ impl Handler<GetNeighbors> for TunnelManager {
     }
 }
 
+pub struct GetTunnels;
+
+impl Message for GetTunnels {
+    type Result = Result<Vec<Tunnel>, Error>;
+}
+impl Handler<GetTunnels> for TunnelManager {
+    type Result = Result<Vec<Tunnel>, Error>;
+
+    fn handle(&mut self, _: GetTunnels, _: &mut Context<Self>) -> Self::Result {
+        let mut res = Vec::new();
+        for (_, tunnels) in self.tunnels.iter() {
+            for tunnel in tunnels.iter() {
+                res.push(tunnel.clone());
+            }
+        }
+        Ok(res)
+    }
+}
+
 /// A message type for deleting all tunnels we haven't heard from for more than the duration.
 pub struct TriggerGC(pub Duration);
 

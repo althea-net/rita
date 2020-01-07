@@ -1,6 +1,6 @@
 //! While traffic watcher keeps an eye on how much traffic flows and what that is worth debtkeeper
 //! maintains the long term memory of who owes who what so that it may later be quiered and paid
-//! by payment manager in the current implementation or guac in the more final one
+//! by payment_controller
 //!
 //! You may be wondering what's up with incoming payments, why can't we just have debt?
 //! Well this whole module is only slightly more complicated than it needs to be.
