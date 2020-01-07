@@ -46,12 +46,17 @@ use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 use std::time::Instant;
 use tokio::net::TcpStream as TokioTcpStream;
+use althea_kernel_interface::wg_iface_counter::{read_iface_tx_packet_counter, read_iface_rx_packet_counter};
 
 pub struct TrafficWatcher {
     // last read download
     last_read_input: u64,
     // last read upload
     last_read_output: u64,
+    // last read upload packet count
+    last_read_tx_packets: u64,
+    // last read rx packet count
+    last_read_rx_packets: u64,
     /// handles the gateway exit client corner case where we need to reconcile client
     /// and relay debts
     gateway_exit_client: bool,
@@ -68,6 +73,8 @@ impl SystemService for TrafficWatcher {
         info!("Client traffic watcher started");
         self.last_read_input = 0;
         self.last_read_output = 0;
+        self.last_read_rx_packets = 0;
+        self.last_read_tx_packets = 0;
         self.gateway_exit_client = false;
         self.last_exit_dest_price = 0;
     }
@@ -77,6 +84,8 @@ impl Default for TrafficWatcher {
         TrafficWatcher {
             last_read_input: 0,
             last_read_output: 0,
+            last_read_rx_packets: 0,
+            last_read_tx_packets: 0,
             gateway_exit_client: false,
             last_exit_dest_price: 0,
         }
@@ -322,6 +331,23 @@ pub fn local_traffic_calculation(
 
     history.last_read_input = counter.download;
     history.last_read_output = counter.upload;
+
+    // here we need to compute bytes wireguard overhead, we are sending
+    // packets with mtu 1340 but are being billed for packets of size 1420
+    // in order to even this out we must look at how many packets we've send
+    // and add 80 bytes for every packet since we last checked.
+    let total_tx_packets = read_iface_tx_packet_counter("wg_exit")?;
+    let total_rx_packets = read_iface_rx_packet_counter("wg_exit")?;
+
+    let tx_packets = total_tx_packets - history.last_read_tx_packets;
+    history.last_read_tx_packets = total_tx_packets;
+
+    let rx_packets = total_rx_packets - history.last_read_rx_packets;
+    history.last_read_rx_packets = total_rx_packets;
+
+    // add 80 bytes of overhead per upload/download packet to the total
+    let input = input + rx_packets * 80;
+    let output = output + tx_packets * 80;
 
     info!("{:?} bytes downloaded from exit this round", &input);
     info!("{:?} bytes uploaded to exit this round", &output);

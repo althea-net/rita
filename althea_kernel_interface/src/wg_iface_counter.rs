@@ -2,14 +2,13 @@
 //! this is mostly used in client and exit billing where we only have to concern ourselves with
 //! a single destination and a single price.
 
+use super::{KernelInterface, KernelInterfaceError};
+use althea_types::WgKey;
 use failure::Error;
 use regex::Regex;
-
 use std::collections::HashMap;
-
-use althea_types::WgKey;
-
-use super::{KernelInterface, KernelInterfaceError};
+use std::fs::File;
+use std::io::Read;
 
 #[derive(Clone, Debug, Copy)]
 pub struct WgUsage {
@@ -84,6 +83,29 @@ impl dyn KernelInterface {
 
         Ok(result)
     }
+}
+
+fn get_packet_counter_file_contents(filename: String) -> Result<u64, Error> {
+    let mut file = File::open(filename)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+    // the file is a single line containing only a number
+    let counter: u64 = contents.parse()?;
+    Ok(counter)
+}
+
+/// Reads the linux file /sys/class/net/ifacename/statistics/tx_packets
+/// should be good up to a few exabytes of packet passing
+pub fn read_iface_tx_packet_counter(ifname: &str) -> Result<u64, Error> {
+    let filename = format!("/sys/class/net/{}/statistics/tx_packets", ifname);
+    get_packet_counter_file_contents(filename)
+}
+
+/// Reads the linux file /sys/class/net/ifacename/statistics/rx_packets
+/// should be good up to a few exabytes of packet passing
+pub fn read_iface_rx_packet_counter(ifname: &str) -> Result<u64, Error> {
+    let filename = format!("/sys/class/net/{}/statistics/rx_packets", ifname);
+    get_packet_counter_file_contents(filename)
 }
 
 #[test]
