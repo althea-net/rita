@@ -248,7 +248,7 @@ impl Handler<GetAddress> for LightClientManager {
 /// Returns addresses not assigned to tunnels to the pool, this is
 /// inefficient versus having tunnel manager notify us when it deletes
 /// a tunnel but it turns out getting the conditional complication required
-/// for that to all workout is moderately complicated. 
+/// for that to all workout is moderately complicated.
 fn return_addresses(tunnels: &[Tunnel], assigned_addresses: &mut HashMap<LocalIdentity, Ipv4Addr>) {
     let mut addresses_to_remove: Vec<LocalIdentity> = Vec::new();
     let mut found = false;
@@ -258,12 +258,12 @@ fn return_addresses(tunnels: &[Tunnel], assigned_addresses: &mut HashMap<LocalId
                 if tunnel_ip == *ip {
                     found = true;
                     break;
-                }                
+                }
             }
         }
         if !found {
             addresses_to_remove.push(*id);
-        } 
+        }
     }
     info!("{} LC ADDR GC", addresses_to_remove.len());
     for id in addresses_to_remove {
