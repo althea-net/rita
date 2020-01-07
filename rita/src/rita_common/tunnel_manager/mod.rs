@@ -288,13 +288,9 @@ impl Tunnel {
             error!("Failed to delete wg interface! {:?}", e);
         }
         TunnelManager::from_registry().do_send(PortCallback(self.listen_port));
-        // this doesn't exist in Rita exit so we add it in or remove it at compile time
-        #[cfg(feature = "light_client_support")]
-        crate::rita_client::light_client_handler::LightClientManager::from_registry().do_send(
-            crate::rita_client::light_client_handler::ReturnAddress(
-                self.light_client_details.unwrap(),
-            ),
-        );
+        // there's a garbage collector function over in light_client_manager
+        // to handle the return of addresses it's less efficient than shooting
+        // off a message here but doesn't require conditional complication
     }
 }
 

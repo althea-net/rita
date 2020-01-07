@@ -8,13 +8,10 @@ edition = "2018"
 [[bin]]
 name = "rita_exit"
 path = "src/exit.rs"
-required-features = ["server"]
-
 
 [[bin]]
 name = "rita"
 path = "src/client.rs"
-required-features = ["client"]
 
 [dependencies]
 althea_kernel_interface = { path = "../althea_kernel_interface" }
@@ -81,7 +78,4 @@ default = []
 # Features for big iron devices with more ram
 server = ["long_timeouts"]
 long_timeouts = []
-# Features for end user client devices (anyone but the exit)
-client = ["light_client_support"]
-light_client_support = []
 development = []

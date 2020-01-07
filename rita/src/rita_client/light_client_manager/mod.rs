@@ -245,28 +245,29 @@ impl Handler<GetAddress> for LightClientManager {
     }
 }
 
-pub struct ReturnAddress(Ipv4Addr);
-
-impl Message for ReturnAddress {
-    type Result = ();
-}
-
-impl Handler<ReturnAddress> for LightClientManager {
-    type Result = ();
-
-    fn handle(&mut self, msg: ReturnAddress, _: &mut Context<Self>) -> Self::Result {
-        let returned_address = msg.0;
-        let mut key_to_remove: Option<LocalIdentity> = None;
-        for (key, ip) in self.assigned_addresses.iter() {
-            if *ip == returned_address {
-                key_to_remove = Some(*key);
+/// Returns addresses not assigned to tunnels to the pool, this is
+/// inefficient versus having tunnel manager notify us when it deletes
+/// a tunnel but it turns out getting the conditional complication required
+/// for that to all workout is moderately complicated. 
+fn return_addresses(tunnels: &[Tunnel], assigned_addresses: &mut HashMap<LocalIdentity, Ipv4Addr>) {
+    let mut addresses_to_remove: Vec<LocalIdentity> = Vec::new();
+    let mut found = false;
+    for (id, ip) in assigned_addresses.iter() {
+        for tunnel in tunnels.iter() {
+            if let Some(tunnel_ip) = tunnel.light_client_details {
+                if tunnel_ip == *ip {
+                    found = true;
+                    break;
+                }                
             }
         }
-        if let Some(val) = key_to_remove {
-            self.assigned_addresses.remove(&val);
-        } else {
-            error!("Failed to free address {}", returned_address);
-        }
+        if !found {
+            addresses_to_remove.push(*id);
+        } 
+    }
+    info!("{} LC ADDR GC", addresses_to_remove.len());
+    for id in addresses_to_remove {
+        assigned_addresses.remove(&id);
     }
 }
 
@@ -319,6 +320,9 @@ impl Handler<Watch> for LightClientManager {
             traffic: traffic_vec,
         };
         DebtKeeper::from_registry().do_send(update);
+
+        // tunnel address garbage collection
+        return_addresses(&tunnels, &mut self.assigned_addresses);
     }
 }
 
