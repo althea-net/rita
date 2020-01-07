@@ -17,6 +17,33 @@ pub struct WgUsage {
     pub download: u64,
 }
 
+pub fn prepare_usage_history(
+    counters: &HashMap<WgKey, WgUsage>,
+    usage_history: &mut HashMap<WgKey, WgUsage>,
+) {
+    for (wg_key, bytes) in counters.iter() {
+        match usage_history.get_mut(&wg_key) {
+            Some(history) => {
+                // tunnel has been reset somehow, reset usage
+                if history.download > bytes.download {
+                    history.download = 0;
+                }
+                if history.upload > bytes.upload {
+                    history.download = 0;
+                }
+            }
+            None => {
+                trace!(
+                    "We have not seen {:?} before, starting counter off at {:?}",
+                    wg_key,
+                    bytes
+                );
+                usage_history.insert(wg_key.clone(), bytes.clone());
+            }
+        }
+    }
+}
+
 impl dyn KernelInterface {
     /// Takes a wg interface name and provides upload and download since creation in bytes
     /// in a hashmap indexed by peer WireGuard key

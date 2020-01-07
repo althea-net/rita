@@ -5,9 +5,13 @@
 //! tunnel if the signup was successful on the selected exit.
 
 use crate::rita_client::exit_manager::ExitManager;
+use crate::rita_client::light_client_manager::light_client_hello_response;
+use crate::rita_client::light_client_manager::LightClientManager;
+use crate::rita_client::light_client_manager::Watch;
 use crate::rita_client::traffic_watcher::TrafficWatcher;
 use crate::rita_client::traffic_watcher::WeAreGatewayClient;
 use crate::rita_common::tunnel_manager::GetNeighbors;
+use crate::rita_common::tunnel_manager::GetTunnels;
 use crate::rita_common::tunnel_manager::TunnelManager;
 use crate::SETTING;
 use actix::actors::resolver;
@@ -15,13 +19,14 @@ use actix::{
     Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
     SystemService,
 };
+use actix_web::http::Method;
+use actix_web::{server, App};
 use althea_types::ExitState;
 use failure::Error;
 use futures01::future::Future;
 use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;
-use std::net::SocketAddr;
-use std::net::UdpSocket;
+use std::net::{SocketAddr, UdpSocket};
 use std::time::{Duration, Instant};
 type Resolver = resolver::Resolver;
 
@@ -80,6 +85,18 @@ impl Handler<Tick> for RitaLoop {
         ExitManager::from_registry().do_send(Tick {});
 
         Arbiter::spawn(check_for_gateway_client_billing_corner_case());
+
+        Arbiter::spawn(
+            TunnelManager::from_registry()
+                .send(GetTunnels)
+                .timeout(CLIENT_LOOP_TIMEOUT)
+                .then(move |res| {
+                    let tunnels = res.unwrap().unwrap();
+                    LightClientManager::from_registry()
+                        .send(Watch { tunnels })
+                        .then(|_res| Ok(()))
+                }),
+        );
 
         if SETTING.get_log().enabled {
             send_udp_heartbeat();
@@ -188,4 +205,23 @@ fn check_for_gateway_client_billing_corner_case() -> impl Future<Item = (), Erro
             }
             Ok(())
         })
+}
+
+pub fn start_rita_client_endpoints(workers: usize) {
+    server::new(|| {
+        App::new().resource("/light_client_hello", |r| {
+            r.method(Method::POST).with(light_client_hello_response)
+        })
+        // .resource("/mobile_debt", |r| {
+        //     r.method(Method::POST).with(get_client_debt)
+        // })
+    })
+    .workers(workers)
+    .bind(format!(
+        "[::0]:{}",
+        SETTING.get_network().light_client_hello_port
+    ))
+    .unwrap()
+    .shutdown_timeout(0)
+    .start();
 }

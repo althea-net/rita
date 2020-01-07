@@ -1,27 +1,20 @@
 //! Network endptoints for common Rita functionality (such as exchanging hello messages)
 
-use althea_types::{LocalIdentity, PaymentTx};
-
-use ::actix::registry::SystemService;
-use actix_web::http::StatusCode;
-use actix_web::*;
-
-use futures01::{future, Future};
-
-use failure::Error;
-
-use crate::SETTING;
-use settings::RitaCommonSettings;
-
-use std::net::SocketAddr;
-
 use crate::rita_common::payment_validator::{PaymentValidator, ToValidate, ValidateLater};
 use crate::rita_common::peer_listener::Peer;
-use crate::rita_common::tunnel_manager::{IdentityCallback, TunnelManager};
-
-use std::time::Instant;
-
+use crate::rita_common::tunnel_manager::id_callback::IdentityCallback;
+use crate::rita_common::tunnel_manager::TunnelManager;
+use crate::SETTING;
+use actix::registry::SystemService;
+use actix_web::http::StatusCode;
+use actix_web::{AsyncResponder, HttpRequest, HttpResponse, Json, Result};
+use althea_types::{LocalIdentity, PaymentTx};
+use failure::Error;
+use futures01::{future, Future};
+use settings::RitaCommonSettings;
 use std::boxed::Box;
+use std::net::SocketAddr;
+use std::time::Instant;
 
 #[derive(Serialize)]
 pub struct JsonStatusResponse {
@@ -100,7 +93,7 @@ pub fn hello_response(
     // the wrong time.
     Box::new(
         TunnelManager::from_registry()
-            .send(IdentityCallback::new(their_id, peer, None))
+            .send(IdentityCallback::new(their_id, peer, None, None))
             .from_err()
             .and_then(|tunnel| {
                 let tunnel = match tunnel {

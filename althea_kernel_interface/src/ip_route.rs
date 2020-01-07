@@ -43,7 +43,7 @@ impl dyn KernelInterface {
         )
     }
 
-    fn set_route(&self, to: &IpRoute, route: &Vec<String>) -> Result<(), Error> {
+    pub fn set_route<T: ToString>(&self, to: &T, route: &[String]) -> Result<(), Error> {
         let to = to.to_string();
         let mut def_route = vec!["route", "add", &to];
 

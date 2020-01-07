@@ -47,6 +47,7 @@ mod rita_common;
 
 use crate::rita_client::enable_remote_logging;
 use crate::rita_client::rita_loop::check_rita_client_actors;
+use crate::rita_client::rita_loop::start_rita_client_endpoints;
 use crate::rita_common::rita_loop::check_rita_common_actors;
 use crate::rita_common::rita_loop::start_core_rita_endpoints;
 
@@ -231,6 +232,7 @@ fn main() {
     check_rita_common_actors();
     check_rita_client_actors();
     start_core_rita_endpoints(2);
+    start_rita_client_endpoints(1);
     start_client_dashboard();
 
     system.run();
