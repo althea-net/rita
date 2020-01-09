@@ -30,15 +30,13 @@ pub enum InterfaceMode {
         ipaddr: Ipv4Addr,
         gateway: Ipv4Addr,
     },
-    Meshpoint, //combo of lan and mesh
-    Unknown,   // Ambiguous wireless modes like monitor or promiscuous
+    Unknown, // Ambiguous wireless modes like monitor or promiscuous
 }
 
 impl ToString for InterfaceMode {
     fn to_string(&self) -> String {
         match self {
             InterfaceMode::Mesh => "mesh".to_owned(),
-            InterfaceMode::Meshpoint => "Meshpoint".to_owned(),
             InterfaceMode::LAN => "LAN".to_owned(),
             InterfaceMode::WAN => "WAN".to_owned(),
             InterfaceMode::StaticWAN { .. } => "StaticWAN".to_owned(),
@@ -54,7 +52,11 @@ pub fn get_interfaces() -> Result<HashMap<String, InterfaceMode>, Error> {
     // Wired
     for (setting_name, value) in KI.uci_show(Some("network"))? {
         // Only non-loopback non-bridge interface names should get past
-        if setting_name.contains("ifname") && !value.contains("backhaul") && value != "lo" {
+        if setting_name.contains("ifname")
+            && !value.contains("backhaul")
+            && value != "lo"
+            && !value.contains("pbs-wlan")
+        {
             // it's a list and we need to handle that
             if value.contains(' ') {
                 for list_member in value.split(' ') {
@@ -67,18 +69,6 @@ pub fn get_interfaces() -> Result<HashMap<String, InterfaceMode>, Error> {
                 retval.insert(value.clone(), ethernet2mode(&value, &setting_name)?);
             }
         }
-    }
-
-    // Wireless
-    match KI.uci_show(Some("wireless")) {
-        Ok(value) => {
-            for (setting_name, value) in value {
-                if setting_name.contains("ifname") {
-                    retval.insert(value.clone(), wlan2mode(&value, &setting_name)?);
-                }
-            }
-        }
-        _ => trace!("Device does not have WiFi!"),
     }
 
     Ok(retval)
@@ -96,77 +86,40 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
     Ok(match &setting_name.replace(".ifname", "") {
         s if s.contains("rita_") => InterfaceMode::Mesh,
         s if s.contains("lan") => InterfaceMode::LAN,
-        s if s.contains("backhaul") => InterfaceMode::WAN,
+        s if s.contains("backhaul") => {
+            let prefix = "network.backhaul";
+            let backhaul = KI.uci_show(Some(prefix))?;
+            trace!("{:?}", backhaul);
+            let proto = if let Some(val) = backhaul.get(&format!("{}.proto", prefix)) {
+                val
+            } else {
+                bail!("WAN network with no proto?");
+            };
+
+            if proto.contains("dhcp") {
+                return Ok(InterfaceMode::WAN);
+            } else if proto.contains("static") {
+                let opt_tuple = (
+                    backhaul.get(&format!("{}.netmask", prefix)),
+                    backhaul.get(&format!("{}.ipaddr", prefix)),
+                    backhaul.get(&format!("{}.gateway", prefix)),
+                );
+                if let (Some(netmask), Some(ipaddr), Some(gateway)) = opt_tuple {
+                    return Ok(InterfaceMode::StaticWAN {
+                        netmask: netmask.parse()?,
+                        ipaddr: ipaddr.parse()?,
+                        gateway: gateway.parse()?,
+                    });
+                } else {
+                    bail!("Failed to parse static wan!");
+                }
+            }
+            bail!("Failed to parse backhaul entry!");
+        }
         other => {
             warn!(
                 "Unknown wired port mode for interface {:?}, section name {:?}",
                 ifname, other
-            );
-            InterfaceMode::Unknown
-        }
-    })
-}
-
-/// Find out a wireless interface's mode (mesh, LAN, WAN) from the 802.11 mode of operation
-pub fn wlan2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, Error> {
-    trace!(
-        "wlan2mode: ifname {:?}, setting_name {:?}",
-        ifname,
-        setting_name
-    );
-
-    let uci = KI.uci_show(Some("wireless"))?;
-
-    let radio_name = setting_name
-        .replace("wireless.", "")
-        .replace(".ifname", "")
-        .replace("default_", "")
-        .replace("mesh_", "");
-
-    let meshpoint_enabled = uci.get(&format!("wireless.mesh_{}.disabled", radio_name));
-
-    // Find the mode entry
-    let mode_entry_name = format!("wireless.default_{}.mode", radio_name);
-
-    let mode_name = match uci.get(&mode_entry_name) {
-        Some(mode_name) => mode_name,
-        None => {
-            error!("Mode setting entry {:?} not found", mode_entry_name);
-            bail!("Mode setting entry {:?} not found", mode_entry_name);
-        }
-    };
-
-    // Match mode
-    Ok(match (mode_name.as_str(), meshpoint_enabled) {
-        ("adhoc", _) => InterfaceMode::Mesh,
-        ("ap", None) => InterfaceMode::LAN,
-        ("sta", None) => InterfaceMode::WAN,
-        ("ap", Some(v)) => match v.as_str() {
-            "1" => InterfaceMode::LAN,
-            "0" => InterfaceMode::Meshpoint,
-            _ => {
-                warn!(
-                    "Ambiguous Meshpoint status on interface {:?}, radio {:?}",
-                    ifname, radio_name
-                );
-                InterfaceMode::Unknown
-            }
-        },
-        ("sta", Some(v)) => match v.as_str() {
-            "1" => InterfaceMode::LAN,
-            "0" => InterfaceMode::Meshpoint,
-            _ => {
-                warn!(
-                    "Ambiguous Meshpoint status on interface {:?}, radio {:?}",
-                    ifname, radio_name
-                );
-                InterfaceMode::Unknown
-            }
-        },
-        other => {
-            warn!(
-                "Ambiguous WiFi mode {:?} on interface {:?}, radio {:?}",
-                other, ifname, radio_name
             );
             InterfaceMode::Unknown
         }
@@ -193,15 +146,8 @@ fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), Error
         }
     }
 
-    // in theory you can have all sorts of wonky interface names, but we know
-    // that we hardcode wlan0 and wlan0 as wlan iface names so we check for that
-    if iface_name.contains("wlan") {
-        trace!("Transforming wlan");
-        wlan_transform_mode(iface_name, current_mode, target_mode)
-    } else {
-        trace!("Transforming ethernet");
-        ethernet_transform_mode(iface_name, current_mode, target_mode)
-    }
+    trace!("Transforming ethernet");
+    ethernet_transform_mode(iface_name, current_mode, target_mode)
 }
 
 /// Transform a wired inteface from mode A to mode B
@@ -250,7 +196,6 @@ pub fn ethernet_transform_mode(
             let ret = KI.del_uci_var(&filtered_ifname);
             return_codes.push(ret);
         }
-        InterfaceMode::Meshpoint => unimplemented!(),
         InterfaceMode::Unknown => unimplemented!(),
     }
 
@@ -318,7 +263,6 @@ pub fn ethernet_transform_mode(
             return_codes.push(ret);
             mesh_add = true;
         }
-        InterfaceMode::Meshpoint => unimplemented!(),
         InterfaceMode::Unknown => unimplemented!(),
     }
 
@@ -353,105 +297,14 @@ pub fn ethernet_transform_mode(
     Ok(())
 }
 
-/// Transform a wireless interface from mode A to mode B
-pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> Result<(), Error> {
-    trace!(
-        "wlan mode transform: ifname {:?}, a {:?}, b {:?}",
-        ifname,
-        a,
-        b,
-    );
-    if a == b {
-        // noop that was easy!
-        return Ok(());
-    } else if a == InterfaceMode::Unknown || b == InterfaceMode::Unknown {
-        bail!("We can't change Unknown interfaces!");
-    } else if a == InterfaceMode::WAN || b == InterfaceMode::WAN {
-        // possible in theory but not implemented
-        bail!("WAN not supported for wlan interfaces!");
-    }
-
-    // if we have edited UCI and it fails we set this var to handle cleanup later
-    let mut return_codes = Vec::new();
-    let mut mesh_add = false;
-
-    // we assume wlan0 => radio0 this is held true by our config
-    // modifications but is not generally true for OpenWRT
-    let radio = match ifname.chars().last() {
-        Some(character) => format!("radio{}", character),
-        None => bail!("Invalid interface name {:?}", ifname),
-    };
-    let network_section = format!("default_{}", radio);
-    let mesh_wlan = match ifname {
-        "wlan0" => "wlan2",
-        "wlan1" => "wlan3",
-        // we hardcode meshpoint radios to wlan2 and 3 but this assumes no device
-        // will ever have more than two internal radios
-        _ => bail!("wlan name not considered in design!"),
-    };
-
-    match a {
-        InterfaceMode::WAN => unimplemented!(),
-        InterfaceMode::StaticWAN { .. } => unimplemented!(),
-        // nothing to do here we overwrite everything we need later
-        InterfaceMode::LAN => {}
-        // for mesh we need to send an unlisten and delete the static interface we made
-        InterfaceMode::Meshpoint => {
-            let ret = KI.set_uci_var(&format!("wireless.mesh_{}.disabled", radio), "1");
-            return_codes.push(ret);
-            PeerListener::from_registry().do_send(UnListen(mesh_wlan.to_string()));
-        }
-        InterfaceMode::Mesh => unimplemented!(),
-        InterfaceMode::Unknown => unimplemented!(),
-    }
-
-    match b {
-        InterfaceMode::WAN => unimplemented!(),
-        InterfaceMode::StaticWAN { .. } => unimplemented!(),
-        // since we left lan mostly unomidifed we just pop in the ifname
-        InterfaceMode::LAN => {
-            let ret = KI.set_uci_var(&format!("wireless.{}.network", network_section), "lan");
-            return_codes.push(ret);
-            let ret = KI.set_uci_var(&format!("wireless.{}.mode", network_section), "ap");
-            return_codes.push(ret);
-            let ret = KI.set_uci_var(&format!("wireless.{}.ssid", network_section), "AltheaHome");
-            return_codes.push(ret);
-            let ret = KI.set_uci_var(
-                &format!("wireless.{}.encryption", network_section),
-                "psk2+tkip+aes",
-            );
-            return_codes.push(ret);
-            let ret = KI.set_uci_var(&format!("wireless.{}.key", network_section), "ChangeMe");
-            return_codes.push(ret);
-        }
-        // in this section we modfiy the wlan config to mesh and then add a static logical iface
-        // that is used for things like ip assignment etc
-        InterfaceMode::Meshpoint => {
-            let val = KI.get_uci_var(&format!("wireless.mesh_{}.disabled", radio));
-            match val {
-                Ok(status) => match status.as_str() {
-                    "0" => {
-                        warn!("You can't meshpoint both wireless interfaces!");
-                        return_codes.push(Err(format_err!(
-                            "You can't meshpoint both wireless interfaces!"
-                        )));
-                    }
-                    "1" => {
-                        let ret = KI.set_uci_var(&format!("wireless.mesh_{}.disabled", radio), "0");
-                        return_codes.push(ret);
-                        mesh_add = true;
-                    }
-                    _ => {
-                        error!("Deivce is not meshpoint enabled?");
-                        return_codes.push(Err(format_err!("Device may not be meshpoint enabled!")));
-                    }
-                },
-                Err(e) => return_codes.push(Err(e)),
-            }
-        }
-        InterfaceMode::Mesh => unimplemented!(),
-        InterfaceMode::Unknown => unimplemented!(),
-    }
+/// Unlike physical ethernet interfaces you can run multiple SSID's on a single WIFI card
+/// so we don't provide options to 'change' wireless modes to match the users expectations
+/// instead we provide a toggle interface.
+/// For example 'toggle user wlan off' or 'toggle phone sale network on' or 'toggle router
+/// to router wireless meshing'.
+pub fn wlan_toggle(ifname: &str, enabled: bool) -> Result<(), Error> {
+    trace!("wlan toggle: ifname {:?}, enabled: {}", ifname, enabled,);
+    let return_codes: Vec<Result<(), Error>> = Vec::new();
 
     // check all of our return codes in order to handle any possible issue
     let mut error_occured = false;
@@ -468,25 +321,16 @@ pub fn wlan_transform_mode(ifname: &str, a: InterfaceMode, b: InterfaceMode) -> 
             res_a,
             res_b
         );
-    } else if mesh_add {
-        let locally_owned_ifname = ifname.to_string();
-        SETTING
-            .get_network_mut()
-            .peer_interfaces
-            .insert(locally_owned_ifname);
     }
 
     KI.uci_commit(&"wireless")?;
-    KI.uci_commit(&"network")?;
-    KI.openwrt_reset_network()?;
     KI.openwrt_reset_wireless()?;
-    SETTING.write().unwrap().write(&ARGS.flag_config)?;
 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
 
-    trace!("Successsfully transformed wlan mode, rebooting");
-    KI.run_command("reboot", &[])?;
+    // trace!("Successsfully toggled wlan mode, rebooting");
+    // KI.run_command("reboot", &[])?;
 
     Ok(())
 }
@@ -584,7 +428,10 @@ pub fn get_interfaces_endpoint(
     debug!("get /interfaces hit");
     match get_interfaces() {
         Ok(val) => Ok(Json(val)),
-        Err(e) => Err(e),
+        Err(e) => {
+            error!("get_interfaces failed with {:?}", e);
+            Err(e)
+        }
     }
 }
 
