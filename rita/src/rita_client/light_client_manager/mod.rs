@@ -4,6 +4,8 @@
 //! especially since the client traffic exits unencrypted at one point on the participating Rita Client router. Sadly this is unavoidable as
 //! far as I can tell due to the restrictive nature of how and when Android allows ipv6 routing.
 
+use crate::rita_client::traffic_watcher::GetExitDestPrice;
+use crate::rita_client::traffic_watcher::TrafficWatcher;
 use crate::rita_common::debt_keeper;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::Traffic;
@@ -60,11 +62,13 @@ pub fn light_client_hello_response(
     req: (Json<LocalIdentity>, HttpRequest),
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let their_id = *req.0;
+    let a = LightClientManager::from_registry().send(GetAddress(their_id));
+    let b = TrafficWatcher::from_registry().send(GetExitDestPrice);
+
     Box::new(
-        LightClientManager::from_registry()
-            .send(GetAddress(their_id))
+        a.join(b)
             .from_err()
-            .and_then(move |light_client_address| {
+            .and_then(move |(light_client_address, exit_dest_price)| {
                 let err_mesg = "Malformed light client hello tcp packet!";
                 let socket = match req.1.connection_info().remote() {
                     Some(val) => match val.parse::<SocketAddr>() {
@@ -100,6 +104,11 @@ pub fn light_client_hello_response(
                                 .json(err_mesg),
                         ));
                     }
+                };
+
+                let exit_dest_price = match exit_dest_price {
+                    Ok(val) => val,
+                    Err(_e) => 0,
                 };
 
                 trace!(
@@ -146,6 +155,7 @@ pub fn light_client_hello_response(
                                 wg_port: tunnel.listen_port,
                                 have_tunnel: Some(have_tunnel),
                                 tunnel_address: light_client_address,
+                                price: SETTING.get_payment().local_fee as u128 + exit_dest_price,
                             };
                             // Two bools -> 4 state truth table, in 3 of
                             // those states we need to re-add these rules

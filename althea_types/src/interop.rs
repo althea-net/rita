@@ -276,6 +276,9 @@ pub struct LightClientLocalIdentity {
     pub have_tunnel: Option<bool>, // If we have an existing tunnel, None if we don't know
     pub global: Identity,
     pub tunnel_address: Ipv4Addr, // we have to replicate dhcp ourselves due to the android vpn api
+    pub price: u128, // the local_fee of the node passing light client traffic, much bigger
+                     // than the actual babel price field for ergonomics around downcasting
+                     // the number after upcasting when we compute it.
 }
 
 #[cfg(feature = "actix")]

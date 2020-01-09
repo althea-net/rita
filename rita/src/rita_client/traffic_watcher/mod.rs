@@ -55,6 +55,8 @@ pub struct TrafficWatcher {
     /// handles the gateway exit client corner case where we need to reconcile client
     /// and relay debts
     gateway_exit_client: bool,
+    /// cached exit destination price value
+    last_exit_dest_price: u128,
 }
 
 impl Actor for TrafficWatcher {
@@ -67,6 +69,7 @@ impl SystemService for TrafficWatcher {
         self.last_read_input = 0;
         self.last_read_output = 0;
         self.gateway_exit_client = false;
+        self.last_exit_dest_price = 0;
     }
 }
 impl Default for TrafficWatcher {
@@ -75,6 +78,7 @@ impl Default for TrafficWatcher {
             last_read_input: 0,
             last_read_output: 0,
             gateway_exit_client: false,
+            last_exit_dest_price: 0,
         }
     }
 }
@@ -307,6 +311,9 @@ pub fn watch(
     // the exit for this because TODO assumes symetric route
     let exit_dest_price: i128 = exit_route_price + i128::from(exit_price);
 
+    // send the exit dest price over to the light client manager for consumption there
+    history.last_exit_dest_price = exit_dest_price as u128;
+
     info!("Exit destination price {}", exit_dest_price);
     trace!("Exit ip: {:?}", exit.mesh_ip);
     trace!("Exit destination:\n{:#?}", exit_route);
@@ -363,4 +370,21 @@ pub fn watch(
     }
 
     Ok(())
+}
+
+/// Grabs the exit desination price cached in the TrafficWatcher object
+/// this allows users to avoid the rather complicated procedure of computing it
+/// themselves
+pub struct GetExitDestPrice;
+
+impl Message for GetExitDestPrice {
+    type Result = Result<u128, Error>;
+}
+
+impl Handler<GetExitDestPrice> for TrafficWatcher {
+    type Result = Result<u128, Error>;
+
+    fn handle(&mut self, _msg: GetExitDestPrice, _: &mut Context<Self>) -> Self::Result {
+        Ok(self.last_exit_dest_price)
+    }
 }
