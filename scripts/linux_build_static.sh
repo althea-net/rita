@@ -26,4 +26,4 @@ docker pull ekidd/rust-musl-builder
 RUST_MUSL_BUILDER="docker run --rm -it -v "$(pwd)":/home/rust/src -v $CARGO_GIT:/home/rust/.cargo/git -v $CARGO_REGISTRY:/home/rust/.cargo/registry ekidd/rust-musl-builder"
 $RUST_MUSL_BUILDER sudo chown -R rust:rust /home/rust/.cargo/git /home/rust/.cargo/registry
 
-$RUST_MUSL_BUILDER cargo build --all ${PROFILE} --features server,${FEATURES}
+$RUST_MUSL_BUILDER cargo build --all ${PROFILE} ${FEATURES}
