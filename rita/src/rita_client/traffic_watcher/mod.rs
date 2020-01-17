@@ -274,7 +274,9 @@ pub fn watch(
             }
             // unwrap is safe because we check that len is not equal to zero
             // then we toss the exit's wg key as we don't need it
-            res.iter().last().unwrap().1.clone()
+            // create an iterator, take the last (and only) value, then grab the
+            // counter and not the key from the hashmap entry
+            *res.iter().last().unwrap().1
         }
         Err(e) => {
             warn!(

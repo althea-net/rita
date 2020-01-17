@@ -11,7 +11,7 @@ use althea_types::WgKey;
 
 use super::{KernelInterface, KernelInterfaceError};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub struct WgUsage {
     pub upload: u64,
     pub download: u64,
