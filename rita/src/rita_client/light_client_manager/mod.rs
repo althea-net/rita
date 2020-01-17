@@ -291,6 +291,7 @@ fn return_addresses(tunnels: &[Tunnel], assigned_addresses: &mut HashMap<LocalId
 /// client usage is.
 pub struct Watch {
     pub tunnels: Vec<Tunnel>,
+    pub exit_dest_price: u128,
 }
 
 impl Message for Watch {
@@ -301,7 +302,7 @@ impl Handler<Watch> for LightClientManager {
     type Result = ();
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        let our_price = SETTING.get_payment().local_fee;
+        let our_price = msg.exit_dest_price;
         let tunnels = msg.tunnels;
         let mut debts: HashMap<Identity, i128> = HashMap::new();
         for tunnel in tunnels.iter() {
@@ -312,8 +313,13 @@ impl Handler<Watch> for LightClientManager {
                     // interface is not supported
                     assert!(counter.len() == 1);
                     // get only the first element
-                    let (_key, usage) = counter.iter().next().unwrap();
-                    let debt = ((usage.upload + usage.download) * our_price as u64) as i128;
+                    let (key, usage) = counter.iter().next().unwrap();
+                    // unwrap is safe before prepare usage history will ensure an entry exits
+                    let last_seen_usage = self.last_seen_bytes.get_mut(&key).unwrap();
+                    let round_upload = usage.upload - last_seen_usage.upload;
+                    let round_download = usage.download - last_seen_usage.download;
+                    *last_seen_usage = *usage;
+                    let debt = ((round_upload + round_download) * our_price as u64) as i128;
                     subtract_or_insert_and_subtract(&mut debts, tunnel.neigh_id.global, debt);
                 }
             }
