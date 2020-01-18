@@ -89,24 +89,20 @@ impl Handler<Tick> for RitaLoop {
 
         let dest_price = TrafficWatcher::from_registry().send(GetExitDestPrice);
         let tunnels = TunnelManager::from_registry().send(GetTunnels);
-        Arbiter::spawn(
-            dest_price
-                .join(tunnels)
-                .then(move |res| {
-                    // unwrap top level actix error, ok to crash if this fails
-                    let (exit_dest_price, tunnels) = res.unwrap();
-                    // these can't ever happen as the function only returns a Result for Actix
-                    // type checking
-                    let tunnels = tunnels.unwrap();
-                    let exit_dest_price = exit_dest_price.unwrap();
-                    LightClientManager::from_registry()
-                        .send(Watch {
-                            tunnels,
-                            exit_dest_price,
-                        })
-                        .then(|_res| Ok(()))
-                }),
-        );
+        Arbiter::spawn(dest_price.join(tunnels).then(move |res| {
+            // unwrap top level actix error, ok to crash if this fails
+            let (exit_dest_price, tunnels) = res.unwrap();
+            // these can't ever happen as the function only returns a Result for Actix
+            // type checking
+            let tunnels = tunnels.unwrap();
+            let exit_dest_price = exit_dest_price.unwrap();
+            LightClientManager::from_registry()
+                .send(Watch {
+                    tunnels,
+                    exit_dest_price,
+                })
+                .then(|_res| Ok(()))
+        }));
 
         if SETTING.get_log().enabled {
             send_udp_heartbeat();
