@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use althea_types::WgKey;
 
@@ -59,6 +59,9 @@ pub struct NetworkSettings {
     /// network
     #[serde(default = "default_light_client_hello_port")]
     pub light_client_hello_port: u16,
+    /// This devices address on the inside of the AltheaPhone network, this is set by the firmware builder. If it's
+    /// none it was never set by the firmware builder and light client operations simply aren't enabled
+    pub light_client_router_ip: Option<Ipv4Addr>,
     /// Port on which rita contacts other althea nodes over the mesh (needs to be constant across an
     /// entire althea deployment)
     pub rita_contact_port: u16,
@@ -138,6 +141,7 @@ impl Default for NetworkSettings {
             rita_contact_port: 4874,
             rita_hello_port: 4876,
             light_client_hello_port: default_light_client_hello_port(),
+            light_client_router_ip: None,
             rita_dashboard_port: 4877,
             rita_dashboard_password: None,
             bounty_port: 8888,
