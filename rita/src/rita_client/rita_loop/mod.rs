@@ -214,20 +214,22 @@ fn check_for_gateway_client_billing_corner_case() -> impl Future<Item = (), Erro
 }
 
 pub fn start_rita_client_endpoints(workers: usize) {
-    server::new(|| {
-        App::new().resource("/light_client_hello", |r| {
-            r.method(Method::POST).with(light_client_hello_response)
+    // listen on the light client gateway ip if it's not none
+    if let Some(gateway_ip) = SETTING.get_network().light_client_router_ip {
+        trace!("Listening for light client hellos on {}", gateway_ip);
+        server::new(|| {
+            App::new().resource("/light_client_hello", |r| {
+                r.method(Method::POST).with(light_client_hello_response)
+            })
         })
-        // .resource("/mobile_debt", |r| {
-        //     r.method(Method::POST).with(get_client_debt)
-        // })
-    })
-    .workers(workers)
-    .bind(format!(
-        "[::0]:{}",
-        SETTING.get_network().light_client_hello_port
-    ))
-    .unwrap()
-    .shutdown_timeout(0)
-    .start();
+        .workers(workers)
+        .bind(format!(
+            "{}:{}",
+            gateway_ip,
+            SETTING.get_network().light_client_hello_port
+        ))
+        .unwrap()
+        .shutdown_timeout(0)
+        .start();
+    }
 }
