@@ -5,6 +5,7 @@
 use crate::rita_common::debt_keeper::DebtAction;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::GetDebtsList;
+use crate::rita_common::payment_validator::TRANSACTION_VERIFICATION_TIMEOUT;
 use crate::rita_exit::database::database_tools::client_conflict;
 use crate::rita_exit::database::database_tools::client_exists;
 use crate::rita_exit::database::database_tools::delete_client;
@@ -625,8 +626,10 @@ pub fn enforce_exit_clients(
                     // as it seems that http requests and anything that touches shelling out slow down
                     // the most in these situations. Hopefully we can figure out more about why the
                     // futures loop starts acting stragely.
-                    if start.elapsed().as_secs() > 2 {
-                       let fail_mesg = "Exit enforcement took more than 2 seconds!";
+                    const PANIC_TIME: u64 = 10;
+                    assert!(TRANSACTION_VERIFICATION_TIMEOUT > Duration::from_secs(PANIC_TIME));
+                    if start.elapsed().as_secs() > PANIC_TIME {
+                       let fail_mesg = format!("Exit enforcement took more than {} seconds!", PANIC_TIME);
                        error!("{}", fail_mesg);
                        panic!("{}", fail_mesg);
                     }
