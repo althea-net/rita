@@ -31,9 +31,9 @@ use web30::types::TransactionResponse;
 // far less dynamic network conditions and it's far more important that we validate payments
 // even at the cost of memory or the risk of an emergency restart if we slow down too much
 #[cfg(not(any(feature = "long_timeouts", target_arch = "x86_64")))]
-const TRANSACTION_VERIFICATION_TIMEOUT: Duration = Duration::from_secs(4);
+pub const TRANSACTION_VERIFICATION_TIMEOUT: Duration = Duration::from_secs(4);
 #[cfg(any(feature = "long_timeouts", target_arch = "x86_64"))]
-const TRANSACTION_VERIFICATION_TIMEOUT: Duration = Duration::from_secs(60);
+pub const TRANSACTION_VERIFICATION_TIMEOUT: Duration = Duration::from_secs(60);
 
 // Discard payments after 15 minutes of failing to find txid
 pub const PAYMENT_TIMEOUT: Duration = Duration::from_secs(900u64);
