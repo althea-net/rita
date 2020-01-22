@@ -22,7 +22,10 @@ use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::net::IpAddr;
 
-pub struct TrafficWatcher;
+#[derive(Debug, Clone)]
+pub struct TrafficWatcher {
+    last_counters: Option<LastCounters>,
+}
 
 impl Actor for TrafficWatcher {
     type Context = Context<Self>;
@@ -43,7 +46,11 @@ impl SystemService for TrafficWatcher {
 
 impl Default for TrafficWatcher {
     fn default() -> TrafficWatcher {
-        TrafficWatcher {}
+        TrafficWatcher {
+            // last counters are read by Exit traffic watcher, which needs to use this
+            // same data but bill differently for it. Since reading traffic countesr clear
+            last_counters: None,
+        }
     }
 }
 
@@ -67,7 +74,36 @@ impl Handler<Watch> for TrafficWatcher {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        watch(msg.routes, &msg.neighbors)
+        if let Ok(val) = watch(msg.routes, &msg.neighbors) {
+            self.last_counters = Some(val);
+        } else {
+            self.last_counters = None;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LastCounters {
+    incoming: HashMap<(IpAddr, String), u64>,
+    outgoing: HashMap<(IpAddr, String), u64>,
+}
+
+pub struct GetLastCounters();
+
+impl Message for GetLastCounters {
+    type Result = Result<LastCounters, Error>;
+}
+
+impl Handler<GetLastCounters> for TrafficWatcher {
+    type Result = Result<LastCounters, Error>;
+
+    fn handle(&mut self, _msg: GetLastCounters, _: &mut Context<Self>) -> Self::Result {
+        if let Some(c) = &self.last_counters {
+            Ok(c.clone())
+        } else {
+            Err(format_err!("Not ready yet"))
+        }
     }
 }
 
@@ -270,7 +306,7 @@ fn update_usage(
 ///
 /// This first time this is run, it will create the rules and then immediately read and zero them.
 /// (should return 0)
-pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
+pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<LastCounters, Error> {
     let (identities, if_to_id) = prepare_helper_maps(neighbors);
 
     let (destinations, local_fee) = get_babel_info(routes)?;
@@ -370,7 +406,11 @@ pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
     };
     DebtKeeper::from_registry().do_send(update);
 
-    Ok(())
+    let last_counters = LastCounters {
+        incoming: total_input_counters,
+        outgoing: total_output_counters,
+    };
+    Ok(last_counters)
 }
 
 #[cfg(test)]
