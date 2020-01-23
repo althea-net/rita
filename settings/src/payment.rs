@@ -46,10 +46,12 @@ fn default_balance_warning_level() -> Uint256 {
     (10_000_000_000_000_000u64).into()
 }
 
+// make sure this matches default system chain and default DAO url
 fn default_node_list() -> Vec<String> {
     vec!["https://dai.althea.org:443".to_string()]
 }
 
+// make sure this matches default node list and default DAO url
 fn default_system_chain() -> SystemChain {
     SystemChain::Xdai
 }
