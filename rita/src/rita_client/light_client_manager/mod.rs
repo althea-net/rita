@@ -302,7 +302,8 @@ impl Handler<Watch> for LightClientManager {
     type Result = ();
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        let our_price = msg.exit_dest_price;
+        trace!("Starting light client traffic watcher");
+        let our_price = SETTING.get_payment().local_fee as u128 + msg.exit_dest_price;
         let tunnels = msg.tunnels;
         let mut debts: HashMap<Identity, i128> = HashMap::new();
         for tunnel in tunnels.iter() {
