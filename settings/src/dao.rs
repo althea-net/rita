@@ -13,8 +13,9 @@ fn default_use_oracle_price() -> bool {
     true
 }
 
+// if you are changing this double check the default currency and the default node url
 fn default_oracle_url() -> Option<String> {
-    Some("https://updates.althea.net/prices".to_string())
+    Some("https://updates.althea.net/xdaiprices".to_string())
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
