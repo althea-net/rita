@@ -279,6 +279,7 @@ fn return_addresses(tunnels: &[Tunnel], assigned_addresses: &mut HashMap<LocalId
     for id in addresses_to_remove {
         assigned_addresses.remove(&id);
     }
+    info!("{} LC ACTIVE", assigned_addresses.len());
 }
 
 /// Traffic watcher implementation for light clients, this is conceptually
