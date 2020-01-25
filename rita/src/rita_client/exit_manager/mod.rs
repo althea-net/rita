@@ -17,7 +17,7 @@
 //! Signup is complete and the user may use the connection
 
 use crate::rita_client::rita_loop::Tick;
-use crate::rita_client::traffic_watcher::{QueryExitDebts, TrafficWatcher, Watch};
+use crate::rita_client::traffic_watcher::{QueryExitDebts, TrafficWatcher};
 use crate::rita_common::oracle::low_balance;
 use crate::KI;
 use crate::SETTING;
@@ -469,21 +469,18 @@ impl Handler<Tick> for ExitManager {
                     let babel_port = SETTING.get_network().babel_port;
                     trace!("We are signed up for the selected exit!");
 
-                    TrafficWatcher::from_registry().do_send(QueryExitDebts {
-                        exit_internal_addr,
-                        exit_port,
-                        exit_id,
-                    });
                     Arbiter::spawn(
                         open_babel_stream(babel_port)
                             .from_err()
                             .and_then(move |stream| {
                                 start_connection(stream).and_then(move |stream| {
                                     parse_routes(stream).and_then(move |routes| {
-                                        TrafficWatcher::from_registry().do_send(Watch {
+                                        TrafficWatcher::from_registry().do_send(QueryExitDebts {
                                             exit_id,
                                             exit_price,
                                             routes: routes.1,
+                                            exit_internal_addr,
+                                            exit_port,
                                         });
                                         Ok(())
                                     })

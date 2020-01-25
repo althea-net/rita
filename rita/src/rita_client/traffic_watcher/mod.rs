@@ -16,13 +16,13 @@
 //! are then stored and used to compute the usage amounts displayed to the user.
 //!
 //! QueryExitDebts asks the exit what it thinks this particular client owes (over the secure channel of the exit tunnel)
-//! for the time being this is the only number we send to debt keeper to actually pay. At some point in the future, probably
-//! when we start worrying about route verification we can sit down and figure out how to compare the debts the client computes
-//! with the ones the exit computes. While we'll never be able to totally eliminate the ability for the exit to defraud the user
-//! with fake packet loss we can at least prevent the exit from presenting insane values.
+//! validating if this number is correct is difficult, because the exit is serving us with a total debt while our local
+//! billing implementation is only producing a delta change. Knowing if the update is fradulent or not requires heuristics
+//! in debt keeper more than anything that can be done here. What we can do here is take action if several requests fail, falling
+//! back to local debt computation rather than running blind.
 
 use crate::rita_common::debt_keeper::{
-    DebtKeeper, Traffic, TrafficReplace, WgKeyInsensitiveTrafficUpdate,
+    DebtKeeper, Traffic, TrafficReplace, TrafficUpdate, WgKeyInsensitiveTrafficUpdate,
 };
 use crate::rita_common::usage_tracker::UpdateUsage;
 use crate::rita_common::usage_tracker::UsageTracker;
@@ -116,8 +116,9 @@ impl Handler<WeAreGatewayClient> for TrafficWatcher {
 /// a higher total packets sent count than the receiving node. Resulting in what looks
 /// like overpayment on the receiving end. For client traffic though this does not apply
 /// the client is paying for the exit to send it download traffic. So if packets are lost
-/// on the way the client will never know the full price the exit has to pay. This call
-/// resolves that issue by communicating about debts with the exit.
+/// on the way the client will never know the full price the exit has to pay. This breaks
+/// the key assumption that allows us to compute bills without any direct communication beyond
+/// packets and payments. To resolve this impossiblity we must communicate with the exit
 ///
 /// This request is made against the exits internal ip address to ensure that upstream
 /// nodes can't spoof it.
@@ -125,6 +126,8 @@ pub struct QueryExitDebts {
     pub exit_internal_addr: IpAddr,
     pub exit_port: u16,
     pub exit_id: Identity,
+    pub exit_price: u64,
+    pub routes: Vec<Route>,
 }
 
 impl Message for QueryExitDebts {
@@ -136,6 +139,14 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
 
     fn handle(&mut self, msg: QueryExitDebts, _: &mut Context<Self>) -> Self::Result {
         trace!("About to query the exit for client debts");
+
+        // we could exit the function if this fails, but doing so would remove the chance
+        // that we can get debts from the exit and continue anyways
+        let local_debt =
+            match local_traffic_calculation(self, &msg.exit_id, msg.exit_price, msg.routes) {
+                Ok(val) => Some(Int256::from(val)),
+                Err(_e) => None,
+            };
 
         let gateway_exit_client = self.gateway_exit_client;
         let start = Instant::now();
@@ -183,21 +194,50 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
                                         };
 
                                         DebtKeeper::from_registry().do_send(exit_replace);
-                                    },
+                                        },
                                         // the exit should never tell us it owes us, that doesn't make sense outside of the gateway
                                         // client corner case
                                         (true, false) => warn!("We're probably a gateway but haven't detected it yet"),
-                                        (false, _) => info!("We are a gateway!, Acting accordingly"),
+                                        (false, _) => {
+                                            info!("We are a gateway!, Acting accordingly");
+                                            if let Some(val) = local_debt {
+                                                let exit_update = WgKeyInsensitiveTrafficUpdate {
+                                                traffic: Traffic {
+                                                    from: exit_id,
+                                                    amount: val,
+                                                    },
+                                                };
+                                                DebtKeeper::from_registry().do_send(exit_update);
+                                            }
+                                        },
                                     }
                                 }
                                 Err(e) => {
-                                    error!("Failed deserializing exit debts update with {:?}", e)
+                                    error!("Failed deserializing exit debts update with {:?}", e);
+                                    if let Some(val) = local_debt {
+                                        let exit_update = TrafficUpdate {
+                                        traffic: vec![Traffic {
+                                            from: exit_id,
+                                            amount: val,
+                                            }],
+                                        };
+                                        DebtKeeper::from_registry().do_send(exit_update);
+                                    }
                                 }
                             }
                             Ok(()) as Result<(), ()>
                         })),
                         Err(e) => {
-                            trace!("Exit debts request to {} failed with {:?}", request, e);
+                            error!("Exit debts request to {} failed with {:?}", request, e);
+                            if let Some(val) = local_debt {
+                                let exit_update = TrafficUpdate {
+                                traffic: vec![Traffic {
+                                    from: exit_id,
+                                    amount: val,
+                                    }],
+                                };
+                                DebtKeeper::from_registry().do_send(exit_update);
+                            }
                             Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = ()>>
                         }
                     }),
@@ -208,6 +248,15 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
                     "Failed to open stream to exit for debts update! with {:?}",
                     e
                 );
+                if let Some(val) = local_debt {
+                    let exit_update = TrafficUpdate {
+                    traffic: vec![Traffic {
+                        from: exit_id,
+                        amount: val,
+                        }],
+                    };
+                    DebtKeeper::from_registry().do_send(exit_update);
+                }
                 Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = ()>>
             }
         });
@@ -228,39 +277,12 @@ fn find_exit_route_capped(exit_mesh_ip: IpAddr, routes: Vec<Route>) -> Result<Ro
     Ok(exit_route)
 }
 
-/// Used to locally compuate the amount of traffic we have used since the last round by monitoring counters
-/// from and to the exit.
-pub struct Watch {
-    pub exit_id: Identity,
-    pub exit_price: u64,
-    pub routes: Vec<Route>,
-}
-
-impl Message for Watch {
-    type Result = Result<(), Error>;
-}
-
-impl Handler<Watch> for TrafficWatcher {
-    type Result = Result<(), Error>;
-
-    fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        watch(
-            self,
-            &msg.exit_id,
-            msg.exit_price,
-            msg.routes,
-            self.gateway_exit_client,
-        )
-    }
-}
-
-pub fn watch(
+pub fn local_traffic_calculation(
     history: &mut TrafficWatcher,
     exit: &Identity,
     exit_price: u64,
     routes: Vec<Route>,
-    gateway_exit_client: bool,
-) -> Result<(), Error> {
+) -> Result<i128, Error> {
     let exit_route = find_exit_route_capped(exit.mesh_ip, routes)?;
     info!("Exit metric: {}", exit_route.metric);
 
@@ -348,18 +370,6 @@ pub fn watch(
 
     if owes_exit > 0 {
         info!("Total client debt of {} this round", owes_exit);
-
-        if gateway_exit_client {
-            let exit_replace = WgKeyInsensitiveTrafficUpdate {
-                traffic: Traffic {
-                    from: *exit,
-                    amount: Int256::from(owes_exit),
-                },
-            };
-
-            DebtKeeper::from_registry().do_send(exit_replace);
-        }
-
         // update the usage tracker with the details of this round's usage
         UsageTracker::from_registry().do_send(UpdateUsage {
             kind: UsageType::Client,
@@ -371,7 +381,8 @@ pub fn watch(
         error!("no Exit bandwidth, no bill!");
     }
 
-    Ok(())
+    assert!(owes_exit >= 0);
+    Ok(owes_exit)
 }
 
 /// Grabs the exit desination price cached in the TrafficWatcher object
