@@ -7,19 +7,18 @@
 //! off to debt keeper to be removed from the owed balance. Payments may time out after a
 //! configured period.
 
-use crate::rita_common;
 use crate::rita_common::debt_keeper::DebtKeeper;
+use crate::rita_common::debt_keeper::PaymentReceived;
 use crate::rita_common::debt_keeper::PaymentSucceeded;
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::rita_common::usage_tracker::UpdatePayments;
 use crate::rita_common::usage_tracker::UsageTracker;
 use crate::SETTING;
-use ::actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
+use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use althea_types::PaymentTx;
 use futures01::future::Either;
 use futures01::{future, Future};
 use num256::Uint256;
-use rita_common::debt_keeper::PaymentReceived;
 use settings::RitaCommonSettings;
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
