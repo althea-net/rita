@@ -34,6 +34,8 @@ use std::time::Instant;
 
 /// How often we save the nodes debt data, currently 30 minutes
 const SAVE_FREQENCY: Duration = Duration::from_secs(1800);
+/// How long an entry can go without being touched before it's dropped on save. Currently one day
+const SAVE_TIMEOUT: Duration = Duration::from_secs(86400);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodeDebtData {
@@ -62,6 +64,10 @@ pub struct NodeDebtData {
     /// case, where when we get payments from the exit there is a race condition where the
     /// exit may not update that we have paid it fast enough
     pub last_successful_payment: Option<Instant>,
+    #[serde(skip_serializing, skip_deserializing)]
+    /// The last time someone updated this entry. If this is None or more than SAVE_TIMEOUT we don't
+    /// serialize this entry to disk.
+    pub last_update: Option<Instant>,
 }
 
 impl NodeDebtData {
@@ -75,6 +81,7 @@ impl NodeDebtData {
             payment_in_flight: false,
             payment_in_flight_start: None,
             last_successful_payment: None,
+            last_update: None,
         }
     }
 }
@@ -87,6 +94,12 @@ type DebtDataSer = Vec<(Identity, NodeDebtData)>;
 fn debt_data_to_ser(input: DebtData) -> DebtDataSer {
     let mut ret = DebtDataSer::new();
     for (i, d) in input {
+        // nothing has updated this entry in more than a day
+        // drop it, unwrap is safe because we check for none first
+        if d.last_update.is_none() || ((Instant::now() - d.last_update.unwrap()) > SAVE_TIMEOUT) {
+            continue;
+        }
+
         ret.push((i, d));
     }
     ret
@@ -433,6 +446,7 @@ impl DebtKeeper {
 
     fn payment_failed(&mut self, to: &Identity) -> Result<(), Error> {
         let peer = self.get_debt_data_mut(to);
+        peer.last_update = Some(Instant::now());
         peer.payment_in_flight = false;
         peer.payment_in_flight_start = None;
         Ok(())
@@ -440,6 +454,7 @@ impl DebtKeeper {
 
     fn payment_succeeded(&mut self, to: &Identity, amount: Uint256) -> Result<(), Error> {
         let peer = self.get_debt_data_mut(to);
+        peer.last_update = Some(Instant::now());
         peer.payment_in_flight = false;
         peer.payment_in_flight_start = None;
 
@@ -457,6 +472,7 @@ impl DebtKeeper {
         let unsigned_zero = Uint256::from(0u32);
 
         let debt_data = self.get_debt_data_mut(ident);
+        debt_data.last_update = Some(Instant::now());
         info!(
             "payment received: old incoming payments for {:?}: {:?}",
             ident.mesh_ip, debt_data.incoming_payments
@@ -505,6 +521,7 @@ impl DebtKeeper {
     fn traffic_update(&mut self, ident: &Identity, amount: Int256) {
         trace!("traffic update for {} is {}", ident.mesh_ip, amount);
         let debt_data = self.get_debt_data_mut(ident);
+        debt_data.last_update = Some(Instant::now());
 
         // we handle the incoming debit or credit versus our existing debit or credit
         // very simple
@@ -516,6 +533,7 @@ impl DebtKeeper {
     fn traffic_replace(&mut self, ident: &Identity, amount: Int256) {
         trace!("traffic replace for {} is {}", ident.mesh_ip, amount);
         let debt_data = self.get_debt_data_mut(ident);
+        debt_data.last_update = Some(Instant::now());
 
         // if we have a payment in flight we shouldn't reset the debt as
         // we may end up double paying we also should wait 60 seconds after
@@ -541,7 +559,6 @@ impl DebtKeeper {
     fn send_update(&mut self, ident: &Identity) -> Result<DebtAction, Error> {
         trace!("debt data: {:?}", self.debt_data);
         let debt_data = self.get_debt_data_mut(ident);
-        // the debt we started this round with
 
         if debt_data.debt != Int256::from(0) {
             info!(
