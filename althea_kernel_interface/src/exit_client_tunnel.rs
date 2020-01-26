@@ -246,4 +246,36 @@ impl dyn KernelInterface {
 
         Ok(())
     }
+
+    pub fn add_light_client_nat_rules(&self, lan_nic: &str) -> Result<(), Error> {
+        self.add_iptables_rule(
+            "iptables",
+            &[
+                "-D", "FORWARD", "-i", &lan_nic, "-o", "wg_exit", "-j", "ACCEPT",
+            ],
+        )?;
+        self.add_iptables_rule(
+            "iptables",
+            &[
+                "-D", "FORWARD", "-i", "wg_exit", "-o", &lan_nic, "-j", "ACCEPT",
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_light_client_nat_rules(&self, lan_nic: &str) -> Result<(), Error> {
+        self.add_iptables_rule(
+            "iptables",
+            &[
+                "-D", "FORWARD", "-i", &lan_nic, "-o", "wg_exit", "-j", "ACCEPT",
+            ],
+        )?;
+        self.add_iptables_rule(
+            "iptables",
+            &[
+                "-D", "FORWARD", "-i", "wg_exit", "-o", &lan_nic, "-j", "ACCEPT",
+            ],
+        )?;
+        Ok(())
+    }
 }
