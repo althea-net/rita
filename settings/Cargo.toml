@@ -8,7 +8,6 @@ edition = "2018"
 config = "0.10"
 althea_types = { path = "../althea_types", features = ["actix"]}
 althea_kernel_interface = { path = "../althea_kernel_interface" }
-eui48 = {git="https://github.com/althea-mesh/eui48.git"}
 num256 = "0.2"
 serde = "1.0"
 serde_derive = "1.0"
