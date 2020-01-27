@@ -21,6 +21,7 @@ use ::actix::prelude::{Actor, Context, Handler, Message, Supervised, SystemServi
 use althea_types::{Identity, PaymentTx};
 use failure::Error;
 use num256::{Int256, Uint256};
+use num_traits::identities::Zero;
 use num_traits::Signed;
 use serde_json::Error as SerdeError;
 use settings::RitaCommonSettings;
@@ -346,8 +347,8 @@ impl Handler<SendUpdate> for DebtKeeper {
 
 impl Default for DebtKeeper {
     fn default() -> DebtKeeper {
-        assert!(SETTING.get_payment().pay_threshold >= Int256::from(0));
-        assert!(SETTING.get_payment().close_threshold <= Int256::from(0));
+        assert!(SETTING.get_payment().pay_threshold >= Int256::zero());
+        assert!(SETTING.get_payment().close_threshold <= Int256::zero());
         let file = File::open(SETTING.get_payment().debts_file.clone());
         // if the loading process goes wrong for any reason, we just start again
         let blank_debt_keeper = DebtKeeper {
@@ -391,8 +392,8 @@ impl Default for DebtKeeper {
 impl DebtKeeper {
     #[cfg(test)]
     pub fn new() -> Self {
-        assert!(SETTING.get_payment().pay_threshold >= Int256::from(0));
-        assert!(SETTING.get_payment().close_threshold <= Int256::from(0));
+        assert!(SETTING.get_payment().pay_threshold >= Int256::zero());
+        assert!(SETTING.get_payment().close_threshold <= Int256::zero());
 
         DebtKeeper {
             last_save: None,
@@ -460,7 +461,7 @@ impl DebtKeeper {
     }
 
     fn payment_received(&mut self, ident: &Identity, amount: Uint256) -> Result<(), Error> {
-        let signed_zero = Int256::from(0);
+        let signed_zero = Int256::zero();
         let unsigned_zero = Uint256::from(0u32);
 
         let debt_data = self.get_debt_data_mut(ident);
@@ -474,7 +475,7 @@ impl DebtKeeper {
         // add in the latest amount to the pile before processing
         debt_data.incoming_payments += amount;
 
-        let they_owe_us = debt_data.debt < Int256::from(0);
+        let they_owe_us = debt_data.debt < Int256::zero();
         // unwrap is safe because the abs of a signed 256 bit int can't overflow a unsigned 256 bit int or be negative
         let incoming_greater_than_debt =
             debt_data.incoming_payments > debt_data.debt.abs().to_uint256().unwrap();
@@ -550,7 +551,7 @@ impl DebtKeeper {
         let debt_data = self.get_debt_data_mut(ident);
         // the debt we started this round with
 
-        if debt_data.debt != Int256::from(0) {
+        if debt_data.debt != Int256::zero() {
             info!(
                 "debt update for {}: debt: {}, payment balance: {}",
                 ident.wg_public_key, debt_data.debt, debt_data.incoming_payments,
@@ -584,7 +585,7 @@ impl DebtKeeper {
             (true, false, _) => {
                 // before we suspend check if there is any unapplied credit
                 // if there is send a zero payment to apply it.
-                let zero = Uint256::from(0u32);
+                let zero = Uint256::zero();
                 if debt_data.incoming_payments > zero {
                     debt_data.action = DebtAction::OpenTunnel;
                     self.payment_received(ident, zero)?;
@@ -636,7 +637,7 @@ impl DebtKeeper {
                 // never use their credit until they run totally out of money. In practice I've seen
                 // routers where this unapplied credit is several dollars worth, so it's best to remit
                 // that to the users by applying it here.
-                let zero = Uint256::from(0u32);
+                let zero = Uint256::zero();
                 if debt_data.incoming_payments > zero {
                     debt_data.action = DebtAction::OpenTunnel;
                     self.payment_received(ident, zero)?;
