@@ -602,7 +602,8 @@ impl DebtKeeper {
                 let mut to_pay: Uint256 = debt_data.debt.to_uint256().ok_or_else(|| {
                     format_err!("Unable to convert debt data into unsigned 256 bit integer")
                 })?;
-                // overpay by 1% to encourage convergence
+                // overpay by the fudge_factor to encourage convergence, this is currently set
+                // to zero in all production networks, so maybe it can be removed
                 if fudge_factor != 0 {
                     to_pay = to_pay.clone() + (to_pay / fudge_factor.into());
                 }
@@ -621,6 +622,27 @@ impl DebtKeeper {
                 })
             }
             (false, false, _) => {
+                // Check if there is any unapplied credit
+                // if there is send a zero payment to apply it.
+                //
+                // this only has a meaningful function on the exits
+                // On clients 'extra' payment is probably disagreement
+                // for example client A sees it's traffic early and sends a payment
+                // client B is running slower and slots that into overpayment, then sees
+                // the new traffic, goes to enforce, and applies the credit.
+                //
+                // Exits on the other hand have clients ask for debt values, so if the client
+                // overpays for whatever reason they will keep paying at the pay threshold and
+                // never use their credit until they run totally out of money. In practice I've seen
+                // routers where this unapplied credit is several dollars worth, so it's best to remit
+                // that to the users by applying it here.
+                let zero = Uint256::from(0u32);
+                if debt_data.incoming_payments > zero {
+                    debt_data.action = DebtAction::OpenTunnel;
+                    self.payment_received(ident, zero)?;
+                    return Ok(DebtAction::OpenTunnel);
+                }
+
                 debt_data.action = DebtAction::OpenTunnel;
                 Ok(DebtAction::OpenTunnel)
             }
