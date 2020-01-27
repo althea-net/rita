@@ -7,6 +7,8 @@
 
 use crate::rita_common::payment_controller::TRANSACTION_SUBMISSON_TIMEOUT;
 use crate::rita_common::rita_loop::get_web3_server;
+use crate::rita_common::simulated_txfee_manager::AddTxToTotal;
+use crate::rita_common::simulated_txfee_manager::SimulatedTxFeeManager;
 use crate::rita_common::usage_tracker::UpdatePayments;
 use crate::rita_common::usage_tracker::UsageTracker;
 use crate::SETTING;
@@ -149,10 +151,11 @@ impl Handler<Tick> for DAOManager {
                             payment: PaymentTx {
                                 to: dao_identity,
                                 from: our_id,
-                                amount: amount_to_pay,
+                                amount: amount_to_pay.clone(),
                                 txid: Some(txid),
                             },
                         });
+                        SimulatedTxFeeManager::from_registry().do_send(AddTxToTotal(amount_to_pay));
                         DAOManager::from_registry().do_send(SuccessfulPayment {});
                         Ok(())
                     }

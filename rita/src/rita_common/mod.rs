@@ -9,6 +9,7 @@ pub mod payment_controller;
 pub mod payment_validator;
 pub mod peer_listener;
 pub mod rita_loop;
+pub mod simulated_txfee_manager;
 pub mod token_bridge;
 pub mod traffic_watcher;
 pub mod tunnel_manager;
