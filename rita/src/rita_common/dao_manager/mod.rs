@@ -49,6 +49,19 @@ impl DAOManager {
     }
 }
 
+pub struct SuccessfulPayment();
+impl Message for SuccessfulPayment {
+    type Result = ();
+}
+
+impl Handler<SuccessfulPayment> for DAOManager {
+    type Result = ();
+
+    fn handle(&mut self, _msg: SuccessfulPayment, _: &mut Context<Self>) -> Self::Result {
+        self.last_payment_time = Instant::now();
+    }
+}
+
 /// Very basic loop for DAO manager payments
 pub struct Tick;
 impl Message for Tick {
@@ -140,6 +153,7 @@ impl Handler<Tick> for DAOManager {
                                 txid: Some(txid),
                             },
                         });
+                        DAOManager::from_registry().do_send(SuccessfulPayment {});
                         Ok(())
                     }
                     Err(e) => {
@@ -148,7 +162,6 @@ impl Handler<Tick> for DAOManager {
                     }
                 }));
             }
-            self.last_payment_time = Instant::now();
         }
     }
 }
