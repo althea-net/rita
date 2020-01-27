@@ -78,6 +78,16 @@ fn default_bridge_addresses() -> TokenBridgeAddresses {
     }
 }
 
+fn default_simulated_transaction_fee_address() -> Address {
+    "0xee8bba37508cd6f9db7c8ad0ae2b3de0168c1b36"
+        .parse()
+        .unwrap()
+}
+
+fn default_simulated_transaction_fee() -> u8 {
+    10
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct TokenBridgeAddresses {
     pub uniswap_address: Address,
@@ -163,6 +173,14 @@ pub struct PaymentSettings {
     /// Token Bridge addresses
     #[serde(default = "default_bridge_addresses")]
     pub bridge_addresses: TokenBridgeAddresses,
+    /// A fee sent to the maintainers of Althea to simulate transaction fee revenue, computed as a fraction of all transactions
+    /// for which this is the denominator. For example a value of '20' would mean 1/20 or 5%
+    /// of all transactions would be sent to the simulated_transaction_fee address. Setting the the fee value to zero will disable
+    /// simulated transaction fees
+    #[serde(default = "default_simulated_transaction_fee_address")]
+    pub simulated_transaction_fee_address: Address,
+    #[serde(default = "default_simulated_transaction_fee")]
+    pub simulated_transaction_fee: u8,
 }
 
 impl Default for PaymentSettings {
@@ -192,6 +210,8 @@ impl Default for PaymentSettings {
             fudge_factor: 0u8,
             debt_limit_enabled: default_debt_limit_enabled(),
             bridge_addresses: default_bridge_addresses(),
+            simulated_transaction_fee_address: default_simulated_transaction_fee_address(),
+            simulated_transaction_fee: default_simulated_transaction_fee(),
         }
     }
 }

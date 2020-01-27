@@ -12,6 +12,8 @@
 use crate::rita_common::payment_controller;
 use crate::rita_common::payment_controller::PaymentController;
 use crate::rita_common::payment_validator::PAYMENT_TIMEOUT;
+use crate::rita_common::simulated_txfee_manager::AddTxToTotal;
+use crate::rita_common::simulated_txfee_manager::SimulatedTxFeeManager;
 use crate::rita_common::tunnel_manager::TunnelAction;
 use crate::rita_common::tunnel_manager::TunnelChange;
 use crate::rita_common::tunnel_manager::TunnelManager;
@@ -217,6 +219,7 @@ impl Handler<PaymentSucceeded> for DebtKeeper {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: PaymentSucceeded, _: &mut Context<Self>) -> Self::Result {
+        SimulatedTxFeeManager::from_registry().do_send(AddTxToTotal(msg.amount.clone()));
         self.payment_succeeded(&msg.to, msg.amount)
     }
 }
