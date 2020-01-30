@@ -106,9 +106,9 @@ fn ser_to_debt_data(input: DebtDataSer) -> DebtData {
         // discard the entry, in the case that they do have some incoming payments the user
         // deserves to have that credit applied in the future so we must retain the entry and
         // reset the debt
-        if d.debt <= Int256::from(0) && d.incoming_payments == Uint256::from(0u32) {
+        if d.debt <= Int256::zero() && d.incoming_payments == Uint256::zero() {
             continue;
-        } else {
+        } else if d.debt <= Int256::zero() {
             d.debt = Int256::from(0);
         }
         ret.insert(i, d);
@@ -709,10 +709,30 @@ impl Handler<GetDebtsList> for DebtKeeper {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::Rng;
 
     fn get_test_identity() -> Identity {
         Identity::new(
             "2001::3".parse().unwrap(),
+            "0x0000000000000000000000000000000000000001"
+                .parse()
+                .unwrap(),
+            "8BeCExnthLe5ou0EYec5jNqJ/PduZ1x2o7lpXJOpgXk="
+                .parse()
+                .unwrap(),
+            None,
+        )
+    }
+
+    fn get_random_test_identity() -> Identity {
+        let mut rng = rand::thread_rng();
+        let mut array: [u16; 8] = [0; 8];
+        for i in array.iter_mut() {
+            *i = rng.gen();
+        }
+
+        Identity::new(
+            array.into(),
             "0x0000000000000000000000000000000000000001"
                 .parse()
                 .unwrap(),
@@ -1098,5 +1118,54 @@ mod tests {
         assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
         assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
         assert_eq!(d.send_update(&ident).unwrap(), DebtAction::OpenTunnel);
+    }
+
+    #[test]
+    fn test_debts_saving() {
+        let mut test_they_owe = NodeDebtData::new();
+        test_they_owe.debt = Int256::from(-500_000i64);
+        let they_owe = (get_random_test_identity(), test_they_owe);
+
+        let mut test_we_owe = NodeDebtData::new();
+        test_we_owe.debt = Int256::from(500_000i64);
+        let we_owe = (get_random_test_identity(), test_we_owe);
+
+        let mut test_have_credit = NodeDebtData::new();
+        test_have_credit.incoming_payments = Uint256::from(1000u64);
+        let have_credit = (get_random_test_identity(), test_have_credit);
+
+        let mut test_have_credit_and_we_owe = NodeDebtData::new();
+        test_have_credit_and_we_owe.debt = Int256::from(500_000i64);
+        test_have_credit_and_we_owe.incoming_payments = Uint256::from(1000u64);
+        let have_credit_and_we_owe = (get_random_test_identity(), test_have_credit_and_we_owe);
+
+        let mut test_have_credit_and_they_owe = NodeDebtData::new();
+        test_have_credit_and_they_owe.debt = Int256::from(-500_000i64);
+        test_have_credit_and_they_owe.incoming_payments = Uint256::from(1000u64);
+        let have_credit_and_they_owe = (get_random_test_identity(), test_have_credit_and_they_owe);
+
+        let mut input: DebtDataSer = DebtDataSer::new();
+        input.push(they_owe);
+        input.push(we_owe);
+        input.push(have_credit);
+        input.push(have_credit_and_we_owe);
+        input.push(have_credit_and_they_owe);
+
+        let dd = ser_to_debt_data(input);
+        let mut one_pos_debt = false;
+        let mut one_pos_credit = false;
+        for item in dd.iter() {
+            assert!(item.1.debt >= Int256::zero());
+            if item.1.debt > Int256::zero() {
+                one_pos_debt = true;
+            }
+            if item.1.incoming_payments > Uint256::zero() {
+                one_pos_credit = true;
+            }
+        }
+        // we should discard the negative with no credit, keep the one with credit but zero it's entry
+        assert!(dd.len() == 4);
+        assert!(one_pos_credit);
+        assert!(one_pos_debt);
     }
 }
