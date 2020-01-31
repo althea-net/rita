@@ -13,6 +13,7 @@ pub mod logging;
 pub mod mesh_ip;
 pub mod neighbors;
 pub mod notifications;
+pub mod prices;
 pub mod release_feed;
 pub mod remote_access;
 pub mod router;

@@ -66,7 +66,6 @@ use crate::rita_common::dashboard::debts::*;
 use crate::rita_common::dashboard::development::*;
 use crate::rita_common::dashboard::nickname::*;
 use crate::rita_common::dashboard::own_info::*;
-use crate::rita_common::dashboard::pricing::*;
 use crate::rita_common::dashboard::settings::*;
 use crate::rita_common::dashboard::token_bridge::*;
 use crate::rita_common::dashboard::usage::*;
@@ -263,12 +262,6 @@ fn start_rita_exit_dashboard() {
                 Method::POST,
                 withdraw_eth,
             )
-            .route(
-                "/auto_price/enabled/{status}",
-                Method::POST,
-                set_auto_pricing,
-            )
-            .route("/auto_price/enabled", Method::GET, auto_pricing_status)
             .route("/nickname/get/", Method::GET, get_nickname)
             .route("/nickname/set/", Method::POST, set_nickname)
             .route("/router/password/", Method::POST, set_pass)
