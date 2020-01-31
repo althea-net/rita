@@ -159,7 +159,7 @@ impl Handler<Tick> for SimulatedTxFeeManager {
         // we will just underpay when that occurs
         Arbiter::spawn(transaction_status.then(move |res| match res {
             Ok(txid) => {
-                info!("Successfully paid the subnet dao {:#066x}!", txid);
+                info!("Successfully paid the simulated txfee {:#066x}!", txid);
                 UsageTracker::from_registry().do_send(UpdatePayments {
                     payment: PaymentTx {
                         to: txfee_identity,
