@@ -30,7 +30,7 @@ pub fn set_auto_pricing(path: Path<bool>) -> Result<HttpResponse, Error> {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Prices {
-    exit_dest_fee: u128,
+    exit_dest_price: u128,
     dao_fee: Uint256,
     simulated_tx_fee: u8,
 }
@@ -38,12 +38,12 @@ pub struct Prices {
 pub fn get_prices(_req: HttpRequest) -> Box<dyn Future<Item = Json<Prices>, Error = Error>> {
     debug!("/prices GET hit");
     let f = TrafficWatcher::from_registry().send(GetExitDestPrice);
-    let b = f.from_err().and_then(|exit_dest_fee| {
-        let exit_dest_fee = exit_dest_fee.unwrap();
+    let b = f.from_err().and_then(|exit_dest_price| {
+        let exit_dest_price = exit_dest_price.unwrap();
         let simulated_tx_fee = SETTING.get_payment().simulated_transaction_fee;
         let dao_fee = SETTING.get_dao().dao_fee.clone();
         let p = Prices {
-            exit_dest_fee,
+            exit_dest_price,
             dao_fee,
             simulated_tx_fee,
         };
