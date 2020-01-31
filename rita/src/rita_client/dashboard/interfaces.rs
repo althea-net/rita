@@ -18,7 +18,7 @@ pub struct InterfaceToSet {
     pub mode: InterfaceMode,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Copy)]
 pub enum InterfaceMode {
     Mesh,
     LAN,
@@ -377,7 +377,7 @@ pub fn get_current_interface_mode(
         let iface = entry.0;
         let mode = entry.1;
         if iface.contains(target_iface) {
-            return mode.clone();
+            return *mode;
         }
     }
     InterfaceMode::Unknown
