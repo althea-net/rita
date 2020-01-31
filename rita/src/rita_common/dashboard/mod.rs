@@ -12,7 +12,6 @@ pub mod debts;
 pub mod development;
 pub mod nickname;
 pub mod own_info;
-pub mod pricing;
 pub mod settings;
 pub mod token_bridge;
 pub mod usage;

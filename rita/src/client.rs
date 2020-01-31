@@ -60,6 +60,7 @@ use crate::rita_client::dashboard::logging::*;
 use crate::rita_client::dashboard::mesh_ip::*;
 use crate::rita_client::dashboard::neighbors::*;
 use crate::rita_client::dashboard::notifications::*;
+use crate::rita_client::dashboard::prices::*;
 use crate::rita_client::dashboard::release_feed::*;
 use crate::rita_client::dashboard::remote_access::*;
 use crate::rita_client::dashboard::router::*;
@@ -73,7 +74,6 @@ use crate::rita_common::dashboard::debts::*;
 use crate::rita_common::dashboard::development::*;
 use crate::rita_common::dashboard::nickname::*;
 use crate::rita_common::dashboard::own_info::*;
-use crate::rita_common::dashboard::pricing::*;
 use crate::rita_common::dashboard::settings::*;
 use crate::rita_common::dashboard::token_bridge::*;
 use crate::rita_common::dashboard::usage::*;
@@ -325,6 +325,7 @@ fn start_client_dashboard() {
                 set_auto_pricing,
             )
             .route("/auto_price/enabled", Method::GET, auto_pricing_status)
+            .route("/prices", Method::GET, get_prices)
             .route(
                 "/blockchain/set/{chain_id}",
                 Method::POST,
