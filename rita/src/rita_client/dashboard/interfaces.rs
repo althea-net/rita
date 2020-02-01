@@ -4,8 +4,9 @@ use crate::rita_common::peer_listener::UnListen;
 use crate::ARGS;
 use crate::KI;
 use crate::SETTING;
-use ::actix::SystemService;
-use ::actix_web::{HttpRequest, HttpResponse, Json};
+use actix::SystemService;
+use actix_web::Path;
+use actix_web::{HttpRequest, HttpResponse, Json};
 use failure::Error;
 use settings::FileWrite;
 use settings::RitaCommonSettings;
@@ -302,23 +303,92 @@ pub fn ethernet_transform_mode(
 /// instead we provide a toggle interface.
 /// For example 'toggle user wlan off' or 'toggle phone sale network on' or 'toggle router
 /// to router wireless meshing'.
-pub fn wlan_toggle(ifname: &str, enabled: bool) -> Result<(), Error> {
-    trace!("wlan toggle: ifname {:?}, enabled: {}", ifname, enabled,);
-    let return_codes: Vec<Result<(), Error>> = Vec::new();
 
-    // check all of our return codes in order to handle any possible issue
-    let mut error_occured = false;
-    for ret in return_codes {
-        if ret.is_err() {
-            error_occured = true;
+fn wlan_toggle_get(uci_spec: &str) -> Result<bool, Error> {
+    if !KI.is_openwrt() {
+        bail!("Not an OpenWRT device!");
+    }
+    let bad_wireless = "Wireless config not correct";
+    let current_state = KI.uci_show(Some(uci_spec))?;
+    let current_state = match current_state.get(uci_spec) {
+        Some(val) => val,
+        None => bail!(bad_wireless),
+    };
+    let current_state = if current_state.contains('0') {
+        true
+    } else if current_state.contains('1') {
+        false
+    } else {
+        bail!(bad_wireless);
+    };
+
+    trace!(
+        "wlan get status: uci_spec {}, enabled: {}",
+        uci_spec,
+        current_state
+    );
+
+    Ok(current_state)
+}
+
+pub fn wlan_mesh_get(_: HttpRequest) -> HttpResponse {
+    let res = wlan_toggle_get("wireless.mesh.disabled");
+    match res {
+        Ok(b) => HttpResponse::Ok().json(b),
+        Err(e) => {
+            error!("get mesh failed with {:?}", e);
+            HttpResponse::InternalServerError().into()
         }
     }
-    if error_occured {
-        let res_a = KI.uci_revert("network");
+}
+
+pub fn wlan_lightclient_get(_: HttpRequest) -> HttpResponse {
+    let res = wlan_toggle_get("wireless.lightclient.disabled");
+    match res {
+        Ok(b) => HttpResponse::Ok().json(b),
+        Err(e) => {
+            error!("get lightclient failed with {:?}", e);
+            HttpResponse::InternalServerError().into()
+        }
+    }
+}
+
+fn wlan_toggle_set(uci_spec: &str, enabled: bool) -> Result<(), Error> {
+    if !KI.is_openwrt() {
+        bail!("Not an OpenWRT device!");
+    }
+    let bad_wireless = "Wireless config not correct";
+    trace!("wlan toggle: uci_spec {}, enabled: {}", uci_spec, enabled,);
+
+    let current_state = KI.uci_show(Some(uci_spec))?;
+    let current_state = match current_state.get(uci_spec) {
+        Some(val) => val,
+        None => bail!(bad_wireless),
+    };
+    let current_state = if current_state.contains('0') {
+        true
+    } else if current_state.contains('1') {
+        false
+    } else {
+        bail!(bad_wireless);
+    };
+
+    if enabled == current_state {
+        return Ok(());
+    }
+
+    // remember it's a 'disabled' toggle so we want to set it to zero to be 'enabled'
+    let res = if enabled {
+        KI.set_uci_var(uci_spec, "0")
+    } else {
+        KI.set_uci_var(uci_spec, "1")
+    };
+
+    if let Err(e) = res {
         let res_b = KI.uci_revert("wireless");
         bail!(
-            "Error running UCI commands! Revert attempted: {:?} {:?}",
-            res_a,
+            "Error running UCI commands! {:?} Revert attempted: {:?}",
+            e,
             res_b
         );
     }
@@ -329,10 +399,33 @@ pub fn wlan_toggle(ifname: &str, enabled: bool) -> Result<(), Error> {
     // We edited disk contents, force global sync
     KI.fs_sync()?;
 
-    // trace!("Successsfully toggled wlan mode, rebooting");
-    // KI.run_command("reboot", &[])?;
+    KI.run_command("reboot", &[])?;
 
     Ok(())
+}
+
+pub fn wlan_mesh_set(enabled: Path<bool>) -> HttpResponse {
+    let enabled = enabled.into_inner();
+    let res = wlan_toggle_set("wireless.mesh.disabled", enabled);
+    match res {
+        Ok(_) => HttpResponse::Ok().into(),
+        Err(e) => {
+            error!("set mesh failed with {:?}", e);
+            HttpResponse::InternalServerError().into()
+        }
+    }
+}
+
+pub fn wlan_lightclient_set(enabled: Path<bool>) -> HttpResponse {
+    let enabled = enabled.into_inner();
+    let res = wlan_toggle_set("wireless.lightclient.disabled", enabled);
+    match res {
+        Ok(_) => HttpResponse::Ok().into(),
+        Err(e) => {
+            error!("set lightclient failed with {:?}", e);
+            HttpResponse::InternalServerError().into()
+        }
+    }
 }
 
 /// A helper function for adding entries to a list
