@@ -465,7 +465,7 @@ impl DebtKeeper {
 
     fn payment_received(&mut self, ident: &Identity, amount: Uint256) -> Result<(), Error> {
         let signed_zero = Int256::zero();
-        let unsigned_zero = Uint256::from(0u32);
+        let unsigned_zero = Uint256::zero();
 
         let debt_data = self.get_debt_data_mut(ident);
         info!(
