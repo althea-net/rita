@@ -276,6 +276,14 @@ fn start_client_dashboard() {
             .route("/info", Method::GET, get_own_info)
             .route("/interfaces", Method::GET, get_interfaces_endpoint)
             .route("/interfaces", Method::POST, set_interfaces_endpoint)
+            .route("/interfaces/mesh", Method::GET, wlan_mesh_get)
+            .route("/interfaces/lightclient", Method::GET, wlan_lightclient_get)
+            .route("/interfaces/mesh/{enabled}", Method::POST, wlan_mesh_set)
+            .route(
+                "/interfaces/lightclient/{enabled}",
+                Method::POST,
+                wlan_lightclient_set,
+            )
             .route("/eth_private_key", Method::GET, get_eth_private_key)
             .route("/eth_private_key", Method::POST, set_eth_private_key)
             .route("/mesh_ip", Method::GET, get_mesh_ip)
