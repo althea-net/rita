@@ -230,15 +230,12 @@ fn update_gas_price(web3: &Web3, full_node: String) {
                 // Dynamic fee computation
                 let mut payment_settings = SETTING.get_payment_mut();
 
-                if payment_settings.system_chain == SystemChain::Xdai {
-                    payment_settings.gas_price = 240_000_000_000u128.into();
-                } else {
-                    // use 105% of the gas price provided by the full node, this is designed
-                    // to keep us above the median price provided by the full node.
-                    // This should ensure that we maintain a higher-than-median priority even
-                    // if the network is being spammed with transactions
-                    payment_settings.gas_price = value.clone() + (value / 20u32.into());
-                }
+                // use 105% of the gas price provided by the full node, this is designed
+                // to keep us above the median price provided by the full node.
+                // This should ensure that we maintain a higher-than-median priority even
+                // if the network is being spammed with transactions
+                payment_settings.gas_price = value.clone() + (value / 20u32.into());
+
                 let dynamic_fee_factor: Int256 = payment_settings.dynamic_fee_multiplier.into();
                 let transaction_gas: Int256 = 21000.into();
                 let neg_one = -1i32;

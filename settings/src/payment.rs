@@ -19,7 +19,7 @@ fn default_pay_threshold() -> Int256 {
 }
 
 fn default_dynamic_fee_multiplier() -> u32 {
-    20
+    300
 }
 
 fn default_fudge_factor() -> u8 {
@@ -192,6 +192,8 @@ impl Default for PaymentSettings {
             free_tier_throughput: default_free_tier_throughput(),
             client_can_use_free_tier: default_client_can_use_free_tier(),
             // computed as 10x the standard transaction cost on 12/2/18
+            // updated in a dynamic fashion using the fee multiplyer, so default
+            // doesn't matter as much as you might think
             pay_threshold: default_pay_threshold(),
             // computed as 10x the pay threshold
             close_threshold: default_close_threshold(),
