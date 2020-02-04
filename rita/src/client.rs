@@ -26,6 +26,7 @@ extern crate arrayvec;
 
 use actix_web::http::Method;
 use actix_web::{http, server, App};
+use althea_types::SystemChain;
 use docopt::Docopt;
 use env_logger;
 use openssl_probe;
@@ -188,6 +189,15 @@ fn wait_for_settings(settings_file: &str) -> RitaSettingsStruct {
 }
 
 fn main() {
+    // Remove in Beta 12 updates payment multiplier for xday routers
+    // scope to ensure the reference is dropped before continuing
+    {
+        let mut payment = SETTING.get_payment_mut();
+        if payment.system_chain == SystemChain::Xdai {
+            payment.dynamic_fee_multiplier = 9000u32;
+        }
+    }
+
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
     openssl_probe::init_ssl_cert_env_vars();

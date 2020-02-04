@@ -33,6 +33,7 @@ pub fn set_system_blockchain(path: Path<String>) -> Result<HttpResponse, Error> 
             oracle_url = "https://updates.altheamesh.com/prices".to_string();
             // reset balance so that things take effect immediatley in the UI
             payment.balance = 0u32.into();
+            payment.dynamic_fee_multiplier = 20u32
         }
         SystemChain::Xdai => {
             payment.node_list = vec!["https://dai.althea.org/".to_string()];
@@ -42,6 +43,7 @@ pub fn set_system_blockchain(path: Path<String>) -> Result<HttpResponse, Error> 
             oracle_url = "https://updates.altheamesh.com/xdaiprices".to_string();
             // reset balance so that things take effect immediatley in the UI
             payment.balance = 0u32.into();
+            payment.dynamic_fee_multiplier = 9000u32
         }
         SystemChain::Rinkeby => {
             payment.node_list =
@@ -52,6 +54,7 @@ pub fn set_system_blockchain(path: Path<String>) -> Result<HttpResponse, Error> 
             oracle_url = "https://updates.altheamesh.com/testprices".to_string();
             // reset balance so that things take effect immediatley in the UI
             payment.balance = 0u32.into();
+            payment.dynamic_fee_multiplier = 20u32
         }
     }
     drop(payment);
