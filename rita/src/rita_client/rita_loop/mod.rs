@@ -217,7 +217,7 @@ pub fn start_rita_client_endpoints(workers: usize) {
     // listen on the light client gateway ip if it's not none
     if let Some(gateway_ip) = SETTING.get_network().light_client_router_ip {
         trace!("Listening for light client hellos on {}", gateway_ip);
-        server::new(|| {
+        let unstarted_server = server::new(|| {
             App::new().resource("/light_client_hello", |r| {
                 r.method(Method::POST).with(light_client_hello_response)
             })
@@ -227,9 +227,11 @@ pub fn start_rita_client_endpoints(workers: usize) {
             "{}:{}",
             gateway_ip,
             SETTING.get_network().light_client_hello_port
-        ))
-        .unwrap()
-        .shutdown_timeout(0)
-        .start();
+        ));
+        if let Ok(val) = unstarted_server {
+            val.shutdown_timeout(0).start();
+        } else {
+            trace!("Failed to bind to light client ip, probably toggled off!")
+        }
     }
 }
