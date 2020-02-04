@@ -5,6 +5,7 @@ use ::actix_web::Path;
 use ::actix_web::{HttpRequest, HttpResponse};
 use althea_types::SystemChain;
 use failure::Error;
+use settings::payment::XDAI_FEE_MULTIPLIER;
 use settings::FileWrite;
 use settings::RitaCommonSettings;
 
@@ -43,7 +44,7 @@ pub fn set_system_blockchain(path: Path<String>) -> Result<HttpResponse, Error> 
             oracle_url = "https://updates.altheamesh.com/xdaiprices".to_string();
             // reset balance so that things take effect immediatley in the UI
             payment.balance = 0u32.into();
-            payment.dynamic_fee_multiplier = 9000u32
+            payment.dynamic_fee_multiplier = XDAI_FEE_MULTIPLIER;
         }
         SystemChain::Rinkeby => {
             payment.node_list =

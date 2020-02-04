@@ -3,6 +3,8 @@ use clarity::{Address, PrivateKey};
 use num256::{Int256, Uint256};
 use std::str::FromStr;
 
+pub const XDAI_FEE_MULTIPLIER: u32 = 9000;
+
 fn default_local_fee() -> u32 {
     300_000u32 // 300kWei per byte
 }
@@ -19,7 +21,7 @@ fn default_pay_threshold() -> Int256 {
 }
 
 fn default_dynamic_fee_multiplier() -> u32 {
-    300
+    XDAI_FEE_MULTIPLIER
 }
 
 fn default_fudge_factor() -> u8 {

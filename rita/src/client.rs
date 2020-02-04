@@ -31,6 +31,7 @@ use docopt::Docopt;
 use env_logger;
 use openssl_probe;
 use settings::client::{RitaClientSettings, RitaSettingsStruct};
+use settings::payment::XDAI_FEE_MULTIPLIER;
 use settings::RitaCommonSettings;
 use std::env;
 use std::sync::{Arc, RwLock};
@@ -189,12 +190,12 @@ fn wait_for_settings(settings_file: &str) -> RitaSettingsStruct {
 }
 
 fn main() {
-    // Remove in Beta 12 updates payment multiplier for xday routers
+    // Remove in Beta 12 updates payment multiplier for xdai routers
     // scope to ensure the reference is dropped before continuing
     {
         let mut payment = SETTING.get_payment_mut();
         if payment.system_chain == SystemChain::Xdai {
-            payment.dynamic_fee_multiplier = 9000u32;
+            payment.dynamic_fee_multiplier = XDAI_FEE_MULTIPLIER;
         }
     }
 
