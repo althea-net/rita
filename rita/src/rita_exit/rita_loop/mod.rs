@@ -207,11 +207,9 @@ pub fn start_rita_exit_endpoints(workers: usize) {
     // Exit stuff, huge threadpool to offset Pgsql blocking
     server::new(|| {
         App::new()
-            .resource("/setup", |r| r.method(Method::POST).with(setup_request))
             .resource("/secure_setup", |r| {
                 r.method(Method::POST).with(secure_setup_request)
             })
-            .resource("/status", |r| r.method(Method::POST).with(status_request))
             .resource("/secure_status", |r| {
                 r.method(Method::POST).with(secure_status_request)
             })

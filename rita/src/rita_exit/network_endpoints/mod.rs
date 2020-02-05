@@ -188,55 +188,6 @@ pub fn secure_setup_request(
     }
 }
 
-pub fn setup_request(
-    their_id: (Json<ExitClientIdentity>, HttpRequest),
-) -> Box<dyn Future<Item = Json<ExitState>, Error = Error>> {
-    info!(
-        "Received setup request from, {}",
-        their_id.0.global.wg_public_key
-    );
-    let client_mesh_ip = their_id.0.global.mesh_ip;
-    let client = their_id.0.into_inner();
-    let remote_mesh_socket: SocketAddr = their_id
-        .1
-        .connection_info()
-        .remote()
-        .expect("Failed in setup request")
-        .parse()
-        .expect("Failed in setup request");
-
-    let remote_mesh_ip = remote_mesh_socket.ip();
-    if remote_mesh_ip == client_mesh_ip {
-        Box::new(signup_client(client).then(|result| match result {
-            Ok(exit_state) => Ok(Json(exit_state)),
-            Err(e) => {
-                error!("Signup client failed with {:?}", e);
-                Ok(Json(ExitState::Denied {
-                    message: "There was an internal server error!".to_string(),
-                }))
-            }
-        }))
-    } else {
-        Box::new(future::ok(Json(ExitState::Denied {
-            message: "The request ip does not match the signup ip".to_string(),
-        })))
-    }
-}
-
-pub fn status_request(
-    their_id: Json<ExitClientIdentity>,
-) -> Box<dyn Future<Item = Json<ExitState>, Error = Error>> {
-    trace!(
-        "Received requester identity for status, {}",
-        their_id.global.wg_public_key
-    );
-    let client = their_id.into_inner();
-
-    Box::new(
-        get_database_connection().and_then(move |conn| Ok(Json(client_status(client, &conn)?))),
-    )
-}
-
 pub fn secure_status_request(
     request: Json<EncryptedExitClientIdentity>,
 ) -> Box<dyn Future<Item = Json<EncryptedExitState>, Error = Error>> {
