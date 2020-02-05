@@ -96,7 +96,7 @@ pub fn update_client(client: &ExitClientIdentity, conn: &PgConnection) -> Result
 pub fn get_client(
     client: &ExitClientIdentity,
     conn: &PgConnection,
-) -> Result<models::Client, Error> {
+) -> Result<Option<models::Client>, Error> {
     use self::schema::clients::dsl::{clients, eth_address, mesh_ip, wg_pubkey};
     let ip = client.global.mesh_ip;
     let wg = client.global.wg_public_key;
@@ -112,8 +112,9 @@ pub fn get_client(
                     "More than one exact match with wg: {} eth: {} ip: {}",
                     wg, key, ip
                 );
+                return Ok(None);
             }
-            Ok(entry[0].clone())
+            Ok(Some(entry[0].clone()))
         }
         Err(e) => {
             error!("We failed to lookup the client {:?} with{:?}", mesh_ip, e);
@@ -184,7 +185,7 @@ pub fn text_sent(client: &ExitClientIdentity, conn: &PgConnection, val: i32) -> 
     Ok(())
 }
 
-pub fn client_exists(client: &ExitClientIdentity, conn: &PgConnection) -> Result<bool, Error> {
+fn client_exists(client: &ExitClientIdentity, conn: &PgConnection) -> Result<bool, Error> {
     use self::schema::clients::dsl::*;
     trace!("Checking if client exists");
     let ip = client.global.mesh_ip;
