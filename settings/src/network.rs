@@ -115,7 +115,9 @@ pub struct NetworkSettings {
     #[serde(default)]
     /// Set to true by the dashboard when the user indicates they've made a backup
     pub backup_created: bool,
-    /// Determines if this device will try and shape interface speeds
+    /// Determines if this device will try and shape interface speeds when latency
+    /// spikes are detected. You probably don't want to have this on in networks
+    /// where there is significant jitter that's not caused by traffic load
     #[serde(default = "default_bandwidth_limit_enabled")]
     pub bandwidth_limit_enabled: bool,
     /// The minimum to which this device will shape an interface
