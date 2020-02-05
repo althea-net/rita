@@ -1,5 +1,6 @@
 use crate::rita_common::utils::ip_increment::increment;
 use crate::rita_exit::database::secs_since_unix_epoch;
+use crate::rita_exit::database::ONE_DAY;
 use crate::SETTING;
 use ::actix_web::Result;
 use althea_kernel_interface::ExitClient;
@@ -62,7 +63,11 @@ pub fn get_next_client_ip(conn: &PgConnection) -> Result<IpAddr, Error> {
 }
 
 /// updates the last seen time
-pub fn update_client(client: &ExitClientIdentity, conn: &PgConnection) -> Result<(), Error> {
+pub fn update_client(
+    client: &ExitClientIdentity,
+    their_record: &models::Client,
+    conn: &PgConnection,
+) -> Result<(), Error> {
     use self::schema::clients::dsl::{
         clients, email, eth_address, last_seen, mesh_ip, phone, wg_pubkey,
     };
@@ -75,20 +80,37 @@ pub fn update_client(client: &ExitClientIdentity, conn: &PgConnection) -> Result
         .filter(eth_address.eq(key.to_string()));
 
     if let Some(mail) = client.reg_details.email.clone() {
-        diesel::update(filtered_list.clone())
-            .set(email.eq(mail))
-            .execute(&*conn)?;
+        if their_record.email != mail {
+            info!(
+                "Client {} email has changed from {} to {} updating",
+                their_record.wg_pubkey, their_record.email, mail
+            );
+            diesel::update(filtered_list.clone())
+                .set(email.eq(mail))
+                .execute(&*conn)?;
+        }
     }
 
     if let Some(number) = client.reg_details.phone.clone() {
-        diesel::update(filtered_list.clone())
-            .set(phone.eq(number))
-            .execute(&*conn)?;
+        if their_record.phone != number {
+            info!(
+                "Client {} phonenumber has changed from {} to {} updating",
+                their_record.wg_pubkey, their_record.phone, number
+            );
+            diesel::update(filtered_list.clone())
+                .set(phone.eq(number))
+                .execute(&*conn)?;
+        }
     }
 
-    diesel::update(filtered_list)
-        .set(last_seen.eq(secs_since_unix_epoch() as i64))
-        .execute(&*conn)?;
+    let current_time = secs_since_unix_epoch();
+    let time_since_last_update = current_time - their_record.last_seen;
+    // update every 12 hours, no entry timeouts less than a day allowed
+    if time_since_last_update > ONE_DAY / 2 {
+        diesel::update(filtered_list)
+            .set(last_seen.eq(secs_since_unix_epoch() as i64))
+            .execute(&*conn)?;
+    }
 
     Ok(())
 }

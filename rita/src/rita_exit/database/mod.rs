@@ -64,6 +64,9 @@ mod geoip;
 mod sms;
 pub mod struct_tools;
 
+/// one day in seconds
+pub const ONE_DAY: i64 = 86400;
+
 /// Gets the Postgres database connection from the threadpool, gracefully waiting using futures delay if there
 /// is no connection available.
 pub fn get_database_connection(
@@ -151,7 +154,7 @@ fn create_or_update_user_record(
 ) -> Result<models::Client, Error> {
     use self::schema::clients::dsl::clients;
     if let Some(val) = get_client(&client, conn)? {
-        update_client(&client, conn)?;
+        update_client(&client, &val, conn)?;
         Ok(val)
     } else {
         info!(
@@ -272,7 +275,7 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
             });
         }
 
-        update_client(&client, &conn)?;
+        update_client(&client, &their_record, &conn)?;
 
         low_balance_notification(client, &their_record, SETTING.get_verif_settings(), &conn);
 
@@ -446,6 +449,8 @@ pub fn cleanup_exit_clients(
             Ok(client_id) => {
                 let time_delta = secs_since_unix_epoch() - client.last_seen;
                 let entry_timeout = i64::from(SETTING.get_exit_network().entry_timeout);
+                // entry timeout can be disabled, or longer than a day, but not shorter
+                assert!(entry_timeout == 0 || entry_timeout >= ONE_DAY);
                 if client.last_seen == 0 {
                     info!(
                         "{} does not have a last seen timestamp, adding one now ",
