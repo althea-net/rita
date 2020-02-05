@@ -1,19 +1,29 @@
 use crate::rita_common::utils::ip_increment::increment;
 use crate::rita_exit::database::secs_since_unix_epoch;
+use crate::rita_exit::database::struct_tools::client_to_new_db_client;
 use crate::rita_exit::database::ONE_DAY;
+use crate::DB_POOL;
 use crate::SETTING;
-use ::actix_web::Result;
+use actix_web::Result;
 use althea_kernel_interface::ExitClient;
 use althea_types::ExitClientIdentity;
 use diesel;
 use diesel::dsl::{delete, exists};
 use diesel::prelude::{ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl};
+use diesel::r2d2::ConnectionManager;
+use diesel::r2d2::PooledConnection;
 use diesel::select;
 use exit_db::{models, schema};
 use failure::Error;
+use futures01::future;
+use futures01::future::Future;
 use settings::exit::RitaExitSettings;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
+use std::time::Duration;
+use std::time::Instant;
+use tokio::timer::Delay;
+use tokio::util::FutureExt;
 
 /// Takes a list of clients and returns a sorted list of ip addresses spefically v4 since it
 /// can implement comparison operators
@@ -302,4 +312,59 @@ pub fn update_low_balance_notification_time(
         .execute(&*conn)?;
 
     Ok(())
+}
+
+/// Gets the Postgres database connection from the threadpool, gracefully waiting using futures delay if there
+/// is no connection available.
+pub fn get_database_connection(
+) -> impl Future<Item = PooledConnection<ConnectionManager<PgConnection>>, Error = Error> {
+    match DB_POOL.read().unwrap().try_get() {
+        Some(connection) => Box::new(future::ok(connection))
+            as Box<
+                dyn Future<Item = PooledConnection<ConnectionManager<PgConnection>>, Error = Error>,
+            >,
+        None => {
+            trace!("No available db connection sleeping!");
+            let when = Instant::now() + Duration::from_millis(100);
+            Box::new(
+                Delay::new(when)
+                    .map_err(move |e| panic!("timer failed; err={:?}", e))
+                    .and_then(move |_| get_database_connection())
+                    .timeout(Duration::from_secs(1))
+                    .then(|result| match result {
+                        Ok(v) => Ok(v),
+                        Err(e) => {
+                            error!("Failed to get DB connection with {:?}", e);
+                            Err(format_err!("{:?}", e))
+                        }
+                    }),
+            )
+        }
+    }
+}
+
+pub fn create_or_update_user_record(
+    conn: &PgConnection,
+    client: &ExitClientIdentity,
+    user_country: String,
+) -> Result<models::Client, Error> {
+    use self::schema::clients::dsl::clients;
+    if let Some(val) = get_client(&client, conn)? {
+        update_client(&client, &val, conn)?;
+        Ok(val)
+    } else {
+        info!(
+            "record for {} does not exist, creating",
+            client.global.wg_public_key
+        );
+
+        let new_ip = get_next_client_ip(conn)?;
+
+        let c = client_to_new_db_client(&client, new_ip, user_country);
+
+        info!("Inserting new client {}", client.global.wg_public_key);
+        diesel::insert_into(clients).values(&c).execute(conn)?;
+
+        Ok(c)
+    }
 }

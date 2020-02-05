@@ -3,11 +3,11 @@
 
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::GetDebtsList;
+use crate::rita_exit::database::database_tools::get_database_connection;
 #[cfg(feature = "development")]
 use crate::rita_exit::database::db_client::DbClient;
 #[cfg(feature = "development")]
 use crate::rita_exit::database::db_client::TruncateTables;
-use crate::rita_exit::database::get_database_connection;
 use crate::rita_exit::database::{client_status, get_exit_info, signup_client};
 use crate::SETTING;
 use ::actix_web::{AsyncResponder, HttpRequest, HttpResponse, Json, Result};

@@ -1,10 +1,13 @@
 use althea_kernel_interface::ExitClient;
+use althea_types::ExitClientIdentity;
 use althea_types::Identity;
 use arrayvec::ArrayString;
 use exit_db::models;
 use exit_db::models::Client;
 use failure::Error;
+use rand::Rng;
 use std::collections::HashSet;
+use std::net::IpAddr;
 
 pub fn to_identity(client: &Client) -> Result<Identity, Error> {
     trace!("Converting client {:?}", client);
@@ -55,4 +58,30 @@ pub fn display_hashset(input: &HashSet<String>) -> String {
         out += &format!("{}, ", item);
     }
     out
+}
+
+pub fn client_to_new_db_client(
+    client: &ExitClientIdentity,
+    new_ip: IpAddr,
+    country: String,
+) -> models::Client {
+    let mut rng = rand::thread_rng();
+    let rand_code: u64 = rng.gen_range(0, 999_999);
+    models::Client {
+        wg_port: i32::from(client.wg_port),
+        mesh_ip: client.global.mesh_ip.to_string(),
+        wg_pubkey: client.global.wg_public_key.to_string(),
+        eth_address: client.global.eth_address.to_string(),
+        nickname: client.global.nickname.unwrap_or_default().to_string(),
+        internal_ip: new_ip.to_string(),
+        email: client.reg_details.email.clone().unwrap_or_default(),
+        phone: client.reg_details.phone.clone().unwrap_or_default(),
+        country,
+        email_code: format!("{:06}", rand_code),
+        text_sent: 0,
+        verified: false,
+        email_sent_time: 0,
+        last_seen: 0,
+        last_balance_warning_time: 0,
+    }
 }

@@ -19,10 +19,10 @@
 //! actix work together on this on properly, not that I've every seen simple actors like the loop crash
 //! very often.
 
+use crate::rita_exit::database::database_tools::get_database_connection;
 use crate::rita_exit::database::struct_tools::clients_to_ids;
 use crate::rita_exit::database::{
-    cleanup_exit_clients, enforce_exit_clients, get_database_connection, setup_clients,
-    validate_clients_region,
+    cleanup_exit_clients, enforce_exit_clients, setup_clients, validate_clients_region,
 };
 use crate::rita_exit::network_endpoints::*;
 use crate::rita_exit::traffic_watcher::{TrafficWatcher, Watch};
