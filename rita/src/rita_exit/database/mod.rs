@@ -7,9 +7,10 @@ use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::GetDebtsList;
 use crate::rita_common::payment_validator::TRANSACTION_VERIFICATION_TIMEOUT;
 use crate::rita_exit::database::database_tools::client_conflict;
+use crate::rita_exit::database::database_tools::create_or_update_user_record;
 use crate::rita_exit::database::database_tools::delete_client;
 use crate::rita_exit::database::database_tools::get_client;
-use crate::rita_exit::database::database_tools::get_next_client_ip;
+use crate::rita_exit::database::database_tools::get_database_connection;
 use crate::rita_exit::database::database_tools::set_client_timestamp;
 use crate::rita_exit::database::database_tools::update_client;
 use crate::rita_exit::database::database_tools::update_low_balance_notification_time;
@@ -28,24 +29,19 @@ use crate::rita_exit::database::struct_tools::to_exit_client;
 use crate::rita_exit::database::struct_tools::to_identity;
 use crate::rita_exit::database::struct_tools::verif_done;
 use crate::rita_exit::rita_loop::EXIT_LOOP_TIMEOUT;
-use crate::DB_POOL;
 use crate::KI;
 use crate::SETTING;
 use ::actix::SystemService;
 use althea_kernel_interface::ExitClient;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 use diesel;
-use diesel::prelude::{PgConnection, RunQueryDsl};
-use diesel::r2d2::ConnectionManager;
-use diesel::r2d2::PooledConnection;
-use exit_db::{models, schema};
+use diesel::prelude::PgConnection;
+use exit_db::schema;
 use failure::Error;
 use futures01::future;
 use futures01::future::join_all;
 use futures01::Future;
 use ipnetwork::IpNetwork;
-use rand;
-use rand::Rng;
 use settings::exit::ExitVerifSettings;
 use settings::exit::RitaExitSettings;
 use settings::RitaCommonSettings;
@@ -54,10 +50,9 @@ use std::collections::HashSet;
 use std::net::IpAddr;
 use std::time::Instant;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::timer::Delay;
 use tokio::util::FutureExt;
 
-mod database_tools;
+pub mod database_tools;
 pub mod db_client;
 mod email;
 mod geoip;
@@ -66,35 +61,6 @@ pub mod struct_tools;
 
 /// one day in seconds
 pub const ONE_DAY: i64 = 86400;
-
-/// Gets the Postgres database connection from the threadpool, gracefully waiting using futures delay if there
-/// is no connection available.
-pub fn get_database_connection(
-) -> impl Future<Item = PooledConnection<ConnectionManager<PgConnection>>, Error = Error> {
-    match DB_POOL.read().unwrap().try_get() {
-        Some(connection) => Box::new(future::ok(connection))
-            as Box<
-                dyn Future<Item = PooledConnection<ConnectionManager<PgConnection>>, Error = Error>,
-            >,
-        None => {
-            trace!("No available db connection sleeping!");
-            let when = Instant::now() + Duration::from_millis(100);
-            Box::new(
-                Delay::new(when)
-                    .map_err(move |e| panic!("timer failed; err={:?}", e))
-                    .and_then(move |_| get_database_connection())
-                    .timeout(Duration::from_secs(1))
-                    .then(|result| match result {
-                        Ok(v) => Ok(v),
-                        Err(e) => {
-                            error!("Failed to get DB connection with {:?}", e);
-                            Err(format_err!("{:?}", e))
-                        }
-                    }),
-            )
-        }
-    }
-}
 
 pub fn get_exit_info() -> ExitDetails {
     ExitDetails {
@@ -119,58 +85,6 @@ pub fn secs_since_unix_epoch() -> i64 {
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards");
     since_the_epoch.as_secs() as i64
-}
-
-fn client_to_new_db_client(
-    client: &ExitClientIdentity,
-    new_ip: IpAddr,
-    country: String,
-) -> models::Client {
-    let mut rng = rand::thread_rng();
-    let rand_code: u64 = rng.gen_range(0, 999_999);
-    models::Client {
-        wg_port: i32::from(client.wg_port),
-        mesh_ip: client.global.mesh_ip.to_string(),
-        wg_pubkey: client.global.wg_public_key.to_string(),
-        eth_address: client.global.eth_address.to_string(),
-        nickname: client.global.nickname.unwrap_or_default().to_string(),
-        internal_ip: new_ip.to_string(),
-        email: client.reg_details.email.clone().unwrap_or_default(),
-        phone: client.reg_details.phone.clone().unwrap_or_default(),
-        country,
-        email_code: format!("{:06}", rand_code),
-        text_sent: 0,
-        verified: false,
-        email_sent_time: 0,
-        last_seen: 0,
-        last_balance_warning_time: 0,
-    }
-}
-
-fn create_or_update_user_record(
-    conn: &PgConnection,
-    client: &ExitClientIdentity,
-    user_country: String,
-) -> Result<models::Client, Error> {
-    use self::schema::clients::dsl::clients;
-    if let Some(val) = get_client(&client, conn)? {
-        update_client(&client, &val, conn)?;
-        Ok(val)
-    } else {
-        info!(
-            "record for {} does not exist, creating",
-            client.global.wg_public_key
-        );
-
-        let new_ip = get_next_client_ip(conn)?;
-
-        let c = client_to_new_db_client(&client, new_ip, user_country);
-
-        info!("Inserting new client {}", client.global.wg_public_key);
-        diesel::insert_into(clients).values(&c).execute(conn)?;
-
-        Ok(c)
-    }
 }
 
 /// Handles a new client registration api call. Performs a geoip lookup
