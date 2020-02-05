@@ -523,7 +523,7 @@ pub fn enforce_exit_clients(
                             None => {
                                 // this can happen when clients are connected but not registered
                                 // to this specific exit
-                                trace!("Could not find {:?} to suspend!", debt_entry.identity);
+                                trace!("Could not find {} {} {} to suspend!", debt_entry.identity.wg_public_key, debt_entry.identity.eth_address, debt_entry.identity.mesh_ip);
                             }
                         }
                     }
