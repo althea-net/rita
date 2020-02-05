@@ -202,6 +202,7 @@ pub fn secure_status_request(
             return val;
         }
     };
+    trace!("got status request from {}", their_wg_pubkey);
 
     Box::new(get_database_connection().and_then(move |conn| {
         let state = match client_status(decrypted_id, &conn) {

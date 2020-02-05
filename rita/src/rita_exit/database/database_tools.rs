@@ -140,10 +140,11 @@ pub fn get_client(
     match filtered_list.load::<models::Client>(conn) {
         Ok(entry) => {
             if entry.len() > 1 {
-                error!(
-                    "More than one exact match with wg: {} eth: {} ip: {}",
-                    wg, key, ip
-                );
+                let err_msg = format!("More than one exact match with wg: {} eth: {} ip: {}",
+                wg, key, ip);
+                error!("{}", err_msg);
+                panic!(err_msg);
+            } else if entry.is_empty() {
                 return Ok(None);
             }
             Ok(Some(entry[0].clone()))
