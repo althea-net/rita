@@ -216,7 +216,6 @@ pub fn start_rita_exit_endpoints(workers: usize) {
             .resource("/exit_info", |r| {
                 r.method(Method::GET).with(get_exit_info_http)
             })
-            .resource("/rtt", |r| r.method(Method::GET).with(rtt))
             .resource("/client_debt", |r| {
                 r.method(Method::POST).with(get_client_debt)
             })

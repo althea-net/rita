@@ -18,7 +18,7 @@ use actix::SystemService;
 use actix_web::AsyncResponder;
 use althea_types::Identity;
 use althea_types::{
-    EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState, RTTimestamps,
+    EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState,
 };
 use failure::Error;
 use futures01::future;
@@ -30,7 +30,6 @@ use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
 use std::net::SocketAddr;
-use std::time::SystemTime;
 
 /// helper function for returning from secure_setup_request()
 fn secure_setup_return(
@@ -228,16 +227,6 @@ pub fn get_exit_info_http(_req: HttpRequest) -> Result<Json<ExitState>, Error> {
         general_details: get_exit_info(),
         message: "Got info successfully".to_string(),
         auto_register: false,
-    }))
-}
-
-/// An endpoint handler for the inner tunnel RTT. It responds with the request arrival and
-/// transmission time timestamps; presently the two values are very close because no exit-side
-/// processing happens yet.
-pub fn rtt(_req: HttpRequest) -> Result<Json<RTTimestamps>> {
-    Ok(Json(RTTimestamps {
-        exit_rx: SystemTime::now(),
-        exit_tx: SystemTime::now(),
     }))
 }
 
