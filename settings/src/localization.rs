@@ -1,5 +1,5 @@
 fn default_wyre_enabled() -> bool {
-    false
+    true
 }
 
 fn default_wyre_account_id() -> String {
