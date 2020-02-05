@@ -7,7 +7,6 @@ use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::GetDebtsList;
 use crate::rita_common::payment_validator::TRANSACTION_VERIFICATION_TIMEOUT;
 use crate::rita_exit::database::database_tools::client_conflict;
-use crate::rita_exit::database::database_tools::client_exists;
 use crate::rita_exit::database::database_tools::delete_client;
 use crate::rita_exit::database::database_tools::get_client;
 use crate::rita_exit::database::database_tools::get_next_client_ip;
@@ -151,9 +150,9 @@ fn create_or_update_user_record(
     user_country: String,
 ) -> Result<models::Client, Error> {
     use self::schema::clients::dsl::clients;
-    if client_exists(&client, conn)? {
+    if let Some(val) = get_client(&client, conn)? {
         update_client(&client, conn)?;
-        Ok(get_client(&client, conn)?)
+        Ok(val)
     } else {
         info!(
             "record for {} does not exist, creating",
@@ -247,10 +246,8 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
 pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<ExitState, Error> {
     trace!("Checking if record exists for {:?}", client.global.mesh_ip);
 
-    if client_exists(&client, &conn)? {
+    if let Some(their_record) = get_client(&client, &conn)? {
         trace!("record exists, updating");
-
-        let their_record = get_client(&client, &conn)?;
 
         if !verif_done(&their_record) {
             return Ok(ExitState::Pending {
