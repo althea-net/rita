@@ -117,6 +117,7 @@ pub fn update_client(
     let time_since_last_update = current_time - their_record.last_seen;
     // update every 12 hours, no entry timeouts less than a day allowed
     if time_since_last_update > ONE_DAY / 2 {
+        info!("Bumping client timestamp for {}", their_record.wg_pubkey);
         diesel::update(filtered_list)
             .set(last_seen.eq(secs_since_unix_epoch() as i64))
             .execute(&*conn)?;
@@ -140,8 +141,10 @@ pub fn get_client(
     match filtered_list.load::<models::Client>(conn) {
         Ok(entry) => {
             if entry.len() > 1 {
-                let err_msg = format!("More than one exact match with wg: {} eth: {} ip: {}",
-                wg, key, ip);
+                let err_msg = format!(
+                    "More than one exact match with wg: {} eth: {} ip: {}",
+                    wg, key, ip
+                );
                 error!("{}", err_msg);
                 panic!(err_msg);
             } else if entry.is_empty() {
