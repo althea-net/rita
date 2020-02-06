@@ -17,6 +17,7 @@
 //! Signup is complete and the user may use the connection
 
 use crate::rita_client::rita_loop::Tick;
+use crate::rita_client::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::rita_client::traffic_watcher::{QueryExitDebts, TrafficWatcher};
 use crate::rita_common::oracle::low_balance;
 use crate::KI;
@@ -190,7 +191,7 @@ fn send_exit_status_request(
 
     stream.from_err().and_then(move |stream| {
         client::post(&endpoint)
-            .timeout(Duration::from_secs(1))
+            .timeout(CLIENT_LOOP_TIMEOUT)
             .with_connection(Connection::from_stream(stream))
             .json(ident)
             .unwrap()
@@ -486,7 +487,7 @@ impl Handler<Tick> for ExitManager {
                                     })
                                 })
                             })
-                            .timeout(Duration::from_secs(4))
+                            .timeout(CLIENT_LOOP_TIMEOUT)
                             .then(|ret| {
                                 if let Err(e) = ret {
                                     error!("Failed to watch client traffic with {:?}", e)
