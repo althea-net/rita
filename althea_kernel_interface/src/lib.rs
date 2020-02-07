@@ -34,7 +34,6 @@ mod manipulate_uci;
 pub mod open_tunnel;
 mod openwrt_ubus;
 pub mod opkg_feeds;
-mod ping_check;
 mod set_system_password;
 mod setup_wg_if;
 mod traffic_control;

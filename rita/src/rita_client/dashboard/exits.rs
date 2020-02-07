@@ -20,12 +20,17 @@ use babel_monitor::parse_routes;
 use babel_monitor::start_connection;
 use bytes::Bytes;
 use failure::Error;
+use fastping_rs::PingResult::{Idle, Receive};
+use fastping_rs::Pinger;
 use futures01::{future, Future};
 use settings::client::{ExitServer, RitaClientSettings};
 use settings::FileWrite;
 use settings::RitaCommonSettings;
 use std::boxed::Box;
 use std::collections::HashMap;
+use std::net::IpAddr;
+use std::thread;
+use std::time::Duration;
 
 #[derive(Serialize)]
 pub struct ExitInfo {
@@ -53,15 +58,17 @@ fn is_selected(exit: &ExitServer, current_exit: Option<&ExitServer>) -> bool {
 
 /// Determines if the provided exit is currently selected, if it's setup, and then if it can be reached over
 /// the exit tunnel via a ping
-fn is_tunnel_working(exit: &ExitServer, current_exit: Option<&ExitServer>) -> bool {
+fn is_tunnel_working(exit: &ExitServer, current_exit: Option<&ExitServer>, p: &Pinger) -> bool {
     match (current_exit, is_selected(exit, current_exit)) {
-        (Some(exit), true) => match exit.info.general_details() {
-            Some(details) => match KI.ping_check_v4(&details.server_internal_ip) {
-                Ok(ping_result) => ping_result,
-                Err(_) => false,
-            },
-            None => false,
-        },
+        (Some(exit), true) => {
+            if let Some(details) = exit.info.general_details() {
+                p.add_ipaddr(&details.server_internal_ip.to_string());
+                p.ping_once();
+                true
+            } else {
+                false
+            }
+        }
         (_, _) => false,
     }
 }
@@ -70,44 +77,112 @@ impl Handler<GetExitInfo> for Dashboard {
     type Result = ResponseFuture<Vec<ExitInfo>, Error>;
 
     fn handle(&mut self, _msg: GetExitInfo, _ctx: &mut Self::Context) -> Self::Result {
+        trace!("Get exit info hit!");
         let babel_port = SETTING.get_network().babel_port;
-
         Box::new(
             open_babel_stream(babel_port)
                 .from_err()
                 .and_then(move |stream| {
                     start_connection(stream).and_then(move |stream| {
                         parse_routes(stream).and_then(move |routes| {
+                            trace!("Get babel routes for exit info!");
+
+                            let sleep_time = 500;
+                            let (pinger, pinger_results) = match Pinger::new(Some(sleep_time), None)
+                            {
+                                Ok((pinger, pinger_results)) => (pinger, pinger_results),
+                                //TODO no panic here
+                                Err(e) => panic!("Error creating pinger: {}", e),
+                            };
+                            let (exit_pinger, exit_pinger_results) =
+                                match Pinger::new(Some(sleep_time), None) {
+                                    Ok((exit_pinger, exit_pinger_results)) => {
+                                        (exit_pinger, exit_pinger_results)
+                                    }
+                                    //TODO no panic here
+                                    Err(e) => panic!("Error creating pinger: {}", e),
+                                };
+                            let sleep_for = Duration::from_millis(sleep_time + 10);
+                            let mut exit_pinger_active = false;
+                            let mut selected_exit_ip = None;
+
                             let route_table_sample = routes.1;
                             let mut output = Vec::new();
+                            // selected, have route, is reachable, tunnel working
+                            let mut results: HashMap<IpAddr, (bool, bool, bool, bool)> =
+                                HashMap::new();
 
                             let exit_client = SETTING.get_exit_client();
                             let current_exit = exit_client.get_current_exit();
 
                             for exit in exit_client.exits.clone().into_iter() {
+                                let exit_ip = exit.1.id.mesh_ip;
                                 let selected = is_selected(&exit.1, current_exit);
-                                let have_route =
-                                    do_we_have_route(&exit.1.id.mesh_ip, &route_table_sample)?;
+                                let have_route = do_we_have_route(&exit_ip, &route_table_sample)?;
 
-                                // failed pings block for one second, so we should be sure it's at least reasonable
-                                // to expect the pings to work before issuing them.
-                                let reachable = if have_route {
-                                    KI.ping_check_v6(&exit.1.id.mesh_ip)?
-                                } else {
-                                    false
+                                pinger.add_ipaddr(&exit_ip.to_string());
+                                if let (true, true) = (have_route, selected) {
+                                    exit_pinger_active =
+                                        is_tunnel_working(&exit.1, current_exit, &exit_pinger);
+                                    selected_exit_ip = Some(exit_ip);
                                 };
-                                let tunnel_working = match (have_route, selected) {
-                                    (true, true) => is_tunnel_working(&exit.1, current_exit),
-                                    _ => false,
-                                };
+                                results.insert(exit_ip, (selected, have_route, false, false));
+                            }
+                            pinger.ping_once();
+                            thread::sleep(sleep_for);
+                            trace!("waiting for exit info pings!");
+                            // recv block until the thread on the other end shuts down
+                            // so we have to judge when we've seen the results and perform
+                            // the shutdown on our end in order to exit the loop. We could also
+                            // break but this is cleaner.
+                            let expected_number = results.len();
+                            let mut number = 0;
+                            while let Ok(ping_result) = pinger_results.recv() {
+                                match ping_result {
+                                    Idle { addr } => {
+                                        number += 1;
+                                        trace!("an address {} is idle", addr)
+                                    }
+                                    Receive { addr, rtt } => {
+                                        trace!("Receive from Address {} in {:?}.", addr, rtt);
+                                        number += 1;
+                                        results.get_mut(&addr).unwrap().2 = true;
+                                    }
+                                }
+                                trace!("{} >= {}", number, expected_number);
+                                if number >= expected_number {
+                                    trace!("breaking!");
+                                    pinger.stop_pinger();
+                                    break;
+                                }
+                            }
+                            trace!("about to start exit pinger!");
+                            if exit_pinger_active {
+                                if let (Ok(ping_result), Some(selected_exit_ip)) =
+                                    (exit_pinger_results.recv(), selected_exit_ip)
+                                {
+                                    match ping_result {
+                                        Idle { .. } => {}
+                                        Receive { addr, rtt } => {
+                                            trace!("Receive from Address {} in {:?}.", addr, rtt);
+                                            results.get_mut(&selected_exit_ip).unwrap().3 = true;
+                                        }
+                                    }
+                                }
+                                exit_pinger.stop_pinger();
+                            }
+                            trace!("stopping exit info pings!");
 
+                            for exit in exit_client.exits.clone().into_iter() {
+                                let exit_ip = exit.1.id.mesh_ip;
+                                let r = results.get(&exit_ip).unwrap();
                                 output.push(ExitInfo {
                                     nickname: exit.0,
                                     exit_settings: exit.1.clone(),
-                                    is_selected: selected,
-                                    have_route,
-                                    is_reachable: reachable,
-                                    is_tunnel_working: tunnel_working,
+                                    is_selected: r.0,
+                                    have_route: r.1,
+                                    is_reachable: r.2,
+                                    is_tunnel_working: r.3,
                                 })
                             }
 
