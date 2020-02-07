@@ -92,7 +92,7 @@ pub struct Args {
 
 lazy_static! {
     static ref USAGE: String = format!(
-        "Usage: rita --config=<settings> --platform=<platform>
+        "Usage: rita --config=<settings> --platform=<platform> [--future]
 Options:
     -c, --config=<settings>     Name of config file
     -p, --platform=<platform>   Platform (linux or openwrt)

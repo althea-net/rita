@@ -114,18 +114,16 @@ impl dyn KernelInterface {
             &["address", "add", &format!("{}", own_ip), "dev", &interface],
         )?;
 
-        if conf_link_local {
-            let output = self.run_command(
-                "ip",
-                &[
-                    "address",
-                    "add",
-                    &format!("{}/64", to_wg_local(own_ip)),
-                    "dev",
-                    &interface,
-                ],
-            )?;
-        }
+        self.run_command(
+            "ip",
+            &[
+                "address",
+                "add",
+                &format!("{}/64", to_wg_local(own_ip)),
+                "dev",
+                &interface,
+            ],
+        )?;
 
         if external_peer {
             self.manual_peers_route(&endpoint.ip(), settings_default_route)?;
