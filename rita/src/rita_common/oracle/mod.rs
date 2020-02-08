@@ -289,10 +289,8 @@ struct OracleUpdate {
     max: u32,
     dao_fee: u128,
     warning: u128,
-    fee_multiplier: u32,
-    fudge_factor: u8,
-    system_chain: SystemChain,
-    withdraw_chain: SystemChain,
+    system_chain: Option<SystemChain>,
+    withdraw_chain: Option<SystemChain>,
     /// A release feed to be applied to the /etc/opkg/customfeeds.config, None means do not
     /// change the currently configured release feed
     release_feed: Option<String>,
@@ -369,11 +367,12 @@ fn update_oracle() {
                                             payment.max_fee = new_settings.max;
                                             payment.balance_warning_level =
                                                 new_settings.warning.into();
-                                            payment.dynamic_fee_multiplier =
-                                                new_settings.fee_multiplier;
-                                            payment.fudge_factor = new_settings.fudge_factor;
-                                            payment.system_chain = new_settings.system_chain;
-                                            payment.withdraw_chain = new_settings.withdraw_chain;
+                                            if let Some(new_chain) = new_settings.system_chain {
+                                                payment.system_chain = new_chain;
+                                            }
+                                            if let Some(new_chain) = new_settings.withdraw_chain {
+                                                payment.withdraw_chain = new_chain;
+                                            }
                                             drop(payment);
 
                                             let new_dao_fee = Uint256::from(new_settings.dao_fee);
