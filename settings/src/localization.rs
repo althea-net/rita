@@ -6,7 +6,7 @@ fn default_wyre_account_id() -> String {
     "AC_2J6LWQEGW8P".to_string()
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct LocalizationSettings {
     // A flag indicating whether or not the dashboard should give users the option to purchase
     // cryptocurrency through Wyre as part of the funding flow.
@@ -15,4 +15,13 @@ pub struct LocalizationSettings {
     // Wyre account_id used to associate transactions with a specific Wyre account
     #[serde(default = "default_wyre_account_id")]
     pub wyre_account_id: String,
+}
+
+impl Default for LocalizationSettings {
+    fn default() -> LocalizationSettings {
+        LocalizationSettings {
+            wyre_enabled: default_wyre_enabled(),
+            wyre_account_id: default_wyre_account_id(),
+        }
+    }
 }
