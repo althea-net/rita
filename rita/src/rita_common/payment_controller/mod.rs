@@ -5,7 +5,7 @@
 
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::PaymentFailed;
-use crate::rita_common::oracle::update_nonce;
+use crate::rita_common::oracle::trigger_update_nonce;
 use crate::rita_common::payment_validator::{PaymentValidator, ToValidate, ValidateLater};
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::SETTING;
@@ -202,7 +202,7 @@ fn make_payment(mut pmt: PaymentTx) -> Result<(), Error> {
 
                         // triggering a nonce update may help us if the oracle modules updates
                         // are slow for some reason
-                        update_nonce(our_address, &web3, full_node);
+                        trigger_update_nonce(our_address, &web3, full_node);
 
                         // we have not yet published the tx (at least hopefully)
                         // so it's safe to add this debt back to our balances
