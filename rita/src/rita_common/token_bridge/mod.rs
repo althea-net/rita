@@ -525,6 +525,12 @@ impl Handler<Withdraw> for TokenBridge {
         let amount = msg.amount.clone();
         let withdraw_all = msg.withdraw_all;
 
+        trace!(
+            "Withdraw handler amount {} withdraw_all {}",
+            amount,
+            withdraw_all
+        );
+
         let bridge = self.bridge.clone();
 
         if let SystemChain::Xdai = system_chain {
@@ -537,15 +543,15 @@ impl Handler<Withdraw> for TokenBridge {
                 }
                 _ => {
                     Arbiter::spawn(bridge.xdai_to_dai_bridge(amount.clone()).then(move |res| {
-                        TokenBridge::from_registry().do_send(DetailedStateChange(
-                            DetailedBridgeState::XdaiToDai {
-                                amount: amount.clone(),
-                            },
-                        ));
                         if res.is_err() {
                             error!("Error in State::Deposit Withdraw handler: {:?}", res);
                         } else {
                             // Only change to Withdraw if there was no error
+                            TokenBridge::from_registry().do_send(DetailedStateChange(
+                                DetailedBridgeState::XdaiToDai {
+                                    amount: amount.clone(),
+                                },
+                            ));
                             TokenBridge::from_registry().do_send(StateChange(State::Withdrawing {
                                 to,
                                 amount,
