@@ -7,6 +7,7 @@
 //! operates by simply grabbing a text file from a configured server and adjusting prices
 //! to match. More advanced pricing systems may be broken out into their own file some day
 
+use crate::rita_common::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::rita_common::token_bridge::ReloadAddresses;
 use crate::rita_common::token_bridge::TokenBridge;
@@ -76,7 +77,7 @@ impl Handler<ZeroWindowStart> for Oracle {
 /// How long we wait for a response from the full node
 /// this value must be less than or equal to the FAST_LOOP_SPEED
 /// in the rita_common fast loop
-pub const ORACLE_TIMEOUT: Duration = Duration::from_secs(2);
+pub const ORACLE_TIMEOUT: Duration = FAST_LOOP_TIMEOUT;
 
 #[derive(Message)]
 pub struct Update();

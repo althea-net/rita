@@ -197,9 +197,10 @@ pub fn validate_transaction(ts: &ToValidate) {
             Err(e) => {
                 // full node failure, we don't actually know anything about the transaction
                 warn!(
-                    "Failed to get blocknum to validate {:#066x} transaction with {:?}",
+                    "Failed to get blocknum to validate {:#066x} transaction with {:?} our timeout is {}",
                     pmt.txid.unwrap(),
-                    e
+                    e,
+                    TRANSACTION_VERIFICATION_TIMEOUT.as_secs()
                 );
                 Either::B(future::ok(()))
             }
