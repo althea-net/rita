@@ -58,13 +58,22 @@ pub fn withdraw_all(path: Path<Address>) -> Box<dyn Future<Item = HttpResponse, 
     let payment_settings = SETTING.get_payment();
     let system_chain = payment_settings.system_chain;
     let withdraw_chain = payment_settings.withdraw_chain;
-    let gas_price = payment_settings.gas_price.clone();
+    let mut gas_price = payment_settings.gas_price.clone();
     let balance = payment_settings.balance.clone();
     drop(payment_settings);
 
     Oracle::from_registry().do_send(ZeroWindowStart());
 
-    let tx_gas = 21000u32.into();
+    let tx_gas: Uint256 =
+        if (system_chain, withdraw_chain) == (SystemChain::Xdai, SystemChain::Ethereum) {
+            // this is the hardcoded gas price over in token bridge so we have to use it
+            gas_price = 10_000_000_000u128.into();
+            // this is a contract call
+            80000u32.into()
+        } else {
+            21000u32.into()
+        };
+
     let tx_cost = gas_price * tx_gas;
     let amount = balance - tx_cost;
     match (system_chain, withdraw_chain) {
