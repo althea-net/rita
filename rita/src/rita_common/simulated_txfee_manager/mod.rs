@@ -148,7 +148,7 @@ impl Handler<Tick> for SimulatedTxFeeManager {
         let transaction_bytes = match transaction_signed.to_bytes() {
             Ok(bytes) => bytes,
             Err(e) => {
-                error!("Failed to generate DAO transaction, {:?}", e);
+                error!("Failed to generate simulated txfee transaction, {:?}", e);
                 return;
             }
         };
