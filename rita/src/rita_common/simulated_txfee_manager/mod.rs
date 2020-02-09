@@ -78,10 +78,9 @@ impl Handler<AddTxToTotal> for SimulatedTxFeeManager {
 
     fn handle(&mut self, msg: AddTxToTotal, _: &mut Context<Self>) -> Self::Result {
         let to_add = msg.0 / SETTING.get_payment().simulated_transaction_fee.into();
-        trace!(
+        info!(
             "Simulated txfee total is {} with {} to add",
-            self.amount_owed,
-            to_add
+            self.amount_owed, to_add
         );
         self.amount_owed += to_add;
     }
@@ -172,7 +171,7 @@ impl Handler<Tick> for SimulatedTxFeeManager {
                 Ok(())
             }
             Err(e) => {
-                warn!("Failed to pay subnet dao! {:?}", e);
+                warn!("Failed to pay simulated txfee! {:?}", e);
                 Ok(())
             }
         }));
