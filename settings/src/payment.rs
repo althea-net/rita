@@ -3,13 +3,18 @@ use clarity::{Address, PrivateKey};
 use num256::{Int256, Uint256};
 use std::str::FromStr;
 
-pub const XDAI_FEE_MULTIPLIER: u32 = 9000;
+pub const XDAI_FEE_MULTIPLIER: u32 = 6000;
+pub const XDAI_MAX_GAS: u64 = 1_000_000_000;
+pub const XDAI_MIN_GAS: u64 = XDAI_MAX_GAS;
+pub const ETH_MAX_GAS: u64 = 200_000_000_000;
+pub const ETH_MIN_GAS: u64 = 1;
+pub const ETH_FEE_MULTIPLIER: u32 = 20;
 
 fn default_local_fee() -> u32 {
-    300_000u32 // 300kWei per byte
+    0u32 // updated by oracle, denominated in wei/byte
 }
 fn default_max_fee() -> u32 {
-    20_000_000u32 // $3/gb at $150 eth
+    200_000_000u32 // updated by oracle denominated in wei
 }
 
 fn default_close_threshold() -> Int256 {
@@ -88,6 +93,18 @@ fn default_simulated_transaction_fee_address() -> Address {
 
 fn default_simulated_transaction_fee() -> u8 {
     10
+}
+
+/// this isn't needed on ETH but on xdai if the network
+/// is inactive min gas will be zero, but you can't actually send
+/// transactions with that
+fn default_min_gas() -> u64 {
+    XDAI_MAX_GAS
+}
+
+/// 1gwei valid for Xdai change this if you change the default blockchain
+fn default_max_gas() -> u64 {
+    XDAI_MAX_GAS
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -183,6 +200,12 @@ pub struct PaymentSettings {
     pub simulated_transaction_fee_address: Address,
     #[serde(default = "default_simulated_transaction_fee")]
     pub simulated_transaction_fee: u8,
+    /// the maximum we will pay for gas on our current blockchain
+    #[serde(default = "default_max_gas")]
+    pub max_gas: u64,
+    /// the minimum we will pay for gas on our current blockchain
+    #[serde(default = "default_min_gas")]
+    pub min_gas: u64,
 }
 
 impl Default for PaymentSettings {
@@ -216,6 +239,8 @@ impl Default for PaymentSettings {
             bridge_addresses: default_bridge_addresses(),
             simulated_transaction_fee_address: default_simulated_transaction_fee_address(),
             simulated_transaction_fee: default_simulated_transaction_fee(),
+            min_gas: default_min_gas(),
+            max_gas: default_max_gas(),
         }
     }
 }

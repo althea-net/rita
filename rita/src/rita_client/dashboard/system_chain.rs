@@ -5,7 +5,12 @@ use ::actix_web::Path;
 use ::actix_web::{HttpRequest, HttpResponse};
 use althea_types::SystemChain;
 use failure::Error;
+use settings::payment::ETH_FEE_MULTIPLIER;
+use settings::payment::ETH_MAX_GAS;
+use settings::payment::ETH_MIN_GAS;
 use settings::payment::XDAI_FEE_MULTIPLIER;
+use settings::payment::XDAI_MAX_GAS;
+use settings::payment::XDAI_MIN_GAS;
 use settings::FileWrite;
 use settings::RitaCommonSettings;
 
@@ -34,7 +39,9 @@ pub fn set_system_blockchain(path: Path<String>) -> Result<HttpResponse, Error> 
             oracle_url = "https://updates.altheamesh.com/prices".to_string();
             // reset balance so that things take effect immediatley in the UI
             payment.balance = 0u32.into();
-            payment.dynamic_fee_multiplier = 20u32
+            payment.dynamic_fee_multiplier = ETH_FEE_MULTIPLIER;
+            payment.max_gas = ETH_MAX_GAS;
+            payment.min_gas = ETH_MIN_GAS;
         }
         SystemChain::Xdai => {
             payment.node_list = vec!["https://dai.althea.org/".to_string()];
@@ -45,6 +52,8 @@ pub fn set_system_blockchain(path: Path<String>) -> Result<HttpResponse, Error> 
             // reset balance so that things take effect immediatley in the UI
             payment.balance = 0u32.into();
             payment.dynamic_fee_multiplier = XDAI_FEE_MULTIPLIER;
+            payment.max_gas = XDAI_MAX_GAS;
+            payment.min_gas = XDAI_MIN_GAS;
         }
         SystemChain::Rinkeby => {
             payment.node_list =
@@ -55,7 +64,9 @@ pub fn set_system_blockchain(path: Path<String>) -> Result<HttpResponse, Error> 
             oracle_url = "https://updates.altheamesh.com/testprices".to_string();
             // reset balance so that things take effect immediatley in the UI
             payment.balance = 0u32.into();
-            payment.dynamic_fee_multiplier = 20u32
+            payment.dynamic_fee_multiplier = ETH_FEE_MULTIPLIER;
+            payment.max_gas = ETH_MAX_GAS;
+            payment.min_gas = ETH_MIN_GAS;
         }
     }
     drop(payment);

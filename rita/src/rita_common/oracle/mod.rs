@@ -28,8 +28,6 @@ use std::time::Duration;
 use std::time::Instant;
 use web30::client::Web3;
 
-const MIN_GAS: u128 = 1_000_000_000;
-
 pub struct Oracle {
     /// An instant representing the start of a short period where the balance can
     /// actually go to zero. This is becuase full nodes (incluing Infura) have an infuriating
@@ -232,17 +230,24 @@ fn update_gas_price(web3: &Web3, full_node: String) {
                 // Dynamic fee computation
                 let mut payment_settings = SETTING.get_payment_mut();
 
-                // somtimes xdai advertises zero gas prices, it's not actually serious about these prices
-                // as no one will accept transactions with zero gas, it's just very very low.
-                if value == Uint256::zero() {
-                    info!("gas price is zero setting to! {}", MIN_GAS);
-                    value = MIN_GAS.into();
-                }
                 // use 105% of the gas price provided by the full node, this is designed
                 // to keep us above the median price provided by the full node.
                 // This should ensure that we maintain a higher-than-median priority even
                 // if the network is being spammed with transactions
-                payment_settings.gas_price = value.clone() + (value / 20u32.into());
+                value = value.clone() + (value / 20u32.into());
+
+                // enforce minimum and maximum gas price rules
+                let min_gas: Uint256 = payment_settings.min_gas.into();
+                let max_gas: Uint256 = payment_settings.max_gas.into();
+                payment_settings.gas_price = if value < min_gas {
+                    info!("gas price is low setting to! {}", min_gas);
+                    min_gas
+                } else if value > max_gas {
+                    trace!("gas price is high setting to! {}", max_gas);
+                    max_gas
+                } else {
+                    value
+                };
 
                 let dynamic_fee_factor: Int256 = payment_settings.dynamic_fee_multiplier.into();
                 let transaction_gas: Int256 = 21000.into();
