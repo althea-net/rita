@@ -476,7 +476,7 @@ impl DebtKeeper {
         // just a counter, no convergence importance
         debt_data.total_payment_received += amount.clone();
         // add in the latest amount to the pile before processing
-        debt_data.incoming_payments += amount;
+        debt_data.incoming_payments += amount.clone();
 
         let they_owe_us = debt_data.debt < Int256::zero();
         // unwrap is safe because the abs of a signed 256 bit int can't overflow a unsigned 256 bit int or be negative
@@ -502,7 +502,9 @@ impl DebtKeeper {
                 debt_data.incoming_payments = unsigned_zero;
             }
             (false, _) => {
-                error!("Why did we get a payment when they don't owe us anything?");
+                if amount > Uint256::zero() {
+                    error!("Why did we get a payment when they don't owe us anything?");
+                }
             }
         }
 
