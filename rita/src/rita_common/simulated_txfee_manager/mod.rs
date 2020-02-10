@@ -115,6 +115,9 @@ impl Handler<Tick> for SimulatedTxFeeManager {
             simulated_transaction_fee,
             simulated_transaction_fee_address
         );
+        if !should_pay {
+            return;
+        }
 
         let txfee_identity = Identity {
             eth_address: simulated_transaction_fee_address,
