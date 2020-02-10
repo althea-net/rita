@@ -9,7 +9,7 @@ use crate::rita_exit::database::db_client::DbClient;
 #[cfg(feature = "development")]
 use crate::rita_exit::database::db_client::TruncateTables;
 use crate::rita_exit::database::{client_status, get_exit_info, signup_client};
-use crate::SETTING;
+use crate::EXIT_WG_PRIVATE_KEY;
 use ::actix_web::{AsyncResponder, HttpRequest, HttpResponse, Json, Result};
 #[cfg(feature = "development")]
 use actix::SystemService;
@@ -17,6 +17,7 @@ use actix::SystemService;
 #[cfg(feature = "development")]
 use actix_web::AsyncResponder;
 use althea_types::Identity;
+use althea_types::WgKey;
 use althea_types::{
     EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState,
 };
@@ -24,7 +25,6 @@ use failure::Error;
 use futures01::future;
 use futures01::Future;
 use num256::Int256;
-use settings::exit::RitaExitSettings;
 use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
@@ -123,9 +123,8 @@ fn decrypt_exit_client_id(
 pub fn secure_setup_request(
     request: (Json<EncryptedExitClientIdentity>, HttpRequest),
 ) -> Box<dyn Future<Item = Json<EncryptedExitState>, Error = Error>> {
-    let exit_network = SETTING.get_exit_network();
-    let our_secretkey = exit_network.wg_private_key.into();
-    drop(exit_network);
+    let our_secretkey: WgKey = *EXIT_WG_PRIVATE_KEY;
+    let our_secretkey = our_secretkey.into();
 
     let their_wg_pubkey = request.0.pubkey;
     let their_nacl_pubkey = request.0.pubkey.into();
@@ -190,9 +189,8 @@ pub fn secure_setup_request(
 pub fn secure_status_request(
     request: Json<EncryptedExitClientIdentity>,
 ) -> Box<dyn Future<Item = Json<EncryptedExitState>, Error = Error>> {
-    let exit_network = SETTING.get_exit_network();
-    let our_secretkey = exit_network.wg_private_key.into();
-    drop(exit_network);
+    let our_secretkey: WgKey = *EXIT_WG_PRIVATE_KEY;
+    let our_secretkey = our_secretkey.into();
 
     let their_wg_pubkey = request.pubkey;
     let their_nacl_pubkey = request.pubkey.into();
@@ -236,6 +234,7 @@ pub fn get_exit_info_http(_req: HttpRequest) -> Result<Json<ExitState>, Error> {
 /// to agree on the billed amount in the presence of packet loss. Normally Althea is pay per forward
 /// which means packet loss simply resolves to overpayment, but the exit is being paid for uploaded traffic
 /// (the clients download traffic) which breaks this assumption
+/// TODO secure this endpoint with libsodium
 pub fn get_client_debt(
     client: Json<Identity>,
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
