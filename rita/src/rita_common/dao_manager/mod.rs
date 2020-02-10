@@ -92,6 +92,8 @@ impl Handler<Tick> for DAOManager {
         let we_have_a_dao = !dao_addresses.is_empty();
         let should_pay =
             (Int256::from(self.last_payment_time.elapsed().as_secs()) * dao_fee) > pay_threshold;
+        let net_version = payment_settings.net_version;
+        drop(payment_settings);
         trace!("We should pay the subnet dao {}", should_pay);
         trace!("We have a dao to pay {}", we_have_a_dao);
 
@@ -129,7 +131,7 @@ impl Handler<Tick> for DAOManager {
                 };
                 let transaction_signed = tx.sign(
                     &eth_private_key.expect("No private key configured!"),
-                    payment_settings.net_version,
+                    net_version,
                 );
 
                 let transaction_bytes = match transaction_signed.to_bytes() {
