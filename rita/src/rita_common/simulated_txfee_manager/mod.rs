@@ -86,7 +86,7 @@ impl Handler<AddTxToTotal> for SimulatedTxFeeManager {
     }
 }
 
-/// Very basic loop for DAO manager payments
+/// Very basic loop for simulated txfee payments
 pub struct Tick;
 impl Message for Tick {
     type Result = ();

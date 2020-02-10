@@ -1,5 +1,7 @@
 use crate::rita_common::dao_manager::DAOManager;
 use crate::rita_common::dao_manager::Tick as DAOTick;
+use crate::rita_common::simulated_txfee_manager::SimulatedTxFeeManager;
+use crate::rita_common::simulated_txfee_manager::Tick as TxFeeTick;
 use crate::rita_common::token_bridge::Tick as TokenBridgeTick;
 use crate::rita_common::token_bridge::TokenBridge;
 use crate::rita_common::tunnel_manager::{TriggerGC, TunnelManager};
@@ -78,6 +80,8 @@ impl Handler<Tick> for RitaSlowLoop {
 
         // Check DAO payments
         DAOManager::from_registry().do_send(DAOTick);
+
+        SimulatedTxFeeManager::from_registry().do_send(TxFeeTick);
 
         TunnelManager::from_registry().do_send(TriggerGC(Duration::from_secs(
             SETTING.get_network().tunnel_timeout_seconds,
