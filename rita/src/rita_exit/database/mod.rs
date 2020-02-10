@@ -63,12 +63,14 @@ pub mod struct_tools;
 pub const ONE_DAY: i64 = 86400;
 
 pub fn get_exit_info() -> ExitDetails {
+    let exit_network = SETTING.get_exit_network();
+    let payment = SETTING.get_payment();
     ExitDetails {
-        server_internal_ip: SETTING.get_exit_network().own_internal_ip.into(),
-        wg_exit_port: SETTING.get_exit_network().wg_tunnel_port,
-        exit_price: SETTING.get_exit_network().exit_price,
-        exit_currency: SETTING.get_payment().system_chain,
-        netmask: SETTING.get_exit_network().netmask,
+        server_internal_ip: exit_network.own_internal_ip.into(),
+        wg_exit_port: exit_network.wg_tunnel_port,
+        exit_price: exit_network.exit_price,
+        exit_currency: payment.system_chain,
+        netmask: exit_network.netmask,
         description: SETTING.get_description(),
         verif_mode: match SETTING.get_verif_settings() {
             Some(ExitVerifSettings::Email(_mailer_settings)) => ExitVerifMode::Email,
@@ -177,10 +179,10 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
 
         let current_ip = their_record.internal_ip.parse()?;
 
-        let current_subnet = IpNetwork::new(
-            SETTING.get_exit_network().own_internal_ip.into(),
-            SETTING.get_exit_network().netmask,
-        )?;
+        let exit_network = SETTING.get_exit_network();
+        let current_subnet =
+            IpNetwork::new(exit_network.own_internal_ip.into(), exit_network.netmask)?;
+        drop(exit_network);
 
         if !current_subnet.contains(current_ip) {
             return Ok(ExitState::Registering {
