@@ -30,15 +30,21 @@ extern crate phonenumber;
 
 use actix_web::http::Method;
 use actix_web::{http, server, App};
+use althea_types::SystemChain;
+use althea_types::WgKey;
 use diesel::r2d2::ConnectionManager;
 use diesel::PgConnection;
 use docopt::Docopt;
 use env_logger;
 use openssl_probe;
 use r2d2::Pool;
+use settings::exit::ExitNetworkSettings;
+use settings::exit::ExitVerifSettings;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::net::IpAddr;
 use std::sync::{Arc, RwLock};
+use std::time::Instant;
 
 #[cfg(test)]
 use std::sync::Mutex;
@@ -130,6 +136,38 @@ lazy_static! {
 lazy_static! {
     pub static ref GEOIP_CACHE: Arc<RwLock<HashMap<IpAddr, String>>> =
         Arc::new(RwLock::new(HashMap::new()));
+}
+
+// These are a set of vars that are never updated during runtime. This means we can have
+// read only versions of them available here to prevent lock contention on large exits.
+lazy_static! {
+    pub static ref EXIT_WG_PRIVATE_KEY: WgKey = SETTING.get_exit_network().wg_private_key;
+}
+lazy_static! {
+    pub static ref EXIT_VERIF_SETTINGS: Option<ExitVerifSettings> = SETTING.get_verif_settings();
+}
+lazy_static! {
+    pub static ref EXIT_NETWORK_SETTINGS: ExitNetworkSettings = SETTING.get_exit_network().clone();
+}
+lazy_static! {
+    pub static ref EXIT_SYSTEM_CHAIN: SystemChain = SETTING.get_payment().system_chain;
+}
+lazy_static! {
+    pub static ref EXIT_DESCRIPTION: String = SETTING.get_description();
+}
+lazy_static! {
+    pub static ref EXIT_ALLOWED_COUNTRIES: HashSet<String> =
+        SETTING.get_allowed_countries().clone();
+}
+// price is updated at runtime, but we only want to grab a read lock to update it every few seconds
+// since this is done cooperatively in get_exit_info() only one read lock is aquired but we can
+// still update it every UPDATE_INTERVAL seconds
+// in the format price/last updated time
+lazy_static! {
+    pub static ref EXIT_PRICE: Arc<RwLock<(u64, Instant)>> = Arc::new(RwLock::new((
+        SETTING.get_exit_network().exit_price,
+        Instant::now()
+    )));
 }
 
 lazy_static! {

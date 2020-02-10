@@ -29,6 +29,12 @@ use crate::rita_exit::database::struct_tools::to_exit_client;
 use crate::rita_exit::database::struct_tools::to_identity;
 use crate::rita_exit::database::struct_tools::verif_done;
 use crate::rita_exit::rita_loop::EXIT_LOOP_TIMEOUT;
+use crate::EXIT_ALLOWED_COUNTRIES;
+use crate::EXIT_DESCRIPTION;
+use crate::EXIT_NETWORK_SETTINGS;
+use crate::EXIT_PRICE;
+use crate::EXIT_SYSTEM_CHAIN;
+use crate::EXIT_VERIF_SETTINGS;
 use crate::KI;
 use crate::SETTING;
 use ::actix::SystemService;
@@ -63,16 +69,28 @@ pub mod struct_tools;
 pub const ONE_DAY: i64 = 86400;
 
 pub fn get_exit_info() -> ExitDetails {
-    let exit_network = SETTING.get_exit_network();
-    let payment = SETTING.get_payment();
+    const UPDATE_INTERVAL: Duration = Duration::from_secs(60);
+    if Instant::now() - EXIT_PRICE.read().unwrap().1 > UPDATE_INTERVAL {
+        let mut exit_price = EXIT_PRICE.write().unwrap();
+        let old_exit_price = exit_price.0;
+        exit_price.0 = SETTING.get_exit_network().exit_price;
+        exit_price.1 = Instant::now();
+        info!(
+            "Updated exit price from settings {} -> {}",
+            exit_price.0, old_exit_price
+        );
+    }
+
+    let exit_network = &EXIT_NETWORK_SETTINGS;
+    let payment = *EXIT_SYSTEM_CHAIN;
     ExitDetails {
         server_internal_ip: exit_network.own_internal_ip.into(),
         wg_exit_port: exit_network.wg_tunnel_port,
-        exit_price: exit_network.exit_price,
-        exit_currency: payment.system_chain,
+        exit_price: EXIT_PRICE.read().unwrap().0,
+        exit_currency: payment,
         netmask: exit_network.netmask,
-        description: SETTING.get_description(),
-        verif_mode: match SETTING.get_verif_settings() {
+        description: EXIT_DESCRIPTION.clone(),
+        verif_mode: match EXIT_VERIF_SETTINGS.clone() {
             Some(ExitVerifSettings::Email(_mailer_settings)) => ExitVerifMode::Email,
             Some(ExitVerifSettings::Phone(_phone_settings)) => ExitVerifMode::Phone,
             None => ExitVerifMode::Off,
@@ -104,7 +122,7 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
                             return Box::new(future::ok(ExitState::Denied {
                                 message: format!(
                                     "Partially changed registration details! Please reset your router and re-register with all new details. Backup your key first! {}",
-                                    display_hashset(&SETTING.get_allowed_countries()),
+                                    display_hashset(&*EXIT_ALLOWED_COUNTRIES),
                                 ),
                             }))
                                 as Box<dyn Future<Item = ExitState, Error = Error>>
@@ -120,7 +138,7 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
                         };
 
                     // either update and grab an existing entry or create one
-                    match (verify_status, SETTING.get_verif_settings()) {
+                    match (verify_status, EXIT_VERIF_SETTINGS.clone()) {
                         (true, Some(ExitVerifSettings::Email(mailer))) => {
                             Box::new(handle_email_registration(
                                 &client,
@@ -151,7 +169,7 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
                         (false, _) => Box::new(future::ok(ExitState::Denied {
                             message: format!(
                                 "This exit only accepts connections from {}",
-                                display_hashset(&SETTING.get_allowed_countries()),
+                                display_hashset(&*EXIT_ALLOWED_COUNTRIES),
                             ),
                         })),
                     }
@@ -179,10 +197,9 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
 
         let current_ip = their_record.internal_ip.parse()?;
 
-        let exit_network = SETTING.get_exit_network();
+        let exit_network = &*EXIT_NETWORK_SETTINGS;
         let current_subnet =
             IpNetwork::new(exit_network.own_internal_ip.into(), exit_network.netmask)?;
-        drop(exit_network);
 
         if !current_subnet.contains(current_ip) {
             return Ok(ExitState::Registering {
@@ -193,7 +210,7 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
 
         update_client(&client, &their_record, &conn)?;
 
-        low_balance_notification(client, &their_record, SETTING.get_verif_settings(), &conn);
+        low_balance_notification(client, &their_record, EXIT_VERIF_SETTINGS.clone(), &conn);
 
         Ok(ExitState::Registered {
             our_details: ExitClientDetails {
