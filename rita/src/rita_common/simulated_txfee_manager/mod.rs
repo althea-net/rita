@@ -109,6 +109,8 @@ impl Handler<Tick> for SimulatedTxFeeManager {
         let simulated_transaction_fee = payment_settings.simulated_transaction_fee;
         let amount_to_pay = self.amount_owed.clone();
         let should_pay = amount_to_pay > pay_threshold.abs().to_uint256().unwrap();
+        let net_version = payment_settings.net_version;
+        drop(payment_settings);
         trace!(
             "We should pay the simulated tx fee {} of 1/{} % to {}",
             should_pay,
@@ -144,7 +146,7 @@ impl Handler<Tick> for SimulatedTxFeeManager {
         };
         let transaction_signed = tx.sign(
             &eth_private_key.expect("No private key configured!"),
-            payment_settings.net_version,
+            net_version,
         );
 
         let transaction_bytes = match transaction_signed.to_bytes() {
