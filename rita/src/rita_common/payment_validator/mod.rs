@@ -173,8 +173,6 @@ impl Handler<Validate> for PaymentValidator {
                 if !item.checked {
                     let msg = "We failed to check txid {:#066x} against full nodes for the full duration of it's timeout period, please check full nodes";
                     error!("{}", msg);
-                    // servers process many transactions and would rather fail than take extra payment
-                    #[cfg(feature = "server")]
                     panic!(msg)
                 }
 
