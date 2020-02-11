@@ -204,9 +204,11 @@ pub fn validate_transaction(ts: &ToValidate) {
         .eth_block_number()
         .join(web3.eth_get_transaction_by_hash(txid.clone()))
         .and_then(move |(block_num, tx_status)| {
-            PaymentValidator::from_registry().do_send(Checked {
-                tx: long_life_ts.clone(),
-            });
+            if !long_life_ts.checked {
+                PaymentValidator::from_registry().do_send(Checked {
+                    tx: long_life_ts.clone(),
+                });
+            }
 
             if let Some(transaction) = tx_status {
                 handle_tx_messaging(txid, transaction, long_life_ts, block_num);
