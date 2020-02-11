@@ -21,6 +21,7 @@ pub struct OwnInfo {
     pub rita_version: String,
     pub version: String,
     pub is_gateway: bool,
+    pub client_can_use_free_tier: bool,
 }
 
 pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
@@ -30,10 +31,11 @@ pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
     let balance = payment_settings.balance.clone();
     let pay_threshold = payment_settings.pay_threshold.clone();
     let close_threshold = payment_settings.close_threshold.clone();
+    let local_fee = payment_settings.local_fee;
+    let client_can_use_free_tier = payment_settings.client_can_use_free_tier;
 
     let network_settings = SETTING.get_network();
-    let local_fee = SETTING.get_payment().local_fee;
-    let metric_factor = SETTING.get_network().metric_factor;
+    let metric_factor = network_settings.metric_factor;
     let device = network_settings.device.clone();
     let is_gateway = network_settings.is_gateway;
 
@@ -49,6 +51,7 @@ pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
         rita_version: env!("CARGO_PKG_VERSION").to_string(),
         version: READABLE_VERSION.to_string(),
         is_gateway,
+        client_can_use_free_tier,
     };
     Ok(Json(reply))
 }
