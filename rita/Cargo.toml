@@ -74,6 +74,6 @@ features = ["std"]
 
 [features]
 # Features for big iron devices with more ram
-server = ["long_timeouts"]
+server = []
 long_timeouts = []
 development = []
