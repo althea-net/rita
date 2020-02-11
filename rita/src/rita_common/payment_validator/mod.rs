@@ -17,8 +17,7 @@ use crate::rita_common::usage_tracker::UsageTracker;
 use crate::SETTING;
 use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use althea_types::PaymentTx;
-use futures01::future::Either;
-use futures01::{future, Future};
+use futures01::Future;
 use num256::Uint256;
 use settings::RitaCommonSettings;
 use std::collections::HashSet;
@@ -163,43 +162,25 @@ pub fn validate_transaction(ts: &ToValidate) {
 
     let long_life_ts = ts.clone();
 
-    let res = web3.eth_block_number().then(move |block| {
-        match block {
-            Ok(block_num) => {
-                Either::A(
-                    web3.eth_get_transaction_by_hash(txid.clone())
-                        .then(move |tx_status| match tx_status {
-                            Ok(status) => match status {
-                                Some(transaction) => {
-                                    handle_tx_messaging(txid, transaction, long_life_ts, block_num);
-                                    Ok(())
-                                }
-                                None => Ok(()),
-                            },
-                            Err(e) => {
-                                // full node failure, we don't actually know anything about the transaction
-                                warn!(
-                                    "Failed to validate {:#066x} transaction with {:?}",
-                                    pmt.txid.unwrap(),
-                                    e
-                                );
-                                Ok(())
-                            }
-                        }),
-                )
+    let res = web3
+        .eth_block_number()
+        .join(web3.eth_get_transaction_by_hash(txid.clone()))
+        .and_then(move |(block_num, tx_status)| {
+            if let Some(transaction) = tx_status {
+                handle_tx_messaging(txid, transaction, long_life_ts, block_num);
             }
-            Err(e) => {
-                // full node failure, we don't actually know anything about the transaction
+            Ok(())
+        })
+        .then(|res| {
+            if let Err(e) = res {
                 warn!(
-                    "Failed to get blocknum to validate {:#066x} transaction with {:?} our timeout is {}",
+                    "Failed to validate {:#066x} transaction with {:?}",
                     pmt.txid.unwrap(),
-                    e,
-                    TRANSACTION_VERIFICATION_TIMEOUT.as_secs()
+                    e
                 );
-                Either::B(future::ok(()))
             }
-        }
-    });
+            Ok(())
+        });
     Arbiter::spawn(res);
 }
 
