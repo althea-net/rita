@@ -37,8 +37,13 @@ const BLOCKS_TO_OLD: u32 = 1440;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct ToValidate {
+    /// details of the payment from the user in the format they where sent
     pub payment: PaymentTx,
+    /// When we got this tx
     pub recieved: Instant,
+    /// if we have managed to talk to a full node about this
+    /// transaction ever
+    pub checked: bool,
 }
 
 pub struct PaymentValidator {
@@ -100,8 +105,10 @@ impl Handler<ValidateLater> for PaymentValidator {
     }
 }
 
+/// Removes a transaction from the pending validation queue, it may either
+/// have been discovered to be invalid or have been succesfully accepted
 #[derive(Message)]
-pub struct Remove {
+struct Remove {
     tx: ToValidate,
     success: bool,
 }
@@ -120,6 +127,29 @@ impl Handler<Remove> for PaymentValidator {
     }
 }
 
+/// Marks a transaction as 'checked' in that we have talked to a full node about it
+/// if we fail to talk to a full node about a transaction for the full duration of
+/// the timeout we will panic and restart.
+#[derive(Message)]
+struct Checked {
+    tx: ToValidate,
+}
+
+impl Handler<Checked> for PaymentValidator {
+    type Result = ();
+
+    fn handle(&mut self, msg: Checked, _ctx: &mut Context<Self>) -> Self::Result {
+        if self.unvalidated_transactions.take(&msg.tx).is_some() {
+            let mut checked_tx = msg.tx;
+            checked_tx.checked = true;
+            trace!("We successfully checked tx {:?}", checked_tx);
+            self.unvalidated_transactions.insert(checked_tx);
+        } else {
+            error!("Tried to mark a tx {:?} we don't have as checked!", msg.tx);
+        }
+    }
+}
+
 #[derive(Message)]
 pub struct Validate();
 
@@ -128,8 +158,9 @@ impl Handler<Validate> for PaymentValidator {
 
     fn handle(&mut self, _msg: Validate, _ctx: &mut Context<Self>) -> Self::Result {
         info!(
-            "Attempting to validate {} transactions",
-            self.unvalidated_transactions.len()
+            "Attempting to validate {} transactions {}",
+            self.unvalidated_transactions.len(),
+            print_txids(&self.unvalidated_transactions)
         );
         let mut to_delete = Vec::new();
         for item in self.unvalidated_transactions.iter() {
@@ -138,6 +169,15 @@ impl Handler<Validate> for PaymentValidator {
                     "Transaction {:#066x} has timed out, payment failed!",
                     item.payment.txid.clone().unwrap()
                 );
+
+                if !item.checked {
+                    let msg = "We failed to check txid {:#066x} against full nodes for the full duration of it's timeout period, please check full nodes";
+                    error!("{}", msg);
+                    // servers process many transactions and would rather fail than take extra payment
+                    #[cfg(feature = "server")]
+                    panic!(msg)
+                }
+
                 to_delete.push(item.clone());
             } else {
                 validate_transaction(item);
@@ -166,6 +206,10 @@ pub fn validate_transaction(ts: &ToValidate) {
         .eth_block_number()
         .join(web3.eth_get_transaction_by_hash(txid.clone()))
         .and_then(move |(block_num, tx_status)| {
+            PaymentValidator::from_registry().do_send(Checked {
+                tx: long_life_ts.clone(),
+            });
+
             if let Some(transaction) = tx_status {
                 handle_tx_messaging(txid, transaction, long_life_ts, block_num);
             }
@@ -306,4 +350,12 @@ fn payment_is_old(chain_height: Uint256, tx_height: Option<Uint256>) -> bool {
         }
         None => false,
     }
+}
+
+fn print_txids(list: &HashSet<ToValidate>) -> String {
+    let mut output = String::new();
+    for item in list.iter() {
+        output += &format!("{:#066x} ,", item.payment.txid.clone().unwrap());
+    }
+    output
 }
