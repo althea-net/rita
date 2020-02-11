@@ -10,6 +10,7 @@
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::PaymentReceived;
 use crate::rita_common::debt_keeper::PaymentSucceeded;
+use crate::rita_common::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::rita_common::usage_tracker::UpdatePayments;
 use crate::rita_common::usage_tracker::UsageTracker;
@@ -25,14 +26,7 @@ use std::time::{Duration, Instant};
 use web30::client::Web3;
 use web30::types::TransactionResponse;
 
-// How long we will wait for full node responses, set to a much more conservative
-// value on the client to prevent memory usage growth, but on the server we experience
-// far less dynamic network conditions and it's far more important that we validate payments
-// even at the cost of memory or the risk of an emergency restart if we slow down too much
-#[cfg(not(any(feature = "long_timeouts", target_arch = "x86_64")))]
-pub const TRANSACTION_VERIFICATION_TIMEOUT: Duration = Duration::from_secs(4);
-#[cfg(any(feature = "long_timeouts", target_arch = "x86_64"))]
-pub const TRANSACTION_VERIFICATION_TIMEOUT: Duration = Duration::from_secs(60);
+pub const TRANSACTION_VERIFICATION_TIMEOUT: Duration = FAST_LOOP_TIMEOUT;
 
 // Discard payments after 15 minutes of failing to find txid
 pub const PAYMENT_TIMEOUT: Duration = Duration::from_secs(900u64);
