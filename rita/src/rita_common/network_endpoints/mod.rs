@@ -60,6 +60,7 @@ pub fn make_payments(
     let ts = ToValidate {
         payment: pmt.0.into_inner(),
         recieved: Instant::now(),
+        checked: false,
     };
     PaymentValidator::from_registry().do_send(ValidateLater(ts));
 

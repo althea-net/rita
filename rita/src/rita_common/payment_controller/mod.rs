@@ -170,9 +170,10 @@ fn make_payment(mut pmt: PaymentTx) -> Result<(), Error> {
                                         SETTING.get_payment_mut().nonce += 1u64.into();
 
 
-                                       let ts = ToValidate {
-                                       payment: pmt,
-                                      recieved: Instant::now(),
+                                        let ts = ToValidate {
+                                            payment: pmt,
+                                            recieved: Instant::now(),
+                                            checked: false
                                        };
 
                                       PaymentValidator::from_registry().do_send(ValidateLater(ts));
