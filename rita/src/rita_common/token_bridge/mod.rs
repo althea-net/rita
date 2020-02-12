@@ -536,10 +536,8 @@ impl Handler<Withdraw> for TokenBridge {
         if let SystemChain::Xdai = system_chain {
             match self.state.clone() {
                 State::Withdrawing { .. } => {
-                    (
-                        // Cannot start a withdraw when one is in progress
-                        bail!("Cannot start a withdraw when one is in progress")
-                    )
+                    // Cannot start a withdraw when one is in progress
+                    bail!("Cannot start a withdraw when one is in progress")
                 }
                 _ => {
                     Arbiter::spawn(bridge.xdai_to_dai_bridge(amount.clone()).then(move |res| {

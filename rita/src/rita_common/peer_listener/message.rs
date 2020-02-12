@@ -2,6 +2,7 @@ use byteorder::{BigEndian, ReadBytesExt};
 use bytes::BufMut;
 use std::convert::From;
 use std::error::Error;
+use std::fmt::Display;
 use std::io::Cursor;
 use std::net::Ipv6Addr;
 use std::{fmt, io};
@@ -20,21 +21,17 @@ pub enum MessageError {
     InvalidIpAddress,
 }
 
-impl Error for MessageError {
-    fn description(&self) -> &str {
-        match *self {
-            MessageError::InvalidPayloadError => "Invalid payload detected",
-            MessageError::InvalidMagic => "Invalid magic value received",
-            MessageError::BufferUnderflow => "Buffer underflow while reading message",
-            MessageError::IoError(ref e) => e.description(),
-            MessageError::InvalidIpAddress => "Received ImHere with invalid IP address",
-        }
-    }
-}
+impl Error for MessageError {}
 
-impl fmt::Display for MessageError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        self.description().fmt(f)
+impl Display for MessageError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            MessageError::InvalidPayloadError => write!(f, "Invalid payload detected"),
+            MessageError::InvalidMagic => write!(f, "Invalid magic value received"),
+            MessageError::BufferUnderflow => write!(f, "Buffer underflow while reading message"),
+            MessageError::IoError(ref e) => write!(f, "{}", e),
+            MessageError::InvalidIpAddress => write!(f, "Received ImHere with invalid IP address"),
+        }
     }
 }
 
