@@ -1,3 +1,5 @@
+/// This file under Apache 2.0
+
 use base64;
 use serde::de::{Deserialize, Error, Unexpected, Visitor};
 use serde::ser::{Serialize, Serializer};
