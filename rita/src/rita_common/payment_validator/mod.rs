@@ -10,7 +10,6 @@
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::PaymentReceived;
 use crate::rita_common::debt_keeper::PaymentSucceeded;
-use crate::rita_common::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::rita_common::usage_tracker::UpdatePayments;
 use crate::rita_common::usage_tracker::UsageTracker;
@@ -21,11 +20,12 @@ use futures01::Future;
 use num256::Uint256;
 use settings::RitaCommonSettings;
 use std::collections::HashSet;
+use std::fmt;
 use std::time::{Duration, Instant};
 use web30::client::Web3;
 use web30::types::TransactionResponse;
 
-pub const TRANSACTION_VERIFICATION_TIMEOUT: Duration = FAST_LOOP_TIMEOUT;
+pub const TRANSACTION_VERIFICATION_TIMEOUT: Duration = Duration::from_secs(2);
 
 // Discard payments after 15 minutes of failing to find txid
 pub const PAYMENT_TIMEOUT: Duration = Duration::from_secs(900u64);
@@ -44,6 +44,19 @@ pub struct ToValidate {
     /// if we have managed to talk to a full node about this
     /// transaction ever
     pub checked: bool,
+}
+
+impl fmt::Display for ToValidate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.payment.txid {
+            Some(txid) => write!(
+                f,
+                "(txid: {:#066x}, from: {}",
+                txid, self.payment.from.wg_public_key
+            ),
+            None => write!(f, "(txid: None, from: {}", self.payment.from.wg_public_key),
+        }
+    }
 }
 
 pub struct PaymentValidator {
@@ -355,7 +368,7 @@ fn payment_is_old(chain_height: Uint256, tx_height: Option<Uint256>) -> bool {
 fn print_txids(list: &HashSet<ToValidate>) -> String {
     let mut output = String::new();
     for item in list.iter() {
-        output += &format!("{:#066x} ,", item.payment.txid.clone().unwrap());
+        output += &format!("{} ,", item);
     }
     output
 }
