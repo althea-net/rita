@@ -22,6 +22,7 @@ use settings::RitaCommonSettings;
 use std::collections::HashSet;
 use std::fmt;
 use std::time::{Duration, Instant};
+use tokio::util::FutureExt;
 use web30::client::Web3;
 use web30::types::TransactionResponse;
 
@@ -216,6 +217,7 @@ pub fn validate_transaction(ts: &ToValidate) {
     let res = web3
         .eth_block_number()
         .join(web3.eth_get_transaction_by_hash(txid.clone()))
+        .timeout(TRANSACTION_VERIFICATION_TIMEOUT)
         .and_then(move |(block_num, tx_status)| {
             if !long_life_ts.checked {
                 PaymentValidator::from_registry().do_send(Checked {
