@@ -53,9 +53,7 @@ pub fn make_payments(
     let txid = txid.unwrap();
     info!(
         "Got Payment from {:?} for {} with txid {:#066x}",
-        pmt.1.connection_info().remote(),
-        pmt.0.amount,
-        txid,
+        pmt.0.from.wg_public_key, pmt.0.amount, txid,
     );
     let ts = ToValidate {
         payment: pmt.0.into_inner(),
