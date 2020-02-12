@@ -10,6 +10,7 @@
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::PaymentReceived;
 use crate::rita_common::debt_keeper::PaymentSucceeded;
+use crate::rita_common::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::rita_common::usage_tracker::UpdatePayments;
 use crate::rita_common::usage_tracker::UsageTracker;
@@ -26,7 +27,7 @@ use tokio::util::FutureExt;
 use web30::client::Web3;
 use web30::types::TransactionResponse;
 
-pub const TRANSACTION_VERIFICATION_TIMEOUT: Duration = Duration::from_secs(2);
+pub const TRANSACTION_VERIFICATION_TIMEOUT: Duration = FAST_LOOP_TIMEOUT;
 
 // Discard payments after 15 minutes of failing to find txid
 pub const PAYMENT_TIMEOUT: Duration = Duration::from_secs(900u64);
@@ -217,6 +218,8 @@ pub fn validate_transaction(ts: &ToValidate) {
     let res = web3
         .eth_block_number()
         .join(web3.eth_get_transaction_by_hash(txid.clone()))
+        // even though we sepcify the timeout above don't remove this, we need it to 100% ensure that operations time out
+        // for example Actix may run slowly, web3 timeouts only care about actual request time
         .timeout(TRANSACTION_VERIFICATION_TIMEOUT)
         .and_then(move |(block_num, tx_status)| {
             if !long_life_ts.checked {
