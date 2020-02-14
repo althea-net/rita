@@ -17,6 +17,7 @@ use crate::rita_common::usage_tracker::UsageTracker;
 use crate::SETTING;
 use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use althea_types::PaymentTx;
+use failure::Error;
 use futures01::Future;
 use num256::Uint256;
 use settings::RitaCommonSettings;
@@ -122,22 +123,30 @@ impl Handler<ValidateLater> for PaymentValidator {
 
 /// Removes a transaction from the pending validation queue, it may either
 /// have been discovered to be invalid or have been succesfully accepted
-#[derive(Message)]
 struct Remove {
     tx: ToValidate,
     success: bool,
 }
 
+impl Message for Remove {
+    type Result = Result<(), Error>;
+}
+
 impl Handler<Remove> for PaymentValidator {
-    type Result = ();
+    type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: Remove, _ctx: &mut Context<Self>) -> Self::Result {
-        self.unvalidated_transactions.remove(&msg.tx);
+        let was_present = self.unvalidated_transactions.remove(&msg.tx);
         // store successful transactions so that they can't be played back to us, at least
         // during this session
-        if msg.success {
+        if msg.success && was_present {
             self.successful_transactions
                 .insert(msg.tx.payment.txid.unwrap());
+        }
+        if was_present {
+            Ok(())
+        } else {
+            Err(format_err!("No such transaction present!"))
         }
     }
 }
@@ -290,17 +299,23 @@ fn handle_tx_messaging(
                 "payment {:#066x} from {} for {} wei successfully validated!",
                 txid, from_address, amount
             );
-            DebtKeeper::from_registry().do_send(PaymentReceived {
-                from: pmt.from,
-                amount: pmt.amount.clone(),
-            });
-            PaymentValidator::from_registry().do_send(Remove {
-                tx: ts,
-                success: true,
-            });
+            let res = PaymentValidator::from_registry()
+                .send(Remove {
+                    tx: ts,
+                    success: true,
+                })
+                .and_then(|_| {
+                    DebtKeeper::from_registry().do_send(PaymentReceived {
+                        from: pmt.from,
+                        amount: pmt.amount.clone(),
+                    });
 
-            // update the usage tracker with the details of this payment
-            UsageTracker::from_registry().do_send(UpdatePayments { payment: pmt });
+                    // update the usage tracker with the details of this payment
+                    UsageTracker::from_registry().do_send(UpdatePayments { payment: pmt });
+                    Ok(())
+                })
+                .then(|_| Ok(()));
+            Arbiter::spawn(res);
         }
         // we suceessfully paid someone
         (false, true, true) => {
@@ -308,17 +323,22 @@ fn handle_tx_messaging(
                 "payment {:#066x} from {} for {} wei successfully sent!",
                 txid, from_address, amount
             );
-            DebtKeeper::from_registry().do_send(PaymentSucceeded {
-                to: pmt.to,
-                amount: pmt.amount.clone(),
-            });
-            PaymentValidator::from_registry().do_send(Remove {
-                tx: ts,
-                success: true,
-            });
-
-            // update the usage tracker with the details of this payment
-            UsageTracker::from_registry().do_send(UpdatePayments { payment: pmt });
+            let res = PaymentValidator::from_registry()
+                .send(Remove {
+                    tx: ts,
+                    success: true,
+                })
+                .and_then(|_| {
+                    DebtKeeper::from_registry().do_send(PaymentSucceeded {
+                        to: pmt.to,
+                        amount: pmt.amount.clone(),
+                    });
+                    // update the usage tracker with the details of this payment
+                    UsageTracker::from_registry().do_send(UpdatePayments { payment: pmt });
+                    Ok(())
+                })
+                .then(|_| Ok(()));
+            Arbiter::spawn(res);
         }
         (true, true, _) => {
             error!("Transaction to ourselves!");
