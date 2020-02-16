@@ -141,11 +141,13 @@ impl Handler<Remove> for PaymentValidator {
         // during this session
         if msg.success && was_present {
             self.successful_transactions
-                .insert(msg.tx.payment.txid.unwrap());
+                .insert(msg.tx.payment.clone().txid.unwrap());
         }
         if was_present {
+            info!("Transaction {} was removed", msg.tx);
             Ok(())
         } else {
+            error!("Transaction {} was double removed", msg.tx);
             Err(format_err!("No such transaction present!"))
         }
     }
@@ -166,7 +168,7 @@ impl Handler<Checked> for PaymentValidator {
         if self.unvalidated_transactions.take(&msg.tx).is_some() {
             let mut checked_tx = msg.tx;
             checked_tx.checked = true;
-            trace!("We successfully checked tx {:?}", checked_tx);
+            info!("We successfully checked tx {:?}", checked_tx);
             self.unvalidated_transactions.insert(checked_tx);
         } else {
             error!("Tried to mark a tx {:?} we don't have as checked!", msg.tx);
@@ -304,14 +306,16 @@ fn handle_tx_messaging(
                     tx: ts,
                     success: true,
                 })
-                .and_then(|_| {
-                    DebtKeeper::from_registry().do_send(PaymentReceived {
-                        from: pmt.from,
-                        amount: pmt.amount.clone(),
-                    });
+                .and_then(|res| {
+                    if res.is_ok() {
+                        DebtKeeper::from_registry().do_send(PaymentReceived {
+                            from: pmt.from,
+                            amount: pmt.amount.clone(),
+                        });
 
-                    // update the usage tracker with the details of this payment
-                    UsageTracker::from_registry().do_send(UpdatePayments { payment: pmt });
+                        // update the usage tracker with the details of this payment
+                        UsageTracker::from_registry().do_send(UpdatePayments { payment: pmt });
+                    }
                     Ok(())
                 })
                 .then(|_| Ok(()));
@@ -328,13 +332,15 @@ fn handle_tx_messaging(
                     tx: ts,
                     success: true,
                 })
-                .and_then(|_| {
-                    DebtKeeper::from_registry().do_send(PaymentSucceeded {
-                        to: pmt.to,
-                        amount: pmt.amount.clone(),
-                    });
-                    // update the usage tracker with the details of this payment
-                    UsageTracker::from_registry().do_send(UpdatePayments { payment: pmt });
+                .and_then(|res| {
+                    if res.is_ok() {
+                        DebtKeeper::from_registry().do_send(PaymentSucceeded {
+                            to: pmt.to,
+                            amount: pmt.amount.clone(),
+                        });
+                        // update the usage tracker with the details of this payment
+                        UsageTracker::from_registry().do_send(UpdatePayments { payment: pmt });
+                    }
                     Ok(())
                 })
                 .then(|_| Ok(()));
