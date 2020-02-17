@@ -172,14 +172,16 @@ pub fn ethernet_transform_mode(
 
     // if we have edited UCI and it fails we set this var to handle cleanup later
     let mut return_codes = Vec::new();
-    let mut mesh_add = false;
+    // in case of failure we revert to here
+    let old_network_settings = { SETTING.get_network().clone() };
     let filtered_ifname = format!("network.rita_{}", ifname.replace(".", ""));
 
     match a {
         // Wan is very simple, just delete it
         InterfaceMode::WAN | InterfaceMode::StaticWAN { .. } => {
-            let ret = KI.del_uci_var("network.backhaul");
             SETTING.get_network_mut().external_nic = None;
+
+            let ret = KI.del_uci_var("network.backhaul");
             return_codes.push(ret);
         }
         // lan is a little more complicated, wifi interfaces
@@ -191,9 +193,12 @@ pub fn ethernet_transform_mode(
             return_codes.push(ret);
         }
         // for mesh we need to send an unlisten so that Rita stops
-        // listening then we can remove the section
+        // listening then we can remove the section, we also need to remove it
+        // from the config
         InterfaceMode::Mesh => {
             PeerListener::from_registry().do_send(UnListen(ifname.to_string()));
+            SETTING.get_network_mut().peer_interfaces.remove(ifname);
+
             let ret = KI.del_uci_var(&filtered_ifname);
             return_codes.push(ret);
         }
@@ -204,6 +209,7 @@ pub fn ethernet_transform_mode(
         // here we add back all the properties of backhaul we removed
         InterfaceMode::WAN => {
             SETTING.get_network_mut().external_nic = Some(ifname.to_string());
+
             let ret = KI.set_uci_var("network.backhaul", "interface");
             return_codes.push(ret);
             let ret = KI.set_uci_var("network.backhaul.ifname", ifname);
@@ -217,6 +223,7 @@ pub fn ethernet_transform_mode(
             gateway,
         } => {
             SETTING.get_network_mut().external_nic = Some(ifname.to_string());
+
             let ret = KI.set_uci_var("network.backhaul", "interface");
             return_codes.push(ret);
             let ret = KI.set_uci_var("network.backhaul.ifname", ifname);
@@ -254,15 +261,18 @@ pub fn ethernet_transform_mode(
                 }
             }
         }
-        // next we do some magic to listen on the interface after a minute
         InterfaceMode::Mesh => {
+            SETTING
+                .get_network_mut()
+                .peer_interfaces
+                .insert(ifname.to_string());
+
             let ret = KI.set_uci_var(&filtered_ifname, "interface");
             return_codes.push(ret);
             let ret = KI.set_uci_var(&format!("{}.ifname", filtered_ifname), ifname);
             return_codes.push(ret);
             let ret = KI.set_uci_var(&format!("{}.proto", filtered_ifname), "static");
             return_codes.push(ret);
-            mesh_add = true;
         }
         InterfaceMode::Unknown => unimplemented!(),
     }
@@ -274,15 +284,10 @@ pub fn ethernet_transform_mode(
             error_occured = true;
         }
     }
-    let locally_owned_ifname = ifname.to_string();
     if error_occured {
         let res = KI.uci_revert("network");
+        *SETTING.get_network_mut() = old_network_settings;
         bail!("Error running UCI commands! Revert attempted: {:?}", res);
-    } else if mesh_add {
-        SETTING
-            .get_network_mut()
-            .peer_interfaces
-            .insert(locally_owned_ifname);
     }
 
     KI.uci_commit(&"network")?;
