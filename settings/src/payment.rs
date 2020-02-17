@@ -49,6 +49,10 @@ fn default_debt_limit_enabled() -> bool {
     true
 }
 
+fn default_apply_incoming_credit() -> bool {
+    false
+}
+
 fn default_balance_warning_level() -> Uint256 {
     (10_000_000_000_000_000u64).into()
 }
@@ -184,6 +188,14 @@ pub struct PaymentSettings {
     /// probably should be axed as cruft
     #[serde(default = "default_fudge_factor")]
     pub fudge_factor: u8,
+    /// See where this is referenced in debt keeper, this option is on for exits and off everywhere
+    /// else. The problem requiring it's creation is that the Exit has it's debts observed by clients
+    /// who pay when it exceeds the pay threshold. Relays have no such issue and their internal balances
+    /// are only observable for debugging and eventually for enforcement. So for exits it's important to apply
+    /// overpayment right away to prevent clients from continuing to pay. For relays it simply won't have any
+    /// bearing except to complicate debugging.
+    #[serde(default = "default_apply_incoming_credit")]
+    pub apply_incoming_credit_immediately: bool,
     /// This prevents nodes from building large debts beyond the debt
     /// limit, this prevents situations where large negative debts will drain balances
     /// on deposit
@@ -236,6 +248,7 @@ impl Default for PaymentSettings {
             bridge_enabled: default_bridge_enabled(),
             fudge_factor: 0u8,
             debt_limit_enabled: default_debt_limit_enabled(),
+            apply_incoming_credit_immediately: default_apply_incoming_credit(),
             bridge_addresses: default_bridge_addresses(),
             simulated_transaction_fee_address: default_simulated_transaction_fee_address(),
             simulated_transaction_fee: default_simulated_transaction_fee(),

@@ -631,7 +631,7 @@ impl DebtKeeper {
                 // Check if there is any unapplied credit
                 // if there is send a zero payment to apply it.
                 //
-                // this only has a meaningful function on the exits
+                // this only has a meaningful function on the exits and is only enabled there
                 // On clients 'extra' payment is probably disagreement
                 // for example client A sees it's traffic early and sends a payment
                 // client B is running slower and slots that into overpayment, then sees
@@ -643,7 +643,9 @@ impl DebtKeeper {
                 // routers where this unapplied credit is several dollars worth, so it's best to remit
                 // that to the users by applying it here.
                 let zero = Uint256::zero();
-                if debt_data.incoming_payments > zero {
+                if SETTING.get_payment().apply_incoming_credit_immediately
+                    && debt_data.incoming_payments > zero
+                {
                     debt_data.action = DebtAction::OpenTunnel;
                     self.payment_received(ident, zero)?;
                     return Ok(DebtAction::OpenTunnel);
