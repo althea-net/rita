@@ -141,6 +141,7 @@ fn linux_init(config: Arc<RwLock<settings::client::RitaSettingsStruct>>) -> Resu
         }
     }
 
+    // generates a keypair if we don't already have a valid one
     if wg_privkey_option.is_none() || wg_pubkey_option.is_none() {
         info!("Existing wireguard keypair is invalid, generating from scratch");
         let keypair = KI.create_wg_keypair().expect("failed to generate wg keys");
@@ -148,7 +149,7 @@ fn linux_init(config: Arc<RwLock<settings::client::RitaSettingsStruct>>) -> Resu
         network_settings.wg_private_key = Some(keypair.private);
     }
 
-    //Creates file on disk containing key
+    // Creates file on disk containing key
     KI.create_wg_key(
         &Path::new(&network_settings.wg_private_key_path),
         &network_settings
@@ -156,6 +157,15 @@ fn linux_init(config: Arc<RwLock<settings::client::RitaSettingsStruct>>) -> Resu
             .clone()
             .expect("How did we get here without generating a key above?"),
     )?;
+
+    // Sometimes due to a bad port toggle the external nic can still be populated
+    // as a peer_interface, this cleans that up.
+    if let Some(external_nic) = network_settings.external_nic.clone() {
+        let res = network_settings.peer_interfaces.remove(&external_nic);
+        if res {
+            warn!("Duplicate interface removed!");
+        }
+    }
 
     // Yield the mut lock
     drop(network_settings);
