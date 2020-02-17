@@ -41,14 +41,6 @@ impl From<io::Error> for MessageError {
     }
 }
 
-#[test]
-fn test_message_error() {
-    assert_eq!(
-        MessageError::InvalidPayloadError.description(),
-        "Invalid payload detected"
-    );
-}
-
 const MSG_IM_HERE: u8 = 0x5b;
 const MSG_IM_HERE_LEN: u16 = 19;
 
