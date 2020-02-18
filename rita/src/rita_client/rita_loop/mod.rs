@@ -38,6 +38,8 @@ pub struct RitaLoop;
 pub const CLIENT_LOOP_SPEED: u64 = 5;
 pub const CLIENT_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
 
+pub const HEARBEAT_MESSAGE_PORT: u16 = 33333;
+
 impl Actor for RitaLoop {
     type Context = Context<Self>;
 
@@ -127,30 +129,7 @@ pub fn send_udp_heartbeat() {
             Ok(Ok(dnsresult)) => {
                 if !dnsresult.is_empty() {
                     for dns_socket in dnsresult {
-                        let local = SocketAddr::from(([0, 0, 0, 0], 33333));
-                        let socket =
-                            UdpSocket::bind(&local).expect("Couldn't bind to UDP heartbeat socket");
-
-                        let remote_ip = dns_socket.ip();
-                        let remote = SocketAddr::new(remote_ip, 33333);
-
-                        trace!("Sending heartbeat to {:?}", remote_ip);
-
-                        let message = SETTING
-                            .get_network()
-                            .wg_public_key
-                            .clone()
-                            .expect("No key?")
-                            .to_string()
-                            .into_bytes();
-
-                        socket
-                            .set_write_timeout(Some(Duration::new(0, 100)))
-                            .expect("Couldn't set socket timeout");
-
-                        socket
-                            .send_to(&message, &remote)
-                            .expect("Couldn't send heartbeat");
+                        send_udp_heartbeat_packet(dns_socket);
                     }
                 } else {
                     trace!("Got zero length dns response: {:?}", dnsresult);
@@ -170,6 +149,39 @@ pub fn send_udp_heartbeat() {
         });
 
     Arbiter::spawn(res);
+}
+
+fn send_udp_heartbeat_packet(dns_socket: SocketAddr) {
+    let local_socketaddr = SocketAddr::from(([0, 0, 0, 0], HEARBEAT_MESSAGE_PORT));
+    let local_socket = match UdpSocket::bind(&local_socketaddr) {
+        Ok(s) => s,
+        Err(e) => {
+            error!("Couldn't bind to UDP heartbeat socket {:?}", e);
+            return;
+        }
+    };
+
+    let remote_ip = dns_socket.ip();
+    let remote = SocketAddr::new(remote_ip, HEARBEAT_MESSAGE_PORT);
+
+    trace!("Sending heartbeat to {:?}", remote_ip);
+
+    let message = match SETTING.get_identity() {
+        Some(i) => i,
+        None => return,
+    };
+    let json_message = match serde_json::to_vec(&message) {
+        Ok(m) => m,
+        Err(_) => return,
+    };
+
+    local_socket
+        .set_write_timeout(Some(Duration::new(0, 100)))
+        .expect("Couldn't set socket timeout");
+
+    local_socket
+        .send_to(&json_message, &remote)
+        .expect("Couldn't send heartbeat");
 }
 
 pub fn check_rita_client_actors() {
