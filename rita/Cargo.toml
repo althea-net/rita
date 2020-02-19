@@ -25,7 +25,7 @@ settings = { path = "../settings" }
 auto-bridge = {git = "https://github.com/althea-net/auto_bridge", tag = "v0.1.5"}
 web30 = {git = "https://github.com/althea-mesh/web30", branch = "master"}
 actix = "0.7"
-actix-web = { version = "0.7", default_features = false, features= ["ssl", "flate2-rust"] }
+actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
 actix-web-httpauth = {git = "https://github.com/althea-mesh/actix-web-httpauth"}
 actix_derive = "0.5"
 bytes = "0.4"
