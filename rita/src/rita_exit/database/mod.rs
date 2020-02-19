@@ -69,7 +69,8 @@ pub const ONE_DAY: i64 = 86400;
 
 pub fn get_exit_info() -> ExitDetails {
     const UPDATE_INTERVAL: Duration = Duration::from_secs(60);
-    if Instant::now() - EXIT_PRICE.read().unwrap().1 > UPDATE_INTERVAL {
+    let last_update = EXIT_PRICE.read().unwrap().1;
+    if Instant::now() > last_update && ((Instant::now() - last_update) > UPDATE_INTERVAL) {
         let mut exit_price = EXIT_PRICE.write().unwrap();
         let old_exit_price = exit_price.0;
         exit_price.0 = SETTING.get_exit_network().exit_price;
