@@ -22,6 +22,23 @@ pub struct Identity {
     pub nickname: Option<ArrayString<[u8; 32]>>,
 }
 
+impl Display for Identity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.nickname {
+            Some(nick) => write!(
+                f,
+                "nickname: {}, mesh_ip: {}, eth_address: {}, wg_pubkey {}",
+                nick, self.mesh_ip, self.eth_address, self.wg_public_key
+            ),
+            None => write!(
+                f,
+                "mesh_ip: {}, eth_address: {}, wg_pubkey {}",
+                self.mesh_ip, self.eth_address, self.wg_public_key
+            ),
+        }
+    }
+}
+
 impl Identity {
     pub fn new(
         mesh_ip: IpAddr,
