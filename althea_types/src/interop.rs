@@ -345,3 +345,19 @@ impl FromStr for ReleaseStatus {
         }
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OracleUpdate {
+    pub client: u32,
+    pub gateway: u32,
+    pub max: u32,
+    pub dao_fee: u128,
+    pub warning: u128,
+    pub system_chain: Option<SystemChain>,
+    pub withdraw_chain: Option<SystemChain>,
+    /// A release feed to be applied to the /etc/opkg/customfeeds.config, None means do not
+    /// change the currently configured release feed
+    pub release_feed: Option<String>,
+    /// A json payload to be merged into the existing settings
+    pub merge_json: serde_json::Value,
+}
