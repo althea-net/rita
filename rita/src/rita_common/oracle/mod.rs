@@ -17,7 +17,7 @@ use actix_web::error::PayloadError;
 use actix_web::{client, Either, HttpMessage, Result};
 use althea_kernel_interface::opkg_feeds::get_release_feed;
 use althea_kernel_interface::opkg_feeds::set_release_feed;
-use althea_types::SystemChain;
+use althea_types::OracleUpdate;
 use bytes::Bytes;
 use clarity::Address;
 use futures01::{future, Future};
@@ -285,22 +285,6 @@ fn update_gas_price(
         "Dynamically set close threshold to {:?}",
         payment_settings.close_threshold
     );
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct OracleUpdate {
-    client: u32,
-    gateway: u32,
-    max: u32,
-    dao_fee: u128,
-    warning: u128,
-    system_chain: Option<SystemChain>,
-    withdraw_chain: Option<SystemChain>,
-    /// A release feed to be applied to the /etc/opkg/customfeeds.config, None means do not
-    /// change the currently configured release feed
-    release_feed: Option<String>,
-    /// A json payload to be merged into the existing settings
-    merge_json: serde_json::Value,
 }
 
 /// This is a hacky version of the eventual on chain subnet DAO structure, since we can't get
