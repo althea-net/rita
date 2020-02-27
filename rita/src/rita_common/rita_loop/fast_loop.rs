@@ -1,6 +1,6 @@
 use crate::rita_common::debt_keeper::{DebtKeeper, SendUpdate};
+use crate::rita_common::network_monitor::NetworkInfo as NetworkMonitorTick;
 use crate::rita_common::network_monitor::NetworkMonitor;
-use crate::rita_common::network_monitor::Tick as NetworkMonitorTick;
 use crate::rita_common::oracle::{Oracle, Update};
 use crate::rita_common::payment_validator::{PaymentValidator, Validate};
 use crate::rita_common::peer_listener::GetPeers;
