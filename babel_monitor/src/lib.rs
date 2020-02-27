@@ -2,6 +2,12 @@
 //! it provides abastractions over the major data this interface provides and an async
 //! way to efficiently communicate with it.
 
+#![warn(clippy::all)]
+#![allow(clippy::pedantic)]
+#![forbid(unsafe_code)]
+
+#[macro_use]
+extern crate serde_derive;
 #[macro_use]
 extern crate failure;
 #[macro_use]
@@ -14,7 +20,7 @@ use futures::future::result as future_result;
 use futures::future::Either;
 use futures::future::Future;
 use ipnetwork::IpNetwork;
-use serde::Serialize;
+use std::f32;
 use std::iter::Iterator;
 use std::net::IpAddr;
 use std::net::SocketAddr;
@@ -55,9 +61,9 @@ use crate::BabelMonitorError::{
 // If a function doesn't need internal state of the Babel object
 // we don't want to place it as a member function.
 fn find_babel_val(val: &str, line: &str) -> Result<String, Error> {
-    let mut iter = line.split(" ");
+    let mut iter = line.split(' ');
     while let Some(entry) = iter.next() {
-        if entry.to_string() == val {
+        if entry == val {
             match iter.next() {
                 Some(v) => return Ok(v.to_string()),
                 None => continue,
@@ -65,7 +71,7 @@ fn find_babel_val(val: &str, line: &str) -> Result<String, Error> {
         }
     }
     warn!("find_babel_val warn! Can not find {} in {}", val, line);
-    return Err(VariableNotFound(String::from(val), String::from(line)).into());
+    Err(VariableNotFound(String::from(val), String::from(line)).into())
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -147,7 +153,7 @@ fn read_babel(
                 // prevent infinite recursion in error cases
                 warn!("Babel read timed out! {}", output);
                 return Box::new(future::err(
-                    ReadFailed(format!("Babel read timed out!")).into(),
+                    ReadFailed("Babel read timed out!".to_string()).into(),
                 ))
                     as Box<dyn Future<Item = (TcpStream, String), Error = Error>>;
             } else if full_buffer {
@@ -194,7 +200,7 @@ fn read_babel_sync(output: &str) -> Result<String, BabelMonitorError> {
                     "Babel returned bad/no; full output:\n{}\nEND OF BABEL OUTPUT",
                     ret
                 );
-                return Err(ReadFailed(ret).into());
+                return Err(ReadFailed(ret));
             }
             _ => continue,
         }
@@ -203,7 +209,7 @@ fn read_babel_sync(output: &str) -> Result<String, BabelMonitorError> {
         "Terminator was never found; full output:\n{:?}\nEND OF BABEL OUTPUT",
         ret
     );
-    return Err(NoTerminator(ret).into());
+    Err(NoTerminator(ret))
 }
 
 pub fn run_command(
@@ -244,9 +250,9 @@ fn validate_preamble(preamble: String) -> Result<(), Error> {
     // Note you have changed the config interface, bump to 1.1 in babel
     if preamble.contains("ALTHEA 0.1") {
         trace!("Attached OK to Babel with preamble: {}", preamble);
-        return Ok(());
+        Ok(())
     } else {
-        return Err(InvalidPreamble(preamble).into());
+        Err(InvalidPreamble(preamble).into())
     }
 }
 
@@ -261,7 +267,7 @@ pub fn get_local_fee(stream: TcpStream) -> impl Future<Item = (TcpStream, u32), 
 }
 
 fn get_local_fee_sync(babel_output: String) -> Result<u32, Error> {
-    let fee_entry = match babel_output.split("\n").nth(0) {
+    let fee_entry = match babel_output.split('\n').nth(0) {
         Some(entry) => entry,
         // Even an empty string wouldn't yield None
         None => return Err(LocalFeeNotFound(String::from("<Babel output is None>")).into()),
@@ -330,7 +336,7 @@ pub fn redistribute_ip(
     );
     run_command(stream, &command).then(move |result| {
         if let Err(e) = result {
-            return Either::A(future_result(Err(e).into()));
+            return Either::A(future_result(Err(e)));
         }
         let (stream, _out) = result.unwrap();
         Either::B(read_babel(stream, String::new(), 0))
@@ -362,10 +368,11 @@ pub fn parse_neighs(
     })
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn parse_neighs_sync(output: String) -> Result<Vec<Neighbor>, Error> {
     let mut vector: Vec<Neighbor> = Vec::with_capacity(5);
     let mut found_neigh = false;
-    for entry in output.split("\n") {
+    for entry in output.split('\n') {
         if entry.contains("add neighbour") {
             found_neigh = true;
             let neigh = Neighbor {
@@ -453,7 +460,7 @@ fn parse_neighs_sync(output: String) -> Result<Vec<Neighbor>, Error> {
             vector.push(neigh);
         }
     }
-    if vector.len() == 0 && found_neigh {
+    if vector.is_empty() && found_neigh {
         bail!("All Babel neigh parsing failed!")
     }
     Ok(vector)
@@ -471,12 +478,13 @@ pub fn parse_routes(
     })
 }
 
+#[allow(clippy::cognitive_complexity)]
 pub fn parse_routes_sync(babel_out: String) -> Result<Vec<Route>, Error> {
     let mut vector: Vec<Route> = Vec::with_capacity(20);
     let mut found_route = false;
     trace!("Got from babel dump: {}", babel_out);
 
-    for entry in babel_out.split("\n") {
+    for entry in babel_out.split('\n') {
         if entry.contains("add route") {
             trace!("Parsing 'add route' entry: {}", entry);
             found_route = true;
@@ -569,7 +577,7 @@ pub fn parse_routes_sync(babel_out: String) -> Result<Vec<Route>, Error> {
             vector.push(route);
         }
     }
-    if vector.len() == 0 && found_route {
+    if vector.is_empty() && found_route {
         bail!("All Babel route parsing failed!")
     }
     Ok(vector)
@@ -582,7 +590,7 @@ pub fn parse_routes_sync(babel_out: String) -> Result<Vec<Route>, Error> {
 pub fn get_route_via_neigh(
     neigh_mesh_ip: IpAddr,
     dest_mesh_ip: IpAddr,
-    routes: &Vec<Route>,
+    routes: &[Route],
 ) -> Result<Route, Error> {
     // First find the neighbors route to itself to get the local address
     for neigh_route in routes.iter() {
@@ -604,7 +612,7 @@ pub fn get_route_via_neigh(
     Err(NoNeighbor(neigh_mesh_ip.to_string()).into())
 }
 /// Checks if Babel has an installed route to the given destination
-pub fn do_we_have_route(mesh_ip: &IpAddr, routes: &Vec<Route>) -> Result<bool, Error> {
+pub fn do_we_have_route(mesh_ip: &IpAddr, routes: &[Route]) -> Result<bool, Error> {
     for route in routes.iter() {
         if let IpNetwork::V6(ref ip) = route.prefix {
             if ip.ip() == *mesh_ip && route.installed {
@@ -615,7 +623,7 @@ pub fn do_we_have_route(mesh_ip: &IpAddr, routes: &Vec<Route>) -> Result<bool, E
     Ok(false)
 }
 /// Returns the installed route to a given destination
-pub fn get_installed_route(mesh_ip: &IpAddr, routes: &Vec<Route>) -> Result<Route, Error> {
+pub fn get_installed_route(mesh_ip: &IpAddr, routes: &[Route]) -> Result<Route, Error> {
     let mut exit_route = None;
     for route in routes.iter() {
         // Only ip6
@@ -636,7 +644,7 @@ pub fn get_installed_route(mesh_ip: &IpAddr, routes: &Vec<Route>) -> Result<Rout
 mod tests {
     use super::*;
 
-    static TABLE: &'static str =
+    static TABLE: &str =
 "local fee 1024\n\
 metric factor 1900\n\
 add interface lo up false\n\
@@ -663,31 +671,31 @@ add route 241fee0 prefix fdc5:5bcb:24ac:b35a:4b7f:146a:a2a1:bdc4/128 from ::/0 i
 e6:95:6e:ff:fe:44:c4:12 metric 328 price 426000 fee 354600 refmetric 217 full-path-rtt 39.874 via fe80::6459:f009:c4b4:9971 if wg36
 ok\n";
 
-    static PREAMBLE: &'static str =
+    static PREAMBLE: &str =
         "ALTHEA 0.1\nversion babeld-1.8.0-24-g6335378\nhost raspberrypi\nmy-id \
          ba:27:eb:ff:fe:09:06:dd\nok\n";
 
-    static XROUTE_LINE: &'static str =
+    static XROUTE_LINE: &str =
         "add xroute 10.28.119.131/32-::/0 prefix 10.28.119.131/32 from ::/0 metric 0";
 
-    static ROUTE_LINE: &'static str =
+    static ROUTE_LINE: &str =
         "add route 14f06d8 prefix 10.28.20.151/32 from 0.0.0.0/0 installed yes id \
          ba:27:eb:ff:fe:c1:2d:d5 metric 1306 price 4008 refmetric 0 full-path-rtt 18.674 via \
          fe80::e9d0:498f:6c61:be29 if wlan0";
 
-    static PROBLEM_ROUTE_LINE: &'static str =
+    static PROBLEM_ROUTE_LINE: &str =
         "add route 241fee0 prefix fdc5:5bcb:24ac:b35a:4b7f:146a:a2a1:bdc4/128 \
          from ::/0 installed no id e6:95:6e:ff:fe:44:c4:12 metric 331 price 426000 fee 354600 refmetric 220 full-path-rtt \
          38.286 via fe80::6459:f009:c4b4:9971 if wg36";
 
-    static NEIGH_LINE: &'static str =
+    static NEIGH_LINE: &str =
         "add neighbour 14f05f0 address fe80::e9d0:498f:6c61:be29 if wlan0 reach ffff rxcost \
          256 txcost 256 rtt 29.264 rttcost 1050 cost 1306";
 
-    static IFACE_LINE: &'static str =
+    static IFACE_LINE: &str =
         "add interface wlan0 up true ipv6 fe80::1a8b:ec1:8542:1bd8 ipv4 10.28.119.131";
 
-    static PRICE_LINE: &'static str = "local price 1024";
+    static PRICE_LINE: &str = "local price 1024";
 
     #[test]
     fn line_parse() {
@@ -760,7 +768,9 @@ ok\n";
 
         let route = routes.get(0).unwrap();
         assert_eq!(route.price, 3072);
-        assert_eq!(route.full_path_rtt, 22.805);
+        // assert that these are equal within the minimum comparison difference
+        // of float values
+        assert!(route.full_path_rtt - 22.805 < f32::EPSILON);
     }
 
     #[test]
