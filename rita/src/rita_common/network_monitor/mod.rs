@@ -279,16 +279,17 @@ impl Handler<NetworkInfo> for NetworkMonitor {
     type Result = ();
 
     fn handle(&mut self, msg: NetworkInfo, _ctx: &mut Context<Self>) -> Self::Result {
-        let babel_neighbors = msg.babel_neighbors;
-        let babel_routes = msg.babel_routes;
-        let rita_neighbors = msg.rita_neighbors;
+        let babel_neighbors = &msg.babel_neighbors;
+        let babel_routes = &msg.babel_routes;
+        let rita_neighbors = &msg.rita_neighbors;
         observe_network(
-            &babel_neighbors,
-            &rita_neighbors,
+            babel_neighbors,
+            rita_neighbors,
             &mut self.latency_history,
             &mut self.packet_loss_history,
         );
-        network_stats(&babel_routes, &babel_neighbors);
+        network_stats(babel_routes, babel_neighbors);
+        self.last_babel_dump = Some(msg);
     }
 }
 

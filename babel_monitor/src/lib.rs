@@ -20,11 +20,14 @@ use futures::future::result as future_result;
 use futures::future::Either;
 use futures::future::Future;
 use ipnetwork::IpNetwork;
+use std::error::Error as ErrorTrait;
 use std::f32;
+use std::fmt::Debug;
 use std::iter::Iterator;
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::str;
+use std::str::FromStr;
 use std::time::Duration;
 use std::time::Instant;
 use tokio::io::read;
@@ -74,7 +77,23 @@ fn find_babel_val(val: &str, line: &str) -> Result<String, Error> {
     Err(VariableNotFound(String::from(val), String::from(line)).into())
 }
 
-#[derive(Debug, Clone, Serialize)]
+fn find_and_parse_babel_val<T: FromStr>(val: &str, line: &str) -> Result<T, Error>
+where
+    <T as FromStr>::Err: Debug + ErrorTrait + Sync + Send + 'static,
+{
+    match find_babel_val(val, line) {
+        Ok(string_val) => match string_val.parse() {
+            Ok(parsed_val) => Ok(parsed_val),
+            Err(e) => {
+                warn!("Error parsing {} from {} with {:?}", val, line, e);
+                Err(e.into())
+            }
+        },
+        Err(e) => Err(e),
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Route {
     pub id: String,
     pub iface: String,
@@ -368,7 +387,6 @@ pub fn parse_neighs(
     })
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn parse_neighs_sync(output: String) -> Result<Vec<Neighbor>, Error> {
     let mut vector: Vec<Neighbor> = Vec::with_capacity(5);
     let mut found_neigh = false;
@@ -380,14 +398,8 @@ fn parse_neighs_sync(output: String) -> Result<Vec<Neighbor>, Error> {
                     Ok(val) => val,
                     Err(_) => continue,
                 },
-                address: match find_babel_val("address", entry) {
-                    Ok(entry) => match entry.parse() {
-                        Ok(parsed_data) => parsed_data,
-                        Err(e) => {
-                            warn!("Error parsing address for neigh {:?} from {}", e, entry);
-                            continue;
-                        }
-                    },
+                address: match find_and_parse_babel_val("address", entry) {
+                    Ok(entry) => entry,
                     Err(_) => continue,
                 },
                 iface: match find_babel_val("if", entry) {
@@ -404,56 +416,26 @@ fn parse_neighs_sync(output: String) -> Result<Vec<Neighbor>, Error> {
                     },
                     Err(_) => continue,
                 },
-                txcost: match find_babel_val("txcost", entry) {
-                    Ok(entry) => match entry.parse() {
-                        Ok(parsed_data) => parsed_data,
-                        Err(e) => {
-                            warn!("Error parsing txcost for neigh {:?} from {}", e, entry);
-                            continue;
-                        }
-                    },
+                txcost: match find_and_parse_babel_val("txcost", entry) {
+                    Ok(entry) => entry,
                     Err(_) => continue,
                 },
-                rxcost: match find_babel_val("rxcost", entry) {
-                    Ok(entry) => match entry.parse() {
-                        Ok(parsed_data) => parsed_data,
-                        Err(e) => {
-                            warn!("Error parsing rxcost for neigh {:?} from {}", e, entry);
-                            continue;
-                        }
-                    },
+                rxcost: match find_and_parse_babel_val("rxcost", entry) {
+                    Ok(entry) => entry,
                     Err(_) => continue,
                 },
-                rtt: match find_babel_val("rtt", entry) {
-                    Ok(entry) => match entry.parse() {
-                        Ok(parsed_data) => parsed_data,
-                        Err(e) => {
-                            warn!("Error parsing rtt for neigh {:?} from {}", e, entry);
-                            continue;
-                        }
-                    },
+                rtt: match find_and_parse_babel_val("rtt", entry) {
+                    Ok(entry) => entry,
                     // it's possible that our neigh does not have rtt enabled, handle
                     Err(_) => 0.0,
                 },
-                rttcost: match find_babel_val("rttcost", entry) {
-                    Ok(entry) => match entry.parse() {
-                        Ok(parsed_data) => parsed_data,
-                        Err(e) => {
-                            warn!("Error parsing rtt for neigh {:?} from {}", e, entry);
-                            continue;
-                        }
-                    },
+                rttcost: match find_and_parse_babel_val("rttcost", entry) {
+                    Ok(entry) => entry,
                     // it's possible that our neigh does not have rtt enabled, handle
                     Err(_) => 0,
                 },
-                cost: match find_babel_val("cost", entry) {
-                    Ok(entry) => match entry.parse() {
-                        Ok(parsed_data) => parsed_data,
-                        Err(e) => {
-                            warn!("Error parsing cost for neigh {:?} from {}", e, entry);
-                            continue;
-                        }
-                    },
+                cost: match find_and_parse_babel_val("cost", entry) {
+                    Ok(entry) => entry,
                     Err(_) => continue,
                 },
             };
@@ -478,7 +460,6 @@ pub fn parse_routes(
     })
 }
 
-#[allow(clippy::cognitive_complexity)]
 pub fn parse_routes_sync(babel_out: String) -> Result<Vec<Route>, Error> {
     let mut vector: Vec<Route> = Vec::with_capacity(20);
     let mut found_route = false;
@@ -502,74 +483,32 @@ pub fn parse_routes_sync(babel_out: String) -> Result<Vec<Route>, Error> {
                     Ok(value) => value.contains("yes"),
                     Err(_) => continue,
                 },
-                neigh_ip: match find_babel_val("via", entry) {
-                    Ok(value) => match value.parse() {
-                        Ok(parsed_data) => parsed_data,
-                        Err(e) => {
-                            warn!("Error parsing neigh_ip for route {:?} from {}", e, entry);
-                            continue;
-                        }
-                    },
+                neigh_ip: match find_and_parse_babel_val("via", entry) {
+                    Ok(value) => value,
                     Err(_) => continue,
                 },
-                prefix: match find_babel_val("prefix", entry) {
-                    Ok(value) => match value.parse() {
-                        Ok(parsed_data) => parsed_data,
-                        Err(e) => {
-                            warn!("Error parsing prefix for route {:?} from {}", e, entry);
-                            continue;
-                        }
-                    },
+                prefix: match find_and_parse_babel_val("prefix", entry) {
+                    Ok(value) => value,
                     Err(_) => continue,
                 },
-                metric: match find_babel_val("metric", entry) {
-                    Ok(value) => match value.parse() {
-                        Ok(parsed_data) => parsed_data,
-                        Err(e) => {
-                            warn!("Error parsing metric for route {:?} from {}", e, entry);
-                            continue;
-                        }
-                    },
+                metric: match find_and_parse_babel_val("metric", entry) {
+                    Ok(value) => value,
                     Err(_) => continue,
                 },
-                refmetric: match find_babel_val("refmetric", entry) {
-                    Ok(value) => match value.parse() {
-                        Ok(parsed_data) => parsed_data,
-                        Err(e) => {
-                            warn!("Error parsing refmetric {:?} from {}", e, entry);
-                            continue;
-                        }
-                    },
+                refmetric: match find_and_parse_babel_val("refmetric", entry) {
+                    Ok(value) => value,
                     Err(_) => continue,
                 },
-                full_path_rtt: match find_babel_val("full-path-rtt", entry) {
-                    Ok(value) => match value.parse() {
-                        Ok(parsed_data) => parsed_data,
-                        Err(e) => {
-                            warn!("Error parsing full_path_rtt {:?} from {}", e, entry);
-                            continue;
-                        }
-                    },
+                full_path_rtt: match find_and_parse_babel_val("full-path-rtt", entry) {
+                    Ok(value) => value,
                     Err(_) => continue,
                 },
-                price: match find_babel_val("price", entry) {
-                    Ok(value) => match value.parse() {
-                        Ok(parsed_data) => parsed_data,
-                        Err(e) => {
-                            warn!("Error parsing price {:?} from {}", e, entry);
-                            continue;
-                        }
-                    },
+                price: match find_and_parse_babel_val("price", entry) {
+                    Ok(value) => value,
                     Err(_) => continue,
                 },
-                fee: match find_babel_val("fee", entry) {
-                    Ok(value) => match value.parse() {
-                        Ok(parsed_data) => parsed_data,
-                        Err(e) => {
-                            warn!("Error parsing fee {:?} from {}", e, entry);
-                            continue;
-                        }
-                    },
+                fee: match find_and_parse_babel_val("fee", entry) {
+                    Ok(value) => value,
                     Err(_) => continue,
                 },
             };
