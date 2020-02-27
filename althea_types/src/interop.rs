@@ -3,6 +3,7 @@ use arrayvec::ArrayString;
 use clarity::Address;
 use failure::Error;
 use num256::Uint256;
+use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
@@ -52,6 +53,19 @@ impl Identity {
             wg_public_key,
             nickname,
         }
+    }
+
+    pub fn get_hash(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    pub fn get_hash_array(&self) -> [u8; 8] {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        let bits = hasher.finish();
+        bits.to_be_bytes()
     }
 }
 
