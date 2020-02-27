@@ -160,6 +160,7 @@ fn has_packet_loss(sample: u16) -> bool {
 pub struct NetworkMonitor {
     latency_history: HashMap<String, RunningLatencyStats>,
     packet_loss_history: HashMap<String, RunningPacketLossStats>,
+    last_babel_dump: Option<NetworkInfo>,
 }
 
 impl Actor for NetworkMonitor {
@@ -183,6 +184,7 @@ impl NetworkMonitor {
         NetworkMonitor {
             latency_history: HashMap::new(),
             packet_loss_history: HashMap::new(),
+            last_babel_dump: None,
         }
     }
 }
@@ -249,17 +251,34 @@ impl Handler<GetStats> for NetworkMonitor {
     }
 }
 
-#[derive(Message)]
-pub struct Tick {
+pub struct GetNetworkInfo;
+
+impl Message for GetNetworkInfo {
+    type Result = Result<NetworkInfo, Error>;
+}
+
+impl Handler<GetNetworkInfo> for NetworkMonitor {
+    type Result = Result<NetworkInfo, Error>;
+
+    fn handle(&mut self, _msg: GetNetworkInfo, _ctx: &mut Context<Self>) -> Self::Result {
+        match self.last_babel_dump.clone() {
+            Some(dump) => Ok(dump),
+            None => Err(format_err!("No babel info ready!")),
+        }
+    }
+}
+
+#[derive(Message, Clone)]
+pub struct NetworkInfo {
     pub babel_neighbors: Vec<BabelNeighbor>,
     pub babel_routes: Vec<BabelRoute>,
     pub rita_neighbors: Vec<RitaNeighbor>,
 }
 
-impl Handler<Tick> for NetworkMonitor {
+impl Handler<NetworkInfo> for NetworkMonitor {
     type Result = ();
 
-    fn handle(&mut self, msg: Tick, _ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: NetworkInfo, _ctx: &mut Context<Self>) -> Self::Result {
         let babel_neighbors = msg.babel_neighbors;
         let babel_routes = msg.babel_routes;
         let rita_neighbors = msg.rita_neighbors;
