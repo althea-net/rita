@@ -4,6 +4,7 @@ version = "0.5.37"
 authors = ["Jehan <jehan.tremback@gmail.com>", "Ben <wangben3@gmail.com>"]
 build = "build.rs"
 edition = "2018"
+license = "AGPL-3.0-only"
 
 [[bin]]
 name = "rita_exit"

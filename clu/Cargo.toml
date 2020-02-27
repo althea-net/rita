@@ -3,6 +3,7 @@ authors = ["Justin <kilpatrickjustin@protonmail.ch>"]
 name = "clu"
 version = "0.0.1"
 edition = "2018"
+license = "AGPL-3.0-only"
 
 [dependencies]
 settings = { path = "../settings" }
