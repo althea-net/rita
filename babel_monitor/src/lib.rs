@@ -61,8 +61,6 @@ use crate::BabelMonitorError::{
     TokioError, VariableNotFound,
 };
 
-// If a function doesn't need internal state of the Babel object
-// we don't want to place it as a member function.
 fn find_babel_val(val: &str, line: &str) -> Result<String, Error> {
     let mut iter = line.split(' ');
     while let Some(entry) = iter.next() {
@@ -550,6 +548,17 @@ pub fn get_route_via_neigh(
     }
     Err(NoNeighbor(neigh_mesh_ip.to_string()).into())
 }
+
+/// Very simple utility function to get a neighbor given a route that traverses that neighbor
+pub fn get_neigh_given_route(route: &Route, neighs: &[Neighbor]) -> Option<Neighbor> {
+    for neigh in neighs.iter() {
+        if route.neigh_ip == neigh.address {
+            return Some(neigh.clone());
+        }
+    }
+    None
+}
+
 /// Checks if Babel has an installed route to the given destination
 pub fn do_we_have_route(mesh_ip: &IpAddr, routes: &[Route]) -> Result<bool, Error> {
     for route in routes.iter() {

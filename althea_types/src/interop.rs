@@ -380,13 +380,25 @@ pub struct OracleUpdate {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HeartBeatMessage {
+    /// The identity of the sender
     pub id: Identity,
-    pub oracle: Address,
+    /// The organizer address set on the device if any
+    pub organizer_address: Option<Address>,
+    /// The devices current balance, we could in theory query this
+    /// using the address in the id anyways, consider dropping
     pub balance: Uint256,
-    pub exit_dest_price: Uint256,
-    pub upstream_to_current_exit: Identity,
-    pub exit_connection_route: Route,
-    pub exit_connection_neighbor: Neighbor,
+    /// The full price this node is paying for each byte of traffic
+    /// in the usual unit of wei/byte
+    pub exit_dest_price: u64,
+    /// The identity of the upstream neighbor, being defined as the one
+    /// closer to the exit
+    pub upstream_id: Identity,
+    /// The babel Route to the exit, including details such as metric and
+    /// full path rtt
+    pub exit_route: Route,
+    /// The babel Neighbor over which our traffic flows, this gives us the Reach
+    /// (packet loss over 16 seconds) as well as the neighbor RTT
+    pub exit_neighbor: Neighbor,
 }
 
 /// Wrapper for secure box containing a HeartBeatMessage

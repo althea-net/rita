@@ -5,6 +5,7 @@
 //! tunnel if the signup was successful on the selected exit.
 
 use crate::rita_client::exit_manager::ExitManager;
+use crate::rita_client::heartbeat::send_udp_heartbeat;
 use crate::rita_client::light_client_manager::light_client_hello_response;
 use crate::rita_client::light_client_manager::LightClientManager;
 use crate::rita_client::light_client_manager::Watch;
@@ -15,7 +16,6 @@ use crate::rita_common::tunnel_manager::GetNeighbors;
 use crate::rita_common::tunnel_manager::GetTunnels;
 use crate::rita_common::tunnel_manager::TunnelManager;
 use crate::SETTING;
-use actix::actors::resolver;
 use actix::{
     Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
     SystemService,
@@ -27,9 +27,7 @@ use failure::Error;
 use futures01::future::Future;
 use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;
-use std::net::{SocketAddr, UdpSocket};
 use std::time::{Duration, Instant};
-type Resolver = resolver::Resolver;
 
 #[derive(Default)]
 pub struct RitaLoop;
@@ -37,8 +35,6 @@ pub struct RitaLoop;
 // the speed in seconds for the client loop
 pub const CLIENT_LOOP_SPEED: u64 = 5;
 pub const CLIENT_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
-
-pub const HEARBEAT_MESSAGE_PORT: u16 = 33333;
 
 impl Actor for RitaLoop {
     type Context = Context<Self>;
@@ -117,71 +113,6 @@ impl Handler<Tick> for RitaLoop {
         );
         Ok(())
     }
-}
-
-pub fn send_udp_heartbeat() {
-    let res = Resolver::from_registry()
-        .send(resolver::Resolve::host(
-            SETTING.get_log().heartbeat_url.clone(),
-        ))
-        .timeout(Duration::from_secs(1))
-        .then(move |res| match res {
-            Ok(Ok(dnsresult)) => {
-                if !dnsresult.is_empty() {
-                    for dns_socket in dnsresult {
-                        send_udp_heartbeat_packet(dns_socket);
-                    }
-                } else {
-                    trace!("Got zero length dns response: {:?}", dnsresult);
-                }
-                Ok(())
-            }
-
-            Err(e) => {
-                warn!("Actor mailbox failure from DNS resolver! {:?}", e);
-                Ok(())
-            }
-
-            Ok(Err(e)) => {
-                warn!("DNS resolution failed with {:?}", e);
-                Ok(())
-            }
-        });
-
-    Arbiter::spawn(res);
-}
-
-fn send_udp_heartbeat_packet(dns_socket: SocketAddr) {
-    let local_socketaddr = SocketAddr::from(([0, 0, 0, 0], HEARBEAT_MESSAGE_PORT));
-    let local_socket = match UdpSocket::bind(&local_socketaddr) {
-        Ok(s) => s,
-        Err(e) => {
-            error!("Couldn't bind to UDP heartbeat socket {:?}", e);
-            return;
-        }
-    };
-
-    let remote_ip = dns_socket.ip();
-    let remote = SocketAddr::new(remote_ip, HEARBEAT_MESSAGE_PORT);
-
-    trace!("Sending heartbeat to {:?}", remote_ip);
-
-    let message = match SETTING.get_identity() {
-        Some(i) => i,
-        None => return,
-    };
-    let json_message = match serde_json::to_vec(&message) {
-        Ok(m) => m,
-        Err(_) => return,
-    };
-
-    local_socket
-        .set_write_timeout(Some(Duration::new(0, 100)))
-        .expect("Couldn't set socket timeout");
-
-    local_socket
-        .send_to(&json_message, &remote)
-        .expect("Couldn't send heartbeat");
 }
 
 pub fn check_rita_client_actors() {
