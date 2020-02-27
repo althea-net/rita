@@ -1,5 +1,7 @@
 use crate::wg_key::WgKey;
 use arrayvec::ArrayString;
+use babel_monitor::Neighbor;
+use babel_monitor::Route;
 use clarity::Address;
 use failure::Error;
 use num256::Uint256;
@@ -374,4 +376,23 @@ pub struct OracleUpdate {
     pub release_feed: Option<String>,
     /// A json payload to be merged into the existing settings
     pub merge_json: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HeartBeatMessage {
+    pub id: Identity,
+    pub oracle: Address,
+    pub balance: Uint256,
+    pub exit_dest_price: Uint256,
+    pub upstream_to_current_exit: Identity,
+    pub exit_connection_route: Route,
+    pub exit_connection_neighbor: Neighbor,
+}
+
+/// Wrapper for secure box containing a HeartBeatMessage
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct EncryptedHeartBeatMessage {
+    pub pubkey: WgKey,
+    pub nonce: [u8; 24],
+    pub encrypted_heart_beat_messsage: Vec<u8>,
 }

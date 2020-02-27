@@ -183,6 +183,7 @@ version = "0.1.0"
 dependencies = [
  "actix",
  "arrayvec 0.5.1",
+ "babel_monitor",
  "base64 0.11.0",
  "clarity",
  "failure",

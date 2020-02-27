@@ -108,7 +108,7 @@ pub struct Route {
     pub fee: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Neighbor {
     pub id: String,
     pub address: IpAddr,
