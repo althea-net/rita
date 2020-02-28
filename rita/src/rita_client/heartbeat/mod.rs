@@ -189,15 +189,10 @@ fn send_udp_heartbeat_packet(
     let ciphertext = box_::seal(&plaintext, &nonce, &their_publickey, &our_secretkey);
 
     let mut packet_contents = Vec::new();
-    for byte in our_publickey.as_ref().iter() {
-        packet_contents.push(*byte);
-    }
-    for byte in nonce.0.iter() {
-        packet_contents.push(*byte);
-    }
-    for byte in ciphertext.iter() {
-        packet_contents.push(*byte);
-    }
+    // build the packet from slices
+    packet_contents.extend_from_slice(our_publickey.as_ref());
+    packet_contents.extend_from_slice(&nonce.0);
+    packet_contents.extend_from_slice(&ciphertext);
 
     if let Err(e) = local_socket.set_write_timeout(Some(Duration::new(0, 100))) {
         trace!("Failed to set socket timeout {:?}, skipping!", e);
