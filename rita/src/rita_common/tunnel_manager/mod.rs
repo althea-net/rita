@@ -284,9 +284,6 @@ impl Tunnel {
         if let Err(e) = KI.del_interface(&self.iface_name) {
             error!("Failed to delete wg interface! {:?}", e);
         }
-        if let Err(e) = KI.delete_light_client_nat_rules(&self.iface_name) {
-            error!("Failed to delete wg interface! {:?}", e);
-        }
         TunnelManager::from_registry().do_send(PortCallback(self.listen_port));
         // there's a garbage collector function over in light_client_manager
         // to handle the return of addresses it's less efficient than shooting

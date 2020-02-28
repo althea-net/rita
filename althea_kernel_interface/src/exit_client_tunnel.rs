@@ -156,7 +156,10 @@ impl dyn KernelInterface {
         Ok(())
     }
 
-    pub fn add_client_nat_rules(&self, lan_nic: &str) -> Result<(), Error> {
+    /// Adds nat rules for all clients, phone clients and lan clients alike hit
+    /// these same rules, there is no forward spec here becuase forward is in general
+    /// allowed on the routers and we stick to restricting input and output.
+    pub fn create_client_nat_rules(&self, _lan_nic: &str) -> Result<(), Error> {
         self.add_iptables_rule(
             "iptables",
             &[
@@ -168,18 +171,6 @@ impl dyn KernelInterface {
                 "wg_exit",
                 "-j",
                 "MASQUERADE",
-            ],
-        )?;
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-A", "FORWARD", "-i", &lan_nic, "-o", "wg_exit", "-j", "ACCEPT",
-            ],
-        )?;
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-A", "FORWARD", "-i", "wg_exit", "-o", &lan_nic, "-j", "ACCEPT",
             ],
         )?;
         self.add_iptables_rule(
@@ -202,80 +193,16 @@ impl dyn KernelInterface {
         Ok(())
     }
 
-    pub fn delete_client_nat_rules(&self, lan_nic: &str) -> Result<(), Error> {
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-t",
-                "nat",
-                "-D",
-                "POSTROUTING",
-                "-o",
-                "wg_exit",
-                "-j",
-                "MASQUERADE",
-            ],
-        )?;
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-D", "FORWARD", "-i", &lan_nic, "-o", "wg_exit", "-j", "ACCEPT",
-            ],
-        )?;
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-D", "FORWARD", "-i", "wg_exit", "-o", &lan_nic, "-j", "ACCEPT",
-            ],
-        )?;
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-D",
-                "FORWARD",
-                "-p",
-                "tcp",
-                "--tcp-flags",
-                "SYN,RST",
-                "SYN",
-                "-j",
-                "TCPMSS",
-                "--clamp-mss-to-pmtu", //should be the same as --set-mss 1300
-            ],
-        )?;
-
+    /// blocks the client nat by inserting a blocker in the start of the special lan forwarding
+    /// table created by openwrt.
+    pub fn block_client_nat(&self) -> Result<(), Error> {
+        self.add_iptables_rule("iptables", &["-I", "zone_lan_forward", "-j", "REJECT"])?;
         Ok(())
     }
 
-    pub fn add_light_client_nat_rules(&self, lan_nic: &str) -> Result<(), Error> {
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-D", "FORWARD", "-i", &lan_nic, "-o", "wg_exit", "-j", "ACCEPT",
-            ],
-        )?;
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-D", "FORWARD", "-i", "wg_exit", "-o", &lan_nic, "-j", "ACCEPT",
-            ],
-        )?;
-        Ok(())
-    }
-
-    pub fn delete_light_client_nat_rules(&self, lan_nic: &str) -> Result<(), Error> {
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-D", "FORWARD", "-i", &lan_nic, "-o", "wg_exit", "-j", "ACCEPT",
-            ],
-        )?;
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-D", "FORWARD", "-i", "wg_exit", "-o", &lan_nic, "-j", "ACCEPT",
-            ],
-        )?;
+    /// Removes the block created by block_client_nat() will fail if not run after that command
+    pub fn restore_client_nat(&self) -> Result<(), Error> {
+        self.add_iptables_rule("iptables", &["-D", "zone_lan_forward", "-j", "REJECT"])?;
         Ok(())
     }
 }

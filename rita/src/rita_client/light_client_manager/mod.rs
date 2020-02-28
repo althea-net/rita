@@ -46,7 +46,8 @@ fn setup_light_client_forwarding(client_addr: Ipv4Addr, nic: &str) -> Result<(),
     // get cleaned up on their own whent the interface is deleted I'm not
     // so sure about the iptables rules yet
     trace!("adding light client nat rules");
-    KI.add_light_client_nat_rules(nic)?;
+    // in theory there should be some forwarding rules for iptables right here
+    // but these are not required because we use forward by default in the system firewall rules
     KI.add_ipv4("192.168.20.0".parse().unwrap(), nic)?;
     KI.run_command(
         "ip",
