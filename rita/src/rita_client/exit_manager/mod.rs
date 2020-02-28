@@ -70,10 +70,22 @@ fn linux_setup_exit_tunnel(
 
     let lan_nics = &SETTING.get_exit_client().lan_nics;
     for nic in lan_nics {
-        KI.add_client_nat_rules(&nic)?;
+        KI.create_client_nat_rules(&nic)?;
     }
 
     Ok(())
+}
+
+fn restore_nat() {
+    if let Err(e) = KI.restore_client_nat() {
+        error!("Failed to restore client nat! {:?}", e);
+    }
+}
+
+fn remove_nat() {
+    if let Err(e) = KI.block_client_nat() {
+        error!("Failed to block client nat! {:?}", e);
+    }
 }
 
 pub fn get_exit_info(to: &SocketAddr) -> impl Future<Item = ExitState, Error = Error> {
@@ -443,19 +455,31 @@ impl Handler<Tick> for ExitManager {
                 // when deployments are not interested in having a sufficiently fast one
                 let low_balance = low_balance();
                 let nat_setup = self.nat_setup;
+                trace!(
+                    "client can use free tier {} low balance {}",
+                    client_can_use_free_tier,
+                    low_balance
+                );
                 match (low_balance, client_can_use_free_tier, nat_setup) {
+                    // remove when we have a low balance, do not have a free tier
+                    // and have a nat setup.
                     (true, false, true) => {
-                        let lan_nics = &SETTING.get_exit_client().lan_nics;
-                        for nic in lan_nics {
-                            KI.delete_client_nat_rules(&nic).unwrap();
-                        }
+                        trace!("removing exit tunnel!");
+                        remove_nat();
                         self.nat_setup = false;
                     }
+                    // restore when our balance is not low and our nat is not setup
+                    // regardless of the free tier value
                     (false, _, false) => {
-                        let lan_nics = &SETTING.get_exit_client().lan_nics;
-                        for nic in lan_nics {
-                            KI.add_client_nat_rules(&nic).unwrap();
-                        }
+                        trace!("restoring exit tunnel!");
+                        restore_nat();
+                        self.nat_setup = true;
+                    }
+                    // restore if the nat is not setup and the free tier is enabled
+                    // this only happens when settings change under the hood
+                    (true, true, false) => {
+                        trace!("restoring exit tunnel!");
+                        restore_nat();
                         self.nat_setup = true;
                     }
                     _ => {}
