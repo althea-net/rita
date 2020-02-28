@@ -3,6 +3,9 @@
 //! heartbeat contains data about routing, balance, and implicit in it's sending data that the router is up and functioning.
 //! This data is sent as a udp fire and forget packet. Take note that if this packet is larger than the MTU you may run into
 //! issues, so be careful expanding it.
+//!
+//! This packet is encrypted using the usual box construction and sent to the heartbeat server in the following format
+//! WgKey, Nonce, Ciphertext for the HeartBeatMessage. This consumes 32 bytes, 24 bytes, and to the end of the message
 
 use crate::rita_client::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::rita_common::network_monitor::GetNetworkInfo;
@@ -24,10 +27,13 @@ use futures01::future::Future;
 use settings::client::ExitServer;
 use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;
+use sodiumoxide::crypto::box_;
 use std::net::{SocketAddr, UdpSocket};
 use std::time::Duration;
 
 type Resolver = resolver::Resolver;
+
+const HEARTBEAT_SERVER_KEY: &str = "hizclQFo/ArWY+/9+AJ0LBY2dTiQK4smy5icM7GA5ng=";
 
 pub fn send_udp_heartbeat() {
     let dns_request = Resolver::from_registry()
@@ -142,6 +148,16 @@ fn send_udp_heartbeat_packet(
     exit_neighbor: Neighbor,
     exit_neighbor_id: Identity,
 ) {
+    let network_settings = SETTING.get_network();
+    let our_publickey = network_settings.wg_public_key.expect("No public key?");
+    let our_secretkey = network_settings
+        .wg_private_key
+        .expect("No private key?")
+        .into();
+    let their_publickey: WgKey = HEARTBEAT_SERVER_KEY.parse().unwrap();
+    let their_publickey = their_publickey.into();
+    drop(network_settings);
+
     let remote_ip = dns_socket.ip();
     let remote_port = dns_socket.port();
     let remote = dns_socket;
@@ -166,17 +182,29 @@ fn send_udp_heartbeat_packet(
         exit_route,
         exit_neighbor,
     };
-    let json_message = match serde_json::to_vec(&message) {
-        Ok(m) => m,
-        Err(_) => return,
-    };
+    // serde will only fail under specific circumstances with specific structs
+    // given the fixed nature of our application here I think this is safe
+    let plaintext = serde_json::to_vec(&message).unwrap();
+    let nonce = box_::gen_nonce();
+    let ciphertext = box_::seal(&plaintext, &nonce, &their_publickey, &our_secretkey);
+
+    let mut packet_contents = Vec::new();
+    for byte in our_publickey.as_ref().iter() {
+        packet_contents.push(*byte);
+    }
+    for byte in nonce.0.iter() {
+        packet_contents.push(*byte);
+    }
+    for byte in ciphertext.iter() {
+        packet_contents.push(*byte);
+    }
 
     if let Err(e) = local_socket.set_write_timeout(Some(Duration::new(0, 100))) {
         trace!("Failed to set socket timeout {:?}, skipping!", e);
         return;
     }
 
-    match local_socket.send_to(&json_message, &remote) {
+    match local_socket.send_to(&packet_contents, &remote) {
         Ok(bytes) => trace!("Sent {} heartbeat bytes", bytes),
         Err(e) => error!("Failed to send heartbeat with {:?}", e),
     }

@@ -400,11 +400,3 @@ pub struct HeartBeatMessage {
     /// (packet loss over 16 seconds) as well as the neighbor RTT
     pub exit_neighbor: Neighbor,
 }
-
-/// Wrapper for secure box containing a HeartBeatMessage
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
-pub struct EncryptedHeartBeatMessage {
-    pub pubkey: WgKey,
-    pub nonce: [u8; 24],
-    pub encrypted_heart_beat_messsage: Vec<u8>,
-}
