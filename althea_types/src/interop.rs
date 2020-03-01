@@ -379,7 +379,7 @@ pub struct OracleUpdate {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HeartBeatMessage {
+pub struct HeartbeatMessage {
     /// The identity of the sender
     pub id: Identity,
     /// The organizer address set on the device if any

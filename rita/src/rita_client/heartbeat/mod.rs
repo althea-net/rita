@@ -15,7 +15,7 @@ use crate::rita_common::utils::option_deref;
 use crate::SETTING;
 use actix::actors::resolver;
 use actix::{Arbiter, SystemService};
-use althea_types::HeartBeatMessage;
+use althea_types::HeartbeatMessage;
 use althea_types::Identity;
 use althea_types::WgKey;
 use babel_monitor::get_installed_route;
@@ -173,7 +173,7 @@ fn send_udp_heartbeat_packet(
 
     trace!("Sending heartbeat to {:?}", remote_ip);
 
-    let message = HeartBeatMessage {
+    let message = HeartbeatMessage {
         id: our_id,
         organizer_address: option_deref(SETTING.get_dao().dao_addresses.get(0)),
         balance: SETTING.get_payment().balance.clone(),
