@@ -60,10 +60,10 @@ fn decrypt_exit_client_id(
     let their_wg_pubkey = val.pubkey;
     let their_nacl_pubkey = val.pubkey.into();
     let their_nonce = Nonce(val.nonce);
-    let chipertext = val.encrypted_exit_client_id;
+    let ciphertext = val.encrypted_exit_client_id;
 
     let decrypted_bytes =
-        match box_::open(&chipertext, &their_nonce, &their_nacl_pubkey, our_secretkey) {
+        match box_::open(&ciphertext, &their_nonce, &their_nacl_pubkey, our_secretkey) {
             Ok(value) => value,
             Err(e) => {
                 error!(
