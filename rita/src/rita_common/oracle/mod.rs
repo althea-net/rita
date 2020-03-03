@@ -24,11 +24,24 @@ use futures01::{future, Future};
 use num256::Int256;
 use num256::Uint256;
 use num_traits::identities::Zero;
+use serde_json::Map;
+use serde_json::Value;
 use settings::payment::PaymentSettings;
 use settings::RitaCommonSettings;
 use std::time::Duration;
 use std::time::Instant;
 use web30::client::Web3;
+
+/// Things that you are not allowed to put into the merge json field of the oracle,
+/// this mostly includes dangerous local things like eth private keys (erase money)
+/// ports (destory all networking) etc etc
+const FORBIDDEN_MERGE_VALUES: [&str; 5] = [
+    "eth_private_key",
+    "eth_address",
+    "mesh_ip",
+    "external_nic",
+    "peer_interfaces",
+];
 
 pub struct Oracle {
     /// An instant representing the start of a short period where the balance can
@@ -370,17 +383,8 @@ fn update_oracle() {
                                                 let mut dao = SETTING.get_dao_mut();
                                                 dao.dao_fee = new_dao_fee;
                                             }
-                                            // merge in arbitrary setting change string if it's not blank
-                                            if new_settings.merge_json != "" {
-                                                match SETTING.merge(new_settings.merge_json.clone())
-                                                {
-                                                    Ok(_) => {}
-                                                    Err(e) => error!(
-                                                        "Failed to merge oracle settings {:?} {:?}",
-                                                        new_settings.merge_json, e
-                                                    ),
-                                                }
-                                            }
+
+                                            merge_settings_safely(new_settings.merge_json);
 
                                             // update the release feed to the provided release
                                             // gated on "None" to prevent reading a file if there is
@@ -454,6 +458,78 @@ fn handle_release_feed_update(val: Option<String>) {
                     }
                 }
             }
+        }
+    }
+}
+
+/// Merges an arbitrary settings string, after first filtering for several
+/// forbidden values
+fn merge_settings_safely(new_settings: Value) {
+    // merge in arbitrary setting change string if it's not blank
+    if new_settings != "" {
+        if let Value::Object(map) = new_settings.clone() {
+            let contains_forbidden_key = contains_forbidden_key(map, &FORBIDDEN_MERGE_VALUES);
+            if !contains_forbidden_key {
+                match SETTING.merge(new_settings.clone()) {
+                    Ok(_) => trace!("Merged new settings successfully {:?}", new_settings),
+                    Err(e) => error!("Failed to merge oracle settings {:?} {:?}", new_settings, e),
+                }
+            } else {
+                info!("Merge Json contains forbidden key! {:?}", new_settings);
+            }
+        }
+    }
+}
+
+/// Recursively traverses down a json object looking for items in the
+/// forbidden keys list
+fn contains_forbidden_key(map: Map<String, Value>, forbidden_values: &[&str]) -> bool {
+    // check if any top level keys are forbidden
+    for item in forbidden_values.iter() {
+        println!("Checking key {} versus {:?}", item, map);
+        if map.contains_key(*item) {
+            return true;
+        }
+    }
+    // bfs for subkeys that are forbidden
+    let mut results: Vec<bool> = Vec::new();
+    for (_name, new_obj) in map.iter() {
+        if let Value::Object(new_map) = new_obj {
+            results.push(contains_forbidden_key(new_map.clone(), forbidden_values));
+        }
+    }
+    // look over all the results, any true values
+    // mean we end our check
+    for result in results {
+        if result {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FORBIDDEN_MERGE_VALUES: [&str; 2] = ["test_key", "other_test_key"];
+
+    #[test]
+    fn test_contains_key() {
+        // exact key match should fail
+        let object = json!({"localization": { "wyre_enabled": true, "wyre_account_id": "test_key", "test_key": false}});
+        if let Value::Object(map) = object {
+            assert!(contains_forbidden_key(map, &FORBIDDEN_MERGE_VALUES));
+        } else {
+            panic!("Not a json map!");
+        }
+
+        // slightly modified key should not match
+        let object = json!({"localization": { "wyre_enabled": true, "wyre_account_id": "test_key", "test_key1": false}});
+        if let Value::Object(map) = object {
+            assert!(!contains_forbidden_key(map, &FORBIDDEN_MERGE_VALUES));
+        } else {
+            panic!("Not a json map!");
         }
     }
 }
