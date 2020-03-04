@@ -26,6 +26,7 @@ use settings::FileWrite;
 use settings::RitaCommonSettings;
 use std::boxed::Box;
 use std::collections::HashMap;
+use std::time::Duration;
 
 #[derive(Serialize)]
 pub struct ExitInfo {
@@ -43,6 +44,8 @@ impl Message for GetExitInfo {
     type Result = Result<Vec<ExitInfo>, Error>;
 }
 
+const EXIT_PING_TIMEOUT: Duration = Duration::from_millis(200);
+
 /// Checks if the provided exit is selected
 fn is_selected(exit: &ExitServer, current_exit: Option<&ExitServer>) -> bool {
     match current_exit {
@@ -56,7 +59,7 @@ fn is_selected(exit: &ExitServer, current_exit: Option<&ExitServer>) -> bool {
 fn is_tunnel_working(exit: &ExitServer, current_exit: Option<&ExitServer>) -> bool {
     match (current_exit, is_selected(exit, current_exit)) {
         (Some(exit), true) => match exit.info.general_details() {
-            Some(details) => match KI.ping_check_v4(&details.server_internal_ip) {
+            Some(details) => match KI.ping_check(&details.server_internal_ip, EXIT_PING_TIMEOUT) {
                 Ok(ping_result) => ping_result,
                 Err(_) => false,
             },
@@ -92,7 +95,7 @@ impl Handler<GetExitInfo> for Dashboard {
                                 // failed pings block for one second, so we should be sure it's at least reasonable
                                 // to expect the pings to work before issuing them.
                                 let reachable = if have_route {
-                                    KI.ping_check_v6(&exit.1.id.mesh_ip)?
+                                    KI.ping_check(&exit.1.id.mesh_ip, EXIT_PING_TIMEOUT)?
                                 } else {
                                     false
                                 };
