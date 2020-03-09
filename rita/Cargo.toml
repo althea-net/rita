@@ -43,7 +43,7 @@ ipnetwork = "0.14"
 lazy_static = "1.4"
 log = { version = "0.4", features = ["release_max_level_info"] }
 minihttpse = "0.1"
-mockito = "0.22"
+mockito = "0.23"
 mockstream = "0.0"
 rand = "0.7"
 serde = "1.0"
