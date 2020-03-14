@@ -297,17 +297,17 @@ fn handle_tx_messaging(
     match (to_us, from_us, is_in_chain) {
         // we where successfully paid
         (true, false, true) => {
-            info!(
-                "payment {:#066x} from {} for {} wei successfully validated!",
-                txid, from_address, amount
-            );
             let res = PaymentValidator::from_registry()
                 .send(Remove {
                     tx: ts,
                     success: true,
                 })
-                .and_then(|res| {
+                .and_then(move |res| {
                     if res.is_ok() {
+                        info!(
+                            "payment {:#066x} from {} for {} wei successfully validated!",
+                            txid, from_address, amount
+                        );
                         DebtKeeper::from_registry().do_send(PaymentReceived {
                             from: pmt.from,
                             amount: pmt.amount.clone(),
@@ -315,6 +315,11 @@ fn handle_tx_messaging(
 
                         // update the usage tracker with the details of this payment
                         UsageTracker::from_registry().do_send(UpdatePayments { payment: pmt });
+                    } else {
+                        info!(
+                            "payment {:#066x} from {} for {} wei duplicate validation attempt!",
+                            txid, from_address, amount
+                        );
                     }
                     Ok(())
                 })
