@@ -6,6 +6,7 @@
 
 use crate::rita_client::exit_manager::ExitManager;
 use crate::rita_client::heartbeat::send_udp_heartbeat;
+use crate::rita_client::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::rita_client::light_client_manager::light_client_hello_response;
 use crate::rita_client::light_client_manager::LightClientManager;
 use crate::rita_client::light_client_manager::Watch;
@@ -23,14 +24,24 @@ use actix::{
 use actix_web::http::Method;
 use actix_web::{server, App};
 use althea_types::ExitState;
+use antenna_forwarding_client::start_antenna_forwarding_proxy;
 use failure::Error;
 use futures01::future::Future;
 use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;
 use std::time::{Duration, Instant};
 
-#[derive(Default)]
-pub struct RitaLoop;
+pub struct RitaLoop {
+    antenna_forwarder_started: bool,
+}
+
+impl Default for RitaLoop {
+    fn default() -> Self {
+        RitaLoop {
+            antenna_forwarder_started: false,
+        }
+    }
+}
 
 // the speed in seconds for the client loop
 pub const CLIENT_LOOP_SPEED: u64 = 5;
@@ -104,6 +115,21 @@ impl Handler<Tick> for RitaLoop {
 
         if SETTING.get_log().enabled {
             send_udp_heartbeat();
+
+            if !self.antenna_forwarder_started {
+                let network = SETTING.get_network();
+                let our_id = SETTING.get_identity().unwrap();
+                let logging = SETTING.get_log();
+                start_antenna_forwarding_proxy(
+                    logging.forwarding_checkin_url.clone(),
+                    our_id,
+                    *HEARTBEAT_SERVER_KEY,
+                    network.wg_public_key.unwrap(),
+                    network.wg_private_key.unwrap(),
+                    network.peer_interfaces.clone(),
+                );
+                self.antenna_forwarder_started = true;
+            }
         }
 
         info!(
