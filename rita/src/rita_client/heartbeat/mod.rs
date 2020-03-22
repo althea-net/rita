@@ -33,7 +33,11 @@ use std::time::Duration;
 
 type Resolver = resolver::Resolver;
 
-const HEARTBEAT_SERVER_KEY: &str = "hizclQFo/ArWY+/9+AJ0LBY2dTiQK4smy5icM7GA5ng=";
+lazy_static! {
+    pub static ref HEARTBEAT_SERVER_KEY: WgKey = "hizclQFo/ArWY+/9+AJ0LBY2dTiQK4smy5icM7GA5ng="
+        .parse()
+        .unwrap();
+}
 
 pub fn send_udp_heartbeat() {
     let dns_request = Resolver::from_registry()
@@ -154,7 +158,7 @@ fn send_udp_heartbeat_packet(
         .wg_private_key
         .expect("No private key?")
         .into();
-    let their_publickey: WgKey = HEARTBEAT_SERVER_KEY.parse().unwrap();
+    let their_publickey: WgKey = *HEARTBEAT_SERVER_KEY;
     let their_publickey = their_publickey.into();
     drop(network_settings);
 
