@@ -1,0 +1,104 @@
+image: rust:latest
+
+before_script:
+  - apt-get -qq update
+  - apt-get install -y libsqlite3-dev curl git libssl-dev build-essential libpq-dev
+  - rustup component add rustfmt
+  - rustup component add clippy
+
+
+stages:
+  - build
+  - lint
+  - test
+  
+build_rita_exit_x86:
+  stage: build
+  script:
+    - "cd rita && cargo build --bin rita_exit"
+
+build_rita:
+  stage: build
+  script:
+    - "cd rita && cargo build --bin rita"
+
+lint_opt_level:
+  stage: lint
+  script:
+    - 'grep -q ''opt-level = "z"'' Cargo.toml'
+lint_audit:
+  stage: lint
+  script:
+    - "cargo install cargo-audit --force && cargo audit"
+lint_geiger:
+  stage: lint
+  script:
+    - "cargo install cargo-geiger --force && cargo geiger"
+lint_fmt:
+  stage: lint
+  script:
+   - cargo fmt --all -- --check
+
+
+test_rita_exit_x86:
+  stage: test
+  script:
+    - "cd rita && RUST_TEST_THREADS=1 cargo test --verbose --bin rita_exit"
+
+test_rita_x86:
+  stage: test
+  script:
+    - "cd rita && RUST_TEST_THREADS=1 cargo test --bin rita --verbose"
+
+# integration_test_basic:
+#   stage: integration_test
+#   script:
+#     - ./integration-tests/rita.sh
+#   variables:
+#     SPEEDTEST_THROUGHPUT: "20"
+#     SPEEDTEST_DURATION: "15"
+#     INITIAL_POLL_INTERVAL: 5 
+#     BACKOFF_FACTOR: "1.5" 
+#     VERBOSE: 1
+#     POSTGRES_USER: postgres 
+#     POSTGRES_BIN: /usr/lib/postgresql/9.6/bin/postgres
+#     POSTGRES_DATABASE: /var/ramfs/postgresql/9.6/main
+#     POSTGRES_CONFIG: /etc/postgresql/9.6/main/postgresql.conf
+
+# integration_test_backwards_to_master:
+#   stage: integration_test
+#   script:
+#     - ./integration-tests/rita.sh
+#   variables:
+#     REVISION_B: master 
+#     REMOTE_A: ".."
+#     REMOTE_B: "https://github.com/althea-mesh/althea_rs.git"
+#     COMPAT_LAYOUT: "inner_ring_old"
+#     SPEEDTEST_THROUGHPUT: "20"
+#     SPEEDTEST_DURATION: "15"
+#     INITIAL_POLL_INTERVAL: 5 
+#     BACKOFF_FACTOR: "1.5" 
+#     VERBOSE: 1
+#     POSTGRES_USER: postgres 
+#     POSTGRES_BIN: /usr/lib/postgresql/9.6/bin/postgres
+#     POSTGRES_DATABASE: /var/ramfs/postgresql/9.6/main
+#     POSTGRES_CONFIG: /etc/postgresql/9.6/main/postgresql.conf
+
+# integration_test_backwards_to_release:
+#   stage: integration_test
+#   script:
+#     - ./integration-tests/rita.sh
+#   variables:
+#     REVISION_B: release 
+#     REMOTE_A: ".."
+#     REMOTE_B: "https://github.com/althea-mesh/althea_rs.git"
+#     COMPAT_LAYOUT: "inner_ring_old"
+#     SPEEDTEST_THROUGHPUT: "20"
+#     SPEEDTEST_DURATION: "15"
+#     INITIAL_POLL_INTERVAL: 5 
+#     BACKOFF_FACTOR: "1.5" 
+#     VERBOSE: 1
+#     POSTGRES_USER: postgres 
+#     POSTGRES_BIN: /usr/lib/postgresql/9.6/bin/postgres
+#     POSTGRES_DATABASE: /var/ramfs/postgresql/9.6/main
+#     POSTGRES_CONFIG: /etc/postgresql/9.6/main/postgresql.conf
