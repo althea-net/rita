@@ -196,13 +196,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "antenna-forwarding-client"
+name = "antenna_forwarding_client"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/althea-net/organizer-tools.git#48f0489e7c3c649aaebc035542cf3a50a0bcfbfe"
 dependencies = [
  "althea_kernel_interface",
  "althea_types",
- "antenna-forwarding-protocol",
+ "antenna_forwarding_protocol",
  "env_logger",
  "failure",
  "get_if_addrs",
@@ -214,9 +213,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "antenna-forwarding-protocol"
+name = "antenna_forwarding_protocol"
 version = "0.1.0"
-source = "git+ssh://git@gitlab.com/althea-net/organizer-tools.git#48f0489e7c3c649aaebc035542cf3a50a0bcfbfe"
 dependencies = [
  "althea_types",
  "clarity",
@@ -2454,7 +2452,7 @@ dependencies = [
  "actix_derive 0.5.0",
  "althea_kernel_interface",
  "althea_types",
- "antenna-forwarding-client",
+ "antenna_forwarding_client",
  "arrayvec 0.5.1",
  "auto-bridge",
  "babel_monitor",

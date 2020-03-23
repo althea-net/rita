@@ -12,17 +12,10 @@ server = ["rita/server"]
 rita = { path = "./rita" }
 
 [workspace]
-members = ["althea_kernel_interface", "settings", "clu", "exit_db"]
+members = ["althea_kernel_interface", "settings", "clu", "exit_db", "antenna_forwarding_client", "antenna_forwarding_protocol"]
 
 [profile.release]
 opt-level = "z"
 lto = true
 codegen-units = 1
 incremental = false
-
-[patch.crates-io]
-
-[patch.'ssh://git@gitlab.com/althea-net/althea_rs.git']
-althea_kernel_interface = { path = "althea_kernel_interface" }
-althea_types = { path = "althea_types"}
-

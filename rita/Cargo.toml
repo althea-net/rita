@@ -15,13 +15,13 @@ path = "src/client.rs"
 
 [dependencies]
 althea_kernel_interface = { path = "../althea_kernel_interface" }
-althea_types = { path = "../althea_types", features = ["actix"], version="0.1"}
+althea_types = { path = "../althea_types", features = ["actix"]}
 babel_monitor = { path = "../babel_monitor" }
 clu = { path = "../clu" }
 exit_db = { path = "../exit_db" }
 num256 = "0.2"
 settings = { path = "../settings" }
-antenna-forwarding-client = {git = "ssh://git@gitlab.com/althea-net/organizer-tools.git", version = "0.1"}
+antenna_forwarding_client = {path = "../antenna_forwarding_client"}
 auto-bridge = {git = "https://github.com/althea-net/auto_bridge", tag = "v0.1.5"}
 actix-web-httpauth = {git = "https://github.com/althea-mesh/actix-web-httpauth"}
 clarity = "0.1"

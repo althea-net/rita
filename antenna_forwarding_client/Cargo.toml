@@ -1,0 +1,18 @@
+[package]
+name = "antenna_forwarding_client"
+version = "0.1.0"
+authors = ["Justin Kilpatrick <justin@althea.net>"]
+edition = "2018"
+
+[dependencies]
+env_logger = "0.7"
+log = "0.4"
+oping = "0.3"
+sodiumoxide = "0.2"
+althea_types = { path = "../althea_types"}
+althea_kernel_interface = { path = "../althea_kernel_interface"}
+antenna_forwarding_protocol = {path = "../antenna_forwarding_protocol"}
+serde_json = "1.0"
+serde = "1.0"
+failure = "0.1"
+get_if_addrs = "0.5"

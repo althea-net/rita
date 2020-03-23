@@ -50,6 +50,11 @@ test_rita_x86:
   script:
     - "cd rita && RUST_TEST_THREADS=1 cargo test --bin rita --verbose"
 
+test_all:
+  stage: test
+  script:
+    - "cd rita && RUST_TEST_THREADS=1 cargo test --verbose --all"
+
 # integration_test_basic:
 #   stage: integration_test
 #   script:
