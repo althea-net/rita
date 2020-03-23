@@ -328,16 +328,16 @@ fn handle_tx_messaging(
         }
         // we suceessfully paid someone
         (false, true, true) => {
-            info!(
-                "payment {:#066x} from {} for {} wei successfully sent!",
-                txid, from_address, amount
-            );
             let res = PaymentValidator::from_registry()
                 .send(Remove {
                     tx: ts,
                     success: true,
                 })
-                .and_then(|res| {
+                .and_then(move |res| {
+                    info!(
+                        "payment {:#066x} from {} for {} wei successfully sent!",
+                        txid, from_address, amount
+                    );
                     if res.is_ok() {
                         DebtKeeper::from_registry().do_send(PaymentSucceeded {
                             to: pmt.to,
