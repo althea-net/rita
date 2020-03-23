@@ -145,15 +145,12 @@ impl ForwardingProtocolMessage for ConnectionMessage {
         connection_id.clone_from_slice(&payload[20..28]);
         let connection_id = u64::from_be_bytes(connection_id);
 
+        let payload_bytes = packet_len as usize - 8;
+        let end = 28 + payload_bytes;
         let mut message_value = Vec::new();
-        message_value.clone_from_slice(&payload[28..28 + packet_len as usize]);
+        message_value.extend_from_slice(&payload[28..28 + payload_bytes]);
 
-        let bytes_read = 28 + packet_len as usize;
-
-        Ok((
-            bytes_read,
-            ConnectionMessage::new(connection_id, message_value),
-        ))
+        Ok((end, ConnectionMessage::new(connection_id, message_value)))
     }
 
     fn get_type(&self) -> u16 {
@@ -492,6 +489,8 @@ impl ForwardingProtocolMessage for ForwardingCloseMessage {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+    use rand;
+    use rand::Rng;
 
     fn get_test_id() -> Identity {
         Identity {
@@ -510,6 +509,25 @@ mod tests {
         ForwardMessage::new("192.168.10.1".parse().unwrap(), 6823, 443)
     }
 
+    fn get_random_test_vector() -> Vec<u8> {
+        let mut rng = rand::thread_rng();
+        // should be small enough to be fast but long enough
+        // to cause issues
+        let len: u16 = rng.gen();
+        let mut out = Vec::new();
+        for _ in 0..len {
+            let byte: u8 = rng.gen();
+            out.push(byte);
+        }
+        out
+    }
+
+    fn get_random_stream_id() -> u64 {
+        let mut rng = rand::thread_rng();
+        let out: u64 = rng.gen();
+        out
+    }
+
     #[test]
     fn test_message_types() {
         assert_eq!(
@@ -523,11 +541,11 @@ mod tests {
         );
         assert_eq!(
             CONNECTION_CLOSE_MESSAGE_TYPE,
-            ConnectionClose::new(50).get_type()
+            ConnectionClose::new(get_random_stream_id()).get_type()
         );
         assert_eq!(
             CONNECTION_MESSAGE_TYPE,
-            ConnectionMessage::new(50, vec![0]).get_type()
+            ConnectionMessage::new(get_random_stream_id(), get_random_test_vector()).get_type()
         );
         assert_eq!(
             FORWARDING_CLOSE_MESSAGE_TYPE,
@@ -541,6 +559,7 @@ mod tests {
         let out = message.get_message();
         let (size, parsed) = IdentificationMessage::read_message(&out).expect("Failed to parse!");
         assert_eq!(parsed, message);
+        assert_eq!(size, out.len());
     }
 
     #[test]
@@ -549,6 +568,7 @@ mod tests {
         let out = message.get_message();
         let (size, parsed) = ForwardMessage::read_message(&out).expect("Failed to parse!");
         assert_eq!(parsed, message);
+        assert_eq!(size, out.len());
     }
 
     #[test]
@@ -557,22 +577,25 @@ mod tests {
         let out = message.get_message();
         let (size, parsed) = ErrorMessage::read_message(&out).expect("Failed to parse!");
         assert_eq!(parsed, message);
+        assert_eq!(size, out.len());
     }
 
     #[test]
     fn test_connecton_close_message() {
-        let message = ConnectionClose::new(50);
+        let message = ConnectionClose::new(get_random_stream_id());
         let out = message.get_message();
         let (size, parsed) = ConnectionClose::read_message(&out).expect("Failed to parse!");
         assert_eq!(parsed, message);
+        assert_eq!(size, out.len());
     }
 
     #[test]
     fn test_connecton_message() {
-        let message = ConnectionMessage::new(50, vec![0]);
+        let message = ConnectionMessage::new(get_random_stream_id(), get_random_test_vector());
         let out = message.get_message();
         let (size, parsed) = ConnectionMessage::read_message(&out).expect("Failed to parse!");
         assert_eq!(parsed, message);
+        assert_eq!(size, out.len());
     }
 
     #[test]
@@ -581,5 +604,56 @@ mod tests {
         let out = message.get_message();
         let (size, parsed) = ForwardingCloseMessage::read_message(&out).expect("Failed to parse!");
         assert_eq!(parsed, message);
+        assert_eq!(size, out.len());
+    }
+
+    #[test]
+    fn test_multiple_connection_messages() {
+        let mut multi_message = Vec::new();
+        let message1 = ConnectionClose::new(get_random_stream_id());
+        multi_message.extend_from_slice(&message1.get_message());
+        let message2 = ConnectionMessage::new(get_random_stream_id(), get_random_test_vector());
+        multi_message.extend_from_slice(&message2.get_message());
+        let message3 = IdentificationMessage::new(get_test_id());
+        multi_message.extend_from_slice(&message3.get_message());
+        let (size1, parsed) =
+            ConnectionClose::read_message(&multi_message[0..]).expect("Failed to parse!");
+        assert_eq!(parsed, message1);
+        let (size2, parsed) =
+            ConnectionMessage::read_message(&multi_message[size1..]).expect("Failed to parse!");
+        assert_eq!(parsed, message2);
+        let (size3, parsed) = IdentificationMessage::read_message(&multi_message[size1 + size2..])
+            .expect("Failed to parse!");
+        assert_eq!(parsed, message3);
+        assert_eq!(size1 + size2 + size3, multi_message.len());
+    }
+
+    #[test]
+    fn test_multiple_message_types() {
+        let mut multi_message = Vec::new();
+        let message1 = ConnectionMessage::new(get_random_stream_id(), get_random_test_vector());
+        multi_message.extend_from_slice(&message1.get_message());
+        let message2 = ConnectionMessage::new(get_random_stream_id(), get_random_test_vector());
+        multi_message.extend_from_slice(&message2.get_message());
+        let message3 = ConnectionMessage::new(get_random_stream_id(), get_random_test_vector());
+        multi_message.extend_from_slice(&message3.get_message());
+        let (size1, parsed) =
+            ConnectionMessage::read_message(&multi_message[0..]).expect("Failed to parse!");
+        assert_eq!(parsed, message1);
+        let (size2, parsed) =
+            ConnectionMessage::read_message(&multi_message[size1..]).expect("Failed to parse!");
+        assert_eq!(parsed, message2);
+        let (size3, parsed) = ConnectionMessage::read_message(&multi_message[size1 + size2..])
+            .expect("Failed to parse!");
+        assert_eq!(parsed, message3);
+        assert_eq!(size1 + size2 + size3, multi_message.len());
+    }
+
+    #[test]
+    fn test_junk() {
+        let mut junk = Vec::new();
+        junk.extend_from_slice(&get_random_test_vector());
+        assert!(ConnectionMessage::read_message(&junk).is_err());
+        assert!(ConnectionMessage::read_message(&junk).is_err());
     }
 }
