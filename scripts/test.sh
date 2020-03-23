@@ -1,8 +1,16 @@
 #!/bin/bash
-set -eux
+#set -eux
 NODES=${NODES:='None'}
 
 RUST_TEST_THREADS=1 cargo test --all
+cross test --target x86_64-unknown-linux-musl --verbose -p rita --bin rita -- --test-threads=1
+cross test --target mips-unknown-linux-gnu --verbose -p rita --bin rita -- --test-threads=1
+cross test --target mipsel-unknown-linux-gnu --verbose -p rita --bin rita -- --test-threads=1
+cross test --target mips64-unknown-linux-gnuabi64 --verbose -p rita --bin rita -- --test-threads=1
+cross test --target mips64el-unknown-linux-gnuabi64 --verbose -p rita --bin rita -- --test-threads=1
+cross test --target aarch64-unknown-linux-gnu --verbose -p rita --bin rita -- --test-threads=1
+cross test --target armv7-unknown-linux-gnueabi --verbose -p rita --bin rita -- --test-threads=1
+cross test --target armv7-unknown-linux-gnueabihf --verbose -p rita --bin rita -- --test-threads=1
 
 if ! modprobe wireguard ; then
 	echo "The container can't load modules into the host kernel"
