@@ -18,7 +18,8 @@ use std::net::IpAddr;
 /// an excessively long protocol magic value that preceeds all
 /// control traffic. A u32 would probably be sufficient to ensure
 /// that we never try to interpret an actual packet as a control packet
-/// but I don't see a reason to be stingy.
+/// but I don't see a reason to be stingy. This is totally random, but you
+/// can never change it once there's a device deployed with it
 const MAGIC: u128 = 266_244_417_876_907_680_150_892_848_205_622_258_774;
 
 pub const IDENTIFICATION_MESSAGE_TYPE: u16 = 0;
@@ -27,6 +28,7 @@ pub const ERROR_MESSAGE_TYPE: u16 = 2;
 pub const CONNECTION_CLOSE_MESSAGE_TYPE: u16 = 3;
 pub const CONNECTION_MESSAGE_TYPE: u16 = 4;
 pub const FORWARDING_CLOSE_MESSAGE_TYPE: u16 = 5;
+pub const KEEPALIVE_MESSAGE_TYPE: u16 = 6;
 
 pub trait ForwardingProtocolMessage {
     fn get_message(&self) -> Vec<u8>;
@@ -88,6 +90,10 @@ pub struct ConnectionMessage {
 /// Used to close the forwarding session
 #[derive(Clone, Serialize, Deserialize, Debug, Default, Eq, PartialEq)]
 pub struct ForwardingCloseMessage;
+
+/// Used to determine the liveness of each end
+#[derive(Clone, Serialize, Deserialize, Debug, Default, Eq, PartialEq)]
+pub struct KeepAliveMessage;
 
 impl ConnectionMessage {
     pub fn new(stream_id: u64, payload: Vec<u8>) -> ConnectionMessage {
@@ -485,6 +491,70 @@ impl ForwardingProtocolMessage for ForwardingCloseMessage {
     }
 }
 
+impl KeepAliveMessage {
+    pub fn new() -> KeepAliveMessage {
+        KeepAliveMessage
+    }
+}
+
+impl ForwardingProtocolMessage for KeepAliveMessage {
+    /// Gets an error message that is sent when the antenna forwarding
+    /// can not start successfully
+    fn get_message(&self) -> Vec<u8> {
+        // serialize the payload first so that we know it's length
+        let payload = self;
+        let payload = serde_json::to_vec(&payload).unwrap();
+
+        let mut message = Vec::new();
+        message.extend_from_slice(&MAGIC.to_be_bytes());
+        // message type number index 17-18
+        message.extend_from_slice(&self.get_type().to_be_bytes());
+        // length, index 18-19
+        let len_bytes = payload.len() as u16;
+        message.extend_from_slice(&len_bytes.to_be_bytes());
+        // copy in the serialized struct
+        message.extend_from_slice(&payload);
+        message
+    }
+
+    /// takes a byte slice that may potentially contain a ForwardMessage and
+    /// deserializes it
+    fn read_message(payload: &[u8]) -> Result<(usize, KeepAliveMessage), Error> {
+        if payload.len() < 20 {
+            return Err(format_err!("Packet too short!"));
+        }
+
+        let mut packet_magic: [u8; 16] = [0; 16];
+        packet_magic.clone_from_slice(&payload[0..16]);
+        let packet_magic = u128::from_be_bytes(packet_magic);
+
+        let mut packet_type: [u8; 2] = [0; 2];
+        packet_type.clone_from_slice(&payload[16..18]);
+        let packet_type = u16::from_be_bytes(packet_type);
+
+        let mut packet_len: [u8; 2] = [0; 2];
+        packet_len.clone_from_slice(&payload[18..20]);
+        let packet_len = u16::from_be_bytes(packet_len);
+
+        if packet_magic != MAGIC {
+            return Err(format_err!("Packet magic incorrect!"));
+        } else if packet_type != KEEPALIVE_MESSAGE_TYPE {
+            return Err(format_err!("Wrong packet type!"));
+        }
+
+        let bytes_read = 20 + packet_len as usize;
+
+        match serde_json::from_slice(&payload[20..(20 + packet_len as usize)]) {
+            Ok(message) => Ok((bytes_read, message)),
+            Err(serde_error) => Err(serde_error.into()),
+        }
+    }
+
+    fn get_type(&self) -> u16 {
+        KEEPALIVE_MESSAGE_TYPE
+    }
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -551,6 +621,7 @@ mod tests {
             FORWARDING_CLOSE_MESSAGE_TYPE,
             ForwardingCloseMessage::new().get_type()
         );
+        assert_eq!(KEEPALIVE_MESSAGE_TYPE, KeepAliveMessage::new().get_type());
     }
 
     #[test]
@@ -603,6 +674,15 @@ mod tests {
         let message = ForwardingCloseMessage::new();
         let out = message.get_message();
         let (size, parsed) = ForwardingCloseMessage::read_message(&out).expect("Failed to parse!");
+        assert_eq!(parsed, message);
+        assert_eq!(size, out.len());
+    }
+
+    #[test]
+    fn test_keepalive_message() {
+        let message = KeepAliveMessage::new();
+        let out = message.get_message();
+        let (size, parsed) = KeepAliveMessage::read_message(&out).expect("Failed to parse!");
         assert_eq!(parsed, message);
         assert_eq!(size, out.len());
     }
