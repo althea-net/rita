@@ -13,7 +13,36 @@ extern crate failure;
 
 use althea_types::Identity;
 use failure::Error;
+use std::io::ErrorKind::WouldBlock;
+use std::io::Write;
 use std::net::IpAddr;
+use std::net::TcpStream;
+use std::thread;
+use std::time::Duration;
+
+/// The amount of time to sleep a thread that's spinlocking on somthing
+pub const SPINLOCK_TIME: Duration = Duration::from_millis(10);
+
+/// The size of the memory buffer for reading and writing packets
+/// currently 100kbytes
+pub const BUFFER_SIZE: usize = 100_000;
+
+/// Writes data to a stream keeping in mind that we may encounter
+/// a buffer limit and have to partially complete our write
+pub fn write_all_spinlock(stream: &mut TcpStream, buffer: &[u8]) -> Result<(), Error> {
+    loop {
+        let res = stream.write_all(buffer);
+        match res {
+            Ok(_val) => return Ok(()),
+            Err(e) => {
+                if e.kind() != WouldBlock {
+                    return Err(e.into());
+                }
+            }
+        }
+        thread::sleep(SPINLOCK_TIME);
+    }
+}
 
 /// an excessively long protocol magic value that preceeds all
 /// control traffic. A u32 would probably be sufficient to ensure

@@ -6,9 +6,14 @@
 extern crate log;
 #[macro_use]
 extern crate failure;
+#[macro_use]
+extern crate lazy_static;
 
+use althea_kernel_interface::KernelInterface;
+use althea_kernel_interface::LinuxCommandRunner;
 use althea_types::Identity;
 use althea_types::WgKey;
+use antenna_forwarding_protocol::write_all_spinlock;
 use antenna_forwarding_protocol::ConnectionClose;
 use antenna_forwarding_protocol::ConnectionMessage;
 use antenna_forwarding_protocol::ErrorMessage;
@@ -16,19 +21,30 @@ use antenna_forwarding_protocol::ForwardMessage;
 use antenna_forwarding_protocol::ForwardingCloseMessage;
 use antenna_forwarding_protocol::ForwardingProtocolMessage;
 use antenna_forwarding_protocol::IdentificationMessage;
+use antenna_forwarding_protocol::BUFFER_SIZE;
+use antenna_forwarding_protocol::SPINLOCK_TIME;
 use failure::Error;
 use oping::Ping;
+use rand::thread_rng;
+use rand::Rng;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::io::ErrorKind::WouldBlock;
 use std::io::Read;
 use std::io::Write;
 use std::net::IpAddr;
+use std::net::Ipv4Addr;
 use std::net::Shutdown;
 use std::net::SocketAddr;
 use std::net::TcpStream;
+use std::process::ExitStatus;
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
+
+lazy_static! {
+    pub static ref KI: Box<dyn KernelInterface> = Box::new(LinuxCommandRunner {});
+}
 
 /// The network operation timeout for this library
 const NET_TIMEOUT: Duration = Duration::from_secs(5);
@@ -63,20 +79,51 @@ pub fn start_antenna_forwarding_proxy(
             trace!("connected to {}", checkin_address);
             stream
                 .set_read_timeout(Some(NET_TIMEOUT))
-                .expect("Failed to get nonblocking socket!");
+                .expect("Failed to set read timeout on socket!");
             // send our identifier
-            let _res = stream.write_all(&IdentificationMessage::new(our_id).get_message());
-            let mut buf = Vec::new();
-            let res = stream.read_to_end(&mut buf);
+            let _res = write_all_spinlock(
+                &mut stream,
+                &IdentificationMessage::new(our_id).get_message(),
+            );
+            let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+            let res = stream.read(&mut buf);
             match res {
                 Ok(bytes) => match ForwardMessage::read_message(&buf) {
                     Ok(msg) => {
+                        // we start nonblocking operation here, so that we
+                        // can easily wait for the forward response after
+                        // sending our ID message, now we need non-blocking
+                        // to process messages
+                        stream
+                            .set_nonblocking(true)
+                            .expect("Failed to get nonblocking socket!");
+
                         trace!("Got fwd message {}", checkin_address);
-                        let (start, forward_message) = msg;
-                        let s =
-                            setup_networking(forward_message, &mut stream, &interfaces_to_search);
-                        if let Ok(s) = s {
-                            forward_connections(s, buf, bytes, stream, start);
+                        let (bytes_read, forward_message) = msg;
+
+                        // todo it would be technically correct to have packets
+                        // after the forward packet, but we don't package things that
+                        // way on the server, we should handle the possibility
+                        if bytes > bytes_read {
+                            error!("Extra messages after forward packet dropped!");
+                        }
+
+                        let s = setup_networking(forward_message, &interfaces_to_search);
+                        match s {
+                            Ok(s) => forward_connections(s, stream),
+                            Err(e) => {
+                                // the error message never reaches the server because the server
+                                // will fail to read it, even if it enters the buffer once the
+                                // connection is terminated.
+                                stream.set_nodelay(true).expect("Failed to disble Nagle");
+                                let a = write_all_spinlock(
+                                    &mut stream,
+                                    &ErrorMessage::new(format!("{:?}", e)).get_message(),
+                                );
+                                let b = stream.shutdown(Shutdown::Both);
+                                warn!("Error forwarding write {:?} shutdown {:?}", a, b);
+                                drop(stream);
+                            }
                         }
                     }
                     Err(e) => warn!("Failed to read forward message with {:?}", e),
@@ -95,39 +142,90 @@ pub fn start_antenna_forwarding_proxy(
 
 /// Actually forwards the connection by managing the reading and writing from
 /// various tcp sockets
-fn forward_connections(
-    antenna_sockaddr: SocketAddr,
-    buffer: Vec<u8>,
-    bytes_read: usize,
-    server_stream: TcpStream,
-    start: usize,
-) {
+fn forward_connections(antenna_sockaddr: SocketAddr, server_stream: TcpStream) {
+    trace!("Forwarding connections!");
     let mut server_stream = server_stream;
-    let mut buffer = buffer;
-    let mut bytes_read = bytes_read;
+    let mut bytes_read;
     let mut streams: HashMap<u64, TcpStream> = HashMap::new();
-    let mut start = start;
+    let mut start;
     let mut last_message = Instant::now();
     loop {
+        let mut streams_to_remove: Vec<u64> = Vec::new();
+        // First we we have to iterate over all of these connections
+        // and read to send messages up the server pipe. We need to do
+        // this first becuase we may exit in the next section if there's
+        // nothing to write
+        for (stream_id, antenna_stream) in streams.iter_mut() {
+            let mut buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+            // in theory we will figure out if the connection is closed here
+            // and then send a closed message
+            match antenna_stream.read(&mut buffer) {
+                Ok(bytes) => {
+                    if bytes != 0 {
+                        trace!(
+                            "We have {} bytes to write from a antenna input socket",
+                            bytes
+                        );
+                        let msg = ConnectionMessage::new(*stream_id, buffer[0..bytes].to_vec());
+                        write_all_spinlock(&mut server_stream, &msg.get_message())
+                            .expect(&format!("Failed to write with stream {}", *stream_id));
+                    }
+                }
+                Err(e) => {
+                    if e.kind() != WouldBlock {
+                        error!("Could not read client socket with {:?}", e);
+                        let msg = ConnectionClose::new(*stream_id);
+                        write_all_spinlock(&mut server_stream, &msg.get_message())
+                            .expect(&format!("Failed to close stream {}", *stream_id));
+                        let _ = antenna_stream.shutdown(Shutdown::Write);
+                        streams_to_remove.push(*stream_id);
+                    }
+                }
+            }
+        }
+        for i in streams_to_remove {
+            streams.remove(&i);
+        }
+
+        let mut buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+        match server_stream.read(&mut buffer) {
+            Ok(bytes) => {
+                if bytes > 0 {
+                    trace!("Got {} bytes from the server", bytes);
+                }
+                bytes_read = bytes;
+                start = 0;
+            }
+            Err(e) => {
+                if e.kind() != WouldBlock {
+                    error!("Failed to read from server with {:?}", e);
+                }
+                continue;
+            }
+        }
+
         while start < bytes_read {
             let connection = ConnectionMessage::read_message(&buffer[start..bytes_read]);
             let close = ConnectionClose::read_message(&buffer[start..bytes_read]);
             let halt = ForwardingCloseMessage::read_message(&buffer[start..bytes_read]);
             match (connection, close, halt) {
                 (Ok((new_start, connection_message)), Err(_), Err(_)) => {
+                    trace!("Got connection message");
                     last_message = Instant::now();
                     start = new_start;
                     let stream_id = &connection_message.stream_id;
                     if let Some(antenna_stream) = streams.get_mut(stream_id) {
+                        trace!("Message for {}", stream_id);
                         antenna_stream
                             .write_all(&connection_message.payload)
                             .expect("Failed to talk to antenna!");
                     } else {
+                        trace!("Opening stream for {}", stream_id);
                         // we don't have a stream, we need to dial out to the server now
                         let mut new_stream = TcpStream::connect(antenna_sockaddr)
                             .expect("Could not contact antenna!");
                         new_stream
-                            .set_nonblocking(false)
+                            .set_nonblocking(true)
                             .expect("Could not get nonblocking connection");
                         new_stream
                             .write_all(&connection_message.payload)
@@ -136,6 +234,7 @@ fn forward_connections(
                     }
                 }
                 (Err(_), Ok((new_start, close_message)), Err(_)) => {
+                    trace!("Got close message");
                     last_message = Instant::now();
                     start = new_start;
                     let stream_id = &close_message.stream_id;
@@ -148,6 +247,7 @@ fn forward_connections(
                     streams.remove(stream_id);
                 }
                 (Err(_), Err(_), Ok((_new_start, _halt_message))) => {
+                    trace!("Got halt message");
                     // we have a close lets get out of here.
                     for (_id, stream) in streams {
                         stream
@@ -160,10 +260,6 @@ fn forward_connections(
                     return;
                 }
                 (Err(_), Err(_), Err(_)) => {
-                    // todo this might not be needed, this handles trailing bytes
-                    // but if everything reads correctly the start should = bytes_read
-                    // and break the loop
-                    trace!("No more messages, leaving");
                     break;
                 }
                 (Ok(_), Ok(_), Ok(_)) => panic!("Impossible!"),
@@ -173,15 +269,11 @@ fn forward_connections(
             }
         }
 
-        if let Ok(bytes) = server_stream.read_to_end(&mut buffer) {
-            bytes_read = bytes;
-            start = 0;
-        }
-
         if Instant::now() - last_message > FORWARD_TIMEOUT {
             error!("Fowarding session timed out!");
             break;
         }
+        thread::sleep(SPINLOCK_TIME);
     }
 }
 
@@ -189,17 +281,14 @@ fn forward_connections(
 /// returns a socketaddr for the antenna
 fn setup_networking(
     msg: ForwardMessage,
-    server_stream: &mut TcpStream,
     interfaces: &HashSet<String>,
 ) -> Result<SocketAddr, Error> {
     let antenna_ip = msg.ip;
-    let antenna_iface = match find_antenna(antenna_ip, interfaces) {
-        Ok(iface) => iface,
+    match find_antenna(antenna_ip, interfaces) {
+        Ok(_iface) => {}
         Err(e) => {
             error!("Could not find anntenna {:?}", e);
-            let _ = server_stream.write_all(&ErrorMessage::new(format!("{:?}", e)).get_message());
-            let _ = server_stream.shutdown(Shutdown::Both);
-            bail!("Can't find antenna!");
+            return Err(e);
         }
     };
     Ok(SocketAddr::new(antenna_ip, 443))
@@ -208,15 +297,67 @@ fn setup_networking(
 /// Finds the antenna on the appropriate physical interface by iterating
 /// over the list of provided interfaces, attempting a ping
 /// and repeating until the appropriate interface is located
-/// TODO actually setup routing to said antenna, maybe implicitly exit when
-/// we find the antenna? becuase then routing will be setup
+/// TODO handle overlapping edge cases for gateway ip, lan ip, br-pbs etc
 fn find_antenna(ip: IpAddr, interfaces: &HashSet<String>) -> Result<String, Error> {
+    let our_ip = get_local_ip(ip);
     for iface in interfaces {
+        trace!("Trying interface {}, with test ip {}", iface, our_ip);
+        // this acts as a wildcard deletion across all interfaces, which is frankly really
+        // dangerous if our default route overlaps, of if you enter an exit route ip
+        let _ = KI.run_command("ip", &["route", "del", &format!("{}/32", ip)]);
+        for iface in interfaces {
+            let _ = KI.run_command(
+                "ip",
+                &["addr", "del", &format!("{}/32", our_ip), "dev", iface],
+            );
+        }
+        let res = KI.run_command(
+            "ip",
+            &["addr", "add", &format!("{}/32", our_ip), "dev", iface],
+        );
+        trace!("Added our own test ip with {:?}", res);
+        // you need to use src here to disambiguate the sending address
+        // otherwise the first avaialble ipv4 address on the interface will
+        // be used
+        match KI.run_command(
+            "ip",
+            &[
+                "route",
+                "add",
+                &format!("{}/32", ip),
+                "dev",
+                iface,
+                "src",
+                &our_ip.to_string(),
+            ],
+        ) {
+            Ok(r) => {
+                // exit status 512 is the code for 'file exists' meaning we are not
+                // checking the interface we thought we where. At this point there's
+                // no option but to exit
+                if let Some(code) = r.status.code() {
+                    if code == 512 {
+                        error!("Failed to add route");
+                        bail!("IP setup failed");
+                    }
+                }
+                trace!("added route with {:?}", r);
+            }
+            Err(e) => {
+                trace!("Failed to add route with {:?}", e);
+                continue;
+            }
+        }
         let mut pinger = Ping::new();
-        pinger.set_device(&iface)?;
         pinger.set_timeout((PING_TIMEOUT.as_millis() as f64 / 1000f64) as f64)?;
         pinger.add_host(&ip.to_string())?;
-        let mut response = pinger.send()?;
+        let mut response = match pinger.send() {
+            Ok(res) => res,
+            Err(e) => {
+                trace!("Failed to ping with {:?}", e);
+                continue;
+            }
+        };
         if let Some(res) = response.next() {
             trace!("got ping response {:?}", res);
             if res.dropped == 0 {
@@ -225,4 +366,25 @@ fn find_antenna(ip: IpAddr, interfaces: &HashSet<String>) -> Result<String, Erro
         }
     }
     Err(format_err!("Failed to find Antenna!"))
+}
+
+/// Generates a random non overlapping ip within a /24 subnet of the provided
+/// target antenna ip.
+fn get_local_ip(target_ip: IpAddr) -> IpAddr {
+    match target_ip {
+        IpAddr::V4(address) => {
+            let mut rng = rand::thread_rng();
+            let mut bytes = address.octets();
+            let mut new_ip: u8 = rng.gen();
+            // keep trying until we get a different number
+            // only editing the last byte is implicitly working
+            // within a /24
+            while new_ip == bytes[3] {
+                new_ip = rng.gen()
+            }
+            bytes[3] = new_ip;
+            Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3]).into()
+        }
+        IpAddr::V6(_address) => unimplemented!(),
+    }
 }
