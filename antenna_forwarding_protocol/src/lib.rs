@@ -27,6 +27,9 @@ pub const SPINLOCK_TIME: Duration = Duration::from_millis(10);
 /// currently 100kbytes
 pub const BUFFER_SIZE: usize = 100_000;
 
+/// The size in bytes of our packet header, 16 byte magic, 2 byte type, 2 byte len
+pub const HEADER_LEN: usize = 20;
+
 /// Writes data to a stream keeping in mind that we may encounter
 /// a buffer limit and have to partially complete our write
 pub fn write_all_spinlock(stream: &mut TcpStream, buffer: &[u8]) -> Result<(), Error> {
@@ -152,7 +155,7 @@ impl ForwardingProtocolMessage for ConnectionMessage {
     /// Attempts to read the stream id of what may potentially be a
     /// connection close message, returns bytes read and struct
     fn read_message(payload: &[u8]) -> Result<(usize, ConnectionMessage), Error> {
-        if payload.len() < 20 {
+        if payload.len() < HEADER_LEN {
             return Err(format_err!("Packet too short!"));
         }
 
@@ -172,8 +175,12 @@ impl ForwardingProtocolMessage for ConnectionMessage {
             return Err(format_err!("Packet magic incorrect!"));
         } else if packet_type != CONNECTION_MESSAGE_TYPE {
             return Err(format_err!("Wrong packet type!"));
-        } else if packet_len < 8 {
-            return Err(format_err!("Incorrect length for close message"));
+        } else if packet_len as usize + HEADER_LEN > payload.len() {
+            return Err(format_err!(
+                "Our slice is {} bytes, but our packet_len {} bytes",
+                payload.len(),
+                packet_len as usize + HEADER_LEN
+            ));
         }
 
         let mut connection_id: [u8; 8] = [0; 8];
@@ -181,9 +188,9 @@ impl ForwardingProtocolMessage for ConnectionMessage {
         let connection_id = u64::from_be_bytes(connection_id);
 
         let payload_bytes = packet_len as usize - 8;
-        let end = 28 + payload_bytes;
+        let end = HEADER_LEN + 8 + payload_bytes;
         let mut message_value = Vec::new();
-        message_value.extend_from_slice(&payload[28..28 + payload_bytes]);
+        message_value.extend_from_slice(&payload[28..end]);
 
         Ok((end, ConnectionMessage::new(connection_id, message_value)))
     }
@@ -219,7 +226,7 @@ impl ForwardingProtocolMessage for ConnectionClose {
     /// Attempts to read the stream id of what may potentially be a
     /// connection close message
     fn read_message(payload: &[u8]) -> Result<(usize, ConnectionClose), Error> {
-        if payload.len() < 20 {
+        if payload.len() < HEADER_LEN {
             return Err(format_err!("Packet too short!"));
         }
 
@@ -289,7 +296,7 @@ impl ForwardingProtocolMessage for IdentificationMessage {
     /// takes a byte slice that may potentially contain a IdentificationMessage and
     /// deserializes it
     fn read_message(payload: &[u8]) -> Result<(usize, IdentificationMessage), Error> {
-        if payload.len() < 20 {
+        if payload.len() < HEADER_LEN {
             return Err(format_err!("Packet too short!"));
         }
 
@@ -313,7 +320,7 @@ impl ForwardingProtocolMessage for IdentificationMessage {
 
         let bytes_read = 20 + packet_len as usize;
 
-        match serde_json::from_slice(&payload[20..(20 + packet_len as usize)]) {
+        match serde_json::from_slice(&payload[HEADER_LEN..bytes_read]) {
             Ok(message) => Ok((bytes_read, message)),
             Err(serde_error) => Err(serde_error.into()),
         }
@@ -353,7 +360,7 @@ impl ForwardingProtocolMessage for ErrorMessage {
     /// takes a byte slice that may potentially contain a ErrorMessage and
     /// deserializes it
     fn read_message(payload: &[u8]) -> Result<(usize, ErrorMessage), Error> {
-        if payload.len() < 20 {
+        if payload.len() < HEADER_LEN {
             return Err(format_err!("Packet too short!"));
         }
 
@@ -375,9 +382,9 @@ impl ForwardingProtocolMessage for ErrorMessage {
             return Err(format_err!("Wrong packet type!"));
         }
 
-        let bytes_read = 20 + packet_len as usize;
+        let bytes_read = HEADER_LEN + packet_len as usize;
 
-        match serde_json::from_slice(&payload[20..(20 + packet_len as usize)]) {
+        match serde_json::from_slice(&payload[HEADER_LEN..bytes_read]) {
             Ok(message) => Ok((bytes_read, message)),
             Err(serde_error) => Err(serde_error.into()),
         }
@@ -421,7 +428,7 @@ impl ForwardingProtocolMessage for ForwardMessage {
     /// takes a byte slice that may potentially contain a ForwardMessage and
     /// deserializes it
     fn read_message(payload: &[u8]) -> Result<(usize, ForwardMessage), Error> {
-        if payload.len() < 20 {
+        if payload.len() < HEADER_LEN {
             return Err(format_err!("Packet too short!"));
         }
 
@@ -443,9 +450,9 @@ impl ForwardingProtocolMessage for ForwardMessage {
             return Err(format_err!("Wrong packet type!"));
         }
 
-        let bytes_read = 20 + packet_len as usize;
+        let bytes_read = HEADER_LEN + packet_len as usize;
 
-        match serde_json::from_slice(&payload[20..(20 + packet_len as usize)]) {
+        match serde_json::from_slice(&payload[HEADER_LEN..bytes_read]) {
             Ok(message) => Ok((bytes_read, message)),
             Err(serde_error) => Err(serde_error.into()),
         }
@@ -485,7 +492,7 @@ impl ForwardingProtocolMessage for ForwardingCloseMessage {
     /// takes a byte slice that may potentially contain a ForwardMessage and
     /// deserializes it
     fn read_message(payload: &[u8]) -> Result<(usize, ForwardingCloseMessage), Error> {
-        if payload.len() < 20 {
+        if payload.len() < HEADER_LEN {
             return Err(format_err!("Packet too short!"));
         }
 
@@ -507,9 +514,9 @@ impl ForwardingProtocolMessage for ForwardingCloseMessage {
             return Err(format_err!("Wrong packet type!"));
         }
 
-        let bytes_read = 20 + packet_len as usize;
+        let bytes_read = HEADER_LEN + packet_len as usize;
 
-        match serde_json::from_slice(&payload[20..(20 + packet_len as usize)]) {
+        match serde_json::from_slice(&payload[HEADER_LEN..bytes_read]) {
             Ok(message) => Ok((bytes_read, message)),
             Err(serde_error) => Err(serde_error.into()),
         }
@@ -549,7 +556,7 @@ impl ForwardingProtocolMessage for KeepAliveMessage {
     /// takes a byte slice that may potentially contain a ForwardMessage and
     /// deserializes it
     fn read_message(payload: &[u8]) -> Result<(usize, KeepAliveMessage), Error> {
-        if payload.len() < 20 {
+        if payload.len() < HEADER_LEN {
             return Err(format_err!("Packet too short!"));
         }
 
@@ -571,9 +578,9 @@ impl ForwardingProtocolMessage for KeepAliveMessage {
             return Err(format_err!("Wrong packet type!"));
         }
 
-        let bytes_read = 20 + packet_len as usize;
+        let bytes_read = HEADER_LEN + packet_len as usize;
 
-        match serde_json::from_slice(&payload[20..(20 + packet_len as usize)]) {
+        match serde_json::from_slice(&payload[HEADER_LEN..bytes_read]) {
             Ok(message) => Ok((bytes_read, message)),
             Err(serde_error) => Err(serde_error.into()),
         }
@@ -656,19 +663,46 @@ mod tests {
     #[test]
     fn test_id_message() {
         let message = IdentificationMessage::new(get_test_id());
-        let out = message.get_message();
-        let (size, parsed) = IdentificationMessage::read_message(&out).expect("Failed to parse!");
-        assert_eq!(parsed, message);
-        assert_eq!(size, out.len());
+        let message_bytes = message.get_message();
+        let (number_of_bytes_parsed, parsed_message_contents) =
+            IdentificationMessage::read_message(&message_bytes).expect("Failed to parse!");
+        assert_eq!(message, parsed_message_contents);
+        assert_eq!(number_of_bytes_parsed, message_bytes.len());
+    }
+
+    #[test]
+    fn test_id_message_trailing_bytes() {
+        let message = IdentificationMessage::new(get_test_id());
+        let mut message_bytes = message.get_message();
+        let actual_message_length = message_bytes.len();
+        // add some random trailing bytes
+        message_bytes.extend_from_slice(&get_random_test_vector());
+        let (message_bytes_parsed, parsed_message_contents) =
+            IdentificationMessage::read_message(&message_bytes).expect("Failed to parse!");
+        assert_eq!(parsed_message_contents, message);
+        assert_eq!(message_bytes_parsed, actual_message_length);
     }
 
     #[test]
     fn test_forward_message() {
         let message = get_forward_message();
-        let out = message.get_message();
-        let (size, parsed) = ForwardMessage::read_message(&out).expect("Failed to parse!");
-        assert_eq!(parsed, message);
-        assert_eq!(size, out.len());
+        let message_bytes = message.get_message();
+        let (message_bytes_parsed, parsed_message_contents) =
+            ForwardMessage::read_message(&message_bytes).expect("Failed to parse!");
+        assert_eq!(message, parsed_message_contents);
+        assert_eq!(message_bytes_parsed, message_bytes.len());
+    }
+
+    #[test]
+    fn test_forward_message_trailing_bytes() {
+        let message = get_forward_message();
+        let mut message_bytes = message.get_message();
+        let actual_message_length = message_bytes.len();
+        message_bytes.extend_from_slice(&get_random_test_vector());
+        let (message_bytes_parsed, parsed_message_contents) =
+            ForwardMessage::read_message(&message_bytes).expect("Failed to parse!");
+        assert_eq!(parsed_message_contents, message);
+        assert_eq!(message_bytes_parsed, actual_message_length);
     }
 
     #[test]
@@ -681,12 +715,34 @@ mod tests {
     }
 
     #[test]
+    fn test_error_message_trailing_bytes() {
+        let message = ErrorMessage::new("test".to_string());
+        let mut out = message.get_message();
+        let actual_message_length = out.len();
+        out.extend_from_slice(&get_random_test_vector());
+        let (size, parsed) = ErrorMessage::read_message(&out).expect("Failed to parse!");
+        assert_eq!(parsed, message);
+        assert_eq!(size, actual_message_length);
+    }
+
+    #[test]
     fn test_connecton_close_message() {
         let message = ConnectionClose::new(get_random_stream_id());
         let out = message.get_message();
         let (size, parsed) = ConnectionClose::read_message(&out).expect("Failed to parse!");
         assert_eq!(parsed, message);
         assert_eq!(size, out.len());
+    }
+
+    #[test]
+    fn test_connecton_close_message_trailing_bytes() {
+        let message = ConnectionClose::new(get_random_stream_id());
+        let mut out = message.get_message();
+        let actual_message_length = out.len();
+        out.extend_from_slice(&get_random_test_vector());
+        let (size, parsed) = ConnectionClose::read_message(&out).expect("Failed to parse!");
+        assert_eq!(parsed, message);
+        assert_eq!(size, actual_message_length);
     }
 
     #[test]
@@ -699,12 +755,34 @@ mod tests {
     }
 
     #[test]
+    fn test_connecton_message_trailing_bytes() {
+        let message = ConnectionMessage::new(get_random_stream_id(), get_random_test_vector());
+        let mut out = message.get_message();
+        let actual_message_length = out.len();
+        out.extend_from_slice(&get_random_test_vector());
+        let (size, parsed) = ConnectionMessage::read_message(&out).expect("Failed to parse!");
+        assert_eq!(parsed, message);
+        assert_eq!(size, actual_message_length);
+    }
+
+    #[test]
     fn test_close_message() {
         let message = ForwardingCloseMessage::new();
         let out = message.get_message();
         let (size, parsed) = ForwardingCloseMessage::read_message(&out).expect("Failed to parse!");
         assert_eq!(parsed, message);
         assert_eq!(size, out.len());
+    }
+
+    #[test]
+    fn test_close_message_trailing_bytes() {
+        let message = ForwardingCloseMessage::new();
+        let mut out = message.get_message();
+        let actual_message_length = out.len();
+        out.extend_from_slice(&get_random_test_vector());
+        let (size, parsed) = ForwardingCloseMessage::read_message(&out).expect("Failed to parse!");
+        assert_eq!(parsed, message);
+        assert_eq!(size, actual_message_length);
     }
 
     #[test]
@@ -717,7 +795,18 @@ mod tests {
     }
 
     #[test]
-    fn test_multiple_connection_messages() {
+    fn test_keepalive_message_trailing_bytes() {
+        let message = KeepAliveMessage::new();
+        let mut out = message.get_message();
+        let actual_message_length = out.len();
+        out.extend_from_slice(&get_random_test_vector());
+        let (size, parsed) = KeepAliveMessage::read_message(&out).expect("Failed to parse!");
+        assert_eq!(parsed, message);
+        assert_eq!(size, actual_message_length);
+    }
+
+    #[test]
+    fn test_multiple_message_types() {
         let mut multi_message = Vec::new();
         let message1 = ConnectionClose::new(get_random_stream_id());
         multi_message.extend_from_slice(&message1.get_message());
@@ -738,7 +827,7 @@ mod tests {
     }
 
     #[test]
-    fn test_multiple_message_types() {
+    fn test_multiple_connection_types() {
         let mut multi_message = Vec::new();
         let message1 = ConnectionMessage::new(get_random_stream_id(), get_random_test_vector());
         multi_message.extend_from_slice(&message1.get_message());
