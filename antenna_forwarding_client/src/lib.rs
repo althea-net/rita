@@ -145,9 +145,7 @@ pub fn start_antenna_forwarding_proxy(
 fn forward_connections(antenna_sockaddr: SocketAddr, server_stream: TcpStream) {
     trace!("Forwarding connections!");
     let mut server_stream = server_stream;
-    let mut bytes_read;
     let mut streams: HashMap<u64, TcpStream> = HashMap::new();
-    let mut start;
     let mut last_message = Instant::now();
     loop {
         let mut streams_to_remove: Vec<u64> = Vec::new();
@@ -188,13 +186,12 @@ fn forward_connections(antenna_sockaddr: SocketAddr, server_stream: TcpStream) {
         }
 
         let mut buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
-        match server_stream.read(&mut buffer) {
+        let mut bytes_read = match server_stream.read(&mut buffer) {
             Ok(bytes) => {
                 if bytes > 0 {
                     trace!("Got {} bytes from the server", bytes);
                 }
-                bytes_read = bytes;
-                start = 0;
+                bytes
             }
             Err(e) => {
                 if e.kind() != WouldBlock {
@@ -202,17 +199,19 @@ fn forward_connections(antenna_sockaddr: SocketAddr, server_stream: TcpStream) {
                 }
                 continue;
             }
-        }
+        };
+        let mut start = 0;
 
         while start < bytes_read {
+            trace!("start {}  bytes_read {}", start, bytes_read);
             let connection = ConnectionMessage::read_message(&buffer[start..bytes_read]);
             let close = ConnectionClose::read_message(&buffer[start..bytes_read]);
             let halt = ForwardingCloseMessage::read_message(&buffer[start..bytes_read]);
             match (connection, close, halt) {
-                (Ok((new_start, connection_message)), Err(_), Err(_)) => {
+                (Ok((message_bytes_read, connection_message)), Err(_), Err(_)) => {
                     trace!("Got connection message");
                     last_message = Instant::now();
-                    start = new_start;
+                    start += message_bytes_read;
                     let stream_id = &connection_message.stream_id;
                     if let Some(antenna_stream) = streams.get_mut(stream_id) {
                         trace!("Message for {}", stream_id);
@@ -233,10 +232,10 @@ fn forward_connections(antenna_sockaddr: SocketAddr, server_stream: TcpStream) {
                         streams.insert(*stream_id, new_stream);
                     }
                 }
-                (Err(_), Ok((new_start, close_message)), Err(_)) => {
+                (Err(_), Ok((message_bytes_read, close_message)), Err(_)) => {
                     trace!("Got close message");
                     last_message = Instant::now();
-                    start = new_start;
+                    start += message_bytes_read;
                     let stream_id = &close_message.stream_id;
                     let stream = streams
                         .get(stream_id)
@@ -259,8 +258,21 @@ fn forward_connections(antenna_sockaddr: SocketAddr, server_stream: TcpStream) {
                         .expect("Could not shutdown connection!");
                     return;
                 }
-                (Err(_), Err(_), Err(_)) => {
-                    break;
+                (Err(a), Err(b), Err(c)) => {
+                    trace!("Triple error {:?} {:?} {:?}", a, b, c);
+                    match server_stream.read(&mut buffer[start..]) {
+                        Ok(bytes) => {
+                            if bytes > 0 {
+                                trace!("Got {} bytes from the server", bytes);
+                            }
+                            bytes_read += bytes;
+                        }
+                        Err(e) => {
+                            if e.kind() != WouldBlock {
+                                error!("Failed to read from server with {:?}", e);
+                            }
+                        }
+                    }
                 }
                 (Ok(_), Ok(_), Ok(_)) => panic!("Impossible!"),
                 (Ok(_), Ok(_), Err(_)) => panic!("Impossible!"),

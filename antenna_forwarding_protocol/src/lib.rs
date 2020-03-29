@@ -14,6 +14,7 @@ extern crate failure;
 use althea_types::Identity;
 use failure::Error;
 use std::io::ErrorKind::WouldBlock;
+use std::io::Read;
 use std::io::Write;
 use std::net::IpAddr;
 use std::net::TcpStream;
@@ -47,13 +48,6 @@ pub fn write_all_spinlock(stream: &mut TcpStream, buffer: &[u8]) -> Result<(), E
     }
 }
 
-/// an excessively long protocol magic value that preceeds all
-/// control traffic. A u32 would probably be sufficient to ensure
-/// that we never try to interpret an actual packet as a control packet
-/// but I don't see a reason to be stingy. This is totally random, but you
-/// can never change it once there's a device deployed with it
-const MAGIC: u128 = 266_244_417_876_907_680_150_892_848_205_622_258_774;
-
 pub const IDENTIFICATION_MESSAGE_TYPE: u16 = 0;
 pub const FORWARD_MESSAGE_TYPE: u16 = 1;
 pub const ERROR_MESSAGE_TYPE: u16 = 2;
@@ -62,12 +56,111 @@ pub const CONNECTION_MESSAGE_TYPE: u16 = 4;
 pub const FORWARDING_CLOSE_MESSAGE_TYPE: u16 = 5;
 pub const KEEPALIVE_MESSAGE_TYPE: u16 = 6;
 
+/// Reads all the currently available messages from the provided stream, this function will
+/// also block until a currently in flight message is delivered, for a maximum of 500ms
+pub fn read_message<T: ForwardingProtocolMessage + Clone>(
+    input: &mut TcpStream,
+) -> Result<Vec<T>, Error> {
+    read_message_internal(input, Vec::new(), Vec::new())
+}
+
+fn read_message_internal<T: ForwardingProtocolMessage + Clone>(
+    input: &mut TcpStream,
+    remaining_bytes: Vec<u8>,
+    messages: Vec<T>,
+) -> Result<Vec<T>, Error> {
+    // these should match the full list of message types defined above
+    let mut messages = messages;
+    let mut unfinished_message = false;
+
+    remaining_bytes.extend_from_slice(&read_till_block(input)?);
+
+    let mut possible_messages: Vec<Result<(usize, T), Error>> = Vec::new();
+    possible_messages.push(IdentificationMessage::read_message(&remaining_bytes));
+    let forward = ForwardMessage::read_message(&remaining_bytes);
+    let error = ErrorMessage::read_message(&remaining_bytes);
+    let close = ConnectionClose::read_message(&remaining_bytes);
+    let connection = ConnectionMessage::read_message(&remaining_bytes);
+    let forwarding_close = ForwardingCloseMessage::read_message(&remaining_bytes);
+    let keepalive = KeepAliveMessage::read_message(&remaining_bytes);
+    if let Ok((bytes, id)) = id {
+        (bytes, message) = get_successfull_message();
+
+        if bytes < remaining_bytes.len() {
+            read_message_internal(input, remaining_bytes[bytes..].to_vec(), messages)
+        } else {
+            Ok(messages)
+        }
+    } else {
+        Ok(messages)
+    }
+}
+
+/// Takes a vec of message parse results and returns the successful one, and error if
+/// more than one is successful
+fn get_successfull_message<T: ForwardingProtocolMessage + Clone>(
+    possible_messages: Vec<Result<(usize, T), Error>>,
+) -> Result<(usize, T), Error> {
+    // this doesn't really need to be here, the same set of bytes
+    // should never parse to two messages successfully, so guarding
+    // is a little excessive.
+    let mut num_ok = 0;
+    let mut res: Option<(usize, T)> = None;
+    for item in possible_messages {
+        if let Ok(val) = item {
+            num_ok += 1;
+            res = Some(val)
+        }
+    }
+    if num_ok > 1 {
+        panic!("The same message parsed two ways!");
+    } else if num_ok == 0 {
+        bail!("No successful messages");
+    } else {
+        // we have exactly one success, this can't panic
+        // because we must have found one to reach this block
+        Ok(res.unwrap())
+    }
+}
+
+/// Reads the entire contents of a tcpstream into a buffer until it blocks
+pub fn read_till_block(input: &mut TcpStream) -> Result<Vec<u8>, Error> {
+    input.set_nonblocking(true)?;
+    let mut out = Vec::new();
+    loop {
+        let mut buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+        match input.read(&mut buffer) {
+            Ok(_bytes) => out.extend_from_slice(&buffer),
+            Err(e) => {
+                if e.kind() == WouldBlock {
+                    return Ok(out);
+                } else {
+                    return Err(e.into());
+                }
+            }
+        }
+    }
+}
+
+/// an excessively long protocol magic value that preceeds all
+/// control traffic. A u32 would probably be sufficient to ensure
+/// that we never try to interpret an actual packet as a control packet
+/// but I don't see a reason to be stingy. This is totally random, but you
+/// can never change it once there's a device deployed with it
+const MAGIC: u128 = 266_244_417_876_907_680_150_892_848_205_622_258_774;
+
+pub enum ForwardingMessageType {
+    IdentificationMessage,
+}
+
 pub trait ForwardingProtocolMessage {
     fn get_message(&self) -> Vec<u8>;
     fn read_message(payload: &[u8]) -> Result<(usize, Self), Error>
     where
         Self: std::marker::Sized;
     fn get_type(&self) -> u16;
+    fn get_payload(&self) -> Option<Vec<u8>>;
+    fn get_stream_id(&self) -> Option<u64>;
 }
 
 /// The serialized struct sent as the payload
@@ -198,6 +291,14 @@ impl ForwardingProtocolMessage for ConnectionMessage {
     fn get_type(&self) -> u16 {
         CONNECTION_MESSAGE_TYPE
     }
+
+    fn get_payload(&self) -> Option<Vec<u8>> {
+        Some(self.payload)
+    }
+
+    fn get_stream_id(&self) -> Option<u64> {
+        Some(self.stream_id)
+    }
 }
 
 impl ConnectionClose {
@@ -261,6 +362,14 @@ impl ForwardingProtocolMessage for ConnectionClose {
 
     fn get_type(&self) -> u16 {
         CONNECTION_CLOSE_MESSAGE_TYPE
+    }
+
+    fn get_payload(&self) -> Option<Vec<u8>> {
+        None
+    }
+
+    fn get_stream_id(&self) -> Option<u64> {
+        Some(self.stream_id)
     }
 }
 
@@ -329,6 +438,14 @@ impl ForwardingProtocolMessage for IdentificationMessage {
     fn get_type(&self) -> u16 {
         IDENTIFICATION_MESSAGE_TYPE
     }
+
+    fn get_payload(&self) -> Option<Vec<u8>> {
+        None
+    }
+
+    fn get_stream_id(&self) -> Option<u64> {
+        None
+    }
 }
 
 impl ErrorMessage {
@@ -392,6 +509,14 @@ impl ForwardingProtocolMessage for ErrorMessage {
 
     fn get_type(&self) -> u16 {
         ERROR_MESSAGE_TYPE
+    }
+
+    fn get_payload(&self) -> Option<Vec<u8>> {
+        None
+    }
+
+    fn get_stream_id(&self) -> Option<u64> {
+        None
     }
 }
 
@@ -461,6 +586,14 @@ impl ForwardingProtocolMessage for ForwardMessage {
     fn get_type(&self) -> u16 {
         FORWARD_MESSAGE_TYPE
     }
+
+    fn get_payload(&self) -> Option<Vec<u8>> {
+        None
+    }
+
+    fn get_stream_id(&self) -> Option<u64> {
+        None
+    }
 }
 
 impl ForwardingCloseMessage {
@@ -525,6 +658,14 @@ impl ForwardingProtocolMessage for ForwardingCloseMessage {
     fn get_type(&self) -> u16 {
         FORWARDING_CLOSE_MESSAGE_TYPE
     }
+
+    fn get_payload(&self) -> Option<Vec<u8>> {
+        None
+    }
+
+    fn get_stream_id(&self) -> Option<u64> {
+        None
+    }
 }
 
 impl KeepAliveMessage {
@@ -588,6 +729,14 @@ impl ForwardingProtocolMessage for KeepAliveMessage {
 
     fn get_type(&self) -> u16 {
         KEEPALIVE_MESSAGE_TYPE
+    }
+
+    fn get_payload(&self) -> Option<Vec<u8>> {
+        None
+    }
+
+    fn get_stream_id(&self) -> Option<u64> {
+        None
     }
 }
 
