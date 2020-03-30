@@ -13,6 +13,7 @@ extern crate failure;
 
 use althea_types::Identity;
 use failure::Error;
+use std::io::Error as IoError;
 use std::io::ErrorKind::WouldBlock;
 use std::io::Read;
 use std::io::Write;
@@ -24,6 +25,9 @@ use std::time::Duration;
 /// The amount of time to sleep a thread that's spinlocking on somthing
 pub const SPINLOCK_TIME: Duration = Duration::from_millis(10);
 
+/// The amount of time to wait for a blocking read
+pub const NET_TIMEOUT: Duration = Duration::from_secs(1);
+
 /// The size of the memory buffer for reading and writing packets
 /// currently 100kbytes
 pub const BUFFER_SIZE: usize = 100_000;
@@ -33,14 +37,14 @@ pub const HEADER_LEN: usize = 20;
 
 /// Writes data to a stream keeping in mind that we may encounter
 /// a buffer limit and have to partially complete our write
-pub fn write_all_spinlock(stream: &mut TcpStream, buffer: &[u8]) -> Result<(), Error> {
+pub fn write_all_spinlock(stream: &mut TcpStream, buffer: &[u8]) -> Result<(), IoError> {
     loop {
         let res = stream.write_all(buffer);
         match res {
             Ok(_val) => return Ok(()),
             Err(e) => {
                 if e.kind() != WouldBlock {
-                    return Err(e.into());
+                    return Err(e);
                 }
             }
         }
@@ -49,50 +53,50 @@ pub fn write_all_spinlock(stream: &mut TcpStream, buffer: &[u8]) -> Result<(), E
 }
 
 /// Reads the entire contents of a tcpstream into a buffer until it blocks
-pub fn read_till_block(input: &mut TcpStream) -> Result<Vec<u8>, Error> {
+/// if someone is sending a huge amount of TCP traffic this routine will
+/// run until you run out of memory
+pub fn read_till_block(input: &mut TcpStream) -> Result<Vec<u8>, IoError> {
     input.set_nonblocking(true)?;
     let mut out = Vec::new();
     loop {
         let mut buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
         match input.read(&mut buffer) {
-            Ok(_bytes) => out.extend_from_slice(&buffer),
+            Ok(bytes) => {
+                if bytes == 0 {
+                    return Ok(out);
+                }
+                out.extend_from_slice(&buffer)
+            }
             Err(e) => {
                 if e.kind() == WouldBlock {
                     return Ok(out);
                 } else {
-                    return Err(e.into());
+                    return Err(e);
                 }
             }
         }
     }
 }
 
-/// Reads all the currently available messages from the provided stream, this function will
-/// also block until a currently in flight message is delivered, for a maximum of 500ms
-pub fn read_message(input: &mut TcpStream) -> Result<Vec<ForwardingProtocolMessage>, Error> {
-    read_message_internal(input, Vec::new(), Vec::new())
-}
-
-fn read_message_internal(
-    input: &mut TcpStream,
-    remaining_bytes: Vec<u8>,
-    messages: Vec<ForwardingProtocolMessage>,
-) -> Result<Vec<ForwardingProtocolMessage>, Error> {
-    // these should match the full list of message types defined above
-    let mut messages = messages;
-    let mut remaining_bytes = remaining_bytes;
-
-    remaining_bytes.extend_from_slice(&read_till_block(input)?);
-
-    if let Ok((bytes, msg)) = ForwardingProtocolMessage::read_message(&remaining_bytes) {
-        messages.push(msg);
-        if bytes < remaining_bytes.len() {
-            read_message_internal(input, remaining_bytes[bytes..].to_vec(), messages)
-        } else {
-            Ok(messages)
+/// Reads the entire contents of a tcpstream into a buffer until it times out
+/// if it fills the buffer it will recurse and read until th buffer is empty
+/// if the buffer is being filled faster than it can read it will run out of memory
+pub fn read_till_timeout(input: &mut TcpStream) -> Result<Vec<u8>, IoError> {
+    input.set_nonblocking(false)?;
+    input.set_read_timeout(Some(NET_TIMEOUT))?;
+    let mut out = Vec::new();
+    let mut buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+    match input.read(&mut buffer) {
+        Ok(bytes) => {
+            if bytes == BUFFER_SIZE {
+                out.extend_from_slice(&buffer);
+                out.extend_from_slice(&read_till_block(input)?);
+                Ok(out)
+            } else {
+                Ok(buffer.to_vec())
+            }
         }
-    } else {
-        Ok(messages)
+        Err(e) => Err(e),
     }
 }
 
@@ -386,6 +390,39 @@ impl ForwardingProtocolMessage {
                 }
             }
             _ => bail!("Unknown packet type!"),
+        }
+    }
+
+    /// Reads all the currently available messages from the provided stream, this function will
+    /// also block until a currently in flight message is delivered
+    pub fn read_messages(input: &mut TcpStream) -> Result<Vec<ForwardingProtocolMessage>, Error> {
+        ForwardingProtocolMessage::read_messages_internal(input, Vec::new(), Vec::new())
+    }
+
+    fn read_messages_internal(
+        input: &mut TcpStream,
+        remaining_bytes: Vec<u8>,
+        messages: Vec<ForwardingProtocolMessage>,
+    ) -> Result<Vec<ForwardingProtocolMessage>, Error> {
+        // these should match the full list of message types defined above
+        let mut messages = messages;
+        let mut remaining_bytes = remaining_bytes;
+
+        remaining_bytes.extend_from_slice(&read_till_block(input)?);
+
+        if let Ok((bytes, msg)) = ForwardingProtocolMessage::read_message(&remaining_bytes) {
+            messages.push(msg);
+            if bytes < remaining_bytes.len() {
+                ForwardingProtocolMessage::read_messages_internal(
+                    input,
+                    remaining_bytes[bytes..].to_vec(),
+                    messages,
+                )
+            } else {
+                Ok(messages)
+            }
+        } else {
+            Ok(messages)
         }
     }
 }
