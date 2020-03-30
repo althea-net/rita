@@ -13,7 +13,7 @@ use althea_kernel_interface::KernelInterface;
 use althea_kernel_interface::LinuxCommandRunner;
 use althea_types::Identity;
 use althea_types::WgKey;
-use antenna_forwarding_protocol::read_till_block;
+use antenna_forwarding_protocol::process_streams;
 use antenna_forwarding_protocol::write_all_spinlock;
 use antenna_forwarding_protocol::ForwardingProtocolMessage;
 use antenna_forwarding_protocol::NET_TIMEOUT;
@@ -23,8 +23,6 @@ use oping::Ping;
 use rand::Rng;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::io::ErrorKind::WouldBlock;
-use std::io::Write;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::net::Shutdown;
@@ -83,22 +81,26 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
                 Ok(messages) => {
                     if messages.is_empty() {
                         error!("Empty vector from read_messages?");
-                        continue;
                     }
                     // read messages will return a vec of at least one,
-                    if let ForwardingProtocolMessage::ForwardMessage {
+                    else if let Some(ForwardingProtocolMessage::ForwardMessage {
                         ip,
                         server_port: _server_port,
                         antenna_port,
-                    } = messages[0]
+                    }) = messages.iter().next()
                     {
-                        match setup_networking(ip, antenna_port, &interfaces_to_search) {
+                        // if there are other messages in this batch safely form a slice
+                        // to pass on
+                        let slice = if messages.len() > 1 {
+                            &messages[1..]
+                        } else {
+                            // an empty slice
+                            &([] as [ForwardingProtocolMessage; 0])
+                        };
+                        // setup networking and process the rest of the messages in this batch
+                        match setup_networking(*ip, *antenna_port, &interfaces_to_search) {
                             Ok(antenna_sockaddr) => {
-                                forward_connections(
-                                    antenna_sockaddr,
-                                    server_stream,
-                                    &messages[1..],
-                                );
+                                forward_connections(antenna_sockaddr, server_stream, slice);
                             }
                             Err(e) => send_error_message(&mut server_stream, format!("{:?}", e)),
                         }
@@ -133,7 +135,7 @@ fn process_messages(
             // the server doesn't send us error messages, what would we do with it?
             ForwardingProtocolMessage::ErrorMessage { .. } => unimplemented!(),
             ForwardingProtocolMessage::ConnectionCloseMessage { stream_id } => {
-                trace!("Got close message");
+                trace!("Got close message for stream {}", stream_id);
                 *last_message = Instant::now();
                 let stream_id = stream_id;
                 let stream = streams
@@ -145,24 +147,22 @@ fn process_messages(
                 streams.remove(stream_id);
             }
             ForwardingProtocolMessage::ConnectionDataMessage { stream_id, payload } => {
-                trace!("Got connection message");
+                trace!(
+                    "Got connection message for stream {} payload {} bytes",
+                    stream_id,
+                    payload.len()
+                );
                 *last_message = Instant::now();
                 let stream_id = stream_id;
-                if let Some(antenna_stream) = streams.get_mut(stream_id) {
-                    trace!("Message for {}", stream_id);
-                    antenna_stream
-                        .write_all(&payload)
+                if let Some(mut antenna_stream) = streams.get_mut(stream_id) {
+                    write_all_spinlock(&mut antenna_stream, &payload)
                         .expect("Failed to talk to antenna!");
                 } else {
                     trace!("Opening stream for {}", stream_id);
                     // we don't have a stream, we need to dial out to the server now
                     let mut new_stream =
                         TcpStream::connect(antenna_sockaddr).expect("Could not contact antenna!");
-                    new_stream
-                        .set_nonblocking(true)
-                        .expect("Could not get nonblocking connection");
-                    new_stream
-                        .write_all(&payload)
+                    write_all_spinlock(&mut new_stream, &payload)
                         .expect("Failed to talk to antenna!");
                     streams.insert(*stream_id, new_stream);
                 }
@@ -185,48 +185,6 @@ fn process_messages(
         }
     }
     false
-}
-
-/// This function processes the antenna streams, meaning it handles taking messages from
-/// known streams, packaging them, and sending them down the line to the server. It also handles
-/// details like closing those streams when they hangup and notifying the server end.
-fn process_streams(streams: &mut HashMap<u64, TcpStream>, server_stream: &mut TcpStream) {
-    let mut streams_to_remove: Vec<u64> = Vec::new();
-    // First we we have to iterate over all of these connections
-    // and read to send messages up the server pipe. We need to do
-    // this first becuase we may exit in the next section if there's
-    // nothing to write
-    for (stream_id, antenna_stream) in streams.iter_mut() {
-        // in theory we will figure out if the connection is closed here
-        // and then send a closed message
-        match read_till_block(antenna_stream) {
-            Ok(bytes) => {
-                if !bytes.is_empty() {
-                    trace!(
-                        "We have {} bytes to write from a antenna input socket",
-                        bytes.len()
-                    );
-                    let msg =
-                        ForwardingProtocolMessage::new_connection_data_message(*stream_id, bytes);
-                    write_all_spinlock(server_stream, &msg.get_message())
-                        .unwrap_or_else(|_| panic!("Failed to write with stream {}", *stream_id));
-                }
-            }
-            Err(e) => {
-                if e.kind() != WouldBlock {
-                    error!("Could not read client socket with {:?}", e);
-                    let msg = ForwardingProtocolMessage::new_connection_close_message(*stream_id);
-                    write_all_spinlock(server_stream, &msg.get_message())
-                        .unwrap_or_else(|_| panic!("Failed to close stream {}", *stream_id));
-                    let _ = antenna_stream.shutdown(Shutdown::Write);
-                    streams_to_remove.push(*stream_id);
-                }
-            }
-        }
-    }
-    for i in streams_to_remove {
-        streams.remove(&i);
-    }
 }
 
 /// Actually forwards the connection by managing the reading and writing from

@@ -12,6 +12,7 @@ serde = "1.0"
 sodiumoxide = "0.2"
 failure = "0.1"
 clarity = "0.1"
+log = "0.4"
 
 [dev-dependencies]
 rand = "0.7"

@@ -10,20 +10,24 @@
 extern crate serde_derive;
 #[macro_use]
 extern crate failure;
+#[macro_use]
+extern crate log;
 
 use althea_types::Identity;
 use failure::Error;
+use std::collections::HashMap;
 use std::io::Error as IoError;
 use std::io::ErrorKind::WouldBlock;
 use std::io::Read;
 use std::io::Write;
 use std::net::IpAddr;
+use std::net::Shutdown;
 use std::net::TcpStream;
 use std::thread;
 use std::time::Duration;
 
 /// The amount of time to sleep a thread that's spinlocking on somthing
-pub const SPINLOCK_TIME: Duration = Duration::from_millis(10);
+pub const SPINLOCK_TIME: Duration = Duration::from_millis(50);
 
 /// The amount of time to wait for a blocking read
 pub const NET_TIMEOUT: Duration = Duration::from_secs(1);
@@ -38,6 +42,7 @@ pub const HEADER_LEN: usize = 20;
 /// Writes data to a stream keeping in mind that we may encounter
 /// a buffer limit and have to partially complete our write
 pub fn write_all_spinlock(stream: &mut TcpStream, buffer: &[u8]) -> Result<(), IoError> {
+    stream.set_nonblocking(true)?;
     loop {
         let res = stream.write_all(buffer);
         match res {
@@ -70,6 +75,8 @@ pub fn read_till_block(input: &mut TcpStream) -> Result<Vec<u8>, IoError> {
             Err(e) => {
                 if e.kind() == WouldBlock {
                     return Ok(out);
+                } else if !out.is_empty() {
+                    return Ok(out);
                 } else {
                     return Err(e);
                 }
@@ -97,6 +104,47 @@ pub fn read_till_timeout(input: &mut TcpStream) -> Result<Vec<u8>, IoError> {
             }
         }
         Err(e) => Err(e),
+    }
+}
+
+/// This function processes the antenna streams, meaning it handles taking messages from
+/// known streams, packaging them, and sending them down the line to the server. It also handles
+/// details like closing those streams when they hangup and notifying the other end.
+pub fn process_streams<S: ::std::hash::BuildHasher>(
+    streams: &mut HashMap<u64, TcpStream, S>,
+    server_stream: &mut TcpStream,
+) {
+    let mut streams_to_remove: Vec<u64> = Vec::new();
+    // First we we have to iterate over all of these connections
+    // and read to send messages up the server pipe. We need to do
+    // this first becuase we may exit in the next section if there's
+    // nothing to write
+    for (stream_id, antenna_stream) in streams.iter_mut() {
+        // in theory we will figure out if the connection is closed here
+        // and then send a closed message
+        match read_till_block(antenna_stream) {
+            Ok(bytes) => {
+                if !bytes.is_empty() {
+                    let msg =
+                        ForwardingProtocolMessage::new_connection_data_message(*stream_id, bytes);
+                    write_all_spinlock(server_stream, &msg.get_message())
+                        .unwrap_or_else(|_| panic!("Failed to write with stream {}", *stream_id));
+                }
+            }
+            Err(e) => {
+                if e.kind() != WouldBlock {
+                    error!("Closing antenna/client connection with {:?}", e);
+                    let msg = ForwardingProtocolMessage::new_connection_close_message(*stream_id);
+                    write_all_spinlock(server_stream, &msg.get_message())
+                        .unwrap_or_else(|_| panic!("Failed to close stream {}", *stream_id));
+                    let _ = antenna_stream.shutdown(Shutdown::Write);
+                    streams_to_remove.push(*stream_id);
+                }
+            }
+        }
+    }
+    for i in streams_to_remove {
+        streams.remove(&i);
     }
 }
 
