@@ -322,7 +322,7 @@ fn xdai_bridge(state: State, bridge: &TokenBridge) {
     match state {
         State::Ready { .. } => {
             info!(
-                "Ticking in State::Ready. Eth Address: {}",
+                "Ticking in bridge State::Ready. Eth Address: {}",
                 bridge.own_address
             );
             // Go into State::Depositing right away to prevent multiple attempts
@@ -399,7 +399,7 @@ fn xdai_bridge(state: State, bridge: &TokenBridge) {
                     // attempts to bridge the same Dai.
 
                     if res.is_err() {
-                        error!("Error in State::Deposit Tick handler: {:?}", res);
+                        error!("Error in bridge State::Deposit Tick handler: {:?}", res);
                     }
                     TokenBridge::from_registry().do_send(StateChange(State::Ready {
                         former_state: Some(Box::new(State::Depositing {})),
@@ -408,13 +408,14 @@ fn xdai_bridge(state: State, bridge: &TokenBridge) {
                 }),
             )
         }
-        State::Depositing {} => trace!("Tried to tick in State::Depositing"),
+        State::Depositing {} => info!("Tried to tick in bridge State::Depositing"),
         State::Withdrawing {
             to,
             amount,
             timestamp,
             withdraw_all,
         } => {
+            info!("Ticking in bridge State:Withdrawing");
             if is_timed_out(timestamp) {
                 error!("Withdraw timed out!");
                 TokenBridge::from_registry().do_send(DetailedStateChange(
