@@ -187,7 +187,7 @@ pub fn light_client_hello_response(
 pub struct LightClientManager {
     start_address: Ipv4Addr,
     prefix: u8,
-    assigned_addresses: HashMap<LocalIdentity, Ipv4Addr>,
+    assigned_addresses: HashMap<Identity, Ipv4Addr>,
     last_seen_bytes: HashMap<WgKey, WgUsage>,
 }
 
@@ -226,44 +226,64 @@ impl Handler<GetAddress> for LightClientManager {
 
     fn handle(&mut self, msg: GetAddress, _: &mut Context<Self>) -> Self::Result {
         let requester_id = msg.0;
-        trace!("Assigning light client address");
-        // we already have an ip for this id on record, send the same one out
-        if let Some(ip) = self.assigned_addresses.get(&requester_id) {
-            return Ok(*ip);
-        }
-        let assigned_ips = {
-            let mut set = HashSet::new();
-            for (_id, ip) in self.assigned_addresses.iter() {
-                set.insert(ip);
-            }
-            set
-        };
-
-        // get the first unused address this is kinda inefficient, I'm sure we could do this in all O(1) operations
-        // but at the cost of more memory usage, which I'd rather avoid. Either way it's trivial
-        // both in terms of memory and cpu at the scale of only 16 bits of address space (ipv4 private range size)
-        let mut new_address: Ipv4Addr = self.start_address;
-        while assigned_ips.contains(&new_address) {
-            trace!("light client address {} is already assigned", new_address);
-            new_address = incrementv4(new_address, self.prefix)?;
-        }
-        self.assigned_addresses.insert(requester_id, new_address);
-        trace!(
-            "finished selecting light client address, it is {}",
-            new_address
-        );
-        Ok(new_address)
+        assign_client_address(
+            &mut self.assigned_addresses,
+            requester_id.global,
+            self.start_address,
+            self.prefix,
+        )
     }
+}
+
+fn assign_client_address(
+    assigned_addresses: &mut HashMap<Identity, Ipv4Addr>,
+    requester_id: Identity,
+    start_address: Ipv4Addr,
+    prefix: u8,
+) -> Result<Ipv4Addr, Error> {
+    trace!("Assigning light client address");
+    // we already have an ip for this id on record, send the same one out
+    if let Some(ip) = assigned_addresses.get(&requester_id) {
+        trace!("Found existing record, no ip assigned");
+        return Ok(*ip);
+    }
+    let assigned_ips = {
+        let mut set = HashSet::new();
+        for (_id, ip) in assigned_addresses.iter() {
+            set.insert(ip);
+        }
+        set
+    };
+
+    // get the first unused address this is kinda inefficient, I'm sure we could do this in all O(1) operations
+    // but at the cost of more memory usage, which I'd rather avoid. Either way it's trivial
+    // both in terms of memory and cpu at the scale of only 16 bits of address space (ipv4 private range size)
+    let mut new_address: Ipv4Addr = start_address;
+    while assigned_ips.contains(&new_address) {
+        trace!("light client address {} is already assigned", new_address);
+        new_address = incrementv4(new_address, prefix)?;
+    }
+    assigned_addresses.insert(requester_id, new_address);
+    trace!(
+        "finished selecting light client address, it is {}",
+        new_address
+    );
+    Ok(new_address)
 }
 
 /// Returns addresses not assigned to tunnels to the pool, this is
 /// inefficient versus having tunnel manager notify us when it deletes
 /// a tunnel but it turns out getting the conditional complication required
 /// for that to all workout is moderately complicated.
-fn return_addresses(tunnels: &[Tunnel], assigned_addresses: &mut HashMap<LocalIdentity, Ipv4Addr>) {
-    let mut addresses_to_remove: Vec<LocalIdentity> = Vec::new();
-    let mut found = false;
+fn return_addresses(tunnels: &[Tunnel], assigned_addresses: &mut HashMap<Identity, Ipv4Addr>) {
+    trace!(
+        "starting address GC tunnels {:?}, addresses {:?}",
+        tunnels,
+        assigned_addresses
+    );
+    let mut addresses_to_remove: Vec<Identity> = Vec::new();
     for (id, ip) in assigned_addresses.iter() {
+        let mut found = false;
         for tunnel in tunnels.iter() {
             if let Some(tunnel_ip) = tunnel.light_client_details {
                 if tunnel_ip == *ip {
@@ -351,5 +371,141 @@ fn subtract_or_insert_and_subtract(data: &mut HashMap<Identity, i128>, i: Identi
         *val -= debt;
     } else {
         data.insert(i, -debt);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clu::generate_mesh_ip;
+
+    fn get_test_id() -> Identity {
+        Identity {
+            mesh_ip: "::1".parse().unwrap(),
+            eth_address: "0x4288C538A553357Bb6c3b77Cf1A60Da6E77931F6"
+                .parse()
+                .unwrap(),
+            wg_public_key: "GIaAXDi1PbGq3PsKqBnT6kIPoE2K1Ssv9HSb7++dzl4="
+                .parse()
+                .unwrap(),
+            nickname: None,
+        }
+    }
+
+    fn get_test_tunnel(ip: Ipv4Addr) -> Tunnel {
+        Tunnel::new(
+            ip.into(),
+            "iface".into(),
+            65535,
+            0,
+            LocalIdentity {
+                wg_port: 65535,
+                have_tunnel: Some(true),
+                global: get_test_id(),
+            },
+            Some(ip),
+        )
+    }
+
+    fn get_random_id() -> Identity {
+        Identity {
+            mesh_ip: generate_mesh_ip().unwrap(),
+            eth_address: "0x4288C538A553357Bb6c3b77Cf1A60Da6E77931F6"
+                .parse()
+                .unwrap(),
+            wg_public_key: "GIaAXDi1PbGq3PsKqBnT6kIPoE2K1Ssv9HSb7++dzl4="
+                .parse()
+                .unwrap(),
+            nickname: None,
+        }
+    }
+
+    #[test]
+    fn test_basic_assign() {
+        let mut assigned_addresses = HashMap::new();
+        let res: Ipv4Addr = assign_client_address(
+            &mut assigned_addresses,
+            get_random_id(),
+            "192.168.1.0".parse().unwrap(),
+            24,
+        )
+        .expect("Failed to assign ip");
+        assert_eq!("192.168.1.0".parse::<Ipv4Addr>().unwrap(), res);
+        let res: Ipv4Addr = assign_client_address(
+            &mut assigned_addresses,
+            get_random_id(),
+            "192.168.1.0".parse().unwrap(),
+            24,
+        )
+        .expect("Failed to assign ip");
+        assert_eq!("192.168.1.1".parse::<Ipv4Addr>().unwrap(), res);
+        let res: Ipv4Addr = assign_client_address(
+            &mut assigned_addresses,
+            get_random_id(),
+            "192.168.1.0".parse().unwrap(),
+            24,
+        )
+        .expect("Failed to assign ip");
+        assert_eq!("192.168.1.2".parse::<Ipv4Addr>().unwrap(), res);
+    }
+
+    #[test]
+    fn test_failed_assign() {
+        let mut assigned_addresses = HashMap::new();
+        let _res = assign_client_address(
+            &mut assigned_addresses,
+            get_test_id(),
+            "192.168.1.255".parse().unwrap(),
+            24,
+        );
+        let res = assign_client_address(
+            &mut assigned_addresses,
+            get_random_id(),
+            "192.168.1.255".parse().unwrap(),
+            24,
+        );
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_gc() {
+        let mut assigned_addresses = HashMap::new();
+        let _res = assign_client_address(
+            &mut assigned_addresses,
+            get_test_id(),
+            "192.168.1.0".parse().unwrap(),
+            24,
+        );
+        let _res = assign_client_address(
+            &mut assigned_addresses,
+            get_random_id(),
+            "192.168.1.0".parse().unwrap(),
+            24,
+        );
+        let empty_tunnels = [] as [Tunnel; 0];
+        return_addresses(&empty_tunnels, &mut assigned_addresses);
+        assert!(assigned_addresses.is_empty());
+    }
+
+    #[test]
+    fn test_not_gc() {
+        let mut assigned_addresses = HashMap::new();
+        let _res = assign_client_address(
+            &mut assigned_addresses,
+            get_test_id(),
+            "192.168.1.0".parse().unwrap(),
+            24,
+        );
+        let _res = assign_client_address(
+            &mut assigned_addresses,
+            get_random_id(),
+            "192.168.1.0".parse().unwrap(),
+            24,
+        );
+        let ip = "192.168.1.0".parse().unwrap();
+        let tunnels = [get_test_tunnel(ip)];
+        println!("{:?}", assigned_addresses);
+        return_addresses(&tunnels, &mut assigned_addresses);
+        assert_eq!(assigned_addresses.len(), 1);
     }
 }

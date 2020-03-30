@@ -156,7 +156,7 @@ impl Display for Tunnel {
 }
 
 impl Tunnel {
-    fn new(
+    pub fn new(
         ip: IpAddr,
         iface_name: String,
         our_listen_port: u16,
