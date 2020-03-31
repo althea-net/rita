@@ -63,23 +63,14 @@ pub fn write_all_spinlock(stream: &mut TcpStream, buffer: &[u8]) -> Result<(), I
 pub fn read_till_block(input: &mut TcpStream) -> Result<Vec<u8>, IoError> {
     input.set_nonblocking(true)?;
     let mut out = Vec::new();
-    loop {
-        let mut buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
-        match input.read(&mut buffer) {
-            Ok(bytes) => {
-                if bytes == 0 {
-                    return Ok(out);
-                }
-                out.extend_from_slice(&buffer)
-            }
-            Err(e) => {
-                if e.kind() == WouldBlock {
-                    return Ok(out);
-                } else if !out.is_empty() {
-                    return Ok(out);
-                } else {
-                    return Err(e);
-                }
+    match input.read_to_end(&mut out) {
+        Ok(_bytes) => Ok(out),
+        Err(e) => {
+            if e.kind() == WouldBlock {
+                Ok(out)
+            } else {
+                error!("Broken! {:?}", e);
+                Err(e)
             }
         }
     }
@@ -125,6 +116,11 @@ pub fn process_streams<S: ::std::hash::BuildHasher>(
         match read_till_block(antenna_stream) {
             Ok(bytes) => {
                 if !bytes.is_empty() {
+                    info!(
+                        "Got {} bytes for stream id {} from antenna/client",
+                        bytes.len(),
+                        stream_id
+                    );
                     let msg =
                         ForwardingProtocolMessage::new_connection_data_message(*stream_id, bytes);
                     write_all_spinlock(server_stream, &msg.get_message())
