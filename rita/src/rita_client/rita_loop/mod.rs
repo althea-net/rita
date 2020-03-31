@@ -10,6 +10,9 @@ use crate::rita_client::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::rita_client::light_client_manager::light_client_hello_response;
 use crate::rita_client::light_client_manager::LightClientManager;
 use crate::rita_client::light_client_manager::Watch;
+use crate::rita_client::operator_fee_manager::OperatorFeeManager;
+use crate::rita_client::operator_fee_manager::Tick as OperatorTick;
+use crate::rita_client::operator_update::{OperatorUpdate, Update};
 use crate::rita_client::traffic_watcher::GetExitDestPrice;
 use crate::rita_client::traffic_watcher::TrafficWatcher;
 use crate::rita_client::traffic_watcher::WeAreGatewayClient;
@@ -131,6 +134,11 @@ impl Handler<Tick> for RitaLoop {
                 self.antenna_forwarder_started = true;
             }
         }
+
+        // Check Operator payments
+        OperatorFeeManager::from_registry().do_send(OperatorTick);
+        // Check in with Organizer
+        OperatorUpdate::from_registry().do_send(Update);
 
         info!(
             "Rita Client loop completed in {}s {}ms",

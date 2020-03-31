@@ -8,6 +8,7 @@ use actix_web::{HttpRequest, HttpResponse, Json, Result};
 use failure::Error;
 use futures01::Future;
 use num256::Uint256;
+use settings::client::RitaClientSettings;
 use settings::FileWrite;
 use settings::RitaCommonSettings;
 

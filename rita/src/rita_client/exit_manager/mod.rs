@@ -19,7 +19,7 @@
 use crate::rita_client::rita_loop::Tick;
 use crate::rita_client::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::rita_client::traffic_watcher::{QueryExitDebts, TrafficWatcher};
-use crate::rita_common::oracle::low_balance;
+use crate::rita_common::blockchain_oracle::low_balance;
 use crate::KI;
 use crate::SETTING;
 use ::actix::registry::SystemService;

@@ -67,7 +67,6 @@ use rita_exit::rita_loop::start_rita_exit_endpoints;
 
 use crate::rita_common::dashboard::auth::*;
 use crate::rita_common::dashboard::babel::*;
-use crate::rita_common::dashboard::dao::*;
 use crate::rita_common::dashboard::debts::*;
 use crate::rita_common::dashboard::development::*;
 use crate::rita_common::dashboard::nickname::*;
@@ -274,8 +273,6 @@ fn start_rita_exit_dashboard() {
             .route("/info", Method::GET, get_own_info)
             .route("/local_fee", Method::GET, get_local_fee)
             .route("/local_fee/{fee}", Method::POST, set_local_fee)
-            .route("/dao_fee", Method::GET, get_dao_fee)
-            .route("/dao_fee/{fee}", Method::POST, set_dao_fee)
             .route("/metric_factor", Method::GET, get_metric_factor)
             .route("/metric_factor/{factor}", Method::POST, set_metric_factor)
             .route("/settings", Method::GET, get_settings)
@@ -286,13 +283,6 @@ fn start_rita_exit_dashboard() {
             .route("/database", Method::DELETE, nuke_db)
             .route("/debts", Method::GET, get_debts)
             .route("/debts/reset", Method::POST, reset_debt)
-            .route("/dao_list", Method::GET, get_dao_list)
-            .route("/dao_list/add/{address}", Method::POST, add_to_dao_list)
-            .route(
-                "/dao_list/remove/{address}",
-                Method::POST,
-                remove_from_dao_list,
-            )
             .route("/withdraw/{address}/{amount}", Method::POST, withdraw)
             .route("/withdraw_all/{address}", Method::POST, withdraw_all)
             .route(

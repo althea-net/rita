@@ -1,5 +1,3 @@
-use crate::rita_common::dao_manager::DAOManager;
-use crate::rita_common::dao_manager::Tick as DAOTick;
 use crate::rita_common::simulated_txfee_manager::SimulatedTxFeeManager;
 use crate::rita_common::simulated_txfee_manager::Tick as TxFeeTick;
 use crate::rita_common::token_bridge::Tick as TokenBridgeTick;
@@ -77,9 +75,6 @@ impl Handler<Tick> for RitaSlowLoop {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
         trace!("Common Slow tick!");
-
-        // Check DAO payments
-        DAOManager::from_registry().do_send(DAOTick);
 
         SimulatedTxFeeManager::from_registry().do_send(TxFeeTick);
 

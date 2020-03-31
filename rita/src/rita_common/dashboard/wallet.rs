@@ -1,6 +1,6 @@
-use crate::rita_common::oracle::trigger_update_nonce;
-use crate::rita_common::oracle::Oracle;
-use crate::rita_common::oracle::ZeroWindowStart;
+use crate::rita_common::blockchain_oracle::trigger_update_nonce;
+use crate::rita_common::blockchain_oracle::BlockchainOracle;
+use crate::rita_common::blockchain_oracle::ZeroWindowStart;
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::rita_common::token_bridge::eth_equal;
 use crate::rita_common::token_bridge::GetBridge;
@@ -62,7 +62,7 @@ pub fn withdraw_all(path: Path<Address>) -> Box<dyn Future<Item = HttpResponse, 
     let balance = payment_settings.balance.clone();
     drop(payment_settings);
 
-    Oracle::from_registry().do_send(ZeroWindowStart());
+    BlockchainOracle::from_registry().do_send(ZeroWindowStart());
 
     let tx_gas: Uint256 =
         if (system_chain, withdraw_chain) == (SystemChain::Xdai, SystemChain::Ethereum) {

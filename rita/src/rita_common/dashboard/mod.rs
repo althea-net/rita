@@ -7,7 +7,6 @@ use actix::registry::SystemService;
 
 pub mod auth;
 pub mod babel;
-pub mod dao;
 pub mod debts;
 pub mod development;
 pub mod nickname;

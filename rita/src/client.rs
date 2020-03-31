@@ -29,12 +29,10 @@ extern crate arrayvec;
 
 use actix_web::http::Method;
 use actix_web::{http, server, App};
-use althea_types::SystemChain;
 use docopt::Docopt;
 use env_logger;
 use openssl_probe;
 use settings::client::{RitaClientSettings, RitaSettingsStruct};
-use settings::payment::XDAI_FEE_MULTIPLIER;
 use settings::RitaCommonSettings;
 use std::env;
 use std::sync::{Arc, RwLock};
@@ -65,6 +63,7 @@ use crate::rita_client::dashboard::logging::*;
 use crate::rita_client::dashboard::mesh_ip::*;
 use crate::rita_client::dashboard::neighbors::*;
 use crate::rita_client::dashboard::notifications::*;
+use crate::rita_client::dashboard::operator::*;
 use crate::rita_client::dashboard::prices::*;
 use crate::rita_client::dashboard::release_feed::*;
 use crate::rita_client::dashboard::remote_access::*;
@@ -74,7 +73,6 @@ use crate::rita_client::dashboard::usage::*;
 use crate::rita_client::dashboard::wifi::*;
 use crate::rita_common::dashboard::auth::*;
 use crate::rita_common::dashboard::babel::*;
-use crate::rita_common::dashboard::dao::*;
 use crate::rita_common::dashboard::debts::*;
 use crate::rita_common::dashboard::development::*;
 use crate::rita_common::dashboard::nickname::*;
@@ -193,12 +191,23 @@ fn wait_for_settings(settings_file: &str) -> RitaSettingsStruct {
 }
 
 fn main() {
-    // Remove in Beta 12 updates payment multiplier for xdai routers
-    // scope to ensure the reference is dropped before continuing
+    // Remove in Beta 13, migrates settings from the old dao structure to
+    // the operator structure in settings.
     {
-        let mut payment = SETTING.get_payment_mut();
-        if payment.system_chain == SystemChain::Xdai {
-            payment.dynamic_fee_multiplier = XDAI_FEE_MULTIPLIER;
+        let dao = { SETTING.get_dao().clone() };
+        let mut operator = SETTING.get_operator_mut();
+
+        // suppose a migration has occured and the user then tries to
+        // change the operator address, it will revert on restart every time
+        // because the 'migration' will run again. So we should check first.
+        if operator.operator_address.is_none() {
+            // get the first address in the list
+            operator.operator_address = match dao.dao_addresses.get(0) {
+                Some(val) => Some(*val),
+                None => None,
+            };
+            operator.operator_fee = dao.dao_fee;
+            operator.use_operator_price = dao.use_oracle_price;
         }
     }
 
@@ -268,6 +277,12 @@ fn start_client_dashboard() {
                 Method::POST,
                 remove_from_dao_list,
             )
+            .route("/dao_fee", Method::GET, get_dao_fee)
+            .route("/dao_fee/{fee}", Method::POST, set_dao_fee)
+            .route("/operator", Method::GET, get_operator)
+            .route("/operator", Method::POST, change_operator)
+            .route("/operator/remote", Method::POST, remove_operator)
+            .route("/operator_fee", Method::GET, get_operator_fee)
             .route("/debts", Method::GET, get_debts)
             .route("/debts/reset", Method::POST, reset_debt)
             .route("/exits/sync", Method::POST, exits_sync)
@@ -278,8 +293,6 @@ fn start_client_dashboard() {
             .route("/exits/{name}/select", Method::POST, select_exit)
             .route("/local_fee", Method::GET, get_local_fee)
             .route("/local_fee/{fee}", Method::POST, set_local_fee)
-            .route("/dao_fee", Method::GET, get_dao_fee)
-            .route("/dao_fee/{fee}", Method::POST, set_dao_fee)
             .route("/metric_factor", Method::GET, get_metric_factor)
             .route("/metric_factor/{factor}", Method::POST, set_metric_factor)
             .route(
@@ -351,7 +364,7 @@ fn start_client_dashboard() {
             .route(
                 "/blockchain/set/{chain_id}",
                 Method::POST,
-                set_system_blockchain,
+                set_system_blockchain_endpoint,
             )
             .route("/blockchain/get", Method::GET, get_system_blockchain)
             .route("/nickname/get", Method::GET, get_nickname)

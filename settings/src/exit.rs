@@ -16,7 +16,6 @@ use althea_types::Identity;
 
 use failure::Error;
 
-use crate::dao::SubnetDAOSettings;
 use crate::json_merge;
 use crate::localization::LocalizationSettings;
 use crate::network::NetworkSettings;
@@ -186,7 +185,6 @@ pub struct RitaExitSettingsStruct {
     payment: PaymentSettings,
     #[serde(default)]
     localization: LocalizationSettings,
-    dao: SubnetDAOSettings,
     network: NetworkSettings,
     exit_network: ExitNetworkSettings,
     /// Countries which the clients to the exit are allowed from, blank for no geoip validation.
@@ -208,7 +206,6 @@ impl RitaExitSettingsStruct {
             workers: 1,
             description: "".to_string(),
             payment: PaymentSettings::default(),
-            dao: SubnetDAOSettings::default(),
             localization: LocalizationSettings::default(),
             network: NetworkSettings::default(),
             exit_network: ExitNetworkSettings::test_default(),
@@ -302,12 +299,6 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
             .map_mut(|g| &mut g.payment)
     }
 
-    fn get_dao<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, SubnetDAOSettings> {
-        RwLockReadGuardRef::new(self.read().expect("Failed to read DAO settings!")).map(|g| &g.dao)
-    }
-
     fn get_localization_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, LocalizationSettings> {
@@ -323,13 +314,6 @@ impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsS
     ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, LocalizationSettings> {
         RwLockReadGuardRef::new(self.read().expect("Failed to read localization settings!"))
             .map(|g| &g.localization)
-    }
-
-    fn get_dao_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, SubnetDAOSettings> {
-        RwLockWriteGuardRefMut::new(self.write().expect("Failed to write dao settings!"))
-            .map_mut(|g| &mut g.dao)
     }
 
     fn get_network<'ret, 'me: 'ret>(

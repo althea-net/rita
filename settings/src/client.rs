@@ -1,26 +1,20 @@
-use config;
-
-use serde_json;
-
-use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
-
-use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, RwLock};
-
-use config::Config;
-
-use althea_types::{ExitRegistrationDetails, ExitState, Identity};
-
-use failure::Error;
-
 use crate::dao::SubnetDAOSettings;
 use crate::json_merge;
 use crate::localization::LocalizationSettings;
 use crate::logging::LoggingSettings;
 use crate::network::NetworkSettings;
+use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
 use crate::spawn_watch_thread;
 use crate::RitaCommonSettings;
+use althea_types::{ExitRegistrationDetails, ExitState, Identity};
+use config;
+use config::Config;
+use failure::Error;
+use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
+use serde_json;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, RwLock};
 
 /// This struct is used by rita to store exit specific information
 /// There is one instance per exit
@@ -104,6 +98,18 @@ pub trait RitaClientSettings {
     fn get_log_mut<'ret, 'me: 'ret>(
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, LoggingSettings>;
+    fn get_dao<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, SubnetDAOSettings>;
+    fn get_dao_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, SubnetDAOSettings>;
+    fn get_operator<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, OperatorSettings>;
+    fn get_operator_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, OperatorSettings>;
 }
 
 impl RitaClientSettings for Arc<RwLock<RitaSettingsStruct>> {
@@ -140,6 +146,30 @@ impl RitaClientSettings for Arc<RwLock<RitaSettingsStruct>> {
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, LoggingSettings> {
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.log)
+    }
+
+    fn get_dao<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, SubnetDAOSettings> {
+        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.dao)
+    }
+
+    fn get_dao_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, SubnetDAOSettings> {
+        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.dao)
+    }
+
+    fn get_operator<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, OperatorSettings> {
+        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.operator)
+    }
+
+    fn get_operator_mut<'ret, 'me: 'ret>(
+        &'me self,
+    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, OperatorSettings> {
+        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.operator)
     }
 }
 
@@ -180,6 +210,8 @@ pub struct RitaSettingsStruct {
     #[serde(default)]
     log: LoggingSettings,
     #[serde(default)]
+    operator: OperatorSettings,
+    #[serde(default)]
     localization: LocalizationSettings,
     network: NetworkSettings,
     exit_client: ExitClientSettings,
@@ -198,18 +230,6 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, PaymentSettings> {
         RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.payment)
-    }
-
-    fn get_dao<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, SubnetDAOSettings> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.dao)
-    }
-
-    fn get_dao_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, SubnetDAOSettings> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.dao)
     }
 
     fn get_localization<'ret, 'me: 'ret>(

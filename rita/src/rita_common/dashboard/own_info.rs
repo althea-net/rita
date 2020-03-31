@@ -1,4 +1,4 @@
-use crate::rita_common::oracle::low_balance;
+use crate::rita_common::blockchain_oracle::low_balance;
 use crate::SETTING;
 use actix_web::{HttpRequest, Json};
 use clarity::Address;

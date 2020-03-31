@@ -362,12 +362,13 @@ impl FromStr for ReleaseStatus {
     }
 }
 
+/// Operator update that we get from the operator server during our checkin
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OracleUpdate {
+pub struct OperatorUpdateMessage {
     pub client: u32,
     pub gateway: u32,
     pub max: u32,
-    pub dao_fee: u128,
+    pub operator_fee: u128,
     pub warning: u128,
     pub system_chain: Option<SystemChain>,
     pub withdraw_chain: Option<SystemChain>,
@@ -378,6 +379,14 @@ pub struct OracleUpdate {
     pub merge_json: serde_json::Value,
 }
 
+/// The message we send to the operator server to checkin
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OperatorCheckinMessage {
+    pub id: Identity,
+}
+
+/// Heartbeat sent to the operator server to help monitor
+/// liveness and network state
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HeartbeatMessage {
     /// The identity of the sender

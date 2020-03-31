@@ -3,9 +3,9 @@
 //! so long as we have not published it to a full node, once the payment is on
 //! the blockchain it's up to the reciever to validate that it's correct
 
+use crate::rita_common::blockchain_oracle::trigger_update_nonce;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::PaymentFailed;
-use crate::rita_common::oracle::trigger_update_nonce;
 use crate::rita_common::payment_validator::{PaymentValidator, ToValidate, ValidateLater};
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::SETTING;

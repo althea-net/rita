@@ -2,6 +2,8 @@ pub mod dashboard;
 pub mod exit_manager;
 pub mod heartbeat;
 pub mod light_client_manager;
+pub mod operator_fee_manager;
+pub mod operator_update;
 pub mod rita_loop;
 pub mod traffic_watcher;
 
