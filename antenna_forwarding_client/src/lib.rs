@@ -79,11 +79,8 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
             thread::sleep(NET_TIMEOUT);
             match ForwardingProtocolMessage::read_messages(&mut server_stream) {
                 Ok(messages) => {
-                    if messages.is_empty() {
-                        error!("Empty vector from read_messages?");
-                    }
                     // read messages will return a vec of at least one,
-                    else if let Some(ForwardingProtocolMessage::ForwardMessage {
+                    if let Some(ForwardingProtocolMessage::ForwardMessage {
                         ip,
                         server_port: _server_port,
                         antenna_port,
@@ -104,6 +101,8 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
                             }
                             Err(e) => send_error_message(&mut server_stream, format!("{:?}", e)),
                         }
+                    } else {
+                        error!("Wrong start message!");
                     }
                 }
                 Err(e) => {

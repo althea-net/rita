@@ -27,14 +27,10 @@ use std::thread;
 use std::time::Duration;
 
 /// The amount of time to sleep a thread that's spinlocking on somthing
-pub const SPINLOCK_TIME: Duration = Duration::from_millis(50);
+pub const SPINLOCK_TIME: Duration = Duration::from_millis(100);
 
 /// The amount of time to wait for a blocking read
 pub const NET_TIMEOUT: Duration = Duration::from_secs(1);
-
-/// The size of the memory buffer for reading and writing packets
-/// currently 100kbytes
-pub const BUFFER_SIZE: usize = 100_000;
 
 /// The size in bytes of our packet header, 16 byte magic, 2 byte type, 2 byte len
 pub const HEADER_LEN: usize = 20;
@@ -73,28 +69,6 @@ pub fn read_till_block(input: &mut TcpStream) -> Result<Vec<u8>, IoError> {
                 Err(e)
             }
         }
-    }
-}
-
-/// Reads the entire contents of a tcpstream into a buffer until it times out
-/// if it fills the buffer it will recurse and read until th buffer is empty
-/// if the buffer is being filled faster than it can read it will run out of memory
-pub fn read_till_timeout(input: &mut TcpStream) -> Result<Vec<u8>, IoError> {
-    input.set_nonblocking(false)?;
-    input.set_read_timeout(Some(NET_TIMEOUT))?;
-    let mut out = Vec::new();
-    let mut buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
-    match input.read(&mut buffer) {
-        Ok(bytes) => {
-            if bytes == BUFFER_SIZE {
-                out.extend_from_slice(&buffer);
-                out.extend_from_slice(&read_till_block(input)?);
-                Ok(out)
-            } else {
-                Ok(buffer.to_vec())
-            }
-        }
-        Err(e) => Err(e),
     }
 }
 

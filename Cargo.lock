@@ -221,6 +221,7 @@ dependencies = [
  "althea_types",
  "clarity",
  "failure",
+ "log",
  "rand 0.7.3",
  "serde 1.0.105",
  "serde_derive",
