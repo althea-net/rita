@@ -1,5 +1,6 @@
 //! These endpoints are used to modify mundane wireless settings
 
+use crate::rita_common::dashboard::nickname::maybe_set_nickname;
 use crate::KI;
 use crate::SETTING;
 use ::actix_web::http::StatusCode;
@@ -135,6 +136,9 @@ fn set_ssid(wifi_ssid: &WifiSSID) -> Result<HttpResponse, Error> {
 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
+    // set the nickname with the first SSID change may fail
+    // if the ssid is too long but don't block on that
+    let _ = maybe_set_nickname(wifi_ssid.ssid.clone());
 
     Ok(HttpResponse::Ok().json(ret))
 }

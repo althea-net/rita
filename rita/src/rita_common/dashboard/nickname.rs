@@ -36,3 +36,26 @@ pub fn set_nickname(nickname: Json<Nickname>) -> Result<HttpResponse, Error> {
         Err(_e) => bail!("Insufficient capacity for string!"),
     }
 }
+
+/// sets a nickname if there is not one already set
+#[allow(dead_code)]
+pub fn maybe_set_nickname(new_nick: String) -> Result<(), Error> {
+    let mut network = SETTING.get_network_mut();
+    if network.nickname.is_none() && (new_nick != "AltheaHome-2.4" || new_nick != "AltheaHome-5") {
+        match ArrayString::<[u8; 32]>::from(&new_nick) {
+            Ok(new) => {
+                network.nickname = Some(new);
+                drop(network);
+
+                // try and save the config and fail if we can't
+                if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+                    return Err(e);
+                }
+                Ok(())
+            }
+            Err(_e) => bail!("Insufficient capacity for string!"),
+        }
+    } else {
+        Ok(())
+    }
+}
