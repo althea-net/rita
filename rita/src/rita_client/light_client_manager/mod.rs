@@ -43,15 +43,30 @@ fn setup_light_client_forwarding(client_addr: Ipv4Addr, nic: &str) -> Result<(),
     // this is easier to manage programatically but as mentioned before
     // doesn't exactly scale well.
     // Key points to note here is that the routes and addresses
-    // get cleaned up on their own whent the interface is deleted I'm not
-    // so sure about the iptables rules yet
+    // get cleaned up on their own whent the interface is deleted but
+    // the iptables rule does not and requires explicit deletion
     trace!("adding light client nat rules");
-    // in theory there should be some forwarding rules for iptables right here
-    // but these are not required because we use forward by default in the system firewall rules
     KI.add_ipv4("192.168.20.0".parse().unwrap(), nic)?;
     KI.run_command(
         "ip",
         &["route", "add", &format!("{}/32", client_addr), "dev", nic],
+    )?;
+    // forwards phone client packets while blocking other destinations this
+    // needs to be cleaned up at some point
+    KI.add_iptables_rule(
+        "iptables",
+        &[
+            "-I",
+            "FORWARD",
+            "-i",
+            &nic,
+            "--src",
+            &format!("{}/32", client_addr),
+            "--dst",
+            "192.168.20.0/24",
+            "-j",
+            "ACCEPT",
+        ],
     )?;
     Ok(())
 }

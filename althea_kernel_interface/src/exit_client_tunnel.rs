@@ -156,10 +156,15 @@ impl dyn KernelInterface {
         Ok(())
     }
 
-    /// Adds nat rules for all clients, phone clients and lan clients alike hit
-    /// these same rules, there is no forward spec here becuase forward is in general
-    /// allowed on the routers and we stick to restricting input and output.
-    pub fn create_client_nat_rules(&self, _lan_nic: &str) -> Result<(), Error> {
+    /// Adds nat rules for lan client, these act within the structure
+    /// of the openwrt rules which themselves create a few requirements
+    /// (such as saying that zone-lan-forward shoul jump to the accept table)
+    /// the nat rule here is very general, note the lack of restriction based
+    /// on incoming interface or ip, this is intentional, as it allows
+    /// the phone clients over in light_client_manager to function using these
+    /// same rules. It may be advisable in the future to split them up into
+    /// individual nat entires for each option
+    pub fn create_client_nat_rules(&self) -> Result<(), Error> {
         self.add_iptables_rule(
             "iptables",
             &[
@@ -173,6 +178,7 @@ impl dyn KernelInterface {
                 "MASQUERADE",
             ],
         )?;
+        self.add_iptables_rule("iptables", &["-A", "zone_lan_forward", "-j", "ACCEPT"])?;
         self.add_iptables_rule(
             "iptables",
             &[

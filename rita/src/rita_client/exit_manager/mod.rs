@@ -68,10 +68,7 @@ fn linux_setup_exit_tunnel(
     )?;
     KI.set_route_to_tunnel(&general_details.server_internal_ip)?;
 
-    let lan_nics = &SETTING.get_exit_client().lan_nics;
-    for nic in lan_nics {
-        KI.create_client_nat_rules(&nic)?;
-    }
+    KI.create_client_nat_rules()?;
 
     Ok(())
 }

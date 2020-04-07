@@ -281,13 +281,30 @@ impl Tunnel {
     }
 
     pub fn close_light_client_tunnel(&self) {
+        // there's a garbage collector function over in light_client_manager
+        // to handle the return of addresses it's less efficient than shooting
+        // off a message here but doesn't require conditional complication
         if let Err(e) = KI.del_interface(&self.iface_name) {
             error!("Failed to delete wg interface! {:?}", e);
         }
         TunnelManager::from_registry().do_send(PortCallback(self.listen_port));
-        // there's a garbage collector function over in light_client_manager
-        // to handle the return of addresses it's less efficient than shooting
-        // off a message here but doesn't require conditional complication
+        // deletes the leftover iptables rule, be sure this matches the rule
+        // generated in light client manager exactly
+        let _res = KI.add_iptables_rule(
+            "iptables",
+            &[
+                "-D",
+                "FORWARD",
+                "-i",
+                &self.iface_name,
+                "--src",
+                &format!("{}/32", self.light_client_details.unwrap()),
+                "--dst",
+                "192.168.20.0/24",
+                "-j",
+                "ACCEPT",
+            ],
+        );
     }
 }
 
