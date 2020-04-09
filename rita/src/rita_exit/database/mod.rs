@@ -35,12 +35,11 @@ use crate::EXIT_SYSTEM_CHAIN;
 use crate::EXIT_VERIF_SETTINGS;
 use crate::KI;
 use crate::SETTING;
-use ::actix::SystemService;
+use actix::Addr;
 use althea_kernel_interface::ExitClient;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 use diesel;
 use diesel::prelude::PgConnection;
-use exit_db::schema;
 use failure::Error;
 use futures01::future;
 use futures01::future::join_all;
@@ -422,14 +421,12 @@ pub fn setup_clients(
     clients_list: &[exit_db::models::Client],
     old_clients: &HashSet<ExitClient>,
 ) -> Result<HashSet<ExitClient>, Error> {
-    use self::schema::clients::dsl::clients;
-
     let start = Instant::now();
 
     // use hashset to ensure uniqueness and check for duplicate db entries
     let mut wg_clients = HashSet::new();
 
-    trace!("got clients from db {:?}", clients);
+    trace!("got clients from db {:?} {:?}", clients_list, old_clients);
 
     for c in clients_list.iter() {
         match (c.verified, to_exit_client(c.clone())) {
@@ -485,12 +482,13 @@ pub fn setup_clients(
 /// ourselves from exceeding the upstream free tier. As an exit we are the upstream.
 pub fn enforce_exit_clients(
     clients_list: Vec<exit_db::models::Client>,
+    debt_keeper: Addr<DebtKeeper>,
 ) -> Box<dyn Future<Item = (), Error = Error>> {
     let start = Instant::now();
     Box::new(
-        DebtKeeper::from_registry()
+        debt_keeper
             .send(GetDebtsList)
-            .timeout(Duration::from_secs(4)).from_err()
+            .from_err()
             .and_then(move |debts_list| match debts_list {
                 Ok(list) => {
                     let mut clients_by_id = HashMap::new();

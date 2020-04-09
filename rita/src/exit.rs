@@ -64,6 +64,7 @@ use rita_common::rita_loop::start_core_rita_endpoints;
 
 use rita_exit::rita_loop::check_rita_exit_actors;
 use rita_exit::rita_loop::start_rita_exit_endpoints;
+use rita_exit::rita_loop::start_rita_exit_loop;
 
 use crate::rita_common::dashboard::auth::*;
 use crate::rita_common::dashboard::babel::*;
@@ -257,6 +258,7 @@ fn main() {
 
     check_rita_common_actors();
     check_rita_exit_actors();
+    start_rita_exit_loop();
     let workers = SETTING.get_workers();
     start_core_rita_endpoints(workers as usize);
     start_rita_exit_endpoints(workers as usize);

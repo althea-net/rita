@@ -28,13 +28,10 @@ use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::str;
 use std::str::FromStr;
-use std::time::Duration;
-use std::time::Instant;
 use tokio::io::read;
 use tokio::io::write_all;
 use tokio::net::tcp::ConnectFuture;
 use tokio::net::TcpStream;
-use tokio::timer::Delay;
 
 #[derive(Debug, Fail)]
 pub enum BabelMonitorError {
@@ -181,13 +178,8 @@ fn read_babel(
                 // our buffer was not full but we also did not find a terminator,
                 // we must have caught babel while it was interupped (only really happens
                 // in single cpu situations)
-                let when = Instant::now() + Duration::from_millis(100);
                 trace!("we didn't get the whole message yet, trying again");
-                return Box::new(
-                    Delay::new(when)
-                        .map_err(move |e| panic!("timer failed; err={:?}", e))
-                        .and_then(move |_| read_babel(stream, full_message, depth + 1)),
-                );
+                return Box::new(read_babel(stream, full_message, depth + 1));
             } else if let Err(e) = babel_data {
                 // some other error
                 warn!("Babel read failed! {} {:?}", output, e);

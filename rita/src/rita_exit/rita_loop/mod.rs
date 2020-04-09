@@ -19,6 +19,7 @@
 //! actix work together on this on properly, not that I've every seen simple actors like the loop crash
 //! very often.
 
+use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_exit::database::database_tools::get_database_connection;
 use crate::rita_exit::database::struct_tools::clients_to_ids;
 use crate::rita_exit::database::{
@@ -44,7 +45,6 @@ use std::collections::HashSet;
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
-use tokio::util::FutureExt;
 
 // the speed in seconds for the exit loop
 pub const EXIT_LOOP_SPEED: u64 = 5;
@@ -55,13 +55,19 @@ pub fn start_rita_exit_loop() {
     setup_exit_wg_tunnel();
     // a cache of what tunnels we had setup last round, used to prevent extra setup ops
     let mut wg_clients: HashSet<ExitClient> = HashSet::new();
-    thread::spawn(move || {
+    let tw = TrafficWatcher::from_registry();
+    let dk = DebtKeeper::from_registry();
+    let _res = thread::spawn(move || {
+        // wait until the system gets started
+        while !(dk.connected() && tw.connected()) {
+            trace!("Waiting for actors to start");
+        }
         loop {
             let start = Instant::now();
             // opening a database connection takes at least several milliseconds, as the database server
             // may be across the country, so to save on back and forth we open on and reuse it as much
             // as possible
-            if let Ok(conn) = get_database_connection().timeout(EXIT_LOOP_TIMEOUT).wait() {
+            if let Ok(conn) = get_database_connection().wait() {
                 use exit_db::schema::clients::dsl::clients;
                 let babel_port = SETTING.get_network().babel_port;
                 info!(
@@ -70,15 +76,19 @@ pub fn start_rita_exit_loop() {
                 );
 
                 if let Ok(clients_list) = clients.load::<models::Client>(&conn) {
+                    trace!("got {:?} clients", clients_list);
                     let ids = clients_to_ids(clients_list.clone());
 
                     // watch and bill for traffic
+                    trace!("about to try opening babel stream");
                     let res = open_babel_stream(babel_port)
                         .from_err()
                         .and_then(|stream| {
+                            trace!("got babel stream");
                             start_connection(stream).and_then(|stream| {
                                 parse_routes(stream).and_then(|routes| {
-                                    TrafficWatcher::from_registry().do_send(Watch {
+                                    trace!("Sending traffic watcher message?");
+                                    tw.do_send(Watch {
                                         users: ids,
                                         routes: routes.1,
                                     });
@@ -86,42 +96,41 @@ pub fn start_rita_exit_loop() {
                                 })
                             })
                         })
-                        .timeout(EXIT_LOOP_TIMEOUT)
                         .wait();
                     if let Err(e) = res {
                         warn!(
-                            "Failed to watch exit traffic with {} {}ms since start",
+                            "Failed to watch exit traffic with {:?} {}ms since start",
                             e,
                             start.elapsed().as_millis()
                         );
                     } else {
                         info!(
-                            "Exit billing completed successfully {}ms since loop start",
+                            "watch exit traffic completed successfully {}ms since loop start",
                             start.elapsed().as_millis()
                         );
                     }
 
+                    trace!("about to setup clients");
                     // Create and update client tunnels
                     match setup_clients(&clients_list, &wg_clients) {
                         Ok(new_wg_clients) => wg_clients = new_wg_clients,
                         Err(e) => error!("Setup clients failed with {:?}", e),
                     }
 
+                    trace!("about to cleanup clients");
                     // find users that have not been active within the configured time period
                     // and remove them from the db
-                    let res = cleanup_exit_clients(&clients_list, &conn);
-                    if res.is_err() {
-                        error!("Exit client cleanup failed with {:?}", res);
+                    if let Err(e) = cleanup_exit_clients(&clients_list, &conn) {
+                        error!("Exit client cleanup failed with {:?}", e);
                     }
 
                     // Make sure no one we are setting up is geoip unauthorized
-                    if !SETTING.get_allowed_countries().is_empty() {
-                        let res = validate_clients_region(clients_list.clone())
-                            .timeout(EXIT_LOOP_TIMEOUT)
-                            .wait();
+                    let val = SETTING.get_allowed_countries().is_empty();
+                    if !val {
+                        let res = validate_clients_region(clients_list.clone()).wait();
                         if let Err(e) = res {
                             warn!(
-                                "Failed to validate client region with {} {}ms since start",
+                                "Failed to validate client region with {:?} {}ms since start",
                                 e,
                                 start.elapsed().as_millis()
                             );
@@ -135,12 +144,10 @@ pub fn start_rita_exit_loop() {
 
                     // handle enforcement on client tunnels by querying debt keeper
                     // this consumes client list, you can move it up in exchange for a clone
-                    let res = enforce_exit_clients(clients_list)
-                        .timeout(EXIT_LOOP_TIMEOUT)
-                        .wait();
+                    let res = enforce_exit_clients(clients_list, dk.clone()).wait();
                     if let Err(e) = res {
                         warn!(
-                            "Failed enforce exit clients with {} {}ms since start",
+                            "Failed enforce exit clients with {:?} {}ms since start",
                             e,
                             start.elapsed().as_millis()
                         );
@@ -177,7 +184,6 @@ fn setup_exit_wg_tunnel() {
 }
 
 pub fn check_rita_exit_actors() {
-    start_rita_exit_loop();
     assert!(crate::rita_exit::traffic_watcher::TrafficWatcher::from_registry().connected());
     assert!(crate::rita_exit::database::db_client::DbClient::from_registry().connected());
 }
