@@ -284,7 +284,7 @@ pub fn get_local_fee(stream: TcpStream) -> impl Future<Item = (TcpStream, u32), 
 }
 
 fn get_local_fee_sync(babel_output: String) -> Result<u32, Error> {
-    let fee_entry = match babel_output.split('\n').nth(0) {
+    let fee_entry = match babel_output.split('\n').next() {
         Some(entry) => entry,
         // Even an empty string wouldn't yield None
         None => return Err(LocalFeeNotFound(String::from("<Babel output is None>")).into()),
