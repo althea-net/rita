@@ -26,6 +26,8 @@ use crate::rita_exit::database::{
     cleanup_exit_clients, enforce_exit_clients, setup_clients, validate_clients_region,
 };
 use crate::rita_exit::network_endpoints::*;
+use crate::rita_exit::rita_loop::wait_timeout::wait_timeout;
+use crate::rita_exit::rita_loop::wait_timeout::WaitResult;
 use crate::rita_exit::traffic_watcher::{TrafficWatcher, Watch};
 use crate::KI;
 use crate::SETTING;
@@ -45,6 +47,8 @@ use std::collections::HashSet;
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
+
+mod wait_timeout;
 
 // the speed in seconds for the exit loop
 pub const EXIT_LOOP_SPEED: u64 = 5;
@@ -67,105 +71,127 @@ pub fn start_rita_exit_loop() {
             // opening a database connection takes at least several milliseconds, as the database server
             // may be across the country, so to save on back and forth we open on and reuse it as much
             // as possible
-            if let Ok(conn) = get_database_connection().wait() {
-                use exit_db::schema::clients::dsl::clients;
-                let babel_port = SETTING.get_network().babel_port;
-                info!(
-                    "Exit tick! got DB connection after {}ms",
-                    start.elapsed().as_millis(),
-                );
-
-                if let Ok(clients_list) = clients.load::<models::Client>(&conn) {
-                    trace!("got {:?} clients", clients_list);
-                    let ids = clients_to_ids(clients_list.clone());
-
-                    // watch and bill for traffic
-                    trace!("about to try opening babel stream");
-                    let res = open_babel_stream(babel_port)
-                        .from_err()
-                        .and_then(|stream| {
-                            trace!("got babel stream");
-                            start_connection(stream).and_then(|stream| {
-                                parse_routes(stream).and_then(|routes| {
-                                    trace!("Sending traffic watcher message?");
-                                    tw.do_send(Watch {
-                                        users: ids,
-                                        routes: routes.1,
-                                    });
-                                    Ok(())
-                                })
-                            })
-                        })
-                        .wait();
-                    if let Err(e) = res {
-                        warn!(
-                            "Failed to watch exit traffic with {:?} {}ms since start",
-                            e,
-                            start.elapsed().as_millis()
-                        );
-                    } else {
-                        info!(
-                            "watch exit traffic completed successfully {}ms since loop start",
-                            start.elapsed().as_millis()
-                        );
-                    }
-
-                    trace!("about to setup clients");
-                    // Create and update client tunnels
-                    match setup_clients(&clients_list, &wg_clients) {
-                        Ok(new_wg_clients) => wg_clients = new_wg_clients,
-                        Err(e) => error!("Setup clients failed with {:?}", e),
-                    }
-
-                    trace!("about to cleanup clients");
-                    // find users that have not been active within the configured time period
-                    // and remove them from the db
-                    if let Err(e) = cleanup_exit_clients(&clients_list, &conn) {
-                        error!("Exit client cleanup failed with {:?}", e);
-                    }
-
-                    // Make sure no one we are setting up is geoip unauthorized
-                    let val = SETTING.get_allowed_countries().is_empty();
-                    if !val {
-                        let res = validate_clients_region(clients_list.clone()).wait();
-                        if let Err(e) = res {
-                            warn!(
-                                "Failed to validate client region with {:?} {}ms since start",
-                                e,
-                                start.elapsed().as_millis()
-                            );
-                        } else {
-                            info!(
-                                "Validated client region {}ms since loop start",
-                                start.elapsed().as_millis()
-                            );
-                        }
-                    }
-
-                    // handle enforcement on client tunnels by querying debt keeper
-                    // this consumes client list, you can move it up in exchange for a clone
-                    let res = enforce_exit_clients(clients_list, dk.clone()).wait();
-                    if let Err(e) = res {
-                        warn!(
-                            "Failed enforce exit clients with {:?} {}ms since start",
-                            e,
-                            start.elapsed().as_millis()
-                        );
-                    } else {
-                        info!(
-                            "Enforced exit clients {}ms since loop start",
-                            start.elapsed().as_millis()
-                        );
-                    }
-
+            match wait_timeout(get_database_connection(), EXIT_LOOP_TIMEOUT) {
+                WaitResult::Ok(conn) => {
+                    use exit_db::schema::clients::dsl::clients;
+                    let babel_port = SETTING.get_network().babel_port;
                     info!(
-                        "Completed Rita sync loop in {}ms, all vars should be dropped",
+                        "Exit tick! got DB connection after {}ms",
                         start.elapsed().as_millis(),
                     );
+
+                    if let Ok(clients_list) = clients.load::<models::Client>(&conn) {
+                        trace!("got {:?} clients", clients_list);
+                        let ids = clients_to_ids(clients_list.clone());
+
+                        // watch and bill for traffic
+                        trace!("about to try opening babel stream");
+                        let res = wait_timeout(
+                            open_babel_stream(babel_port).from_err().and_then(|stream| {
+                                trace!("got babel stream");
+                                start_connection(stream).and_then(|stream| {
+                                    parse_routes(stream).and_then(|routes| {
+                                        trace!("Sending traffic watcher message?");
+                                        tw.do_send(Watch {
+                                            users: ids,
+                                            routes: routes.1,
+                                        });
+                                        Ok(())
+                                    })
+                                })
+                            }),
+                            EXIT_LOOP_TIMEOUT,
+                        );
+                        match res {
+                            WaitResult::Err(e) => warn!(
+                                "Failed to watch exit traffic with {:?} {}ms since start",
+                                e,
+                                start.elapsed().as_millis()
+                            ),
+                            WaitResult::Ok(_) => info!(
+                                "watch exit traffic completed successfully {}ms since loop start",
+                                start.elapsed().as_millis()
+                            ),
+                            WaitResult::TimedOut(_) => error!(
+                                "watch exit traffic timed out! {}ms since loop start",
+                                start.elapsed().as_millis()
+                            ),
+                        }
+
+                        info!("about to setup clients");
+                        // Create and update client tunnels
+                        match setup_clients(&clients_list, &wg_clients) {
+                            Ok(new_wg_clients) => wg_clients = new_wg_clients,
+                            Err(e) => error!("Setup clients failed with {:?}", e),
+                        }
+
+                        info!("about to cleanup clients");
+                        // find users that have not been active within the configured time period
+                        // and remove them from the db
+                        if let Err(e) = cleanup_exit_clients(&clients_list, &conn) {
+                            error!("Exit client cleanup failed with {:?}", e);
+                        }
+
+                        // Make sure no one we are setting up is geoip unauthorized
+                        let val = SETTING.get_allowed_countries().is_empty();
+                        if !val {
+                            let res = wait_timeout(
+                                validate_clients_region(clients_list.clone()),
+                                EXIT_LOOP_TIMEOUT,
+                            );
+                            match res {
+                                WaitResult::Err(e) => warn!(
+                                    "Failed to validate client region with {:?} {}ms since start",
+                                    e,
+                                    start.elapsed().as_millis()
+                                ),
+                                WaitResult::Ok(_) => info!(
+                                "validate client region completed successfully {}ms since loop start",
+                                start.elapsed().as_millis()
+                            ),
+                                WaitResult::TimedOut(_) => error!(
+                                    "validate client region timed out! {}ms since loop start",
+                                    start.elapsed().as_millis()
+                                ),
+                            }
+                        }
+
+                        // handle enforcement on client tunnels by querying debt keeper
+                        // this consumes client list, you can move it up in exchange for a clone
+                        let res = wait_timeout(
+                            enforce_exit_clients(clients_list, dk.clone()),
+                            EXIT_LOOP_TIMEOUT,
+                        );
+                        match res {
+                                WaitResult::Err(e) => warn!(
+                                    "Failed to enforce exit clients with {:?} {}ms since start",
+                                    e,
+                                    start.elapsed().as_millis()
+                                ),
+                                WaitResult::Ok(_) => info!(
+                                "exit client enforcement completed successfully {}ms since loop start",
+                                start.elapsed().as_millis()
+                            ),
+                                WaitResult::TimedOut(_) => error!(
+                                    "exit client enforcement timed out! {}ms since loop start",
+                                    start.elapsed().as_millis()
+                                ),
+                        }
+
+                        info!(
+                            "Completed Rita exit loop in {}ms, all vars should be dropped",
+                            start.elapsed().as_millis(),
+                        );
+                    }
                 }
+                WaitResult::Err(e) => error!("Failed to get database connection with {}", e),
+                WaitResult::TimedOut(_) => error!("Database connection timed out"),
             }
-            // sleep for 5 seconds
-            thread::sleep(EXIT_LOOP_SPEED_DURATION);
+            // sleep until it has been 5 seconds from start, whenever that may be
+            // if it has been more than 5 seconds from start, go right ahead
+            if start.elapsed() < EXIT_LOOP_SPEED_DURATION {
+                thread::sleep(EXIT_LOOP_SPEED_DURATION - start.elapsed());
+            }
         }
     });
 }
