@@ -133,6 +133,7 @@ pub fn start_rita_exit_loop() {
                         }
 
                         // Make sure no one we are setting up is geoip unauthorized
+                        info!("about to check regions");
                         let val = SETTING.get_allowed_countries().is_empty();
                         if !val {
                             let res = wait_timeout(
@@ -156,6 +157,7 @@ pub fn start_rita_exit_loop() {
                             }
                         }
 
+                        info!("About to enforce exit clients");
                         // handle enforcement on client tunnels by querying debt keeper
                         // this consumes client list, you can move it up in exchange for a clone
                         let res = wait_timeout(

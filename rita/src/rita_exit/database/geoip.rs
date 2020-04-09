@@ -1,8 +1,6 @@
 use crate::GEOIP_CACHE;
 use crate::KI;
 use crate::SETTING;
-use actix_web::client as actix_client;
-use actix_web::HttpMessage;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
 use babel_monitor::start_connection;
@@ -15,6 +13,7 @@ use settings::exit::RitaExitSettings;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::time::Duration;
 
 /// gets the gateway ip for a given mesh IP
 pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Box<dyn Future<Item = IpAddr, Error = Error>> {
@@ -151,22 +150,32 @@ pub fn get_country(ip: IpAddr) -> impl Future<Item = String, Error = Error> {
                 geo_ip_url,
                 ip.to_string()
             );
-            Either::B(
-                actix_client::get(&geo_ip_url)
+            Either::B({
+                let geo_ip_url = format!("https://geoip.maxmind.com/geoip/v2.1/country/{}", ip);
+                info!(
+                    "making GeoIP request to {} for {}",
+                    geo_ip_url,
+                    ip.to_string()
+                );
+                let client = reqwest::blocking::Client::new();
+                if let Ok(res) = client
+                    .get(&geo_ip_url)
                     .basic_auth(api_user, Some(api_key))
-                    .finish()
-                    .unwrap()
+                    .timeout(Duration::from_secs(1))
                     .send()
-                    .from_err()
-                    .and_then(move |response| {
-                        response.json().from_err().and_then(move |result| {
-                            let value: GeoIPRet = result;
-                            let code = value.country.iso_code;
-                            GEOIP_CACHE.write().unwrap().insert(ip, code.clone());
-                            Ok(code)
-                        })
-                    }),
-            )
+                {
+                    if let Ok(res) = res.json() {
+                        let value: GeoIPRet = res;
+                        let code = value.country.iso_code;
+                        GEOIP_CACHE.write().unwrap().insert(ip, code.clone());
+                        future::ok(code)
+                    } else {
+                        future::err(format_err!("Failed to deserialize geoip response"))
+                    }
+                } else {
+                    future::err(format_err!("request failed"))
+                }
+            })
         }
     }
 }

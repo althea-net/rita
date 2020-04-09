@@ -67,6 +67,7 @@ hex-literal = "0.2"
 sodiumoxide = "0.2"
 compressed_log = "0.2"
 flate2 = { version = "1.0", features = ["rust_backend"], default-features = false }
+reqwest = { version = "0.10", features = ["blocking", "json"] }
 
 [dependencies.regex]
 version = "1.3"
