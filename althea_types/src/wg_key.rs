@@ -17,6 +17,12 @@ impl AsRef<[u8]> for WgKey {
     }
 }
 
+impl From<WgKey> for [u8; 32] {
+    fn from(val: WgKey) -> [u8; 32] {
+        val.0
+    }
+}
+
 /// This is somewhat dangerous, since libsodium provides seperate
 /// public and private key types while we don't have those here.
 /// Be very careful not to use this on the public key! That would be bad
