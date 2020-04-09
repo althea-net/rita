@@ -31,10 +31,12 @@ use crate::rita_exit::rita_loop::wait_timeout::WaitResult;
 use crate::rita_exit::traffic_watcher::{TrafficWatcher, Watch};
 use crate::KI;
 use crate::SETTING;
+use actix::Addr;
 use actix::SystemService;
 use actix_web::http::Method;
 use actix_web::{server, App};
 use althea_kernel_interface::ExitClient;
+use althea_types::Identity;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
 use babel_monitor::start_connection;
@@ -85,38 +87,7 @@ pub fn start_rita_exit_loop() {
                         let ids = clients_to_ids(clients_list.clone());
 
                         // watch and bill for traffic
-                        trace!("about to try opening babel stream");
-                        let res = wait_timeout(
-                            open_babel_stream(babel_port).from_err().and_then(|stream| {
-                                trace!("got babel stream");
-                                start_connection(stream).and_then(|stream| {
-                                    parse_routes(stream).and_then(|routes| {
-                                        trace!("Sending traffic watcher message?");
-                                        tw.do_send(Watch {
-                                            users: ids,
-                                            routes: routes.1,
-                                        });
-                                        Ok(())
-                                    })
-                                })
-                            }),
-                            EXIT_LOOP_TIMEOUT,
-                        );
-                        match res {
-                            WaitResult::Err(e) => warn!(
-                                "Failed to watch exit traffic with {:?} {}ms since start",
-                                e,
-                                start.elapsed().as_millis()
-                            ),
-                            WaitResult::Ok(_) => info!(
-                                "watch exit traffic completed successfully {}ms since loop start",
-                                start.elapsed().as_millis()
-                            ),
-                            WaitResult::TimedOut(_) => error!(
-                                "watch exit traffic timed out! {}ms since loop start",
-                                start.elapsed().as_millis()
-                            ),
-                        }
+                        bill(babel_port, &tw, start, ids);
 
                         info!("about to setup clients");
                         // Create and update client tunnels
@@ -134,51 +105,10 @@ pub fn start_rita_exit_loop() {
 
                         // Make sure no one we are setting up is geoip unauthorized
                         info!("about to check regions");
-                        let val = SETTING.get_allowed_countries().is_empty();
-                        if !val {
-                            let res = wait_timeout(
-                                validate_clients_region(clients_list.clone()),
-                                EXIT_LOOP_TIMEOUT,
-                            );
-                            match res {
-                                WaitResult::Err(e) => warn!(
-                                    "Failed to validate client region with {:?} {}ms since start",
-                                    e,
-                                    start.elapsed().as_millis()
-                                ),
-                                WaitResult::Ok(_) => info!(
-                                "validate client region completed successfully {}ms since loop start",
-                                start.elapsed().as_millis()
-                            ),
-                                WaitResult::TimedOut(_) => error!(
-                                    "validate client region timed out! {}ms since loop start",
-                                    start.elapsed().as_millis()
-                                ),
-                            }
-                        }
+                        check_regions(start, clients_list.clone());
 
                         info!("About to enforce exit clients");
-                        // handle enforcement on client tunnels by querying debt keeper
-                        // this consumes client list, you can move it up in exchange for a clone
-                        let res = wait_timeout(
-                            enforce_exit_clients(clients_list, dk.clone()),
-                            EXIT_LOOP_TIMEOUT,
-                        );
-                        match res {
-                                WaitResult::Err(e) => warn!(
-                                    "Failed to enforce exit clients with {:?} {}ms since start",
-                                    e,
-                                    start.elapsed().as_millis()
-                                ),
-                                WaitResult::Ok(_) => info!(
-                                "exit client enforcement completed successfully {}ms since loop start",
-                                start.elapsed().as_millis()
-                            ),
-                                WaitResult::TimedOut(_) => error!(
-                                    "exit client enforcement timed out! {}ms since loop start",
-                                    start.elapsed().as_millis()
-                                ),
-                        }
+                        enforce(start, &dk, clients_list);
 
                         info!(
                             "Completed Rita exit loop in {}ms, all vars should be dropped",
@@ -196,6 +126,87 @@ pub fn start_rita_exit_loop() {
             }
         }
     });
+}
+
+fn bill(babel_port: u16, tw: &Addr<TrafficWatcher>, start: Instant, ids: Vec<Identity>) {
+    trace!("about to try opening babel stream");
+    let res = wait_timeout(
+        open_babel_stream(babel_port).from_err().and_then(|stream| {
+            trace!("got babel stream");
+            start_connection(stream).and_then(|stream| {
+                parse_routes(stream).and_then(|routes| {
+                    trace!("Sending traffic watcher message?");
+                    tw.do_send(Watch {
+                        users: ids,
+                        routes: routes.1,
+                    });
+                    Ok(())
+                })
+            })
+        }),
+        EXIT_LOOP_TIMEOUT,
+    );
+    match res {
+        WaitResult::Err(e) => warn!(
+            "Failed to watch exit traffic with {:?} {}ms since start",
+            e,
+            start.elapsed().as_millis()
+        ),
+        WaitResult::Ok(_) => info!(
+            "watch exit traffic completed successfully {}ms since loop start",
+            start.elapsed().as_millis()
+        ),
+        WaitResult::TimedOut(_) => error!(
+            "watch exit traffic timed out! {}ms since loop start",
+            start.elapsed().as_millis()
+        ),
+    }
+}
+
+fn check_regions(start: Instant, clients_list: Vec<models::Client>) {
+    let val = SETTING.get_allowed_countries().is_empty();
+    if !val {
+        let res = wait_timeout(validate_clients_region(clients_list), EXIT_LOOP_TIMEOUT);
+        match res {
+            WaitResult::Err(e) => warn!(
+                "Failed to validate client region with {:?} {}ms since start",
+                e,
+                start.elapsed().as_millis()
+            ),
+            WaitResult::Ok(_) => info!(
+                "validate client region completed successfully {}ms since loop start",
+                start.elapsed().as_millis()
+            ),
+            WaitResult::TimedOut(_) => error!(
+                "validate client region timed out! {}ms since loop start",
+                start.elapsed().as_millis()
+            ),
+        }
+    }
+}
+
+fn enforce(start: Instant, dk: &Addr<DebtKeeper>, clients_list: Vec<models::Client>) {
+    // handle enforcement on client tunnels by querying debt keeper
+    // this consumes client list, you can move it up in exchange for a clone
+    let res = wait_timeout(
+        enforce_exit_clients(clients_list, dk.clone()),
+        EXIT_LOOP_TIMEOUT,
+    );
+    match res {
+        WaitResult::Err(e) => warn!(
+            "Failed to enforce exit clients with {:?} {}ms since start",
+            e,
+            start.elapsed().as_millis()
+        ),
+        WaitResult::Ok(_) => info!(
+            "exit client enforcement completed successfully {}ms since loop start",
+            start.elapsed().as_millis()
+        ),
+        WaitResult::TimedOut(_) => error!(
+            "exit client enforcement timed out! {}ms since loop start",
+            start.elapsed().as_millis()
+        ),
+    }
 }
 
 fn setup_exit_wg_tunnel() {
