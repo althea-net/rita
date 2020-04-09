@@ -27,7 +27,6 @@ use crate::rita_exit::database::struct_tools::display_hashset;
 use crate::rita_exit::database::struct_tools::to_exit_client;
 use crate::rita_exit::database::struct_tools::to_identity;
 use crate::rita_exit::database::struct_tools::verif_done;
-use crate::rita_exit::rita_loop::EXIT_LOOP_TIMEOUT;
 use crate::EXIT_ALLOWED_COUNTRIES;
 use crate::EXIT_DESCRIPTION;
 use crate::EXIT_NETWORK_SETTINGS;
@@ -55,7 +54,6 @@ use std::collections::HashSet;
 use std::net::IpAddr;
 use std::time::Instant;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::util::FutureExt;
 
 pub mod database_tools;
 pub mod db_client;
@@ -310,7 +308,7 @@ fn low_balance_notification(
 /// client that doesn't make status requests
 pub fn validate_clients_region(
     clients_list: Vec<exit_db::models::Client>,
-) -> impl Future<Item = (), Error = ()> {
+) -> impl Future<Item = (), Error = Error> {
     info!("Starting exit region validation");
     let start = Instant::now();
 
@@ -326,44 +324,36 @@ pub fn validate_clients_region(
             Err(_e) => error!("Database entry with invalid mesh ip! {:?}", item),
         }
     }
-    get_gateway_ip_bulk(ip_vec)
-        .and_then(move |list| {
-            get_database_connection().and_then(move |conn| {
-                let mut fut_vec = Vec::new();
-                for item in list.iter() {
-                    fut_vec.push(verify_ip(item.gateway_ip));
-                }
-                join_all(fut_vec).and_then(move |client_verifications| {
-                    for (n, res) in client_verifications.iter().enumerate() {
-                        match res {
-                            true => trace!("{:?} is from an allowed ip", list[n]),
-                            false => {
-                                // get_gateway_ip_bulk can't add new entires to the list
-                                // therefore client_map is strictly a superset of ip_bulk results
-                                let client_to_deauth = &client_map[&list[n].mesh_ip];
-                                if verify_db_client(client_to_deauth, false, &conn).is_err() {
-                                    error!("Failed to deauth client {:?}", client_to_deauth);
-                                }
+    get_gateway_ip_bulk(ip_vec).and_then(move |list| {
+        get_database_connection().and_then(move |conn| {
+            let mut fut_vec = Vec::new();
+            for item in list.iter() {
+                fut_vec.push(verify_ip(item.gateway_ip));
+            }
+            join_all(fut_vec).and_then(move |client_verifications| {
+                for (n, res) in client_verifications.iter().enumerate() {
+                    match res {
+                        true => trace!("{:?} is from an allowed ip", list[n]),
+                        false => {
+                            // get_gateway_ip_bulk can't add new entires to the list
+                            // therefore client_map is strictly a superset of ip_bulk results
+                            let client_to_deauth = &client_map[&list[n].mesh_ip];
+                            if verify_db_client(client_to_deauth, false, &conn).is_err() {
+                                error!("Failed to deauth client {:?}", client_to_deauth);
                             }
                         }
                     }
+                }
 
-                    info!(
-                        "Exit region validation completed in {}s {}ms",
-                        start.elapsed().as_secs(),
-                        start.elapsed().subsec_millis(),
-                    );
-                    Ok(())
-                })
+                info!(
+                    "Exit region validation completed in {}s {}ms",
+                    start.elapsed().as_secs(),
+                    start.elapsed().subsec_millis(),
+                );
+                Ok(())
             })
         })
-        .timeout(EXIT_LOOP_TIMEOUT)
-        .then(|output| {
-            if output.is_err() {
-                error!("Validate clients region failed with {:?}", output);
-            }
-            Ok(())
-        })
+    })
 }
 
 /// Iterates over the the database of clients, if a client's last_seen value
@@ -495,12 +485,12 @@ pub fn setup_clients(
 /// ourselves from exceeding the upstream free tier. As an exit we are the upstream.
 pub fn enforce_exit_clients(
     clients_list: Vec<exit_db::models::Client>,
-) -> Box<dyn Future<Item = (), Error = ()>> {
+) -> Box<dyn Future<Item = (), Error = Error>> {
     let start = Instant::now();
     Box::new(
         DebtKeeper::from_registry()
             .send(GetDebtsList)
-            .timeout(Duration::from_secs(4))
+            .timeout(Duration::from_secs(4)).from_err()
             .and_then(move |debts_list| match debts_list {
                 Ok(list) => {
                     let mut clients_by_id = HashMap::new();
@@ -574,12 +564,5 @@ pub fn enforce_exit_clients(
                     Ok(())
                 }
             })
-            .timeout(EXIT_LOOP_TIMEOUT)
-            .then(|res| {
-                if let Err(e) = res {
-                    error!("Exit enforcement failed with {:?}", e);
-                }
-                Ok(())
-            }),
     )
 }

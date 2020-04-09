@@ -28,7 +28,7 @@ use crate::rita_exit::network_endpoints::*;
 use crate::rita_exit::traffic_watcher::{TrafficWatcher, Watch};
 use crate::KI;
 use crate::SETTING;
-use actix::{Arbiter, SystemService};
+use actix::SystemService;
 use actix_web::http::Method;
 use actix_web::{server, App};
 use althea_kernel_interface::ExitClient;
@@ -57,41 +57,49 @@ pub fn start_rita_exit_loop() {
     let mut wg_clients: HashSet<ExitClient> = HashSet::new();
     thread::spawn(move || {
         loop {
+            let start = Instant::now();
             // opening a database connection takes at least several milliseconds, as the database server
             // may be across the country, so to save on back and forth we open on and reuse it as much
             // as possible
             if let Ok(conn) = get_database_connection().timeout(EXIT_LOOP_TIMEOUT).wait() {
-                let start = Instant::now();
                 use exit_db::schema::clients::dsl::clients;
                 let babel_port = SETTING.get_network().babel_port;
-                info!("Exit tick!");
+                info!(
+                    "Exit tick! got DB connection after {}ms",
+                    start.elapsed().as_millis(),
+                );
 
                 if let Ok(clients_list) = clients.load::<models::Client>(&conn) {
                     let ids = clients_to_ids(clients_list.clone());
 
                     // watch and bill for traffic
-                    Arbiter::spawn(
-                        open_babel_stream(babel_port)
-                            .from_err()
-                            .and_then(|stream| {
-                                start_connection(stream).and_then(|stream| {
-                                    parse_routes(stream).and_then(|routes| {
-                                        TrafficWatcher::from_registry().do_send(Watch {
-                                            users: ids,
-                                            routes: routes.1,
-                                        });
-                                        Ok(())
-                                    })
+                    let res = open_babel_stream(babel_port)
+                        .from_err()
+                        .and_then(|stream| {
+                            start_connection(stream).and_then(|stream| {
+                                parse_routes(stream).and_then(|routes| {
+                                    TrafficWatcher::from_registry().do_send(Watch {
+                                        users: ids,
+                                        routes: routes.1,
+                                    });
+                                    Ok(())
                                 })
                             })
-                            .timeout(EXIT_LOOP_TIMEOUT)
-                            .then(|ret| {
-                                if let Err(e) = ret {
-                                    error!("Failed to watch Exit traffic with {:?}", e)
-                                }
-                                Ok(())
-                            }),
-                    );
+                        })
+                        .timeout(EXIT_LOOP_TIMEOUT)
+                        .wait();
+                    if let Err(e) = res {
+                        warn!(
+                            "Failed to watch exit traffic with {} {}ms since start",
+                            e,
+                            start.elapsed().as_millis()
+                        );
+                    } else {
+                        info!(
+                            "Exit billing completed successfully {}ms since loop start",
+                            start.elapsed().as_millis()
+                        );
+                    }
 
                     // Create and update client tunnels
                     match setup_clients(&clients_list, &wg_clients) {
@@ -108,17 +116,44 @@ pub fn start_rita_exit_loop() {
 
                     // Make sure no one we are setting up is geoip unauthorized
                     if !SETTING.get_allowed_countries().is_empty() {
-                        Arbiter::spawn(validate_clients_region(clients_list.clone()));
+                        let res = validate_clients_region(clients_list.clone())
+                            .timeout(EXIT_LOOP_TIMEOUT)
+                            .wait();
+                        if let Err(e) = res {
+                            warn!(
+                                "Failed to validate client region with {} {}ms since start",
+                                e,
+                                start.elapsed().as_millis()
+                            );
+                        } else {
+                            info!(
+                                "Validated client region {}ms since loop start",
+                                start.elapsed().as_millis()
+                            );
+                        }
                     }
 
                     // handle enforcement on client tunnels by querying debt keeper
                     // this consumes client list, you can move it up in exchange for a clone
-                    Arbiter::spawn(enforce_exit_clients(clients_list));
+                    let res = enforce_exit_clients(clients_list)
+                        .timeout(EXIT_LOOP_TIMEOUT)
+                        .wait();
+                    if let Err(e) = res {
+                        warn!(
+                            "Failed enforce exit clients with {} {}ms since start",
+                            e,
+                            start.elapsed().as_millis()
+                        );
+                    } else {
+                        info!(
+                            "Enforced exit clients {}ms since loop start",
+                            start.elapsed().as_millis()
+                        );
+                    }
 
                     info!(
-                        "Completed Rita sync loop in {}s {}ms, all vars should be dropped",
-                        start.elapsed().as_secs(),
-                        start.elapsed().subsec_millis(),
+                        "Completed Rita sync loop in {}ms, all vars should be dropped",
+                        start.elapsed().as_millis(),
                     );
                 }
             }
