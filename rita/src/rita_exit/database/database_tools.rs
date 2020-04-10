@@ -20,10 +20,10 @@ use futures01::future::Future;
 use settings::exit::RitaExitSettings;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
+use std::thread;
 use std::time::Duration;
-use std::time::Instant;
-use tokio::timer::Delay;
-use tokio::util::FutureExt;
+
+const SLEEP_TIME: Duration = Duration::from_millis(100);
 
 /// Takes a list of clients and returns a sorted list of ip addresses spefically v4 since it
 /// can implement comparison operators
@@ -329,20 +329,8 @@ pub fn get_database_connection(
             >,
         None => {
             trace!("No available db connection sleeping!");
-            let when = Instant::now() + Duration::from_millis(100);
-            Box::new(
-                Delay::new(when)
-                    .map_err(move |e| panic!("timer failed; err={:?}", e))
-                    .and_then(move |_| get_database_connection())
-                    .timeout(Duration::from_secs(1))
-                    .then(|result| match result {
-                        Ok(v) => Ok(v),
-                        Err(e) => {
-                            error!("Failed to get DB connection with {:?}", e);
-                            Err(format_err!("{:?}", e))
-                        }
-                    }),
-            )
+            thread::sleep(SLEEP_TIME);
+            Box::new(get_database_connection())
         }
     }
 }
