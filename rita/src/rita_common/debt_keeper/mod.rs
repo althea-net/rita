@@ -108,10 +108,12 @@ fn ser_to_debt_data(input: DebtDataSer) -> DebtData {
         // discard the entry, in the case that they do have some incoming payments the user
         // deserves to have that credit applied in the future so we must retain the entry and
         // reset the debt
-        if d.debt <= Int256::zero() && d.incoming_payments == Uint256::zero() {
-            continue;
-        } else if d.debt <= Int256::zero() {
-            d.debt = Int256::from(0);
+        if SETTING.get_payment().forgive_on_reboot {
+            if d.debt <= Int256::zero() && d.incoming_payments == Uint256::zero() {
+                continue;
+            } else if d.debt <= Int256::zero() {
+                d.debt = Int256::from(0);
+            }
         }
         ret.insert(i, d);
     }

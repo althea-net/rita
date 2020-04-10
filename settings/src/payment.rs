@@ -111,6 +111,11 @@ fn default_max_gas() -> u64 {
     XDAI_MAX_GAS
 }
 
+/// By default we forgive nodes of their debts on reboot
+fn default_forgive_on_reboot() -> bool {
+    true
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct TokenBridgeAddresses {
     pub uniswap_address: Address,
@@ -218,6 +223,9 @@ pub struct PaymentSettings {
     /// the minimum we will pay for gas on our current blockchain
     #[serde(default = "default_min_gas")]
     pub min_gas: u64,
+    /// if we forgive all debts on reboot
+    #[serde(default = "default_forgive_on_reboot")]
+    pub forgive_on_reboot: bool,
 }
 
 impl Default for PaymentSettings {
@@ -254,6 +262,7 @@ impl Default for PaymentSettings {
             simulated_transaction_fee: default_simulated_transaction_fee(),
             min_gas: default_min_gas(),
             max_gas: default_max_gas(),
+            forgive_on_reboot: default_forgive_on_reboot(),
         }
     }
 }
