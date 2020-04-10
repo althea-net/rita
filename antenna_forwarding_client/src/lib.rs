@@ -112,6 +112,7 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
             }
         }
         trace!("Waiting for next checkin cycle");
+        thread::sleep(SLEEP_TIME)
     });
 }
 
