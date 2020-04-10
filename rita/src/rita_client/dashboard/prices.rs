@@ -14,13 +14,16 @@ use settings::RitaCommonSettings;
 
 pub fn auto_pricing_status(_req: HttpRequest) -> Result<Json<bool>, Error> {
     debug!("Get Auto pricing enabled hit!");
-    Ok(Json(SETTING.get_dao().use_oracle_price))
+    Ok(Json(SETTING.get_operator().use_operator_price))
 }
 
 pub fn set_auto_pricing(path: Path<bool>) -> Result<HttpResponse, Error> {
     let value = path.into_inner();
     debug!("Set Auto pricing enabled hit!");
-    SETTING.get_dao_mut().use_oracle_price = value;
+    let mut op = SETTING.get_operator_mut();
+    if !op.force_use_operator_price {
+        op.use_operator_price = value;
+    }
 
     // try and save the config and fail if we can't
     if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
@@ -42,10 +45,10 @@ pub fn get_prices(_req: HttpRequest) -> Box<dyn Future<Item = Json<Prices>, Erro
     let b = f.from_err().and_then(|exit_dest_price| {
         let exit_dest_price = exit_dest_price.unwrap();
         let simulated_tx_fee = SETTING.get_payment().simulated_transaction_fee;
-        let dao_fee = SETTING.get_dao().dao_fee.clone();
+        let operator_fee = SETTING.get_operator().operator_fee.clone();
         let p = Prices {
             exit_dest_price,
-            dao_fee,
+            dao_fee: operator_fee,
             simulated_tx_fee,
         };
         Ok(Json(p))

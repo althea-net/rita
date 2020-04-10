@@ -11,7 +11,6 @@ use crate::rita_client::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::rita_common::network_monitor::GetNetworkInfo;
 use crate::rita_common::network_monitor::NetworkMonitor;
 use crate::rita_common::tunnel_manager::Neighbor as RitaNeighbor;
-use crate::rita_common::utils::option_deref;
 use crate::SETTING;
 use actix::actors::resolver;
 use actix::{Arbiter, SystemService};
@@ -179,7 +178,7 @@ fn send_udp_heartbeat_packet(
 
     let message = HeartbeatMessage {
         id: our_id,
-        organizer_address: option_deref(SETTING.get_dao().dao_addresses.get(0)),
+        organizer_address: SETTING.get_operator().operator_address,
         balance: SETTING.get_payment().balance.clone(),
         exit_dest_price: exit_price + exit_route.price as u64,
         upstream_id: exit_neighbor_id,
