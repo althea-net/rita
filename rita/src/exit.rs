@@ -40,9 +40,7 @@ use openssl_probe;
 use r2d2::Pool;
 use settings::exit::ExitNetworkSettings;
 use settings::exit::ExitVerifSettings;
-use std::collections::HashMap;
 use std::collections::HashSet;
-use std::net::IpAddr;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
@@ -131,11 +129,6 @@ lazy_static! {
     pub static ref ARGS: Args = Docopt::new((*USAGE).as_str())
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
-}
-
-lazy_static! {
-    pub static ref GEOIP_CACHE: Arc<RwLock<HashMap<IpAddr, String>>> =
-        Arc::new(RwLock::new(HashMap::new()));
 }
 
 // These are a set of vars that are never updated during runtime. This means we can have

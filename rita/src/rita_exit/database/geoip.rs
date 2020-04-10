@@ -1,4 +1,3 @@
-use crate::GEOIP_CACHE;
 use crate::KI;
 use crate::SETTING;
 use babel_monitor::open_babel_stream;
@@ -13,7 +12,13 @@ use settings::exit::RitaExitSettings;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
+
+lazy_static! {
+    static ref GEOIP_CACHE: Arc<RwLock<HashMap<IpAddr, String>>> =
+        Arc::new(RwLock::new(HashMap::new()));
+}
 
 /// gets the gateway ip for a given mesh IP
 pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Box<dyn Future<Item = IpAddr, Error = Error>> {
@@ -141,8 +146,15 @@ pub fn get_country(ip: IpAddr) -> impl Future<Item = String, Error = Error> {
         .clone()
         .expect("No api key configured!");
 
-    match GEOIP_CACHE.read().unwrap().get(&ip) {
-        Some(code) => Either::A(future::ok(code.clone())),
+    // we have to turn this option into a string in order to avoid
+    // the borrow checker trying to keep this lock open for a long period
+    let cache_result = match GEOIP_CACHE.read().unwrap().get(&ip) {
+        Some(val) => Some(val.to_string()),
+        None => None,
+    };
+
+    match cache_result {
+        Some(code) => Either::A(future::ok(code)),
         None => {
             let geo_ip_url = format!("https://geoip.maxmind.com/geoip/v2.1/country/{}", ip);
             info!(
@@ -164,10 +176,13 @@ pub fn get_country(ip: IpAddr) -> impl Future<Item = String, Error = Error> {
                     .timeout(Duration::from_secs(1))
                     .send()
                 {
+                    trace!("Got geoip result {:?}", res);
                     if let Ok(res) = res.json() {
                         let value: GeoIPRet = res;
                         let code = value.country.iso_code;
+                        trace!("Adding GeoIP value {:?} to cache", code);
                         GEOIP_CACHE.write().unwrap().insert(ip, code.clone());
+                        trace!("Added to cache, returning");
                         future::ok(code)
                     } else {
                         future::err(format_err!("Failed to deserialize geoip response"))

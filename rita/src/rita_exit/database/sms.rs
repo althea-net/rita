@@ -3,7 +3,6 @@ use crate::rita_exit::database::database_tools::verify_client;
 use crate::rita_exit::database::get_database_connection;
 use crate::rita_exit::database::get_exit_info;
 use crate::rita_exit::database::struct_tools::texts_sent;
-use actix::Arbiter;
 use actix_web::client as actix_client;
 use actix_web::client::ClientResponse;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState};
@@ -13,6 +12,7 @@ use futures01::future::Either;
 use futures01::future::Future;
 use phonenumber::PhoneNumber;
 use settings::exit::PhoneVerifSettings;
+use std::time::Duration;
 
 #[derive(Serialize)]
 pub struct SmsCheck {
@@ -205,25 +205,29 @@ pub fn send_low_balance_sms(number: &str, phone: PhoneVerifSettings) -> Result<(
         phone.twillio_account_id
     );
     let number: PhoneNumber = number.parse()?;
-    let res = actix_client::post(&url)
+    let client = reqwest::blocking::Client::new();
+    match client
+        .post(&url)
         .basic_auth(phone.twillio_account_id, Some(phone.twillio_auth_token))
         .form(&SmsNotification {
             to: number.to_string(),
             from: phone.notification_number,
             body: phone.balance_notification_body,
         })
-        .unwrap()
+        .timeout(Duration::from_secs(1))
         .send()
-        .then(move |result| {
-            if result.is_err() {
-                warn!(
-                    "Low balance text to {} failed with {:?}",
-                    number.to_string(),
-                    result
-                );
-            }
+    {
+        Ok(val) => {
+            info!("Low balance text sent successfully with {:?}", val);
             Ok(())
-        });
-    Arbiter::spawn(res);
-    Ok(())
+        }
+        Err(e) => {
+            error!(
+                "Low blanace text to {} failed with {:?}",
+                number.to_string(),
+                e
+            );
+            Err(e.into())
+        }
+    }
 }
