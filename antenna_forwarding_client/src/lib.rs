@@ -36,7 +36,7 @@ lazy_static! {
     pub static ref KI: Box<dyn KernelInterface> = Box::new(LinuxCommandRunner {});
 }
 
-const SLEEP_TIME: Duration = NET_TIMEOUT;
+const SLEEP_TIME: Duration = Duration::from_secs(10);
 /// The timeout time for pinging a local antenna, 25ms is very
 /// very generous here as they should all respond really within 5ms
 const PING_TIMEOUT: Duration = Duration::from_millis(100);
