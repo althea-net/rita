@@ -11,11 +11,11 @@ fn default_logging_dest_url() -> String {
 }
 
 fn default_heartbeat_url() -> String {
-    "stats.altheamesh.com:33333".to_string()
+    "operator.althea.net:33333".to_string()
 }
 
 fn default_forwarding_checkin_url() -> String {
-    "stats.altheamesh.com:33334".to_string()
+    "operator.althea.net:33334".to_string()
 }
 
 /// Remote logging settings. Used to control remote logs being
