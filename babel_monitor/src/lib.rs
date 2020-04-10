@@ -28,10 +28,20 @@ use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::str;
 use std::str::FromStr;
+use std::thread;
+use std::time::Duration;
 use tokio::io::read;
 use tokio::io::write_all;
 use tokio::net::tcp::ConnectFuture;
 use tokio::net::TcpStream;
+
+/// we want to ceed the cpu just long enough for Babel
+/// to finish what it's doing and warp up it's write
+/// on multicore machines this is mostly a waste of time
+/// on single core machines it avoids a spinlock until we
+/// are pre-empted by the scheduler to allow Babel to finish the
+/// job
+const SLEEP_TIME: Duration = Duration::from_millis(1);
 
 #[derive(Debug, Fail)]
 pub enum BabelMonitorError {
@@ -178,6 +188,7 @@ fn read_babel(
                 // our buffer was not full but we also did not find a terminator,
                 // we must have caught babel while it was interupped (only really happens
                 // in single cpu situations)
+                thread::sleep(SLEEP_TIME);
                 trace!("we didn't get the whole message yet, trying again");
                 return Box::new(read_babel(stream, full_message, depth + 1));
             } else if let Err(e) = babel_data {
