@@ -28,6 +28,7 @@ use std::net::Ipv4Addr;
 use std::net::Shutdown;
 use std::net::SocketAddr;
 use std::net::TcpStream;
+use std::net::ToSocketAddrs;
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
@@ -55,8 +56,14 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
     interfaces_to_search: HashSet<String, S>,
 ) {
     info!("Starting antenna forwarding proxy!");
-    let socket: SocketAddr = match checkin_address.parse() {
-        Ok(socket) => socket,
+    let socket: SocketAddr = match checkin_address.to_socket_addrs() {
+        Ok(mut res) => match res.next() {
+            Some(socket) => socket,
+            None => {
+                error!("Could not parse {}!", checkin_address);
+                return;
+            }
+        },
         Err(_) => {
             error!("Could not parse {}!", checkin_address);
             return;
@@ -141,9 +148,7 @@ fn process_messages(
                 let stream = streams
                     .get(stream_id)
                     .expect("How can we close a stream we don't have?");
-                stream
-                    .shutdown(Shutdown::Both)
-                    .expect("Failed to shutdown connection!");
+                let _res = stream.shutdown(Shutdown::Both);
                 streams.remove(stream_id);
             }
             ForwardingProtocolMessage::ConnectionDataMessage { stream_id, payload } => {
