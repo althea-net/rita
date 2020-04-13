@@ -12,9 +12,15 @@ extern crate serde_derive;
 extern crate failure;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate lazy_static;
 
 use althea_types::Identity;
+use althea_types::WgKey;
 use failure::Error;
+use sodiumoxide::crypto::box_;
+use sodiumoxide::crypto::box_::Nonce;
+use sodiumoxide::crypto::box_::NONCEBYTES;
 use std::collections::HashMap;
 use std::io::Error as IoError;
 use std::io::ErrorKind::WouldBlock;
@@ -25,6 +31,13 @@ use std::net::Shutdown;
 use std::net::TcpStream;
 use std::thread;
 use std::time::Duration;
+
+lazy_static! {
+    pub static ref FORWARDING_SERVER_PUBLIC_KEY: WgKey =
+        "hizclQFo/ArWY+/9+AJ0LBY2dTiQK4smy5icM7GA5ng="
+            .parse()
+            .unwrap();
+}
 
 /// The amount of time to sleep a thread that's spinlocking on somthing
 pub const SPINLOCK_TIME: Duration = Duration::from_millis(100);
@@ -144,7 +157,7 @@ pub enum ForwardingProtocolMessage {
     },
     /// The serialized struct sent as the payload
     /// for the Error message (type 2) this is what is sent
-    /// back to the server when the antenna can't be forwarde
+    /// back to the server when the antenna can't be forwarded
     ErrorMessage { error: String },
     /// Used to multiplex connection close events
     /// from either end over a single tcp stream this does not
@@ -236,6 +249,89 @@ impl ForwardingProtocolMessage {
         message
     }
 
+    pub fn get_encrypted_forward_message(
+        &self,
+        server_secretkey: WgKey,
+        client_publickey: WgKey,
+    ) -> Result<Vec<u8>, Error> {
+        if let ForwardingProtocolMessage::ForwardMessage { .. } = self {
+            let client_publickey = client_publickey.into();
+            let server_secretkey = server_secretkey.into();
+            let plaintext = serde_json::to_vec(self).unwrap();
+            let nonce = box_::gen_nonce();
+            let ciphertext = box_::seal(&plaintext, &nonce, &client_publickey, &server_secretkey);
+            let mut payload = Vec::new();
+            payload.extend_from_slice(&nonce.0);
+            payload.extend_from_slice(&ciphertext);
+
+            let mut message = Vec::new();
+            message.extend_from_slice(&ForwardingProtocolMessage::MAGIC.to_be_bytes());
+            // message type number index 16-18
+            message
+                .extend_from_slice(&ForwardingProtocolMessage::FORWARD_MESSAGE_TYPE.to_be_bytes());
+            // length, index 18-20
+            let len_bytes = payload.len() as u16;
+            message.extend_from_slice(&len_bytes.to_be_bytes());
+            // copy in the encrypted struct
+            message.extend_from_slice(&payload);
+            Ok(message)
+        } else {
+            unimplemented!()
+        }
+    }
+
+    pub fn read_encrypted_forward_message(
+        payload: &[u8],
+        server_publickey: WgKey,
+        client_secretkey: WgKey,
+    ) -> Result<(usize, ForwardingProtocolMessage), Error> {
+        if payload.len() < HEADER_LEN {
+            return Err(format_err!("Packet too short!"));
+        }
+
+        let mut packet_magic: [u8; 16] = [0; 16];
+        packet_magic.clone_from_slice(&payload[0..16]);
+        let packet_magic = u128::from_be_bytes(packet_magic);
+
+        let mut packet_type: [u8; 2] = [0; 2];
+        packet_type.clone_from_slice(&payload[16..18]);
+        let packet_type = u16::from_be_bytes(packet_type);
+
+        let mut packet_len: [u8; 2] = [0; 2];
+        packet_len.clone_from_slice(&payload[18..20]);
+        let packet_len = u16::from_be_bytes(packet_len);
+
+        // this needs to be updated when new packet types are added
+        if packet_magic != ForwardingProtocolMessage::MAGIC {
+            return Err(format_err!("Packet magic incorrect!"));
+        } else if packet_type != ForwardingProtocolMessage::FORWARD_MESSAGE_TYPE {
+            return Err(format_err!("Wrong packet type!"));
+        } else if packet_len as usize + HEADER_LEN > payload.len() {
+            return Err(format_err!(
+                "Our slice is {} bytes, but our packet_len {} bytes",
+                payload.len(),
+                packet_len as usize + HEADER_LEN
+            ));
+        }
+
+        // nonce is 24 bytes
+        let nonce_end = 20 + NONCEBYTES;
+        let mut nonce: [u8; NONCEBYTES] = [0; NONCEBYTES];
+        nonce.clone_from_slice(&payload[20..nonce_end]);
+        let nonce = Nonce(nonce);
+        let end_bytes = 20 + packet_len as usize;
+        let ciphertext = &payload[nonce_end..end_bytes];
+        let sk = client_secretkey.into();
+        let pk = server_publickey.into();
+        match box_::open(&ciphertext, &nonce, &pk, &sk) {
+            Ok(plaintext) => match serde_json::from_slice(&plaintext) {
+                Ok(forward_message) => Ok((end_bytes, forward_message)),
+                Err(e) => Err(e.into()),
+            },
+            Err(_) => Err(format_err!("Decryption failed!")),
+        }
+    }
+
     pub fn get_message(&self) -> Vec<u8> {
         match self {
             ForwardingProtocolMessage::IdentificationMessage { .. } => {
@@ -244,12 +340,8 @@ impl ForwardingProtocolMessage {
                     self,
                 )
             }
-            ForwardingProtocolMessage::ForwardMessage { .. } => {
-                ForwardingProtocolMessage::make_serde_packet(
-                    ForwardingProtocolMessage::FORWARD_MESSAGE_TYPE,
-                    self,
-                )
-            }
+            // forward messages must be encrypted!
+            ForwardingProtocolMessage::ForwardMessage { .. } => unimplemented!(),
             ForwardingProtocolMessage::ErrorMessage { .. } => {
                 ForwardingProtocolMessage::make_serde_packet(
                     ForwardingProtocolMessage::ERROR_MESSAGE_TYPE,
@@ -334,14 +426,6 @@ impl ForwardingProtocolMessage {
 
         match packet_type {
             ForwardingProtocolMessage::IDENTIFICATION_MESSAGE_TYPE => {
-                let bytes_read = 20 + packet_len as usize;
-
-                match serde_json::from_slice(&payload[HEADER_LEN..bytes_read]) {
-                    Ok(message) => Ok((bytes_read, message)),
-                    Err(serde_error) => Err(serde_error.into()),
-                }
-            }
-            ForwardingProtocolMessage::FORWARD_MESSAGE_TYPE => {
                 let bytes_read = HEADER_LEN + packet_len as usize;
 
                 match serde_json::from_slice(&payload[HEADER_LEN..bytes_read]) {
@@ -349,6 +433,8 @@ impl ForwardingProtocolMessage {
                     Err(serde_error) => Err(serde_error.into()),
                 }
             }
+            // you can not read encrypted packets with this function
+            ForwardingProtocolMessage::FORWARD_MESSAGE_TYPE => unimplemented!(),
             ForwardingProtocolMessage::ERROR_MESSAGE_TYPE => {
                 let bytes_read = HEADER_LEN + packet_len as usize;
 
@@ -447,9 +533,30 @@ impl ForwardingProtocolMessage {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::ForwardingProtocolMessage;
+    use super::Identity;
+    use super::WgKey;
     use rand;
     use rand::Rng;
+
+    lazy_static! {
+        pub static ref FORWARDING_SERVER_PUBLIC_KEY: WgKey =
+            "TynZVeTrJIDjIYGuUrcwgMFuf+Q2v/Hi5op2/guNB2U="
+                .parse()
+                .unwrap();
+        pub static ref FORWARDING_SERVER_PRIVATE_KEY: WgKey =
+            "AHbAX9bKPK7v7GMdS1oR7fwWpAsg8uI3gKduoIuMck4="
+                .parse()
+                .unwrap();
+        pub static ref FORWARDING_CLIENT_PUBLIC_KEY: WgKey =
+            "YVxkADnFUCTSjKn2X6ljAp1jppZgsatGzJETF3UAcQA="
+                .parse()
+                .unwrap();
+        pub static ref FORWARDING_CLIENT_PRIVATE_KEY: WgKey =
+            "aHazoPtmnS2ksW926jvss53+GQbyaXBkVLCfm5OVjnM="
+                .parse()
+                .unwrap();
+    }
 
     fn get_test_id() -> Identity {
         Identity {
@@ -513,9 +620,19 @@ mod tests {
     #[test]
     fn test_forward_message() {
         let message = get_forward_message();
-        let message_bytes = message.get_message();
+        let message_bytes = message
+            .get_encrypted_forward_message(
+                *FORWARDING_SERVER_PRIVATE_KEY,
+                *FORWARDING_CLIENT_PUBLIC_KEY,
+            )
+            .expect("Failed to decrypt");
         let (message_bytes_parsed, parsed_message_contents) =
-            ForwardingProtocolMessage::read_message(&message_bytes).expect("Failed to parse!");
+            ForwardingProtocolMessage::read_encrypted_forward_message(
+                &message_bytes,
+                *FORWARDING_SERVER_PUBLIC_KEY,
+                *FORWARDING_CLIENT_PRIVATE_KEY,
+            )
+            .expect("Failed to parse!");
         assert_eq!(message, parsed_message_contents);
         assert_eq!(message_bytes_parsed, message_bytes.len());
     }
@@ -523,12 +640,22 @@ mod tests {
     #[test]
     fn test_forward_message_trailing_bytes() {
         let message = get_forward_message();
-        let mut message_bytes = message.get_message();
+        let mut message_bytes = message
+            .get_encrypted_forward_message(
+                *FORWARDING_SERVER_PRIVATE_KEY,
+                *FORWARDING_CLIENT_PUBLIC_KEY,
+            )
+            .expect("Failed to decrypt");
         let actual_message_length = message_bytes.len();
         message_bytes.extend_from_slice(&get_random_test_vector());
         let (message_bytes_parsed, parsed_message_contents) =
-            ForwardingProtocolMessage::read_message(&message_bytes).expect("Failed to parse!");
-        assert_eq!(parsed_message_contents, message);
+            ForwardingProtocolMessage::read_encrypted_forward_message(
+                &message_bytes,
+                *FORWARDING_SERVER_PUBLIC_KEY,
+                *FORWARDING_CLIENT_PRIVATE_KEY,
+            )
+            .expect("Failed to parse!");
+        assert_eq!(message, parsed_message_contents);
         assert_eq!(message_bytes_parsed, actual_message_length);
     }
 
