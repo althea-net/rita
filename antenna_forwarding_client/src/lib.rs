@@ -87,29 +87,33 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
             match ForwardingProtocolMessage::read_messages(&mut server_stream) {
                 Ok(messages) => {
                     // read messages will return a vec of at least one,
-                    if let Some(ForwardingProtocolMessage::ForwardMessage {
-                        ip,
-                        server_port: _server_port,
-                        antenna_port,
-                    }) = messages.iter().next()
-                    {
-                        // if there are other messages in this batch safely form a slice
-                        // to pass on
-                        let slice = if messages.len() > 1 {
-                            &messages[1..]
-                        } else {
-                            // an empty slice
-                            &([] as [ForwardingProtocolMessage; 0])
-                        };
-                        // setup networking and process the rest of the messages in this batch
-                        match setup_networking(*ip, *antenna_port, &interfaces_to_search) {
-                            Ok(antenna_sockaddr) => {
-                                forward_connections(antenna_sockaddr, server_stream, slice);
+                    match messages.iter().next() {
+                        Some(ForwardingProtocolMessage::ForwardMessage {
+                            ip,
+                            server_port: _server_port,
+                            antenna_port,
+                        }) => {
+                            // if there are other messages in this batch safely form a slice
+                            // to pass on
+                            let slice = if messages.len() > 1 {
+                                &messages[1..]
+                            } else {
+                                // an empty slice
+                                &([] as [ForwardingProtocolMessage; 0])
+                            };
+                            // setup networking and process the rest of the messages in this batch
+                            match setup_networking(*ip, *antenna_port, &interfaces_to_search) {
+                                Ok(antenna_sockaddr) => {
+                                    forward_connections(antenna_sockaddr, server_stream, slice);
+                                }
+                                Err(e) => {
+                                    send_error_message(&mut server_stream, format!("{:?}", e))
+                                }
                             }
-                            Err(e) => send_error_message(&mut server_stream, format!("{:?}", e)),
                         }
-                    } else {
-                        error!("Wrong start message!");
+                        Some(ForwardingProtocolMessage::ForwardingCloseMessage) => {}
+                        Some(m) => warn!("Wrong start message {:?}", m),
+                        None => {}
                     }
                 }
                 Err(e) => {
