@@ -13,7 +13,6 @@ sodiumoxide = "0.2"
 failure = "0.1"
 clarity = "0.1"
 log = "0.4"
-lazy_static = "1.4"
 
 [dev-dependencies]
 rand = "0.7"

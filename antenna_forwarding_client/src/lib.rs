@@ -50,9 +50,9 @@ const FORWARD_TIMEOUT: Duration = Duration::from_secs(600);
 pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::hash::BuildHasher>(
     checkin_address: String,
     our_id: Identity,
-    _server_public_key: WgKey,
+    server_public_key: WgKey,
     _our_public_key: WgKey,
-    _our_private_key: WgKey,
+    our_private_key: WgKey,
     interfaces_to_search: HashSet<String, S>,
 ) {
     info!("Starting antenna forwarding proxy!");
@@ -84,7 +84,11 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
             );
             // wait for a NET_TIMEOUT and see if the server responds, then read it's entire response
             thread::sleep(NET_TIMEOUT);
-            match ForwardingProtocolMessage::read_messages(&mut server_stream) {
+            match ForwardingProtocolMessage::read_messages_start(
+                &mut server_stream,
+                server_public_key,
+                our_private_key,
+            ) {
                 Ok(messages) => {
                     // read messages will return a vec of at least one,
                     match messages.iter().next() {

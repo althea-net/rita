@@ -12,8 +12,6 @@ extern crate serde_derive;
 extern crate failure;
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate lazy_static;
 
 use althea_types::Identity;
 use althea_types::WgKey;
@@ -31,13 +29,6 @@ use std::net::Shutdown;
 use std::net::TcpStream;
 use std::thread;
 use std::time::Duration;
-
-lazy_static! {
-    pub static ref FORWARDING_SERVER_PUBLIC_KEY: WgKey =
-        "hizclQFo/ArWY+/9+AJ0LBY2dTiQK4smy5icM7GA5ng="
-            .parse()
-            .unwrap();
-}
 
 /// The amount of time to sleep a thread that's spinlocking on somthing
 pub const SPINLOCK_TIME: Duration = Duration::from_millis(100);
@@ -495,6 +486,26 @@ impl ForwardingProtocolMessage {
             }
             _ => bail!("Unknown packet type!"),
         }
+    }
+
+    /// Reads messages using read_messages, but expecting the first message to be an encrypted fowarding message
+    /// this is useful at the start of a forwarding session to simplify verification
+    pub fn read_messages_start(
+        input: &mut TcpStream,
+        server_publickey: WgKey,
+        client_secretkey: WgKey,
+    ) -> Result<Vec<ForwardingProtocolMessage>, Error> {
+        let bytes = read_till_block(input)?;
+        let (bytes_read, msg) = ForwardingProtocolMessage::read_encrypted_forward_message(
+            &bytes,
+            server_publickey,
+            client_secretkey,
+        )?;
+        ForwardingProtocolMessage::read_messages_internal(
+            input,
+            bytes[bytes_read..].to_vec(),
+            vec![msg],
+        )
     }
 
     /// Reads all the currently available messages from the provided stream, this function will
