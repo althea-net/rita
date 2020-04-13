@@ -2,9 +2,8 @@
 //! for the exit, which is most exit logic in general. Keep in mind database connections are remote
 //! and therefore synronous database requests are quite expensive (on the order of tens of milliseconds)
 
+use crate::rita_common::debt_keeper::get_debts_list_sync;
 use crate::rita_common::debt_keeper::DebtAction;
-use crate::rita_common::debt_keeper::DebtKeeper;
-use crate::rita_common::debt_keeper::GetDebtsList;
 use crate::rita_exit::database::database_tools::client_conflict;
 use crate::rita_exit::database::database_tools::create_or_update_user_record;
 use crate::rita_exit::database::database_tools::delete_client;
@@ -35,7 +34,6 @@ use crate::EXIT_SYSTEM_CHAIN;
 use crate::EXIT_VERIF_SETTINGS;
 use crate::KI;
 use crate::SETTING;
-use actix::Addr;
 use althea_kernel_interface::ExitClient;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 use diesel;
@@ -484,87 +482,71 @@ pub fn setup_clients(
 /// setting the htb class they are assigned to to a maximum speed of the free tier value.
 /// Unlike intermediary enforcement we do not need to subdivide the free tier to prevent
 /// ourselves from exceeding the upstream free tier. As an exit we are the upstream.
-pub fn enforce_exit_clients(
-    clients_list: Vec<exit_db::models::Client>,
-    debt_keeper: Addr<DebtKeeper>,
-) -> Box<dyn Future<Item = (), Error = Error>> {
+pub fn enforce_exit_clients(clients_list: Vec<exit_db::models::Client>) -> Result<(), Error> {
     let start = Instant::now();
-    Box::new(
-        debt_keeper
-            .send(GetDebtsList)
-            .from_err()
-            .and_then(move |debts_list| match debts_list {
-                Ok(list) => {
-                    let mut clients_by_id = HashMap::new();
-                    let free_tier_limit = SETTING.get_payment().free_tier_throughput;
-                    let close_threshold = SETTING.get_payment().close_threshold.clone();
-                    for client in clients_list.iter() {
-                        if let Ok(id) = to_identity(client) {
-                            clients_by_id.insert(id, client);
+    let mut clients_by_id = HashMap::new();
+    let free_tier_limit = SETTING.get_payment().free_tier_throughput;
+    let close_threshold = SETTING.get_payment().close_threshold.clone();
+    for client in clients_list.iter() {
+        if let Ok(id) = to_identity(client) {
+            clients_by_id.insert(id, client);
+        }
+    }
+    let list = get_debts_list_sync();
+
+    for debt_entry in list.iter() {
+        match clients_by_id.get(&debt_entry.identity) {
+            Some(client) => {
+                match client.internal_ip.parse() {
+                    Ok(IpAddr::V4(ip)) => {
+                        let res = if debt_entry.payment_details.action == DebtAction::SuspendTunnel
+                        {
+                            info!("Exit is enforcing on {} because their debt of {} is greater than the limit of {}", client.wg_pubkey, debt_entry.payment_details.debt, close_threshold);
+                            KI.set_class_limit("wg_exit", free_tier_limit, free_tier_limit, &ip)
+                        } else {
+                            // set to 500mbps garunteed bandwidth and 1gbps
+                            // absolute max
+                            KI.set_class_limit("wg_exit", 500_000, 1_000_000, &ip)
+                        };
+                        if res.is_err() {
+                            panic!("Failed to limit {} with {:?}", ip, res);
                         }
                     }
+                    _ => warn!("Can't parse Ipv4Addr to create limit!"),
+                };
+            }
+            None => {
+                // this can happen when clients are connected but not registered
+                // to this specific exit
+                trace!(
+                    "Could not find {} {} {} to suspend!",
+                    debt_entry.identity.wg_public_key,
+                    debt_entry.identity.eth_address,
+                    debt_entry.identity.mesh_ip
+                );
+            }
+        }
+    }
 
-                    for debt_entry in list.iter() {
-                        match clients_by_id.get(&debt_entry.identity) {
-                            Some(client) => {
-                                match client.internal_ip.parse() {
-                                    Ok(IpAddr::V4(ip)) => {
-                                        let res = if debt_entry.payment_details.action
-                                            == DebtAction::SuspendTunnel
-                                        {
-                                            info!("Exit is enforcing on {} because their debt of {} is greater than the limit of {}", client.wg_pubkey, debt_entry.payment_details.debt, close_threshold);
-                                            KI.set_class_limit(
-                                                "wg_exit",
-                                                free_tier_limit,
-                                                free_tier_limit,
-                                                &ip,
-                                            )
-                                        } else {
-                                            // set to 500mbps garunteed bandwidth and 1gbps
-                                            // absolute max
-                                            KI.set_class_limit("wg_exit", 500_000, 1_000_000, &ip)
-                                        };
-                                        if res.is_err() {
-                                            panic!("Failed to limit {} with {:?}", ip, res);
-                                        }
-                                    }
-                                    _ => warn!("Can't parse Ipv4Addr to create limit!"),
-                                };
-                            }
-                            None => {
-                                // this can happen when clients are connected but not registered
-                                // to this specific exit
-                                trace!("Could not find {} {} {} to suspend!", debt_entry.identity.wg_public_key, debt_entry.identity.eth_address, debt_entry.identity.mesh_ip);
-                            }
-                        }
-                    }
+    info!(
+        "Exit enforcement completed in {}s {}ms",
+        start.elapsed().as_secs(),
+        start.elapsed().subsec_millis(),
+    );
 
-                    info!(
-                        "Exit enforcement completed in {}s {}ms",
-                        start.elapsed().as_secs(),
-                        start.elapsed().subsec_millis(),
-                    );
-
-                    // TODO this is a hacky emergency kill switch for when we detect that
-                    // the actix loop may be running too slowly, when that happens requests to
-                    // the full node timeout and transactions will not be processed resulting in
-                    // wallet drain, this is worse than the possiblity of the exit not coming back up
-                    // As a method of detection this is just a decent proxy not a 100% acurate method
-                    // as it seems that http requests and anything that touches shelling out slow down
-                    // the most in these situations. Hopefully we can figure out more about why the
-                    // futures loop starts acting stragely.
-                    const PANIC_TIME: u64 = 10;
-                    if start.elapsed().as_secs() > PANIC_TIME {
-                       let fail_mesg = format!("Exit enforcement took more than {} seconds!", PANIC_TIME);
-                       error!("{}", fail_mesg);
-                       panic!("{}", fail_mesg);
-                    }
-                    Ok(())
-                }
-                Err(e) => {
-                    warn!("Failed to get debts from DebtKeeper! {:?}", e);
-                    Ok(())
-                }
-            })
-    )
+    // TODO this is a hacky emergency kill switch for when we detect that
+    // the actix loop may be running too slowly, when that happens requests to
+    // the full node timeout and transactions will not be processed resulting in
+    // wallet drain, this is worse than the possiblity of the exit not coming back up
+    // As a method of detection this is just a decent proxy not a 100% acurate method
+    // as it seems that http requests and anything that touches shelling out slow down
+    // the most in these situations. Hopefully we can figure out more about why the
+    // futures loop starts acting stragely.
+    const PANIC_TIME: u64 = 10;
+    if start.elapsed().as_secs() > PANIC_TIME {
+        let fail_mesg = format!("Exit enforcement took more than {} seconds!", PANIC_TIME);
+        error!("{}", fail_mesg);
+        panic!("{}", fail_mesg);
+    }
+    Ok(())
 }

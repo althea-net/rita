@@ -32,11 +32,16 @@ use std::fs::File;
 use std::io::Error as IOError;
 use std::io::Read;
 use std::io::Write;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use std::time::Instant;
 
 /// How often we save the nodes debt data, currently 30 minutes
 const SAVE_FREQENCY: Duration = Duration::from_secs(1800);
+
+lazy_static! {
+    static ref DEBT_DATA: Arc<RwLock<DebtData>> = Arc::new(RwLock::new(HashMap::new()));
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodeDebtData {
@@ -311,6 +316,8 @@ impl Handler<SendUpdate> for DebtKeeper {
     fn handle(&mut self, _msg: SendUpdate, _ctx: &mut Context<Self>) -> Self::Result {
         trace!("sending debt keeper update");
         self.save_if_needed();
+        // copy debt data into this sync accessible struct
+        *DEBT_DATA.write().unwrap() = self.debt_data.clone();
 
         // in order to keep from overloading actix when we have thousands of debts to process
         // (mainly on exits) we batch tunnel change operations before sending them over
@@ -713,6 +720,18 @@ impl Handler<GetDebtsList> for DebtKeeper {
         trace!("Debts: {}", debts.len());
         Ok(debts)
     }
+}
+
+#[allow(dead_code)]
+pub fn get_debts_list_sync() -> Vec<GetDebtsResult> {
+    let debts: Vec<GetDebtsResult> = DEBT_DATA
+        .read()
+        .unwrap()
+        .iter()
+        .map(|(key, value)| GetDebtsResult::new(&key, &value))
+        .collect();
+    trace!("Debts: {}", debts.len());
+    debts
 }
 
 #[cfg(test)]

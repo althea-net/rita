@@ -19,7 +19,6 @@
 //! actix work together on this on properly, not that I've every seen simple actors like the loop crash
 //! very often.
 
-use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_exit::database::database_tools::get_database_connection;
 use crate::rita_exit::database::struct_tools::clients_to_ids;
 use crate::rita_exit::database::{
@@ -32,6 +31,7 @@ use crate::rita_exit::traffic_watcher::{TrafficWatcher, Watch};
 use crate::KI;
 use crate::SETTING;
 use actix::Addr;
+use actix::System;
 use actix::SystemService;
 use actix_web::http::Method;
 use actix_web::{server, App};
@@ -57,75 +57,95 @@ pub const EXIT_LOOP_SPEED: u64 = 5;
 pub const EXIT_LOOP_SPEED_DURATION: Duration = Duration::from_secs(EXIT_LOOP_SPEED);
 pub const EXIT_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
 
+/// Starts the rita exit billing thread, this thread deals with blocking db
+/// calls and performs various tasks required for billing. The tasks interacting
+/// with actix are the most troublesome because the actix system may restart
+/// and crash this thread. To prevent that and other crashes we have a watchdog
+/// thread which simply restarts the billing.
+/// TODO remove futures on the non http endpoint / actix parts of this
+/// TODO remove futures on the actix parts of this by moving to thread local state
 pub fn start_rita_exit_loop() {
+    let system = System::current();
     setup_exit_wg_tunnel();
-    // a cache of what tunnels we had setup last round, used to prevent extra setup ops
-    let mut wg_clients: HashSet<ExitClient> = HashSet::new();
-    let tw = TrafficWatcher::from_registry();
-    let dk = DebtKeeper::from_registry();
-    let _res = thread::spawn(move || {
-        // wait until the system gets started
-        while !(dk.connected() && tw.connected()) {
-            trace!("Waiting for actors to start");
-        }
-        loop {
-            let start = Instant::now();
-            // opening a database connection takes at least several milliseconds, as the database server
-            // may be across the country, so to save on back and forth we open on and reuse it as much
-            // as possible
-            match wait_timeout(get_database_connection(), EXIT_LOOP_TIMEOUT) {
-                WaitResult::Ok(conn) => {
-                    use exit_db::schema::clients::dsl::clients;
-                    let babel_port = SETTING.get_network().babel_port;
-                    info!(
-                        "Exit tick! got DB connection after {}ms",
-                        start.elapsed().as_millis(),
-                    );
-
-                    if let Ok(clients_list) = clients.load::<models::Client>(&conn) {
-                        trace!("got {:?} clients", clients_list);
-                        let ids = clients_to_ids(clients_list.clone());
-
-                        // watch and bill for traffic
-                        bill(babel_port, &tw, start, ids);
-
-                        info!("about to setup clients");
-                        // Create and update client tunnels
-                        match setup_clients(&clients_list, &wg_clients) {
-                            Ok(new_wg_clients) => wg_clients = new_wg_clients,
-                            Err(e) => error!("Setup clients failed with {:?}", e),
-                        }
-
-                        info!("about to cleanup clients");
-                        // find users that have not been active within the configured time period
-                        // and remove them from the db
-                        if let Err(e) = cleanup_exit_clients(&clients_list, &conn) {
-                            error!("Exit client cleanup failed with {:?}", e);
-                        }
-
-                        // Make sure no one we are setting up is geoip unauthorized
-                        info!("about to check regions");
-                        check_regions(start, clients_list.clone());
-
-                        info!("About to enforce exit clients");
-                        enforce(start, &dk, clients_list);
-
-                        info!(
-                            "Completed Rita exit loop in {}ms, all vars should be dropped",
-                            start.elapsed().as_millis(),
-                        );
-                    }
+    // outer thread is a watchdog, inner thread is the runner
+    thread::spawn(move || {
+        while let Err(e) = {
+            let system_ref = system.clone();
+            thread::spawn(move || {
+                let tw = system_ref.registry().get();
+                // a cache of what tunnels we had setup last round, used to prevent extra setup ops
+                let mut wg_clients: HashSet<ExitClient> = HashSet::new();
+                // wait until the system gets started
+                while !tw.connected() {
+                    trace!("Waiting for actors to start");
                 }
-                WaitResult::Err(e) => error!("Failed to get database connection with {}", e),
-                WaitResult::TimedOut(_) => error!("Database connection timed out"),
-            }
-            // sleep until it has been 5 seconds from start, whenever that may be
-            // if it has been more than 5 seconds from start, go right ahead
-            if start.elapsed() < EXIT_LOOP_SPEED_DURATION {
-                thread::sleep(EXIT_LOOP_SPEED_DURATION - start.elapsed());
-            }
+                loop {
+                    rita_exit_loop(tw.clone(), &mut wg_clients)
+                }
+            })
+            .join()
+        } {
+            error!("Exit loop thread paniced! Respawning {:?}", e);
         }
     });
+}
+
+fn rita_exit_loop(tw: Addr<TrafficWatcher>, wg_clients: &mut HashSet<ExitClient>) {
+    let start = Instant::now();
+    // opening a database connection takes at least several milliseconds, as the database server
+    // may be across the country, so to save on back and forth we open on and reuse it as much
+    // as possible
+    match wait_timeout(get_database_connection(), EXIT_LOOP_TIMEOUT) {
+        WaitResult::Ok(conn) => {
+            use exit_db::schema::clients::dsl::clients;
+            let babel_port = SETTING.get_network().babel_port;
+            info!(
+                "Exit tick! got DB connection after {}ms",
+                start.elapsed().as_millis(),
+            );
+
+            if let Ok(clients_list) = clients.load::<models::Client>(&conn) {
+                trace!("got {:?} clients", clients_list);
+                let ids = clients_to_ids(clients_list.clone());
+
+                // watch and bill for traffic
+                bill(babel_port, &tw, start, ids);
+
+                info!("about to setup clients");
+                // Create and update client tunnels
+                match setup_clients(&clients_list, &wg_clients) {
+                    Ok(new_wg_clients) => *wg_clients = new_wg_clients,
+                    Err(e) => error!("Setup clients failed with {:?}", e),
+                }
+
+                info!("about to cleanup clients");
+                // find users that have not been active within the configured time period
+                // and remove them from the db
+                if let Err(e) = cleanup_exit_clients(&clients_list, &conn) {
+                    error!("Exit client cleanup failed with {:?}", e);
+                }
+
+                // Make sure no one we are setting up is geoip unauthorized
+                info!("about to check regions");
+                check_regions(start, clients_list.clone());
+
+                info!("About to enforce exit clients");
+                enforce(start, clients_list);
+
+                info!(
+                    "Completed Rita exit loop in {}ms, all vars should be dropped",
+                    start.elapsed().as_millis(),
+                );
+            }
+        }
+        WaitResult::Err(e) => error!("Failed to get database connection with {}", e),
+        WaitResult::TimedOut(_) => error!("Database connection timed out"),
+    }
+    // sleep until it has been 5 seconds from start, whenever that may be
+    // if it has been more than 5 seconds from start, go right ahead
+    if start.elapsed() < EXIT_LOOP_SPEED_DURATION {
+        thread::sleep(EXIT_LOOP_SPEED_DURATION - start.elapsed());
+    }
 }
 
 fn bill(babel_port: u16, tw: &Addr<TrafficWatcher>, start: Instant, ids: Vec<Identity>) {
@@ -185,25 +205,17 @@ fn check_regions(start: Instant, clients_list: Vec<models::Client>) {
     }
 }
 
-fn enforce(start: Instant, dk: &Addr<DebtKeeper>, clients_list: Vec<models::Client>) {
+fn enforce(start: Instant, clients_list: Vec<models::Client>) {
     // handle enforcement on client tunnels by querying debt keeper
-    // this consumes client list, you can move it up in exchange for a clone
-    let res = wait_timeout(
-        enforce_exit_clients(clients_list, dk.clone()),
-        EXIT_LOOP_TIMEOUT,
-    );
-    match res {
-        WaitResult::Err(e) => warn!(
+    // this consumes client list
+    match enforce_exit_clients(clients_list) {
+        Err(e) => warn!(
             "Failed to enforce exit clients with {:?} {}ms since start",
             e,
             start.elapsed().as_millis()
         ),
-        WaitResult::Ok(_) => info!(
+        Ok(_) => info!(
             "exit client enforcement completed successfully {}ms since loop start",
-            start.elapsed().as_millis()
-        ),
-        WaitResult::TimedOut(_) => error!(
-            "exit client enforcement timed out! {}ms since loop start",
             start.elapsed().as_millis()
         ),
     }
