@@ -496,6 +496,11 @@ impl ForwardingProtocolMessage {
         client_secretkey: WgKey,
     ) -> Result<Vec<ForwardingProtocolMessage>, Error> {
         let bytes = read_till_block(input)?;
+        if let Ok((_bytes, ForwardingProtocolMessage::ForwardingCloseMessage)) =
+            ForwardingProtocolMessage::read_message(&bytes)
+        {
+            return Ok(vec![ForwardingProtocolMessage::ForwardingCloseMessage]);
+        }
         let (bytes_read, msg) = ForwardingProtocolMessage::read_encrypted_forward_message(
             &bytes,
             server_publickey,

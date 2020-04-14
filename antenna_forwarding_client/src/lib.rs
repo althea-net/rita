@@ -97,6 +97,7 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
                             server_port: _server_port,
                             antenna_port,
                         }) => {
+                            info!("Got forwarding message, forwarding {}", ip);
                             // if there are other messages in this batch safely form a slice
                             // to pass on
                             let slice = if messages.len() > 1 {
