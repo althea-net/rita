@@ -270,7 +270,7 @@ impl ForwardingProtocolMessage {
             message.extend_from_slice(&payload);
             Ok(message)
         } else {
-            unimplemented!()
+            Err(format_err!("Invalid operation!"))
         }
     }
 
@@ -428,7 +428,9 @@ impl ForwardingProtocolMessage {
                 }
             }
             // you can not read encrypted packets with this function
-            ForwardingProtocolMessage::FORWARD_MESSAGE_TYPE => unimplemented!(),
+            ForwardingProtocolMessage::FORWARD_MESSAGE_TYPE => {
+                Err(format_err!("Invalid packet type"))
+            }
             ForwardingProtocolMessage::ERROR_MESSAGE_TYPE => {
                 let bytes_read = HEADER_LEN + packet_len as usize;
 

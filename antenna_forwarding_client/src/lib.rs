@@ -74,7 +74,6 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
         // parse checkin address every loop iteration as a way
         // of resolving the domain name on each run
         trace!("About to checkin with {}", checkin_address);
-        thread::sleep(SLEEP_TIME);
         if let Ok(mut server_stream) = TcpStream::connect_timeout(&socket, NET_TIMEOUT) {
             trace!("connected to {}", checkin_address);
             // send our identifier
@@ -145,11 +144,17 @@ fn process_messages(
     for item in input {
         match item {
             // why would the server ID themselves to us?
-            ForwardingProtocolMessage::IdentificationMessage { .. } => unimplemented!(),
+            ForwardingProtocolMessage::IdentificationMessage { .. } => {
+                error!("Why did the server identify?")
+            }
             // two forward messages?
-            ForwardingProtocolMessage::ForwardMessage { .. } => unimplemented!(),
+            ForwardingProtocolMessage::ForwardMessage { .. } => {
+                error!("Got second forward message?")
+            }
             // the server doesn't send us error messages, what would we do with it?
-            ForwardingProtocolMessage::ErrorMessage { .. } => unimplemented!(),
+            ForwardingProtocolMessage::ErrorMessage { .. } => {
+                error!("Server sent us an error message?")
+            }
             ForwardingProtocolMessage::ConnectionCloseMessage { stream_id } => {
                 trace!("Got close message for stream {}", stream_id);
                 *last_message = Instant::now();
@@ -195,7 +200,7 @@ fn process_messages(
                 return true;
             }
             // we don't use this yet
-            ForwardingProtocolMessage::KeepAliveMessage => unimplemented!(),
+            ForwardingProtocolMessage::KeepAliveMessage => {}
         }
     }
     false
@@ -266,7 +271,7 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
     ip: IpAddr,
     interfaces: &HashSet<String, S>,
 ) -> Result<String, Error> {
-    let our_ip = get_local_ip(ip);
+    let our_ip = get_local_ip(ip)?;
     for iface in interfaces {
         trace!("Trying interface {}, with test ip {}", iface, our_ip);
         // this acts as a wildcard deletion across all interfaces, which is frankly really
@@ -337,7 +342,7 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
 
 /// Generates a random non overlapping ip within a /24 subnet of the provided
 /// target antenna ip.
-fn get_local_ip(target_ip: IpAddr) -> IpAddr {
+fn get_local_ip(target_ip: IpAddr) -> Result<IpAddr, Error> {
     match target_ip {
         IpAddr::V4(address) => {
             let mut rng = rand::thread_rng();
@@ -350,9 +355,9 @@ fn get_local_ip(target_ip: IpAddr) -> IpAddr {
                 new_ip = rng.gen()
             }
             bytes[3] = new_ip;
-            Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3]).into()
+            Ok(Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3]).into())
         }
-        IpAddr::V6(_address) => unimplemented!(),
+        IpAddr::V6(_address) => Err(format_err!("Not supported!")),
     }
 }
 
