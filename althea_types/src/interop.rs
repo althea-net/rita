@@ -417,6 +417,8 @@ pub struct HeartbeatMessage {
     /// The babel Neighbor over which our traffic flows, this gives us the Reach
     /// (packet loss over 16 seconds) as well as the neighbor RTT
     pub exit_neighbor: Neighbor,
+    /// If this user wants to be notified when they have a low balance
+    pub notify_balance: bool,
     /// The exit registration contact details. If set
     pub contact_details: ContactDetails,
 }

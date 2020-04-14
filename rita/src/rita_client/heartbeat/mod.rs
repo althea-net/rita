@@ -154,6 +154,7 @@ fn send_udp_heartbeat_packet(
 ) {
     let network_settings = SETTING.get_network();
     let reg_details = SETTING.get_exit_client().reg_details.clone();
+    let low_balance_notification = SETTING.get_exit_client().low_balance_notification;
     let our_publickey = network_settings.wg_public_key.expect("No public key?");
     let our_secretkey = network_settings
         .wg_private_key
@@ -197,6 +198,7 @@ fn send_udp_heartbeat_packet(
         upstream_id: exit_neighbor_id,
         exit_route,
         exit_neighbor,
+        notify_balance: low_balance_notification,
         contact_details,
     };
     // serde will only fail under specific circumstances with specific structs
