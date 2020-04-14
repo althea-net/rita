@@ -271,6 +271,7 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
     ip: IpAddr,
     interfaces: &HashSet<String, S>,
 ) -> Result<String, Error> {
+    check_blacklist(ip)?;
     let our_ip = get_local_ip(ip)?;
     for iface in interfaces {
         trace!("Trying interface {}, with test ip {}", iface, our_ip);
@@ -361,8 +362,46 @@ fn get_local_ip(target_ip: IpAddr) -> Result<IpAddr, Error> {
     }
 }
 
+const IP_BLACKLIST: [Ipv4Addr; 2] = [Ipv4Addr::new(192, 168, 10, 0), Ipv4Addr::new(127, 0, 0, 0)];
+
+/// Checks the forwarding ip blacklist, these are ip's that we don't
+/// want the forwarding client working on
+fn check_blacklist(ip: IpAddr) -> Result<(), Error> {
+    match ip {
+        IpAddr::V4(address) => {
+            for ip in IP_BLACKLIST.iter() {
+                if compare_ipv4_octets(*ip, address) {
+                    return Err(format_err!("Blacklisted address!"));
+                }
+            }
+            Ok(())
+        }
+        IpAddr::V6(_address) => Ok(()),
+    }
+}
+
+fn compare_ipv4_octets(mask: Ipv4Addr, to_compare: Ipv4Addr) -> bool {
+    let mut bytes = to_compare.octets();
+    bytes[3] = 0;
+    let out: Ipv4Addr = bytes.into();
+    mask == out
+}
+
 fn send_error_message(server_stream: &mut TcpStream, message: String) {
     let msg = ForwardingProtocolMessage::new_error_message(message);
     let _res = write_all_spinlock(server_stream, &msg.get_message());
     let _res = server_stream.shutdown(Shutdown::Both);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_blacklist() {
+        let res = check_blacklist(Ipv4Addr::new(192, 168, 10, 1).into());
+        assert!(res.is_err());
+        let res = check_blacklist(Ipv4Addr::new(192, 168, 11, 1).into());
+        assert!(res.is_ok());
+    }
 }
