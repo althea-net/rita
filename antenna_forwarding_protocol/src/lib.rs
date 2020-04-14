@@ -12,6 +12,9 @@ extern crate serde_derive;
 extern crate failure;
 #[macro_use]
 extern crate log;
+#[cfg(test)]
+#[macro_use]
+extern crate lazy_static;
 
 use althea_types::Identity;
 use althea_types::WgKey;
