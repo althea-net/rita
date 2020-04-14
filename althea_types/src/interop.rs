@@ -385,6 +385,13 @@ pub struct OperatorCheckinMessage {
     pub id: Identity,
 }
 
+/// Struct for storing user contact details
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContactDetails {
+    pub phone: Option<String>,
+    pub email: Option<String>,
+}
+
 /// Heartbeat sent to the operator server to help monitor
 /// liveness and network state
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -408,4 +415,6 @@ pub struct HeartbeatMessage {
     /// The babel Neighbor over which our traffic flows, this gives us the Reach
     /// (packet loss over 16 seconds) as well as the neighbor RTT
     pub exit_neighbor: Neighbor,
+    /// The exit registration contact details. If set
+    pub contact_details: ContactDetails,
 }
