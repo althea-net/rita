@@ -2629,7 +2629,7 @@ dependencies = [
 
 [[package]]
 name = "rita"
-version = "0.5.39"
+version = "0.5.40"
 dependencies = [
  "actix",
  "actix-web",
