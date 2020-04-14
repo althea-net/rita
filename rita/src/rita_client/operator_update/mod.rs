@@ -76,6 +76,7 @@ impl Handler<Update> for OperatorUpdate {
 fn checkin() {
     let logging_enabled = SETTING.get_log().enabled;
     let operator_settings = SETTING.get_operator();
+    let system_chain = SETTING.get_payment().system_chain;
     let url = operator_settings.checkin_url.clone();
     let operator_address = operator_settings.operator_address;
     let use_operator_price =
@@ -91,23 +92,33 @@ fn checkin() {
         return;
     }
 
-    info!(
-        "Starting Operator checkin using {} and {:?}",
-        url, operator_address
-    );
+    match operator_address {
+        Some(address) => info!("Operator checkin using {} and {}", url, address),
+        None => info!(
+            "Operator checkin for default settings {} and {}",
+            url, system_chain
+        ),
+    }
 
     let res = client::post(url)
         .header("User-Agent", "Actix-web")
-        .json(OperatorCheckinMessage { id })
+        .json(OperatorCheckinMessage {
+            id,
+            operator_address,
+            system_chain,
+        })
         .unwrap()
         .send()
         .timeout(OPERATOR_UPDATE_TIMEOUT)
         .from_err()
         .and_then(move |response| {
+            trace!("Response is {:?}", response.status());
+            trace!("Response is {:?}", response.headers());
             response
                 .json()
                 .from_err()
                 .and_then(move |new_settings: OperatorUpdateMessage| {
+                    trace!("Updating from operator settings");
                     let mut payment = SETTING.get_payment_mut();
                     let starting_token_bridge_core = payment.bridge_addresses.clone();
 
@@ -133,10 +144,12 @@ fn checkin() {
                         payment.withdraw_chain = new_chain;
                     }
                     drop(payment);
+                    trace!("Done with payment");
 
                     let mut operator = SETTING.get_operator_mut();
                     let new_operator_fee = Uint256::from(new_settings.operator_fee);
                     operator.operator_fee = new_operator_fee;
+                    drop(operator);
 
                     merge_settings_safely(new_settings.merge_json);
 

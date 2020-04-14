@@ -383,6 +383,8 @@ pub struct OperatorUpdateMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperatorCheckinMessage {
     pub id: Identity,
+    pub operator_address: Option<Address>,
+    pub system_chain: SystemChain,
 }
 
 /// Struct for storing user contact details
