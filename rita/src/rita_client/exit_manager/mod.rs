@@ -329,11 +329,6 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
                 as Box<dyn Future<Item = (), Error = Error>>;
         }
     };
-    let balance_notification = if SETTING.get_exit_client().low_balance_notification {
-        low_balance()
-    } else {
-        false
-    };
 
     let exit_server = current_exit.id.mesh_ip;
     let exit_pubkey = current_exit.id.wg_public_key;
@@ -348,7 +343,7 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
         },
         wg_port: SETTING.get_exit_client().wg_listen_port,
         reg_details: SETTING.get_exit_client().reg_details.clone().unwrap(),
-        low_balance: Some(balance_notification),
+        low_balance: Some(false),
     };
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
