@@ -24,6 +24,7 @@ pub fn set_auto_pricing(path: Path<bool>) -> Result<HttpResponse, Error> {
     if !op.force_use_operator_price {
         op.use_operator_price = value;
     }
+    drop(op);
 
     // try and save the config and fail if we can't
     if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
