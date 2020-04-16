@@ -27,7 +27,7 @@ fn default_force_use_operator_price() -> bool {
 /// The url for checking in with the operator server.
 /// if you are changing this double check the default currency and the default node url
 fn default_checkin_url() -> String {
-    "https://operator.althea.net/checkin".to_string()
+    "https://operator.althea.net:8080/checkin".to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
