@@ -330,18 +330,25 @@ impl Default for TunnelManager {
 }
 
 /// Message sent by network monitor when it determines that an iface is bloated
-pub struct GotBloat {
+pub struct ShapingAdjust {
     pub iface: String,
+    pub action: ShapingAdjustAction,
 }
 
-impl Message for GotBloat {
+pub enum ShapingAdjustAction {
+    IncreaseSpeed,
+    ReduceSpeed,
+}
+
+impl Message for ShapingAdjust {
     type Result = ();
 }
 
-impl Handler<GotBloat> for TunnelManager {
+impl Handler<ShapingAdjust> for TunnelManager {
     type Result = ();
 
-    fn handle(&mut self, msg: GotBloat, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: ShapingAdjust, _: &mut Context<Self>) -> Self::Result {
+        let action = msg.action;
         let network_settings = SETTING.get_network();
         let minimum_bandwidth_limit = network_settings.minimum_bandwidth_limit;
         let starting_bandwidth_limit = network_settings.starting_bandwidth_limit;
@@ -364,20 +371,34 @@ impl Handler<GotBloat> for TunnelManager {
         for (id, tunnel_list) in self.tunnels.iter_mut() {
             for tunnel in tunnel_list {
                 if tunnel.iface_name == iface {
-                    match tunnel.speed_limit {
-                        // start at the startin glimit
-                        None => {
+                    match (tunnel.speed_limit, action) {
+                        // nothing to do in this case
+                        (None, ShapingAdjustAction::IncreaseSpeed) => {}
+                        // start at the starting limit
+                        (None, ShapingAdjustAction::ReduceSpeed) => {
                             tunnel.speed_limit = Some(starting_bandwidth_limit);
                             set_shaping_or_error(&iface, Some(starting_bandwidth_limit))
                         }
                         // after that cut the value by 20% each time
-                        Some(val) => {
+                        (Some(val), ShapingAdjustAction::ReduceSpeed) => {
                             let new_val = (val as f32 * 0.8f32) as usize;
                             if new_val < minimum_bandwidth_limit {
                                 error!("Interface {} for peer {} is showing bloat but we can't reduce it's bandwidth any further. Current value {}", iface, id.wg_public_key, val);
                             } else {
                                 info!(
                                     "Interface {} for peer {} is showing bloat new speed value {}",
+                                    iface, id.wg_public_key, new_val
+                                );
+                                set_shaping_or_error(&iface, Some(new_val));
+                                tunnel.speed_limit = Some(new_val);
+                            }
+                        }
+                        // increase the value by 5% until we reach the starting value
+                        (Some(val), ShapingAdjustAction::IncreaseSpeed) => {
+                            let new_val = (val as f32 * 1.05f32) as usize;
+                            if new_val < starting_bandwidth_limit {
+                                info!(
+                                    "Interface {} for peer {} has not shown bloat new speed value {}",
                                     iface, id.wg_public_key, new_val
                                 );
                                 set_shaping_or_error(&iface, Some(new_val));

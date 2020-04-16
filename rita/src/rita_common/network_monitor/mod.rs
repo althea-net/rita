@@ -9,8 +9,9 @@
 //! on traffic over every interface and base our action off of spikes in throughput as well as spikes in latency.
 
 use crate::rita_common::rita_loop::fast_loop::FAST_LOOP_SPEED;
-use crate::rita_common::tunnel_manager::GotBloat;
 use crate::rita_common::tunnel_manager::Neighbor as RitaNeighbor;
+use crate::rita_common::tunnel_manager::ShapingAdjust;
+use crate::rita_common::tunnel_manager::ShapingAdjustAction;
 use crate::rita_common::tunnel_manager::TunnelManager;
 use actix::Actor;
 use actix::Context;
@@ -23,17 +24,24 @@ use babel_monitor::Neighbor as BabelNeighbor;
 use babel_monitor::Route as BabelRoute;
 use failure::Error;
 use std::collections::HashMap;
+use std::time::Duration;
+use std::time::Instant;
 
 const SAMPLE_PERIOD: u8 = FAST_LOOP_SPEED as u8;
 const SAMPLES_IN_FIVE_MINUTES: usize = 300 / SAMPLE_PERIOD as usize;
+/// 10 minutes in seconds, the amount of time we wait for an interface to be
+/// 'good' before we start trying to increase it's speed
+const BACK_OFF_TIME: Duration = Duration::from_secs(600);
 
 /// Implements https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
-/// to keep track of neighbor latency in an online fashion
+/// to keep track of neighbor latency in an online fashion for a specific interface
 #[derive(Clone)]
 pub struct RunningLatencyStats {
     count: u32,
     mean: f32,
     m2: f32,
+    /// the last time this counters interface was invalidated by a change
+    last_changed: Instant,
 }
 
 impl RunningLatencyStats {
@@ -42,6 +50,7 @@ impl RunningLatencyStats {
             count: 0u32,
             mean: 0f32,
             m2: 0f32,
+            last_changed: Instant::now(),
         }
     }
     pub fn get_avg(&self) -> Option<f32> {
@@ -76,10 +85,22 @@ impl RunningLatencyStats {
             (None, None) => false,
         }
     }
+    /// A hand tuned heuristic used to determine if a connection is good
+    pub fn is_good(&self) -> bool {
+        let avg = self.get_avg();
+        let std_dev = self.get_std_dev();
+        match (avg, std_dev) {
+            (Some(avg), Some(std_dev)) => std_dev <= avg * 2f32,
+            (Some(_avg), None) => false,
+            (None, Some(_std_dev)) => false,
+            (None, None) => false,
+        }
+    }
     pub fn reset(&mut self) {
         self.count = 0u32;
         self.mean = 0f32;
         self.m2 = 0f32;
+        self.last_changed = Instant::now();
     }
 }
 
@@ -307,33 +328,52 @@ fn observe_network(
         }
         let running_stats = latency_history.get_mut(iface).unwrap();
         match (
-            running_stats.is_bloated(),
             get_wg_key_by_ifname(neigh, rita_neighbors),
             running_stats.get_avg(),
             running_stats.get_std_dev(),
         ) {
-            (true, Some(key), Some(avg), Some(std_dev)) => {
-                info!(
-                    "{} is now defined as bloated with AVG {} STDDEV {} and CV {}!",
-                    key, avg, std_dev, neigh.rtt
-                );
-                // shape the misbehaving tunnel
-                TunnelManager::from_registry().do_send(GotBloat {
-                    iface: iface.to_string(),
-                });
-                // reset the values for this entry because we have modified
-                // the qdisc and it's no longer an accurate representation
-                running_stats.reset();
+            (Some(key), Some(avg), Some(std_dev)) => {
+                if running_stats.is_bloated() {
+                    info!(
+                        "{} is defined as bloated with AVG {} STDDEV {} and CV {}!",
+                        key, avg, std_dev, neigh.rtt
+                    );
+                    // shape the misbehaving tunnel
+                    TunnelManager::from_registry().do_send(ShapingAdjust {
+                        iface: iface.to_string(),
+                        action: ShapingAdjustAction::ReduceSpeed,
+                    });
+                    // reset the values for this entry because we have modified
+                    // the qdisc and it's no longer an accurate representation
+                    running_stats.reset();
+                } else if Instant::now() > running_stats.last_changed
+                    && Instant::now() - running_stats.last_changed > BACK_OFF_TIME
+                    && running_stats.is_good()
+                {
+                    info!(
+                        "Neighbor {} is increasing speed with AVG {} STDDEV {} and CV {}",
+                        key, avg, std_dev, neigh.rtt
+                    );
+                    // shape the misbehaving tunnel
+                    TunnelManager::from_registry().do_send(ShapingAdjust {
+                        iface: iface.to_string(),
+                        action: ShapingAdjustAction::IncreaseSpeed,
+                    });
+                    // reset the values for this entry because we have modified
+                    // the qdisc and it's no longer an accurate representation
+                    running_stats.reset();
+                } else {
+                    info!(
+                        "Neighbor {} is ok with AVG {} STDDEV {} and CV {}",
+                        key, avg, std_dev, neigh.rtt
+                    )
+                }
             }
-            (false, Some(key), Some(avg), Some(std_dev)) => info!(
-                "Neighbor {} is ok with AVG {} STDDEV {} and CV {}",
-                key, avg, std_dev, neigh.rtt
-            ),
-            (true, None, _, _) => error!(
+            (None, _, _) => error!(
                 "We have a bloated connection to {} but no Rita neighbor!",
                 iface
             ),
-            (_, _, _, _) => {}
+            (_, _, _) => {}
         }
         running_stats.add_sample(neigh.rtt);
     }
