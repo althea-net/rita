@@ -106,7 +106,7 @@ impl Display for SystemChain {
         match self {
             SystemChain::Ethereum => write!(f, "Ethereum"),
             SystemChain::Rinkeby => write!(f, "Rinkeby"),
-            SystemChain::Xdai => write!(f, "Xday"),
+            SystemChain::Xdai => write!(f, "Xdai"),
         }
     }
 }
