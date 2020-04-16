@@ -140,6 +140,9 @@ fn set_ssid(wifi_ssid: &WifiSSID) -> Result<HttpResponse, Error> {
     // if the ssid is too long but don't block on that
     let _ = maybe_set_nickname(wifi_ssid.ssid.clone());
 
+    // we have invalidated the old nat rules, update them
+    KI.create_client_nat_rules()?;
+
     Ok(HttpResponse::Ok().json(ret))
 }
 
@@ -183,6 +186,10 @@ fn set_pass(wifi_pass: &WifiPass) -> Result<HttpResponse, Error> {
 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
+
+    // we have invalidated the old nat rules, update them
+    KI.create_client_nat_rules()?;
+
     Ok(HttpResponse::Ok().json(()))
 }
 
@@ -215,6 +222,9 @@ fn set_channel(wifi_channel: &WifiChannel) -> Result<HttpResponse, Error> {
 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
+    // we have invalidated the old nat rules, update them
+    KI.create_client_nat_rules()?;
+
     Ok(HttpResponse::Ok().json(()))
 }
 
