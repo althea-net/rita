@@ -365,17 +365,36 @@ impl FromStr for ReleaseStatus {
 /// Operator update that we get from the operator server during our checkin
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperatorUpdateMessage {
+    /// This really should be 'relay' as it is the price that a normal
+    /// 'client' changes other clients for bandwdith (aka the default relay price)
     pub client: u32,
+    /// The default 'gateway' price, this comes with a few caveats mainly that gateway
+    /// auto detection is based around having a wan port and is not always accurate but
+    /// generally gateways will always be detected as gateways and relays may sometimes
+    /// declare themselves gateways if the user toggled in a WAN port even if that WAN port
+    /// is not being used
     pub gateway: u32,
+    /// The maximum price any given router will pay in bandwidth, above this price the routers
+    /// will only pay their peer the max price
     pub max: u32,
+    /// This is the pro-rated fee paid to the operator, defined as wei/second
     pub operator_fee: u128,
+    /// This is the balance level at which the user starts to see the little 'warning'
+    /// message on their dashboard and also when the low balance text message is sent
     pub warning: u128,
+    /// The system blockchain that is currently being used, if it is 'none' here it is
+    /// interpreted as "don't change anything"
     pub system_chain: Option<SystemChain>,
+    /// The wtihdraw blockchain that is currently being used, if it is 'none' here it is
+    /// interpreted as "don't change anything"
     pub withdraw_chain: Option<SystemChain>,
     /// A release feed to be applied to the /etc/opkg/customfeeds.config, None means do not
     /// change the currently configured release feed
     pub release_feed: Option<String>,
-    /// A json payload to be merged into the existing settings
+    /// A json payload to be merged into the existing settings, this payload is checked
+    /// not to include a variety of things that might break the router but is still not
+    /// risk free for example the url fields require http:// or https:// or the router will
+    /// crash even though the value will be accepted as a valid string
     pub merge_json: serde_json::Value,
 }
 
