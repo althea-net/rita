@@ -129,7 +129,7 @@ fn checkin() {
                         if is_gateway {
                             payment.local_fee = new_settings.gateway;
                         } else {
-                            payment.local_fee = new_settings.client;
+                            payment.local_fee = new_settings.relay;
                         }
                     } else {
                         info!("User has disabled the OperatorUpdate!");

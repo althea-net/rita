@@ -365,9 +365,13 @@ impl FromStr for ReleaseStatus {
 /// Operator update that we get from the operator server during our checkin
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperatorUpdateMessage {
-    /// This really should be 'relay' as it is the price that a normal
-    /// 'client' changes other clients for bandwdith (aka the default relay price)
-    pub client: u32,
+    /// The default relay price, which is the price that a normal client in the network
+    /// will charge other clients to forward bandwidth. Remember that everyone has a
+    /// relay price even if they have no one to sell to. Also remember that unless
+    /// forbidden with 'force_operator_price' this value can be changed by the user
+    /// see the situation described in the max bandwidth setting for what might happen
+    ///  if the user sets an insane price.
+    pub relay: u32,
     /// The default 'gateway' price, this comes with a few caveats mainly that gateway
     /// auto detection is based around having a wan port and is not always accurate but
     /// generally gateways will always be detected as gateways and relays may sometimes
@@ -375,7 +379,10 @@ pub struct OperatorUpdateMessage {
     /// is not being used
     pub gateway: u32,
     /// The maximum price any given router will pay in bandwidth, above this price the routers
-    /// will only pay their peer the max price
+    /// will only pay their peer the max price, this can cause situations where routers disagree
+    /// about how much they have been paid and start enforcing. Remember this must be less than
+    /// the relay price + gateway price + exit price of the deepest user in the network in terms
+    /// of hops to prevent this from happening in 'intended' scenarios.
     pub max: u32,
     /// This is the pro-rated fee paid to the operator, defined as wei/second
     pub operator_fee: u128,
