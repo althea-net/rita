@@ -493,6 +493,11 @@ pub fn enforce_exit_clients(clients_list: Vec<exit_db::models::Client>) -> Resul
         }
     }
     let list = get_debts_list_sync();
+    info!(
+        "Exit enforcement finished grabbing data in {}s {}ms",
+        start.elapsed().as_secs(),
+        start.elapsed().subsec_millis(),
+    );
 
     for debt_entry in list.iter() {
         match clients_by_id.get(&debt_entry.identity) {
