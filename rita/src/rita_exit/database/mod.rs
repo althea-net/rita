@@ -35,6 +35,7 @@ use crate::EXIT_VERIF_SETTINGS;
 use crate::KI;
 use crate::SETTING;
 use althea_kernel_interface::ExitClient;
+use althea_types::Identity;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 use diesel;
 use diesel::prelude::PgConnection;
@@ -482,7 +483,10 @@ pub fn setup_clients(
 /// setting the htb class they are assigned to to a maximum speed of the free tier value.
 /// Unlike intermediary enforcement we do not need to subdivide the free tier to prevent
 /// ourselves from exceeding the upstream free tier. As an exit we are the upstream.
-pub fn enforce_exit_clients(clients_list: Vec<exit_db::models::Client>) -> Result<(), Error> {
+pub fn enforce_exit_clients(
+    clients_list: Vec<exit_db::models::Client>,
+    old_debt_actions: &HashSet<(Identity, DebtAction)>,
+) -> Result<HashSet<(Identity, DebtAction)>, Error> {
     let start = Instant::now();
     let mut clients_by_id = HashMap::new();
     let free_tier_limit = SETTING.get_payment().free_tier_throughput;
@@ -498,6 +502,23 @@ pub fn enforce_exit_clients(clients_list: Vec<exit_db::models::Client>) -> Resul
         start.elapsed().as_secs(),
         start.elapsed().subsec_millis(),
     );
+
+    // build the new debt actions list and see if we need to do anything
+    let mut new_debt_actions = HashSet::new();
+    for debt_entry in list.iter() {
+        new_debt_actions.insert((
+            debt_entry.identity,
+            debt_entry.payment_details.action.clone(),
+        ));
+    }
+    if new_debt_actions
+        .symmetric_difference(old_debt_actions)
+        .count()
+        == 0
+    {
+        info!("No change in enforcement list found, skipping tc calls");
+        return Ok(new_debt_actions);
+    }
 
     for debt_entry in list.iter() {
         match clients_by_id.get(&debt_entry.identity) {
@@ -553,5 +574,5 @@ pub fn enforce_exit_clients(clients_list: Vec<exit_db::models::Client>) -> Resul
         error!("{}", fail_mesg);
         panic!("{}", fail_mesg);
     }
-    Ok(())
+    Ok(new_debt_actions)
 }

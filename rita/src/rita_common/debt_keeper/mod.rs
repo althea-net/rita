@@ -303,7 +303,7 @@ impl Message for SendUpdate {
 
 /// Actions to be taken upon a neighbor's debt reaching either a negative or positive
 /// threshold.
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Hash, Eq)]
 pub enum DebtAction {
     SuspendTunnel,
     OpenTunnel,

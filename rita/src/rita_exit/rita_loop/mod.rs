@@ -19,6 +19,7 @@
 //! actix work together on this on properly, not that I've every seen simple actors like the loop crash
 //! very often.
 
+use crate::rita_common::debt_keeper::DebtAction;
 use crate::rita_exit::database::database_tools::get_database_connection;
 use crate::rita_exit::database::struct_tools::clients_to_ids;
 use crate::rita_exit::database::{
@@ -75,12 +76,14 @@ pub fn start_rita_exit_loop() {
                 let tw = system_ref.registry().get();
                 // a cache of what tunnels we had setup last round, used to prevent extra setup ops
                 let mut wg_clients: HashSet<ExitClient> = HashSet::new();
+                // a list of client debts from the last round, to prevent extra enforcement ops
+                let mut debt_actions: HashSet<(Identity, DebtAction)> = HashSet::new();
                 // wait until the system gets started
                 while !tw.connected() {
                     trace!("Waiting for actors to start");
                 }
                 loop {
-                    rita_exit_loop(tw.clone(), &mut wg_clients)
+                    rita_exit_loop(tw.clone(), &mut wg_clients, &mut debt_actions)
                 }
             })
             .join()
@@ -90,7 +93,11 @@ pub fn start_rita_exit_loop() {
     });
 }
 
-fn rita_exit_loop(tw: Addr<TrafficWatcher>, wg_clients: &mut HashSet<ExitClient>) {
+fn rita_exit_loop(
+    tw: Addr<TrafficWatcher>,
+    wg_clients: &mut HashSet<ExitClient>,
+    debt_actions: &mut HashSet<(Identity, DebtAction)>,
+) {
     let start = Instant::now();
     // opening a database connection takes at least several milliseconds, as the database server
     // may be across the country, so to save on back and forth we open on and reuse it as much
@@ -130,7 +137,12 @@ fn rita_exit_loop(tw: Addr<TrafficWatcher>, wg_clients: &mut HashSet<ExitClient>
                 check_regions(start, clients_list.clone());
 
                 info!("About to enforce exit clients");
-                enforce(start, clients_list);
+                // handle enforcement on client tunnels by querying debt keeper
+                // this consumes client list
+                match enforce_exit_clients(clients_list, debt_actions) {
+                    Ok(new_debt_actions) => *debt_actions = new_debt_actions,
+                    Err(e) => warn!("Failed to enforce exit clients with {:?}", e,),
+                }
 
                 info!(
                     "Completed Rita exit loop in {}ms, all vars should be dropped",
@@ -202,22 +214,6 @@ fn check_regions(start: Instant, clients_list: Vec<models::Client>) {
                 start.elapsed().as_millis()
             ),
         }
-    }
-}
-
-fn enforce(start: Instant, clients_list: Vec<models::Client>) {
-    // handle enforcement on client tunnels by querying debt keeper
-    // this consumes client list
-    match enforce_exit_clients(clients_list) {
-        Err(e) => warn!(
-            "Failed to enforce exit clients with {:?} {}ms since start",
-            e,
-            start.elapsed().as_millis()
-        ),
-        Ok(_) => info!(
-            "exit client enforcement completed successfully {}ms since loop start",
-            start.elapsed().as_millis()
-        ),
     }
 }
 
