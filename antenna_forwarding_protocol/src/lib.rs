@@ -104,16 +104,18 @@ pub fn process_streams<S: ::std::hash::BuildHasher>(
                     );
                     let msg =
                         ForwardingProtocolMessage::new_connection_data_message(*stream_id, bytes);
-                    write_all_spinlock(server_stream, &msg.get_message())
-                        .unwrap_or_else(|_| panic!("Failed to write with stream {}", *stream_id));
+                    if let Err(e) = write_all_spinlock(server_stream, &msg.get_message()) {
+                        error!("Failed to write with stream {} with {:?}", *stream_id, e);
+                    }
                 }
             }
             Err(e) => {
                 if e.kind() != WouldBlock {
                     error!("Closing antenna/client connection with {:?}", e);
                     let msg = ForwardingProtocolMessage::new_connection_close_message(*stream_id);
-                    write_all_spinlock(server_stream, &msg.get_message())
-                        .unwrap_or_else(|_| panic!("Failed to close stream {}", *stream_id));
+                    if let Err(e) = write_all_spinlock(server_stream, &msg.get_message()) {
+                        error!("Failed to close stream {} with {:?}", *stream_id, e);
+                    }
                     let _ = antenna_stream.shutdown(Shutdown::Write);
                     streams_to_remove.push(*stream_id);
                 }

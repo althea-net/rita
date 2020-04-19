@@ -159,11 +159,12 @@ fn process_messages(
                 trace!("Got close message for stream {}", stream_id);
                 *last_message = Instant::now();
                 let stream_id = stream_id;
-                let stream = streams
-                    .get(stream_id)
-                    .expect("How can we close a stream we don't have?");
-                let _res = stream.shutdown(Shutdown::Both);
-                streams.remove(stream_id);
+                if let Some(stream) = streams.get(stream_id) {
+                    let _res = stream.shutdown(Shutdown::Both);
+                    streams.remove(stream_id);
+                } else {
+                    error!("Tried to remove stream {} that we did not have", stream_id);
+                }
             }
             ForwardingProtocolMessage::ConnectionDataMessage { stream_id, payload } => {
                 trace!(
@@ -174,29 +175,35 @@ fn process_messages(
                 *last_message = Instant::now();
                 let stream_id = stream_id;
                 if let Some(mut antenna_stream) = streams.get_mut(stream_id) {
-                    write_all_spinlock(&mut antenna_stream, &payload)
-                        .expect("Failed to talk to antenna!");
+                    if let Err(e) = write_all_spinlock(&mut antenna_stream, &payload) {
+                        error!(
+                            "Failed to write to antenna stream id {} with {:?}",
+                            stream_id, e
+                        );
+                    }
                 } else {
                     trace!("Opening stream for {}", stream_id);
                     // we don't have a stream, we need to dial out to the server now
-                    let mut new_stream =
-                        TcpStream::connect(antenna_sockaddr).expect("Could not contact antenna!");
-                    write_all_spinlock(&mut new_stream, &payload)
-                        .expect("Failed to talk to antenna!");
-                    streams.insert(*stream_id, new_stream);
+                    if let Ok(mut new_stream) = TcpStream::connect(antenna_sockaddr) {
+                        match write_all_spinlock(&mut new_stream, &payload) {
+                            Ok(_) => {
+                                streams.insert(*stream_id, new_stream);
+                            }
+                            Err(e) => error!(
+                                "Failed to write to anntenna stream id {} with {:?}",
+                                stream_id, e
+                            ),
+                        }
+                    }
                 }
             }
             ForwardingProtocolMessage::ForwardingCloseMessage => {
                 trace!("Got halt message");
                 // we have a close lets get out of here.
                 for stream in streams.values_mut() {
-                    stream
-                        .shutdown(Shutdown::Both)
-                        .expect("Failed to shutdown connection!");
+                    let _ = stream.shutdown(Shutdown::Both);
                 }
-                server_stream
-                    .shutdown(Shutdown::Both)
-                    .expect("Could not shutdown connection!");
+                let _ = server_stream.shutdown(Shutdown::Both);
                 return true;
             }
             // we don't use this yet
