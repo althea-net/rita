@@ -378,13 +378,23 @@ pub struct OperatorUpdateMessage {
     /// forbidden with 'force_operator_price' this value can be changed by the user
     /// see the situation described in the max bandwidth setting for what might happen
     ///  if the user sets an insane price.
+    /// This field is denominated in wei/byte and is a u32 to reflect the maximum resolution
+    /// of the price field we have set in babel.
     pub relay: u32,
     /// The default 'gateway' price, this comes with a few caveats mainly that gateway
     /// auto detection is based around having a wan port and is not always accurate but
     /// generally gateways will always be detected as gateways and relays may sometimes
     /// declare themselves gateways if the user toggled in a WAN port even if that WAN port
     /// is not being used
+    /// This field is denominated in wei/byte and is a u32 to reflect the maximum resolution
+    /// of the price field we have set in babel.
     pub gateway: u32,
+    /// The price specifically charged to phone clients, above and beyond the price to reach
+    /// the exit. For example if this value was 5c and the cost for the selling node to reach
+    /// the exit was 10c the price presented to the phone client would be 15c. This field is also
+    /// denominated  in wei/byte but is not subject to same size restrictions and could in theory
+    /// be a u64 or even a u128
+    pub phone_relay: u32,
     /// The maximum price any given router will pay in bandwidth, above this price the routers
     /// will only pay their peer the max price, this can cause situations where routers disagree
     /// about how much they have been paid and start enforcing. Remember this must be less than

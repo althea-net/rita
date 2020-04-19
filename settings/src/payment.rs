@@ -130,9 +130,13 @@ pub struct TokenBridgeAddresses {
 /// debt keeper
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct PaymentSettings {
-    /// What we charge other nodes
+    /// What we charge other nodes, denominated in wei/byte, represented by a u32 because that is
+    /// the field size of the price field in Babel
     #[serde(default = "default_local_fee")]
     pub local_fee: u32,
+    /// What we charge light client (phone) nodes specifically, denominated in wei/byte
+    #[serde(default = "default_local_fee")]
+    pub light_client_fee: u32,
     /// A price limit, we will not pay more than this
     #[serde(default = "default_max_fee")]
     pub max_fee: u32,
@@ -232,6 +236,7 @@ impl Default for PaymentSettings {
     fn default() -> Self {
         PaymentSettings {
             local_fee: default_local_fee(),
+            light_client_fee: default_local_fee(),
             max_fee: default_max_fee(),
             dynamic_fee_multiplier: default_dynamic_fee_multiplier(),
             free_tier_throughput: default_free_tier_throughput(),
