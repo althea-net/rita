@@ -379,13 +379,13 @@ pub fn cleanup_exit_clients(
                 if client.last_seen == 0 {
                     info!(
                         "{} does not have a last seen timestamp, adding one now ",
-                        client.mesh_ip
+                        client.wg_pubkey
                     );
                     let res = set_client_timestamp(client_id, conn);
                     if res.is_err() {
                         warn!(
-                            "Unable to update the client timestamp for {:?} with {:?}",
-                            client, res
+                            "Unable to update the client timestamp for {} with {:?}",
+                            client.wg_pubkey, res
                         );
                     }
                 }
@@ -393,7 +393,7 @@ pub fn cleanup_exit_clients(
                 else if entry_timeout != 0 && time_delta > entry_timeout {
                     warn!(
                         "{} has been inactive for too long, deleting! ",
-                        client.mesh_ip
+                        client.wg_pubkey
                     );
                     let res = delete_client(client_id, conn);
                     if res.is_err() {
