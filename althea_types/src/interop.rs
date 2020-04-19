@@ -362,6 +362,13 @@ impl FromStr for ReleaseStatus {
     }
 }
 
+/// Somthing the operator may want to do to a router under their control
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, Eq, PartialEq)]
+pub enum OperatorAction {
+    ResetRouterPassword,
+    ResetWiFiPassword,
+}
+
 /// Operator update that we get from the operator server during our checkin
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperatorUpdateMessage {
@@ -403,6 +410,9 @@ pub struct OperatorUpdateMessage {
     /// risk free for example the url fields require http:// or https:// or the router will
     /// crash even though the value will be accepted as a valid string
     pub merge_json: serde_json::Value,
+    /// An action the operator wants to take to affect this router, examples may include reset
+    /// password or change the wifi ssid
+    pub operator_action: Option<OperatorAction>,
 }
 
 /// The message we send to the operator server to checkin
