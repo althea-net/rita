@@ -168,9 +168,14 @@ fn rita_exit_loop(
         Err(e) => {
             error!("Failed to get database connection with {}", e);
             if !*successful_setup {
-                error!("Failed to get connection on first setup loop, exiting to allow failover");
+                let db_uri = SETTING.get_db_uri();
+                let message = format!(
+                    "Failed to get database connection to {} on first setup loop, the exit can not operate without the ability to get the clients list from the database exiting",
+                    db_uri
+                );
+                error!("{}", message);
                 system.stop();
-                panic!("Failed to get connection on first setup loop, exiting to allow failover");
+                panic!(message);
             }
         }
     }
