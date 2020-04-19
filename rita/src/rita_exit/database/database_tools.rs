@@ -20,10 +20,6 @@ use futures01::future::Future;
 use settings::exit::RitaExitSettings;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
-use std::thread;
-use std::time::Duration;
-
-const SLEEP_TIME: Duration = Duration::from_millis(100);
 
 /// Takes a list of clients and returns a sorted list of ip addresses spefically v4 since it
 /// can implement comparison operators
@@ -318,8 +314,8 @@ pub fn update_low_balance_notification_time(
     Ok(())
 }
 
-/// Gets the Postgres database connection from the threadpool, gracefully waiting using futures delay if there
-/// is no connection available.
+/// Gets the Postgres database connection from the threadpool, since there are dedicated
+/// connections for each threadpool member error if non is available right away
 pub fn get_database_connection(
 ) -> impl Future<Item = PooledConnection<ConnectionManager<PgConnection>>, Error = Error> {
     match DB_POOL.read().unwrap().try_get() {
@@ -328,10 +324,19 @@ pub fn get_database_connection(
                 dyn Future<Item = PooledConnection<ConnectionManager<PgConnection>>, Error = Error>,
             >,
         None => {
-            trace!("No available db connection sleeping!");
-            thread::sleep(SLEEP_TIME);
-            Box::new(get_database_connection())
+            error!("No available db connection sleeping!");
+            Box::new(future::err(format_err!(
+                "No Database connection available!"
+            )))
         }
+    }
+}
+
+pub fn get_database_connection_sync(
+) -> Result<PooledConnection<ConnectionManager<PgConnection>>, Error> {
+    match DB_POOL.read().unwrap().try_get() {
+        Some(connection) => Ok(connection),
+        None => bail!("No connection!"),
     }
 }
 

@@ -20,7 +20,7 @@
 //! very often.
 
 use crate::rita_common::debt_keeper::DebtAction;
-use crate::rita_exit::database::database_tools::get_database_connection;
+use crate::rita_exit::database::database_tools::get_database_connection_sync;
 use crate::rita_exit::database::struct_tools::clients_to_ids;
 use crate::rita_exit::database::{
     cleanup_exit_clients, enforce_exit_clients, setup_clients, validate_clients_region,
@@ -102,8 +102,8 @@ fn rita_exit_loop(
     // opening a database connection takes at least several milliseconds, as the database server
     // may be across the country, so to save on back and forth we open on and reuse it as much
     // as possible
-    match wait_timeout(get_database_connection(), EXIT_LOOP_TIMEOUT) {
-        WaitResult::Ok(conn) => {
+    match get_database_connection_sync() {
+        Ok(conn) => {
             use exit_db::schema::clients::dsl::clients;
             let babel_port = SETTING.get_network().babel_port;
             info!(
@@ -150,8 +150,7 @@ fn rita_exit_loop(
                 );
             }
         }
-        WaitResult::Err(e) => error!("Failed to get database connection with {}", e),
-        WaitResult::TimedOut(_) => error!("Database connection timed out"),
+        Err(e) => error!("Failed to get database connection with {}", e),
     }
     // sleep until it has been 5 seconds from start, whenever that may be
     // if it has been more than 5 seconds from start, go right ahead
