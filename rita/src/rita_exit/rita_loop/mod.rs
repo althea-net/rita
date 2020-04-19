@@ -78,12 +78,22 @@ pub fn start_rita_exit_loop() {
                 let mut wg_clients: HashSet<ExitClient> = HashSet::new();
                 // a list of client debts from the last round, to prevent extra enforcement ops
                 let mut debt_actions: HashSet<(Identity, DebtAction)> = HashSet::new();
+                // if we have successfully setup the wg exit tunnel in the past, if false we have never
+                // setup exit clients and should crash if we fail to do so, otherwise we are preventing
+                // proper failover
+                let mut successful_setup: bool = false;
                 // wait until the system gets started
                 while !tw.connected() {
                     trace!("Waiting for actors to start");
                 }
                 loop {
-                    rita_exit_loop(tw.clone(), &mut wg_clients, &mut debt_actions)
+                    rita_exit_loop(
+                        tw.clone(),
+                        &mut wg_clients,
+                        &mut debt_actions,
+                        &mut successful_setup,
+                        &system_ref,
+                    )
                 }
             })
             .join()
@@ -97,6 +107,8 @@ fn rita_exit_loop(
     tw: Addr<TrafficWatcher>,
     wg_clients: &mut HashSet<ExitClient>,
     debt_actions: &mut HashSet<(Identity, DebtAction)>,
+    successful_setup: &mut bool,
+    system: &System,
 ) {
     let start = Instant::now();
     // opening a database connection takes at least several milliseconds, as the database server
@@ -121,7 +133,10 @@ fn rita_exit_loop(
                 info!("about to setup clients");
                 // Create and update client tunnels
                 match setup_clients(&clients_list, &wg_clients) {
-                    Ok(new_wg_clients) => *wg_clients = new_wg_clients,
+                    Ok(new_wg_clients) => {
+                        *successful_setup = true;
+                        *wg_clients = new_wg_clients;
+                    }
                     Err(e) => error!("Setup clients failed with {:?}", e),
                 }
 
@@ -150,7 +165,14 @@ fn rita_exit_loop(
                 );
             }
         }
-        Err(e) => error!("Failed to get database connection with {}", e),
+        Err(e) => {
+            error!("Failed to get database connection with {}", e);
+            if !*successful_setup {
+                error!("Failed to get connection on first setup loop, exiting to allow failover");
+                system.stop();
+                panic!("Failed to get connection on first setup loop, exiting to allow failover");
+            }
+        }
     }
     // sleep until it has been 5 seconds from start, whenever that may be
     // if it has been more than 5 seconds from start, go right ahead
