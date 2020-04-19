@@ -324,7 +324,7 @@ pub fn get_database_connection(
                 dyn Future<Item = PooledConnection<ConnectionManager<PgConnection>>, Error = Error>,
             >,
         None => {
-            error!("No available db connection sleeping!");
+            error!("No available db connection!");
             Box::new(future::err(format_err!(
                 "No Database connection available!"
             )))
