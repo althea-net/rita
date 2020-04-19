@@ -274,6 +274,10 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
     check_blacklist(ip)?;
     let our_ip = get_local_ip(ip)?;
     for iface in interfaces {
+        if iface == "mesh" {
+            trace!("Skipping mesh interface");
+            continue;
+        }
         trace!("Trying interface {}, with test ip {}", iface, our_ip);
         // this acts as a wildcard deletion across all interfaces, which is frankly really
         // dangerous if our default route overlaps, of if you enter an exit route ip
