@@ -56,24 +56,23 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
     interfaces_to_search: HashSet<String, S>,
 ) {
     info!("Starting antenna forwarding proxy!");
-    let socket: SocketAddr = match checkin_address.to_socket_addrs() {
-        Ok(mut res) => match res.next() {
-            Some(socket) => socket,
-            None => {
+    thread::spawn(move || loop {
+        trace!("About to checkin with {}", checkin_address);
+        // parse checkin address every loop iteration as a way
+        // of resolving the domain name on each run
+        let socket: SocketAddr = match checkin_address.to_socket_addrs() {
+            Ok(mut res) => match res.next() {
+                Some(socket) => socket,
+                None => {
+                    error!("Could not parse {}!", checkin_address);
+                    return;
+                }
+            },
+            Err(_) => {
                 error!("Could not parse {}!", checkin_address);
                 return;
             }
-        },
-        Err(_) => {
-            error!("Could not parse {}!", checkin_address);
-            return;
-        }
-    };
-
-    thread::spawn(move || loop {
-        // parse checkin address every loop iteration as a way
-        // of resolving the domain name on each run
-        trace!("About to checkin with {}", checkin_address);
+        };
         if let Ok(mut server_stream) = TcpStream::connect_timeout(&socket, NET_TIMEOUT) {
             trace!("connected to {}", checkin_address);
             // send our identifier
