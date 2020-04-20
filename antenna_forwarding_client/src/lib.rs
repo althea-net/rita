@@ -65,12 +65,12 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
                 Some(socket) => socket,
                 None => {
                     error!("Could not parse {}!", checkin_address);
-                    return;
+                    continue;
                 }
             },
             Err(_) => {
                 error!("Could not parse {}!", checkin_address);
-                return;
+                continue;
             }
         };
         if let Ok(mut server_stream) = TcpStream::connect_timeout(&socket, NET_TIMEOUT) {
