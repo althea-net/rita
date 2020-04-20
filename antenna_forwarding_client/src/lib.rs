@@ -232,6 +232,9 @@ fn forward_connections(
     );
 
     while let Ok(vec) = ForwardingProtocolMessage::read_messages(&mut server_stream) {
+        if !vec.is_empty() {
+            trace!("In forwarding loop! got {} messages", vec.len());
+        }
         process_streams(&mut streams, &mut server_stream);
         let should_shutdown = process_messages(
             &vec,

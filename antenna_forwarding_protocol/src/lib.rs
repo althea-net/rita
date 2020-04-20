@@ -49,9 +49,14 @@ pub fn write_all_spinlock(stream: &mut TcpStream, buffer: &[u8]) -> Result<(), I
     loop {
         let res = stream.write_all(buffer);
         match res {
-            Ok(_val) => return Ok(()),
+            Ok(_val) => {
+                trace!("Spinlock wrote {} bytes", buffer.len());
+                return Ok(());
+            }
             Err(e) => {
+                error!("Problem in spinlock writing {} bytes", buffer.len());
                 if e.kind() != WouldBlock {
+                    error!("Socket write error is {:?}", e);
                     return Err(e);
                 }
             }
@@ -537,19 +542,45 @@ impl ForwardingProtocolMessage {
 
         remaining_bytes.extend_from_slice(&read_till_block(input)?);
 
-        if let Ok((bytes, msg)) = ForwardingProtocolMessage::read_message(&remaining_bytes) {
-            messages.push(msg);
-            if bytes < remaining_bytes.len() {
-                ForwardingProtocolMessage::read_messages_internal(
-                    input,
-                    remaining_bytes[bytes..].to_vec(),
-                    messages,
-                )
-            } else {
+        match ForwardingProtocolMessage::read_message(&remaining_bytes) {
+            Ok((bytes, msg)) => {
+                messages.push(msg);
+                let num_remaining_bytes = remaining_bytes.len() - bytes;
+
+                if bytes < remaining_bytes.len() {
+                    trace!(
+                        "Got message {:?} recursing for remaining bytes {}",
+                        messages,
+                        num_remaining_bytes
+                    );
+                    ForwardingProtocolMessage::read_messages_internal(
+                        input,
+                        remaining_bytes[bytes..].to_vec(),
+                        messages,
+                    )
+                } else {
+                    if num_remaining_bytes != 0 {
+                        error!(
+                            "Got message {:?} but with {} bytes remaining {:?}",
+                            messages,
+                            num_remaining_bytes,
+                            remaining_bytes[bytes..].to_vec()
+                        );
+                    }
+                    Ok(messages)
+                }
+            }
+            Err(e) => {
+                if !remaining_bytes.is_empty() {
+                    error!(
+                        "Unparsed bytes! {} {:?} {:?}",
+                        remaining_bytes.len(),
+                        e,
+                        remaining_bytes.to_vec()
+                    );
+                }
                 Ok(messages)
             }
-        } else {
-            Ok(messages)
         }
     }
 }
