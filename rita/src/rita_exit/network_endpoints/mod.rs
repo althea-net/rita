@@ -1,8 +1,7 @@
 //! Network endpoints for rita-exit that are not dashboard or local infromational endpoints
 //! these are called by rita instances to operate the mesh
 
-use crate::rita_common::debt_keeper::DebtKeeper;
-use crate::rita_common::debt_keeper::GetDebtsList;
+use crate::rita_common::debt_keeper::get_debts_list_sync;
 use crate::rita_exit::database::database_tools::get_database_connection;
 #[cfg(feature = "development")]
 use crate::rita_exit::database::db_client::DbClient;
@@ -10,12 +9,11 @@ use crate::rita_exit::database::db_client::DbClient;
 use crate::rita_exit::database::db_client::TruncateTables;
 use crate::rita_exit::database::{client_status, get_exit_info, signup_client};
 use crate::EXIT_WG_PRIVATE_KEY;
-use ::actix_web::{AsyncResponder, HttpRequest, HttpResponse, Json, Result};
 #[cfg(feature = "development")]
-use actix::SystemService;
 use actix::SystemService;
 #[cfg(feature = "development")]
 use actix_web::AsyncResponder;
+use actix_web::{HttpRequest, HttpResponse, Json, Result};
 use althea_types::Identity;
 use althea_types::WgKey;
 use althea_types::{
@@ -235,30 +233,15 @@ pub fn get_exit_info_http(_req: HttpRequest) -> Result<Json<ExitState>, Error> {
 /// which means packet loss simply resolves to overpayment, but the exit is being paid for uploaded traffic
 /// (the clients download traffic) which breaks this assumption
 /// TODO secure this endpoint with libsodium
-pub fn get_client_debt(
-    client: Json<Identity>,
-) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+pub fn get_client_debt(client: Json<Identity>) -> HttpResponse {
     let client = client.into_inner();
-    DebtKeeper::from_registry()
-        .send(GetDebtsList {})
-        .from_err()
-        .and_then(move |reply| match reply {
-            Ok(debts) => {
-                for debt in debts {
-                    if debt.identity == client {
-                        return Ok(
-                            HttpResponse::Ok().json(debt.payment_details.debt * Int256::from(-1))
-                        );
-                    }
-                }
-                Ok(HttpResponse::NotFound().json("No client by that ID"))
-            }
-            Err(e) => {
-                error!("Failed to contact debt keeper {:?}", e);
-                Ok(HttpResponse::InternalServerError().json("Internal Error"))
-            }
-        })
-        .responder()
+    let debts = get_debts_list_sync();
+    for debt in debts {
+        if debt.identity == client {
+            return HttpResponse::Ok().json(debt.payment_details.debt * Int256::from(-1));
+        }
+    }
+    HttpResponse::NotFound().json("No client by that ID")
 }
 
 #[cfg(not(feature = "development"))]
