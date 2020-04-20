@@ -4,7 +4,6 @@ use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
 use babel_monitor::start_connection;
 use failure::Error;
-use future::Either;
 use futures01::future;
 use futures01::future::Future;
 use ipnetwork::IpNetwork;
@@ -123,14 +122,21 @@ struct CountryDetails {
     iso_code: String,
 }
 
+pub fn get_country_async(ip: IpAddr) -> impl Future<Item = String, Error = Error> {
+    match get_country(ip) {
+        Ok(res) => future::ok(res),
+        Err(e) => future::err(e),
+    }
+}
+
 /// get ISO country code from ip, consults a in memory cache
-pub fn get_country(ip: IpAddr) -> impl Future<Item = String, Error = Error> {
+pub fn get_country(ip: IpAddr) -> Result<String, Error> {
     trace!("get GeoIP country for {}", ip.to_string());
 
     // if allowed countries is not configured we don't care and will insert
     // empty stings into the DB.
     if SETTING.get_allowed_countries().is_empty() {
-        return Either::A(future::ok(String::new()));
+        return Ok(String::new());
     }
 
     // on the other hand if there is a configured list of allowed countries
@@ -154,7 +160,7 @@ pub fn get_country(ip: IpAddr) -> impl Future<Item = String, Error = Error> {
     };
 
     match cache_result {
-        Some(code) => Either::A(future::ok(code)),
+        Some(code) => Ok(code),
         None => {
             let geo_ip_url = format!("https://geoip.maxmind.com/geoip/v2.1/country/{}", ip);
             info!(
@@ -162,35 +168,33 @@ pub fn get_country(ip: IpAddr) -> impl Future<Item = String, Error = Error> {
                 geo_ip_url,
                 ip.to_string()
             );
-            Either::B({
-                let geo_ip_url = format!("https://geoip.maxmind.com/geoip/v2.1/country/{}", ip);
-                info!(
-                    "making GeoIP request to {} for {}",
-                    geo_ip_url,
-                    ip.to_string()
-                );
-                let client = reqwest::blocking::Client::new();
-                if let Ok(res) = client
-                    .get(&geo_ip_url)
-                    .basic_auth(api_user, Some(api_key))
-                    .timeout(Duration::from_secs(1))
-                    .send()
-                {
-                    trace!("Got geoip result {:?}", res);
-                    if let Ok(res) = res.json() {
-                        let value: GeoIPRet = res;
-                        let code = value.country.iso_code;
-                        trace!("Adding GeoIP value {:?} to cache", code);
-                        GEOIP_CACHE.write().unwrap().insert(ip, code.clone());
-                        trace!("Added to cache, returning");
-                        future::ok(code)
-                    } else {
-                        future::err(format_err!("Failed to deserialize geoip response"))
-                    }
+            let geo_ip_url = format!("https://geoip.maxmind.com/geoip/v2.1/country/{}", ip);
+            info!(
+                "making GeoIP request to {} for {}",
+                geo_ip_url,
+                ip.to_string()
+            );
+            let client = reqwest::blocking::Client::new();
+            if let Ok(res) = client
+                .get(&geo_ip_url)
+                .basic_auth(api_user, Some(api_key))
+                .timeout(Duration::from_secs(1))
+                .send()
+            {
+                trace!("Got geoip result {:?}", res);
+                if let Ok(res) = res.json() {
+                    let value: GeoIPRet = res;
+                    let code = value.country.iso_code;
+                    trace!("Adding GeoIP value {:?} to cache", code);
+                    GEOIP_CACHE.write().unwrap().insert(ip, code.clone());
+                    trace!("Added to cache, returning");
+                    Ok(code)
                 } else {
-                    future::err(format_err!("request failed"))
+                    Err(format_err!("Failed to deserialize geoip response"))
                 }
-            })
+            } else {
+                Err(format_err!("request failed"))
+            }
         }
     }
 }
@@ -198,23 +202,31 @@ pub fn get_country(ip: IpAddr) -> impl Future<Item = String, Error = Error> {
 /// Returns true or false if an ip is confirmed to be inside or outside the region and error
 /// if an api error is encountered trying to figure that out.
 pub fn verify_ip(request_ip: IpAddr) -> impl Future<Item = bool, Error = Error> {
-    if SETTING.get_allowed_countries().is_empty() {
-        Either::A(future::ok(true))
-    } else {
-        Either::B(get_country(request_ip).and_then(|country| {
-            if !SETTING.get_allowed_countries().is_empty()
-                && !SETTING.get_allowed_countries().contains(&country)
-            {
-                return Ok(false);
-            }
+    match verify_ip_sync(request_ip) {
+        Ok(item) => future::ok(item),
+        Err(e) => future::err(e),
+    }
+}
 
-            Ok(true)
-        }))
+/// Returns true or false if an ip is confirmed to be inside or outside the region and error
+/// if an api error is encountered trying to figure that out.
+pub fn verify_ip_sync(request_ip: IpAddr) -> Result<bool, Error> {
+    if SETTING.get_allowed_countries().is_empty() {
+        Ok(true)
+    } else {
+        let country = get_country(request_ip)?;
+        if !SETTING.get_allowed_countries().is_empty()
+            && !SETTING.get_allowed_countries().contains(&country)
+        {
+            return Ok(false);
+        }
+
+        Ok(true)
     }
 }
 
 #[test]
 #[ignore]
 fn test_get_country() {
-    get_country("8.8.8.8".parse().unwrap()).wait().unwrap();
+    get_country("8.8.8.8".parse().unwrap()).unwrap();
 }

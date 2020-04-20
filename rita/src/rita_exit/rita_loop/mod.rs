@@ -51,7 +51,7 @@ use std::thread;
 use std::time::Duration;
 use std::time::Instant;
 
-mod wait_timeout;
+pub mod wait_timeout;
 
 // the speed in seconds for the exit loop
 pub const EXIT_LOOP_SPEED: u64 = 5;
@@ -224,19 +224,15 @@ fn bill(babel_port: u16, tw: &Addr<TrafficWatcher>, start: Instant, ids: Vec<Ide
 fn check_regions(start: Instant, clients_list: Vec<models::Client>) {
     let val = SETTING.get_allowed_countries().is_empty();
     if !val {
-        let res = wait_timeout(validate_clients_region(clients_list), EXIT_LOOP_TIMEOUT);
+        let res = validate_clients_region(clients_list);
         match res {
-            WaitResult::Err(e) => warn!(
+            Err(e) => warn!(
                 "Failed to validate client region with {:?} {}ms since start",
                 e,
                 start.elapsed().as_millis()
             ),
-            WaitResult::Ok(_) => info!(
+            Ok(_) => info!(
                 "validate client region completed successfully {}ms since loop start",
-                start.elapsed().as_millis()
-            ),
-            WaitResult::TimedOut(_) => error!(
-                "validate client region timed out! {}ms since loop start",
                 start.elapsed().as_millis()
             ),
         }

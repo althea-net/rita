@@ -9,6 +9,7 @@ use crate::rita_exit::database::database_tools::create_or_update_user_record;
 use crate::rita_exit::database::database_tools::delete_client;
 use crate::rita_exit::database::database_tools::get_client;
 use crate::rita_exit::database::database_tools::get_database_connection;
+use crate::rita_exit::database::database_tools::get_database_connection_sync;
 use crate::rita_exit::database::database_tools::set_client_timestamp;
 use crate::rita_exit::database::database_tools::update_client;
 use crate::rita_exit::database::database_tools::update_low_balance_notification_time;
@@ -16,16 +17,20 @@ use crate::rita_exit::database::database_tools::verify_client;
 use crate::rita_exit::database::database_tools::verify_db_client;
 use crate::rita_exit::database::email::handle_email_registration;
 use crate::rita_exit::database::email::send_low_balance_email;
-use crate::rita_exit::database::geoip::get_country;
+use crate::rita_exit::database::geoip::get_country_async;
 use crate::rita_exit::database::geoip::get_gateway_ip_bulk;
 use crate::rita_exit::database::geoip::get_gateway_ip_single;
 use crate::rita_exit::database::geoip::verify_ip;
+use crate::rita_exit::database::geoip::verify_ip_sync;
 use crate::rita_exit::database::sms::handle_sms_registration;
 use crate::rita_exit::database::sms::send_low_balance_sms;
 use crate::rita_exit::database::struct_tools::display_hashset;
 use crate::rita_exit::database::struct_tools::to_exit_client;
 use crate::rita_exit::database::struct_tools::to_identity;
 use crate::rita_exit::database::struct_tools::verif_done;
+use crate::rita_exit::rita_loop::wait_timeout::wait_timeout;
+use crate::rita_exit::rita_loop::wait_timeout::WaitResult;
+use crate::rita_exit::rita_loop::EXIT_LOOP_TIMEOUT;
 use crate::EXIT_ALLOWED_COUNTRIES;
 use crate::EXIT_DESCRIPTION;
 use crate::EXIT_NETWORK_SETTINGS;
@@ -41,7 +46,6 @@ use diesel;
 use diesel::prelude::PgConnection;
 use failure::Error;
 use futures01::future;
-use futures01::future::join_all;
 use futures01::Future;
 use ipnetwork::IpNetwork;
 use settings::exit::ExitVerifSettings;
@@ -112,7 +116,7 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
         trace!("got gateway ip {:?}", client);
         verify_ip(gateway_ip).and_then(move |verify_status| {
             trace!("verified the ip country {:?}", client);
-            get_country(gateway_ip).and_then(move |user_country| {
+            get_country_async(gateway_ip).and_then(move |user_country| {
                 trace!("got the country country {:?}", client);
                 get_database_connection().and_then(move |conn| {
                     trace!("Doing database work for {:?} in country {} with verify_status {}", client, user_country, verify_status);
@@ -308,9 +312,7 @@ fn low_balance_notification(
 /// Every 5 seconds we vlaidate all online clients to make sure that they are in the right region
 /// we also do this in the client status requests but we want to handle the edge case of a modified
 /// client that doesn't make status requests
-pub fn validate_clients_region(
-    clients_list: Vec<exit_db::models::Client>,
-) -> impl Future<Item = (), Error = Error> {
+pub fn validate_clients_region(clients_list: Vec<exit_db::models::Client>) -> Result<(), Error> {
     info!("Starting exit region validation");
     let start = Instant::now();
 
@@ -326,36 +328,38 @@ pub fn validate_clients_region(
             Err(_e) => error!("Database entry with invalid mesh ip! {:?}", item),
         }
     }
-    get_gateway_ip_bulk(ip_vec).and_then(move |list| {
-        get_database_connection().and_then(move |conn| {
-            let mut fut_vec = Vec::new();
-            for item in list.iter() {
-                fut_vec.push(verify_ip(item.gateway_ip));
-            }
-            join_all(fut_vec).and_then(move |client_verifications| {
-                for (n, res) in client_verifications.iter().enumerate() {
-                    match res {
-                        true => trace!("{:?} is from an allowed ip", list[n]),
-                        false => {
-                            // get_gateway_ip_bulk can't add new entires to the list
-                            // therefore client_map is strictly a superset of ip_bulk results
-                            let client_to_deauth = &client_map[&list[n].mesh_ip];
-                            if verify_db_client(client_to_deauth, false, &conn).is_err() {
-                                error!("Failed to deauth client {:?}", client_to_deauth);
-                            }
-                        }
-                    }
-                }
-
+    let conn = get_database_connection_sync()?;
+    let list = match wait_timeout(get_gateway_ip_bulk(ip_vec), EXIT_LOOP_TIMEOUT) {
+        WaitResult::Err(e) => return Err(e),
+        WaitResult::Ok(val) => val,
+        WaitResult::TimedOut(_) => return Err(format_err!("Timed out!")),
+    };
+    for item in list.iter() {
+        let res = verify_ip_sync(item.gateway_ip);
+        match res {
+            Ok(true) => trace!("{:?} is from an allowed ip", item),
+            Ok(false) => {
                 info!(
-                    "Exit region validation completed in {}s {}ms",
-                    start.elapsed().as_secs(),
-                    start.elapsed().subsec_millis(),
+                    "Found unauthorized client already registered {}, removing",
+                    client_map[&item.mesh_ip].wg_pubkey
                 );
-                Ok(())
-            })
-        })
-    })
+                // get_gateway_ip_bulk can't add new entires to the list
+                // therefore client_map is strictly a superset of ip_bulk results
+                let client_to_deauth = &client_map[&item.mesh_ip];
+                if verify_db_client(client_to_deauth, false, &conn).is_err() {
+                    error!("Failed to deauth client {:?}", client_to_deauth);
+                }
+            }
+            Err(e) => warn!("Failed to verify ip with {:?}", e),
+        }
+    }
+
+    info!(
+        "Exit region validation completed in {}s {}ms",
+        start.elapsed().as_secs(),
+        start.elapsed().subsec_millis(),
+    );
+    Ok(())
 }
 
 /// Iterates over the the database of clients, if a client's last_seen value
