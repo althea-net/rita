@@ -18,13 +18,13 @@ pub enum WaitResult<F: Future> {
 }
 
 pub fn wait_timeout<F: Future>(f: F, dur: Duration) -> WaitResult<F> {
-    let now = Instant::now();
+    let start = Instant::now();
     let mut task = executor::spawn(f);
     let thread = Arc::new(ThreadNotify::new(thread::current()));
 
     loop {
         let cur = Instant::now();
-        if cur >= now + dur {
+        if cur >= (start + dur) {
             return WaitResult::TimedOut(task);
         }
         match task.poll_future_notify(&thread, 0) {
@@ -33,7 +33,7 @@ pub fn wait_timeout<F: Future>(f: F, dur: Duration) -> WaitResult<F> {
             Err(e) => return WaitResult::Err(e),
         }
 
-        thread.park(now + dur - cur);
+        thread.park(dur);
     }
 
     struct ThreadNotify {
