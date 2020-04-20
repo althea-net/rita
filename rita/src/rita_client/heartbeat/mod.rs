@@ -40,6 +40,7 @@ lazy_static! {
 }
 
 pub fn send_udp_heartbeat() {
+    trace!("attempting to send heartbeat");
     let dns_request = Resolver::from_registry()
         .send(resolver::Resolve::host(
             SETTING.get_log().heartbeat_url.clone(),
@@ -59,29 +60,37 @@ pub fn send_udp_heartbeat() {
         } else {
             return;
         };
+    trace!("we have heartbeat basic info");
 
     let res = dns_request.join(network_info).then(move |res| match res {
         Ok((Ok(dnsresult), Ok(network_info))) => {
             if dnsresult.is_empty() {
                 trace!("Got zero length dns response: {:?}", dnsresult);
             }
+            trace!("we have heartbeat dns");
 
-            if let Ok(route) = get_selected_exit_route(&network_info.babel_routes) {
-                let neigh_option = get_neigh_given_route(&route, &network_info.babel_neighbors);
-                let neigh_option =
-                    get_rita_neigh_option(neigh_option, &network_info.rita_neighbors);
-                if let Some((neigh, rita_neigh)) = neigh_option {
-                    for dns_socket in dnsresult {
-                        send_udp_heartbeat_packet(
-                            dns_socket,
-                            our_id,
-                            selected_exit_details.exit_price,
-                            route.clone(),
-                            neigh.clone(),
-                            rita_neigh.identity.global,
-                        );
+            match get_selected_exit_route(&network_info.babel_routes) {
+                Ok(route) => {
+                    let neigh_option = get_neigh_given_route(&route, &network_info.babel_neighbors);
+                    let neigh_option =
+                        get_rita_neigh_option(neigh_option, &network_info.rita_neighbors);
+                    if let Some((neigh, rita_neigh)) = neigh_option {
+                        for dns_socket in dnsresult {
+                            trace!("sending heartbeat");
+                            send_udp_heartbeat_packet(
+                                dns_socket,
+                                our_id,
+                                selected_exit_details.exit_price,
+                                route.clone(),
+                                neigh.clone(),
+                                rita_neigh.identity.global,
+                            );
+                        }
+                    } else {
+                        warn!("Failed to find neigh for heartbeat!");
                     }
                 }
+                Err(e) => warn!("Failed to geat heartbeat route with {:?}", e),
             }
             Ok(())
         }
@@ -152,6 +161,7 @@ fn send_udp_heartbeat_packet(
     exit_neighbor: Neighbor,
     exit_neighbor_id: Identity,
 ) {
+    trace!("building heartbeat packet");
     let network_settings = SETTING.get_network();
     let reg_details = SETTING.get_exit_client().reg_details.clone();
     let low_balance_notification = SETTING.get_exit_client().low_balance_notification;
@@ -219,7 +229,7 @@ fn send_udp_heartbeat_packet(
     }
 
     match local_socket.send_to(&packet_contents, &remote) {
-        Ok(bytes) => trace!("Sent {} heartbeat bytes", bytes),
+        Ok(bytes) => info!("Sent {} heartbeat bytes", bytes),
         Err(e) => error!("Failed to send heartbeat with {:?}", e),
     }
 }
