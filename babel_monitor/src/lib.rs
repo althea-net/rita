@@ -41,7 +41,7 @@ use tokio::net::TcpStream;
 /// on single core machines it avoids a spinlock until we
 /// are pre-empted by the scheduler to allow Babel to finish the
 /// job
-const SLEEP_TIME: Duration = Duration::from_millis(1);
+const SLEEP_TIME: Duration = Duration::from_millis(10);
 
 #[derive(Debug, Fail)]
 pub enum BabelMonitorError {
@@ -173,7 +173,7 @@ fn read_babel(
             // with no retry limit immediately as we can simply go and read more
             let full_message = previous_contents + output;
             let babel_data = read_babel_sync(&full_message);
-            if depth > 5 {
+            if depth > 50 {
                 // prevent infinite recursion in error cases
                 warn!("Babel read timed out! {}", output);
                 return Box::new(future::err(
