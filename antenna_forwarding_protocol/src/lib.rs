@@ -536,6 +536,7 @@ impl ForwardingProtocolMessage {
         remaining_bytes: Vec<u8>,
         messages: Vec<ForwardingProtocolMessage>,
     ) -> Result<Vec<ForwardingProtocolMessage>, Error> {
+        trace!("in read message");
         // these should match the full list of message types defined above
         let mut messages = messages;
         let mut remaining_bytes = remaining_bytes;
@@ -547,7 +548,7 @@ impl ForwardingProtocolMessage {
                 messages.push(msg);
                 let num_remaining_bytes = remaining_bytes.len() - bytes;
 
-                if bytes < remaining_bytes.len() {
+                if num_remaining_bytes != 0 {
                     trace!(
                         "Got message {:?} recursing for remaining bytes {}",
                         messages,
@@ -559,27 +560,16 @@ impl ForwardingProtocolMessage {
                         messages,
                     )
                 } else {
-                    if num_remaining_bytes != 0 {
-                        error!(
-                            "Got message {:?} but with {} bytes remaining {:?}",
-                            messages,
-                            num_remaining_bytes,
-                            remaining_bytes[bytes..].to_vec()
-                        );
-                    }
                     Ok(messages)
                 }
             }
             Err(e) => {
                 if !remaining_bytes.is_empty() {
-                    error!(
-                        "Unparsed bytes! {} {:?} {:?}",
-                        remaining_bytes.len(),
-                        e,
-                        remaining_bytes.to_vec()
-                    );
+                    error!("Unparsed bytes! {} {:?}", remaining_bytes.len(), e);
+                    panic!("bytes unparsed {:#x?}", remaining_bytes);
+                } else {
+                    Ok(messages)
                 }
-                Ok(messages)
             }
         }
     }
