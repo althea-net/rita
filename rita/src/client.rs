@@ -191,7 +191,7 @@ fn wait_for_settings(settings_file: &str) -> RitaSettingsStruct {
 }
 
 fn main() {
-    // Remove in Beta 13, migrates settings from the old dao structure to
+    // Remove in Beta 14, migrates settings from the old dao structure to
     // the operator structure in settings.
     {
         let dao = { SETTING.get_dao().clone() };
@@ -209,6 +209,12 @@ fn main() {
             operator.operator_fee = dao.dao_fee;
             operator.use_operator_price = dao.use_oracle_price;
         }
+    }
+    // some devices are on beta 12 and therefore have the old default heartbeat
+    // url which is not correct in beta 13, remove this in beta 14
+    {
+        let mut log = SETTING.get_log_mut();
+        log.heartbeat_url = "operator.althea.net:33333".to_string();
     }
 
     // On Linux static builds we need to probe ssl certs path to be able to
