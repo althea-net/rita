@@ -18,11 +18,15 @@ extern crate lazy_static;
 
 use althea_types::Identity;
 use althea_types::WgKey;
-use failure::Error;
+use failure::Error as FailureError;
 use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::box_::Nonce;
 use sodiumoxide::crypto::box_::NONCEBYTES;
 use std::collections::HashMap;
+use std::error::Error;
+use std::fmt;
+use std::fmt::Display;
+use std::fmt::Formatter;
 use std::io::Error as IoError;
 use std::io::ErrorKind::WouldBlock;
 use std::io::Read;
@@ -41,6 +45,41 @@ pub const NET_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// The size in bytes of our packet header, 16 byte magic, 2 byte type, 2 byte len
 pub const HEADER_LEN: usize = 20;
+
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
+pub enum ForwardingProtocolError {
+    SliceTooSmall { expected: u16, actual: u16 },
+    SerdeError { message: String },
+    BadMagic,
+    InvalidLen,
+    WrongPacketType,
+    UnknownPacketType,
+    DecryptionFailed,
+}
+
+impl Error for ForwardingProtocolError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}
+
+impl Display for ForwardingProtocolError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            ForwardingProtocolError::SliceTooSmall { expected, actual } => write!(
+                f,
+                "SliceTooSmall expected {} bytes, got {} bytes",
+                expected, actual
+            ),
+            ForwardingProtocolError::BadMagic => write!(f, "BadMagic"),
+            ForwardingProtocolError::InvalidLen => write!(f, "InvalidLen"),
+            ForwardingProtocolError::WrongPacketType => write!(f, "WrongPacketType"),
+            ForwardingProtocolError::UnknownPacketType => write!(f, "UnknownPacketType"),
+            ForwardingProtocolError::DecryptionFailed => write!(f, "DecryptionFailed"),
+            ForwardingProtocolError::SerdeError { message } => write!(f, "SerdeError {}", message),
+        }
+    }
+}
 
 /// Writes data to a stream keeping in mind that we may encounter
 /// a buffer limit and have to partially complete our write
@@ -254,7 +293,7 @@ impl ForwardingProtocolMessage {
         &self,
         server_secretkey: WgKey,
         client_publickey: WgKey,
-    ) -> Result<Vec<u8>, Error> {
+    ) -> Result<Vec<u8>, ForwardingProtocolError> {
         if let ForwardingProtocolMessage::ForwardMessage { .. } = self {
             let client_publickey = client_publickey.into();
             let server_secretkey = server_secretkey.into();
@@ -277,7 +316,7 @@ impl ForwardingProtocolMessage {
             message.extend_from_slice(&payload);
             Ok(message)
         } else {
-            Err(format_err!("Invalid operation!"))
+            Err(ForwardingProtocolError::WrongPacketType)
         }
     }
 
@@ -285,9 +324,9 @@ impl ForwardingProtocolMessage {
         payload: &[u8],
         server_publickey: WgKey,
         client_secretkey: WgKey,
-    ) -> Result<(usize, ForwardingProtocolMessage), Error> {
+    ) -> Result<(usize, ForwardingProtocolMessage), ForwardingProtocolError> {
         if payload.len() < HEADER_LEN {
-            return Err(format_err!("Packet too short!"));
+            return Err(ForwardingProtocolError::InvalidLen);
         }
 
         let mut packet_magic: [u8; 16] = [0; 16];
@@ -304,15 +343,14 @@ impl ForwardingProtocolMessage {
 
         // this needs to be updated when new packet types are added
         if packet_magic != ForwardingProtocolMessage::MAGIC {
-            return Err(format_err!("Packet magic incorrect!"));
+            return Err(ForwardingProtocolError::BadMagic);
         } else if packet_type != ForwardingProtocolMessage::FORWARD_MESSAGE_TYPE {
-            return Err(format_err!("Wrong packet type!"));
+            return Err(ForwardingProtocolError::WrongPacketType);
         } else if packet_len as usize + HEADER_LEN > payload.len() {
-            return Err(format_err!(
-                "Our slice is {} bytes, but our packet_len {} bytes",
-                payload.len(),
-                packet_len as usize + HEADER_LEN
-            ));
+            return Err(ForwardingProtocolError::SliceTooSmall {
+                actual: payload.len() as u16,
+                expected: { packet_len + HEADER_LEN as u16 },
+            });
         }
 
         // nonce is 24 bytes
@@ -327,9 +365,11 @@ impl ForwardingProtocolMessage {
         match box_::open(&ciphertext, &nonce, &pk, &sk) {
             Ok(plaintext) => match serde_json::from_slice(&plaintext) {
                 Ok(forward_message) => Ok((end_bytes, forward_message)),
-                Err(e) => Err(e.into()),
+                Err(e) => Err(ForwardingProtocolError::SerdeError {
+                    message: e.to_string(),
+                }),
             },
-            Err(_) => Err(format_err!("Decryption failed!")),
+            Err(_) => Err(ForwardingProtocolError::DecryptionFailed),
         }
     }
 
@@ -395,9 +435,11 @@ impl ForwardingProtocolMessage {
         }
     }
 
-    pub fn read_message(payload: &[u8]) -> Result<(usize, ForwardingProtocolMessage), Error> {
+    pub fn read_message(
+        payload: &[u8],
+    ) -> Result<(usize, ForwardingProtocolMessage), ForwardingProtocolError> {
         if payload.len() < HEADER_LEN {
-            return Err(format_err!("Packet too short!"));
+            return Err(ForwardingProtocolError::InvalidLen);
         }
 
         let mut packet_magic: [u8; 16] = [0; 16];
@@ -414,15 +456,14 @@ impl ForwardingProtocolMessage {
 
         // this needs to be updated when new packet types are added
         if packet_magic != ForwardingProtocolMessage::MAGIC {
-            return Err(format_err!("Packet magic incorrect!"));
+            return Err(ForwardingProtocolError::BadMagic);
         } else if packet_type > 6 {
-            return Err(format_err!("Wrong packet type!"));
+            return Err(ForwardingProtocolError::WrongPacketType);
         } else if packet_len as usize + HEADER_LEN > payload.len() {
-            return Err(format_err!(
-                "Our slice is {} bytes, but our packet_len {} bytes",
-                payload.len(),
-                packet_len as usize + HEADER_LEN
-            ));
+            return Err(ForwardingProtocolError::SliceTooSmall {
+                actual: payload.len() as u16,
+                expected: { packet_len + HEADER_LEN as u16 },
+            });
         }
 
         match packet_type {
@@ -431,24 +472,28 @@ impl ForwardingProtocolMessage {
 
                 match serde_json::from_slice(&payload[HEADER_LEN..bytes_read]) {
                     Ok(message) => Ok((bytes_read, message)),
-                    Err(serde_error) => Err(serde_error.into()),
+                    Err(serde_error) => Err(ForwardingProtocolError::SerdeError {
+                        message: serde_error.to_string(),
+                    }),
                 }
             }
             // you can not read encrypted packets with this function
             ForwardingProtocolMessage::FORWARD_MESSAGE_TYPE => {
-                Err(format_err!("Invalid packet type"))
+                Err(ForwardingProtocolError::WrongPacketType)
             }
             ForwardingProtocolMessage::ERROR_MESSAGE_TYPE => {
                 let bytes_read = HEADER_LEN + packet_len as usize;
 
                 match serde_json::from_slice(&payload[HEADER_LEN..bytes_read]) {
                     Ok(message) => Ok((bytes_read, message)),
-                    Err(serde_error) => Err(serde_error.into()),
+                    Err(serde_error) => Err(ForwardingProtocolError::SerdeError {
+                        message: serde_error.to_string(),
+                    }),
                 }
             }
             ForwardingProtocolMessage::CONNECTION_CLOSE_MESSAGE_TYPE => {
                 if packet_len != 8 {
-                    return Err(format_err!("Incorrect length for close message"));
+                    return Err(ForwardingProtocolError::InvalidLen);
                 }
 
                 let mut connection_id: [u8; 8] = [0; 8];
@@ -485,7 +530,9 @@ impl ForwardingProtocolMessage {
 
                 match serde_json::from_slice(&payload[HEADER_LEN..bytes_read]) {
                     Ok(message) => Ok((bytes_read, message)),
-                    Err(serde_error) => Err(serde_error.into()),
+                    Err(serde_error) => Err(ForwardingProtocolError::SerdeError {
+                        message: serde_error.to_string(),
+                    }),
                 }
             }
             ForwardingProtocolMessage::KEEPALIVE_MESSAGE_TYPE => {
@@ -493,10 +540,12 @@ impl ForwardingProtocolMessage {
 
                 match serde_json::from_slice(&payload[HEADER_LEN..bytes_read]) {
                     Ok(message) => Ok((bytes_read, message)),
-                    Err(serde_error) => Err(serde_error.into()),
+                    Err(serde_error) => Err(ForwardingProtocolError::SerdeError {
+                        message: serde_error.to_string(),
+                    }),
                 }
             }
-            _ => bail!("Unknown packet type!"),
+            _ => Err(ForwardingProtocolError::UnknownPacketType),
         }
     }
 
@@ -506,7 +555,7 @@ impl ForwardingProtocolMessage {
         input: &mut TcpStream,
         server_publickey: WgKey,
         client_secretkey: WgKey,
-    ) -> Result<Vec<ForwardingProtocolMessage>, Error> {
+    ) -> Result<Vec<ForwardingProtocolMessage>, FailureError> {
         let bytes = read_till_block(input)?;
         if let Ok((_bytes, ForwardingProtocolMessage::ForwardingCloseMessage)) =
             ForwardingProtocolMessage::read_message(&bytes)
@@ -527,7 +576,9 @@ impl ForwardingProtocolMessage {
 
     /// Reads all the currently available messages from the provided stream, this function will
     /// also block until a currently in flight message is delivered
-    pub fn read_messages(input: &mut TcpStream) -> Result<Vec<ForwardingProtocolMessage>, Error> {
+    pub fn read_messages(
+        input: &mut TcpStream,
+    ) -> Result<Vec<ForwardingProtocolMessage>, FailureError> {
         ForwardingProtocolMessage::read_messages_internal(input, Vec::new(), Vec::new())
     }
 
@@ -535,7 +586,7 @@ impl ForwardingProtocolMessage {
         input: &mut TcpStream,
         remaining_bytes: Vec<u8>,
         messages: Vec<ForwardingProtocolMessage>,
-    ) -> Result<Vec<ForwardingProtocolMessage>, Error> {
+    ) -> Result<Vec<ForwardingProtocolMessage>, FailureError> {
         trace!("in read message");
         // these should match the full list of message types defined above
         let mut messages = messages;
