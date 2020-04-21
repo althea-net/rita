@@ -571,6 +571,7 @@ impl ForwardingProtocolMessage {
             input,
             bytes[bytes_read..].to_vec(),
             vec![msg],
+            0,
         )
     }
 
@@ -579,15 +580,21 @@ impl ForwardingProtocolMessage {
     pub fn read_messages(
         input: &mut TcpStream,
     ) -> Result<Vec<ForwardingProtocolMessage>, FailureError> {
-        ForwardingProtocolMessage::read_messages_internal(input, Vec::new(), Vec::new())
+        ForwardingProtocolMessage::read_messages_internal(input, Vec::new(), Vec::new(), 0)
     }
 
     fn read_messages_internal(
         input: &mut TcpStream,
         remaining_bytes: Vec<u8>,
         messages: Vec<ForwardingProtocolMessage>,
+        depth: u8,
     ) -> Result<Vec<ForwardingProtocolMessage>, FailureError> {
-        trace!("in read message");
+        if depth > 1 && depth <= 10 {
+            thread::sleep(SPINLOCK_TIME);
+        } else if depth > 10 {
+            error!("Never found the end of the message");
+            bail!("Never found the end of the message");
+        }
         // these should match the full list of message types defined above
         let mut messages = messages;
         let mut remaining_bytes = remaining_bytes;
@@ -601,27 +608,38 @@ impl ForwardingProtocolMessage {
 
                 if num_remaining_bytes != 0 {
                     trace!(
-                        "Got message {:?} recursing for remaining bytes {}",
-                        messages,
+                        "Got message recursing for remaining bytes {}",
                         num_remaining_bytes
                     );
                     ForwardingProtocolMessage::read_messages_internal(
                         input,
                         remaining_bytes[bytes..].to_vec(),
                         messages,
+                        depth + 1,
                     )
                 } else {
                     Ok(messages)
                 }
             }
-            Err(e) => {
-                if !remaining_bytes.is_empty() {
-                    error!("Unparsed bytes! {} {:?}", remaining_bytes.len(), e);
-                    panic!("bytes unparsed {:#x?}", remaining_bytes);
-                } else {
-                    Ok(messages)
+            Err(e) => match e {
+                ForwardingProtocolError::SliceTooSmall { expected, actual } => {
+                    error!("Expected {} bytes, got {} bytes", expected, actual);
+                    ForwardingProtocolMessage::read_messages_internal(
+                        input,
+                        remaining_bytes,
+                        messages,
+                        depth + 1,
+                    )
                 }
-            }
+                _ => {
+                    if !remaining_bytes.is_empty() {
+                        error!("Unparsed bytes! {} {:?}", remaining_bytes.len(), e);
+                        bail!("Unparsed bytes!");
+                    } else {
+                        Ok(messages)
+                    }
+                }
+            },
         }
     }
 }
