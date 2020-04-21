@@ -104,9 +104,11 @@ impl dyn KernelInterface {
     /// This sets up latency protecting flow control, either cake on openwrt
     /// or fq_codel on older devices/kernels
     pub fn set_codel_shaping(&self, iface_name: &str, speed: Option<usize>) -> Result<(), Error> {
-        if self.has_qdisc(iface_name)? {
-            self.delete_qdisc(iface_name)?;
-        }
+        let operator = if self.has_qdisc(iface_name)? {
+            "change"
+        } else {
+            "add"
+        };
         // we need to duplicate most of this array because the borrow checker gets confused
         // by references to vecs with contents of &str
         let output = match speed {
@@ -114,7 +116,7 @@ impl dyn KernelInterface {
                 "tc",
                 &[
                     "qdisc",
-                    "add",
+                    operator,
                     "dev",
                     iface_name,
                     "root",
@@ -123,14 +125,14 @@ impl dyn KernelInterface {
                     "cake",
                     "bandwidth",
                     &format!("{}mbit", val),
-                    "metro",
+                    "internet",
                 ],
             )?,
             None => self.run_command(
                 "tc",
                 &[
                     "qdisc",
-                    "add",
+                    operator,
                     "dev",
                     iface_name,
                     "root",
@@ -138,7 +140,7 @@ impl dyn KernelInterface {
                     "1:",
                     "cake",
                     "unlimited",
-                    "metro",
+                    "internet",
                 ],
             )?,
         };
@@ -149,8 +151,8 @@ impl dyn KernelInterface {
             let output = self.run_command(
                 "tc",
                 &[
-                    "qdisc", "add", "dev", iface_name, "root", "handle", "1:", "fq_codel",
-                    "target", "10ms",
+                    "qdisc", operator, "dev", iface_name, "root", "handle", "1:", "fq_codel",
+                    "target", "100ms",
                 ],
             )?;
 
