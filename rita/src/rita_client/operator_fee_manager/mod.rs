@@ -18,7 +18,7 @@ use althea_types::PaymentTx;
 use clarity::Transaction;
 use futures01::future::Future;
 use num256::Int256;
-use num_traits::Signed;
+use num256::Uint256;
 use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;
 use std::time::Instant;
@@ -52,7 +52,9 @@ impl OperatorFeeManager {
     }
 }
 
-pub struct SuccessfulPayment();
+pub struct SuccessfulPayment {
+    timestamp: Instant,
+}
 impl Message for SuccessfulPayment {
     type Result = ();
 }
@@ -60,8 +62,8 @@ impl Message for SuccessfulPayment {
 impl Handler<SuccessfulPayment> for OperatorFeeManager {
     type Result = ();
 
-    fn handle(&mut self, _msg: SuccessfulPayment, _: &mut Context<Self>) -> Self::Result {
-        self.last_payment_time = Instant::now();
+    fn handle(&mut self, msg: SuccessfulPayment, _: &mut Context<Self>) -> Self::Result {
+        self.last_payment_time = msg.timestamp;
     }
 }
 
@@ -75,6 +77,7 @@ impl Handler<Tick> for OperatorFeeManager {
     type Result = ();
 
     fn handle(&mut self, _msg: Tick, _: &mut Context<Self>) -> Self::Result {
+        let payment_send_time = Instant::now();
         let operator_settings = SETTING.get_operator();
         let payment_settings = SETTING.get_payment();
         let eth_private_key = payment_settings.eth_private_key;
@@ -89,22 +92,17 @@ impl Handler<Tick> for OperatorFeeManager {
             Some(val) => val,
             None => return,
         };
-        let operator_fee = match operator_settings.operator_fee.to_int256() {
-            Some(val) => val,
-            None => return,
-        };
-        let should_pay = (Int256::from(self.last_payment_time.elapsed().as_secs()) * operator_fee)
-            > pay_threshold;
+        let operator_fee = operator_settings.operator_fee.clone();
+        let amount_to_pay =
+            Uint256::from(self.last_payment_time.elapsed().as_secs()) * operator_fee;
+        let should_pay =
+            amount_to_pay.to_int256().unwrap_or_else(|| Int256::from(0)) > pay_threshold;
         let net_version = payment_settings.net_version;
         drop(payment_settings);
         trace!("We should pay our operator {}", should_pay);
 
         if should_pay {
             trace!("Paying subnet operator fee to {}", operator_address);
-            let amount_to_pay = match pay_threshold.abs().to_uint256() {
-                Some(val) => val,
-                None => return,
-            };
 
             let dao_identity = Identity {
                 eth_address: operator_address,
@@ -161,7 +159,9 @@ impl Handler<Tick> for OperatorFeeManager {
                         },
                     });
                     SimulatedTxFeeManager::from_registry().do_send(AddTxToTotal(amount_to_pay));
-                    OperatorFeeManager::from_registry().do_send(SuccessfulPayment {});
+                    OperatorFeeManager::from_registry().do_send(SuccessfulPayment {
+                        timestamp: payment_send_time,
+                    });
                     Ok(())
                 }
                 Err(e) => {
