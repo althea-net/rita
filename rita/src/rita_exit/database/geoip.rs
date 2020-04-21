@@ -168,12 +168,6 @@ pub fn get_country(ip: IpAddr) -> Result<String, Error> {
                 geo_ip_url,
                 ip.to_string()
             );
-            let geo_ip_url = format!("https://geoip.maxmind.com/geoip/v2.1/country/{}", ip);
-            info!(
-                "making GeoIP request to {} for {}",
-                geo_ip_url,
-                ip.to_string()
-            );
             let client = reqwest::blocking::Client::new();
             if let Ok(res) = client
                 .get(&geo_ip_url)
