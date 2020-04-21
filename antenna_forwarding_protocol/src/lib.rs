@@ -556,23 +556,90 @@ impl ForwardingProtocolMessage {
         server_publickey: WgKey,
         client_secretkey: WgKey,
     ) -> Result<Vec<ForwardingProtocolMessage>, FailureError> {
-        let bytes = read_till_block(input)?;
-        if let Ok((_bytes, ForwardingProtocolMessage::ForwardingCloseMessage)) =
-            ForwardingProtocolMessage::read_message(&bytes)
-        {
-            return Ok(vec![ForwardingProtocolMessage::ForwardingCloseMessage]);
-        }
-        let (bytes_read, msg) = ForwardingProtocolMessage::read_encrypted_forward_message(
-            &bytes,
+        trace!("read messages start");
+        ForwardingProtocolMessage::read_messages_start_internal(
+            input,
             server_publickey,
             client_secretkey,
-        )?;
-        ForwardingProtocolMessage::read_messages_internal(
-            input,
-            bytes[bytes_read..].to_vec(),
-            vec![msg],
+            Vec::new(),
             0,
         )
+    }
+
+    fn read_messages_start_internal(
+        input: &mut TcpStream,
+        server_publickey: WgKey,
+        client_secretkey: WgKey,
+        bytes: Vec<u8>,
+        depth: u8,
+    ) -> Result<Vec<ForwardingProtocolMessage>, FailureError> {
+        // don't wait the first time in order to speed up execution
+        // if we are recursing we want to wait for the message to finish
+        // being written as the only reason we recuse is becuase we found
+        // a write in progress
+        if depth > 1 && depth <= 10 {
+            thread::sleep(SPINLOCK_TIME);
+        } else if depth > 10 {
+            error!("Never found the end of the message");
+            bail!("Never found the end of the message");
+        }
+
+        let mut bytes = bytes;
+        bytes.extend_from_slice(&read_till_block(input)?);
+
+        match (
+            ForwardingProtocolMessage::read_message(&bytes),
+            ForwardingProtocolMessage::read_encrypted_forward_message(
+                &bytes,
+                server_publickey,
+                client_secretkey,
+            ),
+        ) {
+            (Ok((_bytes, ForwardingProtocolMessage::ForwardingCloseMessage)), _) => {
+                trace!("Got close message, not starting");
+                Ok(vec![ForwardingProtocolMessage::ForwardingCloseMessage])
+            }
+            (_, Ok((bytes_read, msg))) => {
+                trace!(
+                    "Got a forward message, recursing with {} bytes",
+                    bytes.len() - bytes_read
+                );
+                ForwardingProtocolMessage::read_messages_internal(
+                    input,
+                    bytes[bytes_read..].to_vec(),
+                    vec![msg],
+                    0,
+                )
+            }
+            (Err(ForwardingProtocolError::SliceTooSmall { .. }), _) => {
+                trace!("Got partial close message");
+                ForwardingProtocolMessage::read_messages_start_internal(
+                    input,
+                    server_publickey,
+                    client_secretkey,
+                    bytes,
+                    depth + 1,
+                )
+            }
+            (_, Err(ForwardingProtocolError::SliceTooSmall { .. })) => {
+                trace!("Got partial forward message");
+                ForwardingProtocolMessage::read_messages_start_internal(
+                    input,
+                    server_publickey,
+                    client_secretkey,
+                    bytes,
+                    depth + 1,
+                )
+            }
+            (Err(a), Err(b)) => {
+                trace!("Double read failure {:?} {:?}", a, b);
+                Err(format_err!("{:?} {:?}", a, b))
+            }
+            (_, _) => {
+                trace!("Impossible error");
+                Err(format_err!("Impossible"))
+            }
+        }
     }
 
     /// Reads all the currently available messages from the provided stream, this function will
@@ -589,6 +656,10 @@ impl ForwardingProtocolMessage {
         messages: Vec<ForwardingProtocolMessage>,
         depth: u8,
     ) -> Result<Vec<ForwardingProtocolMessage>, FailureError> {
+        // don't wait the first time in order to speed up execution
+        // if we are recursing we want to wait for the message to finish
+        // being written as the only reason we recuse is becuase we found
+        // a write in progress
         if depth > 1 && depth <= 10 {
             thread::sleep(SPINLOCK_TIME);
         } else if depth > 10 {
