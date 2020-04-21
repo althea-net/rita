@@ -335,7 +335,7 @@ fn observe_network(
             (Some(key), Some(avg), Some(std_dev)) => {
                 if running_stats.is_bloated() {
                     info!(
-                        "{} is defined as bloated with AVG {} STDDEV {} and CV {}!",
+                        "Neighbor {} is defined as bloated with AVG {} STDDEV {} and CV {}!",
                         key, avg, std_dev, neigh.rtt
                     );
                     // shape the misbehaving tunnel
