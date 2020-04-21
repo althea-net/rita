@@ -73,8 +73,8 @@ use std::time::Duration;
 use std::time::Instant;
 
 const BRIDGE_TIMEOUT: Duration = Duration::from_secs(3600);
-const UNISWAP_TIMEOUT: u64 = 600u64;
 pub const ETH_TRANSFER_TIMEOUT: u64 = 600u64;
+const UNISWAP_TIMEOUT: u64 = ETH_TRANSFER_TIMEOUT;
 /// 1c in of dai in wei
 pub const DAI_WEI_CENT: u128 = 10_000_000_000_000_000u128;
 
@@ -102,7 +102,9 @@ pub enum State {
         /// used to ensure that only the future chain that started an operation can end it
         former_state: Option<Box<State>>,
     },
-    Depositing {},
+    Depositing {
+        timestamp: Instant,
+    },
     Withdrawing {
         amount: Uint256,
         to: Address,
@@ -326,7 +328,10 @@ fn xdai_bridge(state: State, bridge: &TokenBridge) {
                 bridge.own_address
             );
             // Go into State::Depositing right away to prevent multiple attempts
-            TokenBridge::from_registry().do_send(StateChange(State::Depositing {}));
+            let state = State::Depositing {
+                timestamp: Instant::now(),
+            };
+            TokenBridge::from_registry().do_send(StateChange(state.clone()));
             Arbiter::spawn(
                 rescue_dai(
                     bridge.clone(),
@@ -362,7 +367,7 @@ fn xdai_bridge(state: State, bridge: &TokenBridge) {
                                 Box::new(
                                     bridge
                                         // Convert to Dai in Uniswap
-                                        .eth_to_dai_swap(swap_amount, ETH_TRANSFER_TIMEOUT)
+                                        .eth_to_dai_swap(swap_amount, UNISWAP_TIMEOUT)
                                         .and_then(move |dai_bought| {
                                             TokenBridge::from_registry().do_send(
                                                 DetailedStateChange(
@@ -393,7 +398,7 @@ fn xdai_bridge(state: State, bridge: &TokenBridge) {
                             }
                         })
                 })
-                .then(|res| {
+                .then(move |res| {
                     // It goes back into State::Ready once the dai
                     // is in the bridge or if failed. This prevents multiple simultaneous
                     // attempts to bridge the same Dai.
@@ -402,13 +407,33 @@ fn xdai_bridge(state: State, bridge: &TokenBridge) {
                         error!("Error in bridge State::Deposit Tick handler: {:?}", res);
                     }
                     TokenBridge::from_registry().do_send(StateChange(State::Ready {
-                        former_state: Some(Box::new(State::Depositing {})),
+                        former_state: Some(Box::new(state)),
                     }));
                     Ok(())
                 }),
             )
         }
-        State::Depositing {} => info!("Tried to tick in bridge State::Depositing"),
+        State::Depositing { timestamp } => {
+            info!("Tried to tick in bridge State::Depositing");
+            // if the do_send at the end of state depositing fails we can get stuck here
+            // at the time time we don't want to submit multiple eth transactions for each
+            // step above, especially if they take a long time (note the timeouts are in the 10's of minutes)
+            // so we often 'tick' in depositing because there's a background future we don't want to interuppt
+            // if that future fails it's state change do_send a few lines up from here we're screwed and the bridge
+            // forever sits in this no-op state. This is a rescue setup for that situation where we check that enough
+            // time has elapsed. The theroretical max here is the uniswap timeout plus the eth transfer timeout
+            let now = Instant::now();
+            if now
+                > timestamp
+                    + Duration::from_secs(UNISWAP_TIMEOUT)
+                    + Duration::from_secs(ETH_TRANSFER_TIMEOUT)
+            {
+                warn!("Rescued stuck bridge");
+                TokenBridge::from_registry().do_send(StateChange(State::Ready {
+                    former_state: Some(Box::new(State::Depositing { timestamp })),
+                }));
+            }
+        }
         State::Withdrawing {
             to,
             amount,
