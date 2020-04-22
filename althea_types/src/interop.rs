@@ -467,4 +467,6 @@ pub struct HeartbeatMessage {
     pub notify_balance: bool,
     /// The exit registration contact details. If set
     pub contact_details: ContactDetails,
+    /// The router version stored in semver format as found in the Cargo.toml
+    pub version: String,
 }

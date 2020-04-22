@@ -210,6 +210,7 @@ fn send_udp_heartbeat_packet(
         exit_neighbor,
         notify_balance: low_balance_notification,
         contact_details,
+        version: env!("CARGO_PKG_VERSION").to_string(),
     };
     // serde will only fail under specific circumstances with specific structs
     // given the fixed nature of our application here I think this is safe
