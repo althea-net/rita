@@ -84,23 +84,33 @@ impl Display for ForwardingProtocolError {
 /// Writes data to a stream keeping in mind that we may encounter
 /// a buffer limit and have to partially complete our write
 pub fn write_all_spinlock(stream: &mut TcpStream, buffer: &[u8]) -> Result<(), IoError> {
+    assert!(!buffer.is_empty());
     stream.set_nonblocking(true)?;
-    loop {
-        let res = stream.write_all(buffer);
-        match res {
-            Ok(_val) => {
-                trace!("Spinlock wrote {} bytes", buffer.len());
-                return Ok(());
-            }
-            Err(e) => {
-                error!("Problem in spinlock writing {} bytes", buffer.len());
-                if e.kind() != WouldBlock {
-                    error!("Socket write error is {:?}", e);
-                    return Err(e);
-                }
+    let res = stream.write(buffer);
+    match res {
+        Ok(bytes) => {
+            trace!("Spinlock wrote {} bytes", buffer.len());
+            if buffer.len() == bytes {
+                Ok(())
+            } else if bytes == 0 {
+                Err(IoError::new(
+                    std::io::ErrorKind::WriteZero,
+                    format_err!("Probably a dead connection"),
+                ))
+            } else {
+                write_all_spinlock(stream, &buffer[bytes..])
             }
         }
-        thread::sleep(SPINLOCK_TIME);
+        Err(e) => {
+            error!("Problem {:?} in spinlock writing {} bytes", e, buffer.len());
+            if e.kind() == WouldBlock {
+                thread::sleep(SPINLOCK_TIME);
+                write_all_spinlock(stream, &buffer)
+            } else {
+                error!("Socket write error is {:?}", e);
+                Err(e)
+            }
+        }
     }
 }
 
