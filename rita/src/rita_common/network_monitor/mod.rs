@@ -32,6 +32,9 @@ const SAMPLES_IN_FIVE_MINUTES: usize = 300 / SAMPLE_PERIOD as usize;
 /// 10 minutes in seconds, the amount of time we wait for an interface to be
 /// 'good' before we start trying to increase it's speed
 const BACK_OFF_TIME: Duration = Duration::from_secs(600);
+/// We want to reset our counters every few hours to make sure they don't
+/// become to insensitive to changes, currently 12 hours.
+const WINDOW_TIME: Duration = Duration::from_secs(43200);
 
 /// Implements https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
 /// to keep track of neighbor latency in an online fashion for a specific interface
@@ -343,9 +346,6 @@ fn observe_network(
                         iface: iface.to_string(),
                         action: ShapingAdjustAction::ReduceSpeed,
                     });
-                    // reset the values for this entry because we have modified
-                    // the qdisc and it's no longer an accurate representation
-                    running_stats.reset();
                 } else if Instant::now() > running_stats.last_changed
                     && Instant::now() - running_stats.last_changed > BACK_OFF_TIME
                     && running_stats.is_good()
@@ -359,9 +359,6 @@ fn observe_network(
                         iface: iface.to_string(),
                         action: ShapingAdjustAction::IncreaseSpeed,
                     });
-                    // reset the values for this entry because we have modified
-                    // the qdisc and it's no longer an accurate representation
-                    running_stats.reset();
                 } else {
                     info!(
                         "Neighbor {} is ok with AVG {} STDDEV {} and CV {}",
@@ -376,6 +373,11 @@ fn observe_network(
             (_, _, _) => {}
         }
         running_stats.add_sample(neigh.rtt);
+        if Instant::now() > running_stats.last_changed
+            && Instant::now() - running_stats.last_changed > WINDOW_TIME
+        {
+            running_stats.reset();
+        }
     }
     for neigh in babel_neighbors.iter() {
         let iface = &neigh.iface;
