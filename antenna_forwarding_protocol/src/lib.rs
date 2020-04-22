@@ -684,7 +684,8 @@ impl ForwardingProtocolMessage {
 
                 if num_remaining_bytes != 0 {
                     trace!(
-                        "Got message recursing for remaining bytes {}",
+                        "Got message of size {} recursing for remaining bytes {}",
+                        bytes,
                         num_remaining_bytes
                     );
                     ForwardingProtocolMessage::read_messages_internal(
@@ -710,6 +711,10 @@ impl ForwardingProtocolMessage {
                 _ => {
                     if !remaining_bytes.is_empty() {
                         error!("Unparsed bytes! {} {:?}", remaining_bytes.len(), e);
+                        error!(
+                            "Messages {:#X?} Remaining bytes {:#X?}",
+                            messages, remaining_bytes
+                        );
                         bail!("Unparsed bytes!");
                     } else {
                         Ok(messages)
@@ -771,6 +776,22 @@ mod tests {
         // to cause issues
         let mut len: u32 = rng.gen();
         while len > U16MAX as u32 * 4 {
+            len = rng.gen();
+        }
+        let mut out = Vec::new();
+        for _ in 0..len {
+            let byte: u8 = rng.gen();
+            out.push(byte);
+        }
+        out
+    }
+
+    fn get_random_long_test_vector() -> Vec<u8> {
+        let mut rng = rand::thread_rng();
+        // should be small enough to be fast but long enough
+        // to cause issues
+        let mut len: u32 = rng.gen();
+        while len > U16MAX as u32 * 4 || len < U16MAX as u32 {
             len = rng.gen();
         }
         let mut out = Vec::new();
@@ -1033,5 +1054,33 @@ mod tests {
         junk.extend_from_slice(&get_random_test_vector());
         assert!(ForwardingProtocolMessage::read_message(&junk).is_err());
         assert!(ForwardingProtocolMessage::read_message(&junk).is_err());
+    }
+
+    #[test]
+    fn test_multiple_big_connection_messages() {
+        let message_a = ForwardingProtocolMessage::new_connection_data_message(
+            get_random_stream_id(),
+            get_random_long_test_vector(),
+        );
+        let message_b = ForwardingProtocolMessage::new_connection_data_message(
+            get_random_stream_id(),
+            get_random_long_test_vector(),
+        );
+        let message_c = ForwardingProtocolMessage::new_connection_data_message(
+            get_random_stream_id(),
+            get_random_test_vector(),
+        );
+        let mut out = message_a.get_message();
+        out.extend_from_slice(&message_b.get_message());
+        out.extend_from_slice(&message_c.get_message());
+        let (size_a, parsed) =
+            ForwardingProtocolMessage::read_message(&out).expect("Failed to parse!");
+        assert_eq!(parsed, message_a);
+        let (size_b, parsed) =
+            ForwardingProtocolMessage::read_message(&out[size_a..]).expect("Failed to parse!");
+        assert_eq!(parsed, message_b);
+        let (_size_c, parsed) = ForwardingProtocolMessage::read_message(&out[size_a + size_b..])
+            .expect("Failed to parse!");
+        assert_eq!(parsed, message_c);
     }
 }
