@@ -57,7 +57,7 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
 ) {
     info!("Starting antenna forwarding proxy!");
     thread::spawn(move || loop {
-        trace!("About to checkin with {}", checkin_address);
+        info!("About to checkin with {}", checkin_address);
         // parse checkin address every loop iteration as a way
         // of resolving the domain name on each run
         let socket: SocketAddr = match checkin_address.to_socket_addrs() {
@@ -74,7 +74,7 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
             }
         };
         if let Ok(mut server_stream) = TcpStream::connect_timeout(&socket, NET_TIMEOUT) {
-            trace!("connected to {}", checkin_address);
+            info!("connected to {}", checkin_address);
             // send our identifier
             let _res = write_all_spinlock(
                 &mut server_stream,
@@ -125,7 +125,7 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
                 }
             }
         }
-        trace!("Waiting for next checkin cycle");
+        info!("Waiting for next checkin cycle");
         thread::sleep(SLEEP_TIME)
     });
 }

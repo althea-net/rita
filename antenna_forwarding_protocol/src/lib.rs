@@ -577,9 +577,10 @@ impl ForwardingProtocolMessage {
         // if we are recursing we want to wait for the message to finish
         // being written as the only reason we recuse is becuase we found
         // a write in progress
-        if depth > 1 && depth <= 10 {
+        const WAIT_TIME: u8 = 10;
+        if depth > 1 && depth <= WAIT_TIME {
             thread::sleep(SPINLOCK_TIME);
-        } else if depth > 10 {
+        } else if depth > WAIT_TIME {
             error!("Never found the end of the message");
             bail!("Never found the end of the message");
         }
@@ -654,15 +655,19 @@ impl ForwardingProtocolMessage {
         input: &mut TcpStream,
         remaining_bytes: Vec<u8>,
         messages: Vec<ForwardingProtocolMessage>,
-        depth: u8,
+        depth: u16,
     ) -> Result<Vec<ForwardingProtocolMessage>, FailureError> {
         // don't wait the first time in order to speed up execution
         // if we are recursing we want to wait for the message to finish
         // being written as the only reason we recuse is becuase we found
         // a write in progress
-        if depth > 1 && depth <= 10 {
+        // we wait up to 60 seconds, this may seem absurdly long but on very
+        // bad connections it's better to trust in the transport (TCP) to resume
+        // and keep the packets flowing
+        const WAIT_TIME: u16 = 600;
+        if depth > 1 && depth <= WAIT_TIME {
             thread::sleep(SPINLOCK_TIME);
-        } else if depth > 10 {
+        } else if depth > WAIT_TIME {
             error!("Never found the end of the message");
             bail!("Never found the end of the message");
         }
