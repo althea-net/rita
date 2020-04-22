@@ -43,12 +43,12 @@ pub const SPINLOCK_TIME: Duration = Duration::from_millis(100);
 /// The amount of time to wait for a blocking read
 pub const NET_TIMEOUT: Duration = Duration::from_secs(1);
 
-/// The size in bytes of our packet header, 16 byte magic, 2 byte type, 2 byte len
-pub const HEADER_LEN: usize = 20;
+/// The size in bytes of our packet header, 16 byte magic, 2 byte type, 4 byte len
+pub const HEADER_LEN: usize = 22;
 
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
 pub enum ForwardingProtocolError {
-    SliceTooSmall { expected: u16, actual: u16 },
+    SliceTooSmall { expected: u32, actual: u32 },
     SerdeError { message: String },
     BadMagic,
     InvalidLen,
@@ -282,7 +282,7 @@ impl ForwardingProtocolMessage {
         // message type number index 16-18
         message.extend_from_slice(&message_type.to_be_bytes());
         // length, index 18-20
-        let len_bytes = payload.len() as u16;
+        let len_bytes = payload.len() as u32;
         message.extend_from_slice(&len_bytes.to_be_bytes());
         // copy in the serialized struct
         message.extend_from_slice(&payload);
@@ -310,7 +310,7 @@ impl ForwardingProtocolMessage {
             message
                 .extend_from_slice(&ForwardingProtocolMessage::FORWARD_MESSAGE_TYPE.to_be_bytes());
             // length, index 18-20
-            let len_bytes = payload.len() as u16;
+            let len_bytes = payload.len() as u32;
             message.extend_from_slice(&len_bytes.to_be_bytes());
             // copy in the encrypted struct
             message.extend_from_slice(&payload);
@@ -337,9 +337,9 @@ impl ForwardingProtocolMessage {
         packet_type.clone_from_slice(&payload[16..18]);
         let packet_type = u16::from_be_bytes(packet_type);
 
-        let mut packet_len: [u8; 2] = [0; 2];
-        packet_len.clone_from_slice(&payload[18..20]);
-        let packet_len = u16::from_be_bytes(packet_len);
+        let mut packet_len: [u8; 4] = [0; 4];
+        packet_len.clone_from_slice(&payload[18..22]);
+        let packet_len = u32::from_be_bytes(packet_len);
 
         // this needs to be updated when new packet types are added
         if packet_magic != ForwardingProtocolMessage::MAGIC {
@@ -348,17 +348,17 @@ impl ForwardingProtocolMessage {
             return Err(ForwardingProtocolError::WrongPacketType);
         } else if packet_len as usize + HEADER_LEN > payload.len() {
             return Err(ForwardingProtocolError::SliceTooSmall {
-                actual: payload.len() as u16,
-                expected: { packet_len + HEADER_LEN as u16 },
+                actual: payload.len() as u32,
+                expected: { packet_len + HEADER_LEN as u32 },
             });
         }
 
         // nonce is 24 bytes
-        let nonce_end = 20 + NONCEBYTES;
+        let nonce_end = HEADER_LEN + NONCEBYTES;
         let mut nonce: [u8; NONCEBYTES] = [0; NONCEBYTES];
-        nonce.clone_from_slice(&payload[20..nonce_end]);
+        nonce.clone_from_slice(&payload[HEADER_LEN..nonce_end]);
         let nonce = Nonce(nonce);
-        let end_bytes = 20 + packet_len as usize;
+        let end_bytes = HEADER_LEN + packet_len as usize;
         let ciphertext = &payload[nonce_end..end_bytes];
         let sk = client_secretkey.into();
         let pk = server_publickey.into();
@@ -397,7 +397,7 @@ impl ForwardingProtocolMessage {
                     &ForwardingProtocolMessage::CONNECTION_CLOSE_MESSAGE_TYPE.to_be_bytes(),
                 );
                 // len is only 8 byte stream id
-                let len_bytes = 8u16;
+                let len_bytes = 8u32;
                 message.extend_from_slice(&len_bytes.to_be_bytes());
                 message.extend_from_slice(&stream_id.to_be_bytes());
 
@@ -411,7 +411,7 @@ impl ForwardingProtocolMessage {
                     &(ForwardingProtocolMessage::CONNECTION_DATA_MESSAGE_TYPE.to_be_bytes()),
                 );
                 // length is the stream id followed by the payload bytes
-                let len_bytes = payload.len() as u16 + 8;
+                let len_bytes = payload.len() as u32 + 8;
                 message.extend_from_slice(&len_bytes.to_be_bytes());
                 // copy in stream id
                 message.extend_from_slice(&stream_id.to_be_bytes());
@@ -450,9 +450,9 @@ impl ForwardingProtocolMessage {
         packet_type.clone_from_slice(&payload[16..18]);
         let packet_type = u16::from_be_bytes(packet_type);
 
-        let mut packet_len: [u8; 2] = [0; 2];
-        packet_len.clone_from_slice(&payload[18..20]);
-        let packet_len = u16::from_be_bytes(packet_len);
+        let mut packet_len: [u8; 4] = [0; 4];
+        packet_len.clone_from_slice(&payload[18..HEADER_LEN]);
+        let packet_len = u32::from_be_bytes(packet_len);
 
         // this needs to be updated when new packet types are added
         if packet_magic != ForwardingProtocolMessage::MAGIC {
@@ -461,8 +461,8 @@ impl ForwardingProtocolMessage {
             return Err(ForwardingProtocolError::WrongPacketType);
         } else if packet_len as usize + HEADER_LEN > payload.len() {
             return Err(ForwardingProtocolError::SliceTooSmall {
-                actual: payload.len() as u16,
-                expected: { packet_len + HEADER_LEN as u16 },
+                actual: payload.len() as u32,
+                expected: { packet_len + HEADER_LEN as u32 },
             });
         }
 
@@ -497,10 +497,10 @@ impl ForwardingProtocolMessage {
                 }
 
                 let mut connection_id: [u8; 8] = [0; 8];
-                connection_id.clone_from_slice(&payload[20..28]);
+                connection_id.clone_from_slice(&payload[HEADER_LEN..HEADER_LEN + 8]);
                 let connection_id = u64::from_be_bytes(connection_id);
 
-                let bytes_read = 28;
+                let bytes_read = HEADER_LEN + 8;
 
                 Ok((
                     bytes_read,
@@ -509,13 +509,13 @@ impl ForwardingProtocolMessage {
             }
             ForwardingProtocolMessage::CONNECTION_DATA_MESSAGE_TYPE => {
                 let mut connection_id: [u8; 8] = [0; 8];
-                connection_id.clone_from_slice(&payload[20..28]);
+                connection_id.clone_from_slice(&payload[HEADER_LEN..HEADER_LEN + 8]);
                 let connection_id = u64::from_be_bytes(connection_id);
 
                 let payload_bytes = packet_len as usize - 8;
                 let end = HEADER_LEN + 8 + payload_bytes;
                 let mut message_value = Vec::new();
-                message_value.extend_from_slice(&payload[28..end]);
+                message_value.extend_from_slice(&payload[HEADER_LEN + 8..end]);
 
                 Ok((
                     end,
@@ -722,6 +722,7 @@ mod tests {
     use super::WgKey;
     use rand;
     use rand::Rng;
+    use std::u16::MAX as U16MAX;
 
     lazy_static! {
         pub static ref FORWARDING_SERVER_PUBLIC_KEY: WgKey =
@@ -763,7 +764,10 @@ mod tests {
         let mut rng = rand::thread_rng();
         // should be small enough to be fast but long enough
         // to cause issues
-        let len: u16 = rng.gen();
+        let mut len: u32 = rng.gen();
+        while len > U16MAX as u32 * 4 {
+            len = rng.gen();
+        }
         let mut out = Vec::new();
         for _ in 0..len {
             let byte: u8 = rng.gen();
