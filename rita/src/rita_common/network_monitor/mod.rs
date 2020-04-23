@@ -10,6 +10,7 @@
 
 use crate::rita_common::rita_loop::fast_loop::FAST_LOOP_SPEED;
 use crate::rita_common::tunnel_manager::Neighbor as RitaNeighbor;
+use crate::rita_common::tunnel_manager::ShapeMany;
 use crate::rita_common::tunnel_manager::ShapingAdjust;
 use crate::rita_common::tunnel_manager::ShapingAdjustAction;
 use crate::rita_common::tunnel_manager::TunnelManager;
@@ -38,7 +39,7 @@ const WINDOW_TIME: Duration = Duration::from_secs(43200);
 
 /// Implements https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
 /// to keep track of neighbor latency in an online fashion for a specific interface
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct RunningLatencyStats {
     count: u32,
     mean: f32,
@@ -324,6 +325,7 @@ fn observe_network(
     latency_history: &mut HashMap<String, RunningLatencyStats>,
     packet_loss_history: &mut HashMap<String, RunningPacketLossStats>,
 ) {
+    let mut to_shape = Vec::new();
     for neigh in babel_neighbors.iter() {
         let iface = &neigh.iface;
         if !latency_history.contains_key(iface) {
@@ -341,11 +343,12 @@ fn observe_network(
                         "Neighbor {} is defined as bloated with AVG {} STDDEV {} and CV {}!",
                         key, avg, std_dev, neigh.rtt
                     );
-                    // shape the misbehaving tunnel
-                    TunnelManager::from_registry().do_send(ShapingAdjust {
+                    // schedule the misbehaving tunnel for shaping
+                    to_shape.push(ShapingAdjust {
                         iface: iface.to_string(),
                         action: ShapingAdjustAction::ReduceSpeed,
                     });
+                    running_stats.last_changed = Instant::now();
                 } else if Instant::now() > running_stats.last_changed
                     && Instant::now() - running_stats.last_changed > BACK_OFF_TIME
                     && running_stats.is_good()
@@ -354,11 +357,12 @@ fn observe_network(
                         "Neighbor {} is increasing speed with AVG {} STDDEV {} and CV {}",
                         key, avg, std_dev, neigh.rtt
                     );
-                    // shape the misbehaving tunnel
-                    TunnelManager::from_registry().do_send(ShapingAdjust {
+                    // schedule the misbehaving tunnel for a speed increase
+                    to_shape.push(ShapingAdjust {
                         iface: iface.to_string(),
                         action: ShapingAdjustAction::IncreaseSpeed,
                     });
+                    running_stats.last_changed = Instant::now();
                 } else {
                     info!(
                         "Neighbor {} is ok with AVG {} STDDEV {} and CV {}",
@@ -379,6 +383,11 @@ fn observe_network(
             running_stats.reset();
         }
     }
+
+    // observe packet loss, currently not used in production to adjust anything
+    // could maybe be used as a feedback for when shaping is working hard because
+    // that's the only time things get dropped, you pry each packet form the cold
+    // dead hands of the antennas 500ms later rather than droping them.
     for neigh in babel_neighbors.iter() {
         let iface = &neigh.iface;
         if !packet_loss_history.contains_key(iface) {
@@ -408,6 +417,10 @@ fn observe_network(
             (false, _, _) => {}
         }
     }
+
+    // shape the misbehaving tunnels, we do this all at once for the sake
+    // of efficiency as lots of do_sends have a high chance of getting lost
+    TunnelManager::from_registry().do_send(ShapeMany { to_shape });
 }
 
 fn get_wg_key_by_ifname(neigh: &BabelNeighbor, rita_neighbors: &[RitaNeighbor]) -> Option<WgKey> {
