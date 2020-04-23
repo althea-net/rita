@@ -35,8 +35,6 @@ use althea_types::WgKey;
 use diesel::r2d2::ConnectionManager;
 use diesel::PgConnection;
 use docopt::Docopt;
-use env_logger;
-use openssl_probe;
 use r2d2::Pool;
 use settings::exit::ExitNetworkSettings;
 use settings::exit::ExitVerifSettings;

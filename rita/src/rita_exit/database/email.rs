@@ -5,7 +5,6 @@ use crate::rita_exit::database::secs_since_unix_epoch;
 use crate::rita_exit::database::struct_tools::verif_done;
 use crate::SETTING;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState};
-use diesel;
 use diesel::prelude::PgConnection;
 use exit_db::models;
 use failure::Error;

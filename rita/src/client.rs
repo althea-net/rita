@@ -30,8 +30,6 @@ extern crate arrayvec;
 use actix_web::http::Method;
 use actix_web::{http, server, App};
 use docopt::Docopt;
-use env_logger;
-use openssl_probe;
 use settings::client::{RitaClientSettings, RitaSettingsStruct};
 use settings::RitaCommonSettings;
 use std::env;

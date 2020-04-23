@@ -42,7 +42,6 @@ use crate::SETTING;
 use althea_kernel_interface::ExitClient;
 use althea_types::Identity;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
-use diesel;
 use diesel::prelude::PgConnection;
 use failure::Error;
 use futures01::future;

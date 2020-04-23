@@ -7,7 +7,6 @@ use crate::SETTING;
 use actix_web::Result;
 use althea_kernel_interface::ExitClient;
 use althea_types::ExitClientIdentity;
-use diesel;
 use diesel::dsl::{delete, exists};
 use diesel::prelude::{ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl};
 use diesel::r2d2::ConnectionManager;

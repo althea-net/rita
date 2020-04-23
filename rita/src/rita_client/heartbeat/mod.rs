@@ -123,11 +123,7 @@ fn get_selected_exit_route(route_dump: &[Route]) -> Result<Route, Error> {
 
 fn get_selected_exit() -> Option<ExitServer> {
     let exit_client = SETTING.get_exit_client();
-    let exit = if let Some(e) = exit_client.get_current_exit() {
-        e
-    } else {
-        return None;
-    };
+    let exit = exit_client.get_current_exit()?;
     Some(exit.clone())
 }
 

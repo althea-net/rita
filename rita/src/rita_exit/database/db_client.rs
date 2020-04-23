@@ -7,7 +7,6 @@ use actix::Message;
 use actix::Supervised;
 use actix::SystemService;
 use actix_web::Result;
-use diesel;
 use diesel::dsl::delete;
 use diesel::*;
 use exit_db::schema;
