@@ -139,7 +139,9 @@ fn checkin() {
                     payment.max_fee = new_settings.max;
                     payment.balance_warning_level = new_settings.warning.into();
                     if let Some(new_chain) = new_settings.system_chain {
-                        set_system_blockchain(new_chain, &mut payment);
+                        if payment.system_chain != new_chain {
+                            set_system_blockchain(new_chain, &mut payment);
+                        }
                     }
                     if let Some(new_chain) = new_settings.withdraw_chain {
                         payment.withdraw_chain = new_chain;
