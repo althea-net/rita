@@ -44,6 +44,7 @@ pub struct RunningLatencyStats {
     count: u32,
     mean: f32,
     m2: f32,
+    last_value: Option<f32>,
     /// the last time this counters interface was invalidated by a change
     last_changed: Instant,
 }
@@ -54,6 +55,7 @@ impl RunningLatencyStats {
             count: 0u32,
             mean: 0f32,
             m2: 0f32,
+            last_value: None,
             last_changed: Instant::now(),
         }
     }
@@ -77,27 +79,24 @@ impl RunningLatencyStats {
         self.mean += delta / self.count as f32;
         let delta2 = sample - self.mean;
         self.m2 += delta * delta2;
+        self.last_value = Some(sample);
     }
     /// A hand tuned heuristic used to determine if a connection is bloated
     pub fn is_bloated(&self) -> bool {
-        let avg = self.get_avg();
         let std_dev = self.get_std_dev();
-        match (avg, std_dev) {
-            (Some(avg), Some(std_dev)) => std_dev > avg * 10f32,
-            (Some(_avg), None) => false,
-            (None, Some(_std_dev)) => false,
-            (None, None) => false,
+        if let Some(std_dev) = std_dev {
+            std_dev > 1000f32
+        } else {
+            false
         }
     }
     /// A hand tuned heuristic used to determine if a connection is good
     pub fn is_good(&self) -> bool {
-        let avg = self.get_avg();
         let std_dev = self.get_std_dev();
-        match (avg, std_dev) {
-            (Some(avg), Some(std_dev)) => std_dev <= avg * 2f32,
-            (Some(_avg), None) => false,
-            (None, Some(_std_dev)) => false,
-            (None, None) => false,
+        if let Some(std_dev) = std_dev {
+            std_dev < 100f32
+        } else {
+            false
         }
     }
     pub fn reset(&mut self) {
