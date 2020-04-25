@@ -9,10 +9,10 @@
 //! on traffic over every interface and base our action off of spikes in throughput as well as spikes in latency.
 
 use crate::rita_common::rita_loop::fast_loop::FAST_LOOP_SPEED;
+use crate::rita_common::tunnel_manager::shaping::ShapeMany;
+use crate::rita_common::tunnel_manager::shaping::ShapingAdjust;
+use crate::rita_common::tunnel_manager::shaping::ShapingAdjustAction;
 use crate::rita_common::tunnel_manager::Neighbor as RitaNeighbor;
-use crate::rita_common::tunnel_manager::ShapeMany;
-use crate::rita_common::tunnel_manager::ShapingAdjust;
-use crate::rita_common::tunnel_manager::ShapingAdjustAction;
 use crate::rita_common::tunnel_manager::TunnelManager;
 use actix::Actor;
 use actix::Context;

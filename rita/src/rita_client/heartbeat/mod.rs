@@ -14,7 +14,6 @@ use crate::rita_common::tunnel_manager::Neighbor as RitaNeighbor;
 use crate::SETTING;
 use actix::actors::resolver;
 use actix::{Arbiter, SystemService};
-use althea_types::ContactDetails;
 use althea_types::HeartbeatMessage;
 use althea_types::Identity;
 use althea_types::WgKey;
@@ -159,7 +158,6 @@ fn send_udp_heartbeat_packet(
 ) {
     trace!("building heartbeat packet");
     let network_settings = SETTING.get_network();
-    let reg_details = SETTING.get_exit_client().reg_details.clone();
     let low_balance_notification = SETTING.get_exit_client().low_balance_notification;
     let our_publickey = network_settings.wg_public_key.expect("No public key?");
     let our_secretkey = network_settings
@@ -168,17 +166,6 @@ fn send_udp_heartbeat_packet(
         .into();
     let their_publickey: WgKey = *HEARTBEAT_SERVER_KEY;
     let their_publickey = their_publickey.into();
-
-    let contact_details = match reg_details {
-        Some(details) => ContactDetails {
-            phone: details.phone,
-            email: details.email,
-        },
-        None => ContactDetails {
-            phone: None,
-            email: None,
-        },
-    };
     drop(network_settings);
 
     let remote_ip = dns_socket.ip();
@@ -205,7 +192,6 @@ fn send_udp_heartbeat_packet(
         exit_route,
         exit_neighbor,
         notify_balance: low_balance_notification,
-        contact_details,
         version: env!("CARGO_PKG_VERSION").to_string(),
     };
     // serde will only fail under specific circumstances with specific structs

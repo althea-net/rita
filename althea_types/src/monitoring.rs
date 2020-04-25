@@ -14,7 +14,7 @@ pub struct RTTimestamps {
 
 /// Implements https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
 /// to keep track of neighbor latency in an online fashion for a specific interface
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct RunningLatencyStats {
     count: u32,
     mean: f32,
@@ -94,7 +94,7 @@ impl RunningLatencyStats {
 /// more data processing to get correct values. 'Reach' is a 16 second bitvector of hello/IHU
 /// outcomes, but we're sampling every 5 seconds, in order to keep samples from interfering with
 /// each other we take the top 5 bits and use that to compute packet loss.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunningPacketLossStats {
     /// the number of packets lost during each 5 second sample period over the last five minutes
     five_minute_loss: Vec<u8>,

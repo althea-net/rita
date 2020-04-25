@@ -424,23 +424,50 @@ pub struct OperatorUpdateMessage {
     /// An action the operator wants to take to affect this router, examples may include reset
     /// password or change the wifi ssid
     pub operator_action: Option<OperatorAction>,
+    /// The speed the bandwidth shaper will start at, keep in mind this is not the maximum device
+    /// speed as all interfaces start at 'unlmited' this is instead the speed the shaper will deploy
+    /// when it detects problems on the interface and a speed it will not go above when it's increasing
+    /// the speed after the problem is gone
+    pub max_shaper_speed: Option<usize>,
+    /// this is the minimum speed the shaper will assign to an interface under any circumstances
+    /// when the first bad behavior on a link is experienced the value goes from 'unlimited' to
+    /// max_shaper_speed and heads downward from there. Set this value based on what you think the
+    /// worst realistic performance of any link in the network may be.
+    pub min_shaper_speed: Option<usize>,
 }
 
-/// The message we send to the operator server to checkin
+/// The message we send to the operator server to checkin, this allows us to customize
+/// the operator checkin response to the device based on it's network and any commands
+/// the operator may wish to send
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperatorCheckinMessage {
     pub id: Identity,
     pub operator_address: Option<Address>,
+    /// we include a system chain here becuase if there is no operator address
+    /// we don't know what this router is supposed to be configured like, the best
+    /// proxy for that is the system chain value
     pub system_chain: SystemChain,
-    // below this is data too large to fit into the heartbeat but stuff we still want
-    pub peers: Option<Vec<NeighborStatus>>,
+    /// The status of this devices peers, this is data that we want to communicate
+    /// with the operator server but don't really have space in the purely udp
+    /// heartbeat packet, neither is it required that this data be sent very often
+    /// we don't need instant updates of it. Arguably the phone number and email
+    /// values for heartbeats should come in through here.
+    pub neighbor_info: Option<Vec<NeighborStatus>>,
+    /// The exit registration contact details. Once again we want to sync this
+    /// regularly with the operator server but it contains non-fixed size data
+    /// like strings
+    pub contact_details: Option<ContactDetails>,
 }
 
 /// Struct for storing peer status data for reporting to the operator tools server
+/// the goal is to give a full picture of all links in the network to the operator
+/// so we include not only the link speed but also the stats history of the link
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NeighborStatus {
-    id: Identity,
-    speed: u64,
+    /// the id of the neighbor
+    pub id: Identity,
+    /// their shaped wg interface speed in mbps
+    pub shaper_speed: Option<usize>,
 }
 
 /// Struct for storing user contact details
@@ -475,8 +502,6 @@ pub struct HeartbeatMessage {
     pub exit_neighbor: Neighbor,
     /// If this user wants to be notified when they have a low balance
     pub notify_balance: bool,
-    /// The exit registration contact details. If set
-    pub contact_details: ContactDetails,
     /// The router version stored in semver format as found in the Cargo.toml
     pub version: String,
 }

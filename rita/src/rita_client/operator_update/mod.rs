@@ -4,12 +4,17 @@ use crate::rita_client::dashboard::system_chain::set_system_blockchain;
 use crate::rita_client::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::rita_common::token_bridge::ReloadAddresses;
 use crate::rita_common::token_bridge::TokenBridge;
+use crate::rita_common::tunnel_manager::shaping::flag_reset_shaper;
+use crate::rita_common::tunnel_manager::shaping::get_shaping_status;
 use crate::SETTING;
 use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use actix_web::Error;
 use actix_web::{client, HttpMessage};
 use althea_kernel_interface::opkg_feeds::get_release_feed;
 use althea_kernel_interface::opkg_feeds::set_release_feed;
+use althea_types::ContactDetails;
+use althea_types::NeighborStatus;
+use althea_types::OperatorAction;
 use althea_types::OperatorCheckinMessage;
 use althea_types::OperatorUpdateMessage;
 use futures01::Future;
@@ -83,7 +88,21 @@ fn checkin() {
         operator_settings.use_operator_price || operator_settings.force_use_operator_price;
     let is_gateway = SETTING.get_network().is_gateway;
     let id = SETTING.get_identity().unwrap();
+
+    let reg_details = SETTING.get_exit_client().reg_details.clone();
+    let contact_details = match reg_details {
+        Some(details) => ContactDetails {
+            phone: details.phone,
+            email: details.email,
+        },
+        None => ContactDetails {
+            phone: None,
+            email: None,
+        },
+    };
+
     drop(operator_settings);
+
     // if the user has disabled logging and has no operator configured we don't check in
     // if the user configures an operator but has disabled logging then we assume they still
     // want the operator to work properly and we will continue to checkin
@@ -100,12 +119,23 @@ fn checkin() {
         ),
     }
 
+    let speeds = get_shaping_status();
+    let mut neighbor_info = Vec::new();
+    for (id, speed) in speeds {
+        neighbor_info.push(NeighborStatus {
+            id,
+            shaper_speed: speed,
+        });
+    }
+
     let res = client::post(url)
         .header("User-Agent", "Actix-web")
         .json(OperatorCheckinMessage {
             id,
             operator_address,
             system_chain,
+            neighbor_info: Some(neighbor_info),
+            contact_details: Some(contact_details),
         })
         .unwrap()
         .send()
@@ -167,6 +197,19 @@ fn checkin() {
                     if SETTING.get_payment().bridge_addresses != starting_token_bridge_core {
                         TokenBridge::from_registry().do_send(ReloadAddresses());
                     }
+
+                    if let Some(OperatorAction::ResetShaper) = new_settings.operator_action {
+                        flag_reset_shaper()
+                    }
+
+                    let mut network = SETTING.get_network_mut();
+                    if let Some(new_speed) = new_settings.max_shaper_speed {
+                        network.starting_bandwidth_limit = new_speed;
+                    }
+                    if let Some(new_speed) = new_settings.min_shaper_speed {
+                        network.minimum_bandwidth_limit = new_speed;
+                    }
+                    drop(network);
 
                     trace!("Successfully completed OperatorUpdate");
                     Ok(())
