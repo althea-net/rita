@@ -367,6 +367,7 @@ impl FromStr for ReleaseStatus {
 pub enum OperatorAction {
     ResetRouterPassword,
     ResetWiFiPassword,
+    ResetShaper,
 }
 
 /// Operator update that we get from the operator server during our checkin
@@ -431,6 +432,15 @@ pub struct OperatorCheckinMessage {
     pub id: Identity,
     pub operator_address: Option<Address>,
     pub system_chain: SystemChain,
+    // below this is data too large to fit into the heartbeat but stuff we still want
+    pub peers: Option<Vec<NeighborStatus>>,
+}
+
+/// Struct for storing peer status data for reporting to the operator tools server
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NeighborStatus {
+    id: Identity,
+    speed: u64,
 }
 
 /// Struct for storing user contact details

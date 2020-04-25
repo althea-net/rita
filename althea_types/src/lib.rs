@@ -6,10 +6,10 @@ extern crate failure;
 extern crate arrayvec;
 
 pub mod interop;
-pub mod rtt;
+pub mod monitoring;
 pub mod wg_key;
 
 pub use crate::interop::*;
-pub use crate::rtt::RTTimestamps;
+pub use crate::monitoring::*;
 pub use crate::wg_key::WgKey;
 pub use std::str::FromStr;
