@@ -182,7 +182,7 @@ impl dyn KernelInterface {
         self.add_iptables_rule(
             "iptables",
             &[
-                "-A",
+                "-I",
                 "FORWARD",
                 "-p",
                 "tcp",
