@@ -74,6 +74,7 @@ impl Handler<ShapeMany> for TunnelManager {
                     }
                 }
             }
+            RESET_FLAG.store(false, Ordering::Relaxed);
             return;
         }
 
