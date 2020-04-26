@@ -208,7 +208,7 @@ fn observe_network(
                         iface: iface.to_string(),
                         action: ShapingAdjustAction::ReduceSpeed,
                     });
-                    running_stats.set_last_changed();
+                    running_stats.reset();
                 } else if Instant::now() > running_stats.last_changed()
                     && Instant::now() - running_stats.last_changed() > BACK_OFF_TIME
                     && running_stats.is_good()
