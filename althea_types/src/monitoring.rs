@@ -19,6 +19,9 @@ pub struct RunningLatencyStats {
     count: u32,
     mean: f32,
     m2: f32,
+    /// the lowest value we have ever seen on this link used to determine roughly what
+    /// we should be expecting
+    lowest: Option<f32>,
     last_value: Option<f32>,
     /// the last time this counters interface was invalidated by a change
     #[serde(skip_serializing, skip_deserializing)]
@@ -31,6 +34,7 @@ impl RunningLatencyStats {
             count: 0u32,
             mean: 0f32,
             m2: 0f32,
+            lowest: None,
             last_value: None,
             last_changed: Some(Instant::now()),
         }
@@ -56,25 +60,38 @@ impl RunningLatencyStats {
         let delta2 = sample - self.mean;
         self.m2 += delta * delta2;
         self.last_value = Some(sample);
+        match self.lowest {
+            Some(lowest) => {
+                if sample < lowest {
+                    self.lowest = Some(sample)
+                }
+            }
+            None => self.lowest = Some(sample),
+        }
     }
     /// A hand tuned heuristic used to determine if a connection is bloated
     pub fn is_bloated(&self) -> bool {
         let std_dev = self.get_std_dev();
-        if let Some(std_dev) = std_dev {
-            std_dev > 1000f32
-        } else {
-            false
+        let avg = self.get_avg();
+        let lowest = self.lowest;
+        match (std_dev, avg, lowest) {
+            (Some(std_dev), Some(avg), Some(lowest)) => {
+                std_dev > 1000f32 || (avg > 10f32 * lowest && avg > 20f32)
+            }
+            (_, _, _) => false,
         }
     }
     /// A hand tuned heuristic used to determine if a connection is good
     pub fn is_good(&self) -> bool {
         let std_dev = self.get_std_dev();
-        if let Some(std_dev) = std_dev {
-            std_dev < 100f32
-        } else {
-            false
+        let avg = self.get_avg();
+        let lowest = self.lowest;
+        match (std_dev, avg, lowest) {
+            (Some(std_dev), Some(avg), Some(lowest)) => std_dev < 100f32 || avg < 2f32 * lowest,
+            (_, _, _) => false,
         }
     }
+    /// resets the welfords algorithm average
     pub fn reset(&mut self) {
         self.count = 0u32;
         self.mean = 0f32;
