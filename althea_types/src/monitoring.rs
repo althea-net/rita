@@ -74,8 +74,23 @@ impl RunningLatencyStats {
         let std_dev = self.get_std_dev();
         let avg = self.get_avg();
         match (std_dev, avg) {
-            // you probably don't want to touch this, I have no idea why it works so well
-            // but almost anything else you come up with will be much worse
+            // you probably don't want to touch this, yes I know it doesn't make
+            // much sense from a stats perspective but here's why it works. Often
+            // when links start you get a lot of transient bad states, like 2000ms
+            // latency and the like. Because the history is reset in network_monitor after
+            // this is triggered it doesn't immeidately trigger again. The std_dev and average
+            // are both high and this protects connections from rapid excessive down shaping.
+            // the other key is that as things run longer the average goes down so spikes in
+            // std-dev are properly responded to. This is *not* a good metric for up-shaping
+            // it's too subject to not being positive when it should be whereas those false
+            // negatives are probably better here.
+            //
+            // If for some reason you feel the need to edit this you should probably not
+            // do anything until you have more than 100 or so samples and then carve out
+            // exceptions for conditions like avgerage latency under 10ms becuase fiber lines
+            // are a different beast than  the wireless connections. Do remember that exits can
+            // be a lot more than 50ms away so you need to account for distant but stable connections
+            // as well. This somehow does all of that at once, so here it stands
             (Some(std_dev), Some(avg)) => std_dev > 10f32 * avg,
             (_, _) => false,
         }
