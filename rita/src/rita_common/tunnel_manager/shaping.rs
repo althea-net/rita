@@ -148,10 +148,6 @@ impl Handler<ShapeMany> for TunnelManager {
                     }
                 }
             }
-            error!(
-                "Could not find tunnel for banwdith limit with iface {}",
-                iface
-            );
         }
     }
 }
