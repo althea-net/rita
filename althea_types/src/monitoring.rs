@@ -73,12 +73,11 @@ impl RunningLatencyStats {
     pub fn is_bloated(&self) -> bool {
         let std_dev = self.get_std_dev();
         let avg = self.get_avg();
-        let lowest = self.lowest;
-        match (std_dev, avg, lowest) {
-            (Some(std_dev), Some(avg), Some(lowest)) => {
-                std_dev > 1000f32 || (avg > 10f32 * lowest && avg > 20f32)
-            }
-            (_, _, _) => false,
+        match (std_dev, avg) {
+            // you probably don't want to touch this, I have no idea why it works so well
+            // but almost anything else you come up with will be much worse
+            (Some(std_dev), Some(avg)) => std_dev > 10f32 * avg,
+            (_, _) => false,
         }
     }
     /// A hand tuned heuristic used to determine if a connection is good
