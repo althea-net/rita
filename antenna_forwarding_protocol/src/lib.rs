@@ -491,6 +491,16 @@ impl ForwardingProtocolMessage {
         } else if packet_type > 6 {
             return Err(ForwardingProtocolError::WrongPacketType);
         } else if packet_len as usize + HEADER_LEN > payload.len() {
+            // look here for strange errors with identity packets if you're trying
+            // to make them larger
+            if packet_type == ForwardingProtocolMessage::IDENTIFICATION_MESSAGE_TYPE
+                && packet_len > 10000
+            {
+                // identity is fixed size struct, if we get a bs big packet like this
+                // we are probably dealing with an old client that has 2 byte packet len
+                return Err(ForwardingProtocolError::WrongPacketType);
+            }
+
             return Err(ForwardingProtocolError::SliceTooSmall {
                 actual: payload.len() as u32,
                 expected: { packet_len + HEADER_LEN as u32 },
