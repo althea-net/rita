@@ -25,8 +25,28 @@ pub fn get_remote_access_status(_req: HttpRequest) -> Result<HttpResponse, Error
     Ok(HttpResponse::Ok().json(true))
 }
 
+// todo try and combine the above function with this one and maintain
+// the http responses at some point
+pub fn get_remote_access_internal() -> Result<bool, Error> {
+    if !KI.is_openwrt() {
+        return Err(format_err!("Not Openwrt!"));
+    }
+    let lines = get_lines(DROPBEAR_CONFIG)?;
+    for line in lines.iter() {
+        if line.contains("option Interface") {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 pub fn set_remote_access_status(path: Path<bool>) -> Result<HttpResponse, Error> {
     let remote_access = path.into_inner();
+    set_remote_access_internal(remote_access)?;
+    Ok(HttpResponse::Ok().json(()))
+}
+
+pub fn set_remote_access_internal(remote_access: bool) -> Result<(), Error> {
     let mut lines: Vec<String> = Vec::new();
     lines.push("config dropbear".to_string());
     // the wonky spacing is actually important, keep it
@@ -41,10 +61,12 @@ pub fn set_remote_access_status(path: Path<bool>) -> Result<HttpResponse, Error>
     write_out(DROPBEAR_CONFIG, lines)?;
     KI.run_command("/etc/init.d/dropbear", &["restart"])?;
 
+    // this should just be cruft now as we don't ship any version
+    // without this in the firewall config, but leaving it here just in case.
     let mut firewall_lines = get_lines(FIREWALL_CONFIG)?;
     for line in firewall_lines.iter() {
         if line.contains("Allow-Mesh-SSH") {
-            return Ok(HttpResponse::Ok().json(()));
+            return Ok(());
         }
     }
     firewall_lines.push("".to_string());
@@ -55,6 +77,5 @@ pub fn set_remote_access_status(path: Path<bool>) -> Result<HttpResponse, Error>
     firewall_lines.push("        option target           ACCEPT".to_string());
     write_out(FIREWALL_CONFIG, firewall_lines)?;
     KI.run_command("reboot", &[])?;
-
-    Ok(HttpResponse::Ok().json(()))
+    Ok(())
 }

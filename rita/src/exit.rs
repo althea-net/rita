@@ -23,9 +23,6 @@ extern crate log;
 extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
-#[cfg(test)]
-#[macro_use]
-extern crate hex_literal;
 extern crate phonenumber;
 
 use actix_web::http::Method;
@@ -62,7 +59,6 @@ use rita_exit::rita_loop::check_rita_exit_actors;
 use rita_exit::rita_loop::start_rita_exit_endpoints;
 use rita_exit::rita_loop::start_rita_exit_loop;
 
-use crate::rita_common::dashboard::auth::*;
 use crate::rita_common::dashboard::babel::*;
 use crate::rita_common::dashboard::debts::*;
 use crate::rita_common::dashboard::development::*;
@@ -285,7 +281,6 @@ fn start_rita_exit_dashboard() {
             )
             .route("/nickname/get/", Method::GET, get_nickname)
             .route("/nickname/set/", Method::POST, set_nickname)
-            .route("/router/password/", Method::POST, set_pass)
             .route("/crash_actors", Method::POST, crash_actors)
             .route("/usage/payments", Method::GET, get_payments)
             .route("/token_bridge/status", Method::GET, get_bridge_status)

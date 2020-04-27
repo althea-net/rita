@@ -1,3 +1,5 @@
+use crate::rita_client::dashboard::remote_access::get_remote_access_internal;
+use crate::rita_client::dashboard::remote_access::set_remote_access_internal;
 use crate::ARGS;
 use crate::KI;
 use crate::SETTING;
@@ -33,6 +35,18 @@ pub fn set_pass(router_pass: Json<RouterPassword>) -> Result<HttpResponse, Error
 
     if KI.is_openwrt() {
         KI.set_system_password(router_pass.password)?;
+
+        // if the user has set a password we can now allow remote
+        // access via ssh and/or access via ssh on the lan this breaks
+        // down into two conditions 1) remote access on from the factory
+        // in which there's no password ssh at all or 2) remote access from toggle
+        // at which point access was previously only allowed on lan via SSH either way
+        // this updates remote access such that it works on LAN or remotely if it was
+        // toggled on when the password was set
+        if let Ok(true) = get_remote_access_internal() {
+            // we do not want to fail if this fails
+            let _ = set_remote_access_internal(true);
+        }
 
         // We edited disk contents, force global sync
         KI.fs_sync()?;

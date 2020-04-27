@@ -5,7 +5,6 @@
 use actix::prelude::*;
 use actix::registry::SystemService;
 
-pub mod auth;
 pub mod babel;
 pub mod debts;
 pub mod development;

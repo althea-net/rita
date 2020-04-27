@@ -52,6 +52,7 @@ use crate::rita_client::rita_loop::start_rita_client_endpoints;
 use crate::rita_common::rita_loop::check_rita_common_actors;
 use crate::rita_common::rita_loop::start_core_rita_endpoints;
 
+use crate::rita_client::dashboard::auth::*;
 use crate::rita_client::dashboard::backup_created::*;
 use crate::rita_client::dashboard::eth_private_key::*;
 use crate::rita_client::dashboard::exits::*;
@@ -69,7 +70,6 @@ use crate::rita_client::dashboard::router::*;
 use crate::rita_client::dashboard::system_chain::*;
 use crate::rita_client::dashboard::usage::*;
 use crate::rita_client::dashboard::wifi::*;
-use crate::rita_common::dashboard::auth::*;
 use crate::rita_common::dashboard::babel::*;
 use crate::rita_common::dashboard::debts::*;
 use crate::rita_common::dashboard::development::*;
@@ -258,7 +258,7 @@ fn main() {
 
     check_rita_common_actors();
     check_rita_client_actors();
-    start_core_rita_endpoints(2);
+    start_core_rita_endpoints(4);
     start_rita_client_endpoints(1);
     start_client_dashboard();
 
