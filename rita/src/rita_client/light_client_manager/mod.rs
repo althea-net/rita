@@ -169,7 +169,8 @@ pub fn light_client_hello_response(
                                 wg_port: tunnel.listen_port,
                                 have_tunnel: Some(have_tunnel),
                                 tunnel_address: light_client_address,
-                                price: SETTING.get_payment().local_fee as u128 + exit_dest_price,
+                                price: SETTING.get_payment().light_client_fee as u128
+                                    + exit_dest_price,
                             };
                             // Two bools -> 4 state truth table, in 3 of
                             // those states we need to re-add these rules
