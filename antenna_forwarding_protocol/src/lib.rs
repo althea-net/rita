@@ -771,7 +771,6 @@ mod tests {
     use super::ForwardingProtocolMessage;
     use super::Identity;
     use super::WgKey;
-    use rand;
     use rand::Rng;
     use std::u16::MAX as U16MAX;
 
