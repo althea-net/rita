@@ -199,7 +199,7 @@ impl Tunnel {
             &mut SETTING.get_network_mut().default_route,
             light_client_details,
         )?;
-        KI.set_codel_shaping(&self.iface_name, None)
+        KI.set_codel_shaping(&self.iface_name, self.speed_limit)
     }
 
     /// Register this tunnel into Babel monitor
