@@ -121,7 +121,6 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
                 }
                 Err(e) => {
                     error!("Failed to read message from server with {:?}", e);
-                    continue;
                 }
             }
         }
