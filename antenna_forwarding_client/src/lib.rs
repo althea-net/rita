@@ -15,6 +15,7 @@ use althea_types::Identity;
 use althea_types::WgKey;
 use antenna_forwarding_protocol::process_streams;
 use antenna_forwarding_protocol::write_all_spinlock;
+use antenna_forwarding_protocol::ExternalStream;
 use antenna_forwarding_protocol::ForwardingProtocolMessage;
 use antenna_forwarding_protocol::NET_TIMEOUT;
 use antenna_forwarding_protocol::SPINLOCK_TIME;
@@ -134,7 +135,7 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
 /// was found in the message batch.
 fn process_messages(
     input: &[ForwardingProtocolMessage],
-    streams: &mut HashMap<u64, TcpStream>,
+    streams: &mut HashMap<u64, ExternalStream>,
     server_stream: &mut TcpStream,
     last_message: &mut Instant,
     antenna_sockaddr: SocketAddr,
@@ -158,7 +159,7 @@ fn process_messages(
                 *last_message = Instant::now();
                 let stream_id = stream_id;
                 if let Some(stream) = streams.get(stream_id) {
-                    let _res = stream.shutdown(Shutdown::Both);
+                    let _res = stream.stream.shutdown(Shutdown::Both);
                     streams.remove(stream_id);
                 } else {
                     error!("Tried to remove stream {} that we did not have", stream_id);
@@ -172,8 +173,8 @@ fn process_messages(
                 );
                 *last_message = Instant::now();
                 let stream_id = stream_id;
-                if let Some(mut antenna_stream) = streams.get_mut(stream_id) {
-                    if let Err(e) = write_all_spinlock(&mut antenna_stream, &payload) {
+                if let Some(antenna_stream) = streams.get_mut(stream_id) {
+                    if let Err(e) = write_all_spinlock(&mut antenna_stream.stream, &payload) {
                         error!(
                             "Failed to write to antenna stream id {} with {:?}",
                             stream_id, e
@@ -185,7 +186,13 @@ fn process_messages(
                     if let Ok(mut new_stream) = TcpStream::connect(antenna_sockaddr) {
                         match write_all_spinlock(&mut new_stream, &payload) {
                             Ok(_) => {
-                                streams.insert(*stream_id, new_stream);
+                                streams.insert(
+                                    *stream_id,
+                                    ExternalStream {
+                                        stream: new_stream,
+                                        last_message: Instant::now(),
+                                    },
+                                );
                             }
                             Err(e) => error!(
                                 "Failed to write to anntenna stream id {} with {:?}",
@@ -199,7 +206,7 @@ fn process_messages(
                 trace!("Got halt message");
                 // we have a close lets get out of here.
                 for stream in streams.values_mut() {
-                    let _ = stream.shutdown(Shutdown::Both);
+                    let _ = stream.stream.shutdown(Shutdown::Both);
                 }
                 let _ = server_stream.shutdown(Shutdown::Both);
                 return true;
@@ -220,7 +227,7 @@ fn forward_connections(
 ) {
     trace!("Forwarding connections!");
     let mut server_stream = server_stream;
-    let mut streams: HashMap<u64, TcpStream> = HashMap::new();
+    let mut streams: HashMap<u64, ExternalStream> = HashMap::new();
     let mut last_message = Instant::now();
     process_messages(
         first_round_input,

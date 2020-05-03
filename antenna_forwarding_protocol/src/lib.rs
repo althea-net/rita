@@ -36,6 +36,7 @@ use std::net::Shutdown;
 use std::net::TcpStream;
 use std::thread;
 use std::time::Duration;
+use std::time::Instant;
 
 /// The amount of time to sleep a thread that's spinlocking on somthing
 pub const SPINLOCK_TIME: Duration = Duration::from_millis(100);
@@ -45,6 +46,10 @@ pub const NET_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// The size in bytes of our packet header, 16 byte magic, 2 byte type, 4 byte len
 pub const HEADER_LEN: usize = 22;
+
+/// The amount of time before we close a stream that has not gotten a message
+/// from an antenna or a client
+pub const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
 pub enum ForwardingProtocolError {
@@ -154,11 +159,16 @@ pub fn read_till_block(input: &mut TcpStream) -> Result<Vec<u8>, IoError> {
     }
 }
 
+pub struct ExternalStream {
+    pub stream: TcpStream,
+    pub last_message: Instant,
+}
+
 /// This function processes the antenna streams, meaning it handles taking messages from
 /// known streams, packaging them, and sending them down the line to the server. It also handles
 /// details like closing those streams when they hangup and notifying the other end.
 pub fn process_streams<S: ::std::hash::BuildHasher>(
-    streams: &mut HashMap<u64, TcpStream, S>,
+    streams: &mut HashMap<u64, ExternalStream, S>,
     server_stream: &mut TcpStream,
 ) {
     let mut streams_to_remove: Vec<u64> = Vec::new();
@@ -169,7 +179,7 @@ pub fn process_streams<S: ::std::hash::BuildHasher>(
     for (stream_id, antenna_stream) in streams.iter_mut() {
         // in theory we will figure out if the connection is closed here
         // and then send a closed message
-        match read_till_block(antenna_stream) {
+        match read_till_block(&mut antenna_stream.stream) {
             Ok(bytes) => {
                 if !bytes.is_empty() {
                     info!(
@@ -182,6 +192,7 @@ pub fn process_streams<S: ::std::hash::BuildHasher>(
                     if let Err(e) = write_all_spinlock(server_stream, &msg.get_message()) {
                         error!("Failed to write with stream {} with {:?}", *stream_id, e);
                     }
+                    antenna_stream.last_message = Instant::now();
                 }
             }
             Err(e) => {
@@ -191,10 +202,26 @@ pub fn process_streams<S: ::std::hash::BuildHasher>(
                     if let Err(e) = write_all_spinlock(server_stream, &msg.get_message()) {
                         error!("Failed to close stream {} with {:?}", *stream_id, e);
                     }
-                    let _ = antenna_stream.shutdown(Shutdown::Write);
+                    let _ = antenna_stream.stream.shutdown(Shutdown::Write);
                     streams_to_remove.push(*stream_id);
                 }
             }
+        }
+
+        // this check is here because while I'm pretty sure this struct
+        // is only modified in this thread I'm not positive, don't remove
+        // the extra check unless you are positive. Becuase negative durations
+        // mean a panic
+        if Instant::now() > antenna_stream.last_message
+            && Instant::now() - antenna_stream.last_message > STREAM_TIMEOUT
+        {
+            error!("Closing antenna/client connection due to STREAM_TIMEOUT");
+            let msg = ForwardingProtocolMessage::new_connection_close_message(*stream_id);
+            if let Err(e) = write_all_spinlock(server_stream, &msg.get_message()) {
+                error!("Failed to close stream {} with {:?}", *stream_id, e);
+            }
+            let _ = antenna_stream.stream.shutdown(Shutdown::Write);
+            streams_to_remove.push(*stream_id);
         }
     }
     for i in streams_to_remove {
