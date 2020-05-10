@@ -252,6 +252,7 @@ fn handle_release_feed_update(val: Option<String>) {
 /// Merges an arbitrary settings string, after first filtering for several
 /// forbidden values
 fn merge_settings_safely(new_settings: Value) {
+    trace!("Got new settings from server {:?}", new_settings);
     // merge in arbitrary setting change string if it's not blank
     if new_settings != "" {
         if let Value::Object(map) = new_settings.clone() {
