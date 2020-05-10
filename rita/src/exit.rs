@@ -13,6 +13,10 @@
 #![allow(clippy::pedantic)]
 #![forbid(unsafe_code)]
 
+use jemallocator::Jemalloc;
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 #[macro_use]
 extern crate failure;
 #[macro_use]
