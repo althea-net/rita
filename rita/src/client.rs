@@ -208,12 +208,6 @@ fn main() {
             operator.use_operator_price = dao.use_oracle_price;
         }
     }
-    // some devices are on beta 12 and therefore have the old default heartbeat
-    // url which is not correct in beta 13, remove this in beta 14
-    {
-        let mut log = SETTING.get_log_mut();
-        log.heartbeat_url = "operator.althea.net:33333".to_string();
-    }
 
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
