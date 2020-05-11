@@ -1,16 +1,16 @@
 #[cfg(feature = "development")]
-use crate::rita_common::rita_loop::Crash;
+use crate::rita_common::rita_loop::fast_loop::Crash;
 #[cfg(feature = "development")]
-use crate::rita_common::rita_loop::RitaLoop as RitaCommonLoop;
+use crate::rita_common::rita_loop::fast_loop::RitaFastLoop as RitaCommonLoop;
 #[cfg(feature = "development")]
 use crate::KI;
 #[cfg(feature = "development")]
 use crate::SETTING;
 #[cfg(feature = "development")]
-use actix::registry::SystemService;
+use actix::SystemService;
 use actix_web::{HttpRequest, HttpResponse, Result};
 #[cfg(feature = "development")]
-use clu::{cleanup, linux_generate_mesh_ip};
+use clu::{cleanup, generate_mesh_ip};
 use failure::Error;
 #[cfg(feature = "development")]
 use settings::RitaCommonSettings;
@@ -66,7 +66,7 @@ pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {
     network_settings.wg_private_key = Some(keypair.private);
 
     // Generate new mesh IP
-    match linux_generate_mesh_ip() {
+    match generate_mesh_ip() {
         Ok(ip) => {
             trace!("wipe: Generated new mesh IP");
             network_settings.mesh_ip = Some(ip);

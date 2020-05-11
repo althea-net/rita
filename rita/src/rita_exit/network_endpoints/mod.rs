@@ -251,7 +251,7 @@ pub fn nuke_db(_req: HttpRequest) -> Result<HttpResponse, Error> {
 }
 
 #[cfg(feature = "development")]
-pub fn nuke_db(_req: HttpRequest) -> Box<Future<Item = HttpResponse, Error = Error>> {
+pub fn nuke_db(_req: HttpRequest) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     trace!("nuke_db: Truncating all data from the database");
     DbClient::from_registry()
         .send(TruncateTables {})
