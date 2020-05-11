@@ -24,6 +24,7 @@ mod exit_server_tunnel;
 pub mod file_io;
 mod fs_sync;
 mod get_neighbors;
+pub mod hardware_info;
 mod interface_tools;
 mod ip_addr;
 mod ip_route;

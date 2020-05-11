@@ -429,7 +429,7 @@ pub struct OperatorUpdateMessage {
     /// being phased out, see shaper settings TODO Remove in Beta 15
     pub min_shaper_speed: Option<usize>,
     /// settings for the device bandwidth shaper
-    #[serde(default="default_shaper_settings")]
+    #[serde(default = "default_shaper_settings")]
     pub shaper_settings: ShaperSettings,
 }
 
@@ -478,6 +478,19 @@ pub struct OperatorCheckinMessage {
     /// regularly with the operator server but it contains non-fixed size data
     /// like strings
     pub contact_details: Option<ContactDetails>,
+    /// Info about the current state of this device, including it's model, CPU,
+    /// memory, and hopefully some day more info like temperature
+    pub hardware_info: Option<HardwareInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HardwareInfo {
+    pub load_avg_one_minute: f32,
+    pub load_avg_five_minute: f32,
+    pub load_avg_fifteen_minute: f32,
+    pub system_memory: u64,
+    pub allocated_memory: u64,
+    pub model: String,
 }
 
 /// Struct for storing peer status data for reporting to the operator tools server

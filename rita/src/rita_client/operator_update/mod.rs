@@ -10,6 +10,7 @@ use crate::SETTING;
 use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use actix_web::Error;
 use actix_web::{client, HttpMessage};
+use althea_kernel_interface::hardware_info::get_hardware_info;
 use althea_kernel_interface::opkg_feeds::get_release_feed;
 use althea_kernel_interface::opkg_feeds::set_release_feed;
 use althea_types::ContactDetails;
@@ -128,6 +129,14 @@ fn checkin() {
         });
     }
 
+    let hardware_info = match get_hardware_info({ SETTING.get_network().device.clone() }) {
+        Ok(info) => Some(info),
+        Err(e) => {
+            error!("Failed to get hardware info with {:?}", e);
+            None
+        }
+    };
+
     let res = client::post(url)
         .header("User-Agent", "Actix-web")
         .json(OperatorCheckinMessage {
@@ -136,6 +145,7 @@ fn checkin() {
             system_chain,
             neighbor_info: Some(neighbor_info),
             contact_details: Some(contact_details),
+            hardware_info,
         })
         .unwrap()
         .send()
