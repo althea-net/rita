@@ -482,8 +482,8 @@ impl Handler<TriggerGC> for TunnelManager {
     fn handle(&mut self, msg: TriggerGC, _ctx: &mut Context<Self>) -> Self::Result {
         let mut good: HashMap<Identity, Vec<Tunnel>> = HashMap::new();
         let mut timed_out: HashMap<Identity, Vec<Tunnel>> = HashMap::new();
-        // Split entries into good and timed out rebuilding the double hashmap strucutre
-        // as you can tell this is enterly copy based and uses 2n ram to prevent borrow
+        // Split entries into good and timed out rebuilding the double hashmap structure
+        // as you can tell this is totally copy based and uses 2n ram to prevent borrow
         // checker issues, we should consider a method that does modify in place
         for (identity, tunnels) in self.tunnels.iter() {
             for tunnel in tunnels.iter() {
@@ -503,7 +503,11 @@ impl Handler<TriggerGC> for TunnelManager {
             }
         }
 
-        info!("TriggerGC: removing tunnels: {:?}", timed_out);
+        for (id, tunnels) in timed_out.iter() {
+            for tunnel in tunnels {
+                info!("TriggerGC: removing tunnel: {} {}", id, tunnel);
+            }
+        }
 
         // Please keep in mind it makes more sense to update the tunnel map *before* yielding the
         // actual interfaces and ports from timed_out.
