@@ -6,7 +6,7 @@ use failure::Error;
 use num256::{Int256, Uint256};
 use settings::RitaCommonSettings;
 
-pub static READABLE_VERSION: &str = "Beta 13 RC7";
+pub static READABLE_VERSION: &str = "Beta 14 RC1";
 
 #[derive(Serialize)]
 pub struct OwnInfo {
