@@ -186,7 +186,7 @@ fn read_babel(
                 return Box::new(read_babel(stream, full_message, depth));
             } else if let Err(NoTerminator(_)) = babel_data {
                 // our buffer was not full but we also did not find a terminator,
-                // we must have caught babel while it was interupped (only really happens
+                // we must have caught babel while it was interrupted (only really happens
                 // in single cpu situations)
                 thread::sleep(SLEEP_TIME);
                 trace!("we didn't get the whole message yet, trying again");
