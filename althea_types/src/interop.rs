@@ -429,6 +429,7 @@ pub struct OperatorUpdateMessage {
     /// being phased out, see shaper settings TODO Remove in Beta 15
     pub min_shaper_speed: Option<usize>,
     /// settings for the device bandwidth shaper
+    #[serde(default="default_shaper_settings")]
     pub shaper_settings: ShaperSettings,
 }
 
@@ -446,6 +447,14 @@ pub struct ShaperSettings {
     /// max_shaper_speed and heads downward from there. Set this value based on what you think the
     /// worst realistic performance of any link in the network may be.
     pub min_speed: usize,
+}
+
+fn default_shaper_settings() -> ShaperSettings {
+    ShaperSettings {
+        max_speed: 1000,
+        min_speed: 50,
+        enabled: true,
+    }
 }
 
 /// The message we send to the operator server to checkin, this allows us to customize
