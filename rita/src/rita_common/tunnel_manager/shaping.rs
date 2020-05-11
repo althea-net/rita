@@ -58,9 +58,9 @@ impl Handler<ShapeMany> for TunnelManager {
 
     fn handle(&mut self, msg: ShapeMany, _: &mut Context<Self>) -> Self::Result {
         let network_settings = SETTING.get_network();
-        let minimum_bandwidth_limit = network_settings.minimum_bandwidth_limit;
-        let starting_bandwidth_limit = network_settings.starting_bandwidth_limit;
-        let bandwidth_limit_enabled = network_settings.bandwidth_limit_enabled;
+        let minimum_bandwidth_limit = network_settings.shaper_settings.min_speed;
+        let starting_bandwidth_limit = network_settings.shaper_settings.max_speed;
+        let bandwidth_limit_enabled = network_settings.shaper_settings.enabled;
         drop(network_settings);
 
         // removes shaping without requiring a restart if the flag is set or

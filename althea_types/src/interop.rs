@@ -424,16 +424,28 @@ pub struct OperatorUpdateMessage {
     /// An action the operator wants to take to affect this router, examples may include reset
     /// password or change the wifi ssid
     pub operator_action: Option<OperatorAction>,
+    /// being phased out, see shaper settings TODO Remove in Beta 15
+    pub max_shaper_speed: Option<usize>,
+    /// being phased out, see shaper settings TODO Remove in Beta 15
+    pub min_shaper_speed: Option<usize>,
+    /// settings for the device bandwidth shaper
+    pub shaper_settings: ShaperSettings,
+}
+
+/// Settings for the bandwidth shaper
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, Eq, PartialEq)]
+pub struct ShaperSettings {
+    pub enabled: bool,
     /// The speed the bandwidth shaper will start at, keep in mind this is not the maximum device
     /// speed as all interfaces start at 'unlmited' this is instead the speed the shaper will deploy
     /// when it detects problems on the interface and a speed it will not go above when it's increasing
     /// the speed after the problem is gone
-    pub max_shaper_speed: Option<usize>,
+    pub max_speed: usize,
     /// this is the minimum speed the shaper will assign to an interface under any circumstances
     /// when the first bad behavior on a link is experienced the value goes from 'unlimited' to
     /// max_shaper_speed and heads downward from there. Set this value based on what you think the
     /// worst realistic performance of any link in the network may be.
-    pub min_shaper_speed: Option<usize>,
+    pub min_speed: usize,
 }
 
 /// The message we send to the operator server to checkin, this allows us to customize

@@ -1,3 +1,4 @@
+use althea_types::ShaperSettings;
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
@@ -21,16 +22,12 @@ fn default_usage_tracker_file() -> String {
     "/etc/rita-usage-tracker.json".to_string()
 }
 
-fn default_bandwidth_limit_enabled() -> bool {
-    true
-}
-
-fn default_minimum_bandwidth_limit() -> usize {
-    50
-}
-
-fn default_starting_bandwidth_limit() -> usize {
-    10_000
+fn default_shaper_settings() -> ShaperSettings {
+    ShaperSettings {
+        enabled: true,
+        max_speed: 10000,
+        min_speed: 50,
+    }
 }
 
 fn default_light_client_hello_port() -> u16 {
@@ -118,23 +115,14 @@ pub struct NetworkSettings {
     /// Determines if this device will try and shape interface speeds when latency
     /// spikes are detected. You probably don't want to have this on in networks
     /// where there is significant jitter that's not caused by traffic load
-    #[serde(default = "default_bandwidth_limit_enabled")]
-    pub bandwidth_limit_enabled: bool,
-    /// The minimum to which this device will shape an interface
-    #[serde(default = "default_minimum_bandwidth_limit")]
-    pub minimum_bandwidth_limit: usize,
-    /// The starting value for banwidth interface shaping, should be equal to or greater than
-    /// the maximum bandwidth of the fastest interface of the device.
-    #[serde(default = "default_starting_bandwidth_limit")]
-    pub starting_bandwidth_limit: usize,
+    #[serde(default = "default_shaper_settings")]
+    pub shaper_settings: ShaperSettings,
 }
 
 impl Default for NetworkSettings {
     fn default() -> Self {
         NetworkSettings {
-            bandwidth_limit_enabled: default_bandwidth_limit_enabled(),
-            minimum_bandwidth_limit: default_minimum_bandwidth_limit(),
-            starting_bandwidth_limit: default_starting_bandwidth_limit(),
+            shaper_settings: default_shaper_settings(),
             backup_created: false,
             metric_factor: default_metric_factor(),
             mesh_ip: None,

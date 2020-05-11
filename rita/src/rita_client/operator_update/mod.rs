@@ -203,12 +203,7 @@ fn checkin() {
                     }
 
                     let mut network = SETTING.get_network_mut();
-                    if let Some(new_speed) = new_settings.max_shaper_speed {
-                        network.starting_bandwidth_limit = new_speed;
-                    }
-                    if let Some(new_speed) = new_settings.min_shaper_speed {
-                        network.minimum_bandwidth_limit = new_speed;
-                    }
+                    network.shaper_settings = new_settings.shaper_settings;
                     drop(network);
 
                     trace!("Successfully completed OperatorUpdate");
