@@ -27,7 +27,7 @@ impl Actor for HelloHandler {
 impl Supervised for HelloHandler {}
 impl SystemService for HelloHandler {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        info!("HTTP Client started");
+        info!("HelloHandler started");
     }
 }
 
