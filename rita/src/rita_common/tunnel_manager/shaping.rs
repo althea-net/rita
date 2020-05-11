@@ -21,7 +21,7 @@ lazy_static! {
 /// A cross thread accessible object representing the shaping level of a given interface, this is not perfect as it's
 /// a mapping by identity, meaning that if a given id has multiple tunnels using different shaped speeds it may not
 /// paint the full picture, that being said my observation is that this never seems to be the case, I can of course be wrong
-/// TODO we only ever interact with tunnel speed shaping here, we should consdier moving this subcomponent to locked data
+/// TODO we only ever interact with tunnel speed shaping here, we should consider moving this subcomponent to locked data
 /// rather than actor data as part of the actix-removal refactor
 #[allow(dead_code)]
 pub fn get_shaping_status() -> HashMap<Identity, Option<usize>> {
@@ -63,21 +63,6 @@ impl Handler<ShapeMany> for TunnelManager {
         let bandwidth_limit_enabled = network_settings.shaper_settings.enabled;
         drop(network_settings);
 
-        // removes shaping without requiring a restart if the flag is set or
-        // if it's set in the settings
-        if !bandwidth_limit_enabled || RESET_FLAG.load(Ordering::Relaxed) {
-            for (_id, tunnel_list) in self.tunnels.iter_mut() {
-                for tunnel in tunnel_list {
-                    if tunnel.speed_limit != None {
-                        set_shaping_or_error(&tunnel.iface_name, None);
-                        tunnel.speed_limit = None;
-                    }
-                }
-            }
-            RESET_FLAG.store(false, Ordering::Relaxed);
-            return;
-        }
-
         // get the lowest speed from each set of tunnels by
         // id and store that for external reference
         let mut external_list = INTERFACE_MBPS.write().unwrap();
@@ -98,6 +83,21 @@ impl Handler<ShapeMany> for TunnelManager {
             external_list.insert(*id, lowest);
         }
         drop(external_list);
+
+        // removes shaping without requiring a restart if the flag is set or
+        // if it's set in the settings
+        if !bandwidth_limit_enabled || RESET_FLAG.load(Ordering::Relaxed) {
+            for (_id, tunnel_list) in self.tunnels.iter_mut() {
+                for tunnel in tunnel_list {
+                    if tunnel.speed_limit != None {
+                        set_shaping_or_error(&tunnel.iface_name, None);
+                        tunnel.speed_limit = None;
+                    }
+                }
+            }
+            RESET_FLAG.store(false, Ordering::Relaxed);
+            return;
+        }
 
         for shaping_command in msg.to_shape {
             let action = shaping_command.action;
