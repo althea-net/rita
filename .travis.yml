@@ -7,17 +7,17 @@ before_install:
   - sudo add-apt-repository universe
   - sudo apt-get -qq update
   - sudo apt-get install -y iperf3 libsqlite3-dev postgresql-client-11 postgresql-server-dev-11 libpq-dev python3-pip bridge-utils wireguard linux-source linux-headers-$(uname -r) curl git libssl-dev pkg-config build-essential ipset python3-setuptools python3-wheel
-  - cargo install cross --version 0.1.9 --force
+  - cargo install cross --force
 
 env:
   matrix:
-    - CMD="cross build --target x86_64-unknown-linux-gnu --verbose -p rita --bin rita && cross test --target x86_64-unknown-linux-gnu --verbose -p rita --bin rita -- --test-threads=1"
-    - CMD="cross build --target mips-unknown-linux-gnu --verbose -p rita --bin rita && cross test --target mips-unknown-linux-gnu --verbose -p rita --bin rita -- --test-threads=1"
-    - CMD="cross build --target mipsel-unknown-linux-gnu --verbose -p rita --bin rita && cross test --target mipsel-unknown-linux-gnu --verbose -p rita --bin rita -- --test-threads=1"
-    - CMD="cross build --target mips64-unknown-linux-gnuabi64 --verbose -p rita --bin rita && cross test --target mips64-unknown-linux-gnuabi64 --verbose -p rita --bin rita -- --test-threads=1"
-    - CMD="cross build --target mips64el-unknown-linux-gnuabi64 --verbose -p rita --bin rita && cross test --target mips64el-unknown-linux-gnuabi64 --verbose -p rita --bin rita -- --test-threads=1"
-    - CMD="cross build --target aarch64-unknown-linux-gnu --verbose -p rita --bin rita && cross test --target aarch64-unknown-linux-gnu --verbose -p rita --bin rita -- --test-threads=1"
-    - CMD="cross build --target armv7-unknown-linux-gnueabihf --verbose -p rita --bin rita && cross test --target armv7-unknown-linux-gnueabihf --verbose -p rita --bin rita -- --test-threads=1"
+    - CMD="cross test --target x86_64-unknown-linux-gnu --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
+    - CMD="cross test --target mips-unknown-linux-gnu --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
+    - CMD="cross test --target mipsel-unknown-linux-gnu --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
+    - CMD="cross test --target mips64-unknown-linux-gnuabi64 --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
+    - CMD="cross test --target mips64el-unknown-linux-gnuabi64 --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
+    - CMD="cross test --target aarch64-unknown-linux-gnu --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
+    - CMD="cross test --target armv7-unknown-linux-gnueabihf --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
     # test Rita exit only on x86 since cross does not include postgres libs :(
     - CMD="cargo build --all && RUST_TEST_THREADS=1 cargo test --verbose --all"
 

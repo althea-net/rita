@@ -67,6 +67,12 @@ hex-literal = "0.2"
 sodiumoxide = "0.2"
 compressed_log = "0.2"
 flate2 = { version = "1.0", features = ["rust_backend"], default-features = false }
+# we don't call or us OpenSSL directly in this codebase, but by adding
+# this dependency with this feature we can enforce that openssl is compiled
+# in 'vendored' mode all the way down the tree. What this means is that we use
+# an openssl implementation from the crate and not from the system. This adds about
+# 3mb to the build so it's tagged into the server feature and it's own feature
+openssl = {version = "0.10", features = ["vendored"], optional = true}
 
 [dependencies.regex]
 version = "1.3"
@@ -74,7 +80,7 @@ default-features = false
 features = ["std"]
 
 [features]
+bundle_openssl = ["openssl"]
 # Features for big iron devices with more ram
-server = []
-long_timeouts = []
+server = ["openssl"]
 development = []
