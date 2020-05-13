@@ -16,6 +16,7 @@ use crate::SETTING;
 use actix::actors::mocker::Mocker;
 use actix::actors::resolver;
 use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
+use althea_kernel_interface::open_tunnel::TunnelOpenArgs;
 use althea_types::Identity;
 use althea_types::LocalIdentity;
 use babel_monitor::monitor;
@@ -185,20 +186,22 @@ impl Tunnel {
     /// Open a real tunnel to match the virtual tunnel we store in memory
     pub fn open(&self, light_client_details: Option<Ipv4Addr>) -> Result<(), Error> {
         let network = SETTING.get_network().clone();
-        KI.open_tunnel(
-            &self.iface_name,
-            self.listen_port,
-            &SocketAddr::new(self.ip, self.neigh_id.wg_port),
-            &self.neigh_id.global.wg_public_key,
-            Path::new(&network.wg_private_key_path),
-            &match network.mesh_ip {
+        let args = TunnelOpenArgs {
+            interface: self.iface_name.clone(),
+            port: self.listen_port,
+            endpoint: SocketAddr::new(self.ip, self.neigh_id.wg_port),
+            remote_pub_key: self.neigh_id.global.wg_public_key,
+            private_key_path: Path::new(&network.wg_private_key_path),
+            own_ip: match network.mesh_ip {
                 Some(ip) => ip,
                 None => bail!("No mesh IP configured yet"),
             },
-            network.external_nic.clone(),
-            &mut SETTING.get_network_mut().default_route,
-            light_client_details,
-        )?;
+            external_nic: network.external_nic.clone(),
+            settings_default_route: &mut SETTING.get_network_mut().default_route,
+            allowed_ipv4_address: light_client_details,
+        };
+
+        KI.open_tunnel(args)?;
         KI.set_codel_shaping(&self.iface_name, self.speed_limit)
     }
 

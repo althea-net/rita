@@ -22,10 +22,11 @@ use crate::rita_client::traffic_watcher::{QueryExitDebts, TrafficWatcher};
 use crate::rita_common::blockchain_oracle::low_balance;
 use crate::KI;
 use crate::SETTING;
-use ::actix::registry::SystemService;
-use ::actix::{Actor, Arbiter, Context, Handler, ResponseFuture, Supervised};
-use ::actix_web::client::Connection;
-use ::actix_web::{client, HttpMessage, Result};
+use actix::registry::SystemService;
+use actix::{Actor, Arbiter, Context, Handler, ResponseFuture, Supervised};
+use actix_web::client::Connection;
+use actix_web::{client, HttpMessage, Result};
+use althea_kernel_interface::exit_client_tunnel::ClientExitTunnelConfig;
 use althea_types::ExitClientDetails;
 use althea_types::ExitDetails;
 use althea_types::WgKey;
@@ -57,15 +58,18 @@ fn linux_setup_exit_tunnel(
     KI.update_settings_route(&mut SETTING.get_network_mut().default_route)?;
 
     KI.setup_wg_if_named("wg_exit")?;
-    KI.set_client_exit_tunnel_config(
-        SocketAddr::new(current_exit.id.mesh_ip, general_details.wg_exit_port),
-        current_exit.id.wg_public_key,
-        SETTING.get_network().wg_private_key_path.clone(),
-        SETTING.get_exit_client().wg_listen_port,
-        our_details.client_internal_ip,
-        general_details.netmask,
-        SETTING.get_network().rita_hello_port,
-    )?;
+
+    let args = ClientExitTunnelConfig {
+        endpoint: SocketAddr::new(current_exit.id.mesh_ip, general_details.wg_exit_port),
+        pubkey: current_exit.id.wg_public_key,
+        private_key_path: SETTING.get_network().wg_private_key_path.clone(),
+        listen_port: SETTING.get_exit_client().wg_listen_port,
+        local_ip: our_details.client_internal_ip,
+        netmask: general_details.netmask,
+        rita_hello_port: SETTING.get_network().rita_hello_port,
+    };
+
+    KI.set_client_exit_tunnel_config(args)?;
     KI.set_route_to_tunnel(&general_details.server_internal_ip)?;
 
     KI.create_client_nat_rules()?;

@@ -531,7 +531,7 @@ fn xdai_bridge(state: State, bridge: &TokenBridge) {
                                         .and_then(move |_| {
                                             info!("Issued an eth transfer for withdraw! Now complete!");
                                             // we only exit the withdraw state on success or timeout
-                                            TokenBridge::from_registry().do_send(StateChange(State::Ready {former_state: Some(Box::new(State::Withdrawing{to, amount: amount, timestamp, withdraw_all}))}));
+                                            TokenBridge::from_registry().do_send(StateChange(State::Ready {former_state: Some(Box::new(State::Withdrawing{to, amount, timestamp, withdraw_all}))}));
                                             Ok(())}))
                                     } else {
                                         info!("withdraw is waiting on bridge");
