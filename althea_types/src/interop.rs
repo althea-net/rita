@@ -187,20 +187,20 @@ impl Default for ExitState {
 
 impl ExitState {
     pub fn general_details(&self) -> Option<&ExitDetails> {
-        match self {
-            &ExitState::GotInfo {
+        match *self {
+            ExitState::GotInfo {
                 ref general_details,
                 ..
             } => Some(general_details),
-            &ExitState::Registering {
+            ExitState::Registering {
                 ref general_details,
                 ..
             } => Some(general_details),
-            &ExitState::Pending {
+            ExitState::Pending {
                 ref general_details,
                 ..
             } => Some(general_details),
-            &ExitState::Registered {
+            ExitState::Registered {
                 ref general_details,
                 ..
             } => Some(general_details),
@@ -209,8 +209,8 @@ impl ExitState {
     }
 
     pub fn our_details(&self) -> Option<&ExitClientDetails> {
-        match self {
-            &ExitState::Registered {
+        match *self {
+            ExitState::Registered {
                 ref our_details, ..
             } => Some(our_details),
             _ => None,
@@ -218,14 +218,14 @@ impl ExitState {
     }
 
     pub fn message(&self) -> String {
-        match self {
-            &ExitState::New => "New exit".to_string(),
-            &ExitState::GotInfo { ref message, .. } => message.clone(),
-            &ExitState::Registering { ref message, .. } => message.clone(),
-            &ExitState::Pending { ref message, .. } => message.clone(),
-            &ExitState::Registered { ref message, .. } => message.clone(),
-            &ExitState::Denied { ref message, .. } => message.clone(),
-            &ExitState::Disabled => "Exit disabled".to_string(),
+        match *self {
+            ExitState::New => "New exit".to_string(),
+            ExitState::GotInfo { ref message, .. } => message.clone(),
+            ExitState::Registering { ref message, .. } => message.clone(),
+            ExitState::Pending { ref message, .. } => message.clone(),
+            ExitState::Registered { ref message, .. } => message.clone(),
+            ExitState::Denied { ref message, .. } => message.clone(),
+            ExitState::Disabled => "Exit disabled".to_string(),
         }
     }
 }
