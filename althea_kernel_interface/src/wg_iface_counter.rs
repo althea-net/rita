@@ -17,9 +17,9 @@ pub struct WgUsage {
     pub download: u64,
 }
 
-pub fn prepare_usage_history(
-    counters: &HashMap<WgKey, WgUsage>,
-    usage_history: &mut HashMap<WgKey, WgUsage>,
+pub fn prepare_usage_history<S: ::std::hash::BuildHasher>(
+    counters: &HashMap<WgKey, WgUsage, S>,
+    usage_history: &mut HashMap<WgKey, WgUsage, S>,
 ) {
     for (wg_key, bytes) in counters.iter() {
         match usage_history.get_mut(&wg_key) {
@@ -120,8 +120,8 @@ fn test_read_wg_counters() {
 
     assert_eq!(wg_counter.len(), 1);
     assert!(wg_counter.contains_key(&test_key));
-    assert_eq!(wg_counter.get(&test_key).unwrap().upload, 13592616000);
-    assert_eq!(wg_counter.get(&test_key).unwrap().download, 821519724);
+    assert_eq!(wg_counter.get(&test_key).unwrap().upload, 13_592_616_000);
+    assert_eq!(wg_counter.get(&test_key).unwrap().download, 821_519_724);
 }
 
 #[test]
@@ -176,12 +176,12 @@ jL+LlqHAM63Qd9/ynAuqqn4wrYO7Hp8cYMlnf2OoSH8=\t679969972\t6539417596
 
     assert_eq!(wg_counter.len(), 11);
     assert!(wg_counter.contains_key(&test_key));
-    assert_eq!(wg_counter.get(&test_key).unwrap().upload, 15281630160);
-    assert_eq!(wg_counter.get(&test_key).unwrap().download, 7088439728);
+    assert_eq!(wg_counter.get(&test_key).unwrap().upload, 15_281_630_160);
+    assert_eq!(wg_counter.get(&test_key).unwrap().download, 7_088_439_728);
     assert!(wg_counter.contains_key(&test_key2));
     assert_eq!(wg_counter.get(&test_key2).unwrap().upload, 0);
     assert_eq!(wg_counter.get(&test_key2).unwrap().download, 0);
     assert!(wg_counter.contains_key(&test_key3));
-    assert_eq!(wg_counter.get(&test_key3).unwrap().upload, 3318456);
+    assert_eq!(wg_counter.get(&test_key3).unwrap().upload, 3_318_456);
     assert_eq!(wg_counter.get(&test_key3).unwrap().download, 0);
 }

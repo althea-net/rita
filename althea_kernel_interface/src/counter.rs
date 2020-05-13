@@ -18,26 +18,26 @@ pub enum FilterTarget {
 
 impl FilterTarget {
     pub fn interface(&self) -> &str {
-        match self {
-            &FilterTarget::Input | &FilterTarget::ForwardInput => "src",
-            &FilterTarget::Output | &FilterTarget::ForwardOutput => "dst",
+        match *self {
+            FilterTarget::Input | FilterTarget::ForwardInput => "src",
+            FilterTarget::Output | FilterTarget::ForwardOutput => "dst",
         }
     }
 
     pub fn set_name(&self) -> &str {
-        match self {
-            &FilterTarget::Input => "rita_input",
-            &FilterTarget::Output => "rita_output",
-            &FilterTarget::ForwardInput => "rita_fwd_input",
-            &FilterTarget::ForwardOutput => "rita_fwd_output",
+        match *self {
+            FilterTarget::Input => "rita_input",
+            FilterTarget::Output => "rita_output",
+            FilterTarget::ForwardInput => "rita_fwd_input",
+            FilterTarget::ForwardOutput => "rita_fwd_output",
         }
     }
 
     pub fn table(&self) -> &str {
-        match self {
-            &FilterTarget::Input => "INPUT",
-            &FilterTarget::Output => "OUTPUT",
-            &FilterTarget::ForwardOutput | &FilterTarget::ForwardInput => "FORWARD",
+        match *self {
+            FilterTarget::Input => "INPUT",
+            FilterTarget::Output => "OUTPUT",
+            FilterTarget::ForwardOutput | FilterTarget::ForwardInput => "FORWARD",
         }
     }
 }
@@ -102,7 +102,7 @@ add zxcv 1234:5678:9801:2345:6789:0123:4567:8902,wg0 packets 123456789 bytes 987
             let value1 = result
                 .get(&(IpAddr::V6(addr1), "wg42".into()))
                 .expect("Unable to find key");
-            assert_eq!(value1, &(987654321u64 + 123456789u64 * 40));
+            assert_eq!(value1, &(987_654_321u64 + 123_456_789u64 * 40));
 
             let addr2 = Ipv6Addr::new(
                 0x1234, 0x5678, 0x9801, 0x2345, 0x6789, 0x0123, 0x4567, 0x8902,
@@ -110,7 +110,7 @@ add zxcv 1234:5678:9801:2345:6789:0123:4567:8902,wg0 packets 123456789 bytes 987
             let value2 = result
                 .get(&(IpAddr::V6(addr2), "wg0".into()))
                 .expect("Unable to find key");
-            assert_eq!(value2, &(987654320u64 + 123456789u64 * 40));
+            assert_eq!(value2, &(987_654_320u64 + 123_456_789u64 * 40));
         }
         Err(e) => {
             panic!("Unexpected error {:?}", e);

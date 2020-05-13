@@ -66,8 +66,8 @@ impl dyn KernelInterface {
         for c in clients.iter() {
             match c.internal_ip {
                 IpAddr::V4(addr) => {
-                    if !self.has_flow_bulk(&addr, &flows) {
-                        self.create_flow_by_ip("wg_exit", &addr)?
+                    if !self.has_flow_bulk(addr, &flows) {
+                        self.create_flow_by_ip("wg_exit", addr)?
                     }
                 }
                 _ => panic!("Could not derive ipv4 addr for client! Corrupt DB!"),

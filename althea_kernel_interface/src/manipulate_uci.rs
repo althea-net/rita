@@ -32,10 +32,9 @@ impl dyn KernelInterface {
 
     //Sets an arbitrary UCI list on OpenWRT
     pub fn set_uci_list(&self, key: &str, value: &[&str]) -> Result<(), Error> {
-        match self.del_uci_var(&key) {
-            Err(e) => trace!("Delete uci var failed! {:?}", e),
-            _ => (),
-        };
+        if let Err(e) = self.del_uci_var(&key) {
+            trace!("Delete uci var failed! {:?}", e);
+        }
 
         for v in value {
             self.run_uci("uci", &["add_list", &format!("{}={}", &key, &v)])?;

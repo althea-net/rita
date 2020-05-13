@@ -49,7 +49,7 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
         None => return memory_info_error,
     };
     let model = match device_name {
-        Some(name) => name.to_string(),
+        Some(name) => name,
         None => "Unknown Device".to_string(),
     };
 

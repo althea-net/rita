@@ -10,17 +10,17 @@ impl dyn KernelInterface {
         // if it is then we don't need to do anything
         let mut new_command = Vec::new();
         let mut i_pos_skip = None;
-        for i in 0..rule.len() {
+        for (i, rule) in rule.iter().enumerate() {
             if i_pos_skip.is_some() && i == i_pos_skip.unwrap() {
                 continue;
             }
-            if rule[i] == "-I" {
+            if *rule == "-I" {
                 new_command.push("-C");
                 i_pos_skip = Some(i + 2);
-            } else if rule[i] == "-A" {
+            } else if *rule == "-A" {
                 new_command.push("-C");
             } else {
-                new_command.push(rule[i]);
+                new_command.push(rule);
             }
         }
 

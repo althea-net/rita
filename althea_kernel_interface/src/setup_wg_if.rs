@@ -16,8 +16,8 @@ impl dyn KernelInterface {
 
         for l in output.lines() {
             let parsed = l.parse();
-            if parsed.is_ok() {
-                peers.push(parsed.unwrap());
+            if let Ok(val) = parsed {
+                peers.push(val);
             } else {
                 warn!("Could not parse peer! {}", l);
             }
@@ -65,12 +65,12 @@ impl dyn KernelInterface {
         let mut num: u32 = 0;
         let out = String::from_utf8(output.stdout)?;
         for line in out.lines() {
-            let content: Vec<&str> = line.split("\t").collect();
+            let content: Vec<&str> = line.split('\t').collect();
             let mut itr = content.iter();
             itr.next();
             let timestamp = itr
                 .next()
-                .ok_or(err_msg("Option did not contain a value."))?;
+                .ok_or_else(|| err_msg("Option did not contain a value."))?;
             let d = UNIX_EPOCH + Duration::from_secs(timestamp.parse()?);
 
             if SystemTime::now().duration_since(d)? < Duration::new(600, 0) {

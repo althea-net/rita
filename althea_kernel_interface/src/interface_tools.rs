@@ -111,10 +111,10 @@ fn test_get_interfaces_linux() {
 
     let interfaces = KI.get_interfaces().unwrap();
 
-    assert_eq!(format!("{}", interfaces[0]), "lo");
-    assert_eq!(format!("{}", interfaces[1]), "dummy");
-    assert_eq!(format!("{}", interfaces[2]), "wg0");
-    assert_eq!(format!("{}", interfaces[3]), "veth-1-6");
+    assert_eq!(interfaces[0].to_string(), "lo");
+    assert_eq!(interfaces[1].to_string(), "dummy");
+    assert_eq!(interfaces[2].to_string(), "wg0");
+    assert_eq!(interfaces[3].to_string(), "veth-1-6");
 }
 
 #[test]

@@ -1,35 +1,46 @@
 use super::{KernelInterface, KernelInterfaceError};
-
+use althea_types::WgKey;
 use failure::Error;
-
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
-use althea_types::WgKey;
+pub struct ClientExitTunnelConfig {
+    /// The mesh ip of the exit server and it's port
+    pub endpoint: SocketAddr,
+    /// the public key of the exit
+    pub pubkey: WgKey,
+    /// our private key which is copied to a file on startup for easy reference
+    pub private_key_path: String,
+    /// the port that we wil be listening on, the exit will send keep alive messages
+    /// to this port to help open the connection
+    pub listen_port: u16,
+    /// the ip we are using inside of the wg exit tunnel, we need this both to add it
+    /// to the tunnel and to be sure we replace it with the new one when switching exits
+    pub local_ip: IpAddr,
+    /// the netmask the exit assigns addresses out of. We could instead of providing this
+    /// insert a route to the exits ip on this subnet but this is the easier solution. Cross
+    /// talk does not occur due to firewall rules
+    pub netmask: u8,
+    /// Used to insert a firewall rule that prevents rita hello packets from going over this
+    /// interface, I'm nearly positive this can be safely removed because the implementation of
+    /// peer discovery has been changed since it was first needed
+    pub rita_hello_port: u16,
+}
 
 impl dyn KernelInterface {
-    pub fn set_client_exit_tunnel_config(
-        &self,
-        endpoint: SocketAddr,
-        pubkey: WgKey,
-        private_key_path: String,
-        listen_port: u16,
-        local_ip: IpAddr,
-        netmask: u8,
-        rita_hello_port: u16,
-    ) -> Result<(), Error> {
+    pub fn set_client_exit_tunnel_config(&self, args: ClientExitTunnelConfig) -> Result<(), Error> {
         self.run_command(
             "wg",
             &[
                 "set",
                 "wg_exit",
                 "listen-port",
-                &listen_port.to_string(),
+                &args.listen_port.to_string(),
                 "private-key",
-                &private_key_path,
+                &args.private_key_path,
                 "peer",
-                &format!("{}", &pubkey),
+                &args.pubkey.to_string(),
                 "endpoint",
-                &format!("[{}]:{}", endpoint.ip(), endpoint.port()),
+                &format!("[{}]:{}", args.endpoint.ip(), args.endpoint.port()),
                 "allowed-ips",
                 "0.0.0.0/0",
                 "persistent-keepalive",
@@ -38,7 +49,7 @@ impl dyn KernelInterface {
         )?;
 
         for i in self.get_peers("wg_exit")? {
-            if i != pubkey {
+            if i != args.pubkey {
                 self.run_command(
                     "wg",
                     &["set", "wg_exit", "peer", &format!("{}", i), "remove"],
@@ -57,7 +68,7 @@ impl dyn KernelInterface {
                 "-p",
                 "tcp",
                 "--dport",
-                &format!("{}", rita_hello_port),
+                &format!("{}", args.rita_hello_port),
                 "-j",
                 "DROP",
             ],
@@ -67,13 +78,13 @@ impl dyn KernelInterface {
 
         match prev_ip {
             Ok(prev_ip) => {
-                if prev_ip != local_ip {
+                if prev_ip != args.local_ip {
                     self.run_command(
                         "ip",
                         &[
                             "address",
                             "delete",
-                            &format!("{}/{}", prev_ip, netmask),
+                            &format!("{}/{}", prev_ip, args.netmask),
                             "dev",
                             "wg_exit",
                         ],
@@ -84,7 +95,7 @@ impl dyn KernelInterface {
                         &[
                             "address",
                             "add",
-                            &format!("{}/{}", local_ip, netmask),
+                            &format!("{}/{}", args.local_ip, args.netmask),
                             "dev",
                             "wg_exit",
                         ],
@@ -98,7 +109,7 @@ impl dyn KernelInterface {
                     &[
                         "address",
                         "add",
-                        &format!("{}/{}", local_ip, netmask),
+                        &format!("{}/{}", args.local_ip, args.netmask),
                         "dev",
                         "wg_exit",
                     ],
@@ -128,10 +139,9 @@ impl dyn KernelInterface {
     }
 
     pub fn set_route_to_tunnel(&self, gateway: &IpAddr) -> Result<(), Error> {
-        match self.run_command("ip", &["route", "del", "default"]) {
-            Err(e) => warn!("Failed to delete default route {:?}", e),
-            _ => (),
-        };
+        if let Err(e) = self.run_command("ip", &["route", "del", "default"]) {
+            warn!("Failed to delete default route {:?}", e);
+        }
 
         let output = self.run_command(
             "ip",

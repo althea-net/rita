@@ -5,8 +5,8 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::Path;
 
 fn to_wg_local(ip: &IpAddr) -> IpAddr {
-    match ip {
-        &IpAddr::V6(ip) => {
+    match *ip {
+        IpAddr::V6(ip) => {
             let seg = ip.segments();
             assert_eq!((seg[0] & 0xfd00), 0xfd00);
             IpAddr::V6(Ipv6Addr::new(
@@ -34,9 +34,9 @@ pub fn is_link_local(ip: IpAddr) -> bool {
 
 /// socket to string with interface id support
 fn socket_to_string(endpoint: &SocketAddr, interface_name: Option<String>) -> String {
-    match endpoint {
-        &SocketAddr::V6(endpoint) => {
-            if is_link_local(IpAddr::V6(endpoint.ip().clone())) {
+    match *endpoint {
+        SocketAddr::V6(endpoint) => {
+            if is_link_local(IpAddr::V6(*endpoint.ip())) {
                 format!(
                     "[{}%{}]:{}",
                     endpoint.ip(),
@@ -47,53 +47,66 @@ fn socket_to_string(endpoint: &SocketAddr, interface_name: Option<String>) -> St
                 format!("[{}]:{}", endpoint.ip(), endpoint.port())
             }
         }
-        &SocketAddr::V4(endpoint) => format!("{}:{}", endpoint.ip(), endpoint.port()),
+        SocketAddr::V4(endpoint) => format!("{}:{}", endpoint.ip(), endpoint.port()),
     }
 }
 
+pub struct TunnelOpenArgs<'a> {
+    /// the wg tunnel name
+    pub interface: String,
+    /// the port we will listen on
+    pub port: u16,
+    /// the peers ip and endpoint port
+    pub endpoint: SocketAddr,
+    /// the remote peers public key
+    pub remote_pub_key: WgKey,
+    /// the path to a file on the local system containing our private key
+    pub private_key_path: &'a Path,
+    /// our mesh ipv6 address
+    pub own_ip: IpAddr,
+    /// the nic that we use to get to the internet if we are a gateway, only used to handle
+    /// default route considerations on the gateway
+    pub external_nic: Option<String>,
+    /// the default route that we use to get to the internet if we are a gateway, only used to handle
+    /// default route considerations on the gateway
+    pub settings_default_route: &'a mut Vec<String>,
+    /// a single ipv4 address that we may allow to access this tunnel, used by light clients (aka phones) for
+    /// their special case ipv4 only tunnels
+    pub allowed_ipv4_address: Option<Ipv4Addr>,
+}
+
 impl dyn KernelInterface {
-    pub fn open_tunnel(
-        &self,
-        interface: &String,
-        port: u16,
-        endpoint: &SocketAddr,
-        remote_pub_key: &WgKey,
-        private_key_path: &Path,
-        own_ip: &IpAddr,
-        external_nic: Option<String>,
-        settings_default_route: &mut Vec<String>,
-        allowed_ipv4_address: Option<Ipv4Addr>,
-    ) -> Result<(), Error> {
+    pub fn open_tunnel(&self, args: TunnelOpenArgs) -> Result<(), Error> {
         let external_peer;
-        let phy_name = match self.get_device_name(endpoint.ip()) {
+        let phy_name = match self.get_device_name(args.endpoint.ip()) {
             Ok(phy_name) => {
                 external_peer = false;
                 Some(phy_name)
             }
             Err(_) => {
                 external_peer = true;
-                external_nic
+                args.external_nic
             }
         };
 
-        let allowed_addresses = match allowed_ipv4_address {
+        let allowed_addresses = match args.allowed_ipv4_address {
             None => "::/0".to_string(),
-            Some(_) => format!("::/0,0.0.0.0/0"),
+            Some(_) => "::/0,0.0.0.0/0".to_string(),
         };
 
-        let socket_connect_str = socket_to_string(endpoint, phy_name);
+        let socket_connect_str = socket_to_string(&args.endpoint, phy_name);
         trace!("socket conenct string: {}", socket_connect_str);
         let output = self.run_command(
             "wg",
             &[
                 "set",
-                &interface,
+                &args.interface,
                 "listen-port",
-                &format!("{}", port),
+                &format!("{}", args.port),
                 "private-key",
-                &format!("{}", private_key_path.to_str().unwrap()),
+                &args.private_key_path.to_str().unwrap().to_string(),
                 "peer",
-                &format!("{}", remote_pub_key),
+                &format!("{}", args.remote_pub_key),
                 "endpoint",
                 &socket_connect_str,
                 "allowed-ips",
@@ -111,7 +124,13 @@ impl dyn KernelInterface {
         }
         let _output = self.run_command(
             "ip",
-            &["address", "add", &format!("{}", own_ip), "dev", &interface],
+            &[
+                "address",
+                "add",
+                &args.own_ip.to_string(),
+                "dev",
+                &args.interface,
+            ],
         )?;
 
         self.run_command(
@@ -119,17 +138,17 @@ impl dyn KernelInterface {
             &[
                 "address",
                 "add",
-                &format!("{}/64", to_wg_local(own_ip)),
+                &format!("{}/64", to_wg_local(&args.own_ip)),
                 "dev",
-                &interface,
+                &args.interface,
             ],
         )?;
 
         if external_peer {
-            self.manual_peers_route(&endpoint.ip(), settings_default_route)?;
+            self.manual_peers_route(&args.endpoint.ip(), args.settings_default_route)?;
         }
 
-        let output = self.run_command("ip", &["link", "set", "dev", &interface, "up"])?;
+        let output = self.run_command("ip", &["link", "set", "dev", &args.interface, "up"])?;
         if !output.stderr.is_empty() {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error setting wg interface up: {}",
@@ -243,16 +262,17 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
         }
     }));
 
-    KI.open_tunnel(
-        &interface,
-        8088,
-        &endpoint,
-        &remote_pub_key,
-        &private_key_path,
-        &own_mesh_ip,
-        None,
-        &mut vec![],
-        None,
-    )
-    .unwrap();
+    let args = TunnelOpenArgs {
+        interface,
+        port: 8088,
+        endpoint,
+        remote_pub_key,
+        private_key_path,
+        own_ip: own_mesh_ip,
+        external_nic: None,
+        settings_default_route: &mut vec![],
+        allowed_ipv4_address: None,
+    };
+
+    KI.open_tunnel(args).unwrap();
 }

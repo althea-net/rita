@@ -87,7 +87,7 @@ impl dyn KernelInterface {
         trace!("looking for {:?} in {:?} for device name", their_ip, neigh);
         for (ip, dev) in neigh {
             if ip == their_ip {
-                return Ok(dev.to_string());
+                return Ok(dev);
             }
         }
 

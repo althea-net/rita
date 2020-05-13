@@ -25,8 +25,8 @@ impl dyn KernelInterface {
     }
 
     /// Determines if the provided flow is assigned
-    pub fn has_flow(&self, ip: &Ipv4Addr, iface_name: &str) -> Result<bool, Error> {
-        let class_id = self.get_class_id(&ip);
+    pub fn has_flow(&self, ip: Ipv4Addr, iface_name: &str) -> Result<bool, Error> {
+        let class_id = self.get_class_id(ip);
         let result = self.run_command("tc", &["filter", "show", "dev", iface_name])?;
 
         if !result.status.success() {
@@ -51,13 +51,13 @@ impl dyn KernelInterface {
 
     /// A version of the flows check designed to be run from the raw input, more efficient
     /// in the exit setup loop than running the same command several hundred times
-    pub fn has_flow_bulk(&self, ip: &Ipv4Addr, tc_out: &str) -> bool {
-        let class_id = self.get_class_id(&ip);
+    pub fn has_flow_bulk(&self, ip: Ipv4Addr, tc_out: &str) -> bool {
+        let class_id = self.get_class_id(ip);
         tc_out.contains(&format!("1:{}", class_id))
     }
 
     /// Determines if the provided flow is assigned
-    pub fn has_class(&self, ip: &Ipv4Addr, iface_name: &str) -> Result<bool, Error> {
+    pub fn has_class(&self, ip: Ipv4Addr, iface_name: &str) -> Result<bool, Error> {
         let class_id = self.get_class_id(ip);
         let result = self.run_command("tc", &["class", "show", "dev", iface_name])?;
 
@@ -230,15 +230,14 @@ impl dyn KernelInterface {
         iface_name: &str,
         min_bw: u32,
         max_bw: u32,
-        ip: &Ipv4Addr,
+        ip: Ipv4Addr,
     ) -> Result<(), Error> {
         let class_id = self.get_class_id(ip);
-        let modifier;
-        if self.has_class(ip, iface_name)? {
-            modifier = "change";
+        let modifier = if self.has_class(ip, iface_name)? {
+            "change"
         } else {
-            modifier = "add";
-        }
+            "add"
+        };
 
         let output = self.run_command(
             "tc",
@@ -293,7 +292,7 @@ impl dyn KernelInterface {
     }
 
     /// Generates a unique traffic class id for a exit user, essentially a really dumb hashing function
-    pub fn get_class_id(&self, ip: &Ipv4Addr) -> u32 {
+    pub fn get_class_id(&self, ip: Ipv4Addr) -> u32 {
         format!(
             "{}{}{}{}",
             ip.octets()[3],
@@ -310,7 +309,7 @@ impl dyn KernelInterface {
     /// to shape that traffic on the exit side, uses the last two octets of the ip
     /// to generate a class id.
     /// TODO when ipv6 exit support is added this will need to be revisited
-    pub fn create_flow_by_ip(&self, iface_name: &str, ip: &Ipv4Addr) -> Result<(), Error> {
+    pub fn create_flow_by_ip(&self, iface_name: &str, ip: Ipv4Addr) -> Result<(), Error> {
         let class_id = self.get_class_id(ip);
 
         let output = self.run_command(
@@ -356,5 +355,5 @@ impl dyn KernelInterface {
 #[test]
 fn get_id() {
     use crate::KI;
-    println!("{}", KI.get_class_id(&"172.168.4.121".parse().unwrap()));
+    println!("{}", KI.get_class_id("172.168.4.121".parse().unwrap()));
 }

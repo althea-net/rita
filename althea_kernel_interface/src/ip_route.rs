@@ -35,8 +35,7 @@ impl dyn KernelInterface {
         Some(
             stdout
                 .lines()
-                .filter(|line| line.starts_with("default"))
-                .nth(0)?
+                .find(|line| line.starts_with("default"))?
                 .split_whitespace() // Extract first
                 .map(|s| s.to_string())
                 .collect(),
@@ -67,7 +66,7 @@ impl dyn KernelInterface {
 
         if !def_route.contains(&String::from("wg_exit")) {
             // update the default route if default route is not wg exit
-            *settings_default_route = def_route.clone();
+            *settings_default_route = def_route;
         }
         Ok(())
     }
@@ -216,7 +215,7 @@ fn test_set_route() {
 
     KI.set_route(
         &IpRoute::ToAddr(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
-        &vec!["token1".into(), "token2".into(), "token3".into()],
+        &["token1".into(), "token2".into(), "token3".into()],
     )
     .expect("Unable to set route");
 }
@@ -246,6 +245,6 @@ fn test_set_default_route() {
         }
     }));
 
-    KI.set_route(&IpRoute::DefaultRoute, &vec![])
+    KI.set_route(&IpRoute::DefaultRoute, &[])
         .expect("Unable to set default route");
 }

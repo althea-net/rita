@@ -68,14 +68,14 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
     let addresses = KI.get_neighbors().unwrap();
 
     //assert_eq!(format!("{}", addresses[0].0), "00-00-00-aa-00-03");
-    assert_eq!(format!("{}", addresses[0].0), "10.0.2.2");
-    assert_eq!(format!("{}", addresses[0].1), "eth0");
+    assert_eq!(addresses[0].0.to_string(), "10.0.2.2");
+    assert_eq!(addresses[0].1.to_string(), "eth0");
 
     //assert_eq!(format!("{}", addresses[1].0), "00-00-00-aa-00-05");
-    assert_eq!(format!("{}", addresses[1].0), "10.0.1.2");
-    assert_eq!(format!("{}", addresses[1].1), "eth0");
+    assert_eq!(addresses[1].0.to_string(), "10.0.1.2");
+    assert_eq!(addresses[1].1.to_string(), "eth0");
 
     //assert_eq!(format!("{}", addresses[2].0), "00-00-00-aa-00-56");
-    assert_eq!(format!("{}", addresses[2].0), "2001::2");
-    assert_eq!(format!("{}", addresses[2].1), "eth0");
+    assert_eq!(addresses[2].0.to_string(), "2001::2");
+    assert_eq!(addresses[2].1.to_string(), "eth0");
 }

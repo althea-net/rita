@@ -19,7 +19,7 @@ mod counter;
 mod create_wg_key;
 mod delete_tunnel;
 mod dns;
-mod exit_client_tunnel;
+pub mod exit_client_tunnel;
 mod exit_server_tunnel;
 pub mod file_io;
 mod fs_sync;
@@ -50,6 +50,8 @@ use failure::Error;
 use std::net::AddrParseError;
 use std::string::FromUtf8Error;
 
+type CommandFunction = Box<dyn FnMut(String, Vec<String>) -> Result<Output, Error> + Send>;
+
 #[derive(Debug, Fail)]
 pub enum KernelInterfaceError {
     #[fail(display = "Runtime Error: {:?}", _0)]
@@ -62,19 +64,19 @@ pub enum KernelInterfaceError {
 
 impl From<FromUtf8Error> for KernelInterfaceError {
     fn from(e: FromUtf8Error) -> Self {
-        KernelInterfaceError::RuntimeError(format!("{:?}", e).to_string())
+        KernelInterfaceError::RuntimeError(format!("{:?}", e))
     }
 }
 
 impl From<Error> for KernelInterfaceError {
     fn from(e: Error) -> Self {
-        KernelInterfaceError::RuntimeError(format!("{:?}", e).to_string())
+        KernelInterfaceError::RuntimeError(format!("{:?}", e))
     }
 }
 
 impl From<AddrParseError> for KernelInterfaceError {
     fn from(e: AddrParseError) -> Self {
-        KernelInterfaceError::RuntimeError(format!("{:?}", e).to_string())
+        KernelInterfaceError::RuntimeError(format!("{:?}", e))
     }
 }
 
@@ -94,7 +96,7 @@ lazy_static! {
 
 pub trait CommandRunner {
     fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, Error>;
-    fn set_mock(&self, mock: Box<dyn FnMut(String, Vec<String>) -> Result<Output, Error> + Send>);
+    fn set_mock(&self, mock: CommandFunction);
 }
 
 // a quick throwaway function to print arguments arrays so that they can be copy/pasted from logs
@@ -138,7 +140,7 @@ impl CommandRunner for LinuxCommandRunner {
         trace!(
             "command completed in {}s {}ms",
             start.elapsed().as_secs(),
-            start.elapsed().subsec_nanos() / 1000000
+            start.elapsed().subsec_millis()
         );
 
         if start.elapsed().as_secs() > 5 {
@@ -155,7 +157,7 @@ impl CommandRunner for LinuxCommandRunner {
             );
         }
 
-        return Ok(output);
+        Ok(output)
     }
 
     fn set_mock(&self, _mock: Box<dyn FnMut(String, Vec<String>) -> Result<Output, Error> + Send>) {
@@ -164,21 +166,20 @@ impl CommandRunner for LinuxCommandRunner {
 }
 
 pub struct TestCommandRunner {
-    pub run_command:
-        Arc<Mutex<Box<dyn FnMut(String, Vec<String>) -> Result<Output, Error> + Send>>>,
+    pub run_command: Arc<Mutex<CommandFunction>>,
 }
 
 impl CommandRunner for TestCommandRunner {
     fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, Error> {
         let mut args_owned = Vec::new();
         for a in args {
-            args_owned.push(a.to_string())
+            args_owned.push((*a).to_string())
         }
 
         (&mut *self.run_command.lock().unwrap())(program.to_string(), args_owned)
     }
 
-    fn set_mock(&self, mock: Box<dyn FnMut(String, Vec<String>) -> Result<Output, Error> + Send>) {
+    fn set_mock(&self, mock: CommandFunction) {
         *self.run_command.lock().unwrap() = mock
     }
 }

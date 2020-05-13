@@ -19,7 +19,7 @@ fn parse_local_port(s: &str) -> Result<u16, Error> {
         None => return runtime_error("Error parsing local_address column!"),
     };
     // having a format like "00000000:14E9"
-    let port = match local_addr.split(":").nth(1) {
+    let port = match local_addr.split(':').nth(1) {
         Some(port) => port,
         None => return runtime_error("Error parsing local_address column!"),
     };
@@ -43,12 +43,12 @@ impl dyn KernelInterface {
     /// Returns list of ports in use as seen in the UDP socket table (/proc/net/udp)
     pub fn used_ports(&self) -> Result<Vec<u16>, Error> {
         let udp_sockets_table = self.read_udp_socket_table()?;
-        let mut lines = udp_sockets_table.split("\n");
+        let mut lines = udp_sockets_table.split('\n');
 
         lines.next(); // advance iterator to skip header
 
         let ports: Vec<u16> = lines
-            .take_while(|line| line.len() > 0) // until end of the table is reached,
+            .take_while(|line| !line.is_empty()) // until end of the table is reached,
             .map(|line| parse_local_port(line)) // parse each udp port,
             .filter_map(Result::ok) // only taking those which parsed successfully
             .collect();

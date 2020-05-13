@@ -19,7 +19,7 @@ impl dyn KernelInterface {
             // we get dropped '1' to mean the packet is dropped
             // because this create offers c bindings and doesn't do
             // much of anything to adapt them
-            Ok(!(res.dropped > 0))
+            Ok(res.dropped == 0)
         } else {
             Ok(false)
         }
