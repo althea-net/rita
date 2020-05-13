@@ -10,12 +10,9 @@ extern crate lazy_static;
 use althea_kernel_interface::KI;
 use clarity::PrivateKey;
 use failure::Error;
-use ipgen;
-use rand;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use regex::Regex;
-use settings;
 use settings::exit::RitaExitSettings;
 use settings::RitaCommonSettings;
 use std::fs::File;
@@ -57,17 +54,15 @@ pub fn cleanup() -> Result<(), Error> {
 
     for i in KI.get_interfaces()? {
         if RE.is_match(&i) {
-            match KI.del_interface(&i) {
-                Err(e) => trace!("Failed to delete wg# {:?}", e),
-                _ => (),
-            };
+            if let Err(e) = KI.del_interface(&i) {
+                trace!("Failed to delete wg# {:?}", e);
+            }
         }
     }
 
-    match KI.del_interface("wg_exit") {
-        Err(e) => trace!("Failed to delete wg_exit {:?}", e),
-        _ => (),
-    };
+    if let Err(e) = KI.del_interface("wg_exit") {
+        trace!("Failed to delete wg_exit {:?}", e);
+    }
 
     Ok(())
 }
@@ -78,9 +73,9 @@ fn linux_init(config: Arc<RwLock<settings::client::RitaSettingsStruct>>) -> Resu
 
     // handle things we need to generate at runtime
     let mut network_settings = config.get_network_mut();
-    let mesh_ip_option = network_settings.mesh_ip.clone();
-    let wg_pubkey_option = network_settings.wg_public_key.clone();
-    let wg_privkey_option = network_settings.wg_private_key.clone();
+    let mesh_ip_option = network_settings.mesh_ip;
+    let wg_pubkey_option = network_settings.wg_public_key;
+    let wg_privkey_option = network_settings.wg_private_key;
     let device_option = network_settings.device.clone();
 
     match mesh_ip_option {
@@ -124,10 +119,9 @@ fn linux_init(config: Arc<RwLock<settings::client::RitaSettingsStruct>>) -> Resu
 
             for line in contents.lines() {
                 if line.starts_with("device:") {
-                    let device = line.split(" ").nth(1).ok_or(format_err!(
-                        "Could not obtain device name from line {:?}",
-                        line
-                    ))?;
+                    let device = line.split(' ').nth(1).ok_or_else(|| {
+                        format_err!("Could not obtain device name from line {:?}", line)
+                    })?;
 
                     network_settings.device = Some(device.to_string());
 
@@ -171,7 +165,7 @@ fn linux_init(config: Arc<RwLock<settings::client::RitaSettingsStruct>>) -> Resu
     drop(network_settings);
 
     let mut payment_settings = config.get_payment_mut();
-    let eth_private_key_option = payment_settings.eth_private_key.clone();
+    let eth_private_key_option = payment_settings.eth_private_key;
 
     match eth_private_key_option {
         Some(existing_eth_private_key) => {
@@ -206,9 +200,9 @@ fn linux_exit_init(
     drop(exit_network_settings_ref);
 
     let mut network_settings = config.get_network_mut();
-    let mesh_ip_option = network_settings.mesh_ip.clone();
-    let wg_pubkey_option = network_settings.wg_public_key.clone();
-    let wg_privkey_option = network_settings.wg_private_key.clone();
+    let mesh_ip_option = network_settings.mesh_ip;
+    let wg_pubkey_option = network_settings.wg_public_key;
+    let wg_privkey_option = network_settings.wg_private_key;
 
     match mesh_ip_option {
         Some(existing_mesh_ip) => {
@@ -255,7 +249,7 @@ fn linux_exit_init(
     drop(network_settings);
 
     let mut payment_settings = config.get_payment_mut();
-    let eth_private_key_option = payment_settings.eth_private_key.clone();
+    let eth_private_key_option = payment_settings.eth_private_key;
 
     match eth_private_key_option {
         Some(existing_eth_private_key) => {
