@@ -3,6 +3,7 @@ set -eux
 NODES=${NODES:='None'}
 
 RUST_TEST_THREADS=1 cargo test --all
+cargo clippy --all-targets --all-features -- -D warnings
 cross test --target x86_64-unknown-linux-musl --verbose -p rita --bin rita -- --test-threads=1
 cross test --target mips-unknown-linux-gnu --verbose -p rita --bin rita -- --test-threads=1
 cross test --target mipsel-unknown-linux-gnu --verbose -p rita --bin rita -- --test-threads=1
