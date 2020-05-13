@@ -11,13 +11,13 @@ before_install:
 
 env:
   matrix:
-    - CMD="cross build --target x86_64-unknown-linux-gnu --verbose -p rita --bin rita && cross test --target x86_64-unknown-linux-gnu --verbose -p rita --bin rita -- --test-threads=1"
-    - CMD="cross build --target mips-unknown-linux-gnu --verbose -p rita --bin rita && cross test --target mips-unknown-linux-gnu --verbose -p rita --bin rita -- --test-threads=1"
-    - CMD="cross build --target mipsel-unknown-linux-gnu --verbose -p rita --bin rita && cross test --target mipsel-unknown-linux-gnu --verbose -p rita --bin rita -- --test-threads=1"
-    - CMD="cross build --target mips64-unknown-linux-gnuabi64 --verbose -p rita --bin rita && cross test --target mips64-unknown-linux-gnuabi64 --verbose -p rita --bin rita -- --test-threads=1"
-    - CMD="cross build --target mips64el-unknown-linux-gnuabi64 --verbose -p rita --bin rita && cross test --target mips64el-unknown-linux-gnuabi64 --verbose -p rita --bin rita -- --test-threads=1"
-    - CMD="cross build --target aarch64-unknown-linux-gnu --verbose -p rita --bin rita && cross test --target aarch64-unknown-linux-gnu --verbose -p rita --bin rita -- --test-threads=1"
-    - CMD="cross build --target armv7-unknown-linux-gnueabihf --verbose -p rita --bin rita && cross test --target armv7-unknown-linux-gnueabihf --verbose -p rita --bin rita -- --test-threads=1"
+    - CMD="cross build --target x86_64-unknown-linux-gnu --verbose -p rita --bin rita && cross test --target x86_64-unknown-linux-gnu --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
+    - CMD="cross build --target mips-unknown-linux-gnu --verbose -p rita --bin rita && cross test --target mips-unknown-linux-gnu --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
+    - CMD="cross build --target mipsel-unknown-linux-gnu --verbose -p rita --bin rita && cross test --target mipsel-unknown-linux-gnu --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
+    - CMD="cross build --target mips64-unknown-linux-gnuabi64 --verbose -p rita --bin rita && cross test --target mips64-unknown-linux-gnuabi64 --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
+    - CMD="cross build --target mips64el-unknown-linux-gnuabi64 --verbose -p rita --bin rita && cross test --target mips64el-unknown-linux-gnuabi64 --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
+    - CMD="cross build --target aarch64-unknown-linux-gnu --verbose -p rita --bin rita && cross test --target aarch64-unknown-linux-gnu --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
+    - CMD="cross build --target armv7-unknown-linux-gnueabihf --verbose -p rita --bin rita && cross test --target armv7-unknown-linux-gnueabihf --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
     # test Rita exit only on x86 since cross does not include postgres libs :(
     - CMD="cargo build --all && RUST_TEST_THREADS=1 cargo test --verbose --all"
 

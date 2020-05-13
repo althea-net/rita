@@ -7,6 +7,8 @@ edition = "2018"
 [features]
 development = ["rita/development"]
 server = ["rita/server"]
+bundle_openssl = ["rita/bundle_openssl"]
+jemalloc = ["rita/jemalloc"]
 
 [dependencies]
 rita = { path = "./rita" }
