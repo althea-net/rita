@@ -18,7 +18,7 @@ fn default_max_fee() -> u32 {
 }
 
 fn default_close_threshold() -> Int256 {
-    (-8400000000000000i64).into()
+    (-8_400_000_000_000_000i64).into()
 }
 
 fn default_pay_threshold() -> Int256 {

@@ -8,11 +8,9 @@ use crate::payment::PaymentSettings;
 use crate::spawn_watch_thread;
 use crate::RitaCommonSettings;
 use althea_types::{ExitRegistrationDetails, ExitState, Identity};
-use config;
 use config::Config;
 use failure::Error;
 use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
-use serde_json;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 
@@ -185,7 +183,7 @@ impl RitaSettingsStruct {
     pub fn new_watched(file_name: &str) -> Result<Arc<RwLock<Self>>, Error> {
         let mut s = Config::new();
         s.merge(config::File::with_name(file_name).required(false))?;
-        let settings: Self = s.clone().try_into()?;
+        let settings: Self = s.try_into()?;
 
         let settings = Arc::new(RwLock::new(settings));
 
@@ -197,7 +195,7 @@ impl RitaSettingsStruct {
     }
 
     pub fn get_exit_id(&self) -> Option<Identity> {
-        Some(self.exit_client.get_current_exit().as_ref()?.id.clone())
+        Some(self.exit_client.get_current_exit().as_ref()?.id)
     }
 }
 
@@ -276,10 +274,10 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
 
     fn get_identity(&self) -> Option<Identity> {
         Some(Identity::new(
-            self.get_network().mesh_ip?.clone(),
-            self.get_payment().eth_address.clone()?,
-            self.get_network().wg_public_key.clone()?,
-            self.get_network().nickname.clone(),
+            self.get_network().mesh_ip?,
+            self.get_payment().eth_address?,
+            self.get_network().wg_public_key?,
+            self.get_network().nickname,
         ))
     }
 

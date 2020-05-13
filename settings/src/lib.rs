@@ -15,38 +15,28 @@ extern crate lazy_static;
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
-
 extern crate arrayvec;
 
-#[cfg(test)]
-use std::sync::Mutex;
-
-use toml;
-
-use serde;
-use serde_json;
-
-use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
-
-use std::fs::File;
-use std::io::Write;
-use std::sync::{Arc, RwLock};
-use std::thread;
-use std::time::Duration;
-
+use crate::localization::LocalizationSettings;
+use crate::network::NetworkSettings;
+use crate::payment::PaymentSettings;
 use althea_kernel_interface::KernelInterface;
-
 #[cfg(not(test))]
 use althea_kernel_interface::LinuxCommandRunner;
 #[cfg(test)]
 use althea_kernel_interface::TestCommandRunner;
-
 use althea_types::Identity;
-
+use failure::Error;
+use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-use failure::Error;
+use std::fs::File;
+use std::io::Write;
+#[cfg(test)]
+use std::sync::Mutex;
+use std::sync::{Arc, RwLock};
+use std::thread;
+use std::time::Duration;
 
 pub mod client;
 pub mod dao;
@@ -56,10 +46,6 @@ pub mod logging;
 pub mod network;
 pub mod operator;
 pub mod payment;
-
-use crate::localization::LocalizationSettings;
-use crate::network::NetworkSettings;
-use crate::payment::PaymentSettings;
 
 #[cfg(test)]
 lazy_static! {
@@ -141,9 +127,8 @@ where
 
             if old_settings != new_settings {
                 trace!("writing updated config: {:?}", new_settings);
-                match settings.read().unwrap().write(&file_path) {
-                    Err(e) => warn!("writing updated config failed {:?}", e),
-                    _ => (),
+                if let Err(e) = settings.read().unwrap().write(&file_path) {
+                    warn!("writing updated config failed {:?}", e);
                 }
             }
         }
@@ -157,7 +142,7 @@ where
     T: Serialize,
 {
     fn write(&self, file_name: &str) -> Result<(), Error> {
-        let ser = toml::Value::try_from(self.clone())?;
+        let ser = toml::Value::try_from(self)?;
         let ser = toml::to_string(&ser)?;
         let mut file = File::create(file_name)?;
         file.write_all(ser.as_bytes())?;
