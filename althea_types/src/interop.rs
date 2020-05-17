@@ -479,18 +479,63 @@ pub struct OperatorCheckinMessage {
     /// like strings
     pub contact_details: Option<ContactDetails>,
     /// Info about the current state of this device, including it's model, CPU,
-    /// memory, and hopefully some day more info like temperature
+    /// memory, and temperature if sensors are available
     pub hardware_info: Option<HardwareInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// A set of info derived from /proc/ and /sys/ about the recent
+/// load on the system
 pub struct HardwareInfo {
+    /// the number of logical processors on the system, derived
+    /// by parsing /proc/cpuinfo and counting the number of instances
+    /// of the word 'processor'
+    pub logical_processors: u32,
+    /// The load average of the system over the last 1 minute please
+    /// see this reference before making decisions based on this value
+    /// http://www.brendangregg.com/blog/2017-08-08/linux-load-averages.html
+    /// parsed from /proc/loadvg
     pub load_avg_one_minute: f32,
+    /// The load average of the system over the last 5 minutes please
+    /// see this reference before making decisions based on this value
+    /// http://www.brendangregg.com/blog/2017-08-08/linux-load-averages.html
+    /// parsed from /proc/loadavg
     pub load_avg_five_minute: f32,
+    /// The load average of the system over the last 15 minutes please
+    /// see this reference before making decisions based on this value
+    /// http://www.brendangregg.com/blog/2017-08-08/linux-load-averages.html
+    /// parsed from /proc/loadavg
     pub load_avg_fifteen_minute: f32,
+    /// Available system memory in kilobytes parsed from /proc/meminfo
     pub system_memory: u64,
+    /// Allocated system memory in kilobytes parsed from /proc/meminfo
     pub allocated_memory: u64,
+    /// The model name of this router which is inserted into the config
+    /// at build time by the firmware builder. Note that this is an Althea
+    /// specific identifying name since we define it ourselves there
     pub model: String,
+    /// An array of sensors data, one entry for each sensor discovered by
+    /// traversing /sys/class/hwmon
+    pub sensor_readings: Option<Vec<SensorReading>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Representation of a sensor discovered in /sys/class/hwmon
+/// https://www.kernel.org/doc/Documentation/hwmon/sysfs-interface
+/// TODO not completely implemented
+pub struct SensorReading {
+    /// Human readable device name
+    pub name: String,
+    /// The sensor reading in Units of centi-celsius not all readings
+    /// will end up being read because TODO the interface parsing is not
+    /// complete
+    pub reading: u64,
+    /// The minimum reading this sensor can read in centi-celsius
+    pub min: Option<u64>,
+    /// The maximum reading this sensor can read in centi-celsius
+    pub max: Option<u64>,
+    /// A provided temp at which this device starts to risk failure in centi-celsius
+    pub crit: Option<u64>,
 }
 
 /// Struct for storing peer status data for reporting to the operator tools server
