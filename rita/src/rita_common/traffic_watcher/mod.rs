@@ -89,7 +89,7 @@ pub fn prepare_helper_maps(
 pub fn get_babel_info(routes: Vec<Route>) -> Result<(HashMap<IpAddr, i128>, u32), Error> {
     trace!("Got {} routes: {:?}", routes.len(), routes);
     let mut destinations = HashMap::new();
-    // we assume this matches what is actually set it babel becuase we
+    // we assume this matches what is actually set it babel because we
     // panic on startup if it does not get set correctly
     let local_fee = SETTING.get_payment().local_fee;
 
@@ -235,7 +235,7 @@ pub fn get_output_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
     Ok(total_output_counters)
 }
 
-/// Takes and sumns the input and output counters for logging
+/// Takes and sums the input and output counters for logging
 fn update_usage(
     input: &HashMap<(IpAddr, String), u64>,
     output: &HashMap<(IpAddr, String), u64>,
@@ -305,7 +305,7 @@ pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
                 }
             }
             // this can be caused by a peer that has not yet formed a babel route
-            // we use _ because ip_to_if is created from identites, if one fails the other must
+            // we use _ because ip_to_if is created from identities, if one fails the other must
             (None, Some(if_to_id)) => warn!(
                 "We have an id {:?} but not destination for {}",
                 if_to_id.mesh_ip, ip
@@ -333,7 +333,7 @@ pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
                 None => warn!("No debts entry for input entry id {:?}", id_from_if),
             },
             // this can be caused by a peer that has not yet formed a babel route
-            // we use _ because ip_to_if is created from identites, if one fails the other must
+            // we use _ because ip_to_if is created from identities, if one fails the other must
             (None, Some(id_from_if)) => warn!(
                 "We have an id {:?} but not destination for {}",
                 id_from_if.mesh_ip, ip
