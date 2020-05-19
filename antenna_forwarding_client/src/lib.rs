@@ -46,7 +46,7 @@ const PING_TIMEOUT: Duration = Duration::from_millis(100);
 const FORWARD_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// Starts a thread that will check in with the provided server repeatedly and forward antennas
-/// when the right signal is recieved. The type bound is so that you can use custom hashers and
+/// when the right signal is received. The type bound is so that you can use custom hashers and
 /// may not really be worth keeping around.
 pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::hash::BuildHasher>(
     checkin_address: String,
@@ -195,7 +195,7 @@ fn process_messages(
                                 );
                             }
                             Err(e) => error!(
-                                "Failed to write to anntenna stream id {} with {:?}",
+                                "Failed to write to antenna stream id {} with {:?}",
                                 stream_id, e
                             ),
                         }
@@ -271,7 +271,7 @@ fn setup_networking<S: ::std::hash::BuildHasher>(
     match find_antenna(antenna_ip, interfaces) {
         Ok(_iface) => {}
         Err(e) => {
-            error!("Could not find anntenna {:?}", e);
+            error!("Could not find antenna {:?}", e);
             return Err(e);
         }
     };
@@ -313,7 +313,7 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
         );
         trace!("Added our own test ip with {:?}", res);
         // you need to use src here to disambiguate the sending address
-        // otherwise the first avaialble ipv4 address on the interface will
+        // otherwise the first available ipv4 address on the interface will
         // be used
         match KI.run_command(
             "ip",
