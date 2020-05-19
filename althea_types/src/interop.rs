@@ -368,6 +368,7 @@ pub enum OperatorAction {
     ResetRouterPassword,
     ResetWiFiPassword,
     ResetShaper,
+    Reboot,
 }
 
 /// Operator update that we get from the operator server during our checkin

@@ -1,11 +1,13 @@
 //! This module is responsible for checking in with the operator server and getting updated local settings
 
 use crate::rita_client::dashboard::system_chain::set_system_blockchain;
+use crate::rita_client::dashboard::wifi::reset_wifi_pass;
 use crate::rita_client::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::rita_common::token_bridge::ReloadAddresses;
 use crate::rita_common::token_bridge::TokenBridge;
 use crate::rita_common::tunnel_manager::shaping::flag_reset_shaper;
 use crate::rita_common::tunnel_manager::shaping::get_shaping_status;
+use crate::KI;
 use crate::SETTING;
 use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use actix_web::Error;
@@ -208,8 +210,18 @@ fn checkin() {
                         TokenBridge::from_registry().do_send(ReloadAddresses());
                     }
 
-                    if let Some(OperatorAction::ResetShaper) = new_settings.operator_action {
-                        flag_reset_shaper()
+                    match new_settings.operator_action {
+                        Some(OperatorAction::ResetShaper) => flag_reset_shaper(),
+                        Some(OperatorAction::Reboot) => {
+                            let _res = KI.run_command("reboot", &[]);
+                        }
+                        Some(OperatorAction::ResetRouterPassword) => {
+                            SETTING.get_network_mut().rita_dashboard_password = None;
+                        }
+                        Some(OperatorAction::ResetWiFiPassword) => {
+                            let _res = reset_wifi_pass();
+                        }
+                        None => {}
                     }
 
                     let mut network = SETTING.get_network_mut();
