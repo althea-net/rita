@@ -342,9 +342,6 @@ fn start_client_dashboard() {
             .route("/version", Method::GET, version)
             .route("/wg_public_key", Method::GET, get_wg_public_key)
             .route("/wifi_settings", Method::POST, set_wifi_multi)
-            .route("/wifi_settings/pass", Method::POST, set_wifi_pass)
-            .route("/wifi_settings/ssid", Method::POST, set_wifi_ssid)
-            .route("/wifi_settings/channel", Method::POST, set_wifi_channel)
             .route(
                 "/wifi_settings/get_channels/{radio}",
                 Method::GET,

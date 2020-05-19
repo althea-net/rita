@@ -107,13 +107,6 @@ pub enum ValidationError {
     TooShort(usize),
 }
 
-pub fn set_wifi_ssid(wifi_ssid: Json<WifiSSID>) -> Result<HttpResponse, Error> {
-    debug!("/wifi_settings/ssid hit with {:?}", wifi_ssid);
-
-    let wifi_ssid = wifi_ssid.into_inner();
-    set_ssid(&wifi_ssid)
-}
-
 fn set_ssid(wifi_ssid: &WifiSSID) -> Result<HttpResponse, Error> {
     let mut ret: HashMap<String, String> = HashMap::new();
 
@@ -144,16 +137,6 @@ fn set_ssid(wifi_ssid: &WifiSSID) -> Result<HttpResponse, Error> {
     KI.create_client_nat_rules()?;
 
     Ok(HttpResponse::Ok().json(ret))
-}
-
-/// In the past this was used to set the wifi password, it's now been replaced
-/// by the multiple value set wifi endpoint that lets people change all the wifi
-/// credentials at once
-pub fn set_wifi_pass(wifi_pass: Json<WifiPass>) -> Result<HttpResponse, Error> {
-    debug!("/wifi_settings/pass hit with {:?}", wifi_pass);
-
-    let wifi_pass = wifi_pass.into_inner();
-    set_pass(&wifi_pass)
 }
 
 /// Resets the wifi password to the stock value for all radios
@@ -207,13 +190,6 @@ fn set_pass(wifi_pass: &WifiPass) -> Result<HttpResponse, Error> {
     KI.create_client_nat_rules()?;
 
     Ok(HttpResponse::Ok().json(()))
-}
-
-pub fn set_wifi_channel(wifi_channel: Json<WifiChannel>) -> Result<HttpResponse, Error> {
-    debug!("/wifi_settings/channel hit with {:?}", wifi_channel);
-
-    let wifi_channel = wifi_channel.into_inner();
-    set_channel(&wifi_channel)
 }
 
 fn set_channel(wifi_channel: &WifiChannel) -> Result<HttpResponse, Error> {
