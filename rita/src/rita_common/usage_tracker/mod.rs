@@ -3,8 +3,6 @@
 //! in that round and exactly what type of bandwidth it is is sent to this module, from there
 //! the handler updates the storage to reflect the new total. When a user would like to inspect
 //! or graph usage they query an endpoint which will request the data from this module.
-//!
-//! Persistant storage is planned but not currently implemented.
 
 use crate::SETTING;
 use actix::Actor;
@@ -87,7 +85,7 @@ fn to_formatted_payment_tx(input: PaymentTx) -> FormattedPaymentTx {
     }
 }
 
-/// A struct for tracking each hours of paymetns indexed in hours since unix epoch
+/// A struct for tracking each hours of payments indexed in hours since unix epoch
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PaymentHour {
     index: u64,
@@ -100,11 +98,36 @@ pub struct PaymentHour {
 pub struct UsageTracker {
     last_save_hour: u64,
     // at least one of these will be left unused
+    client_bandwidth: VecDeque<UsageHour>,
+    relay_bandwidth: VecDeque<UsageHour>,
+    exit_bandwidth: VecDeque<UsageHour>,
+    /// A history of payments
+    payments: VecDeque<PaymentHour>,
+}
+
+/// A legacy struct required to parse the old member names
+/// and convert into the new version
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UsageTrackerMisspelled {
+    last_save_hour: u64,
+    // at least one of these will be left unused
     client_bandwith: VecDeque<UsageHour>,
     relay_bandwith: VecDeque<UsageHour>,
     exit_bandwith: VecDeque<UsageHour>,
     /// A history of payments
     payments: VecDeque<PaymentHour>,
+}
+
+impl UsageTrackerMisspelled {
+    pub fn upgrade(self) -> UsageTracker {
+        UsageTracker {
+            last_save_hour: self.last_save_hour,
+            client_bandwidth: self.client_bandwith,
+            relay_bandwidth: self.relay_bandwith,
+            exit_bandwidth: self.exit_bandwith,
+            payments: self.payments,
+        }
+    }
 }
 
 impl Default for UsageTracker {
@@ -113,9 +136,9 @@ impl Default for UsageTracker {
         // if the loading process goes wrong for any reason, we just start again
         let blank_usage_tracker = UsageTracker {
             last_save_hour: 0,
-            client_bandwith: VecDeque::new(),
-            relay_bandwith: VecDeque::new(),
-            exit_bandwith: VecDeque::new(),
+            client_bandwidth: VecDeque::new(),
+            relay_bandwidth: VecDeque::new(),
+            exit_bandwidth: VecDeque::new(),
             payments: VecDeque::new(),
         };
 
@@ -135,9 +158,16 @@ impl Default for UsageTracker {
                                 trace!("found a compressed json stream");
                                 let deserialized: Result<UsageTracker, SerdeError> =
                                     serde_json::from_slice(&contents);
-                                match deserialized {
-                                    Ok(value) => value,
-                                    Err(e) => {
+
+                                let legacy_deserialized: Result<
+                                    UsageTrackerMisspelled,
+                                    SerdeError,
+                                > = serde_json::from_slice(&contents);
+
+                                match (deserialized, legacy_deserialized) {
+                                    (Ok(value), _) => value,
+                                    (Err(_e), Ok(value)) => value.upgrade(),
+                                    (Err(e), Err(_e)) => {
                                         error!("Failed to deserialize bytes in compressed bw history {:?}", e);
                                         blank_usage_tracker
                                     }
@@ -153,10 +183,16 @@ impl Default for UsageTracker {
                                         let deserialized: Result<UsageTracker, SerdeError> =
                                             serde_json::from_str(&contents_str);
 
-                                        match deserialized {
-                                            Ok(value) => value,
-                                            Err(e) => {
-                                                error!("Failed to deserialize usage tracker from flatfile {:?}", e);
+                                        let legacy_deserialized: Result<
+                                            UsageTrackerMisspelled,
+                                            SerdeError,
+                                        > = serde_json::from_slice(&contents);
+
+                                        match (deserialized, legacy_deserialized) {
+                                            (Ok(value), _) => value,
+                                            (Err(_e), Ok(value)) => value.upgrade(),
+                                            (Err(e), Err(_e)) => {
+                                                error!("Failed to deserialize bytes in compressed bw history {:?}", e);
                                                 blank_usage_tracker
                                             }
                                         }
@@ -248,9 +284,9 @@ impl Handler<UpdateUsage> for UsageTracker {
 fn process_usage_update(current_hour: u64, msg: UpdateUsage, data: &mut UsageTracker) {
     // history contains a reference to whatever the correct storage array is
     let history = match msg.kind {
-        UsageType::Client => &mut data.client_bandwith,
-        UsageType::Relay => &mut data.relay_bandwith,
-        UsageType::Exit => &mut data.exit_bandwith,
+        UsageType::Client => &mut data.client_bandwidth,
+        UsageType::Relay => &mut data.relay_bandwidth,
+        UsageType::Exit => &mut data.exit_bandwidth,
     };
     // we grab the front entry from the VecDeque, if there is an entry one we check if it's
     // up to date, if it is we add to it, if it's not or there is no entry we create one.
@@ -345,9 +381,9 @@ impl Handler<GetUsage> for UsageTracker {
     type Result = Result<VecDeque<UsageHour>, Error>;
     fn handle(&mut self, msg: GetUsage, _: &mut Context<Self>) -> Self::Result {
         match msg.kind {
-            UsageType::Client => Ok(self.client_bandwith.clone()),
-            UsageType::Relay => Ok(self.relay_bandwith.clone()),
-            UsageType::Exit => Ok(self.exit_bandwith.clone()),
+            UsageType::Client => Ok(self.client_bandwidth.clone()),
+            UsageType::Relay => Ok(self.relay_bandwidth.clone()),
+            UsageType::Exit => Ok(self.exit_bandwidth.clone()),
         }
     }
 }
