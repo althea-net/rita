@@ -66,6 +66,9 @@ pub struct FormattedPaymentTx {
     pub amount: Uint256,
     // should always be populated in this case
     pub txid: String,
+    // TODO add "payment_type" here which will allow the frontend
+    // to easily tell what this payment is for and prevent the need
+    // for hacky classification
 }
 
 fn to_formatted_payment_tx(input: PaymentTx) -> FormattedPaymentTx {
@@ -174,6 +177,7 @@ impl Default for UsageTracker {
                                 }
                             }
                             Err(e) => {
+                                // no active devices are using the flatfile, this should be safe to remove
                                 info!("Failed to decompress with, trying flatfile {:?}", e);
                                 file.seek(SeekFrom::Start(0))
                                     .expect("Failed to return to start of file!");
