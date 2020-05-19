@@ -283,11 +283,11 @@ fn setup_networking<S: ::std::hash::BuildHasher>(
 /// and repeating until the appropriate interface is located
 /// TODO handle overlapping edge cases for gateway ip, lan ip, br-pbs etc
 fn find_antenna<S: ::std::hash::BuildHasher>(
-    ip: IpAddr,
+    target_ip: IpAddr,
     interfaces: &HashSet<String, S>,
 ) -> Result<String, Error> {
-    check_blacklist(ip)?;
-    let our_ip = get_local_ip(ip)?;
+    check_blacklist(target_ip)?;
+    let our_ip = get_local_ip(target_ip)?;
     for iface in interfaces {
         if iface == "mesh" {
             trace!("Skipping mesh interface");
@@ -295,12 +295,16 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
         }
         trace!("Trying interface {}, with test ip {}", iface, our_ip);
         // this acts as a wildcard deletion across all interfaces, which is frankly really
-        // dangerous if our default route overlaps, of if you enter an exit route ip
-        let _ = KI.run_command("ip", &["route", "del", &format!("{}/32", ip)]);
+        // dangerous if our default route overlaps, or if you enter an exit route ip
+        let _ = KI.run_command("ip", &["route", "del", &format!("{}/32", target_ip)]);
         for iface in interfaces {
             let _ = KI.run_command(
                 "ip",
                 &["addr", "del", &format!("{}/32", our_ip), "dev", iface],
+            );
+            let _ = KI.run_command(
+                "ip",
+                &["addr", "del", &format!("{}/32", target_ip), "dev", iface],
             );
         }
         let res = KI.run_command(
@@ -316,7 +320,7 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
             &[
                 "route",
                 "add",
-                &format!("{}/32", ip),
+                &format!("{}/32", target_ip),
                 "dev",
                 iface,
                 "src",
@@ -342,7 +346,7 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
         }
         let mut pinger = Ping::new();
         pinger.set_timeout((PING_TIMEOUT.as_millis() as f64 / 1000f64) as f64)?;
-        pinger.add_host(&ip.to_string())?;
+        pinger.add_host(&target_ip.to_string())?;
         let mut response = match pinger.send() {
             Ok(res) => res,
             Err(e) => {
