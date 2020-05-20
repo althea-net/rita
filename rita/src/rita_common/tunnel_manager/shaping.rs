@@ -129,7 +129,7 @@ impl Handler<ShapeMany> for TunnelManager {
                             }
                             // increase the value by 5% until we reach the starting value
                             (Some(val), ShapingAdjustAction::IncreaseSpeed) => {
-                                let new_val = (val as f32 * 1.05f32) as usize;
+                                let new_val = increase_speed(val);
                                 if new_val < starting_bandwidth_limit {
                                     info!(
                                     "Interface {} for peer {} has not shown bloat new speed value {}",
@@ -156,5 +156,16 @@ impl Handler<ShapeMany> for TunnelManager {
 fn set_shaping_or_error(iface: &str, limit: Option<usize>) {
     if let Err(e) = KI.set_codel_shaping(iface, limit) {
         error!("Failed to shape tunnel for bloat! {}", e);
+    }
+}
+
+/// increase the speed by 5% or 1mbps if the value is too small
+/// for a 5% increase
+fn increase_speed(input: usize) -> usize {
+    let new = (input as f32 * 1.05f32) as usize;
+    if new == input {
+        input + 1
+    } else {
+        new
     }
 }
