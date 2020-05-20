@@ -40,9 +40,15 @@ impl<S> Middleware<S> for Headers {
         }
 
         if origin != "" {
+            #[cfg(not(feature = "dash_debug"))]
             resp.headers_mut().insert(
                 header::HeaderName::try_from("Access-Control-Allow-Origin").unwrap(),
                 header::HeaderValue::from_str(&format!("http://{}", origin)).unwrap(),
+            );
+            #[cfg(feature = "dash_debug")]
+            resp.headers_mut().insert(
+                header::HeaderName::try_from("Access-Control-Allow-Origin").unwrap(),
+                header::HeaderValue::from_str("*").unwrap(),
             );
         }
         resp.headers_mut().insert(

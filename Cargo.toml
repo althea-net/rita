@@ -6,6 +6,7 @@ edition = "2018"
 
 [features]
 development = ["rita/development"]
+dash_debug = ["rita/dash_debug"]
 server = ["rita/server"]
 bundle_openssl = ["rita/bundle_openssl"]
 jemalloc = ["rita/jemalloc"]

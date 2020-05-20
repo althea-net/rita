@@ -86,4 +86,6 @@ jemalloc = ["jemallocator"]
 bundle_openssl = ["openssl"]
 # Features for big iron devices with more ram
 server = ["jemalloc", "openssl"]
-development = []
+# disables cors for dash debugging
+dash_debug = []
+development = ["dash_debug"]
