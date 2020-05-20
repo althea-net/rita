@@ -137,8 +137,8 @@ fn get_sensor_readings() -> Result<Vec<SensorReading>, Error> {
             maybe_get_single_line_string(&format!("{}/name", path)),
         ) {
             ret.push(SensorReading {
-                name: name,
-                reading: reading,
+                name,
+                reading,
                 min: maybe_get_single_line_u64(&format!("{}/temp1_min", path)),
                 crit: maybe_get_single_line_u64(&format!("{}/temp1_crit", path)),
                 max: maybe_get_single_line_u64(&format!("{}/temp1_max", path)),
