@@ -293,6 +293,7 @@ fn start_client_dashboard() {
             .route("/operator", Method::POST, change_operator)
             .route("/operator/remove", Method::POST, remove_operator)
             .route("/operator_fee", Method::GET, get_operator_fee)
+            .route("/operator_debt", Method::GET, get_operator_debt)
             .route("/debts", Method::GET, get_debts)
             .route("/debts/reset", Method::POST, reset_debt)
             .route("/exits/sync", Method::POST, exits_sync)

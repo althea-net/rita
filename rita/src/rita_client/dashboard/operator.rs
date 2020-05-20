@@ -1,3 +1,4 @@
+use crate::rita_client::operator_fee_manager::get_operator_fee_debt;
 use crate::ARGS;
 use crate::SETTING;
 use actix_web::Path;
@@ -91,4 +92,9 @@ pub fn remove_operator(_path: Path<Address>) -> Result<Json<()>, Error> {
 pub fn get_operator_fee(_req: HttpRequest) -> Result<HttpResponse, Error> {
     debug!("get operator GET hit");
     Ok(HttpResponse::Ok().json(SETTING.get_operator().operator_fee.clone()))
+}
+
+pub fn get_operator_debt(_req: HttpRequest) -> Result<HttpResponse, Error> {
+    debug!("get operator debt hit");
+    Ok(HttpResponse::Ok().json(get_operator_fee_debt()))
 }

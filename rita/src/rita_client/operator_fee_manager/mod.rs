@@ -21,8 +21,17 @@ use num256::Int256;
 use num256::Uint256;
 use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use web30::client::Web3;
+
+lazy_static! {
+    static ref OPERATOR_FEE_DEBT: Arc<RwLock<Uint256>> = Arc::new(RwLock::new(Uint256::from(0u8)));
+}
+
+pub fn get_operator_fee_debt() -> Uint256 {
+    OPERATOR_FEE_DEBT.read().unwrap().clone()
+}
 
 pub struct OperatorFeeManager {
     last_payment_time: Instant,
@@ -34,7 +43,7 @@ impl Actor for OperatorFeeManager {
 impl Supervised for OperatorFeeManager {}
 impl SystemService for OperatorFeeManager {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        info!("DAO manager started");
+        info!("OperatorFee manager started");
     }
 }
 
@@ -85,6 +94,7 @@ impl Handler<Tick> for OperatorFeeManager {
             Some(id) => id,
             None => return,
         };
+        let our_balance = payment_settings.balance.clone();
         let gas_price = payment_settings.gas_price.clone();
         let nonce = payment_settings.nonce.clone();
         let pay_threshold = payment_settings.pay_threshold.clone();
@@ -95,16 +105,23 @@ impl Handler<Tick> for OperatorFeeManager {
         let operator_fee = operator_settings.operator_fee.clone();
         let amount_to_pay =
             Uint256::from(self.last_payment_time.elapsed().as_secs()) * operator_fee;
-        let should_pay =
-            amount_to_pay.to_int256().unwrap_or_else(|| Int256::from(0)) > pay_threshold;
         let net_version = payment_settings.net_version;
+
+        // we should pay if the amount is greater than the pay threshold and if we have the
+        // balance to do so. If we don't have the balance then we'll do all the signing and
+        // network request for nothing
+        let should_pay = amount_to_pay.to_int256().unwrap_or_else(|| Int256::from(0))
+            > pay_threshold
+            && amount_to_pay <= our_balance;
         drop(payment_settings);
         trace!("We should pay our operator {}", should_pay);
+
+        *OPERATOR_FEE_DEBT.write().unwrap() = amount_to_pay.clone();
 
         if should_pay {
             trace!("Paying subnet operator fee to {}", operator_address);
 
-            let dao_identity = Identity {
+            let operator_identity = Identity {
                 eth_address: operator_address,
                 // this key has no meaning, it's here so that we don't have to change
                 // the identity indexing
@@ -142,8 +159,9 @@ impl Handler<Tick> for OperatorFeeManager {
 
             let transaction_status = web3.eth_send_raw_transaction(transaction_bytes);
 
-            // in theory this may fail, for now there is no handler and
-            // we will just underpay when that occurs
+            // in theory this may fail to get into a block, for now there is no handler and
+            // we will just underpay when that occurs. Failure to successfully submit the tx
+            // will be properly retried
             Arbiter::spawn(transaction_status.then(move |res| match res {
                 Ok(txid) => {
                     info!(
@@ -152,7 +170,7 @@ impl Handler<Tick> for OperatorFeeManager {
                     );
                     UsageTracker::from_registry().do_send(UpdatePayments {
                         payment: PaymentTx {
-                            to: dao_identity,
+                            to: operator_identity,
                             from: our_id,
                             amount: amount_to_pay.clone(),
                             txid: Some(txid),
