@@ -201,26 +201,6 @@ fn wait_for_settings(settings_file: &str) -> RitaSettingsStruct {
 }
 
 fn main() {
-    // Remove in Beta 14, migrates settings from the old dao structure to
-    // the operator structure in settings.
-    {
-        let dao = { SETTING.get_dao().clone() };
-        let mut operator = SETTING.get_operator_mut();
-
-        // suppose a migration has occured and the user then tries to
-        // change the operator address, it will revert on restart every time
-        // because the 'migration' will run again. So we should check first.
-        if operator.operator_address.is_none() {
-            // get the first address in the list
-            operator.operator_address = match dao.dao_addresses.get(0) {
-                Some(val) => Some(*val),
-                None => None,
-            };
-            operator.operator_fee = dao.dao_fee;
-            operator.use_operator_price = dao.use_oracle_price;
-        }
-    }
-
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
     openssl_probe::init_ssl_cert_env_vars();

@@ -39,7 +39,6 @@ use std::thread;
 use std::time::Duration;
 
 pub mod client;
-pub mod dao;
 pub mod exit;
 pub mod localization;
 pub mod logging;
