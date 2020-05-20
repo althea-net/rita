@@ -58,9 +58,9 @@ mod middleware;
 mod rita_common;
 mod rita_exit;
 
+use crate::rita_common::dashboard::own_info::READABLE_VERSION;
 use rita_common::rita_loop::check_rita_common_actors;
 use rita_common::rita_loop::start_core_rita_endpoints;
-
 use rita_exit::rita_loop::check_rita_exit_actors;
 use rita_exit::rita_loop::start_rita_exit_endpoints;
 use rita_exit::rita_loop::start_rita_exit_loop;
@@ -91,8 +91,9 @@ Options:
     -c, --config=<settings>   Name of config file
     --future                    Enable B side of A/B releases
 About:
-    Version {}
+    Version {} - {}
     git hash {}",
+        READABLE_VERSION,
         env!("CARGO_PKG_VERSION"),
         env!("GIT_HASH")
     );

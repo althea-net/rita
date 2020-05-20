@@ -55,6 +55,7 @@ mod rita_common;
 use crate::rita_client::enable_remote_logging;
 use crate::rita_client::rita_loop::check_rita_client_actors;
 use crate::rita_client::rita_loop::start_rita_client_endpoints;
+use crate::rita_common::dashboard::own_info::READABLE_VERSION;
 use crate::rita_common::rita_loop::check_rita_common_actors;
 use crate::rita_common::rita_loop::start_core_rita_endpoints;
 
@@ -95,16 +96,21 @@ pub struct Args {
     flag_future: bool,
 }
 
+// TODO we should remove --platform as it's not used, but that requires
+// changing how rita is invoked everywhere, because that's difficult
+// with in the field routers this is waiting on another more pressing
+// upgrade to the init file for Rita on the routers
 lazy_static! {
     static ref USAGE: String = format!(
         "Usage: rita --config=<settings> --platform=<platform> [--future]
 Options:
     -c, --config=<settings>     Name of config file
-    -p, --platform=<platform>   Platform (linux or openwrt)
+    -p, --platform=<platform>   Platform (linux or OpenWrt)
     --future                    Enable B side of A/B releases
 About:
-    Version {}
+    Version {} - {}
     git hash {}",
+        READABLE_VERSION,
         env!("CARGO_PKG_VERSION"),
         env!("GIT_HASH")
     );
