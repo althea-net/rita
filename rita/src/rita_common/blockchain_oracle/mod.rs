@@ -1,7 +1,7 @@
-//! This module is dedicated to updating local state with various pieces of infromation
-//! relating to the blockchain being used. First and formost is maintaining an updated
+//! This module is dedicated to updating local state with various pieces of information
+//! relating to the blockchain being used. First and foremost is maintaining an updated
 //! balance and nonce as well as computing more complicated things like the closing and
-//! payment treshhold based on gas prices.
+//! payment threshold based on gas prices.
 
 use crate::rita_common::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
 use crate::rita_common::rita_loop::get_web3_server;
@@ -20,7 +20,7 @@ use web30::client::Web3;
 
 pub struct BlockchainOracle {
     /// An instant representing the start of a short period where the balance can
-    /// actually go to zero. This is becuase full nodes (incluing Infura) have an infuriating
+    /// actually go to zero. This is because full nodes (including Infura) have an infuriating
     /// chance of returning a zero balance if they are not fully synced, causing all sorts of
     /// disruption. So instead when we manually zero the balance (send a withdraw_all) we open
     /// up a short five minute window during which we will actually trust the full node if it
