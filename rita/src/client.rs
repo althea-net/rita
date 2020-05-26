@@ -304,7 +304,6 @@ fn start_client_dashboard() {
                 wlan_lightclient_set,
             )
             .route("/eth_private_key", Method::GET, get_eth_private_key)
-            .route("/eth_private_key", Method::POST, set_eth_private_key)
             .route("/mesh_ip", Method::GET, get_mesh_ip)
             .route("/neighbors", Method::GET, get_neighbor_info)
             .route("/routes", Method::GET, get_routes)
