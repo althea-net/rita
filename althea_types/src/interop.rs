@@ -4,7 +4,9 @@ use babel_monitor::Neighbor;
 use babel_monitor::Route;
 use clarity::Address;
 use failure::Error;
+use lettre::EmailAddress;
 use num256::Uint256;
+use phonenumber::PhoneNumber;
 use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::fmt::Display;
@@ -12,6 +14,7 @@ use std::hash::{Hash, Hasher};
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
+use std::time::SystemTime;
 
 #[cfg(feature = "actix")]
 use actix::Message;
@@ -553,11 +556,72 @@ pub struct NeighborStatus {
     pub shaper_speed: Option<usize>,
 }
 
-/// Struct for storing user contact details
+/// Struct for storing user contact details, being phased out in favor
+/// of InstallationDetails in Beta 15
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct ContactDetails {
     pub phone: Option<String>,
     pub email: Option<String>,
+}
+
+/// This enum is used to represent the fact that while we may not have a phone
+/// number and may not have an Email we are required to have at least one to
+/// facilitate exit registration.
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub enum ContactType {
+    Phone {
+        number: PhoneNumber,
+    },
+    Email {
+        email: EmailAddress,
+    },
+    Both {
+        number: PhoneNumber,
+        email: EmailAddress,
+    },
+    /// During migration we may encounter invalid values we don't want
+    /// to lose this info so we store it in this variant.
+    Bad {
+        invalid_number: Option<String>,
+        invalid_email: Option<String>,
+    },
+}
+
+/// Struct for storing details about this user installation. This particular
+/// struct exists in the settings on the router because it has to be persisted
+/// long enough to make it to the operator tools, once it's been uploaded though
+/// it has no reason to hand around and is mostly dead weight in the config. The
+/// question is if we want to delete it or manage it somehow.
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct InstallationDetails {
+    /// The contact type for this user, could be phone, email, or both.
+    pub contact_type: ContactType,
+    /// The CPE ip of this client. This field seems straightforward but actually
+    /// has quite a bit of optionality. What if the user is connected via l2 bridge
+    /// (for example a cable, or fiber) in that case this could be None. If the client
+    /// is multihomed which ip is the client antenna and which one is the relay antenna?
+    /// That can be decided randomly without any problems I think.
+    pub client_antenna_ip: Option<Ipv4Addr>,
+    /// A list of addresses for relay antennas, this could include sectors and/or
+    /// point to point links going downstream. If the vec is empty there are no
+    /// relay antennas
+    pub relay_antennas: Vec<Ipv4Addr>,
+    /// A list of addresses for light client antennas. The vec can of course
+    /// be empty representing no phone client antennas.
+    pub phone_client_antennas: Vec<Ipv4Addr>,
+    /// The mailing address of this installation, assumed to be in whatever
+    /// format the local nation has for addresses. Optional as this install
+    /// may not have a formal mailing address
+    pub mailing_address: Option<String>,
+    /// The address of this installation, this has no structure and should
+    /// simply be displayed. Depending on the country address formats will
+    /// be very different and we might even only have GPS points
+    pub physical_address: String,
+    /// Description of the installation and equipment at the
+    /// location
+    pub equipment_details: String,
+    /// Time of install, in milliseconds since Unix Epoch
+    pub install_date: SystemTime,
 }
 
 /// Heartbeat sent to the operator server to help monitor

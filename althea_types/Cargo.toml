@@ -19,4 +19,6 @@ actix = { version = "0.7", optional = true}
 clarity = "0.1"
 arrayvec = {version= "0.5", features = ["serde"]}
 failure = "0.1"
+phonenumber = "0.2"
+lettre = {version = "0.9", features = ["serde"]}
 

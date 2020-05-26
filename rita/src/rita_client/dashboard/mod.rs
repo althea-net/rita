@@ -8,6 +8,7 @@ pub mod auth;
 pub mod backup_created;
 pub mod eth_private_key;
 pub mod exits;
+pub mod installation_details;
 pub mod interfaces;
 pub mod localization;
 pub mod logging;
