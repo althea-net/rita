@@ -61,6 +61,7 @@ use crate::rita_common::rita_loop::start_core_rita_endpoints;
 
 use crate::rita_client::dashboard::auth::*;
 use crate::rita_client::dashboard::backup_created::*;
+use crate::rita_client::dashboard::contact_info::*;
 use crate::rita_client::dashboard::eth_private_key::*;
 use crate::rita_client::dashboard::exits::*;
 use crate::rita_client::dashboard::installation_details::*;
@@ -398,6 +399,10 @@ fn start_client_dashboard() {
                 Method::GET,
                 get_installation_details,
             )
+            .route("/phone", Method::GET, get_phone_number)
+            .route("/phone", Method::POST, set_phone_number)
+            .route("/email", Method::GET, get_email)
+            .route("/email", Method::POST, set_email)
     })
     .workers(1)
     .bind(format!(

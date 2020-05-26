@@ -148,6 +148,40 @@ pub struct ExitRegistrationDetails {
     pub phone_code: Option<String>,
 }
 
+impl From<ContactType> for ExitRegistrationDetails {
+    fn from(ct: ContactType) -> Self {
+        match ct {
+            ContactType::Both { number, email } => ExitRegistrationDetails {
+                phone: Some(number.to_string()),
+                email: Some(email.to_string()),
+                email_code: None,
+                phone_code: None,
+            },
+            ContactType::Email { email } => ExitRegistrationDetails {
+                phone: None,
+                email: Some(email.to_string()),
+                email_code: None,
+                phone_code: None,
+            },
+            ContactType::Phone { number } => ExitRegistrationDetails {
+                phone: Some(number.to_string()),
+                email: None,
+                email_code: None,
+                phone_code: None,
+            },
+            ContactType::Bad {
+                invalid_email,
+                invalid_number,
+            } => ExitRegistrationDetails {
+                phone: invalid_number,
+                email: invalid_email,
+                email_code: None,
+                phone_code: None,
+            },
+        }
+    }
+}
+
 /// This is the state an exit can be in
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 #[serde(tag = "state")]
@@ -481,10 +515,13 @@ pub struct OperatorCheckinMessage {
     /// we don't need instant updates of it. Arguably the phone number and email
     /// values for heartbeats should come in through here.
     pub neighbor_info: Option<Vec<NeighborStatus>>,
-    /// The exit registration contact details. Once again we want to sync this
-    /// regularly with the operator server but it contains non-fixed size data
-    /// like strings
+    /// Legacy contact_info with less validation beta 13 only
     pub contact_details: Option<ContactDetails>,
+    /// The user contact details, stored in exit client details but used throughout
+    /// for various reasons.
+    ///  see the type definition for more details about how this type restricts values
+    /// This only exists in Beta 14+
+    pub contact_info: Option<ContactType>,
     /// Info about the current state of this device, including it's model, CPU,
     /// memory, and temperature if sensors are available
     pub hardware_info: Option<HardwareInfo>,
@@ -557,7 +594,7 @@ pub struct NeighborStatus {
 }
 
 /// Struct for storing user contact details, being phased out in favor
-/// of InstallationDetails in Beta 15
+/// of ContactType in Beta 15
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct ContactDetails {
     pub phone: Option<String>,
@@ -594,8 +631,6 @@ pub enum ContactType {
 /// question is if we want to delete it or manage it somehow.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct InstallationDetails {
-    /// The contact type for this user, could be phone, email, or both.
-    pub contact_type: ContactType,
     /// The CPE ip of this client. This field seems straightforward but actually
     /// has quite a bit of optionality. What if the user is connected via l2 bridge
     /// (for example a cable, or fiber) in that case this could be None. If the client

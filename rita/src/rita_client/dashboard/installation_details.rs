@@ -24,7 +24,7 @@ pub struct InstallationDetailsPost {
 
 pub fn set_installation_details(req: Json<InstallationDetailsPost>) -> HttpResponse {
     let input = req.into_inner();
-    let mut operator_settings = SETTING.get_operator_mut();
+    let mut exit_client = SETTING.get_exit_client_mut();
     let contact_details = match (input.phone, input.email) {
         (None, None) => return HttpResponse::BadRequest().finish(),
         (Some(phone), Some(email)) => match (phone.parse(), email.parse()) {
@@ -43,9 +43,13 @@ pub fn set_installation_details(req: Json<InstallationDetailsPost>) -> HttpRespo
             Err(_e) => return HttpResponse::BadRequest().finish(),
         },
     };
+    // update the contact info, we display this as part of the forum but it's
+    // stored separately since it's used elsewhere and sent to the operator tools
+    // on it's own.
+    exit_client.contact_info = Some(contact_details);
+    drop(exit_client);
 
     let new_installation_details = InstallationDetails {
-        contact_type: contact_details,
         client_antenna_ip: input.client_antenna_ip,
         relay_antennas: input.relay_antennas,
         phone_client_antennas: input.phone_client_antennas,
@@ -55,6 +59,7 @@ pub fn set_installation_details(req: Json<InstallationDetailsPost>) -> HttpRespo
         install_date: SystemTime::now(),
     };
 
+    let mut operator_settings = SETTING.get_operator_mut();
     operator_settings.installation_details = Some(new_installation_details);
     HttpResponse::Ok().finish()
 }

@@ -15,7 +15,6 @@ use actix_web::{client, HttpMessage};
 use althea_kernel_interface::hardware_info::get_hardware_info;
 use althea_kernel_interface::opkg_feeds::get_release_feed;
 use althea_kernel_interface::opkg_feeds::set_release_feed;
-use althea_types::ContactDetails;
 use althea_types::NeighborStatus;
 use althea_types::OperatorAction;
 use althea_types::OperatorCheckinMessage;
@@ -92,17 +91,7 @@ fn checkin() {
     let is_gateway = SETTING.get_network().is_gateway;
     let id = SETTING.get_identity().unwrap();
 
-    let reg_details = SETTING.get_exit_client().reg_details.clone();
-    let contact_details = match reg_details {
-        Some(details) => ContactDetails {
-            phone: details.phone,
-            email: details.email,
-        },
-        None => ContactDetails {
-            phone: None,
-            email: None,
-        },
-    };
+    let contact_info = SETTING.get_exit_client().contact_info.clone();
 
     drop(operator_settings);
 
@@ -146,7 +135,8 @@ fn checkin() {
             operator_address,
             system_chain,
             neighbor_info: Some(neighbor_info),
-            contact_details: Some(contact_details),
+            contact_details: None,
+            contact_info,
             hardware_info,
         })
         .unwrap()

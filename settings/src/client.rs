@@ -6,7 +6,7 @@ use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
 use crate::spawn_watch_thread;
 use crate::RitaCommonSettings;
-use althea_types::{ExitRegistrationDetails, ExitState, Identity};
+use althea_types::{ContactType, ExitState, Identity};
 use config::Config;
 use failure::Error;
 use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
@@ -43,8 +43,9 @@ pub struct ExitClientSettings {
     /// This is the port which the exit wireguard tunnel will listen on
     /// NOTE: must be under `wg_start_port` in `NetworkSettings`
     pub wg_listen_port: u16,
-    /// Details for exit registration
-    pub reg_details: Option<ExitRegistrationDetails>,
+    /// An enum which represents the full range of options for contacts, phone
+    /// number, email, both, none, or invalid versions of either
+    pub contact_info: Option<ContactType>,
     /// This controls which interfaces will be proxied over the exit tunnel
     pub lan_nics: HashSet<String>,
     /// Specifies if the user would like to receive low balance messages from the exit
@@ -58,12 +59,7 @@ impl Default for ExitClientSettings {
             exits: HashMap::new(),
             current_exit: None,
             wg_listen_port: 59999,
-            reg_details: Some(ExitRegistrationDetails {
-                email: Some("1234@mail.com".into()),
-                email_code: Some("000000".into()),
-                phone: Some("00000".into()),
-                phone_code: Some("000000".into()),
-            }),
+            contact_info: None,
             lan_nics: HashSet::new(),
             low_balance_notification: true,
         }

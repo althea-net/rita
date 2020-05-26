@@ -31,7 +31,7 @@ use althea_types::ExitClientDetails;
 use althea_types::ExitDetails;
 use althea_types::WgKey;
 use althea_types::{EncryptedExitClientIdentity, EncryptedExitState};
-use althea_types::{ExitClientIdentity, ExitState, ExitVerifMode};
+use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState, ExitVerifMode};
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
 use babel_monitor::start_connection;
@@ -269,9 +269,13 @@ pub fn exit_setup_request(
         Some(details) => details.verif_mode,
         None => return Box::new(future::err(format_err!("Exit is not ready to be setup!"))),
     };
+    let mut reg_details: ExitRegistrationDetails =
+        match SETTING.get_exit_client().contact_info.clone() {
+            Some(val) => val.into(),
+            None => return Box::new(future::err(format_err!("No registration info set!"))),
+        };
     let exit_server = current_exit.id.mesh_ip;
     let exit_pubkey = current_exit.id.wg_public_key;
-    let mut reg_details = SETTING.get_exit_client().reg_details.clone().unwrap();
     match exit_auth_type {
         ExitVerifMode::Email => {
             reg_details.email_code = code;
@@ -333,6 +337,10 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
                 as Box<dyn Future<Item = (), Error = Error>>;
         }
     };
+    let reg_details = match SETTING.get_exit_client().contact_info.clone() {
+        Some(val) => val.into(),
+        None => return Box::new(future::err(format_err!("No valid details"))),
+    };
 
     let exit_server = current_exit.id.mesh_ip;
     let exit_pubkey = current_exit.id.wg_public_key;
@@ -346,7 +354,7 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
             }
         },
         wg_port: SETTING.get_exit_client().wg_listen_port,
-        reg_details: SETTING.get_exit_client().reg_details.clone().unwrap(),
+        reg_details,
         low_balance: Some(false),
     };
 
