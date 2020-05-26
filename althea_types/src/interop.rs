@@ -306,12 +306,15 @@ impl Message for LocalIdentity {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct LightClientLocalIdentity {
     pub wg_port: u16,
-    pub have_tunnel: Option<bool>, // If we have an existing tunnel, None if we don't know
+    /// If we have an existing tunnel, None if we don't know
+    pub have_tunnel: Option<bool>,
     pub global: Identity,
-    pub tunnel_address: Ipv4Addr, // we have to replicate dhcp ourselves due to the android vpn api
-    pub price: u128, // the local_fee of the node passing light client traffic, much bigger
-                     // than the actual babel price field for ergonomics around downcasting
-                     // the number after upcasting when we compute it.
+    /// we have to replicate dhcp ourselves due to the android vpn api
+    pub tunnel_address: Ipv4Addr,
+    /// the local_fee of the node passing light client traffic, much bigger
+    /// than the actual babel price field for ergonomics around downcasting
+    /// the number after upcasting when we compute it.
+    pub price: u128,
 }
 
 #[cfg(feature = "actix")]
@@ -319,7 +322,7 @@ impl Message for LightClientLocalIdentity {
     type Result = ();
 }
 
-/// This is a stand-in for channel updates. representing a payment
+/// This represents a generic payment that may be to or from us
 /// when completed it contains a txid from a published transaction
 /// that should be validated against the blockchain
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
@@ -362,7 +365,7 @@ impl FromStr for ReleaseStatus {
     }
 }
 
-/// Somthing the operator may want to do to a router under their control
+/// Something the operator may want to do to a router under their control
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub enum OperatorAction {
     ResetRouterPassword,
@@ -411,7 +414,7 @@ pub struct OperatorUpdateMessage {
     /// The system blockchain that is currently being used, if it is 'none' here it is
     /// interpreted as "don't change anything"
     pub system_chain: Option<SystemChain>,
-    /// The wtihdraw blockchain that is currently being used, if it is 'none' here it is
+    /// The withdraw blockchain that is currently being used, if it is 'none' here it is
     /// interpreted as "don't change anything"
     pub withdraw_chain: Option<SystemChain>,
     /// A release feed to be applied to the /etc/opkg/customfeeds.config, None means do not
@@ -439,7 +442,7 @@ pub struct OperatorUpdateMessage {
 pub struct ShaperSettings {
     pub enabled: bool,
     /// The speed the bandwidth shaper will start at, keep in mind this is not the maximum device
-    /// speed as all interfaces start at 'unlmited' this is instead the speed the shaper will deploy
+    /// speed as all interfaces start at 'unlimited' this is instead the speed the shaper will deploy
     /// when it detects problems on the interface and a speed it will not go above when it's increasing
     /// the speed after the problem is gone
     pub max_speed: usize,
