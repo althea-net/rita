@@ -498,9 +498,9 @@ impl Handler<TriggerGC> for TunnelManager {
         // checker issues, we should consider a method that does modify in place
         for (_identity, tunnels) in self.tunnels.iter() {
             for tunnel in tunnels.iter() {
-                if tunnel.last_contact.elapsed() < msg.tunnel_timeout {
-                    insert_into_tunnel_list(tunnel, &mut good);
-                } else if check_handshake_time(msg.tunnel_handshake_timeout, &tunnel.iface_name) {
+                if tunnel.last_contact.elapsed() < msg.tunnel_timeout
+                    || check_handshake_time(msg.tunnel_handshake_timeout, &tunnel.iface_name)
+                {
                     insert_into_tunnel_list(tunnel, &mut good);
                 } else {
                     insert_into_tunnel_list(tunnel, &mut timed_out)
