@@ -474,7 +474,15 @@ impl Handler<GetTunnels> for TunnelManager {
 }
 
 /// A message type for deleting all tunnels we haven't heard from for more than the duration.
-pub struct TriggerGC(pub Duration);
+pub struct TriggerGC {
+    /// if we do not receive a hello within this many seconds we attempt to gc the tunnel
+    /// this garbage collection can be avoided if the tunnel has seen a handshake within
+    /// tunnel_handshake_timeout time
+    pub tunnel_timeout: Duration,
+    /// The backup value that prevents us from deleting an active tunnel. We check the last
+    /// handshake on the tunnel and if it's within this amount of time we don't GC it.
+    pub tunnel_handshake_timeout: Duration,
+}
 
 impl Message for TriggerGC {
     type Result = Result<(), Error>;
@@ -488,20 +496,14 @@ impl Handler<TriggerGC> for TunnelManager {
         // Split entries into good and timed out rebuilding the double hashmap structure
         // as you can tell this is totally copy based and uses 2n ram to prevent borrow
         // checker issues, we should consider a method that does modify in place
-        for (identity, tunnels) in self.tunnels.iter() {
+        for (_identity, tunnels) in self.tunnels.iter() {
             for tunnel in tunnels.iter() {
-                if tunnel.last_contact.elapsed() < msg.0 {
-                    if good.contains_key(identity) {
-                        good.get_mut(identity).unwrap().push(tunnel.clone());
-                    } else {
-                        good.insert(identity.clone(), Vec::new());
-                        good.get_mut(identity).unwrap().push(tunnel.clone());
-                    }
-                } else if timed_out.contains_key(identity) {
-                    timed_out.get_mut(identity).unwrap().push(tunnel.clone());
+                if tunnel.last_contact.elapsed() < msg.tunnel_timeout {
+                    insert_into_tunnel_list(tunnel, &mut good);
+                } else if check_handshake_time(msg.tunnel_handshake_timeout, &tunnel.iface_name) {
+                    insert_into_tunnel_list(tunnel, &mut good);
                 } else {
-                    timed_out.insert(identity.clone(), Vec::new());
-                    timed_out.get_mut(identity).unwrap().push(tunnel.clone());
+                    insert_into_tunnel_list(tunnel, &mut timed_out)
                 }
             }
         }
@@ -538,6 +540,47 @@ impl Handler<TriggerGC> for TunnelManager {
         }
 
         Ok(())
+    }
+}
+
+/// A simple helper function to reduce the number of if/else statements in tunnel GC
+fn insert_into_tunnel_list(input: &Tunnel, tunnels_list: &mut HashMap<Identity, Vec<Tunnel>>) {
+    let identity = &input.neigh_id.global;
+    let input = input.clone();
+    if tunnels_list.contains_key(identity) {
+        tunnels_list.get_mut(identity).unwrap().push(input);
+    } else {
+        tunnels_list.insert(identity.clone(), Vec::new());
+        tunnels_list.get_mut(identity).unwrap().push(input);
+    }
+}
+
+/// This function checks the handshake time of a tunnel when compared to the handshake timeout,
+/// it returns true if we fail to get the handshake time (erring on the side of caution) and only
+/// false if all last tunnel handshakes are older than the allowed time limit
+fn check_handshake_time(handshake_timeout: Duration, ifname: &str) -> bool {
+    let res = KI.get_last_handshake_time(ifname);
+    match res {
+        Ok(handshakes) => {
+            for (_key, time) in handshakes {
+                match time.elapsed() {
+                    Ok(elapsed) => {
+                        if elapsed < handshake_timeout {
+                            return true;
+                        }
+                    }
+                    Err(_e) => {
+                        // handshake in the future, possible system clock change
+                        return true;
+                    }
+                }
+            }
+            false
+        }
+        Err(e) => {
+            error!("Could not get tunnel handshake with {:?}", e);
+            true
+        }
     }
 }
 

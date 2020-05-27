@@ -18,9 +18,15 @@ use settings::RitaCommonSettings;
 use std::time::Duration;
 use tokio::util::FutureExt;
 
-// the speed in seconds for the common loop
+/// the speed in seconds for the common loop
 pub const SLOW_LOOP_SPEED: u64 = 60;
 pub const SLOW_LOOP_TIMEOUT: Duration = Duration::from_secs(15);
+/// if we haven't heard a hello from a peer after this time we clean up the tunnel
+/// 15 minutes currently, this is not the final say on this value we check if the tunnel
+/// has seen any handshakes in TUNNEL_HANDSHAKE_TIMEOUT seconds, if it has we spare it from
+/// reaping
+pub const TUNNEL_TIMEOUT: Duration = Duration::from_secs(900);
+pub const TUNNEL_HANDSHAKE_TIMEOUT: Duration = TUNNEL_TIMEOUT;
 
 pub struct RitaSlowLoop;
 
@@ -78,9 +84,10 @@ impl Handler<Tick> for RitaSlowLoop {
 
         SimulatedTxFeeManager::from_registry().do_send(TxFeeTick);
 
-        TunnelManager::from_registry().do_send(TriggerGC(Duration::from_secs(
-            SETTING.get_network().tunnel_timeout_seconds,
-        )));
+        TunnelManager::from_registry().do_send(TriggerGC {
+            tunnel_timeout: TUNNEL_TIMEOUT,
+            tunnel_handshake_timeout: TUNNEL_HANDSHAKE_TIMEOUT,
+        });
 
         TokenBridge::from_registry().do_send(TokenBridgeTick());
 

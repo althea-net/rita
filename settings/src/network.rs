@@ -10,10 +10,6 @@ fn default_discovery_ip() -> Ipv6Addr {
     Ipv6Addr::new(0xff02, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x8)
 }
 
-fn default_tunnel_timeout() -> u64 {
-    21600 // 6 hours
-}
-
 fn default_metric_factor() -> u32 {
     1_900u32
 }
@@ -97,9 +93,6 @@ pub struct NetworkSettings {
     /// This in memory variable specifies if we are a gateway or not
     #[serde(skip_deserializing, default)]
     pub is_gateway: bool,
-    /// How long do we wait without contact from a peer before we delete the associated tunnel?
-    #[serde(default = "default_tunnel_timeout")]
-    pub tunnel_timeout_seconds: u64,
     /// The name of the device or router model
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device: Option<String>,
@@ -145,7 +138,6 @@ impl Default for NetworkSettings {
             external_nic: None,
             default_route: Vec::new(),
             is_gateway: false,
-            tunnel_timeout_seconds: default_tunnel_timeout(),
             device: None,
             nickname: None,
             usage_tracker_file: default_usage_tracker_file(),
