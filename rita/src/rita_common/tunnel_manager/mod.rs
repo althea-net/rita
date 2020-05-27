@@ -636,7 +636,7 @@ impl Handler<PeersToContact> for TunnelManager {
                 }
                 Err(_) => {
                     // Do not contact manual peers on the internet if we are not a gateway
-                    // it will just fill the logs with faild dns resolution attempts or result
+                    // it will just fill the logs with failed dns resolution attempts or result
                     // in bad behavior, we do allow the addressing of direct ip address gateways
                     // for the special case that the user is attempting some special behavior
                     if is_gateway {
@@ -1142,7 +1142,7 @@ fn tunnel_state_change(
 }
 
 /// Takes the tunnels list and iterates over it to update all of the traffic control settings
-/// since we can't figure out how to combine interfaces badnwidth budgets we're subdividing it
+/// since we can't figure out how to combine interfaces bandwidth budgets we're subdividing it
 /// here with manual terminal commands whenever there is a change
 fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, Vec<Tunnel>>) -> Result<(), Error> {
     info!("Running tunnel bw limit update!");
