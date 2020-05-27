@@ -124,6 +124,7 @@ use althea_kernel_interface::KernelInterface;
 use althea_kernel_interface::LinuxCommandRunner;
 #[cfg(test)]
 use althea_kernel_interface::TestCommandRunner;
+use althea_types::ContactType;
 
 #[cfg(test)]
 lazy_static! {
@@ -203,6 +204,15 @@ fn wait_for_settings(settings_file: &str) -> RitaSettingsStruct {
 }
 
 fn main() {
+    {
+        let mut exit_client = SETTING.get_exit_client_mut();
+        let reg_details = exit_client.reg_details.clone();
+        if let Some(reg_details) = reg_details {
+            let contact_info: Option<ContactType> = ContactType::convert(reg_details);
+            exit_client.contact_info = contact_info;
+        }
+    }
+
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
     openssl_probe::init_ssl_cert_env_vars();

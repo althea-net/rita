@@ -6,7 +6,7 @@ use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
 use crate::spawn_watch_thread;
 use crate::RitaCommonSettings;
-use althea_types::{ContactType, ExitState, Identity};
+use althea_types::{ContactType, ExitRegistrationDetails, ExitState, Identity};
 use config::Config;
 use failure::Error;
 use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
@@ -48,6 +48,8 @@ pub struct ExitClientSettings {
     pub contact_info: Option<ContactType>,
     /// This controls which interfaces will be proxied over the exit tunnel
     pub lan_nics: HashSet<String>,
+    /// legacy contact details storage, to be phased out in beta 15 after everyone has migrated
+    pub reg_details: Option<ExitRegistrationDetails>,
     /// Specifies if the user would like to receive low balance messages from the exit
     #[serde(default = "default_balance_notification")]
     pub low_balance_notification: bool,
@@ -59,6 +61,7 @@ impl Default for ExitClientSettings {
             exits: HashMap::new(),
             current_exit: None,
             wg_listen_port: 59999,
+            reg_details: None,
             contact_info: None,
             lan_nics: HashSet::new(),
             low_balance_notification: true,

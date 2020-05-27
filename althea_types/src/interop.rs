@@ -624,6 +624,68 @@ pub enum ContactType {
     },
 }
 
+impl ContactType {
+    pub fn convert(old: ExitRegistrationDetails) -> Option<Self> {
+        match old {
+            ExitRegistrationDetails {
+                phone: Some(phone),
+                email: Some(email),
+                phone_code: _,
+                email_code: _,
+            } => match (phone.parse(), email.parse()) {
+                (Ok(validated_phone), Ok(validated_email)) => Some(ContactType::Both {
+                    number: validated_phone,
+                    email: validated_email,
+                }),
+                (Err(_e), Ok(validated_email)) => Some(ContactType::Email {
+                    email: validated_email,
+                }),
+                (Ok(validated_phone), Err(_e)) => Some(ContactType::Phone {
+                    number: validated_phone,
+                }),
+                (Err(_ea), Err(_eb)) => Some(ContactType::Bad {
+                    invalid_email: Some(email),
+                    invalid_number: Some(phone),
+                }),
+            },
+            ExitRegistrationDetails {
+                phone: Some(phone),
+                email: None,
+                phone_code: _,
+                email_code: _,
+            } => match phone.parse() {
+                Ok(validated_phone) => Some(ContactType::Phone {
+                    number: validated_phone,
+                }),
+                Err(_e) => Some(ContactType::Bad {
+                    invalid_number: Some(phone),
+                    invalid_email: None,
+                }),
+            },
+            ExitRegistrationDetails {
+                phone: None,
+                email: Some(email),
+                phone_code: _,
+                email_code: _,
+            } => match email.parse() {
+                Ok(validated_email) => Some(ContactType::Email {
+                    email: validated_email,
+                }),
+                Err(_e) => Some(ContactType::Bad {
+                    invalid_number: Some(email),
+                    invalid_email: None,
+                }),
+            },
+            ExitRegistrationDetails {
+                phone: None,
+                email: None,
+                phone_code: _,
+                email_code: _,
+            } => None,
+        }
+    }
+}
+
 /// Struct for storing details about this user installation. This particular
 /// struct exists in the settings on the router because it has to be persisted
 /// long enough to make it to the operator tools, once it's been uploaded though
