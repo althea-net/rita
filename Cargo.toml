@@ -22,3 +22,7 @@ opt-level = "z"
 lto = true
 codegen-units = 1
 incremental = false
+
+
+[patch.crates-io]
+actix = {git = "https://github.com/althea-net/actix", branch = "0.7"}

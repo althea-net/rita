@@ -23,9 +23,9 @@ num256 = "0.2"
 settings = { path = "../settings" }
 antenna_forwarding_client = {path = "../antenna_forwarding_client"}
 auto-bridge = {git = "https://github.com/althea-net/auto_bridge", tag = "v0.1.5"}
-actix-web-httpauth = {git = "https://github.com/althea-mesh/actix-web-httpauth"}
+actix-web-httpauth = {git = "https://github.com/althea-net/actix-web-httpauth"}
 clarity = "0.1"
-web30 = {git = "https://github.com/althea-mesh/web30", branch = "master"}
+web30 = {git = "https://github.com/althea-net/web30", branch = "master"}
 
 actix = "0.7"
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
