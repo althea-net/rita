@@ -810,6 +810,8 @@ impl TunnelManager {
         light_client_details: Option<Ipv4Addr>,
     ) -> Result<(Tunnel, bool), Error> {
         trace!("getting existing tunnel or opening a new one");
+        // ifidx must be a part of the key so that we can open multiple tunnels
+        // if we have more than one physical connection to the same peer
         let key = their_localid.global;
 
         let we_have_tunnel = match self.tunnels.get(&key) {
@@ -829,28 +831,19 @@ impl TunnelManager {
         if we_have_tunnel {
             // Scope the last_contact bump to let go of self.tunnels before next use
             {
-                // bump all tunnels for this peer identity, we don't want any of
-                // them to expire while the peer is still around. This is based
-                // on the assumption that peer tunnel lists never get too large
-                // see the error message here we added to check
                 let tunnels = self.tunnels.get_mut(&key).unwrap();
-                if tunnels.len() >= 3 {
-                    error!(
-                        "TunnelManager Error We have {} tunnels for peer {}!",
-                        tunnels.len(),
-                        key.wg_public_key
-                    );
-                }
                 for tunnel in tunnels.iter_mut() {
-                    trace!("We already have a tunnel for {}", tunnel);
-                    trace!(
-                        "Bumping timestamp after {}s for tunnel: {}",
-                        tunnel.last_contact.elapsed().as_secs(),
-                        tunnel
-                    );
-                    tunnel.last_contact = Instant::now();
-                    // update the nickname in case they changed it live
-                    tunnel.neigh_id.global.nickname = their_localid.global.nickname;
+                    if tunnel.listen_ifidx == peer.ifidx && tunnel.ip == peer.contact_socket.ip() {
+                        trace!("We already have a tunnel for {}", tunnel);
+                        trace!(
+                            "Bumping timestamp after {}s for tunnel: {}",
+                            tunnel.last_contact.elapsed().as_secs(),
+                            tunnel
+                        );
+                        tunnel.last_contact = Instant::now();
+                        // update the nickname in case they changed it live
+                        tunnel.neigh_id.global.nickname = their_localid.global.nickname;
+                    }
                 }
             }
 
@@ -1092,7 +1085,7 @@ fn tunnel_state_change(
         }
     }
 
-    // this is done outside of the match to make the borrow checker happy
+    // this is done ouside of the match to make the borrow checker happy
     if tunnel_bw_limits_need_change {
         let res = tunnel_bw_limit_update(&tunnels);
         // if this fails consistently it could be a wallet draining attack
