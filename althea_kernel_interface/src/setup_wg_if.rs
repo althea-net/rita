@@ -79,6 +79,28 @@ impl dyn KernelInterface {
         }
         Ok(num)
     }
+
+    /// Returns the last handshake time of every client on this tunnel.
+    pub fn get_last_handshake_time(&self, ifname: &str) -> Result<Vec<(WgKey, SystemTime)>, Error> {
+        let output = self.run_command("wg", &["show", ifname, "latest-handshakes"])?;
+        let out = String::from_utf8(output.stdout)?;
+        let mut timestamps = Vec::new();
+        for line in out.lines() {
+            let content: Vec<&str> = line.split('\t').collect();
+            let mut itr = content.iter();
+            let wg_key: WgKey = match itr.next() {
+                Some(val) => val.parse()?,
+                None => return Err(format_err!("Invalid line!")),
+            };
+            let timestamp = match itr.next() {
+                Some(val) => val.parse()?,
+                None => return Err(format_err!("Invalid line!")),
+            };
+            let d = UNIX_EPOCH + Duration::from_secs(timestamp);
+            timestamps.push((wg_key, d))
+        }
+        Ok(timestamps)
+    }
 }
 
 #[test]
@@ -150,4 +172,58 @@ fn test_get_wg_exit_clients_online() {
     }));
 
     assert_eq!(KI.get_wg_exit_clients_online().unwrap(), 1);
+}
+
+#[test]
+fn test_get_last_handshake_time() {
+    use crate::KI;
+
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
+
+    let mut counter = 0;
+
+    let link_args = &["show", "wg1", "latest-handshakes"];
+    KI.set_mock(Box::new(move |program, args| {
+        assert_eq!(program, "wg");
+        counter += 1;
+
+        match counter {
+            1 => {
+                assert_eq!(args, link_args);
+                Ok(Output{
+                        stdout: format!("88gbNAZx7NoNK9hatYuDkeZOjQ8EBmJ8VBpcFhXPqHs=	{}\nbGkj7Z6bX1593G0pExfzxocWKhS3Un9uifIhZP9c5iM=	1536936247\n9jRr6euMHu3tBIsZyqxUmjbuKVVFZCBOYApOR2pLNkQ=	0", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()).as_bytes().to_vec(),
+                        stderr: b"".to_vec(),
+                        status: ExitStatus::from_raw(0),
+                    })
+            }
+            _ => panic!("command called too many times"),
+        }
+    }));
+
+    let wgkey1: WgKey = "88gbNAZx7NoNK9hatYuDkeZOjQ8EBmJ8VBpcFhXPqHs="
+        .parse()
+        .unwrap();
+    let wgkey2: WgKey = "bGkj7Z6bX1593G0pExfzxocWKhS3Un9uifIhZP9c5iM="
+        .parse()
+        .unwrap();
+    let wgkey3: WgKey = "9jRr6euMHu3tBIsZyqxUmjbuKVVFZCBOYApOR2pLNkQ="
+        .parse()
+        .unwrap();
+
+    let res = KI
+        .get_last_handshake_time("wg1")
+        .expect("Failed to run get_last_handshake_time!");
+    assert!(res.contains(&(wgkey3, SystemTime::UNIX_EPOCH)));
+    assert!(res.contains(&(
+        wgkey2,
+        (SystemTime::UNIX_EPOCH + Duration::from_secs(1_536_936_247))
+    )));
+    for (key, time) in res {
+        if key == wgkey1 {
+            // system time is very high resolution but within a second is fine
+            assert!(time > SystemTime::now() - Duration::from_secs(1));
+        }
+    }
 }
