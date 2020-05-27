@@ -5,14 +5,14 @@
 use crate::SETTING;
 use actix_web::HttpRequest;
 use actix_web::HttpResponse;
-use actix_web::Json;
 use althea_types::interop::ContactType;
 use lettre::EmailAddress;
 use phonenumber::PhoneNumber;
 use settings::client::RitaClientSettings;
 
-pub fn set_phone_number(req: Json<String>) -> HttpResponse {
-    let number: PhoneNumber = match req.into_inner().parse() {
+pub fn set_phone_number(req: String) -> HttpResponse {
+    trace!("Got number {:?}", req);
+    let number: PhoneNumber = match req.parse() {
         Ok(p) => p,
         Err(_e) => return HttpResponse::BadRequest().finish(),
     };
@@ -34,17 +34,18 @@ pub fn set_phone_number(req: Json<String>) -> HttpResponse {
 pub fn get_phone_number(_req: HttpRequest) -> HttpResponse {
     let exit_client = SETTING.get_exit_client();
     match &exit_client.contact_info {
-        Some(ContactType::Phone { number }) => HttpResponse::Ok().json(number),
+        Some(ContactType::Phone { number }) => HttpResponse::Ok().json(number.to_string()),
         Some(ContactType::Both {
             email: _email,
             number,
-        }) => HttpResponse::Ok().json(number),
+        }) => HttpResponse::Ok().json(number.to_string()),
         _ => HttpResponse::Ok().finish(),
     }
 }
 
-pub fn set_email(req: Json<String>) -> HttpResponse {
-    let email: EmailAddress = match req.into_inner().parse() {
+pub fn set_email(req: String) -> HttpResponse {
+    trace!("Got email {:?}", req);
+    let email: EmailAddress = match req.parse() {
         Ok(p) => p,
         Err(_e) => return HttpResponse::BadRequest().finish(),
     };
@@ -66,11 +67,11 @@ pub fn set_email(req: Json<String>) -> HttpResponse {
 pub fn get_email(_req: HttpRequest) -> HttpResponse {
     let exit_client = SETTING.get_exit_client();
     match &exit_client.contact_info {
-        Some(ContactType::Email { email }) => HttpResponse::Ok().json(email),
+        Some(ContactType::Email { email }) => HttpResponse::Ok().json(email.to_string()),
         Some(ContactType::Both {
             number: _number,
             email,
-        }) => HttpResponse::Ok().json(email),
+        }) => HttpResponse::Ok().json(email.to_string()),
         _ => HttpResponse::Ok().finish(),
     }
 }

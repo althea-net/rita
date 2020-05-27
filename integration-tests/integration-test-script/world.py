@@ -148,7 +148,7 @@ class World:
             if id != self.exit_id and id != self.external:
                 (RITA, RITA_EXIT) = switch_binaries(id, VERBOSE, RITA, RITA_EXIT,
                                                     COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B)
-                start_rita(node, dname, RITA, EXIT_SETTINGS, len(self.nodes) > 7)
+                start_rita(node, dname, RITA, EXIT_SETTINGS)
             time.sleep(0.5 + random.random() / 2)  # wait 0.5s - 1s
             print()
         print("rita started")
@@ -187,9 +187,9 @@ class World:
             if node.id == self.exit_id:
                 continue
             elif not assert_test(self.test_exit_reach(node, exit_internal_ip), "Exit Reachability " +
-                               "from node {} ({})".format(node.id,
-                                                          node.revision),
-                               verbose=verbose, global_fail=global_fail):
+                                 "from node {} ({})".format(node.id,
+                                                            node.revision),
+                                 verbose=verbose, global_fail=global_fail):
                 ret = False
         if global_fail and not ret:
             exit(1)

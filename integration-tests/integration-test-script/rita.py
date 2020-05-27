@@ -99,10 +99,6 @@ EXIT_SETTINGS = {
     },
     "current_exit": "exit_a",
     "wg_listen_port": 59999,
-    "reg_details": {
-        "zip_code": "1234",
-        "email": "1234@gmail.com"
-    }
 }
 
 EXIT_SELECT = {
