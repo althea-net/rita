@@ -208,8 +208,12 @@ fn main() {
         let mut exit_client = SETTING.get_exit_client_mut();
         let reg_details = exit_client.reg_details.clone();
         if let Some(reg_details) = reg_details {
-            let contact_info: Option<ContactStorage> = ContactStorage::convert(reg_details);
-            exit_client.contact_info = contact_info;
+            // only migrate if it has not already been done, otherwise we might
+            // overwrite changed details
+            if exit_client.contact_info.is_none() {
+                let contact_info: Option<ContactStorage> = ContactStorage::convert(reg_details);
+                exit_client.contact_info = contact_info;
+            }
         }
     }
 
