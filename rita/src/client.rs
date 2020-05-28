@@ -413,6 +413,12 @@ fn start_client_dashboard() {
                 Method::GET,
                 get_installation_details,
             )
+            .route(
+                "/operator_setup/{enabled}",
+                Method::POST,
+                set_display_operator_setup,
+            )
+            .route("/operator_setup", Method::GET, display_operator_setup)
             .route("/phone", Method::GET, get_phone_number)
             .route("/phone", Method::POST, set_phone_number)
             .route("/email", Method::GET, get_email)

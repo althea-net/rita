@@ -19,6 +19,11 @@ fn default_use_operator_price() -> bool {
     true
 }
 
+/// If we are displaying the operator setup card on the front page or not
+fn default_display_operator_setup() -> bool {
+    true
+}
+
 /// If the operator has indicated that users should not be able to change
 /// their own prices
 fn default_force_use_operator_price() -> bool {
@@ -51,6 +56,9 @@ pub struct OperatorSettings {
     /// Details about this devices installation see the doc comments on the struct
     /// this is set at startup time for the router
     pub installation_details: Option<InstallationDetails>,
+    /// If we should display the operator setup on the dashboard
+    #[serde(default = "default_display_operator_setup")]
+    pub display_operator_setup: bool,
 }
 
 impl Default for OperatorSettings {
@@ -62,6 +70,7 @@ impl Default for OperatorSettings {
             force_use_operator_price: default_force_use_operator_price(),
             checkin_url: default_checkin_url(),
             installation_details: None,
+            display_operator_setup: true,
         }
     }
 }

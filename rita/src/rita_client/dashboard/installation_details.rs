@@ -1,6 +1,6 @@
 use crate::SETTING;
 use actix_web::HttpResponse;
-use actix_web::{HttpRequest, Json};
+use actix_web::{HttpRequest, Json, Path};
 use althea_types::ContactType;
 use althea_types::InstallationDetails;
 use settings::client::RitaClientSettings;
@@ -67,4 +67,13 @@ pub fn set_installation_details(req: Json<InstallationDetailsPost>) -> HttpRespo
 pub fn get_installation_details(_req: HttpRequest) -> HttpResponse {
     let operator_settings = SETTING.get_operator();
     HttpResponse::Ok().json(operator_settings.installation_details.clone())
+}
+
+pub fn display_operator_setup(_req: HttpRequest) -> HttpResponse {
+    HttpResponse::Ok().json(SETTING.get_operator().display_operator_setup)
+}
+
+pub fn set_display_operator_setup(val: Path<bool>) -> HttpResponse {
+    SETTING.get_operator_mut().display_operator_setup = val.into_inner();
+    HttpResponse::Ok().finish()
 }
