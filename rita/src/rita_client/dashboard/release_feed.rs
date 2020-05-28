@@ -15,26 +15,26 @@ pub fn get_release_feed_http(_req: HttpRequest) -> Result<HttpResponse, Error> {
     Ok(HttpResponse::Ok().json(res))
 }
 
-pub fn set_release_feed_http(path: Path<String>) -> Result<HttpResponse, Error> {
+pub fn set_release_feed_http(path: Path<String>) -> HttpResponse {
     if !KI.is_openwrt() {
-        return Ok(HttpResponse::new(StatusCode::BAD_REQUEST));
+        return HttpResponse::new(StatusCode::BAD_REQUEST);
     }
 
     let val = path.into_inner().parse();
     if val.is_err() {
-        return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
+        return HttpResponse::new(StatusCode::BAD_REQUEST)
             .into_builder()
             .json(format!(
                 "Could not parse {:?} into a ReleaseStatus enum!",
                 val
-            )));
+            ));
     }
     let val = val.unwrap();
     if let Err(e) = set_release_feed(val) {
-        return Ok(HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+        return HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
             .into_builder()
-            .json(format!("Failed to write new release feed with {:?}", e)));
+            .json(format!("Failed to write new release feed with {:?}", e));
     }
 
-    Ok(HttpResponse::Ok().json(()))
+    HttpResponse::Ok().json(())
 }

@@ -20,46 +20,44 @@ pub fn get_dao_list(_req: HttpRequest) -> Result<Json<Vec<Address>>, Error> {
 }
 
 /// TODO remove after beta 12, provided for backwards compat
-pub fn add_to_dao_list(path: Path<Address>) -> Result<Json<()>, Error> {
+pub fn add_to_dao_list(path: Path<Address>) -> HttpResponse {
     trace!("Add to dao list: Hit");
     let provided_address = path.into_inner();
     SETTING.get_operator_mut().operator_address = Some(provided_address);
-    // try and save the config and fail if we can't
-    if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
-        return Err(e);
+    if let Err(_e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+        return HttpResponse::InternalServerError().finish();
     }
-    Ok(Json(()))
+    HttpResponse::Ok().finish()
 }
 
 /// TODO remove after beta 12, provided for backwards compat
-pub fn remove_from_dao_list(_path: Path<Address>) -> Result<Json<()>, Error> {
+pub fn remove_from_dao_list(_path: Path<Address>) -> HttpResponse {
     SETTING.get_operator_mut().operator_address = None;
-    if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
-        return Err(e);
+    if let Err(_e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+        return HttpResponse::InternalServerError().finish();
     }
-    Ok(Json(()))
+    HttpResponse::Ok().finish()
 }
 
 /// TODO remove after beta 12, provided for backwards compat
-pub fn get_dao_fee(_req: HttpRequest) -> Result<HttpResponse, Error> {
+pub fn get_dao_fee(_req: HttpRequest) -> HttpResponse {
     debug!("/dao_fee GET hit");
     let mut ret = HashMap::new();
     ret.insert("dao_fee", SETTING.get_operator().operator_fee.clone());
 
-    Ok(HttpResponse::Ok().json(ret))
+    HttpResponse::Ok().json(ret)
 }
 
 /// TODO remove after beta 12, provided for backwards compat
-pub fn set_dao_fee(path: Path<Uint256>) -> Result<Json<()>, Error> {
+pub fn set_dao_fee(path: Path<Uint256>) -> HttpResponse {
     let new_fee = path.into_inner();
     debug!("/dao_fee/{} POST hit", new_fee);
     SETTING.get_operator_mut().operator_fee = new_fee;
 
-    // try and save the config and fail if we can't
-    if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
-        return Err(e);
+    if let Err(_e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+        return HttpResponse::InternalServerError().finish();
     }
-    Ok(Json(()))
+    HttpResponse::Ok().finish()
 }
 
 pub fn get_operator(_req: HttpRequest) -> Json<Option<Address>> {
@@ -70,31 +68,30 @@ pub fn get_operator(_req: HttpRequest) -> Json<Option<Address>> {
     }
 }
 
-pub fn change_operator(path: Path<Address>) -> Result<Json<()>, Error> {
+pub fn change_operator(path: Path<Address>) -> HttpResponse {
     trace!("add operator address: Hit");
     let provided_address = path.into_inner();
     SETTING.get_operator_mut().operator_address = Some(provided_address);
-    // try and save the config and fail if we can't
-    if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
-        return Err(e);
+    if let Err(_e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+        return HttpResponse::InternalServerError().finish();
     }
-    Ok(Json(()))
+    HttpResponse::Ok().finish()
 }
 
-pub fn remove_operator(_path: Path<Address>) -> Result<Json<()>, Error> {
+pub fn remove_operator(_path: Path<Address>) -> HttpResponse {
     SETTING.get_operator_mut().operator_address = None;
-    if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
-        return Err(e);
+    if let Err(_e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+        return HttpResponse::InternalServerError().finish();
     }
-    Ok(Json(()))
+    HttpResponse::Ok().finish()
 }
 
-pub fn get_operator_fee(_req: HttpRequest) -> Result<HttpResponse, Error> {
+pub fn get_operator_fee(_req: HttpRequest) -> HttpResponse {
     debug!("get operator GET hit");
-    Ok(HttpResponse::Ok().json(SETTING.get_operator().operator_fee.clone()))
+    HttpResponse::Ok().json(SETTING.get_operator().operator_fee.clone())
 }
 
-pub fn get_operator_debt(_req: HttpRequest) -> Result<HttpResponse, Error> {
+pub fn get_operator_debt(_req: HttpRequest) -> HttpResponse {
     debug!("get operator debt hit");
-    Ok(HttpResponse::Ok().json(get_operator_fee_debt()))
+    HttpResponse::Ok().json(get_operator_fee_debt())
 }

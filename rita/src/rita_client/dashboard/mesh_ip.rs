@@ -1,10 +1,9 @@
 use crate::SETTING;
 use ::actix_web::{HttpRequest, HttpResponse};
-use failure::Error;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 
-pub fn get_mesh_ip(_req: HttpRequest) -> Result<HttpResponse, Error> {
+pub fn get_mesh_ip(_req: HttpRequest) -> HttpResponse {
     debug!("/mesh_ip GET hit");
 
     let mut ret = HashMap::new();
@@ -20,5 +19,5 @@ pub fn get_mesh_ip(_req: HttpRequest) -> Result<HttpResponse, Error> {
         }
     }
 
-    Ok(HttpResponse::Ok().json(ret))
+    HttpResponse::Ok().json(ret)
 }

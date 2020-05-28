@@ -3,13 +3,14 @@
 //! the exit settings struct is the one true source. All the others are updated as needed and you should try to phase them out if practical.
 
 use crate::rita_common::utils::option_convert;
+use crate::ARGS;
 use crate::SETTING;
 use actix_web::HttpRequest;
 use actix_web::HttpResponse;
 use althea_types::ContactType;
 use lettre::EmailAddress;
 use phonenumber::PhoneNumber;
-use settings::client::RitaClientSettings;
+use settings::{client::RitaClientSettings, FileWrite};
 
 fn clean_quotes(val: &str) -> String {
     val.trim().trim_matches('"').trim_matches('\\').to_string()
@@ -38,6 +39,12 @@ pub fn set_phone_number(req: String) -> HttpResponse {
         None => Some(ContactType::Phone { number }),
     };
     exit_client.contact_info = option_convert(res);
+
+    // try and save the config and fail if we can't
+    if let Err(_e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+        return HttpResponse::InternalServerError().finish();
+    }
+
     HttpResponse::Ok().finish()
 }
 
@@ -76,6 +83,12 @@ pub fn set_email(req: String) -> HttpResponse {
         None => Some(ContactType::Email { email }),
     };
     exit_client.contact_info = option_convert(res);
+
+    // try and save the config and fail if we can't
+    if let Err(_e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+        return HttpResponse::InternalServerError().finish();
+    }
+
     HttpResponse::Ok().finish()
 }
 
