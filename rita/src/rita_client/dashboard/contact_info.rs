@@ -39,6 +39,7 @@ pub fn set_phone_number(req: String) -> HttpResponse {
         None => Some(ContactType::Phone { number }),
     };
     exit_client.contact_info = option_convert(res);
+    drop(exit_client);
 
     // try and save the config and fail if we can't
     if let Err(_e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
@@ -83,6 +84,7 @@ pub fn set_email(req: String) -> HttpResponse {
         None => Some(ContactType::Email { email }),
     };
     exit_client.contact_info = option_convert(res);
+    drop(exit_client);
 
     // try and save the config and fail if we can't
     if let Err(_e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
