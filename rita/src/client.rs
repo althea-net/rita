@@ -124,7 +124,7 @@ use althea_kernel_interface::KernelInterface;
 use althea_kernel_interface::LinuxCommandRunner;
 #[cfg(test)]
 use althea_kernel_interface::TestCommandRunner;
-use althea_types::ContactType;
+use althea_types::ContactStorage;
 
 #[cfg(test)]
 lazy_static! {
@@ -185,7 +185,7 @@ fn env_vars_contains(var_name: &str) -> bool {
 }
 
 /// Some devices (n600/n750) will provide junk file reads during disk init
-/// post flashing, this ads in retry for the settings file read for up to
+/// post flashing, this adds in retry for the settings file read for up to
 /// two minutes
 fn wait_for_settings(settings_file: &str) -> RitaSettingsStruct {
     let start = Instant::now();
@@ -208,7 +208,7 @@ fn main() {
         let mut exit_client = SETTING.get_exit_client_mut();
         let reg_details = exit_client.reg_details.clone();
         if let Some(reg_details) = reg_details {
-            let contact_info: Option<ContactType> = ContactType::convert(reg_details);
+            let contact_info: Option<ContactStorage> = ContactStorage::convert(reg_details);
             exit_client.contact_info = contact_info;
         }
     }

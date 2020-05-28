@@ -7,6 +7,7 @@ use crate::rita_common::token_bridge::ReloadAddresses;
 use crate::rita_common::token_bridge::TokenBridge;
 use crate::rita_common::tunnel_manager::shaping::flag_reset_shaper;
 use crate::rita_common::tunnel_manager::shaping::get_shaping_status;
+use crate::rita_common::utils::option_convert;
 use crate::KI;
 use crate::SETTING;
 use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
@@ -91,7 +92,7 @@ fn checkin() {
     let is_gateway = SETTING.get_network().is_gateway;
     let id = SETTING.get_identity().unwrap();
 
-    let contact_info = SETTING.get_exit_client().contact_info.clone();
+    let contact_info = option_convert(SETTING.get_exit_client().contact_info.clone());
 
     drop(operator_settings);
 

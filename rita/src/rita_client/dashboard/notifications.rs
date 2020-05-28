@@ -19,6 +19,7 @@ pub fn set_low_balance_notification(path: Path<bool>) -> Result<HttpResponse, Er
 
     // try and save the config and fail if we can't
     if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
+        error!("error saving config {:?}", e);
         return Err(e);
     }
     Ok(HttpResponse::Ok().json(()))

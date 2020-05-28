@@ -6,7 +6,7 @@ use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
 use crate::spawn_watch_thread;
 use crate::RitaCommonSettings;
-use althea_types::{ContactType, ExitRegistrationDetails, ExitState, Identity};
+use althea_types::{ContactStorage, ExitRegistrationDetails, ExitState, Identity};
 use config::Config;
 use failure::Error;
 use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
@@ -43,9 +43,10 @@ pub struct ExitClientSettings {
     /// This is the port which the exit wireguard tunnel will listen on
     /// NOTE: must be under `wg_start_port` in `NetworkSettings`
     pub wg_listen_port: u16,
-    /// An enum which represents the full range of options for contacts, phone
-    /// number, email, both, none, or invalid versions of either
-    pub contact_info: Option<ContactType>,
+    /// ContactStorage is a TOML serialized representation of ContactType, use the .into()
+    /// traits to get ContactType for actual operations. This struct represents a full range
+    /// of possibilities for contact info.
+    pub contact_info: Option<ContactStorage>,
     /// This controls which interfaces will be proxied over the exit tunnel
     pub lan_nics: HashSet<String>,
     /// legacy contact details storage, to be phased out in beta 15 after everyone has migrated

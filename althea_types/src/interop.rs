@@ -1,12 +1,13 @@
-use crate::wg_key::WgKey;
+use crate::{
+    contact_info::{ContactDetails, ContactType},
+    wg_key::WgKey,
+};
 use arrayvec::ArrayString;
 use babel_monitor::Neighbor;
 use babel_monitor::Route;
 use clarity::Address;
 use failure::Error;
-use lettre::EmailAddress;
 use num256::Uint256;
-use phonenumber::PhoneNumber;
 use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::fmt::Display;
@@ -146,40 +147,6 @@ pub struct ExitRegistrationDetails {
     pub phone: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub phone_code: Option<String>,
-}
-
-impl From<ContactType> for ExitRegistrationDetails {
-    fn from(ct: ContactType) -> Self {
-        match ct {
-            ContactType::Both { number, email } => ExitRegistrationDetails {
-                phone: Some(number.to_string()),
-                email: Some(email.to_string()),
-                email_code: None,
-                phone_code: None,
-            },
-            ContactType::Email { email } => ExitRegistrationDetails {
-                phone: None,
-                email: Some(email.to_string()),
-                email_code: None,
-                phone_code: None,
-            },
-            ContactType::Phone { number } => ExitRegistrationDetails {
-                phone: Some(number.to_string()),
-                email: None,
-                email_code: None,
-                phone_code: None,
-            },
-            ContactType::Bad {
-                invalid_email,
-                invalid_number,
-            } => ExitRegistrationDetails {
-                phone: invalid_number,
-                email: invalid_email,
-                email_code: None,
-                phone_code: None,
-            },
-        }
-    }
 }
 
 /// This is the state an exit can be in
@@ -591,99 +558,6 @@ pub struct NeighborStatus {
     pub id: Identity,
     /// their shaped wg interface speed in mbps
     pub shaper_speed: Option<usize>,
-}
-
-/// Struct for storing user contact details, being phased out in favor
-/// of ContactType in Beta 15
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-pub struct ContactDetails {
-    pub phone: Option<String>,
-    pub email: Option<String>,
-}
-
-/// This enum is used to represent the fact that while we may not have a phone
-/// number and may not have an Email we are required to have at least one to
-/// facilitate exit registration.
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-pub enum ContactType {
-    Phone {
-        number: PhoneNumber,
-    },
-    Email {
-        email: EmailAddress,
-    },
-    Both {
-        number: PhoneNumber,
-        email: EmailAddress,
-    },
-    /// During migration we may encounter invalid values we don't want
-    /// to lose this info so we store it in this variant.
-    Bad {
-        invalid_number: Option<String>,
-        invalid_email: Option<String>,
-    },
-}
-
-impl ContactType {
-    pub fn convert(old: ExitRegistrationDetails) -> Option<Self> {
-        match old {
-            ExitRegistrationDetails {
-                phone: Some(phone),
-                email: Some(email),
-                phone_code: _,
-                email_code: _,
-            } => match (phone.parse(), email.parse()) {
-                (Ok(validated_phone), Ok(validated_email)) => Some(ContactType::Both {
-                    number: validated_phone,
-                    email: validated_email,
-                }),
-                (Err(_e), Ok(validated_email)) => Some(ContactType::Email {
-                    email: validated_email,
-                }),
-                (Ok(validated_phone), Err(_e)) => Some(ContactType::Phone {
-                    number: validated_phone,
-                }),
-                (Err(_ea), Err(_eb)) => Some(ContactType::Bad {
-                    invalid_email: Some(email),
-                    invalid_number: Some(phone),
-                }),
-            },
-            ExitRegistrationDetails {
-                phone: Some(phone),
-                email: None,
-                phone_code: _,
-                email_code: _,
-            } => match phone.parse() {
-                Ok(validated_phone) => Some(ContactType::Phone {
-                    number: validated_phone,
-                }),
-                Err(_e) => Some(ContactType::Bad {
-                    invalid_number: Some(phone),
-                    invalid_email: None,
-                }),
-            },
-            ExitRegistrationDetails {
-                phone: None,
-                email: Some(email),
-                phone_code: _,
-                email_code: _,
-            } => match email.parse() {
-                Ok(validated_email) => Some(ContactType::Email {
-                    email: validated_email,
-                }),
-                Err(_e) => Some(ContactType::Bad {
-                    invalid_number: Some(email),
-                    invalid_email: None,
-                }),
-            },
-            ExitRegistrationDetails {
-                phone: None,
-                email: None,
-                phone_code: _,
-                email_code: _,
-            } => None,
-        }
-    }
 }
 
 /// Struct for storing details about this user installation. This particular

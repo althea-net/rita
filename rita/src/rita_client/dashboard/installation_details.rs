@@ -46,7 +46,7 @@ pub fn set_installation_details(req: Json<InstallationDetailsPost>) -> HttpRespo
     // update the contact info, we display this as part of the forum but it's
     // stored separately since it's used elsewhere and sent to the operator tools
     // on it's own.
-    exit_client.contact_info = Some(contact_details);
+    exit_client.contact_info = Some(contact_details.into());
     drop(exit_client);
 
     let new_installation_details = InstallationDetails {

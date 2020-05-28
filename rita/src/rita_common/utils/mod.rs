@@ -9,3 +9,11 @@ pub fn option_deref<T: Copy>(item: Option<&T>) -> Option<T> {
         None => None,
     }
 }
+
+#[allow(dead_code)]
+pub fn option_convert<B: std::convert::From<A>, A>(item: Option<A>) -> Option<B> {
+    match item {
+        Some(val) => Some(val.into()),
+        None => None,
+    }
+}
