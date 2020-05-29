@@ -117,7 +117,7 @@ impl Display for SystemChain {
 
 impl Default for SystemChain {
     fn default() -> SystemChain {
-        SystemChain::Ethereum
+        SystemChain::Xdai
     }
 }
 
@@ -489,6 +489,13 @@ pub struct OperatorCheckinMessage {
     ///  see the type definition for more details about how this type restricts values
     /// This only exists in Beta 14+
     pub contact_info: Option<ContactType>,
+    /// Details about this installation, including ip addresses, address and other
+    /// info to insert into a spreadsheet displayed by operator tools. This is set
+    /// all the time but only accepted by operator tools once. The reason we store
+    /// it in the config is so that values can be set before the device is connected
+    /// and then be sent up at a later date. This does result in a constant resending
+    /// of this data forever just to discard it on the other end. TODO optimize sending
+    pub install_details: Option<InstallationDetails>,
     /// Info about the current state of this device, including it's model, CPU,
     /// memory, and temperature if sensors are available
     pub hardware_info: Option<HardwareInfo>,
@@ -591,8 +598,9 @@ pub struct InstallationDetails {
     /// Description of the installation and equipment at the
     /// location
     pub equipment_details: String,
-    /// Time of install, in milliseconds since Unix Epoch
-    pub install_date: SystemTime,
+    /// Time of install, this is set by the operator tools when it accepts
+    /// the value because the router system clocks may be problematic.
+    pub install_date: Option<SystemTime>,
 }
 
 /// Heartbeat sent to the operator server to help monitor

@@ -93,6 +93,7 @@ fn checkin() {
     let id = SETTING.get_identity().unwrap();
 
     let contact_info = option_convert(SETTING.get_exit_client().contact_info.clone());
+    let install_details = operator_settings.installation_details.clone();
 
     drop(operator_settings);
 
@@ -138,6 +139,7 @@ fn checkin() {
             neighbor_info: Some(neighbor_info),
             contact_details: None,
             contact_info,
+            install_details,
             hardware_info,
         })
         .unwrap()
