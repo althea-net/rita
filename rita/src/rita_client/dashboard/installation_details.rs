@@ -11,6 +11,7 @@ use settings::{client::RitaClientSettings, FileWrite};
 /// rather than relying on serde to get it right.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct InstallationDetailsPost {
+    pub user_name: String,
     pub phone: Option<String>,
     pub email: Option<String>,
     pub client_antenna_ip: Option<String>,
@@ -86,6 +87,7 @@ pub fn set_installation_details(req: Json<InstallationDetailsPost>) -> HttpRespo
     drop(exit_client);
 
     let new_installation_details = InstallationDetails {
+        user_name: input.user_name,
         client_antenna_ip: parsed_client_antenna_ip,
         relay_antennas: parsed_relay_antenna_ips,
         phone_client_antennas: parsed_phone_client_anntenna_ips,

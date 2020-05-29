@@ -574,6 +574,8 @@ pub struct NeighborStatus {
 /// question is if we want to delete it or manage it somehow.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct InstallationDetails {
+    /// The users name
+    pub user_name: String,
     /// The CPE ip of this client. This field seems straightforward but actually
     /// has quite a bit of optionality. What if the user is connected via l2 bridge
     /// (for example a cable, or fiber) in that case this could be None. If the client
