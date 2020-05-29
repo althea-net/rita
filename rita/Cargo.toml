@@ -30,7 +30,7 @@ web30 = {git = "https://github.com/althea-net/web30", branch = "master"}
 actix = "0.7"
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
 actix_derive = "0.5"
-bytes = "0.4"
+bytes = "0.5"
 config = "0.10"
 diesel = { version = "1.4", features = ["postgres", "r2d2"] }
 docopt = "1.1"
@@ -39,12 +39,12 @@ env_logger = "0.7"
 failure = "0.1"
 futures01 = { package = "futures", version = "0.1"}
 futures = { version = "0.3", features = ["compat"] }
-handlebars = "2.0"
+handlebars = "3.0"
 ipnetwork = "0.14"
 lazy_static = "1.4"
 log = { version = "0.4", features = ["release_max_level_info"] }
 minihttpse = "0.1"
-mockito = "0.23"
+mockito = "0.25"
 mockstream = "0.0"
 rand = "0.7"
 serde = "1.0"

@@ -64,7 +64,7 @@ impl PeerMessage {
         match *self {
             PeerMessage::ImHere(addr) => {
                 buf.put_u8(MSG_IM_HERE);
-                buf.put_u16_be(MSG_IM_HERE_LEN);
+                buf.put_u16(MSG_IM_HERE_LEN);
                 let ipaddr_bytes: [u8; 16] = addr.octets();
                 for i in ipaddr_bytes.iter() {
                     buf.put_u8(*i);

@@ -6,11 +6,8 @@ use crate::ARGS;
 use crate::KI;
 use crate::SETTING;
 use actix::{Handler, Message, ResponseFuture, SystemService};
-use actix_web::client;
-use actix_web::error::PayloadError;
 use actix_web::http::StatusCode;
 use actix_web::AsyncResponder;
-use actix_web::HttpMessage;
 use actix_web::Path;
 use actix_web::{HttpRequest, HttpResponse, Json};
 use althea_types::ExitState;
@@ -18,7 +15,6 @@ use babel_monitor::do_we_have_route;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
 use babel_monitor::start_connection;
-use bytes::Bytes;
 use failure::Error;
 use futures01::{future, Future};
 use settings::client::{ExitServer, RitaClientSettings};
@@ -130,117 +126,6 @@ pub fn add_exits(
     exits.extend(new_exits.into_inner());
 
     Box::new(future::ok(HttpResponse::Ok().json(exits.clone())))
-}
-
-pub fn exits_sync(
-    list_url_json: Json<HashMap<String, String>>,
-) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
-    debug!("/exits/sync hit with {:?}", list_url_json);
-
-    let list_url = match list_url_json.get("url") {
-        Some(url) if url.starts_with("https://") => url,
-        Some(_unsafe_url) => {
-            let mut ret = HashMap::new();
-            ret.insert(
-                "error".to_owned(),
-                "Attempted to use a non-HTTPS url".to_owned(),
-            );
-            return Box::new(future::ok(
-                HttpResponse::new(StatusCode::BAD_REQUEST)
-                    .into_builder()
-                    .json(ret),
-            ));
-        }
-        None => {
-            let mut ret = HashMap::new();
-
-            ret.insert(
-                "error".to_owned(),
-                "Could not find a \"url\" key in supplied JSON".to_owned(),
-            );
-            return Box::new(future::ok(
-                HttpResponse::new(StatusCode::BAD_REQUEST)
-                    .into_builder()
-                    .json(ret),
-            ));
-        }
-    }
-    .to_string();
-
-    let res = client::get(list_url.clone())
-        .header("User-Agent", "Actix-web")
-        .finish()
-        .unwrap()
-        .send()
-        .from_err()
-        .and_then(move |response| {
-            response
-                .body()
-                .then(move |message_body: Result<Bytes, PayloadError>| {
-                    if let Err(e) = message_body {
-                        return Box::new(future::ok(
-                            HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
-                                .into_builder()
-                                .json(format!("Actix encountered a payload error {:?}", e)),
-                        ));
-                    }
-                    let message_body = message_body.unwrap();
-
-                    // .json() only works on application/json content types unlike reqwest which handles bytes
-                    // transparently actix requests need to get the body and deserialize using serde_json in
-                    // an explicit fashion
-                    match serde_json::from_slice::<HashMap<String, ExitServer>>(&message_body) {
-                        Ok(mut new_exits) => {
-                            info!("exit_sync list: {:#?}", new_exits);
-
-                            let mut exit_client = SETTING.get_exit_client_mut();
-
-                            // if the entry already exists copy the registration info over
-                            for new_exit in new_exits.iter_mut() {
-                                let nick = new_exit.0;
-                                let new_settings = new_exit.1;
-                                if let Some(old_exit) = exit_client.exits.get(nick) {
-                                    new_settings.info = old_exit.info.clone();
-                                }
-                            }
-                            exit_client.exits.extend(new_exits);
-                            let exits = exit_client.exits.clone();
-                            drop(exit_client);
-
-                            // try and save the config and fail if we can't
-                            if let Err(e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
-                                trace!("Failed to write settings");
-                                return Box::new(future::err(e));
-                            }
-
-                            Box::new(future::ok(HttpResponse::Ok().json(exits)))
-                        }
-                        Err(e) => {
-                            let mut ret = HashMap::<String, String>::new();
-
-                            error!(
-                                "Could not deserialize exit list at {:?} because of error: {:?}",
-                                list_url, e
-                            );
-                            ret.insert(
-                                "error".to_owned(),
-                                format!(
-                            "Could not deserialize exit list at URL {:?} because of error {:?}",
-                             list_url, e
-                             ),
-                            );
-
-                            Box::new(future::ok(
-                                HttpResponse::new(StatusCode::BAD_REQUEST)
-                                    .into_builder()
-                                    .json(ret),
-                            ))
-                        }
-                    }
-                })
-        });
-
-    Box::new(res)
 }
 
 pub fn get_exit_info(
