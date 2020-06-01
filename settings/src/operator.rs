@@ -20,8 +20,14 @@ fn default_use_operator_price() -> bool {
 }
 
 /// If we are displaying the operator setup card on the front page or not
+/// this is false by default but set to true using the config template in
+/// the firmware builder. The reasoning for this is that when we upgrade
+/// older routers we don't want this form to suddenly show up, we want to
+/// show it only for new routers being setup. Once everyone is upgraded
+/// having this starting value be true will have the same affect but that's
+/// not until Beta 15 at least
 fn default_display_operator_setup() -> bool {
-    true
+    false
 }
 
 /// If the operator has indicated that users should not be able to change
