@@ -25,6 +25,10 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
         Ok(readings) => Some(readings),
         Err(_e) => None,
     };
+    let allocated_memory = match mem_total.checked_sub(mem_free) {
+        Some(val) => val,
+        None => return Err(format_err!("Failed to get accurate memory numbers")),
+    };
 
     Ok(HardwareInfo {
         logical_processors: num_cpus,
@@ -32,7 +36,7 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
         load_avg_five_minute: five_minute_load_avg,
         load_avg_fifteen_minute: fifteen_minute_load_avg,
         system_memory: mem_total,
-        allocated_memory: mem_free,
+        allocated_memory,
         model,
         sensor_readings,
     })
