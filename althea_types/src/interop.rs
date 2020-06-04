@@ -375,6 +375,23 @@ pub enum OperatorAction {
     Reboot,
 }
 
+impl FromStr for OperatorAction {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<OperatorAction, Error> {
+        match s {
+            "ResetRouterPassword" => Ok(OperatorAction::ResetRouterPassword),
+            "ResetWiFiPassword" => Ok(OperatorAction::ResetWiFiPassword),
+            "ResetShaper" => Ok(OperatorAction::ResetShaper),
+            "Reboot" => Ok(OperatorAction::Reboot),
+            "resetrouterpassword" => Ok(OperatorAction::ResetRouterPassword),
+            "resetwifipassword" => Ok(OperatorAction::ResetWiFiPassword),
+            "resetshaper" => Ok(OperatorAction::ResetShaper),
+            "reboot" => Ok(OperatorAction::Reboot),
+            _ => Err(format_err!("Invalid Operator Action")),
+        }
+    }
+}
+
 /// Operator update that we get from the operator server during our checkin
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperatorUpdateMessage {
