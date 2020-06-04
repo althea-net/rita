@@ -242,13 +242,6 @@ fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = 
             None => bail!("Could not find exit {}", exit),
         };
 
-        match exit_details {
-            ExitState::GotInfo { .. } => {
-                trace!("Got exit info response {:?}", exit_details);
-            }
-            _ => bail!("got incorrect state from exit details request"),
-        }
-
         current_exit.info = exit_details;
 
         Ok(())
