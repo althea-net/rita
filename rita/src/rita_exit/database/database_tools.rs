@@ -82,7 +82,7 @@ pub fn update_client(
     let filtered_list = clients
         .filter(mesh_ip.eq(ip.to_string()))
         .filter(wg_pubkey.eq(wg.to_string()))
-        .filter(eth_address.eq(key.to_string()));
+        .filter(eth_address.eq(key.to_string().to_lowercase()));
 
     if let Some(mail) = client.reg_details.email.clone() {
         if their_record.email != mail {
@@ -132,7 +132,7 @@ pub fn get_client(
     let filtered_list = clients
         .filter(mesh_ip.eq(ip.to_string()))
         .filter(wg_pubkey.eq(wg.to_string()))
-        .filter(eth_address.eq(key.to_string()));
+        .filter(eth_address.eq(key.to_string().to_lowercase()));
     match filtered_list.load::<models::Client>(conn) {
         Ok(entry) => {
             if entry.len() > 1 {
@@ -167,7 +167,7 @@ pub fn verify_client(
     let filtered_list = clients
         .filter(mesh_ip.eq(ip.to_string()))
         .filter(wg_pubkey.eq(wg.to_string()))
-        .filter(eth_address.eq(key.to_string()));
+        .filter(eth_address.eq(key.to_string().to_lowercase()));
 
     diesel::update(filtered_list)
         .set(verified.eq(client_verified))
@@ -189,7 +189,7 @@ pub fn verify_db_client(
     let filtered_list = clients
         .filter(mesh_ip.eq(ip.to_string()))
         .filter(wg_pubkey.eq(wg.to_string()))
-        .filter(eth_address.eq(key.to_string()));
+        .filter(eth_address.eq(key.to_string().to_lowercase()));
 
     diesel::update(filtered_list)
         .set(verified.eq(client_verified))
@@ -207,7 +207,7 @@ pub fn text_sent(client: &ExitClientIdentity, conn: &PgConnection, val: i32) -> 
     let filtered_list = clients
         .filter(mesh_ip.eq(ip.to_string()))
         .filter(wg_pubkey.eq(wg.to_string()))
-        .filter(eth_address.eq(key.to_string()));
+        .filter(eth_address.eq(key.to_string().to_lowercase()));
 
     diesel::update(filtered_list)
         .set(text_sent.eq(val + 1))
@@ -225,7 +225,7 @@ fn client_exists(client: &ExitClientIdentity, conn: &PgConnection) -> Result<boo
     let filtered_list = clients
         .filter(mesh_ip.eq(ip.to_string()))
         .filter(wg_pubkey.eq(wg.to_string()))
-        .filter(eth_address.eq(key.to_string()));
+        .filter(eth_address.eq(key.to_string().to_lowercase()));
     Ok(select(exists(filtered_list)).get_result(&*conn)?)
 }
 
@@ -244,7 +244,7 @@ pub fn client_conflict(client: &ExitClientIdentity, conn: &PgConnection) -> Resu
     let key = client.global.eth_address;
     let ip_match = clients.filter(mesh_ip.eq(ip.to_string()));
     let wg_key_match = clients.filter(wg_pubkey.eq(wg.to_string()));
-    let eth_address_match = clients.filter(eth_address.eq(key.to_string()));
+    let eth_address_match = clients.filter(eth_address.eq(key.to_string().to_lowercase()));
     let ip_exists = select(exists(ip_match)).get_result(&*conn)?;
     let wg_exists = select(exists(wg_key_match)).get_result(&*conn)?;
     let eth_exists = select(exists(eth_address_match)).get_result(&*conn)?;
