@@ -101,7 +101,6 @@ pub fn handle_email_registration(
                     "Wait {} more seconds for verification cooldown",
                     cooldown - time_since_last_email
                 ),
-                auto_register: true,
             })
         } else {
             match update_mail_sent_time(&client, &conn) {

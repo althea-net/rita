@@ -534,12 +534,7 @@ impl Handler<Tick> for ExitManager {
 
         for (k, s) in servers {
             match s.info {
-                ExitState::Denied { .. }
-                | ExitState::Disabled
-                | ExitState::GotInfo {
-                    auto_register: false,
-                    ..
-                } => {}
+                ExitState::Denied { .. } | ExitState::Disabled | ExitState::GotInfo { .. } => {}
                 ExitState::New { .. } => {
                     futs.push(Box::new(exit_general_details_request(k.clone()).then(
                         move |res| {

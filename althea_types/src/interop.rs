@@ -157,9 +157,6 @@ pub enum ExitState {
     GotInfo {
         general_details: ExitDetails,
         message: String,
-
-        #[serde(default)]
-        auto_register: bool,
     },
     Registering {
         general_details: ExitDetails,

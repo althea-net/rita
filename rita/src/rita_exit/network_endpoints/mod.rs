@@ -223,7 +223,6 @@ pub fn get_exit_info_http(_req: HttpRequest) -> Result<Json<ExitState>, Error> {
     Ok(Json(ExitState::GotInfo {
         general_details: get_exit_info(),
         message: "Got info successfully".to_string(),
-        auto_register: false,
     }))
 }
 
