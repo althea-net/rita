@@ -21,17 +21,36 @@ pub struct InterfaceToSet {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Copy)]
 pub enum InterfaceMode {
+    /// 'Mesh' mode essentially defines a port where Rita is attached and performing
+    /// it's own hello/ImHere protocol as defined in PeerListener. These ports are just
+    /// setup as static in the OpenWRT config and so long as SLACC IPv6 linklocal auto
+    /// negotiation is on Rita takes it from there. Some key caveats is that a port
+    /// may not be 'mesh' (eg: defined in Rita's peer_interfaces var) and also configured
+    /// as a WAN port.
     Mesh,
+    /// LAN port is essentially defined as any port attached to the br-lan bridge. The br-lan
+    /// bridge then provides DHCP. Finally Rita comes in and places a default route though the
+    /// exit server so that users can actually reach the internet.
     LAN,
+    /// WAN port, specifically means that this device is listening for DHCP (instead of providing DHCP
+    /// like on LAN). This route will be accepted and installed. Keep in mind if a WAN port is set this
+    /// device will count itself as a 'gateway' regardless of if there is actual activity on the port.
+    /// Example effects of a device being defined as a 'gateway' include making DHCP requests for manual_peers
+    /// in tunnel_manager and taking the gateway price in operator_update
     WAN,
-    /// StaticWAN is used to set interfaces but once set isn't
-    /// seen as any different than WAN elsewhere in the system
+    /// Same as WAN but configures a static IP for this device.
     StaticWAN {
         netmask: Ipv4Addr,
         ipaddr: Ipv4Addr,
         gateway: Ipv4Addr,
     },
-    Unknown, // Ambiguous wireless modes like monitor or promiscuous
+    /// This represents a port dedicated to phone network extending antennas. This is an extension of the
+    /// AltheaMobile SSID and can be boiled down to attaching the port to br-pbs over which devices will
+    /// then be assigned phone network DHCP and IPs
+    Phone,
+    /// Ambiguous wireless modes like monitor, or promiscuous show up here, but other things that might also
+    /// be unknown are various forms of malformed configs. Take for example a StaticWAN missing a config param
+    Unknown,
 }
 
 impl ToString for InterfaceMode {
@@ -41,6 +60,7 @@ impl ToString for InterfaceMode {
             InterfaceMode::LAN => "LAN".to_owned(),
             InterfaceMode::WAN => "WAN".to_owned(),
             InterfaceMode::StaticWAN { .. } => "StaticWAN".to_owned(),
+            InterfaceMode::Phone => "Phone".to_owned(),
             InterfaceMode::Unknown => "unknown".to_owned(),
         }
     }
@@ -53,20 +73,22 @@ pub fn get_interfaces() -> Result<HashMap<String, InterfaceMode>, Error> {
     // Wired
     for (setting_name, value) in KI.uci_show(Some("network"))? {
         // Only non-loopback non-bridge interface names should get past
-        if setting_name.contains("ifname")
-            && !value.contains("backhaul")
-            && value != "lo"
-            && !value.contains("pbs-wlan")
-        {
+        if setting_name.contains("ifname") && !value.contains("backhaul") && value != "lo" {
             // it's a list and we need to handle that
             if value.contains(' ') {
                 for list_member in value.split(' ') {
+                    if list_member.contains("pbs-wlan") {
+                        continue;
+                    }
                     retval.insert(
                         list_member.replace(" ", "").to_string(),
                         ethernet2mode(&value, &setting_name)?,
                     );
                 }
             } else {
+                if value.contains("pbs-wlan") {
+                    continue;
+                }
                 retval.insert(value.clone(), ethernet2mode(&value, &setting_name)?);
             }
         }
@@ -87,6 +109,7 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
     Ok(match &setting_name.replace(".ifname", "") {
         s if s.contains("rita_") => InterfaceMode::Mesh,
         s if s.contains("lan") => InterfaceMode::LAN,
+        s if s.contains("pbs") => InterfaceMode::Phone,
         s if s.contains("backhaul") => {
             let prefix = "network.backhaul";
             let backhaul = KI.uci_show(Some(prefix))?;
@@ -184,12 +207,21 @@ pub fn ethernet_transform_mode(
             let ret = KI.del_uci_var("network.backhaul");
             return_codes.push(ret);
         }
-        // lan is a little more complicated, wifi interfaces
-        // may depend on it so we only remove the ifname entry
+        // LAN is a bridge and the lan bridge must always remain because things
+        // like WiFi interfaces are attached to it. So we just remove the interface
+        // from the list
         InterfaceMode::LAN => {
             let list = KI.get_uci_var("network.lan.ifname")?;
             let new_list = list_remove(&list, ifname);
             let ret = KI.set_uci_var("network.lan.ifname", &new_list);
+            return_codes.push(ret);
+        }
+        // just like LAN we are adding and removing a device from the list just this time
+        // on pbs
+        InterfaceMode::Phone => {
+            let list = KI.get_uci_var("network.pbs.ifname")?;
+            let new_list = list_remove(&list, ifname);
+            let ret = KI.set_uci_var("network.pbs.ifname", &new_list);
             return_codes.push(ret);
         }
         // for mesh we need to send an unlisten so that Rita stops
@@ -237,7 +269,7 @@ pub fn ethernet_transform_mode(
             let ret = KI.set_uci_var("network.backhaul.gateway", &format!("{}", gateway));
             return_codes.push(ret);
         }
-        // since we left lan mostly unomidifed we just pop in the ifname
+        // since we left lan mostly unmodified we just pop in the ifname
         InterfaceMode::LAN => {
             trace!("Converting interface to lan with ifname {:?}", ifname);
             let ret = KI.get_uci_var("network.lan.ifname");
@@ -256,6 +288,29 @@ pub fn ethernet_transform_mode(
                         return_codes.push(ret);
                     } else {
                         warn!("Trying to read lan ifname returned {:?}", e);
+                        return_codes.push(Err(e));
+                    }
+                }
+            }
+        }
+        InterfaceMode::Phone => {
+            trace!("Converting interface to Phone with ifname {:?}", ifname);
+            let ret = KI.get_uci_var("network.pbs.ifname");
+            match ret {
+                Ok(list) => {
+                    trace!("The existing Phone interfaces list is {:?}", list);
+                    let new_list = list_add(&list, &ifname);
+                    trace!("Setting the new list {:?}", new_list);
+                    let ret = KI.set_uci_var("network.pbs.ifname", &new_list);
+                    return_codes.push(ret);
+                }
+                Err(e) => {
+                    if e.to_string().contains("Entry not found") {
+                        trace!("No Phone interfaces found, setting one now");
+                        let ret = KI.set_uci_var("network.pbs.ifname", &ifname);
+                        return_codes.push(ret);
+                    } else {
+                        warn!("Trying to read Phone ifname returned {:?}", e);
                         return_codes.push(Err(e));
                     }
                 }
