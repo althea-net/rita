@@ -122,7 +122,7 @@ fn checkin() {
         });
     }
 
-    let hardware_info = match get_hardware_info({ SETTING.get_network().device.clone() }) {
+    let hardware_info = match get_hardware_info(SETTING.get_network().device.clone()) {
         Ok(info) => Some(info),
         Err(e) => {
             error!("Failed to get hardware info with {:?}", e);
