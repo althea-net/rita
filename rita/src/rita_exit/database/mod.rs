@@ -223,7 +223,10 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
             message: "Registration OK".to_string(),
         })
     } else {
-        Ok(ExitState::New)
+        error!("De-registering client! {:?}", client);
+        bail!("Refusing to de-register clients right now!");
+        // TODO restore this functionality once it's confirmed to be safe
+        // Ok(ExitState::New)
     }
 }
 
