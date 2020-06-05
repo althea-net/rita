@@ -132,6 +132,10 @@ pub fn get_client(
     let filtered_list = clients
         .filter(mesh_ip.eq(ip.to_string()))
         .filter(wg_pubkey.eq(wg.to_string()))
+        // TODO search for EIP-55 capitalized key string and add a fallback
+        // to upgrade entires that are using the old all lowercase format. This should
+        // simplify the code some and reduce calls to .to_lowercase and worst of all the chance
+        // that we might forget a lowercase call, which type-checking can't protect us from.
         .filter(eth_address.eq(key.to_string().to_lowercase()));
     match filtered_list.load::<models::Client>(conn) {
         Ok(entry) => {
