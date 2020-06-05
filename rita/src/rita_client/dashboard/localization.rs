@@ -1,5 +1,6 @@
 use crate::SETTING;
 use actix_web::{HttpRequest, Json};
+use phonenumber::Mode;
 use settings::{localization::LocalizationSettings, RitaCommonSettings};
 
 /// A version of the localization struct that serializes into a more easily
@@ -18,7 +19,11 @@ impl From<LocalizationSettings> for LocalizationReturn {
             wyre_enabled: input.wyre_enabled,
             wyre_account_id: input.wyre_account_id,
             display_currency_symbol: input.display_currency_symbol,
-            support_number: input.support_number.to_string(),
+            support_number: input
+                .support_number
+                .format()
+                .mode(Mode::National)
+                .to_string(),
         }
     }
 }
