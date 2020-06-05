@@ -1,8 +1,0 @@
-#!/bin/sh
-
-# copy cargo and rustup into /builds directory which is in a shared volume
-cp -r /opt/cargo /builds/${CI_PROJECT_PATH}/shared/
-cp -r /opt/rustup /builds/${CI_PROJECT_PATH}/shared/
-
-# start real cross with modified path
-RUSTUP_HOME=/builds/${CI_PROJECT_PATH}/shared/rustup CARGO_HOME=/builds/${CI_PROJECT_PATH}/shared/cargo real-cross "$@"
