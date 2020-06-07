@@ -203,7 +203,9 @@ fn wait_for_settings(settings_file: &str) -> RitaSettingsStruct {
     }
 }
 
-pub fn migrate_contact_info() {
+/// Migrates from the old contact details structure to the new one, returns true
+/// if a migration has occurred.
+pub fn migrate_contact_info() -> bool {
     let mut exit_client = SETTING.get_exit_client_mut();
     let reg_details = exit_client.reg_details.clone();
     if let Some(reg_details) = reg_details {
@@ -212,8 +214,10 @@ pub fn migrate_contact_info() {
         if exit_client.contact_info.is_none() {
             let contact_info: Option<ContactStorage> = ContactStorage::convert(reg_details);
             exit_client.contact_info = contact_info;
+            return true;
         }
     }
+    false
 }
 
 fn main() {
