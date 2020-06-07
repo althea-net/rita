@@ -411,7 +411,7 @@ impl Handler<Tick> for ExitManager {
         trace!("About to setup exit tunnel!");
         if let Some(exit) = exit_server {
             trace!("We have selected an exit!");
-            if let Some(general_details) = exit.info.clone().general_details() {
+            if let Some(general_details) = exit.info.general_details() {
                 trace!("We have details for the selected exit!");
 
                 let signed_up_for_exit = exit.info.our_details().is_some();

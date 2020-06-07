@@ -186,7 +186,7 @@ fn make_payment(mut pmt: PaymentTx) -> Result<(), Error> {
                                             txid: tx_id,
                                             contact_socket,
                                             neigh_url: neighbor_url,
-                                            pmt: pmt.clone(),
+                                            pmt,
                                             attempt: 0u8,
                                         }));
                                         Ok(())

@@ -38,7 +38,7 @@ pub fn prepare_usage_history<S: ::std::hash::BuildHasher>(
                     wg_key,
                     bytes
                 );
-                usage_history.insert(wg_key.clone(), bytes.clone());
+                usage_history.insert(*wg_key, *bytes);
             }
         }
     }

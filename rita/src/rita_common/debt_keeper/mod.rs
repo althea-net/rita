@@ -447,7 +447,7 @@ impl DebtKeeper {
 
     fn get_debt_data_mut(&mut self, ident: &Identity) -> &mut NodeDebtData {
         self.debt_data
-            .entry(ident.clone())
+            .entry(*ident)
             .or_insert_with(NodeDebtData::new)
     }
 

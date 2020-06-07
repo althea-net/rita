@@ -550,7 +550,7 @@ fn insert_into_tunnel_list(input: &Tunnel, tunnels_list: &mut HashMap<Identity, 
     if tunnels_list.contains_key(identity) {
         tunnels_list.get_mut(identity).unwrap().push(input);
     } else {
-        tunnels_list.insert(identity.clone(), Vec::new());
+        tunnels_list.insert(*identity, Vec::new());
         tunnels_list.get_mut(identity).unwrap().push(input);
     }
 }

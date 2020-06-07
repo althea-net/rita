@@ -114,7 +114,7 @@ fn generate_helper_maps(our_id: &Identity, clients: &[Identity]) -> Result<Helpe
     let mut identities: HashMap<WgKey, Identity> = HashMap::new();
     let mut id_from_ip: HashMap<IpAddr, Identity> = HashMap::new();
     let our_settings = SETTING.get_network();
-    id_from_ip.insert(our_settings.mesh_ip.unwrap(), our_id.clone());
+    id_from_ip.insert(our_settings.mesh_ip.unwrap(), *our_id);
 
     for ident in clients.iter() {
         identities.insert(ident.wg_public_key, *ident);

@@ -41,7 +41,7 @@ impl dyn KernelInterface {
             args.push("persistent-keepalive".into());
             args.push("5".into());
 
-            client_pubkeys.insert(c.public_key.clone());
+            client_pubkeys.insert(c.public_key);
         }
 
         let arg_str: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
