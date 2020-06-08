@@ -66,7 +66,8 @@ use futures01::future;
 use futures01::future::Future;
 use num256::Uint256;
 use num_traits::identities::Zero;
-use settings::RitaCommonSettings;
+use rand::{thread_rng, Rng};
+use settings::{payment::PaymentSettings, RitaCommonSettings};
 use std::fmt;
 use std::fmt::Display;
 use std::time::Duration;
@@ -163,8 +164,7 @@ impl SystemService for TokenBridge {
     }
 }
 
-fn token_bridge_core_from_settings() -> TokenBridgeCore {
-    let payment_settings = SETTING.get_payment();
+fn token_bridge_core_from_settings(payment_settings: &PaymentSettings) -> TokenBridgeCore {
     let addresses = payment_settings.bridge_addresses.clone();
     TokenBridgeCore::new(
         addresses.uniswap_address,
@@ -180,11 +180,27 @@ fn token_bridge_core_from_settings() -> TokenBridgeCore {
 
 impl Default for TokenBridge {
     fn default() -> TokenBridge {
+        let mut payment_settings = SETTING.get_payment_mut();
+        let minimum_to_exchange = match payment_settings.bridge_addresses.minimum_to_exchange {
+            Some(val) => val,
+            None => {
+                payment_settings.bridge_addresses.minimum_to_exchange = Some(4);
+                4
+            }
+        };
+        let reserve_amount = match payment_settings.bridge_addresses.reserve_amount {
+            Some(val) => val,
+            None => {
+                payment_settings.bridge_addresses.reserve_amount = Some(2);
+                2
+            }
+        };
+
         TokenBridge {
-            bridge: token_bridge_core_from_settings(),
+            bridge: token_bridge_core_from_settings(&payment_settings),
             state: State::Ready { former_state: None },
-            minimum_to_exchange: 2,
-            reserve_amount: 1,
+            minimum_to_exchange,
+            reserve_amount,
             minimum_stranded_dai_transfer: 1,
             detailed_state: DetailedBridgeState::NoOp {
                 eth_balance: Uint256::zero(),
@@ -212,10 +228,20 @@ fn rescue_dai(
                         amount: dai_balance.clone(),
                     },
                 ));
+
+                // Remove up to U16_MAX wei from this transaction, this is well under a cent.
+                // what this does is randomly change the tx hash and help prevent 'stuck' transactions
+                // thanks to anti-spam mechanisms. Payments get this 'for free' thanks to changing debts
+                // numbers. And other tx's here do thanks to changing exchange rates and other external factors
+                // this is the only transaction that will be exactly the same for a very long period.
+                let mut rng = thread_rng();
+                let some_wei: u16 = rng.gen();
+                let amount = dai_balance - Uint256::from(some_wei);
+
                 // Over the bridge into xDai
                 Box::new(
                     bridge
-                        .dai_to_xdai_bridge(dai_balance, ETH_TRANSFER_TIMEOUT)
+                        .dai_to_xdai_bridge(amount, ETH_TRANSFER_TIMEOUT)
                         .and_then(|_res| Ok(())),
                 )
             } else {
@@ -250,7 +276,7 @@ impl Handler<Tick> for TokenBridge {
 }
 
 /// simplified logic for bringing xdai back over to Eth if the user has xdai and then
-/// selects Eth as their blockchain it will brin gthe full balance back into Eth
+/// selects Eth as their blockchain it will bring the full balance back into Eth
 fn eth_bridge(_state: State, bridge: &TokenBridge) {
     let bridge = bridge.bridge.clone();
     Arbiter::spawn(
@@ -418,10 +444,10 @@ fn xdai_bridge(state: State, bridge: &TokenBridge) {
             // if the do_send at the end of state depositing fails we can get stuck here
             // at the time time we don't want to submit multiple eth transactions for each
             // step above, especially if they take a long time (note the timeouts are in the 10's of minutes)
-            // so we often 'tick' in depositing because there's a background future we don't want to interuppt
+            // so we often 'tick' in depositing because there's a background future we don't want to interrupt
             // if that future fails it's state change do_send a few lines up from here we're screwed and the bridge
             // forever sits in this no-op state. This is a rescue setup for that situation where we check that enough
-            // time has elapsed. The theroretical max here is the uniswap timeout plus the eth transfer timeout
+            // time has elapsed. The theoretical max here is the uniswap timeout plus the eth transfer timeout
             let now = Instant::now();
             if now
                 > timestamp
@@ -751,6 +777,7 @@ impl Message for ReloadAddresses {
 impl Handler<ReloadAddresses> for TokenBridge {
     type Result = ();
     fn handle(&mut self, _msg: ReloadAddresses, _ctx: &mut Context<Self>) -> Self::Result {
-        self.bridge = token_bridge_core_from_settings();
+        let payment_settings = SETTING.get_payment();
+        self.bridge = token_bridge_core_from_settings(&payment_settings);
     }
 }
