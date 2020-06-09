@@ -15,6 +15,59 @@ pub struct ContactDetails {
     pub email: Option<String>,
 }
 
+impl From<ContactType> for ContactDetails {
+    fn from(val: ContactType) -> Self {
+        match val {
+            ContactType::Phone { number } => ContactDetails {
+                phone: Some(number.to_string()),
+                email: None,
+            },
+            ContactType::Email { email } => ContactDetails {
+                phone: None,
+                email: Some(email.to_string()),
+            },
+            ContactType::Both { email, number } => ContactDetails {
+                phone: Some(number.to_string()),
+                email: Some(email.to_string()),
+            },
+            ContactType::Bad {
+                invalid_email,
+                invalid_number,
+            } => ContactDetails {
+                phone: invalid_number,
+                email: invalid_email,
+            },
+        }
+    }
+}
+
+impl ContactType {
+    pub fn convert(val: ContactDetails) -> Option<Self> {
+        let same = ExitRegistrationDetails {
+            phone: val.phone,
+            email: val.email,
+            phone_code: None,
+            email_code: None,
+        };
+        match ContactStorage::convert(same) {
+            Some(val) => Some(val.into()),
+            None => None,
+        }
+    }
+}
+
+impl From<Option<ContactType>> for ContactDetails {
+    fn from(val: Option<ContactType>) -> Self {
+        match val {
+            Some(val) => val.into(),
+            None => ContactDetails {
+                phone: None,
+                email: None,
+            },
+        }
+    }
+}
+
 /// This enum is used to represent the fact that while we may not have a phone
 /// number and may not have an Email we are required to have at least one to
 /// facilitate exit registration.
