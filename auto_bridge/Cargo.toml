@@ -1,0 +1,17 @@
+[package]
+name = "auto-bridge"
+version = "0.1.5"
+authors = ["Jehan <jehan.tremback@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+web30 = { git = "https://github.com/althea-mesh/web30", branch = "master" }
+actix = "0.7"
+futures = "0.1"
+failure = "0.1"
+num256 = "0.2"
+clarity = "0.1"
+futures-timer = "0.1"
+rand = "0.7"
+num = "0.2"
+log = "0.4"

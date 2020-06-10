@@ -22,7 +22,7 @@ exit_db = { path = "../exit_db" }
 num256 = "0.2"
 settings = { path = "../settings" }
 antenna_forwarding_client = {path = "../antenna_forwarding_client"}
-auto-bridge = {git = "https://github.com/althea-net/auto_bridge", tag = "v0.1.5"}
+auto-bridge = {path = "../auto_bridge"}
 actix-web-httpauth = {git = "https://github.com/althea-net/actix-web-httpauth"}
 clarity = "0.1"
 web30 = {git = "https://github.com/althea-net/web30", branch = "master"}

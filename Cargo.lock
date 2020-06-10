@@ -291,7 +291,6 @@ dependencies = [
 [[package]]
 name = "auto-bridge"
 version = "0.1.5"
-source = "git+https://github.com/althea-net/auto_bridge?tag=v0.1.5#995f9cea1d7bdcb395a4cd0a8c02d82b8b883824"
 dependencies = [
  "actix",
  "clarity",
