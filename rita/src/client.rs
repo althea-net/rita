@@ -227,7 +227,13 @@ fn main() {
     // do TLS stuff.
     openssl_probe::init_ssl_cert_env_vars();
 
-    if !SETTING.get_log().enabled || env_vars_contains("NO_REMOTE_LOG") {
+    // we should remove log if there's an operator address or if logging is enabled
+    let should_remote_log =
+        SETTING.get_log().enabled || SETTING.get_operator().operator_address.is_some();
+    // if remote logging is disabled, or the NO_REMOTE_LOG env var is set we should use the
+    // local logger and log to std-out. Note we don't care what is actually set in NO_REMOTE_LOG
+    // just that it is set
+    if !should_remote_log || env_vars_contains("NO_REMOTE_LOG") {
         env_logger::init();
     } else {
         let res = enable_remote_logging();

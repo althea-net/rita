@@ -116,7 +116,7 @@ impl Handler<Tick> for RitaLoop {
                 .then(|_res| Ok(()))
         }));
 
-        if SETTING.get_log().enabled {
+        if SETTING.get_log().enabled || SETTING.get_operator().operator_address.is_some() {
             send_udp_heartbeat();
 
             if !self.antenna_forwarder_started {
