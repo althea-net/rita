@@ -78,7 +78,7 @@ impl RunningLatencyStats {
             // much sense from a stats perspective but here's why it works. Often
             // when links start you get a lot of transient bad states, like 2000ms
             // latency and the like. Because the history is reset in network_monitor after
-            // this is triggered it doesn't immeidately trigger again. The std_dev and average
+            // this is triggered it doesn't immediately trigger again. The std_dev and average
             // are both high and this protects connections from rapid excessive down shaping.
             // the other key is that as things run longer the average goes down so spikes in
             // std-dev are properly responded to. This is *not* a good metric for up-shaping
@@ -87,15 +87,23 @@ impl RunningLatencyStats {
             //
             // If for some reason you feel the need to edit this you should probably not
             // do anything until you have more than 100 or so samples and then carve out
-            // exceptions for conditions like avgerage latency under 10ms becuase fiber lines
-            // are a different beast than  the wireless connections. Do remember that exits can
+            // exceptions for conditions like average latency under 10ms because fiber lines
+            // are a different beast than the wireless connections. Do remember that exits can
             // be a lot more than 50ms away so you need to account for distant but stable connections
             // as well. This somehow does all of that at once, so here it stands
             (Some(std_dev), Some(avg)) => std_dev > 10f32 * avg,
             (_, _) => false,
         }
     }
-    /// A hand tuned heuristic used to determine if a connection is good
+    /// A hand tuned heuristic used to determine if a connection is good this works differently than
+    /// is_bloated because false positives are less damaging. We can rate limit speed increases to once
+    /// every few minutes. While making the connection stable needs to be done right away, making it faster
+    /// can be done more slowly. We use a combined average and std-dev measure specifically for fiber connections
+    /// lets say you have a fiber connection and it has a 2ms normal latency and then one 2 second spike, that's
+    /// going throw off your std-dev essentially forever. Which is why we have the out when the average is near the
+    /// lowest. On wireless links the lowest you ever see will almost always be much lower than the average, on fiber
+    /// it happens all the time. Over on the wireless link side we have a much less clustered distribution so the std-dev
+    /// is more stable and a good metric.
     pub fn is_good(&self) -> bool {
         let std_dev = self.get_std_dev();
         let avg = self.get_avg();
