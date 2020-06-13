@@ -54,7 +54,10 @@ impl RunningLatencyStats {
         }
     }
     pub fn add_sample(&mut self, sample: f32) {
-        self.count += 1;
+        match self.count.checked_add(1) {
+            Some(val) => self.count = val,
+            None => self.reset(),
+        }
         let delta = sample - self.mean;
         self.mean += delta / self.count as f32;
         let delta2 = sample - self.mean;
@@ -127,6 +130,9 @@ impl RunningLatencyStats {
         self.last_changed
             .expect("Tried to get changed on a serialized counter!")
     }
+    pub fn samples(&self) -> u32 {
+        self.count
+    }
 }
 
 /// Due to the way babel communicates packet loss the functions here require slightly
@@ -160,8 +166,20 @@ impl RunningPacketLossStats {
         // babel displays a 16 second window of hellos, so adjust this based on
         // any changes in run rate of this function
         let lost_packets = SAMPLE_PERIOD - get_first_n_set_bits(sample, SAMPLE_PERIOD);
-        self.total_lost += u32::from(lost_packets);
-        self.total_packets += u32::from(SAMPLE_PERIOD);
+        match self.total_lost.checked_add(u32::from(lost_packets)) {
+            Some(val) => self.total_lost = val,
+            None => {
+                self.total_packets = 0;
+                self.total_lost = 0;
+            }
+        }
+        match self.total_packets.checked_add(u32::from(SAMPLE_PERIOD)) {
+            Some(val) => self.total_packets = val,
+            None => {
+                self.total_packets = 0;
+                self.total_lost = 0;
+            }
+        }
         self.five_minute_loss[self.front] = lost_packets;
         self.front = (self.front + 1) % SAMPLES_IN_FIVE_MINUTES;
     }
@@ -176,6 +194,12 @@ impl RunningPacketLossStats {
         let total_packets = SAMPLES_IN_FIVE_MINUTES * SAMPLE_PERIOD as usize;
         let sum_loss: usize = self.five_minute_loss.iter().map(|i| *i as usize).sum();
         sum_loss as f32 / total_packets as f32
+    }
+    pub fn get_count(&self) -> u32 {
+        self.total_packets
+    }
+    pub fn get_lost(&self) -> u32 {
+        self.total_lost
     }
 }
 
@@ -236,5 +260,20 @@ mod tests {
     #[should_panic]
     fn test_get_first_n_set_bits_impossible() {
         let _count = get_first_n_set_bits(0b1110_0000_0000_1100, 32);
+    }
+
+    #[test]
+    fn test_rtt_increment() {
+        let mut stats = RunningLatencyStats::new();
+        stats.add_sample(0.12);
+        assert_eq!(stats.samples(), 1);
+    }
+
+    #[test]
+    fn test_packet_loss_increment() {
+        let mut stats = RunningPacketLossStats::new();
+        stats.add_sample(0);
+        assert_eq!(stats.get_count(), SAMPLE_PERIOD as u32);
+        assert_eq!(stats.get_lost(), SAMPLE_PERIOD as u32);
     }
 }
