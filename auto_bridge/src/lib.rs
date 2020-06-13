@@ -29,6 +29,7 @@ pub struct TokenBridge {
 }
 
 impl TokenBridge {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         uniswap_address: Address,
         xdai_home_bridge_address: Address,
@@ -59,8 +60,8 @@ impl TokenBridge {
         timeout: u64,
     ) -> Box<dyn Future<Item = (), Error = Error>> {
         let web3 = self.eth_web3.clone();
-        let own_address = self.own_address.clone();
-        let secret = self.secret.clone();
+        let own_address = self.own_address;
+        let secret = self.secret;
 
         Box::new(
             web3.send_transaction(to, Vec::new(), amount, own_address, secret, vec![])
@@ -78,8 +79,8 @@ impl TokenBridge {
         amount: Uint256,
     ) -> Box<dyn Future<Item = Uint256, Error = Error>> {
         let web3 = self.eth_web3.clone();
-        let uniswap_address = self.uniswap_address.clone();
-        let own_address = self.own_address.clone();
+        let uniswap_address = self.uniswap_address;
+        let own_address = self.own_address;
 
         Box::new(
             web3.contract_call(
@@ -106,8 +107,8 @@ impl TokenBridge {
         amount: Uint256,
     ) -> Box<dyn Future<Item = Uint256, Error = Error>> {
         let web3 = self.eth_web3.clone();
-        let uniswap_address = self.uniswap_address.clone();
-        let own_address = self.own_address.clone();
+        let uniswap_address = self.uniswap_address;
+        let own_address = self.own_address;
 
         Box::new(
             web3.contract_call(
@@ -136,9 +137,9 @@ impl TokenBridge {
         eth_amount: Uint256,
         timeout: u64,
     ) -> Box<dyn Future<Item = Uint256, Error = Error>> {
-        let uniswap_address = self.uniswap_address.clone();
-        let own_address = self.own_address.clone();
-        let secret = self.secret.clone();
+        let uniswap_address = self.uniswap_address;
+        let own_address = self.own_address;
+        let secret = self.secret;
         let web3 = self.eth_web3.clone();
 
         Box::new(
@@ -150,7 +151,7 @@ impl TokenBridge {
                     let deadline = block.timestamp + timeout.into();
                     let payload = encode_call(
                         "ethToTokenSwapInput(uint256,uint256)",
-                        &[expected_dai.clone().into(), deadline.into()],
+                        &[expected_dai.into(), deadline.into()],
                     );
 
                     web3.send_transaction(
@@ -183,9 +184,9 @@ impl TokenBridge {
     /// Checks if the uniswap contract has been approved to spend dai from our account.
     pub fn check_if_uniswap_dai_approved(&self) -> Box<dyn Future<Item = bool, Error = Error>> {
         let web3 = self.eth_web3.clone();
-        let uniswap_address = self.uniswap_address.clone();
-        let dai_address = self.foreign_dai_contract_address.clone();
-        let own_address = self.own_address.clone();
+        let uniswap_address = self.uniswap_address;
+        let dai_address = self.foreign_dai_contract_address;
+        let own_address = self.own_address;
 
         Box::new(
             web3.contract_call(
@@ -216,10 +217,10 @@ impl TokenBridge {
         &self,
         timeout: Duration,
     ) -> Box<dyn Future<Item = (), Error = Error>> {
-        let dai_address = self.foreign_dai_contract_address.clone();
-        let own_address = self.own_address.clone();
-        let uniswap_address = self.uniswap_address.clone();
-        let secret = self.secret.clone();
+        let dai_address = self.foreign_dai_contract_address;
+        let own_address = self.own_address;
+        let uniswap_address = self.uniswap_address;
+        let secret = self.secret;
         let web3 = self.eth_web3.clone();
 
         let payload = encode_call(
@@ -257,9 +258,9 @@ impl TokenBridge {
         dai_amount: Uint256,
         timeout: u64,
     ) -> Box<dyn Future<Item = Uint256, Error = Error>> {
-        let uniswap_address = self.uniswap_address.clone();
-        let own_address = self.own_address.clone();
-        let secret = self.secret.clone();
+        let uniswap_address = self.uniswap_address;
+        let own_address = self.own_address;
+        let secret = self.secret;
         let web3 = self.eth_web3.clone();
         let salf = self.clone();
 
@@ -286,11 +287,7 @@ impl TokenBridge {
                             let deadline = block.timestamp + timeout.into();
                             let payload = encode_call(
                                 "tokenToEthSwapInput(uint256,uint256,uint256)",
-                                &[
-                                    dai_amount.into(),
-                                    expected_eth.clone().into(),
-                                    deadline.into(),
-                                ],
+                                &[dai_amount.into(), expected_eth.into(), deadline.into()],
                             );
 
                             web3.send_transaction(
@@ -328,10 +325,10 @@ impl TokenBridge {
         timeout: u64,
     ) -> Box<dyn Future<Item = Uint256, Error = Error>> {
         let eth_web3 = self.eth_web3.clone();
-        let foreign_dai_contract_address = self.foreign_dai_contract_address.clone();
-        let xdai_foreign_bridge_address = self.xdai_foreign_bridge_address.clone();
-        let own_address = self.own_address.clone();
-        let secret = self.secret.clone();
+        let foreign_dai_contract_address = self.foreign_dai_contract_address;
+        let xdai_foreign_bridge_address = self.xdai_foreign_bridge_address;
+        let own_address = self.own_address;
+        let secret = self.secret;
 
         // You basically just send it some coins
         // We have no idea when this has succeeded since the events are not indexed
@@ -367,10 +364,10 @@ impl TokenBridge {
     ) -> Box<dyn Future<Item = Uint256, Error = Error>> {
         let xdai_web3 = self.xdai_web3.clone();
 
-        let xdai_home_bridge_address = self.xdai_home_bridge_address.clone();
+        let xdai_home_bridge_address = self.xdai_home_bridge_address;
 
-        let own_address = self.own_address.clone();
-        let secret = self.secret.clone();
+        let own_address = self.own_address;
+        let secret = self.secret;
 
         // You basically just send it some coins
         Box::new(xdai_web3.send_transaction(
@@ -416,7 +413,6 @@ impl TokenBridge {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use actix;
     use std::str::FromStr;
 
     fn new_token_bridge() -> TokenBridge {
@@ -427,11 +423,11 @@ mod tests {
         .unwrap();
 
         TokenBridge::new(
-            Address::from_str("0x09cabEC1eAd1c0Ba254B09efb3EE13841712bE14".into()).unwrap(),
-            Address::from_str("0x7301CFA0e1756B71869E93d4e4Dca5c7d0eb0AA6".into()).unwrap(),
-            Address::from_str("0x4aa42145Aa6Ebf72e164C9bBC74fbD3788045016".into()).unwrap(),
-            Address::from_str("0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359".into()).unwrap(),
-            Address::from_str("0x79AE13432950bF5CDC3499f8d4Cf5963c3F0d42c".into()).unwrap(),
+            Address::from_str("0x09cabEC1eAd1c0Ba254B09efb3EE13841712bE14").unwrap(),
+            Address::from_str("0x7301CFA0e1756B71869E93d4e4Dca5c7d0eb0AA6").unwrap(),
+            Address::from_str("0x4aa42145Aa6Ebf72e164C9bBC74fbD3788045016").unwrap(),
+            Address::from_str("0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359").unwrap(),
+            Address::from_str("0x79AE13432950bF5CDC3499f8d4Cf5963c3F0d42c").unwrap(),
             pk,
             "https://eth.althea.org".into(),
             "https://dai.althea.org".into(),
@@ -444,6 +440,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_is_approved() {
         let pk = PrivateKey::from_str(&format!(
             "FE1FC0A7A29503BAF72274A{}601D67309E8F3{}D22",
@@ -456,11 +453,11 @@ mod tests {
         let token_bridge = new_token_bridge();
 
         let unapproved_token_bridge = TokenBridge::new(
-            Address::from_str("0x09cabEC1eAd1c0Ba254B09efb3EE13841712bE14".into()).unwrap(),
-            Address::from_str("0x7301CFA0e1756B71869E93d4e4Dca5c7d0eb0AA6".into()).unwrap(),
-            Address::from_str("0x4aa42145Aa6Ebf72e164C9bBC74fbD3788045016".into()).unwrap(),
-            Address::from_str("0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359".into()).unwrap(),
-            Address::from_str("0x6d943740746934b2f5D9c9E6Cb1908758A42452f".into()).unwrap(),
+            Address::from_str("0x09cabEC1eAd1c0Ba254B09efb3EE13841712bE14").unwrap(),
+            Address::from_str("0x7301CFA0e1756B71869E93d4e4Dca5c7d0eb0AA6").unwrap(),
+            Address::from_str("0x4aa42145Aa6Ebf72e164C9bBC74fbD3788045016").unwrap(),
+            Address::from_str("0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359").unwrap(),
+            Address::from_str("0x6d943740746934b2f5D9c9E6Cb1908758A42452f").unwrap(),
             pk,
             "https://eth.althea.org".into(),
             "https://dai.althea.org".into(),
@@ -488,6 +485,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_eth_to_dai_swap() {
         let system = actix::System::new("test");
 
@@ -496,9 +494,7 @@ mod tests {
         actix::spawn(
             token_bridge
                 .dai_to_eth_price(eth_to_wei(0.01f64))
-                .and_then(move |one_cent_in_eth| {
-                    token_bridge.eth_to_dai_swap(one_cent_in_eth.clone(), 600)
-                })
+                .and_then(move |one_cent_in_eth| token_bridge.eth_to_dai_swap(one_cent_in_eth, 600))
                 .then(|res| {
                     res.unwrap();
                     actix::System::current().stop();
@@ -510,6 +506,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_dai_to_eth_swap() {
         let system = actix::System::new("test");
         let token_bridge = new_token_bridge();
@@ -529,6 +526,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_dai_to_xdai_bridge() {
         let system = actix::System::new("test");
 
@@ -550,6 +548,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_xdai_to_dai_bridge() {
         let system = actix::System::new("test");
 
