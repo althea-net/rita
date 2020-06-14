@@ -4,6 +4,8 @@
 //! This loop manages exit signup based on the settings configuration state and deploys an exit vpn
 //! tunnel if the signup was successful on the selected exit.
 
+use crate::rita_client::dashboard::interfaces::get_interfaces;
+use crate::rita_client::dashboard::interfaces::InterfaceMode;
 use crate::rita_client::exit_manager::ExitManager;
 use crate::rita_client::heartbeat::send_udp_heartbeat;
 use crate::rita_client::heartbeat::HEARTBEAT_SERVER_KEY;
@@ -32,6 +34,7 @@ use failure::Error;
 use futures01::future::Future;
 use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;
+use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 pub struct RitaLoop {
@@ -123,13 +126,31 @@ impl Handler<Tick> for RitaLoop {
                 let network = SETTING.get_network();
                 let our_id = SETTING.get_identity().unwrap();
                 let logging = SETTING.get_log();
+                let interfaces = match get_interfaces() {
+                    Ok(val) => {
+                        let mut v = HashSet::new();
+                        for (iface, mode) in val {
+                            if mode != InterfaceMode::LAN {
+                                v.insert(iface);
+                            }
+                        }
+                        info!("Starting antenna forwarder on {:?}", v);
+                        v
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to get interfaces, starting forwarder on peer interfaces only!, {:?}", e
+                        );
+                        network.peer_interfaces.clone()
+                    }
+                };
                 start_antenna_forwarding_proxy(
                     logging.forwarding_checkin_url.clone(),
                     our_id,
                     *HEARTBEAT_SERVER_KEY,
                     network.wg_public_key.unwrap(),
                     network.wg_private_key.unwrap(),
-                    network.peer_interfaces.clone(),
+                    interfaces,
                 );
                 self.antenna_forwarder_started = true;
             }
