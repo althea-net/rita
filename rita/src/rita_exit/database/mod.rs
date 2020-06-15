@@ -240,7 +240,7 @@ fn low_balance_notification(
     config: Option<ExitVerifSettings>,
     conn: &PgConnection,
 ) {
-    trace!("Checking low balance nofication");
+    trace!("Checking low balance notification");
 
     // maybe this needs a trait 'enabled'?
     if let Some(ref config) = config {
@@ -322,6 +322,11 @@ pub fn validate_clients_region(clients_list: Vec<exit_db::models::Client>) -> Re
     let mut ip_vec = Vec::new();
     let mut client_map = HashMap::new();
     for item in clients_list {
+        // there's no need to check clients that aren't verified
+        // as they are never setup
+        if !item.verified {
+            continue;
+        }
         match item.mesh_ip.parse() {
             Ok(ip) => {
                 client_map.insert(ip, item);
