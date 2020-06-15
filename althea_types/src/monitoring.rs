@@ -139,7 +139,7 @@ impl RunningLatencyStats {
 /// more data processing to get correct values. 'Reach' is a 16 second bitvector of hello/IHU
 /// outcomes, but we're sampling every 5 seconds, in order to keep samples from interfering with
 /// each other we take the top 5 bits and use that to compute packet loss.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunningPacketLossStats {
     /// the number of packets lost during each 5 second sample period over the last five minutes
     five_minute_loss: Vec<u8>,
@@ -151,8 +151,8 @@ pub struct RunningPacketLossStats {
     total_lost: u32,
 }
 
-impl RunningPacketLossStats {
-    pub fn new() -> RunningPacketLossStats {
+impl Default for RunningPacketLossStats {
+    fn default() -> Self {
         let mut new = Vec::with_capacity(SAMPLES_IN_FIVE_MINUTES);
         new.extend_from_slice(&[0; SAMPLES_IN_FIVE_MINUTES]);
         RunningPacketLossStats {
@@ -162,7 +162,20 @@ impl RunningPacketLossStats {
             total_lost: 0u32,
         }
     }
+}
+
+impl RunningPacketLossStats {
+    pub fn new() -> RunningPacketLossStats {
+        RunningPacketLossStats::default()
+    }
     pub fn add_sample(&mut self, sample: u16) {
+        // handles when 'default' was miscalled
+        if self.five_minute_loss.is_empty() {
+            let mut new = Vec::with_capacity(SAMPLES_IN_FIVE_MINUTES);
+            new.extend_from_slice(&[0; SAMPLES_IN_FIVE_MINUTES]);
+            self.five_minute_loss = new;
+        }
+
         // babel displays a 16 second window of hellos, so adjust this based on
         // any changes in run rate of this function
         let lost_packets = SAMPLE_PERIOD - get_first_n_set_bits(sample, SAMPLE_PERIOD);
@@ -192,8 +205,12 @@ impl RunningPacketLossStats {
     }
     pub fn get_five_min_average(&self) -> f32 {
         let total_packets = SAMPLES_IN_FIVE_MINUTES * SAMPLE_PERIOD as usize;
-        let sum_loss: usize = self.five_minute_loss.iter().map(|i| *i as usize).sum();
-        sum_loss as f32 / total_packets as f32
+        if total_packets > 0 {
+            let sum_loss: usize = self.five_minute_loss.iter().map(|i| *i as usize).sum();
+            sum_loss as f32 / total_packets as f32
+        } else {
+            0.0
+        }
     }
     pub fn get_count(&self) -> u32 {
         self.total_packets
