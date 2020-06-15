@@ -174,7 +174,7 @@ pub fn process_streams<S: ::std::hash::BuildHasher>(
     let mut streams_to_remove: Vec<u64> = Vec::new();
     // First we we have to iterate over all of these connections
     // and read to send messages up the server pipe. We need to do
-    // this first becuase we may exit in the next section if there's
+    // this first because we may exit in the next section if there's
     // nothing to write
     for (stream_id, antenna_stream) in streams.iter_mut() {
         // in theory we will figure out if the connection is closed here
@@ -678,6 +678,7 @@ impl ForwardingProtocolMessage {
                     bytes[bytes_read..].to_vec(),
                     vec![msg],
                     0,
+                    None,
                 )
             }
             (Err(ForwardingProtocolError::SliceTooSmall { .. }), _) => {
@@ -716,14 +717,20 @@ impl ForwardingProtocolMessage {
     pub fn read_messages(
         input: &mut TcpStream,
     ) -> Result<Vec<ForwardingProtocolMessage>, FailureError> {
-        ForwardingProtocolMessage::read_messages_internal(input, Vec::new(), Vec::new(), 0)
+        ForwardingProtocolMessage::read_messages_internal(input, Vec::new(), Vec::new(), 0, None)
     }
 
+    /// internal helper function designed to handle the complexities of reading off of a buffer and breaking down into messages, if we find a message
+    /// it is pushed onto the messages vec, if we have bytes left over from our read we recurse and try and parse a message out of them, if we have a
+    /// packet that promises more bytes than we have that means we need to wait for the remainder by sleeping for spinlock time. In very bad situations
+    /// the connection may actually be that slow and we use last_read_bytes to ensure that if any packets are delivered in a minute we keep trying
+    /// last read bytes is only filled out when we recurse for an unfinished message
     fn read_messages_internal(
         input: &mut TcpStream,
         remaining_bytes: Vec<u8>,
         messages: Vec<ForwardingProtocolMessage>,
         depth: u16,
+        last_read_bytes: Option<u32>,
     ) -> Result<Vec<ForwardingProtocolMessage>, FailureError> {
         // don't wait the first time in order to speed up execution
         // if we are recursing we want to wait for the message to finish
@@ -761,6 +768,7 @@ impl ForwardingProtocolMessage {
                         remaining_bytes[bytes..].to_vec(),
                         messages,
                         depth + 1,
+                        None,
                     )
                 } else {
                     Ok(messages)
@@ -769,11 +777,24 @@ impl ForwardingProtocolMessage {
             Err(e) => match e {
                 ForwardingProtocolError::SliceTooSmall { expected, actual } => {
                     error!("Expected {} bytes, got {} bytes", expected, actual);
+                    if let Some(last_actual) = last_read_bytes {
+                        // we got some new bytes, reset the counter
+                        if actual > last_actual {
+                            return ForwardingProtocolMessage::read_messages_internal(
+                                input,
+                                remaining_bytes,
+                                messages,
+                                0,
+                                Some(actual),
+                            );
+                        }
+                    }
                     ForwardingProtocolMessage::read_messages_internal(
                         input,
                         remaining_bytes,
                         messages,
                         depth + 1,
+                        Some(actual),
                     )
                 }
                 _ => {
