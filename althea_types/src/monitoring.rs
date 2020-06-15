@@ -133,6 +133,9 @@ impl RunningLatencyStats {
     pub fn samples(&self) -> u32 {
         self.count
     }
+    pub fn get_lowest(&self) -> Option<f32> {
+        self.lowest
+    }
 }
 
 /// Due to the way babel communicates packet loss the functions here require slightly
@@ -169,7 +172,7 @@ impl RunningPacketLossStats {
         RunningPacketLossStats::default()
     }
     pub fn add_sample(&mut self, sample: u16) {
-        // handles when 'default' was miscalled
+        // handles when 'default' was miscalled, this should be safe to remove
         if self.five_minute_loss.is_empty() {
             let mut new = Vec::with_capacity(SAMPLES_IN_FIVE_MINUTES);
             new.extend_from_slice(&[0; SAMPLES_IN_FIVE_MINUTES]);
