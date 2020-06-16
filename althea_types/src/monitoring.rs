@@ -65,7 +65,9 @@ impl RunningLatencyStats {
         self.last_value = Some(sample);
         match self.lowest {
             Some(lowest) => {
-                if sample < lowest {
+                // fix for bad "default" where some lowest as zero's slipped in
+                // TODO remove operator tools fixing hack
+                if sample < lowest || lowest == 0 {
                     self.lowest = Some(sample)
                 }
             }
@@ -173,6 +175,7 @@ impl RunningPacketLossStats {
     }
     pub fn add_sample(&mut self, sample: u16) {
         // handles when 'default' was miscalled, this should be safe to remove
+        // TODO remove operator tools fixing hack
         if self.five_minute_loss.is_empty() {
             let mut new = Vec::with_capacity(SAMPLES_IN_FIVE_MINUTES);
             new.extend_from_slice(&[0; SAMPLES_IN_FIVE_MINUTES]);
