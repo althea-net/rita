@@ -67,7 +67,7 @@ impl RunningLatencyStats {
             Some(lowest) => {
                 // fix for bad "default" where some lowest as zero's slipped in
                 // TODO remove operator tools fixing hack
-                if sample < lowest || lowest == 0 {
+                if sample < lowest || lowest == 0.0 {
                     self.lowest = Some(sample)
                 }
             }
@@ -96,7 +96,7 @@ impl RunningLatencyStats {
             // are a different beast than the wireless connections. Do remember that exits can
             // be a lot more than 50ms away so you need to account for distant but stable connections
             // as well. This somehow does all of that at once, so here it stands
-            (Some(std_dev), Some(avg)) => std_dev > 10f32 * avg,
+            (Some(std_dev), Some(avg)) => std_dev > 10f32 * avg && avg > 10f32,
             (_, _) => false,
         }
     }
@@ -108,13 +108,16 @@ impl RunningLatencyStats {
     /// going throw off your std-dev essentially forever. Which is why we have the out when the average is near the
     /// lowest. On wireless links the lowest you ever see will almost always be much lower than the average, on fiber
     /// it happens all the time. Over on the wireless link side we have a much less clustered distribution so the std-dev
-    /// is more stable and a good metric.
+    /// is more stable and a good metric. With the exception of ultra-short distance wireless links, which have their own
+    /// exception at <10ms
     pub fn is_good(&self) -> bool {
         let std_dev = self.get_std_dev();
         let avg = self.get_avg();
         let lowest = self.lowest;
         match (std_dev, avg, lowest) {
-            (Some(std_dev), Some(avg), Some(lowest)) => std_dev < 100f32 || avg < 2f32 * lowest,
+            (Some(std_dev), Some(avg), Some(lowest)) => {
+                std_dev < 100f32 || avg < 2f32 * lowest || avg < 10f32
+            }
             (_, _, _) => false,
         }
     }
