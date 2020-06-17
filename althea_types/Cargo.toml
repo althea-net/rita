@@ -22,3 +22,6 @@ failure = "0.1"
 phonenumber = "0.2"
 lettre = {version = "0.9", features = ["serde"]}
 
+[dev-dependencies]
+rand = "0.4"
+

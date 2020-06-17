@@ -189,6 +189,7 @@ dependencies = [
  "lettre",
  "num256",
  "phonenumber",
+ "rand 0.4.6",
  "serde 1.0.110",
  "serde_derive",
  "serde_json",

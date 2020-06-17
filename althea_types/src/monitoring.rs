@@ -3,6 +3,8 @@ use std::time::SystemTime;
 
 pub const SAMPLE_PERIOD: u8 = 5u8;
 const SAMPLES_IN_FIVE_MINUTES: usize = 300 / SAMPLE_PERIOD as usize;
+/// The size of the latency history array, this covers about 10 minutes
+const LATENCY_HISTORY: usize = 100;
 
 /// This is a helper struct for measuring the round trip time over the exit tunnel independently
 /// from Babel. In the future, `RTTimestamps` should aid in RTT-related overadvertisement detection.
@@ -14,7 +16,7 @@ pub struct RTTimestamps {
 
 /// Implements https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
 /// to keep track of neighbor latency in an online fashion for a specific interface
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunningLatencyStats {
     count: u32,
     mean: f32,
@@ -26,10 +28,16 @@ pub struct RunningLatencyStats {
     /// the last time this counters interface was invalidated by a change
     #[serde(skip_serializing, skip_deserializing)]
     last_changed: Option<Instant>,
+    /// the front of the latency history ring buffer
+    front: usize,
+    /// A history of the last few values we have seen, used to compute the median
+    history: Vec<f32>,
 }
 
-impl RunningLatencyStats {
-    pub fn new() -> RunningLatencyStats {
+impl Default for RunningLatencyStats {
+    fn default() -> Self {
+        let mut new = Vec::with_capacity(LATENCY_HISTORY);
+        new.extend_from_slice(&[0.0; LATENCY_HISTORY]);
         RunningLatencyStats {
             count: 0u32,
             mean: 0f32,
@@ -37,7 +45,15 @@ impl RunningLatencyStats {
             lowest: None,
             last_value: None,
             last_changed: Some(Instant::now()),
+            front: 0,
+            history: new,
         }
+    }
+}
+
+impl RunningLatencyStats {
+    pub fn new() -> RunningLatencyStats {
+        RunningLatencyStats::default()
     }
     pub fn get_avg(&self) -> Option<f32> {
         if self.count > 2 {
@@ -73,14 +89,16 @@ impl RunningLatencyStats {
             }
             None => self.lowest = Some(sample),
         }
+        self.history[self.front] = sample;
+        self.front = (self.front + 1) % LATENCY_HISTORY;
     }
     /// A hand tuned heuristic used to determine if a connection is bloated
     pub fn is_bloated(&self) -> bool {
         let std_dev = self.get_std_dev();
         let avg = self.get_avg();
         match (std_dev, avg) {
-            // you probably don't want to touch this, yes I know it doesn't make
-            // much sense from a stats perspective but here's why it works. Often
+            // comparing std_dev to a multiple of the average doesn't make sense from a stats perspective
+            // but has a compensating affect across a wide array of connections,  here's why it works. Often
             // when links start you get a lot of transient bad states, like 2000ms
             // latency and the like. Because the history is reset in network_monitor after
             // this is triggered it doesn't immediately trigger again. The std_dev and average
@@ -90,12 +108,11 @@ impl RunningLatencyStats {
             // it's too subject to not being positive when it should be whereas those false
             // negatives are probably better here.
             //
-            // If for some reason you feel the need to edit this you should probably not
-            // do anything until you have more than 100 or so samples and then carve out
-            // exceptions for conditions like average latency under 10ms because fiber lines
-            // are a different beast than the wireless connections. Do remember that exits can
-            // be a lot more than 50ms away so you need to account for distant but stable connections
-            // as well. This somehow does all of that at once, so here it stands
+            // the other exceptions you see here are cases where we have very low latency links
+            // this causes mundane latency spikes to really change the std-dev. For example
+            // a wireless link with 1ms latency spikes to 50ms, we carve out our first exception
+            // there. Then we carve out exceptions for links with low averages to handle short distance
+            // p2p links that can have very unstable std_dev
             (Some(std_dev), Some(avg)) => std_dev > 10f32 * avg && avg > 10f32,
             (_, _) => false,
         }
@@ -109,7 +126,7 @@ impl RunningLatencyStats {
     /// lowest. On wireless links the lowest you ever see will almost always be much lower than the average, on fiber
     /// it happens all the time. Over on the wireless link side we have a much less clustered distribution so the std-dev
     /// is more stable and a good metric. With the exception of ultra-short distance wireless links, which have their own
-    /// exception at <10ms
+    /// exception at avg < 10ms
     pub fn is_good(&self) -> bool {
         let std_dev = self.get_std_dev();
         let avg = self.get_avg();
@@ -140,6 +157,12 @@ impl RunningLatencyStats {
     }
     pub fn get_lowest(&self) -> Option<f32> {
         self.lowest
+    }
+    /// gets the median of the last LATENCY_HISTORY inputs
+    pub fn get_median(&self) -> f32 {
+        let mut history = self.history.clone();
+        history.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
+        history[history.len() / 2]
     }
 }
 
@@ -257,6 +280,9 @@ pub fn has_packet_loss(sample: u16) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::thread_rng;
+    use rand::Rng;
+
     #[test]
     fn test_get_first_n_set_bits() {
         let count = get_first_n_set_bits(0b1110_0000_0000_0000, 5);
@@ -293,6 +319,20 @@ mod tests {
         let mut stats = RunningLatencyStats::new();
         stats.add_sample(0.12);
         assert_eq!(stats.samples(), 1);
+    }
+
+    #[test]
+    fn test_rtt_many_samples() {
+        let mut stats = RunningLatencyStats::new();
+        for _i in 0..10000 {
+            stats.get_avg();
+            stats.get_lowest();
+            stats.get_std_dev();
+            stats.get_median();
+            let sample: f32 = thread_rng().gen();
+            stats.add_sample(sample);
+        }
+        assert!(stats.get_median() != 0.0);
     }
 
     #[test]
