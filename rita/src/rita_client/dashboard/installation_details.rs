@@ -4,6 +4,7 @@ use actix_web::HttpResponse;
 use actix_web::{HttpRequest, Json, Path};
 use althea_types::ContactType;
 use althea_types::InstallationDetails;
+use althea_types::{BillingDetails, MailingAddress};
 use settings::{client::RitaClientSettings, FileWrite};
 
 /// This is a utility type that is used by the front end when sending us
@@ -11,7 +12,13 @@ use settings::{client::RitaClientSettings, FileWrite};
 /// rather than relying on serde to get it right.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct InstallationDetailsPost {
-    pub user_name: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub country: String,
+    pub postal_code: String,
+    pub state: Option<String>,
+    pub city: String,
+    pub street: String,
     pub phone: Option<String>,
     pub email: Option<String>,
     pub client_antenna_ip: Option<String>,
@@ -87,18 +94,28 @@ pub fn set_installation_details(req: Json<InstallationDetailsPost>) -> HttpRespo
     drop(exit_client);
 
     let new_installation_details = InstallationDetails {
-        user_name: input.user_name,
         client_antenna_ip: parsed_client_antenna_ip,
         relay_antennas: parsed_relay_antenna_ips,
         phone_client_antennas: parsed_phone_client_anntenna_ips,
-        mailing_address: input.mailing_address,
         physical_address: input.physical_address,
         equipment_details: input.equipment_details,
         install_date: None,
     };
+    let new_billing_details = BillingDetails {
+        user_first_name: input.first_name,
+        user_last_name: input.last_name,
+        mailing_address: MailingAddress {
+            country: input.country,
+            postal_code: input.postal_code,
+            state: input.state,
+            city: input.city,
+            street: input.street,
+        },
+    };
 
     let mut operator_settings = SETTING.get_operator_mut();
     operator_settings.installation_details = Some(new_installation_details);
+    operator_settings.billing_details = Some(new_billing_details);
     operator_settings.display_operator_setup = false;
 
     drop(operator_settings);

@@ -5,7 +5,7 @@
 //! simplifies things a lot (no need for complex trustless enforcement). If you find that both DAO settings and this exist at the same time
 //! that means the transition is still in prgress.
 
-use althea_types::interop::InstallationDetails;
+use althea_types::{BillingDetails, InstallationDetails};
 use clarity::Address;
 use num256::Uint256;
 
@@ -60,8 +60,11 @@ pub struct OperatorSettings {
     #[serde(default = "default_checkin_url")]
     pub checkin_url: String,
     /// Details about this devices installation see the doc comments on the struct
-    /// this is set at startup time for the router
+    /// this is set at install time for the router
     pub installation_details: Option<InstallationDetails>,
+    /// Details about this devices installation see the doc comments on the struct
+    /// this is set at install time for the router
+    pub billing_details: Option<BillingDetails>,
     /// If we should display the operator setup on the dashboard
     #[serde(default = "default_display_operator_setup")]
     pub display_operator_setup: bool,
@@ -76,6 +79,7 @@ impl Default for OperatorSettings {
             force_use_operator_price: default_force_use_operator_price(),
             checkin_url: default_checkin_url(),
             installation_details: None,
+            billing_details: None,
             display_operator_setup: true,
         }
     }
