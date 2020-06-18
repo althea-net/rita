@@ -24,8 +24,7 @@ pub struct InstallationDetailsPost {
     pub client_antenna_ip: Option<String>,
     pub relay_antennas: Option<String>,
     pub phone_client_antennas: Option<String>,
-    pub mailing_address: Option<String>,
-    pub physical_address: String,
+    pub physical_address: Option<String>,
     pub equipment_details: String,
 }
 
@@ -147,5 +146,16 @@ pub fn set_display_operator_setup(val: Path<bool>) -> HttpResponse {
     if let Err(_e) = SETTING.write().unwrap().write(&ARGS.flag_config) {
         return HttpResponse::InternalServerError().finish();
     }
+    HttpResponse::Ok().finish()
+}
+
+pub fn get_billing_details(_req: HttpRequest) -> HttpResponse {
+    let operator_settings = SETTING.get_operator();
+    HttpResponse::Ok().json(operator_settings.billing_details.clone())
+}
+
+pub fn set_billing_details(req: Json<BillingDetails>) -> HttpResponse {
+    let mut operator_settings = SETTING.get_operator_mut();
+    operator_settings.billing_details = Some(req.into_inner());
     HttpResponse::Ok().finish()
 }

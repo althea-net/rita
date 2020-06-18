@@ -414,6 +414,7 @@ fn start_client_dashboard() {
             .route("/wipe", Method::POST, wipe)
             .route("/crash_actors", Method::POST, crash_actors)
             .route("/localization", Method::GET, get_localization)
+            .route("/wyre_reservation", Method::POST, get_wyre_reservation)
             .route(
                 "/installation_details",
                 Method::POST,
@@ -424,6 +425,8 @@ fn start_client_dashboard() {
                 Method::GET,
                 get_installation_details,
             )
+            .route("/billing_details", Method::GET, get_billing_details)
+            .route("/billing_details", Method::POST, set_billing_details)
             .route(
                 "/operator_setup/{enabled}",
                 Method::POST,

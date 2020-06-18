@@ -1,3 +1,5 @@
+use crate::ContactType;
+use clarity::Address;
 use std::net::Ipv4Addr;
 use std::time::SystemTime;
 
@@ -53,11 +55,53 @@ pub struct InstallationDetails {
     /// The address of this installation, this has no structure and should
     /// simply be displayed. Depending on the country address formats will
     /// be very different and we might even only have GPS points
-    pub physical_address: String,
+    /// will only exist if mailing address over in contact info is blank
+    pub physical_address: Option<String>,
     /// Description of the installation and equipment at the
     /// location
     pub equipment_details: String,
     /// Time of install, this is set by the operator tools when it accepts
     /// the value because the router system clocks may be problematic.
     pub install_date: Option<SystemTime>,
+}
+
+/// This struct carries info to the operator tools
+/// to perform the registration request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WyreReservationRequestCarrier {
+    /// the actual amount the user is requesting to deposit
+    pub amount: f32,
+    pub address: Address,
+    pub contact_info: ContactType,
+    pub billing_details: BillingDetails,
+}
+
+/// The exact struct for sending to this endpoint
+///https://docs.sendwyre.com/docs/wallet-order-reservations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WyreReservationRequest {
+    pub amount: f32,
+    #[serde(rename = "sourceCurrency")]
+    pub source_currency: String,
+    #[serde(rename = "destCurrency")]
+    pub dest_currency: String,
+    pub dest: String,
+    #[serde(rename = "firstName")]
+    pub first_name: String,
+    #[serde(rename = "lastName")]
+    pub last_name: String,
+    pub city: String,
+    pub state: String,
+    pub country: String,
+    pub phone: Option<String>,
+    pub email: Option<String>,
+    pub street1: String,
+    #[serde(rename = "postalCode")]
+    pub postal_code: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WyreReservationResponse {
+    url: String,
+    reservation: String,
 }

@@ -486,7 +486,7 @@ fn default_shaper_settings() -> ShaperSettings {
 pub struct OperatorCheckinMessage {
     pub id: Identity,
     pub operator_address: Option<Address>,
-    /// we include a system chain here becuase if there is no operator address
+    /// we include a system chain here because if there is no operator address
     /// we don't know what this router is supposed to be configured like, the best
     /// proxy for that is the system chain value
     pub system_chain: SystemChain,
