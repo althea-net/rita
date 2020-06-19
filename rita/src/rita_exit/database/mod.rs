@@ -110,15 +110,15 @@ pub fn secs_since_unix_epoch() -> i64 {
 /// on their registration ip to make sure that they are coming from a valid gateway
 /// ip and then sends out an email of phone message
 pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState, Error = Error> {
-    trace!("got setup request {:?}", client);
+    info!("got setup request {:?}", client);
     get_gateway_ip_single(client.global.mesh_ip).and_then(move |gateway_ip| {
-        trace!("got gateway ip {:?}", client);
+        info!("got gateway ip {:?}", client);
         verify_ip(gateway_ip).and_then(move |verify_status| {
-            trace!("verified the ip country {:?}", client);
+            info!("verified the ip country {:?}", client);
             get_country_async(gateway_ip).and_then(move |user_country| {
-                trace!("got the country country {:?}", client);
+                info!("got the country  {:?}", client);
                 get_database_connection().and_then(move |conn| {
-                    trace!("Doing database work for {:?} in country {} with verify_status {}", client, user_country, verify_status);
+                    info!("Doing database work for {:?} in country {} with verify_status {}", client, user_country, verify_status);
                     // check if we have any users with conflicting details
                     match client_conflict(&client, &conn) {
                         Ok(true) => {
