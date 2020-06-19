@@ -4,8 +4,6 @@
 //! This loop manages exit signup based on the settings configuration state and deploys an exit vpn
 //! tunnel if the signup was successful on the selected exit.
 
-use crate::rita_client::dashboard::interfaces::get_interfaces;
-use crate::rita_client::dashboard::interfaces::InterfaceMode;
 use crate::rita_client::exit_manager::ExitManager;
 use crate::rita_client::heartbeat::send_udp_heartbeat;
 use crate::rita_client::heartbeat::HEARTBEAT_SERVER_KEY;
@@ -34,7 +32,6 @@ use failure::Error;
 use futures01::future::Future;
 use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;
-use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 pub struct RitaLoop {
@@ -126,24 +123,8 @@ impl Handler<Tick> for RitaLoop {
                 let network = SETTING.get_network();
                 let our_id = SETTING.get_identity().unwrap();
                 let logging = SETTING.get_log();
-                let interfaces = match get_interfaces() {
-                    Ok(val) => {
-                        let mut v = HashSet::new();
-                        for (iface, mode) in val {
-                            if mode != InterfaceMode::LAN {
-                                v.insert(iface);
-                            }
-                        }
-                        info!("Starting antenna forwarder on {:?}", v);
-                        v
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to get interfaces, starting forwarder on peer interfaces only!, {:?}", e
-                        );
-                        network.peer_interfaces.clone()
-                    }
-                };
+                let mut interfaces = network.peer_interfaces.clone();
+                interfaces.insert("br-pbs".to_string());
                 start_antenna_forwarding_proxy(
                     logging.forwarding_checkin_url.clone(),
                     our_id,
