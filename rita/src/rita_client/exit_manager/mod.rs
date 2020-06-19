@@ -424,7 +424,7 @@ impl Handler<Tick> for ExitManager {
 
                 match (signed_up_for_exit, exit_has_changed, correct_default_route) {
                     (true, true, _) => {
-                        trace!("Exit change, setting up exit tunnel");
+                        info!("Exit change, setting up exit tunnel");
                         linux_setup_exit_tunnel(
                             &exit,
                             &general_details.clone(),
@@ -435,7 +435,7 @@ impl Handler<Tick> for ExitManager {
                         self.last_exit = Some(exit.clone());
                     }
                     (true, false, false) => {
-                        trace!("DHCP overwrite setup exit tunnel again");
+                        info!("DHCP overwrite setup exit tunnel again");
                         linux_setup_exit_tunnel(
                             &exit,
                             &general_details.clone(),
