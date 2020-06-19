@@ -1,3 +1,4 @@
+use crate::rita_common::utils::ip_increment::is_unicast_link_local;
 use crate::KI;
 use crate::SETTING;
 use babel_monitor::open_babel_stream;
@@ -139,6 +140,24 @@ pub fn get_country(ip: IpAddr) -> Result<String, Error> {
         return Ok(String::new());
     }
 
+    // in this case we have a gateway directly attached to the exit, so our
+    // peer address for them will be an fe80 linklocal ip address. When we
+    // detect this we go ahead and assign the user one of our allowed countries
+    // and move on. In the common case where we have only one allowed country
+    // this will produce the correct result. We can affirm this will never panic
+    // because we just checked that allowed countries contains at least one value
+    // above
+    if let IpAddr::V6(val) = ip {
+        if is_unicast_link_local(&val) {
+            return Ok(SETTING
+                .get_allowed_countries()
+                .iter()
+                .next()
+                .unwrap()
+                .clone());
+        }
+    }
+
     // on the other hand if there is a configured list of allowed countries
     // but no configured api details, we panic
     let api_user = SETTING
@@ -205,6 +224,16 @@ pub fn verify_ip(request_ip: IpAddr) -> impl Future<Item = bool, Error = Error> 
 /// Returns true or false if an ip is confirmed to be inside or outside the region and error
 /// if an api error is encountered trying to figure that out.
 pub fn verify_ip_sync(request_ip: IpAddr) -> Result<bool, Error> {
+    // in this case we have a gateway directly attached to the exit, so our
+    // peer address for them will be an fe80 linklocal ip address. When we
+    // detect this we know that they are in the allowed countries list because
+    // we assume the exit itself is in one of it's allowed countries.
+    if let IpAddr::V6(val) = request_ip {
+        if is_unicast_link_local(&val) {
+            return Ok(true);
+        }
+    }
+
     if SETTING.get_allowed_countries().is_empty() {
         Ok(true)
     } else {

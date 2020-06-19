@@ -67,6 +67,20 @@ pub fn increment(address: IpAddr, netmask: u8) -> Result<IpAddr, Error> {
     }
 }
 
+/// Lifted directly from https://doc.rust-lang.org/src/std/net/ip.rs.html
+/// this identifies fe80 linklocal addresses
+#[allow(dead_code)]
+pub fn is_unicast_link_local(input: &Ipv6Addr) -> bool {
+    (input.segments()[0] & 0xffc0) == 0xfe80
+}
+
+/// Lifted directly from https://doc.rust-lang.org/src/std/net/ip.rs.html
+/// this identifies fd local addresses in short mesh addresses
+#[allow(dead_code)]
+pub fn is_unique_local(input: &Ipv6Addr) -> bool {
+    (input.segments()[0] & 0xfe00) == 0xfc00
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
