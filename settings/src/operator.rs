@@ -36,12 +36,6 @@ fn default_force_use_operator_price() -> bool {
     false
 }
 
-/// The url for checking in with the operator server.
-/// if you are changing this double check the default currency and the default node url
-fn default_checkin_url() -> String {
-    "https://operator.althea.net:8080/checkin".to_string()
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct OperatorSettings {
     /// The operator managing this router
@@ -56,9 +50,6 @@ pub struct OperatorSettings {
     /// If this operator has indicated that users should not change prices
     #[serde(default = "default_force_use_operator_price")]
     pub force_use_operator_price: bool,
-    /// The server used to checkin and grab settings
-    #[serde(default = "default_checkin_url")]
-    pub checkin_url: String,
     /// Details about this devices installation see the doc comments on the struct
     /// this is set at install time for the router
     pub installation_details: Option<InstallationDetails>,
@@ -77,7 +68,6 @@ impl Default for OperatorSettings {
             operator_fee: 0u32.into(),
             use_operator_price: default_force_use_operator_price(),
             force_use_operator_price: default_force_use_operator_price(),
-            checkin_url: default_checkin_url(),
             installation_details: None,
             billing_details: None,
             display_operator_setup: true,

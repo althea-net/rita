@@ -39,11 +39,14 @@ lazy_static! {
 }
 
 pub fn send_udp_heartbeat() {
+    #[cfg(not(feature = "operator_debug"))]
+    let heartbeat_url = "operator.althea.net:33333";
+    #[cfg(feature = "operator_debug")]
+    let heartbeat_url = "192.168.10.2:33333";
+
     trace!("attempting to send heartbeat");
     let dns_request = Resolver::from_registry()
-        .send(resolver::Resolve::host(
-            SETTING.get_log().heartbeat_url.clone(),
-        ))
+        .send(resolver::Resolve::host(heartbeat_url.to_string()))
         .timeout(CLIENT_LOOP_TIMEOUT);
     let network_info = NetworkMonitor::from_registry()
         .send(GetNetworkInfo {})

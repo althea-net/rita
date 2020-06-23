@@ -82,10 +82,14 @@ impl Handler<Update> for OperatorUpdate {
 
 /// Checks in with the operator server
 fn checkin() {
+    #[cfg(not(feature = "operator_debug"))]
+    let url = "https://operator.althea.net:8080/checkin";
+    #[cfg(feature = "operator_debug")]
+    let url = "http://192.168.10.2:8080/checkin";
+
     let logging_enabled = SETTING.get_log().enabled;
     let operator_settings = SETTING.get_operator();
     let system_chain = SETTING.get_payment().system_chain;
-    let url = operator_settings.checkin_url.clone();
     let operator_address = operator_settings.operator_address;
     let use_operator_price =
         operator_settings.use_operator_price || operator_settings.force_use_operator_price;

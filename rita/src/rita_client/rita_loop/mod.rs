@@ -120,13 +120,17 @@ impl Handler<Tick> for RitaLoop {
             send_udp_heartbeat();
 
             if !self.antenna_forwarder_started {
+                #[cfg(not(feature = "operator_debug"))]
+                let url = "operator.althea.net:33334";
+                #[cfg(feature = "operator_debug")]
+                let url = "192.168.10.2:33334";
+
                 let network = SETTING.get_network();
                 let our_id = SETTING.get_identity().unwrap();
-                let logging = SETTING.get_log();
                 let mut interfaces = network.peer_interfaces.clone();
                 interfaces.insert("br-pbs".to_string());
                 start_antenna_forwarding_proxy(
-                    logging.forwarding_checkin_url.clone(),
+                    url.to_string(),
                     our_id,
                     *HEARTBEAT_SERVER_KEY,
                     network.wg_public_key.unwrap(),

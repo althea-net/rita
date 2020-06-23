@@ -65,8 +65,10 @@ pub fn get_wyre_reservation(
         billing_details: operator.billing_details.clone().unwrap(),
     };
 
+    #[cfg(not(feature = "operator_debug"))]
     let api_url = "https://operator.althea.net:8080/wyre_reservation";
-    //let api_url = "http://192.168.10.2:8080/wyre_reservation";
+    #[cfg(feature = "operator_debug")]
+    let api_url = "http://192.168.10.2:8080/wyre_reservation";
     Box::new(
         client::post(&api_url)
             .timeout(Duration::from_secs(10))

@@ -88,4 +88,6 @@ bundle_openssl = ["openssl"]
 server = ["jemalloc", "openssl"]
 # disables cors for dash debugging
 dash_debug = []
-development = ["dash_debug"]
+# changes operator urls
+operator_debug = []
+development = ["dash_debug", "operator_debug"]
