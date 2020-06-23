@@ -12,6 +12,12 @@ fn default_display_currency_symbol() -> bool {
     true
 }
 
+// disable the wyre reservation flow as it is half baked
+// as of this release
+fn default_wyre_reservation_flow() -> bool {
+    false
+}
+
 fn default_support_number() -> PhoneNumber {
     "+18664ALTHEA".parse().unwrap()
 }
@@ -35,6 +41,11 @@ pub struct LocalizationSettings {
     /// a locally relevant one if possible.
     #[serde(default = "default_support_number")]
     pub support_number: PhoneNumber,
+    /// If we use the wyre hosted debit card widget flow or the reservation flow, the reservation
+    /// flow calls out to the operator tools to get a reservation link whereas the pre-reservation flow
+    /// is simply a link to the wyre widget
+    #[serde(default = "default_wyre_reservation_flow")]
+    pub wyre_reservation_flow: bool,
 }
 
 impl Default for LocalizationSettings {
@@ -44,6 +55,7 @@ impl Default for LocalizationSettings {
             wyre_account_id: default_wyre_account_id(),
             display_currency_symbol: default_display_currency_symbol(),
             support_number: default_support_number(),
+            wyre_reservation_flow: default_wyre_reservation_flow(),
         }
     }
 }
