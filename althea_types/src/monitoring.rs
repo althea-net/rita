@@ -29,8 +29,10 @@ pub struct RunningLatencyStats {
     #[serde(skip_serializing, skip_deserializing)]
     last_changed: Option<Instant>,
     /// the front of the latency history ring buffer
+    #[serde(default)]
     front: usize,
     /// A history of the last few values we have seen, used to compute the median
+    #[serde(default)]
     history: Vec<f32>,
 }
 
@@ -70,6 +72,14 @@ impl RunningLatencyStats {
         }
     }
     pub fn add_sample(&mut self, sample: f32) {
+        // handles when 'default' was miscalled, this should be safe to remove
+        // TODO remove operator tools fixing hack
+        if self.history.is_empty() {
+            let mut new = Vec::with_capacity(LATENCY_HISTORY);
+            new.extend_from_slice(&[0.0; LATENCY_HISTORY]);
+            self.history = new;
+        }
+
         match self.count.checked_add(1) {
             Some(val) => self.count = val,
             None => self.reset(),
