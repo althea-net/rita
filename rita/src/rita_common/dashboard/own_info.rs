@@ -1,4 +1,5 @@
 use crate::rita_common::blockchain_oracle::low_balance;
+use crate::rita_common::rita_loop::is_gateway;
 use crate::SETTING;
 use actix_web::{HttpRequest, Json};
 use clarity::Address;
@@ -37,7 +38,7 @@ pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
     let network_settings = SETTING.get_network();
     let metric_factor = network_settings.metric_factor;
     let device = network_settings.device.clone();
-    let is_gateway = network_settings.is_gateway;
+    let is_gateway = is_gateway();
 
     let reply = OwnInfo {
         address: eth_address,

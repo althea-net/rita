@@ -90,9 +90,6 @@ pub struct NetworkSettings {
     /// globally routable ip
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_nic: Option<String>,
-    /// This in memory variable specifies if we are a gateway or not
-    #[serde(skip_deserializing, default)]
-    pub is_gateway: bool,
     /// The name of the device or router model
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device: Option<String>,
@@ -137,7 +134,6 @@ impl Default for NetworkSettings {
             manual_peers: Vec::new(),
             external_nic: None,
             default_route: Vec::new(),
-            is_gateway: false,
             device: None,
             nickname: None,
             usage_tracker_file: default_usage_tracker_file(),

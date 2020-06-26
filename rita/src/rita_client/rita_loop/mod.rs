@@ -15,7 +15,6 @@ use crate::rita_client::operator_fee_manager::Tick as OperatorTick;
 use crate::rita_client::operator_update::{OperatorUpdate, Update};
 use crate::rita_client::traffic_watcher::GetExitDestPrice;
 use crate::rita_client::traffic_watcher::TrafficWatcher;
-use crate::rita_client::traffic_watcher::WeAreGatewayClient;
 use crate::rita_common::tunnel_manager::GetNeighbors;
 use crate::rita_common::tunnel_manager::GetTunnels;
 use crate::rita_common::tunnel_manager::TunnelManager;
@@ -32,7 +31,23 @@ use failure::Error;
 use futures01::future::Future;
 use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
+
+lazy_static! {
+    /// see the comment on check_for_gateway_client_billing_corner_case()
+    /// to identify why this variable is needed. In short it identifies
+    /// a specific billing corner case.
+    static ref IS_GATEWAY_CLIENT: AtomicBool = AtomicBool::new(false);
+}
+
+pub fn is_gateway_client() -> bool {
+    IS_GATEWAY_CLIENT.load(Ordering::Relaxed)
+}
+
+pub fn set_gateway_client(input: bool) {
+    IS_GATEWAY_CLIENT.store(input, Ordering::Relaxed)
+}
 
 pub struct RitaLoop {
     antenna_forwarder_started: bool,
@@ -164,8 +179,8 @@ pub fn check_rita_client_actors() {
 /// the same exit, this will produce incorrect billing data as we need to reconcile the
 /// relay bills (under the exit relay id) and the client bills (under the exit id) versus
 /// the exit who just has the single billing id for the client and is combining debts
-/// This function grabs neighbors and etermines if we have a neighbor with the same mesh ip
-/// and eth adress as our selected exit, if we do we trigger the special case handling
+/// This function grabs neighbors and determines if we have a neighbor with the same mesh ip
+/// and eth address as our selected exit, if we do we trigger the special case handling
 fn check_for_gateway_client_billing_corner_case() -> impl Future<Item = (), Error = ()> {
     TunnelManager::from_registry()
         .send(GetNeighbors)
@@ -180,16 +195,16 @@ fn check_for_gateway_client_billing_corner_case() -> impl Future<Item = (), Erro
                 if let ExitState::Registered { .. } = exit.info {
                     for neigh in neighbors {
                         // we have a neighbor who is also our selected exit!
-                        // wg_key exluded due to multihomed exits having a different one
+                        // wg_key excluded due to multihomed exits having a different one
                         if neigh.identity.global.mesh_ip == exit.id.mesh_ip
                             && neigh.identity.global.eth_address == exit.id.eth_address
                         {
-                            TrafficWatcher::from_registry()
-                                .do_send(WeAreGatewayClient { value: true });
+                            info!("We are a gateway client");
+                            set_gateway_client(true);
                             return Ok(());
                         }
                     }
-                    TrafficWatcher::from_registry().do_send(WeAreGatewayClient { value: false });
+                    set_gateway_client(false);
                 }
             }
             Ok(())

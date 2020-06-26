@@ -27,6 +27,7 @@ use failure::Error;
 use futures01::Future;
 use rand::thread_rng;
 use rand::Rng;
+use rita_common::rita_loop::is_gateway;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::fmt;
@@ -605,7 +606,7 @@ impl Handler<PeersToContact> for TunnelManager {
     fn handle(&mut self, msg: PeersToContact, _ctx: &mut Context<Self>) -> Self::Result {
         let network_settings = SETTING.get_network();
         let manual_peers = network_settings.manual_peers.clone();
-        let is_gateway = network_settings.is_gateway;
+        let is_gateway = is_gateway();
         let rita_hello_port = network_settings.rita_hello_port;
         drop(network_settings);
 
@@ -766,7 +767,7 @@ impl TunnelManager {
     pub fn neighbor_inquiry_hostname(&mut self, their_hostname: String) -> Result<(), Error> {
         trace!("Getting tunnel, inq");
         let network_settings = SETTING.get_network();
-        let is_gateway = network_settings.is_gateway;
+        let is_gateway = is_gateway();
         let rita_hello_port = network_settings.rita_hello_port;
         drop(network_settings);
 

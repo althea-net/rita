@@ -5,6 +5,7 @@ use crate::rita_common::network_monitor::NetworkMonitor;
 use crate::rita_common::payment_validator::{PaymentValidator, Validate};
 use crate::rita_common::peer_listener::GetPeers;
 use crate::rita_common::peer_listener::PeerListener;
+use crate::rita_common::rita_loop::set_gateway;
 use crate::rita_common::traffic_watcher::{TrafficWatcher, Watch};
 use crate::rita_common::tunnel_manager::PeersToContact;
 use crate::rita_common::tunnel_manager::{GetNeighbors, TunnelManager};
@@ -215,12 +216,14 @@ impl Handler<Tick> for RitaFastLoop {
     }
 }
 
-/// Manages gateway functionaltiy and maintains the was_gateway parameter, this is different from the gateway
+/// Manages gateway functionality and maintains the gateway parameter, this is different from the gateway
 /// identification in rita_client because this must function even if we aren't registered for an exit it's also
 /// very prone to being true when the device has a wan port but no actual wan connection.
 fn manage_gateway() {
     // Resolves the gateway client corner case
     // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
+    // the is_up detection is mostly useless because these ports reside on switches which mark
+    // all ports as up all the time.
     let gateway = match SETTING.get_network().external_nic {
         Some(ref external_nic) => match KI.is_iface_up(external_nic) {
             Some(val) => val,
@@ -230,7 +233,7 @@ fn manage_gateway() {
     };
 
     info!("We are a Gateway: {}", gateway);
-    SETTING.get_network_mut().is_gateway = gateway;
+    set_gateway(gateway);
 
     if gateway {
         match KI.get_resolv_servers() {

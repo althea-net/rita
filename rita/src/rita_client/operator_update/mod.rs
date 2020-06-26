@@ -2,7 +2,9 @@
 
 use crate::rita_client::dashboard::system_chain::set_system_blockchain;
 use crate::rita_client::dashboard::wifi::reset_wifi_pass;
+use crate::rita_client::rita_loop::is_gateway_client;
 use crate::rita_client::rita_loop::CLIENT_LOOP_TIMEOUT;
+use crate::rita_common::rita_loop::is_gateway;
 use crate::rita_common::token_bridge::ReloadAddresses;
 use crate::rita_common::token_bridge::TokenBridge;
 use crate::rita_common::tunnel_manager::shaping::flag_reset_shaper;
@@ -93,7 +95,10 @@ fn checkin() {
     let operator_address = operator_settings.operator_address;
     let use_operator_price =
         operator_settings.use_operator_price || operator_settings.force_use_operator_price;
-    let is_gateway = SETTING.get_network().is_gateway;
+    // a node is logically a gateway from a users perspective if it is directly connected to the
+    // exit as a mesh client, even if the is_gateway var mostly governs things related to WAN use.
+    // So we accept either of these conditions being true.
+    let is_gateway = is_gateway() || is_gateway_client();
     let id = SETTING.get_identity().unwrap();
 
     let contact_info = option_convert(SETTING.get_exit_client().contact_info.clone());

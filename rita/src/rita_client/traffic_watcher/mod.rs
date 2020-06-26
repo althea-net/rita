@@ -21,6 +21,7 @@
 //! in debt keeper more than anything that can be done here. What we can do here is take action if several requests fail, falling
 //! back to local debt computation rather than running blind.
 
+use crate::rita_client::rita_loop::is_gateway_client;
 use crate::rita_common::debt_keeper::{
     DebtKeeper, Traffic, TrafficReplace, TrafficUpdate, WgKeyInsensitiveTrafficUpdate,
 };
@@ -52,9 +53,6 @@ pub struct TrafficWatcher {
     last_read_input: u64,
     // last read upload
     last_read_output: u64,
-    /// handles the gateway exit client corner case where we need to reconcile client
-    /// and relay debts
-    gateway_exit_client: bool,
     /// cached exit destination price value
     last_exit_dest_price: u128,
 }
@@ -68,7 +66,6 @@ impl SystemService for TrafficWatcher {
         info!("Client traffic watcher started");
         self.last_read_input = 0;
         self.last_read_output = 0;
-        self.gateway_exit_client = false;
         self.last_exit_dest_price = 0;
     }
 }
@@ -77,34 +74,8 @@ impl Default for TrafficWatcher {
         TrafficWatcher {
             last_read_input: 0,
             last_read_output: 0,
-            gateway_exit_client: false,
             last_exit_dest_price: 0,
         }
-    }
-}
-
-/// There is a complicated corner case where the gateway is a client and a relay to
-/// the same exit, this will produce incorrect billing data as we need to reconcile the
-/// relay bills (under the exit relay id) and the client bills (under the exit id) versus
-/// the exit who just has the single billing id for the client and is combining debts
-/// This function grabs neighbors and etermines if we have a neighbor with the same mesh ip
-/// and eth adress as our selected exit, if we do we trigger the special case handling
-/// this is called in rita client loop when this condition is discovered to set it here
-pub struct WeAreGatewayClient {
-    pub value: bool,
-}
-
-impl Message for WeAreGatewayClient {
-    type Result = Result<(), Error>;
-}
-
-impl Handler<WeAreGatewayClient> for TrafficWatcher {
-    type Result = Result<(), Error>;
-
-    fn handle(&mut self, msg: WeAreGatewayClient, _: &mut Context<Self>) -> Self::Result {
-        info!("We are a gateway client: {}", msg.value);
-        self.gateway_exit_client = msg.value;
-        Ok(())
     }
 }
 
@@ -148,14 +119,14 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
                 Err(_e) => None,
             };
 
-        let gateway_exit_client = self.gateway_exit_client;
+        let gateway_exit_client = is_gateway_client();
         let start = Instant::now();
         let exit_addr = msg.exit_internal_addr;
         let exit_id = msg.exit_id;
         let exit_port = msg.exit_port;
         // actix client behaves badly if you build a request the default way but don't give it
         // a domain name, so in order to do peer to peer requests we use with_connection and our own
-        // socket speficification
+        // socket specification
         let our_id = SETTING.get_identity();
         let request = format!("http://{}:{}/client_debt", exit_addr, exit_port);
         // it's an ipaddr appended to a u16, there's no real way for this to fail

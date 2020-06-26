@@ -13,9 +13,29 @@ use actix_web::{server, App};
 use rand::thread_rng;
 use rand::Rng;
 use settings::RitaCommonSettings;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 
 pub mod fast_loop;
 pub mod slow_loop;
+
+lazy_static! {
+    /// keeps track of if this node is a gateway, specifically if this node
+    /// needs to perform the various edge case behaviors required to manage
+    /// peering out to exits over a WAN port. This includes DHCP lookups
+    /// in tunnel manager, where the gateway reaches out to it's manual peers
+    /// to create NAT punching tunnels to the exit and setting routes to prevent
+    /// exit traffic from going over the exit tunnel (which obviously doesn't work)
+    static ref IS_GATEWAY: AtomicBool = AtomicBool::new(false);
+}
+
+pub fn is_gateway() -> bool {
+    IS_GATEWAY.load(Ordering::Relaxed)
+}
+
+pub fn set_gateway(input: bool) {
+    IS_GATEWAY.store(input, Ordering::Relaxed)
+}
 
 /// Checks the list of full nodes, panics if none exist, if there exist
 /// one or more a random entry from the list is returned in an attempt
