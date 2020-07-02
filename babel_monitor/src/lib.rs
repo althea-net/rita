@@ -99,6 +99,14 @@ where
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Interface {
+    pub name: String,
+    pub up: bool,
+    pub ipv6: Option<IpAddr>,
+    pub ipv4: Option<IpAddr>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Route {
     pub id: String,
     pub iface: String,
@@ -276,6 +284,18 @@ fn validate_preamble(preamble: String) -> Result<(), Error> {
     }
 }
 
+pub fn get_interfaces(
+    stream: TcpStream,
+) -> impl Future<Item = (TcpStream, Vec<Interface>), Error = Error> {
+    run_command(stream, "dump").then(|output| {
+        if let Err(e) = output {
+            return Err(e);
+        }
+        let (stream, babel_output) = output.unwrap();
+        Ok((stream, parse_interfaces_sync(babel_output)?))
+    })
+}
+
 pub fn get_local_fee(stream: TcpStream) -> impl Future<Item = (TcpStream, u32), Error = Error> {
     run_command(stream, "dump").then(|output| {
         if let Err(e) = output {
@@ -386,6 +406,39 @@ pub fn parse_neighs(
         let (stream, output) = result.unwrap();
         Ok((stream, parse_neighs_sync(output)?))
     })
+}
+
+fn parse_interfaces_sync(output: String) -> Result<Vec<Interface>, Error> {
+    let mut vector: Vec<Interface> = Vec::new();
+    let mut found_interface = false;
+    for entry in output.split('\n') {
+        if entry.contains("add interface") {
+            found_interface = true;
+            let interface = Interface {
+                name: match find_babel_val("interface", entry) {
+                    Ok(val) => val,
+                    Err(_) => continue,
+                },
+                up: match find_and_parse_babel_val("up", entry) {
+                    Ok(val) => val,
+                    Err(_) => continue,
+                },
+                ipv4: match find_and_parse_babel_val("ipv4", entry) {
+                    Ok(val) => Some(val),
+                    Err(_) => None,
+                },
+                ipv6: match find_and_parse_babel_val("ipv6", entry) {
+                    Ok(val) => Some(val),
+                    Err(_) => None,
+                },
+            };
+            vector.push(interface);
+        }
+    }
+    if vector.is_empty() && found_interface {
+        bail!("All Babel Interface parsing failed!")
+    }
+    Ok(vector)
 }
 
 fn parse_neighs_sync(output: String) -> Result<Vec<Neighbor>, Error> {
@@ -601,6 +654,8 @@ metric factor 1900\n\
 add interface lo up false\n\
 add interface wlan0 up true ipv6 fe80::1a8b:ec1:8542:1bd8 ipv4 10.28.119.131\n\
 add interface wg0 up true ipv6 fe80::2cee:2fff:7380:8354 ipv4 10.0.236.201\n\
+add interface wg44 up false\n\
+add interface wg43 up true ipv6 fe80::d1fd:cb7a:e760:2ec0\n\
 add neighbour 14f19a8 address fe80::2cee:2fff:648:8796 if wg0 reach ffff rxcost 256 txcost 256 rtt \
 26.723 rttcost 912 cost 1168\n\
 add neighbour 14f0640 address fe80::e841:e384:491e:8eb9 if wlan0 reach 9ff7 rxcost 512 txcost 256 \
@@ -704,6 +759,24 @@ ok\n";
 
         let route = routes.get(0).unwrap();
         assert_eq!(route.price, 3072);
+    }
+
+    #[test]
+    fn interfaces_parse() {
+        let interfaces = parse_interfaces_sync(TABLE.to_string()).unwrap();
+        assert_eq!(interfaces.len(), 5);
+
+        let iface = interfaces.get(0).unwrap();
+        assert!(!iface.up);
+        let iface = interfaces.get(2).unwrap();
+        assert_eq!(iface.ipv4, Some("10.0.236.201".parse().unwrap()));
+        let iface = interfaces.get(3).unwrap();
+        assert!(iface.ipv4.is_none());
+        assert!(iface.ipv6.is_none());
+        assert!(!iface.up);
+        let iface = interfaces.get(4).unwrap();
+        assert!(iface.up);
+        assert!(iface.ipv6.is_some());
     }
 
     #[test]
