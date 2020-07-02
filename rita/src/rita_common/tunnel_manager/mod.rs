@@ -222,7 +222,7 @@ impl Tunnel {
                 })
                 .then(move |res| {
                     // Errors here seem very very rare, I've only ever seen it happen
-                    // twice myself and I couldn't reproduce it, nontheless it's a pretty
+                    // twice myself and I couldn't reproduce it, nonetheless it's a pretty
                     // bad situation so we will retry
                     if let Err(e) = res {
                         warn!("Tunnel monitor failed with {:?}, retrying in 1 second", e);
@@ -386,7 +386,7 @@ impl Handler<TunnelUnMonitorFailure> for TunnelManager {
             tunnel_to_retry.unmonitor(retry_count + 1);
         } else {
             error!(
-                "Unmonitoring tunnel has failed! Babel will now listen on a non-existant tunnel"
+                "Unmonitoring tunnel has failed! Babel will now listen on a non-existent tunnel"
             );
         }
     }

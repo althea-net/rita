@@ -284,7 +284,7 @@ fn validate_preamble(preamble: String) -> Result<(), Error> {
     }
 }
 
-pub fn get_interfaces(
+pub fn parse_interfaces(
     stream: TcpStream,
 ) -> impl Future<Item = (TcpStream, Vec<Interface>), Error = Error> {
     run_command(stream, "dump").then(|output| {
@@ -294,6 +294,39 @@ pub fn get_interfaces(
         let (stream, babel_output) = output.unwrap();
         Ok((stream, parse_interfaces_sync(babel_output)?))
     })
+}
+
+fn parse_interfaces_sync(output: String) -> Result<Vec<Interface>, Error> {
+    let mut vector: Vec<Interface> = Vec::new();
+    let mut found_interface = false;
+    for entry in output.split('\n') {
+        if entry.contains("add interface") {
+            found_interface = true;
+            let interface = Interface {
+                name: match find_babel_val("interface", entry) {
+                    Ok(val) => val,
+                    Err(_) => continue,
+                },
+                up: match find_and_parse_babel_val("up", entry) {
+                    Ok(val) => val,
+                    Err(_) => continue,
+                },
+                ipv4: match find_and_parse_babel_val("ipv4", entry) {
+                    Ok(val) => Some(val),
+                    Err(_) => None,
+                },
+                ipv6: match find_and_parse_babel_val("ipv6", entry) {
+                    Ok(val) => Some(val),
+                    Err(_) => None,
+                },
+            };
+            vector.push(interface);
+        }
+    }
+    if vector.is_empty() && found_interface {
+        bail!("All Babel Interface parsing failed!")
+    }
+    Ok(vector)
 }
 
 pub fn get_local_fee(stream: TcpStream) -> impl Future<Item = (TcpStream, u32), Error = Error> {
@@ -406,39 +439,6 @@ pub fn parse_neighs(
         let (stream, output) = result.unwrap();
         Ok((stream, parse_neighs_sync(output)?))
     })
-}
-
-fn parse_interfaces_sync(output: String) -> Result<Vec<Interface>, Error> {
-    let mut vector: Vec<Interface> = Vec::new();
-    let mut found_interface = false;
-    for entry in output.split('\n') {
-        if entry.contains("add interface") {
-            found_interface = true;
-            let interface = Interface {
-                name: match find_babel_val("interface", entry) {
-                    Ok(val) => val,
-                    Err(_) => continue,
-                },
-                up: match find_and_parse_babel_val("up", entry) {
-                    Ok(val) => val,
-                    Err(_) => continue,
-                },
-                ipv4: match find_and_parse_babel_val("ipv4", entry) {
-                    Ok(val) => Some(val),
-                    Err(_) => None,
-                },
-                ipv6: match find_and_parse_babel_val("ipv6", entry) {
-                    Ok(val) => Some(val),
-                    Err(_) => None,
-                },
-            };
-            vector.push(interface);
-        }
-    }
-    if vector.is_empty() && found_interface {
-        bail!("All Babel Interface parsing failed!")
-    }
-    Ok(vector)
 }
 
 fn parse_neighs_sync(output: String) -> Result<Vec<Neighbor>, Error> {

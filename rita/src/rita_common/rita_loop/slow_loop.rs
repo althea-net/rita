@@ -10,6 +10,7 @@ use actix::{
     SystemService,
 };
 use babel_monitor::open_babel_stream;
+use babel_monitor::parse_interfaces;
 use babel_monitor::set_local_fee;
 use babel_monitor::set_metric_factor;
 use babel_monitor::start_connection;
@@ -82,13 +83,33 @@ impl Handler<Tick> for RitaSlowLoop {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
         trace!("Common Slow tick!");
+        let babel_port = SETTING.get_network().babel_port;
 
         SimulatedTxFeeManager::from_registry().do_send(TxFeeTick);
 
-        TunnelManager::from_registry().do_send(TriggerGC {
-            tunnel_timeout: TUNNEL_TIMEOUT,
-            tunnel_handshake_timeout: TUNNEL_HANDSHAKE_TIMEOUT,
-        });
+        Arbiter::spawn(
+            open_babel_stream(babel_port)
+                .from_err()
+                .and_then(move |stream| {
+                    start_connection(stream).and_then(move |stream| {
+                        parse_interfaces(stream).and_then(move |(_stream, babel_interfaces)| {
+                            trace!("Sending tunnel GC");
+                            TunnelManager::from_registry().do_send(TriggerGC {
+                                tunnel_timeout: TUNNEL_TIMEOUT,
+                                tunnel_handshake_timeout: TUNNEL_HANDSHAKE_TIMEOUT,
+                                babel_interfaces,
+                            });
+                            Ok(())
+                        })
+                    })
+                })
+                .then(|ret| {
+                    if let Err(e) = ret {
+                        error!("Tunnel Garbage collection failed with {:?}", e)
+                    }
+                    Ok(())
+                }),
+        );
 
         TokenBridge::from_registry().do_send(TokenBridgeTick());
 
