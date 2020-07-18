@@ -1,6 +1,5 @@
 //! The Exit info endpoint gathers infromation about exit status and presents it to the dashbaord.
 
-use crate::migrate_contact_info;
 use crate::rita_client::exit_manager::exit_setup_request;
 use crate::rita_common::dashboard::Dashboard;
 use crate::ARGS;
@@ -212,14 +211,6 @@ pub fn register_to_exit(path: Path<String>) -> Box<dyn Future<Item = HttpRespons
 
     debug!("Attempting to register on exit {:?}", exit_name);
 
-    // before beta 14 contact info was set directly into the config via the settings merge endpoint
-    // so what can happen is if a user has the beta 13 or before dashboard in their browser cache and
-    // goes to register to an exit it slips in the registration details into the config without us knowing
-    // and without performing a migration. We could intercept that at the settings endpoint but it's easier
-    // to just re-run the migration here and check to see if we have old style contact details set that we
-    // have no already migrated.
-    migrate_contact_info_and_hide_operator_info();
-
     Box::new(exit_setup_request(exit_name, None).then(|res| {
         let mut ret = HashMap::new();
         match res {
@@ -244,9 +235,6 @@ pub fn verify_on_exit_with_code(
     let (exit_name, code) = path.into_inner();
     debug!("/exits/{}/verify/{} hit", exit_name, code);
 
-    // same as register_to_exit() but I'm actually 99% sure it's not actually needed here.
-    migrate_contact_info_and_hide_operator_info();
-
     Box::new(exit_setup_request(exit_name, Some(code)).then(|res| {
         let mut ret = HashMap::new();
         match res {
@@ -263,17 +251,4 @@ pub fn verify_on_exit_with_code(
             }
         }
     }))
-}
-
-/// We need to do a migration in this file if and only if the user has used the
-/// old dashboard to set their email or phone number since reboot. In that case
-/// they probably have an old version of the dash cached and are not seeing the
-/// new operator setup screen. Since we don't want the customer eventually seeing
-/// it we should hide it
-pub fn migrate_contact_info_and_hide_operator_info() {
-    let res = migrate_contact_info();
-    if res {
-        let mut operator = SETTING.get_operator_mut();
-        operator.display_operator_setup = false;
-    }
 }

@@ -1,8 +1,4 @@
-use crate::{
-    contact_info::{ContactDetails, ContactType},
-    wg_key::WgKey,
-    BillingDetails, InstallationDetails,
-};
+use crate::{contact_info::ContactType, wg_key::WgKey, BillingDetails, InstallationDetails};
 use arrayvec::ArrayString;
 use babel_monitor::Neighbor;
 use babel_monitor::Route;
@@ -446,10 +442,6 @@ pub struct OperatorUpdateMessage {
     /// An action the operator wants to take to affect this router, examples may include reset
     /// password or change the wifi ssid
     pub operator_action: Option<OperatorAction>,
-    /// being phased out, see shaper settings TODO Remove in Beta 15
-    pub max_shaper_speed: Option<usize>,
-    /// being phased out, see shaper settings TODO Remove in Beta 15
-    pub min_shaper_speed: Option<usize>,
     /// settings for the device bandwidth shaper
     #[serde(default = "default_shaper_settings")]
     pub shaper_settings: ShaperSettings,
@@ -496,8 +488,6 @@ pub struct OperatorCheckinMessage {
     /// we don't need instant updates of it. Arguably the phone number and email
     /// values for heartbeats should come in through here.
     pub neighbor_info: Option<Vec<NeighborStatus>>,
-    /// Legacy contact_info with less validation beta 13 only
-    pub contact_details: Option<ContactDetails>,
     /// The user contact details, stored in exit client details but used throughout
     /// for various reasons.
     ///  see the type definition for more details about how this type restricts values

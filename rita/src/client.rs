@@ -124,7 +124,6 @@ use althea_kernel_interface::KernelInterface;
 use althea_kernel_interface::LinuxCommandRunner;
 #[cfg(test)]
 use althea_kernel_interface::TestCommandRunner;
-use althea_types::ContactStorage;
 
 #[cfg(test)]
 lazy_static! {
@@ -203,26 +202,7 @@ fn wait_for_settings(settings_file: &str) -> RitaSettingsStruct {
     }
 }
 
-/// Migrates from the old contact details structure to the new one, returns true
-/// if a migration has occurred.
-pub fn migrate_contact_info() -> bool {
-    let mut exit_client = SETTING.get_exit_client_mut();
-    let reg_details = exit_client.reg_details.clone();
-    if let Some(reg_details) = reg_details {
-        // only migrate if it has not already been done, otherwise we might
-        // overwrite changed details
-        if exit_client.contact_info.is_none() {
-            let contact_info: Option<ContactStorage> = ContactStorage::convert(reg_details);
-            exit_client.contact_info = contact_info;
-            return true;
-        }
-    }
-    false
-}
-
 fn main() {
-    migrate_contact_info();
-
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
     openssl_probe::init_ssl_cert_env_vars();

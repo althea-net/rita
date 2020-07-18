@@ -147,7 +147,6 @@ fn checkin() {
             operator_address,
             system_chain,
             neighbor_info: Some(neighbor_info),
-            contact_details: None,
             contact_info,
             install_details,
             billing_details,

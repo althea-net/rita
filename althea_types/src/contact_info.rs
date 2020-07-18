@@ -7,8 +7,7 @@ use crate::ExitRegistrationDetails;
 use lettre::EmailAddress;
 use phonenumber::PhoneNumber;
 
-/// Struct for storing user contact details, being phased out in favor
-/// of ContactType in Beta 15
+/// Struct for submitting contact details to exits
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct ContactDetails {
     pub phone: Option<String>,
