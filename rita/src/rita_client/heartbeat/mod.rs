@@ -27,7 +27,10 @@ use settings::client::ExitServer;
 use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;
 use sodiumoxide::crypto::box_;
+use std::collections::VecDeque;
 use std::net::{SocketAddr, UdpSocket};
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::Duration;
 
 type Resolver = resolver::Resolver;
@@ -36,6 +39,13 @@ lazy_static! {
     pub static ref HEARTBEAT_SERVER_KEY: WgKey = "hizclQFo/ArWY+/9+AJ0LBY2dTiQK4smy5icM7GA5ng="
         .parse()
         .unwrap();
+    // The last resolved IP address for the forwarding proxy. In the case that we suddenly
+    // stop getting successful DNS responses we will fall back to the last successful response
+    // this covers a pretty small edge case of a failed major DNS server. For example a cloudflare
+    // outage where cloudflare responds to all requests with 'no domain', so there isn't failover to the
+    // next provider but there's also no entry. This also reduces the number of failed heartbeats due to simple
+    // things like lookup timeouts.
+    pub static ref DNS_CACHE: Arc<RwLock<VecDeque<SocketAddr>>> = Arc::new(RwLock::new(VecDeque::new()));
 }
 
 pub fn send_udp_heartbeat() {
@@ -66,10 +76,19 @@ pub fn send_udp_heartbeat() {
 
     let res = dns_request.join(network_info).then(move |res| match res {
         Ok((Ok(dnsresult), Ok(network_info))) => {
-            if dnsresult.is_empty() {
-                trace!("Got zero length dns response: {:?}", dnsresult);
-            }
+            // having successfully talked to the DNS server does not mean we have any A records
+            // this is where we disambiguate that. Results may include several addresses and we
+            // want to use them all not just the first one.
             trace!("we have heartbeat dns");
+            let dnsresult = if dnsresult.is_empty() {
+                trace!("Got zero length dns response, using cache: {:?}", dnsresult);
+                DNS_CACHE.read().unwrap().clone()
+            } else {
+                // we got a response, update the cache
+                let mut a = DNS_CACHE.write().unwrap();
+                *a = dnsresult.clone();
+                dnsresult
+            };
 
             match get_selected_exit_route(&network_info.babel_routes) {
                 Ok(route) => {
@@ -77,6 +96,8 @@ pub fn send_udp_heartbeat() {
                     let neigh_option =
                         get_rita_neigh_option(neigh_option, &network_info.rita_neighbors);
                     if let Some((neigh, rita_neigh)) = neigh_option {
+                        // this is intentional behavior, if we have multiple A records we should
+                        // send heartbeats to all of them
                         for dns_socket in dnsresult {
                             trace!("sending heartbeat");
                             send_udp_heartbeat_packet(

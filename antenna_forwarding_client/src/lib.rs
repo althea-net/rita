@@ -57,16 +57,34 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
     interfaces_to_search: HashSet<String, S>,
 ) {
     info!("Starting antenna forwarding proxy!");
+    // The last resolved IP address for the forwarding proxy. In the case that we suddenly
+    // stop getting successful DNS responses we will fall back to the last successful response
+    // this covers a pretty small edge case of a failed major DNS server. For example a cloudflare
+    // outage where cloudflare responds to all requests with 'no domain', so there isn't failover to the
+    // next provider but there's also no entry. This also reduces the number of failed checkins due to simple
+    // things like lookup timeouts.
+    let mut dns_cache: Option<SocketAddr> = None;
     thread::spawn(move || loop {
         info!("About to checkin with {}", checkin_address);
         // parse checkin address every loop iteration as a way
         // of resolving the domain name on each run
         let socket: SocketAddr = match checkin_address.to_socket_addrs() {
             Ok(mut res) => match res.next() {
-                Some(socket) => socket,
+                Some(socket) => {
+                    dns_cache = Some(socket);
+                    socket
+                }
                 None => {
-                    error!("Could not parse {}!", checkin_address);
-                    continue;
+                    if let Some(last_val) = dns_cache {
+                        error!(
+                            "Could not perform DNS lookup for {}! Falling back to {}",
+                            checkin_address, last_val
+                        );
+                        last_val
+                    } else {
+                        error!("Could not perform DNS lookup for {}!", checkin_address);
+                        continue;
+                    }
                 }
             },
             Err(_) => {
