@@ -1,12 +1,11 @@
 #[macro_use]
 extern crate log;
 
+use async_std::future::timeout as future_timeout;
 use clarity::abi::encode_call;
 use clarity::{Address, PrivateKey};
 use failure::bail;
 use failure::Error;
-use futures::Future;
-use futures_timer::FutureExt;
 use num::Bounded;
 use num256::Uint256;
 use std::time::Duration;
@@ -53,170 +52,162 @@ impl TokenBridge {
     }
 
     /// This just sends some Eth. Returns the tx hash.
-    pub fn eth_transfer(
+    pub async fn eth_transfer(
         &self,
         to: Address,
         amount: Uint256,
         timeout: u64,
-    ) -> Box<dyn Future<Item = (), Error = Error>> {
+    ) -> Result<(), Error> {
         let web3 = self.eth_web3.clone();
         let own_address = self.own_address;
         let secret = self.secret;
 
-        Box::new(
-            web3.send_transaction(to, Vec::new(), amount, own_address, secret, vec![])
-                .and_then(move |tx_hash| {
-                    web3.wait_for_transaction(tx_hash.into())
-                        .timeout(Duration::from_secs(timeout));
-                    Ok(())
-                }),
+        let tx_hash = web3
+            .send_transaction(to, Vec::new(), amount, own_address, secret, vec![])
+            .await?;
+
+        future_timeout(
+            Duration::from_secs(timeout),
+            web3.wait_for_transaction(tx_hash.into()),
         )
+        .await??;
+        Ok(())
     }
 
     /// Price of ETH in Dai
-    pub fn eth_to_dai_price(
-        &self,
-        amount: Uint256,
-    ) -> Box<dyn Future<Item = Uint256, Error = Error>> {
+    pub async fn eth_to_dai_price(&self, amount: Uint256) -> Result<Uint256, Error> {
         let web3 = self.eth_web3.clone();
         let uniswap_address = self.uniswap_address;
         let own_address = self.own_address;
 
-        Box::new(
-            web3.contract_call(
+        let tokens_bought = web3
+            .contract_call(
                 uniswap_address,
                 "getEthToTokenInputPrice(uint256)",
                 &[amount.into()],
                 own_address,
             )
-            .and_then(move |tokens_bought| {
-                Ok(Uint256::from_bytes_be(match tokens_bought.get(0..32) {
-                    Some(val) => val,
-                    None => bail!(
-                        "Malformed output from uniswap getEthToTokenInputPrice call {:?}",
-                        tokens_bought
-                    ),
-                }))
-            }),
-        )
+            .await?;
+
+        Ok(Uint256::from_bytes_be(match tokens_bought.get(0..32) {
+            Some(val) => val,
+            None => bail!(
+                "Malformed output from uniswap getEthToTokenInputPrice call {:?}",
+                tokens_bought
+            ),
+        }))
     }
 
     /// Price of Dai in Eth
-    pub fn dai_to_eth_price(
-        &self,
-        amount: Uint256,
-    ) -> Box<dyn Future<Item = Uint256, Error = Error>> {
+    pub async fn dai_to_eth_price(&self, amount: Uint256) -> Result<Uint256, Error> {
         let web3 = self.eth_web3.clone();
         let uniswap_address = self.uniswap_address;
         let own_address = self.own_address;
 
-        Box::new(
-            web3.contract_call(
+        let eth_bought = web3
+            .contract_call(
                 uniswap_address,
                 "getTokenToEthInputPrice(uint256)",
                 &[amount.into()],
                 own_address,
             )
-            .and_then(move |eth_bought| {
-                Ok(Uint256::from_bytes_be(match eth_bought.get(0..32) {
-                    Some(val) => val,
-                    None => bail!(
-                        "Malformed output from uniswap getTokenToEthInputPrice call {:?}",
-                        eth_bought
-                    ),
-                }))
-            }),
-        )
+            .await?;
+
+        Ok(Uint256::from_bytes_be(match eth_bought.get(0..32) {
+            Some(val) => val,
+            None => bail!(
+                "Malformed output from uniswap getTokenToEthInputPrice call {:?}",
+                eth_bought
+            ),
+        }))
     }
 
     /// Sell `eth_amount` ETH for Dai.
     /// This function will error out if it takes longer than 'timeout' and the transaction is guaranteed not
     /// to be accepted on the blockchain after this time.
-    pub fn eth_to_dai_swap(
+    pub async fn eth_to_dai_swap(
         &self,
         eth_amount: Uint256,
         timeout: u64,
-    ) -> Box<dyn Future<Item = Uint256, Error = Error>> {
+    ) -> Result<Uint256, Error> {
         let uniswap_address = self.uniswap_address;
         let own_address = self.own_address;
         let secret = self.secret;
         let web3 = self.eth_web3.clone();
 
-        Box::new(
-            web3.eth_get_latest_block()
-                .join(self.eth_to_dai_price(eth_amount.clone()))
-                .and_then(move |(block, expected_dai)| {
-                    // Equivalent to `amount * (1 - 0.025)` without using decimals
-                    let expected_dai = (expected_dai / 40u64.into()) * 39u64.into();
-                    let deadline = block.timestamp + timeout.into();
-                    let payload = encode_call(
-                        "ethToTokenSwapInput(uint256,uint256)",
-                        &[expected_dai.into(), deadline.into()],
-                    );
+        let block = web3.eth_get_latest_block().await?;
+        let expected_dai = self.eth_to_dai_price(eth_amount.clone()).await?;
 
-                    web3.send_transaction(
-                        uniswap_address,
-                        payload,
-                        eth_amount,
-                        own_address,
-                        secret,
-                        vec![SendTxOption::GasLimit(80_000u64.into())],
-                    )
-                    .join(
-                        web3.wait_for_event_alt(
-                            uniswap_address,
-                            "TokenPurchase(address,uint256,uint256)",
-                            Some(vec![own_address.into()]),
-                            None,
-                            None,
-                            |_| true,
-                        )
-                        .timeout(Duration::from_secs(timeout)),
-                    )
-                    .and_then(move |(_tx, response)| {
-                        let transfered_dai = Uint256::from_bytes_be(&response.topics[3]);
-                        Ok(transfered_dai)
-                    })
-                }),
+        // Equivalent to `amount * (1 - 0.025)` without using decimals
+        let expected_dai = (expected_dai / 40u64.into()) * 39u64.into();
+        let deadline = block.timestamp + timeout.into();
+        let payload = encode_call(
+            "ethToTokenSwapInput(uint256,uint256)",
+            &[expected_dai.into(), deadline.into()],
+        );
+
+        let _tx = future_timeout(
+            Duration::from_secs(timeout),
+            web3.send_transaction(
+                uniswap_address,
+                payload,
+                eth_amount,
+                own_address,
+                secret,
+                vec![SendTxOption::GasLimit(80_000u64.into())],
+            ),
         )
+        .await??;
+
+        let response = future_timeout(
+            Duration::from_secs(timeout),
+            web3.wait_for_event_alt(
+                uniswap_address,
+                "TokenPurchase(address,uint256,uint256)",
+                Some(vec![own_address.into()]),
+                None,
+                None,
+                |_| true,
+            ),
+        )
+        .await??;
+
+        let transfered_dai = Uint256::from_bytes_be(&response.topics[3]);
+        Ok(transfered_dai)
     }
 
     /// Checks if the uniswap contract has been approved to spend dai from our account.
-    pub fn check_if_uniswap_dai_approved(&self) -> Box<dyn Future<Item = bool, Error = Error>> {
+    pub async fn check_if_uniswap_dai_approved(&self) -> Result<bool, Error> {
         let web3 = self.eth_web3.clone();
         let uniswap_address = self.uniswap_address;
         let dai_address = self.foreign_dai_contract_address;
         let own_address = self.own_address;
 
-        Box::new(
-            web3.contract_call(
+        let allowance = web3
+            .contract_call(
                 dai_address,
                 "allowance(address,address)",
                 &[own_address.into(), uniswap_address.into()],
                 own_address,
             )
-            .and_then(move |allowance| {
-                let allowance = Uint256::from_bytes_be(match allowance.get(0..32) {
-                    Some(val) => val,
-                    None => bail!(
-                        "Malformed output from uniswap getTokenToEthInputPrice call {:?}",
-                        allowance
-                    ),
-                });
+            .await?;
 
-                // Check if the allowance remaining is greater than half of a Uint256- it's as good
-                // a test as any.
-                Ok(allowance > (Uint256::max_value() / 2u32.into()))
-            }),
-        )
+        let allowance = Uint256::from_bytes_be(match allowance.get(0..32) {
+            Some(val) => val,
+            None => bail!(
+                "Malformed output from uniswap getTokenToEthInputPrice call {:?}",
+                allowance
+            ),
+        });
+
+        // Check if the allowance remaining is greater than half of a Uint256- it's as good
+        // a test as any.
+        Ok(allowance > (Uint256::max_value() / 2u32.into()))
     }
 
     /// Sends transaction to the DAI contract to approve uniswap transactions, this future will not
     /// resolve until the process is either successful for the timeout finishes
-    pub fn approve_uniswap_dai_transfers(
-        &self,
-        timeout: Duration,
-    ) -> Box<dyn Future<Item = (), Error = Error>> {
+    pub async fn approve_uniswap_dai_transfers(&self, timeout: Duration) -> Result<(), Error> {
         let dai_address = self.foreign_dai_contract_address;
         let own_address = self.own_address;
         let uniswap_address = self.uniswap_address;
@@ -228,7 +219,8 @@ impl TokenBridge {
             &[uniswap_address.into(), Uint256::max_value().into()],
         );
 
-        Box::new(
+        let _res = future_timeout(
+            timeout,
             web3.send_transaction(
                 dai_address,
                 payload,
@@ -236,132 +228,129 @@ impl TokenBridge {
                 own_address,
                 secret,
                 vec![],
-            )
-            .join(web3.wait_for_event_alt(
+            ),
+        )
+        .await??;
+
+        let _res = future_timeout(
+            timeout,
+            web3.wait_for_event_alt(
                 dai_address,
                 "Approval(address,address,uint256)",
                 Some(vec![own_address.into()]),
                 Some(vec![uniswap_address.into()]),
                 None,
                 |_| true,
-            ))
-            .timeout(timeout)
-            .and_then(move |_| Ok(())),
+            ),
         )
+        .await??;
+
+        Ok(())
     }
 
     /// Sell `dai_amount` Dai for ETH
     /// This function will error out if it takes longer than 'timeout' and the transaction is guaranteed not
     /// to be accepted on the blockchain after this time.
-    pub fn dai_to_eth_swap(
+    pub async fn dai_to_eth_swap(
         &self,
         dai_amount: Uint256,
         timeout: u64,
-    ) -> Box<dyn Future<Item = Uint256, Error = Error>> {
+    ) -> Result<Uint256, Error> {
         let uniswap_address = self.uniswap_address;
         let own_address = self.own_address;
         let secret = self.secret;
         let web3 = self.eth_web3.clone();
-        let salf = self.clone();
 
-        Box::new(
-            self.check_if_uniswap_dai_approved()
-                .and_then({
-                    let salf = self.clone();
-                    move |is_approved| {
-                        trace!("uniswap approved {}", is_approved);
-                        if is_approved {
-                            Box::new(futures::future::ok(()))
-                                as Box<dyn Future<Item = (), Error = Error>>
-                        } else {
-                            salf.approve_uniswap_dai_transfers(Duration::from_secs(600))
-                        }
-                    }
-                })
-                .and_then(move |_| {
-                    web3.eth_get_latest_block()
-                        .join(salf.dai_to_eth_price(dai_amount.clone()))
-                        .and_then(move |(block, expected_eth)| {
-                            // Equivalent to `amount * (1 - 0.025)` without using decimals
-                            let expected_eth = (expected_eth / 40u64.into()) * 39u64.into();
-                            let deadline = block.timestamp + timeout.into();
-                            let payload = encode_call(
-                                "tokenToEthSwapInput(uint256,uint256,uint256)",
-                                &[dai_amount.into(), expected_eth.into(), deadline.into()],
-                            );
+        let is_approved = self.check_if_uniswap_dai_approved().await?;
+        trace!("uniswap approved {}", is_approved);
+        if !is_approved {
+            self.approve_uniswap_dai_transfers(Duration::from_secs(600))
+                .await?;
+        }
 
-                            web3.send_transaction(
-                                uniswap_address,
-                                payload,
-                                0u32.into(),
-                                own_address,
-                                secret,
-                                vec![SendTxOption::GasLimit(80_000u64.into())],
-                            )
-                            .join(
-                                web3.wait_for_event_alt(
-                                    uniswap_address,
-                                    "EthPurchase(address,uint256,uint256)",
-                                    Some(vec![own_address.into()]),
-                                    None,
-                                    None,
-                                    |_| true,
-                                )
-                                .timeout(Duration::from_secs(timeout)),
-                            )
-                            .and_then(move |(_tx, response)| {
-                                let transfered_eth = Uint256::from_bytes_be(&response.topics[3]);
-                                Ok(transfered_eth)
-                            })
-                        })
-                }),
+        let block = web3.eth_get_latest_block().await?;
+        let expected_eth = self.dai_to_eth_price(dai_amount.clone()).await?;
+        // Equivalent to `amount * (1 - 0.025)` without using decimals
+        let expected_eth = (expected_eth / 40u64.into()) * 39u64.into();
+        let deadline = block.timestamp + timeout.into();
+        let payload = encode_call(
+            "tokenToEthSwapInput(uint256,uint256,uint256)",
+            &[dai_amount.into(), expected_eth.into(), deadline.into()],
+        );
+
+        let _tx = future_timeout(
+            Duration::from_secs(timeout),
+            web3.send_transaction(
+                uniswap_address,
+                payload,
+                0u32.into(),
+                own_address,
+                secret,
+                vec![SendTxOption::GasLimit(80_000u64.into())],
+            ),
         )
+        .await?;
+
+        let response = future_timeout(
+            Duration::from_secs(timeout),
+            web3.wait_for_event_alt(
+                uniswap_address,
+                "EthPurchase(address,uint256,uint256)",
+                Some(vec![own_address.into()]),
+                None,
+                None,
+                |_| true,
+            ),
+        )
+        .await??;
+
+        let transfered_eth = Uint256::from_bytes_be(&response.topics[3]);
+        Ok(transfered_eth)
     }
 
     /// Bridge `dai_amount` dai to xdai
-    pub fn dai_to_xdai_bridge(
+    pub async fn dai_to_xdai_bridge(
         &self,
         dai_amount: Uint256,
         timeout: u64,
-    ) -> Box<dyn Future<Item = Uint256, Error = Error>> {
+    ) -> Result<Uint256, Error> {
         let eth_web3 = self.eth_web3.clone();
         let foreign_dai_contract_address = self.foreign_dai_contract_address;
         let xdai_foreign_bridge_address = self.xdai_foreign_bridge_address;
         let own_address = self.own_address;
         let secret = self.secret;
 
-        // You basically just send it some coins
-        // We have no idea when this has succeeded since the events are not indexed
-        Box::new(
-            eth_web3
-                .send_transaction(
-                    foreign_dai_contract_address,
-                    encode_call(
-                        "transfer(address,uint256)",
-                        &[
-                            xdai_foreign_bridge_address.into(),
-                            dai_amount.clone().into(),
-                        ],
-                    ),
-                    0u32.into(),
-                    own_address,
-                    secret,
-                    vec![SendTxOption::GasLimit(80_000u64.into())],
-                )
-                .and_then(move |tx_hash| {
-                    eth_web3
-                        .wait_for_transaction(tx_hash.into())
-                        .timeout(Duration::from_secs(timeout));
-                    Ok(dai_amount)
-                }),
+        // You basically just send it some coins to the bridge address and they show
+        // up in the same address on the xdai side we have no idea when this has succeeded
+        // since the events are not indexed
+        let tx_hash = eth_web3
+            .send_transaction(
+                foreign_dai_contract_address,
+                encode_call(
+                    "transfer(address,uint256)",
+                    &[
+                        xdai_foreign_bridge_address.into(),
+                        dai_amount.clone().into(),
+                    ],
+                ),
+                0u32.into(),
+                own_address,
+                secret,
+                vec![SendTxOption::GasLimit(80_000u64.into())],
+            )
+            .await?;
+
+        future_timeout(
+            Duration::from_secs(timeout),
+            eth_web3.wait_for_transaction(tx_hash.into()),
         )
+        .await??;
+
+        Ok(dai_amount)
     }
 
     /// Bridge `xdai_amount` xdai to dai
-    pub fn xdai_to_dai_bridge(
-        &self,
-        xdai_amount: Uint256,
-    ) -> Box<dyn Future<Item = Uint256, Error = Error>> {
+    pub async fn xdai_to_dai_bridge(&self, xdai_amount: Uint256) -> Result<Uint256, Error> {
         let xdai_web3 = self.xdai_web3.clone();
 
         let xdai_home_bridge_address = self.xdai_home_bridge_address;
@@ -369,44 +358,43 @@ impl TokenBridge {
         let own_address = self.own_address;
         let secret = self.secret;
 
-        // You basically just send it some coins
-        Box::new(xdai_web3.send_transaction(
-            xdai_home_bridge_address,
-            Vec::new(),
-            xdai_amount,
-            own_address,
-            secret,
-            vec![
-                SendTxOption::GasPrice(10_000_000_000u128.into()),
-                SendTxOption::NetworkId(100u64),
-            ],
-        ))
+        // You basically just send it some coins to the contract address on the Xdai side
+        // and it will show up on the Eth side in the same address
+        xdai_web3
+            .send_transaction(
+                xdai_home_bridge_address,
+                Vec::new(),
+                xdai_amount,
+                own_address,
+                secret,
+                vec![
+                    SendTxOption::GasPrice(10_000_000_000u128.into()),
+                    SendTxOption::NetworkId(100u64),
+                ],
+            )
+            .await
     }
 
-    pub fn get_dai_balance(
-        &self,
-        address: Address,
-    ) -> Box<dyn Future<Item = Uint256, Error = Error>> {
+    pub async fn get_dai_balance(&self, address: Address) -> Result<Uint256, Error> {
         let web3 = self.eth_web3.clone();
         let dai_address = self.foreign_dai_contract_address;
         let own_address = self.own_address;
-        Box::new(
-            web3.contract_call(
+        let balance = web3
+            .contract_call(
                 dai_address,
                 "balanceOf(address)",
                 &[address.into()],
                 own_address,
             )
-            .and_then(|balance| {
-                Ok(Uint256::from_bytes_be(match balance.get(0..32) {
-                    Some(val) => val,
-                    None => bail!(
-                        "Got bad output for DAI balance from the full node {:?}",
-                        balance
-                    ),
-                }))
-            }),
-        )
+            .await?;
+
+        Ok(Uint256::from_bytes_be(match balance.get(0..32) {
+            Some(val) => val,
+            None => bail!(
+                "Got bad output for DAI balance from the full node {:?}",
+                balance
+            ),
+        }))
     }
 }
 
@@ -463,25 +451,17 @@ mod tests {
             "https://dai.althea.org".into(),
         );
 
-        actix::spawn(
-            token_bridge
+        actix::spawn(async move {
+            let is_approved = token_bridge.check_if_uniswap_dai_approved().await.unwrap();
+            assert!(is_approved);
+            let is_approved = unapproved_token_bridge
                 .check_if_uniswap_dai_approved()
-                .and_then(move |is_approved| {
-                    assert!(is_approved);
-                    unapproved_token_bridge
-                        .check_if_uniswap_dai_approved()
-                        .and_then(move |is_approved| {
-                            assert!(!is_approved);
-                            Ok(())
-                        })
-                })
-                .then(|res| {
-                    res.unwrap();
-                    actix::System::current().stop();
-                    Box::new(futures::future::ok(()))
-                }),
-        );
-        system.run();
+                .await
+                .unwrap();
+            assert!(is_approved);
+            actix::System::current().stop();
+        });
+        system.run().unwrap();
     }
 
     #[test]
@@ -491,18 +471,19 @@ mod tests {
 
         let token_bridge = new_token_bridge();
 
-        actix::spawn(
-            token_bridge
+        actix::spawn(async move {
+            let one_cent_in_eth = token_bridge
                 .dai_to_eth_price(eth_to_wei(0.01f64))
-                .and_then(move |one_cent_in_eth| token_bridge.eth_to_dai_swap(one_cent_in_eth, 600))
-                .then(|res| {
-                    res.unwrap();
-                    actix::System::current().stop();
-                    Box::new(futures::future::ok(()))
-                }),
-        );
+                .await
+                .unwrap();
+            token_bridge
+                .eth_to_dai_swap(one_cent_in_eth, 600)
+                .await
+                .unwrap();
+            actix::System::current().stop();
+        });
 
-        system.run();
+        system.run().unwrap();
     }
 
     #[test]
@@ -511,18 +492,19 @@ mod tests {
         let system = actix::System::new("test");
         let token_bridge = new_token_bridge();
 
-        actix::spawn(
+        actix::spawn(async move {
             token_bridge
                 .approve_uniswap_dai_transfers(Duration::from_secs(600))
-                .and_then(move |_| token_bridge.dai_to_eth_swap(eth_to_wei(0.01f64), 600))
-                .then(|res| {
-                    res.unwrap();
-                    actix::System::current().stop();
-                    Box::new(futures::future::ok(()))
-                }),
-        );
+                .await
+                .unwrap();
+            token_bridge
+                .dai_to_eth_swap(eth_to_wei(0.01f64), 600)
+                .await
+                .unwrap();
+            actix::System::current().stop();
+        });
 
-        system.run();
+        system.run().unwrap();
     }
 
     #[test]
@@ -532,19 +514,17 @@ mod tests {
 
         let token_bridge = new_token_bridge();
 
-        actix::spawn(
+        actix::spawn(async move {
+            // All we can really do here is test that it doesn't throw. Check your balances in
+            // 5-10 minutes to see if the money got transferred.
             token_bridge
-                // All we can really do here is test that it doesn't throw. Check your balances in
-                // 5-10 minutes to see if the money got transferred.
                 .dai_to_xdai_bridge(eth_to_wei(0.01f64), 600)
-                .then(|res| {
-                    res.unwrap();
-                    actix::System::current().stop();
-                    Box::new(futures::future::ok(()))
-                }),
-        );
+                .await
+                .unwrap();
+            actix::System::current().stop();
+        });
 
-        system.run();
+        system.run().unwrap();
     }
 
     #[test]
@@ -554,18 +534,16 @@ mod tests {
 
         let token_bridge = new_token_bridge();
 
-        actix::spawn(
+        actix::spawn(async move {
+            // All we can really do here is test that it doesn't throw. Check your balances in
+            // 5-10 minutes to see if the money got transferred.
             token_bridge
-                // All we can really do here is test that it doesn't throw. Check your balances in
-                // 5-10 minutes to see if the money got transferred.
                 .xdai_to_dai_bridge(eth_to_wei(0.01f64))
-                .then(|res| {
-                    res.unwrap();
-                    actix::System::current().stop();
-                    Box::new(futures::future::ok(()))
-                }),
-        );
+                .await
+                .unwrap();
+            actix::System::current().stop();
+        });
 
-        system.run();
+        system.run().unwrap();
     }
 }
