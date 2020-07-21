@@ -62,6 +62,7 @@ use althea_types::SystemChain;
 use auto_bridge::TokenBridge as TokenBridgeCore;
 use clarity::Address;
 use failure::Error;
+use futures::future::join4;
 use futures01::future;
 use futures01::future::Future;
 use num256::Uint256;
@@ -105,6 +106,12 @@ pub enum State {
     },
     Depositing {
         timestamp: Instant,
+    },
+    WithdrawRequest {
+        amount: Uint256,
+        to: Address,
+        timestamp: Instant,
+        withdraw_all: bool,
     },
     Withdrawing {
         amount: Uint256,
@@ -213,43 +220,37 @@ impl Default for TokenBridge {
 /// If some part of the depositing chain is disrupted due to a failure we may end up
 /// with a stranded dai balance, this function detects that balance and 'rescues' stranded
 /// dai
-fn rescue_dai(
+async fn rescue_dai(
     bridge: TokenBridgeCore,
     our_address: Address,
     minimum_stranded_dai_transfer: u32,
-) -> Box<dyn Future<Item = (), Error = Error>> {
-    Box::new(bridge.get_dai_balance(our_address).and_then({
-        move |dai_balance| {
-            info!("Our DAI balance is {}", dai_balance);
-            if dai_balance > eth_to_wei(minimum_stranded_dai_transfer.into()) {
-                info!("rescuing dais");
-                TokenBridge::from_registry().do_send(DetailedStateChange(
-                    DetailedBridgeState::DaiToXdai {
-                        amount: dai_balance.clone(),
-                    },
-                ));
+) -> Result<(), Error> {
+    let dai_balance = bridge.get_dai_balance(our_address).await?;
+    info!("Our DAI balance is {}", dai_balance);
+    if dai_balance > eth_to_wei(minimum_stranded_dai_transfer.into()) {
+        info!("rescuing dais");
+        TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::DaiToXdai {
+            amount: dai_balance.clone(),
+        }));
 
-                // Remove up to U16_MAX wei from this transaction, this is well under a cent.
-                // what this does is randomly change the tx hash and help prevent 'stuck' transactions
-                // thanks to anti-spam mechanisms. Payments get this 'for free' thanks to changing debts
-                // numbers. And other tx's here do thanks to changing exchange rates and other external factors
-                // this is the only transaction that will be exactly the same for a very long period.
-                let mut rng = thread_rng();
-                let some_wei: u16 = rng.gen();
-                let amount = dai_balance - Uint256::from(some_wei);
+        // Remove up to U16_MAX wei from this transaction, this is well under a cent.
+        // what this does is randomly change the tx hash and help prevent 'stuck' transactions
+        // thanks to anti-spam mechanisms. Payments get this 'for free' thanks to changing debts
+        // numbers. And other tx's here do thanks to changing exchange rates and other external factors
+        // this is the only transaction that will be exactly the same for a very long period.
+        let mut rng = thread_rng();
+        let some_wei: u16 = rng.gen();
+        let amount = dai_balance - Uint256::from(some_wei);
 
-                // Over the bridge into xDai
-                Box::new(
-                    bridge
-                        .dai_to_xdai_bridge(amount, ETH_TRANSFER_TIMEOUT)
-                        .and_then(|_res| Ok(())),
-                )
-            } else {
-                // we don't have a lot of dai, we shouldn't do anything
-                Box::new(future::ok(())) as Box<dyn Future<Item = (), Error = Error>>
-            }
-        }
-    }))
+        // Over the bridge into xDai
+        bridge
+            .dai_to_xdai_bridge(amount, ETH_TRANSFER_TIMEOUT)
+            .await?;
+        Ok(())
+    } else {
+        // we don't have a lot of dai, we shouldn't do anything
+        Ok(())
+    }
 }
 
 #[derive(Message)]
@@ -269,7 +270,7 @@ impl Handler<Tick> for TokenBridge {
 
         match system_chain {
             SystemChain::Xdai => xdai_bridge(self.state.clone(), &self),
-            SystemChain::Ethereum => eth_bridge(self.state.clone(), &self),
+            SystemChain::Ethereum => eth_bridge(&self),
             SystemChain::Rinkeby => {}
         }
     }
@@ -277,72 +278,73 @@ impl Handler<Tick> for TokenBridge {
 
 /// simplified logic for bringing xdai back over to Eth if the user has xdai and then
 /// selects Eth as their blockchain it will bring the full balance back into Eth
-fn eth_bridge(_state: State, bridge: &TokenBridge) {
+async fn eth_bridge(bridge: &TokenBridge) {
     let bridge = bridge.bridge.clone();
-    Arbiter::spawn(
+
+    let our_dai_balance = match bridge.get_dai_balance(bridge.own_address).await {
+        Ok(val) => val,
+        Err(e) => {
+            error!("Failed to get DAI balance with {:?}", e);
+            return;
+        }
+    };
+    let our_eth_balance = match bridge.eth_web3.eth_get_balance(bridge.own_address).await {
+        Ok(val) => val,
+        Err(e) => {
+            error!("Failed to get ETH balance with {:?}", e);
+            return;
+        }
+    };
+    let wei_per_dollar = match bridge.dai_to_eth_price(eth_to_wei(1u8.into())).await {
+        Ok(val) => val,
+        Err(e) => {
+            error!("Failed to get DAI price with {:?}", e);
+            return;
+        }
+    };
+    let our_xdai_balance = match bridge.xdai_web3.eth_get_balance(bridge.own_address).await {
+        Ok(val) => val,
+        Err(e) => {
+            error!("Failed to get xDai balance with {:?}", e);
+            return;
+        }
+    };
+
+    info!(
+        "xdai rescue state is {} dai {} eth {} xdai {} wei per dollar",
+        our_dai_balance, our_eth_balance, our_xdai_balance, wei_per_dollar
+    );
+    let tx_gas: Uint256 = 21000u32.into();
+    // if you actually ask for the gas price you'll get an incorrect value
+    let xdai_gas_price: Uint256 = 60_000_000_000u128.into();
+    let xdai_tx_cost = xdai_gas_price * tx_gas;
+    // Money has come over the bridge
+    if our_xdai_balance > xdai_tx_cost {
+        let amount = our_xdai_balance - xdai_tx_cost;
+        bridge.xdai_to_dai_bridge(amount.clone()).await;
+        TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::XdaiToDai {
+            amount,
+        }));
+    } else if our_dai_balance > 0u32.into() {
+        // Then it converts to eth
+        TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::DaiToEth {
+            amount_of_dai: our_dai_balance.clone(),
+            wei_per_dollar,
+        }));
         bridge
-            .get_dai_balance(bridge.own_address)
-            .join4(
-                bridge.eth_web3.eth_get_balance(bridge.own_address),
-                bridge.dai_to_eth_price(eth_to_wei(1u8.into())),
-                bridge.xdai_web3.eth_get_balance(bridge.own_address),
-            )
-            .and_then(
-                move |(our_dai_balance, our_eth_balance, wei_per_dollar, our_xdai_balance)| {
-                    info!(
-                        "xdai rescue state is {} dai {} eth {} xdai {} wei per dollar",
-                        our_dai_balance, our_eth_balance, our_xdai_balance, wei_per_dollar
-                    );
-                    let tx_gas: Uint256 = 21000u32.into();
-                    // if you actually ask for the gas price you'll get an incorrect value
-                    let xdai_gas_price: Uint256 = 60_000_000_000u128.into();
-                    let xdai_tx_cost = xdai_gas_price * tx_gas;
-                    // Money has come over the bridge
-                    if our_xdai_balance > xdai_tx_cost {
-                        let amount = our_xdai_balance - xdai_tx_cost;
-                        Box::new(bridge.xdai_to_dai_bridge(amount.clone()).then(move |_res| {
-                            TokenBridge::from_registry().do_send(DetailedStateChange(
-                                DetailedBridgeState::XdaiToDai { amount },
-                            ));
-                            Ok(())
-                        })) as Box<dyn Future<Item = (), Error = Error>>
-                    } else if our_dai_balance > 0u32.into() {
-                        TokenBridge::from_registry().do_send(DetailedStateChange(
-                            DetailedBridgeState::DaiToEth {
-                                amount_of_dai: our_dai_balance.clone(),
-                                wei_per_dollar,
-                            },
-                        ));
-                        Box::new(
-                            bridge
-                                // Then it converts to eth
-                                .dai_to_eth_swap(our_dai_balance, UNISWAP_TIMEOUT)
-                                .and_then(|_| Ok(())),
-                        ) as Box<dyn Future<Item = (), Error = Error>>
-                    // all other steps are done and the eth is sitting and waiting
-                    } else {
-                        TokenBridge::from_registry().do_send(DetailedStateChange(
-                            DetailedBridgeState::NoOp {
-                                eth_balance: our_eth_balance,
-                                wei_per_dollar,
-                            },
-                        ));
-                        Box::new(futures01::future::ok(()))
-                            as Box<dyn Future<Item = (), Error = Error>>
-                    }
-                },
-            )
-            .then(|res| {
-                if res.is_err() {
-                    error!("Error in Eth rescuing Tick handler: {:?}", res);
-                }
-                Ok(())
-            }),
-    )
+            .dai_to_eth_swap(our_dai_balance, UNISWAP_TIMEOUT)
+            .await;
+    // all other steps are done and the eth is sitting and waiting
+    } else {
+        TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::NoOp {
+            eth_balance: our_eth_balance,
+            wei_per_dollar,
+        }));
+    }
 }
 
 /// The logic for the Eth -> Xdai bridge operation
-fn xdai_bridge(state: State, bridge: &TokenBridge) {
+async fn xdai_bridge(state: State, bridge: &TokenBridge) {
     let minimum_stranded_dai_transfer = bridge.minimum_stranded_dai_transfer;
     let reserve_amount = bridge.reserve_amount;
     let minimum_to_exchange = bridge.minimum_to_exchange;
@@ -358,86 +360,86 @@ fn xdai_bridge(state: State, bridge: &TokenBridge) {
                 timestamp: Instant::now(),
             };
             TokenBridge::from_registry().do_send(StateChange(state.clone()));
-            Arbiter::spawn(
-                rescue_dai(
-                    bridge.clone(),
-                    bridge.own_address,
-                    minimum_stranded_dai_transfer,
-                )
-                .and_then(move |_| {
-                    trace!("rescued dai");
-                    bridge
-                        .dai_to_eth_price(eth_to_wei(1u8.into()))
-                        .join(bridge.eth_web3.eth_get_balance(bridge.own_address))
-                        .and_then(move |(wei_per_dollar, eth_balance)| {
-                            // These statements convert the reserve_amount and minimum_to_exchange
-                            // into eth using the current price (units of wei)
-                            let reserve = wei_per_dollar.clone() * reserve_amount.into();
-                            let minimum_to_exchange =
-                                wei_per_dollar.clone() * minimum_to_exchange.into();
-
-                            // This means enough has been sent into our account to start the
-                            // deposit process.
-                            if eth_balance >= minimum_to_exchange {
-                                // Leave a reserve in the account to use for gas in the future
-                                let swap_amount = eth_balance - reserve;
-
-                                TokenBridge::from_registry().do_send(DetailedStateChange(
-                                    DetailedBridgeState::EthToDai {
-                                        amount_of_eth: swap_amount.clone(),
-                                        wei_per_dollar,
-                                    },
-                                ));
-
-                                info!("Converting to Dai");
-                                Box::new(
-                                    bridge
-                                        // Convert to Dai in Uniswap
-                                        .eth_to_dai_swap(swap_amount, UNISWAP_TIMEOUT)
-                                        .and_then(move |dai_bought| {
-                                            TokenBridge::from_registry().do_send(
-                                                DetailedStateChange(
-                                                    DetailedBridgeState::DaiToXdai {
-                                                        amount: dai_bought.clone(),
-                                                    },
-                                                ),
-                                            );
-                                            // And over the bridge into xDai
-                                            bridge.dai_to_xdai_bridge(
-                                                dai_bought,
-                                                ETH_TRANSFER_TIMEOUT,
-                                            )
-                                        })
-                                        .and_then(|_| Ok(())),
-                                )
-                                    as Box<dyn Future<Item = (), Error = Error>>
-                            } else {
-                                TokenBridge::from_registry().do_send(DetailedStateChange(
-                                    DetailedBridgeState::NoOp {
-                                        eth_balance,
-                                        wei_per_dollar,
-                                    },
-                                ));
-                                // we don't have a lot of eth, we shouldn't do anything
-                                Box::new(future::ok(()))
-                                    as Box<dyn Future<Item = (), Error = Error>>
-                            }
-                        })
-                })
-                .then(move |res| {
-                    // It goes back into State::Ready once the dai
-                    // is in the bridge or if failed. This prevents multiple simultaneous
-                    // attempts to bridge the same Dai.
-
-                    if res.is_err() {
-                        error!("Error in bridge State::Deposit Tick handler: {:?}", res);
-                    }
+            rescue_dai(
+                bridge.clone(),
+                bridge.own_address,
+                minimum_stranded_dai_transfer,
+            )
+            .await;
+            trace!("rescued dai");
+            let wei_per_dollar = match bridge.dai_to_eth_price(eth_to_wei(1u8.into())).await {
+                Ok(val) => val,
+                Err(e) => {
+                    warn!("Failed to get eth price with {:?}", e);
                     TokenBridge::from_registry().do_send(StateChange(State::Ready {
                         former_state: Some(Box::new(state)),
                     }));
-                    Ok(())
-                }),
-            )
+                    return;
+                }
+            };
+            let eth_balance = match bridge.eth_web3.eth_get_balance(bridge.own_address).await {
+                Ok(val) => val,
+                Err(e) => {
+                    warn!("Failed to get eth balance {:?}", e);
+                    TokenBridge::from_registry().do_send(StateChange(State::Ready {
+                        former_state: Some(Box::new(state)),
+                    }));
+                    return;
+                }
+            };
+            // These statements convert the reserve_amount and minimum_to_exchange
+            // into eth using the current price (units of wei)
+            let reserve = wei_per_dollar.clone() * reserve_amount.into();
+            let minimum_to_exchange = wei_per_dollar.clone() * minimum_to_exchange.into();
+
+            // This means enough has been sent into our account to start the
+            // deposit process.
+            if eth_balance >= minimum_to_exchange {
+                // Leave a reserve in the account to use for gas in the future
+                let swap_amount = eth_balance - reserve;
+
+                TokenBridge::from_registry().do_send(DetailedStateChange(
+                    DetailedBridgeState::EthToDai {
+                        amount_of_eth: swap_amount.clone(),
+                        wei_per_dollar,
+                    },
+                ));
+
+                info!("Converting to Dai");
+                let dai_bought = match bridge.eth_to_dai_swap(swap_amount, UNISWAP_TIMEOUT).await {
+                    Ok(val) => val,
+                    Err(e) => {
+                        warn!("Failed to swap dai with {:?}", e);
+                        TokenBridge::from_registry().do_send(StateChange(State::Ready {
+                            former_state: Some(Box::new(state)),
+                        }));
+                        return;
+                    }
+                };
+                TokenBridge::from_registry().do_send(DetailedStateChange(
+                    DetailedBridgeState::DaiToXdai {
+                        amount: dai_bought.clone(),
+                    },
+                ));
+                // And over the bridge into xDai
+                bridge
+                    .dai_to_xdai_bridge(dai_bought, ETH_TRANSFER_TIMEOUT)
+                    .await;
+            } else {
+                TokenBridge::from_registry().do_send(DetailedStateChange(
+                    DetailedBridgeState::NoOp {
+                        eth_balance,
+                        wei_per_dollar,
+                    },
+                ));
+                // we don't have a lot of eth, we shouldn't do anything
+            }
+            // It goes back into State::Ready once the dai
+            // is in the bridge or if failed. This prevents multiple simultaneous
+            // attempts to bridge the same Dai.
+            TokenBridge::from_registry().do_send(StateChange(State::Ready {
+                former_state: Some(Box::new(state)),
+            }));
         }
         State::Depositing { timestamp } => {
             info!("Tried to tick in bridge State::Depositing");
@@ -460,6 +462,32 @@ fn xdai_bridge(state: State, bridge: &TokenBridge) {
                 }));
             }
         }
+        State::WithdrawRequest {
+            to,
+            amount,
+            timestamp,
+            withdraw_all,
+        } => match bridge.xdai_to_dai_bridge(amount.clone()).await {
+            Ok(res) => {
+                // Only change to Withdraw if there was no error
+                TokenBridge::from_registry().do_send(DetailedStateChange(
+                    DetailedBridgeState::XdaiToDai {
+                        amount: amount.clone(),
+                    },
+                ));
+                TokenBridge::from_registry().do_send(StateChange(State::Withdrawing {
+                    to,
+                    amount,
+                    timestamp: Instant::now(),
+                    withdraw_all,
+                }));
+            }
+            Err(e) => {
+                error!("Error in State::Deposit WithdrawRequest handler: {:?}", e);
+                TokenBridge::from_registry()
+                    .do_send(StateChange(State::Ready { former_state: None }));
+            }
+        },
         State::Withdrawing {
             to,
             amount,
@@ -484,95 +512,116 @@ fn xdai_bridge(state: State, bridge: &TokenBridge) {
                     })),
                 }));
             } else {
-                Arbiter::spawn(
-                            bridge
-                                .get_dai_balance(bridge.own_address)
-                                .join5(bridge.eth_web3.eth_get_balance(bridge.own_address),
-                                bridge.dai_to_eth_price(eth_to_wei(1u8.into())),
-                                bridge.dai_to_eth_price(DAI_WEI_CENT.into()),
-                                bridge.eth_web3.eth_gas_price())
-                                .and_then(move |(our_dai_balance, our_eth_balance, wei_per_dollar, wei_per_cent, eth_gas_price)| {
-                                    info!("bridge withdraw state is {} dai {} eth {} wei per dollar", our_dai_balance, our_eth_balance, wei_per_dollar);
-                                    let transferred_eth = eth_equal(amount.clone(), wei_per_cent);
+                let our_dai_balance = match bridge.get_dai_balance(bridge.own_address).await {
+                    Ok(val) => val,
+                    Err(_e) => return,
+                };
+                let our_eth_balance =
+                    match bridge.eth_web3.eth_get_balance(bridge.own_address).await {
+                        Ok(val) => val,
+                        Err(_e) => return,
+                    };
+                let wei_per_dollar = match bridge.dai_to_eth_price(eth_to_wei(1u8.into())).await {
+                    Ok(val) => val,
+                    Err(_e) => return,
+                };
+                // todo why don't we compute this from the above? be careful if you're attempting this, the conversion
+                // is fraught with ways to screw it up. Pull out the many units tricks from your physics class
+                let wei_per_cent = match bridge.dai_to_eth_price(DAI_WEI_CENT.into()).await {
+                    Ok(val) => val,
+                    Err(_e) => return,
+                };
+                let eth_gas_price = match bridge.eth_web3.eth_gas_price().await {
+                    Ok(val) => val,
+                    Err(_e) => return,
+                };
 
-                                    // the amount we must leave behind to continue to pay for eth operations
-                                    let reserve = wei_per_dollar.clone() * reserve_amount.into();
-                                    // the reserve value with some margin, to deal with exchange rate fluctuations
-                                    let reserve_with_margin = reserve.clone() * 10u32.into();
+                info!(
+                    "bridge withdraw state is {} dai {} eth {} wei per dollar",
+                    our_dai_balance, our_eth_balance, wei_per_dollar
+                );
+                let transferred_eth = eth_equal(amount.clone(), wei_per_cent);
 
-                                    // this code handles the case where you are withdrawing a large amount and
-                                    // the exchange rate meaningfully goes down during your exchange and withdraw.
-                                    // What occurs in this case is that your new eth balance is now no longer as much
-                                    // as your withdraw amount. For small withdraws you A) don't move the price much
-                                    // and B) the reserve amount can make up small shortfalls. For large withdraws you
-                                    // may lose something like 1/2 dollars out of $500+ but then the eth would sit around
-                                    // not enough to finish the withdraw. So what we do instead is withdraw what we can
-                                    // over the reserve amount. If the balance is less than $10 (10x the current reserve)
-                                    // then we can be pretty sure it at least wasn't us that moved the price that much
-                                    let transferred_eth = if our_eth_balance < transferred_eth &&
-                                            our_eth_balance.clone() / wei_per_dollar.clone() > reserve_with_margin {
-                                        if withdraw_all {
-                                            our_eth_balance.clone()
-                                        } else {
-                                           our_eth_balance.clone() - reserve
-                                        }
-                                    } else {
-                                        transferred_eth
-                                    };
+                // the amount we must leave behind to continue to pay for eth operations
+                let reserve = wei_per_dollar.clone() * reserve_amount.into();
+                // the reserve value with some margin, to deal with exchange rate fluctuations
+                let reserve_with_margin = reserve.clone() * 10u32.into();
 
-                                    // Money has come over the bridge
-                                    if our_dai_balance >= amount {
-                                        TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::DaiToEth{
-                                            amount_of_dai: amount.clone(),
-                                            wei_per_dollar
-                                        }));
-                                        Box::new(
-                                            bridge
-                                                // Then it converts to eth
-                                                .dai_to_eth_swap(amount, UNISWAP_TIMEOUT).and_then(|_amount_actually_exchanged| Ok(()))
-                                        )
-                                            as Box<dyn Future<Item = (), Error = Error>>
-                                    // all other steps are done and the eth is sitting and waiting
-                                    } else if our_eth_balance >= transferred_eth {
-                                        info!("Converted dai back to eth!");
-                                        let withdraw_amount = if withdraw_all {
-                                            // this only works because the gas price is hardcoded in auto_bridge
-                                            // that should be fixed someday and this should use dynamic gas
-                                            let gas_price = eth_gas_price;
-                                            let tx_gas: Uint256 = 21_000u32.into();
-                                            let tx_cost = gas_price * tx_gas;
-                                            our_eth_balance - tx_cost
-                                            } else { transferred_eth };
+                // this code handles the case where you are withdrawing a large amount and
+                // the exchange rate meaningfully goes down during your exchange and withdraw.
+                // What occurs in this case is that your new eth balance is now no longer as much
+                // as your withdraw amount. For small withdraws you A) don't move the price much
+                // and B) the reserve amount can make up small shortfalls. For large withdraws you
+                // may lose something like 1/2 dollars out of $500+ but then the eth would sit around
+                // not enough to finish the withdraw. So what we do instead is withdraw what we can
+                // over the reserve amount. If the balance is less than $10 (10x the current reserve)
+                // then we can be pretty sure it at least wasn't us that moved the price that much
+                let transferred_eth = if our_eth_balance < transferred_eth
+                    && our_eth_balance.clone() / wei_per_dollar.clone() > reserve_with_margin
+                {
+                    if withdraw_all {
+                        our_eth_balance.clone()
+                    } else {
+                        our_eth_balance.clone() - reserve
+                    }
+                } else {
+                    transferred_eth
+                };
 
-                                        TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::EthToDest{
-                                            amount_of_eth: withdraw_amount.clone(),
-                                            wei_per_dollar,
-                                            dest_address: to
-                                        }));
-                                        Box::new(bridge.eth_transfer(
-                                            to,
-                                            withdraw_amount,
-                                            ETH_TRANSFER_TIMEOUT,
-                                        )
-                                        .and_then(move |_| {
-                                            info!("Issued an eth transfer for withdraw! Now complete!");
-                                            // we only exit the withdraw state on success or timeout
-                                            TokenBridge::from_registry().do_send(StateChange(State::Ready {former_state: Some(Box::new(State::Withdrawing{to, amount, timestamp, withdraw_all}))}));
-                                            Ok(())}))
-                                    } else {
-                                        info!("withdraw is waiting on bridge");
-                                        TokenBridge::from_registry().do_send(DetailedStateChange(DetailedBridgeState::XdaiToDai{amount}));
-                                        Box::new(futures01::future::ok(()))
-                                            as Box<dyn Future<Item = (), Error = Error>>
-                                    }
-                                })
-                                .then(|res| {
-                                    if res.is_err() {
-                                        error!("Error in State::Withdraw Tick handler: {:?}", res);
-                                    }
-                                    Ok(())
-                                }),
-                        )
+                // Money has come over the bridge
+                if our_dai_balance >= amount {
+                    TokenBridge::from_registry().do_send(DetailedStateChange(
+                        DetailedBridgeState::DaiToEth {
+                            amount_of_dai: amount.clone(),
+                            wei_per_dollar,
+                        },
+                    ));
+                    // Then it converts to eth
+                    let _amount_actually_exchanged =
+                        bridge.dai_to_eth_swap(amount, UNISWAP_TIMEOUT);
+                // all other steps are done and the eth is sitting and waiting
+                } else if our_eth_balance >= transferred_eth {
+                    info!("Converted dai back to eth!");
+                    let withdraw_amount = if withdraw_all {
+                        // this only works because the gas price is hardcoded in auto_bridge
+                        // that should be fixed someday and this should use dynamic gas
+                        let gas_price = eth_gas_price;
+                        let tx_gas: Uint256 = 21_000u32.into();
+                        let tx_cost = gas_price * tx_gas;
+                        our_eth_balance - tx_cost
+                    } else {
+                        transferred_eth
+                    };
+
+                    TokenBridge::from_registry().do_send(DetailedStateChange(
+                        DetailedBridgeState::EthToDest {
+                            amount_of_eth: withdraw_amount.clone(),
+                            wei_per_dollar,
+                            dest_address: to,
+                        },
+                    ));
+
+                    let res = bridge
+                        .eth_transfer(to, withdraw_amount, ETH_TRANSFER_TIMEOUT)
+                        .await;
+                    if res.is_ok() {
+                        info!("Issued an eth transfer for withdraw! Now complete!");
+                        // we only exit the withdraw state on success or timeout
+                        TokenBridge::from_registry().do_send(StateChange(State::Ready {
+                            former_state: Some(Box::new(State::Withdrawing {
+                                to,
+                                amount,
+                                timestamp,
+                                withdraw_all,
+                            })),
+                        }));
+                    }
+                } else {
+                    info!("withdraw is waiting on bridge");
+                    TokenBridge::from_registry().do_send(DetailedStateChange(
+                        DetailedBridgeState::XdaiToDai { amount },
+                    ));
+                }
             }
         }
     }
@@ -616,24 +665,11 @@ impl Handler<Withdraw> for TokenBridge {
                     bail!("Cannot start a withdraw when one is in progress")
                 }
                 _ => {
-                    Arbiter::spawn(bridge.xdai_to_dai_bridge(amount.clone()).then(move |res| {
-                        if res.is_err() {
-                            error!("Error in State::Deposit Withdraw handler: {:?}", res);
-                        } else {
-                            // Only change to Withdraw if there was no error
-                            TokenBridge::from_registry().do_send(DetailedStateChange(
-                                DetailedBridgeState::XdaiToDai {
-                                    amount: amount.clone(),
-                                },
-                            ));
-                            TokenBridge::from_registry().do_send(StateChange(State::Withdrawing {
-                                to,
-                                amount,
-                                timestamp: Instant::now(),
-                                withdraw_all,
-                            }));
-                        }
-                        Ok(())
+                    TokenBridge::from_registry().do_send(StateChange(State::WithdrawRequest {
+                        to,
+                        amount,
+                        timestamp: Instant::now(),
+                        withdraw_all,
                     }));
                     Ok(())
                 }
