@@ -281,11 +281,6 @@ fn start_rita_exit_dashboard() {
             .route("/debts/reset", Method::POST, reset_debt)
             .route("/withdraw/{address}/{amount}", Method::POST, withdraw)
             .route("/withdraw_all/{address}", Method::POST, withdraw_all)
-            .route(
-                "/withdraw_eth/{address}/{amount}",
-                Method::POST,
-                withdraw_eth,
-            )
             .route("/nickname/get/", Method::GET, get_nickname)
             .route("/nickname/set/", Method::POST, set_nickname)
             .route("/crash_actors", Method::POST, crash_actors)

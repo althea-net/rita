@@ -2,12 +2,8 @@ use crate::rita_common::blockchain_oracle::trigger_update_nonce;
 use crate::rita_common::blockchain_oracle::BlockchainOracle;
 use crate::rita_common::blockchain_oracle::ZeroWindowStart;
 use crate::rita_common::rita_loop::get_web3_server;
-use crate::rita_common::token_bridge::eth_equal;
-use crate::rita_common::token_bridge::GetBridge;
 use crate::rita_common::token_bridge::TokenBridge;
 use crate::rita_common::token_bridge::Withdraw;
-use crate::rita_common::token_bridge::DAI_WEI_CENT;
-use crate::rita_common::token_bridge::ETH_TRANSFER_TIMEOUT;
 use crate::SETTING;
 use ::actix::SystemService;
 use ::actix_web::http::StatusCode;
@@ -90,77 +86,6 @@ pub fn withdraw_all(path: Path<Address>) -> Box<dyn Future<Item = HttpResponse, 
                 )),
         )),
     }
-}
-
-pub fn withdraw_eth(
-    path: Path<(Address, Uint256)>,
-) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
-    let to = path.0;
-    let withdraw_amount = path.1.clone();
-    debug!("/withdraw_eth/{:#x}/{} hit", to, withdraw_amount);
-    let payment_settings = SETTING.get_payment();
-    let our_address = payment_settings.eth_address.unwrap();
-    drop(payment_settings);
-
-    Box::new(
-        TokenBridge::from_registry()
-            .send(GetBridge())
-            .then(move |bridge| {
-                if let Err(e) = bridge {
-                    return Box::new(future::ok(
-                        HttpResponse::new(StatusCode::from_u16(500u16).unwrap())
-                            .into_builder()
-                            .json(format!("Failed to get bridge {:?}", e)),
-                    ))
-                        as Box<dyn Future<Item = HttpResponse, Error = Error>>;
-                }
-                // first layer is the actix failure we just handled, second is the Result from
-                // the actix endpoint which can never fail you could fix this by messing with the ReturnMessage
-                // trait and implementing it for this tuple rather than using the generic Result impl
-                let (bridge, reserve_amount) = bridge.unwrap().unwrap();
-                Box::new(
-                    bridge
-                        .eth_web3
-                        .eth_get_balance(our_address)
-                        .join(bridge.dai_to_eth_price(DAI_WEI_CENT.into()))
-                        .then(move |res| {
-                            if let Err(e) = res {
-                                return Box::new(future::ok(
-                                    HttpResponse::new(StatusCode::from_u16(500u16).unwrap())
-                                        .into_builder()
-                                        .json(format!("Failed to get balance or price {:?}", e)),
-                                ))
-                                    as Box<dyn Future<Item = HttpResponse, Error = Error>>;
-                            }
-                            let (our_eth_balance, wei_per_cent) = res.unwrap();
-                            let reserve_amount_eth = eth_equal(reserve_amount, wei_per_cent);
-                            if our_eth_balance - reserve_amount_eth > withdraw_amount {
-                                Box::new(
-                                    bridge
-                                        .eth_transfer(to, withdraw_amount, ETH_TRANSFER_TIMEOUT)
-                                        .then(|res| {
-                                            if let Err(e) = res {
-                                                Ok(HttpResponse::new(
-                                                    StatusCode::from_u16(500u16).unwrap(),
-                                                )
-                                                .into_builder()
-                                                .json(format!("Transfer error {:?}", e)))
-                                            } else {
-                                                Ok(HttpResponse::Ok().json("Success!".to_string()))
-                                            }
-                                        }),
-                                )
-                            } else {
-                                Box::new(future::ok(
-                                    HttpResponse::new(StatusCode::from_u16(400u16).unwrap())
-                                        .into_builder()
-                                        .json("Insufficient balance".to_string()),
-                                ))
-                            }
-                        }),
-                )
-            }),
-    )
 }
 
 /// Withdraw for eth compatible chains

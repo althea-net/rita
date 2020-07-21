@@ -3,18 +3,18 @@
 //! through uniswap into DAI and then from there it is bridged over to the Xdai proof of authority chains.
 //! Support for Cosmos chains using a DAI-pegged native currency is next on the list.
 //!
-//! Essentially the goal is to allow uers to deposit a popular and easy to aquire coin like Ethereum and then
+//! Essentially the goal is to allow users to deposit a popular and easy to acquire coin like Ethereum and then
 //! actually transact in a stablecoin on a fast blockchain, eg not Ethereum. Withdraws are also transparently
 //! converted back to Ethereum to allow easy exchange by the user.
 //!
 //! This entire module works on the premise we call the conveyor belt model. It's difficult to track
 //! money through this entire process exactly, in fact there are some edge cases where it's simply not
 //! possible to reliably say if a task has completed or not. With that in mind we simply always progress
-//! the the process for Eth -> DAI -> XDAI unless we explicilty have a withdraw in progress. So if we find
+//! the the process for Eth -> DAI -> XDAI unless we explicitly have a withdraw in progress. So if we find
 //! some DAI in our address it will always be converted to XDAI even if we didn't convert that DAI from Eth
 //! in the first place.
 //!
-//! For the withdraw process we create a withdraw request object which does a best effort sheparding of the
+//! For the withdraw process we create a withdraw request object which does a best effort shepherding of the
 //! requested withdraw amount back to Eth and into the users hands. If this fails then the withdraw will timeout
 //! and the money will not be lost but instead moved back into XDAI by the normal conveyor belt operation
 //!
@@ -745,24 +745,6 @@ impl Handler<GetBridgeStatus> for TokenBridge {
             state: self.detailed_state.clone(),
         };
         Ok(ret)
-    }
-}
-
-/// used to get the bridge object and manipulate eth elsewhere, returns
-/// the reserve amount in eth and the TokenBridge struct
-#[derive(Debug, Eq, PartialEq, Clone, Serialize)]
-pub struct GetBridge();
-
-impl Message for GetBridge {
-    type Result = Result<(TokenBridgeCore, Uint256), Error>;
-}
-
-impl Handler<GetBridge> for TokenBridge {
-    type Result = Result<(TokenBridgeCore, Uint256), Error>;
-    fn handle(&mut self, _msg: GetBridge, _ctx: &mut Context<Self>) -> Self::Result {
-        let bridge = self.bridge.clone();
-        let reserve_amount = eth_to_wei(self.reserve_amount.into());
-        Ok((bridge, reserve_amount))
     }
 }
 
