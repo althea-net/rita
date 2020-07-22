@@ -389,7 +389,7 @@ async fn xdai_bridge(state: State) -> State {
         State::WithdrawRequest {
             to,
             amount,
-            timestamp: _timestamp,
+            timestamp,
             withdraw_all,
         } => match bridge.xdai_to_dai_bridge(amount.clone()).await {
             Ok(_amount_bridged) => {
@@ -406,7 +406,22 @@ async fn xdai_bridge(state: State) -> State {
             }
             Err(e) => {
                 error!("Error in State::Deposit WithdrawRequest handler: {:?}", e);
-                State::Ready
+
+                if is_timed_out(timestamp) {
+                    error!("Withdraw timed out!");
+                    detailed_state_change(DetailedBridgeState::NoOp {
+                        eth_balance: Uint256::zero(),
+                        wei_per_dollar: Uint256::zero(),
+                    });
+                    State::Ready
+                } else {
+                    State::WithdrawRequest {
+                        to,
+                        amount,
+                        timestamp,
+                        withdraw_all,
+                    }
+                }
             }
         },
         State::Withdrawing {
@@ -548,7 +563,7 @@ pub fn withdraw(msg: Withdraw) -> Result<(), Error> {
     let payment_settings = SETTING.get_payment();
     let system_chain = payment_settings.system_chain;
     drop(payment_settings);
-    let bridge = BRIDGE.read().unwrap();
+    let bridge = BRIDGE.read().unwrap().clone();
 
     let to = msg.to;
     let amount = msg.amount.clone();
@@ -560,7 +575,7 @@ pub fn withdraw(msg: Withdraw) -> Result<(), Error> {
     );
 
     if let SystemChain::Xdai = system_chain {
-        match bridge.state.clone() {
+        match bridge.state {
             State::Withdrawing { .. } | State::WithdrawRequest { .. } => {
                 // Cannot start a withdraw when one is in progress
                 bail!("Cannot start a withdraw when one is in progress")
