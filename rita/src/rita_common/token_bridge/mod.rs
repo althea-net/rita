@@ -173,7 +173,7 @@ pub struct TokenBridgeAmounts {
     minimum_stranded_dai_transfer: u32,
 }
 
-pub async fn tick() {
+pub async fn tick_token_bridge() {
     let bridge = BRIDGE.read().unwrap();
     let amounts = { get_amounts() };
     assert!(amounts.minimum_to_exchange > amounts.reserve_amount);
@@ -186,8 +186,8 @@ pub async fn tick() {
     drop(payment_settings);
 
     match system_chain {
-        SystemChain::Xdai => xdai_bridge(bridge.state.clone(), &bridge).await,
-        SystemChain::Ethereum => eth_bridge(&bridge).await,
+        SystemChain::Xdai => xdai_bridge(bridge.state.clone()).await,
+        SystemChain::Ethereum => eth_bridge().await,
         SystemChain::Rinkeby => {}
     }
 }
@@ -256,7 +256,7 @@ async fn rescue_dai(
 
 /// simplified logic for bringing xdai back over to Eth if the user has xdai and then
 /// selects Eth as their blockchain it will bring the full balance back into Eth
-async fn eth_bridge(bridge: &TokenBridgeState) {
+async fn eth_bridge() {
     let bridge = get_core();
 
     let our_dai_balance = match bridge.get_dai_balance(bridge.own_address).await {
@@ -299,7 +299,10 @@ async fn eth_bridge(bridge: &TokenBridgeState) {
     // Money has come over the bridge
     if our_xdai_balance > xdai_tx_cost {
         let amount = our_xdai_balance - xdai_tx_cost;
-        bridge.xdai_to_dai_bridge(amount.clone()).await;
+        let res = bridge.xdai_to_dai_bridge(amount.clone()).await;
+        if res.is_err() {
+            warn!("Xdai to xdai failed with {:?}", res);
+        }
         detailed_state_change(DetailedBridgeState::XdaiToDai { amount });
     } else if our_dai_balance > 0u32.into() {
         // Then it converts to eth
@@ -307,9 +310,12 @@ async fn eth_bridge(bridge: &TokenBridgeState) {
             amount_of_dai: our_dai_balance.clone(),
             wei_per_dollar,
         });
-        bridge
+        let res = bridge
             .dai_to_eth_swap(our_dai_balance, UNISWAP_TIMEOUT)
             .await;
+        if res.is_err() {
+            warn!("Dai to Eth swap failed! {:?}", res);
+        }
     // all other steps are done and the eth is sitting and waiting
     } else {
         detailed_state_change(DetailedBridgeState::NoOp {
@@ -320,7 +326,7 @@ async fn eth_bridge(bridge: &TokenBridgeState) {
 }
 
 /// The logic for the Eth -> Xdai bridge operation
-async fn xdai_bridge(state: State, bridge: &TokenBridgeState) {
+async fn xdai_bridge(state: State) {
     let amounts = { get_amounts() };
     let minimum_stranded_dai_transfer = amounts.minimum_stranded_dai_transfer;
     let reserve_amount = amounts.reserve_amount;
@@ -337,12 +343,15 @@ async fn xdai_bridge(state: State, bridge: &TokenBridgeState) {
                 timestamp: Instant::now(),
             };
             state_change(state.clone());
-            rescue_dai(
+            let res = rescue_dai(
                 bridge.clone(),
                 bridge.own_address,
                 minimum_stranded_dai_transfer,
             )
             .await;
+            if res.is_err() {
+                warn!("Failed to rescue dai with {:?}", res);
+            }
             trace!("rescued dai");
             let wei_per_dollar = match bridge.dai_to_eth_price(eth_to_wei(1u8.into())).await {
                 Ok(val) => val,
@@ -395,7 +404,7 @@ async fn xdai_bridge(state: State, bridge: &TokenBridgeState) {
                     amount: dai_bought.clone(),
                 });
                 // And over the bridge into xDai
-                bridge
+                let _res = bridge
                     .dai_to_xdai_bridge(dai_bought, ETH_TRANSFER_TIMEOUT)
                     .await;
             } else {
@@ -436,10 +445,10 @@ async fn xdai_bridge(state: State, bridge: &TokenBridgeState) {
         State::WithdrawRequest {
             to,
             amount,
-            timestamp,
+            timestamp: _timestamp,
             withdraw_all,
         } => match bridge.xdai_to_dai_bridge(amount.clone()).await {
-            Ok(res) => {
+            Ok(_amount_bridged) => {
                 // Only change to Withdraw if there was no error
                 detailed_state_change(DetailedBridgeState::XdaiToDai {
                     amount: amount.clone(),
@@ -726,7 +735,7 @@ fn get_core() -> TokenBridgeCore {
 }
 
 fn get_amounts() -> TokenBridgeAmounts {
-    let mut payment_settings = SETTING.get_payment();
+    let mut payment_settings = SETTING.get_payment_mut();
     let minimum_to_exchange = match payment_settings.bridge_addresses.minimum_to_exchange {
         Some(val) => val,
         None => {

@@ -82,5 +82,5 @@ pub fn check_rita_common_actors() {
     assert!(crate::rita_common::traffic_watcher::TrafficWatcher::from_registry().connected());
     assert!(crate::rita_common::peer_listener::PeerListener::from_registry().connected());
     assert!(crate::rita_common::rita_loop::fast_loop::RitaFastLoop::from_registry().connected());
-    assert!(crate::rita_common::rita_loop::slow_loop::RitaSlowLoop::from_registry().connected());
+    crate::rita_common::rita_loop::slow_loop::start_rita_slow_loop();
 }

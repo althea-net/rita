@@ -1,6 +1,6 @@
 //! Copied from here https://gist.github.com/alexcrichton/871b5bf058a2ce77ac4fedccf3fda9c9
 //! turns out poll with timeout is quite complex. It has also been adapted by myself to use
-//! notify without a really good understanding of the internalls. The park/unpark version
+//! notify without a really good understanding of the internals. The park/unpark version
 //! paniced about every 24 hours this version is not correct I don't think for arbitrary futures
 //! but is correct for our trivial case of a single future on a thread. We'll see how it holds up
 use futures01::executor::Notify;

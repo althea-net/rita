@@ -5,7 +5,7 @@ authors = ["Jehan <jehan.tremback@gmail.com>, Justin <justin@althea.net>"]
 edition = "2018"
 
 [dependencies]
-web30 = { git = "https://github.com/althea-mesh/web30", rev = "ced518b6a3f82756e46bf061f5eb547695cbe868" }
+web30 = { git = "https://github.com/althea-net/web30", rev = "ced518b6a3f82756e46bf061f5eb547695cbe868" }
 futures = "0.3"
 failure = "0.1"
 num256 = "0.2"

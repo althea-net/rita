@@ -4,6 +4,8 @@
 
 use crate::rita_common::debt_keeper::get_debts_list_sync;
 use crate::rita_common::debt_keeper::DebtAction;
+use crate::rita_common::utils::wait_timeout::wait_timeout;
+use crate::rita_common::utils::wait_timeout::WaitResult;
 use crate::rita_exit::database::database_tools::client_conflict;
 use crate::rita_exit::database::database_tools::create_or_update_user_record;
 use crate::rita_exit::database::database_tools::delete_client;
@@ -28,8 +30,6 @@ use crate::rita_exit::database::struct_tools::display_hashset;
 use crate::rita_exit::database::struct_tools::to_exit_client;
 use crate::rita_exit::database::struct_tools::to_identity;
 use crate::rita_exit::database::struct_tools::verif_done;
-use crate::rita_exit::rita_loop::wait_timeout::wait_timeout;
-use crate::rita_exit::rita_loop::wait_timeout::WaitResult;
 use crate::rita_exit::rita_loop::EXIT_LOOP_TIMEOUT;
 use crate::EXIT_ALLOWED_COUNTRIES;
 use crate::EXIT_DESCRIPTION;

@@ -163,7 +163,6 @@ fn checkin() {
                 .and_then(move |new_settings: OperatorUpdateMessage| {
                     trace!("Updating from operator settings");
                     let mut payment = SETTING.get_payment_mut();
-                    let starting_token_bridge_core = payment.bridge_addresses.clone();
 
                     if use_operator_price {
                         // This will be true on devices that have integrated switches

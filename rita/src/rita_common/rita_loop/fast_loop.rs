@@ -161,9 +161,9 @@ impl Handler<Tick> for RitaFastLoop {
                     .and_then(move |stream| {
                         start_connection(stream).and_then(move |stream| {
                             parse_routes(stream).and_then(move |(stream, babel_routes)| {
-                                parse_neighs(stream).and_then(move |(_stream, babel_neighbors)| {
+                                parse_neighs(stream).and_then(move |(stream, babel_neighbors)| {
                                     parse_interfaces(stream).and_then(
-                                        move |(stream, babel_interfaces)| {
+                                        move |(_stream, babel_interfaces)| {
                                             trace!("Sending network monitor tick");
                                             NetworkMonitor::from_registry().do_send(
                                                 NetworkMonitorTick {

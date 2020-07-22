@@ -353,15 +353,15 @@ impl Handler<UpdatePayments> for UsageTracker {
     type Result = Result<(), Error>;
     fn handle(&mut self, msg: UpdatePayments, _: &mut Context<Self>) -> Self::Result {
         let mut queue = PAYMENT_UPDATE_QUEUE.write().unwrap();
-        for item in *queue {
-            let _res = handle_payments(&mut self, item);
+        for item in (*queue).iter() {
+            let _res = handle_payments(self, item);
         }
         *queue = Vec::new();
-        handle_payments(&mut self, msg.payment)
+        handle_payments(self, &msg.payment)
     }
 }
 
-fn handle_payments(history: &mut UsageTracker, payment: PaymentTx) -> Result<(), Error> {
+fn handle_payments(history: &mut UsageTracker, payment: &PaymentTx) -> Result<(), Error> {
     let current_hour = match get_current_hour() {
         Ok(hour) => hour,
         Err(e) => {
@@ -369,7 +369,7 @@ fn handle_payments(history: &mut UsageTracker, payment: PaymentTx) -> Result<(),
             return Ok(());
         }
     };
-    let formatted_payment = to_formatted_payment_tx(payment);
+    let formatted_payment = to_formatted_payment_tx(payment.clone());
     match history.payments.front_mut() {
         None => history.payments.push_front(PaymentHour {
             index: current_hour,
