@@ -78,7 +78,7 @@ fn find_babel_val(val: &str, line: &str) -> Result<String, Error> {
             }
         }
     }
-    warn!("find_babel_val warn! Can not find {} in {}", val, line);
+    trace!("find_babel_val warn! Can not find {} in {}", val, line);
     Err(VariableNotFound(String::from(val), String::from(line)).into())
 }
 
