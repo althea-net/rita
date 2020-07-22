@@ -23,16 +23,15 @@
 //!     State::Ready:
 //!         If there is a Dai balance, send it thru the bridge into xdai (this rescues stuck funds in Dai)
 //!
-//!         Change to State::Depositing.
-//!
 //!         If there is an `eth_balance` that is greater than the `minimum_to_exchange` amount,
 //!         subtract the `reserve` amount and send it through uniswap into DAI. If not Change to State::Ready
 //!         Future waits on Uniswap, and upon successful swap, sends dai thru the bridge into xdai.
 //!         When the money is out of the Dai account and in the bridge, or if uniswap times out, change
 //!         to State::Ready.
 //!
-//!     State::Depositing:
-//!         do nothing
+//!     State::WithdrawRequest { to, amount, timestamp}:
+//!         Performs the initial send to the bridge, then progresses to State::Withdrawing, this is required
+//!         in order to ensure that we only send the funds for a given withdraw once
 //!
 //!     State::Withdrawing { to, amount, timestamp}:
 //!         If the timestamp is expired, switch the state back into State::Ready.
@@ -42,13 +41,6 @@
 //!
 //!         Future waits on Uniswap and upon successful swap, sends eth to "to" address. Another future
 //!         waits on this transfer to complete. When it is complete, the state switches back to State::Ready
-//!
-//! WithdrawEvent:
-//!     State::Ready:
-//!         Send amount into bridge, switch to State::Withdrawing.
-//!
-//!     State::Withdrawing { to, amount, timestamp}:
-//!         Nothing happens
 
 use crate::SETTING;
 use althea_types::SystemChain;
@@ -97,13 +89,7 @@ pub fn eth_equal(dai_in_wei: Uint256, wei_per_cent: Uint256) -> Uint256 {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum State {
-    Ready {
-        /// used to ensure that only the future chain that started an operation can end it
-        former_state: Option<Box<State>>,
-    },
-    Depositing {
-        timestamp: Instant,
-    },
+    Ready,
     WithdrawRequest {
         amount: Uint256,
         to: Address,
@@ -121,11 +107,7 @@ pub enum State {
 impl Display for State {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            State::Ready {
-                former_state: Some(_),
-            } => write!(f, "Ready{{Some()}}"),
-            State::Ready { former_state: None } => write!(f, "Ready{{None}}"),
-            State::Depositing { .. } => write!(f, "Depositing"),
+            State::Ready => write!(f, "Ready"),
             State::WithdrawRequest {
                 amount: a,
                 to: t,
@@ -155,6 +137,7 @@ impl Display for State {
 /// contains details fo the various inner workings of the actual contract and bridge calls
 /// rather than the logic. This struct was previously combined with TokenBridgeAmounts but
 /// we want to reload the amounts regularly without interfering with the state.
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TokenBridgeState {
     state: State,
     detailed_state: DetailedBridgeState,
@@ -174,7 +157,7 @@ pub struct TokenBridgeAmounts {
 }
 
 pub async fn tick_token_bridge() {
-    let bridge = BRIDGE.read().unwrap();
+    let bridge: TokenBridgeState = BRIDGE.read().unwrap().clone();
     let amounts = { get_amounts() };
     assert!(amounts.minimum_to_exchange > amounts.reserve_amount);
     let payment_settings = SETTING.get_payment();
@@ -185,8 +168,9 @@ pub async fn tick_token_bridge() {
     }
     drop(payment_settings);
 
+    trace!("Launching bridge future");
     match system_chain {
-        SystemChain::Xdai => xdai_bridge(bridge.state.clone()).await,
+        SystemChain::Xdai => state_change(xdai_bridge(bridge.state.clone()).await),
         SystemChain::Ethereum => eth_bridge().await,
         SystemChain::Rinkeby => {}
     }
@@ -209,7 +193,7 @@ fn token_bridge_core_from_settings(payment_settings: &PaymentSettings) -> TokenB
 impl Default for TokenBridgeState {
     fn default() -> TokenBridgeState {
         TokenBridgeState {
-            state: State::Ready { former_state: None },
+            state: State::Ready,
             detailed_state: DetailedBridgeState::NoOp {
                 eth_balance: Uint256::zero(),
                 wei_per_dollar: Uint256::zero(),
@@ -326,7 +310,7 @@ async fn eth_bridge() {
 }
 
 /// The logic for the Eth -> Xdai bridge operation
-async fn xdai_bridge(state: State) {
+async fn xdai_bridge(state: State) -> State {
     let amounts = { get_amounts() };
     let minimum_stranded_dai_transfer = amounts.minimum_stranded_dai_transfer;
     let reserve_amount = amounts.reserve_amount;
@@ -338,11 +322,6 @@ async fn xdai_bridge(state: State) {
                 "Ticking in bridge State::Ready. Eth Address: {}",
                 bridge.own_address
             );
-            // Go into State::Depositing right away to prevent multiple attempts
-            let state = State::Depositing {
-                timestamp: Instant::now(),
-            };
-            state_change(state.clone());
             let res = rescue_dai(
                 bridge.clone(),
                 bridge.own_address,
@@ -357,20 +336,14 @@ async fn xdai_bridge(state: State) {
                 Ok(val) => val,
                 Err(e) => {
                     warn!("Failed to get eth price with {:?}", e);
-                    state_change(State::Ready {
-                        former_state: Some(Box::new(state)),
-                    });
-                    return;
+                    return State::Ready;
                 }
             };
             let eth_balance = match bridge.eth_web3.eth_get_balance(bridge.own_address).await {
                 Ok(val) => val,
                 Err(e) => {
                     warn!("Failed to get eth balance {:?}", e);
-                    state_change(State::Ready {
-                        former_state: Some(Box::new(state)),
-                    });
-                    return;
+                    return State::Ready;
                 }
             };
             // These statements convert the reserve_amount and minimum_to_exchange
@@ -394,10 +367,7 @@ async fn xdai_bridge(state: State) {
                     Ok(val) => val,
                     Err(e) => {
                         warn!("Failed to swap dai with {:?}", e);
-                        state_change(State::Ready {
-                            former_state: Some(Box::new(state)),
-                        });
-                        return;
+                        return State::Ready;
                     }
                 };
                 detailed_state_change(DetailedBridgeState::DaiToXdai {
@@ -414,33 +384,7 @@ async fn xdai_bridge(state: State) {
                 });
                 // we don't have a lot of eth, we shouldn't do anything
             }
-            // It goes back into State::Ready once the dai
-            // is in the bridge or if failed. This prevents multiple simultaneous
-            // attempts to bridge the same Dai.
-            state_change(State::Ready {
-                former_state: Some(Box::new(state)),
-            });
-        }
-        State::Depositing { timestamp } => {
-            info!("Tried to tick in bridge State::Depositing");
-            // if the do_send at the end of state depositing fails we can get stuck here
-            // at the time time we don't want to submit multiple eth transactions for each
-            // step above, especially if they take a long time (note the timeouts are in the 10's of minutes)
-            // so we often 'tick' in depositing because there's a background future we don't want to interrupt
-            // if that future fails it's state change do_send a few lines up from here we're screwed and the bridge
-            // forever sits in this no-op state. This is a rescue setup for that situation where we check that enough
-            // time has elapsed. The theoretical max here is the uniswap timeout plus the eth transfer timeout
-            let now = Instant::now();
-            if now
-                > timestamp
-                    + Duration::from_secs(UNISWAP_TIMEOUT)
-                    + Duration::from_secs(ETH_TRANSFER_TIMEOUT)
-            {
-                warn!("Rescued stuck bridge");
-                state_change(State::Ready {
-                    former_state: Some(Box::new(State::Depositing { timestamp })),
-                });
-            }
+            State::Ready
         }
         State::WithdrawRequest {
             to,
@@ -453,16 +397,16 @@ async fn xdai_bridge(state: State) {
                 detailed_state_change(DetailedBridgeState::XdaiToDai {
                     amount: amount.clone(),
                 });
-                state_change(State::Withdrawing {
+                State::Withdrawing {
                     to,
                     amount,
                     timestamp: Instant::now(),
                     withdraw_all,
-                });
+                }
             }
             Err(e) => {
                 error!("Error in State::Deposit WithdrawRequest handler: {:?}", e);
-                state_change(State::Ready { former_state: None });
+                State::Ready
             }
         },
         State::Withdrawing {
@@ -472,43 +416,42 @@ async fn xdai_bridge(state: State) {
             withdraw_all,
         } => {
             info!("Ticking in bridge State:Withdrawing");
+            let our_withdrawing_state = State::Withdrawing {
+                to,
+                amount: amount.clone(),
+                timestamp,
+                withdraw_all,
+            };
             if is_timed_out(timestamp) {
                 error!("Withdraw timed out!");
                 detailed_state_change(DetailedBridgeState::NoOp {
                     eth_balance: Uint256::zero(),
                     wei_per_dollar: Uint256::zero(),
                 });
-                state_change(State::Ready {
-                    former_state: Some(Box::new(State::Withdrawing {
-                        to,
-                        amount,
-                        timestamp,
-                        withdraw_all,
-                    })),
-                });
+                State::Ready
             } else {
                 let our_dai_balance = match bridge.get_dai_balance(bridge.own_address).await {
                     Ok(val) => val,
-                    Err(_e) => return,
+                    Err(_e) => return our_withdrawing_state,
                 };
                 let our_eth_balance =
                     match bridge.eth_web3.eth_get_balance(bridge.own_address).await {
                         Ok(val) => val,
-                        Err(_e) => return,
+                        Err(_e) => return our_withdrawing_state,
                     };
                 let wei_per_dollar = match bridge.dai_to_eth_price(eth_to_wei(1u8.into())).await {
                     Ok(val) => val,
-                    Err(_e) => return,
+                    Err(_e) => return our_withdrawing_state,
                 };
                 // todo why don't we compute this from the above? be careful if you're attempting this, the conversion
                 // is fraught with ways to screw it up. Pull out the many units tricks from your physics class
                 let wei_per_cent = match bridge.dai_to_eth_price(DAI_WEI_CENT.into()).await {
                     Ok(val) => val,
-                    Err(_e) => return,
+                    Err(_e) => return our_withdrawing_state,
                 };
                 let eth_gas_price = match bridge.eth_web3.eth_gas_price().await {
                     Ok(val) => val,
-                    Err(_e) => return,
+                    Err(_e) => return our_withdrawing_state,
                 };
 
                 info!(
@@ -552,6 +495,7 @@ async fn xdai_bridge(state: State) {
                     // Then it converts to eth
                     let _amount_actually_exchanged =
                         bridge.dai_to_eth_swap(amount, UNISWAP_TIMEOUT);
+                    our_withdrawing_state
                 // all other steps are done and the eth is sitting and waiting
                 } else if our_eth_balance >= transferred_eth {
                     info!("Converted dai back to eth!");
@@ -578,18 +522,14 @@ async fn xdai_bridge(state: State) {
                     if res.is_ok() {
                         info!("Issued an eth transfer for withdraw! Now complete!");
                         // we only exit the withdraw state on success or timeout
-                        state_change(State::Ready {
-                            former_state: Some(Box::new(State::Withdrawing {
-                                to,
-                                amount,
-                                timestamp,
-                                withdraw_all,
-                            })),
-                        });
+                        State::Ready
+                    } else {
+                        our_withdrawing_state
                     }
                 } else {
                     info!("withdraw is waiting on bridge");
                     detailed_state_change(DetailedBridgeState::XdaiToDai { amount });
+                    our_withdrawing_state
                 }
             }
         }
@@ -621,7 +561,7 @@ pub fn withdraw(msg: Withdraw) -> Result<(), Error> {
 
     if let SystemChain::Xdai = system_chain {
         match bridge.state.clone() {
-            State::Withdrawing { .. } => {
+            State::Withdrawing { .. } | State::WithdrawRequest { .. } => {
                 // Cannot start a withdraw when one is in progress
                 bail!("Cannot start a withdraw when one is in progress")
             }
@@ -644,24 +584,7 @@ fn state_change(msg: State) {
     trace!("Changing state to {}", msg);
     let new_state = msg;
     let mut bridge = BRIDGE.write().unwrap();
-    // since multiple futures from this system may be in flight at once we face a race
-    // condition, the solution we have used is to put some state into the ready message
-    // the ready message contains the state that it expects to find the system in before
-    // it becomes ready again. If for example the state is depositing and it sees a message
-    // ready(depositing) we know it's the right state change. If we are in withdraw and we
-    // see ready(depositing) we know that it's a stray in flight future that's trying to
-    // modify the state machine incorrectly
-    // TODO this may not be needed after async refactor
-    if let State::Ready {
-        former_state: Some(f),
-    } = new_state.clone()
-    {
-        trace!("checking if we should change the state");
-        if bridge.state != *f {
-            trace!("{} != {}", bridge.state, *f);
-            return;
-        }
-    }
+    trace!("Got bridge write lock");
     bridge.state = new_state;
 }
 
