@@ -1,19 +1,8 @@
+use crate::rita_common::token_bridge::get_bridge_status as get_status;
 use crate::rita_common::token_bridge::BridgeStatus;
-use crate::rita_common::token_bridge::GetBridgeStatus;
-use crate::rita_common::token_bridge::TokenBridge;
-use ::actix::registry::SystemService;
-use ::actix_web::{AsyncResponder, HttpRequest, Json};
-use failure::Error;
-use futures01::Future;
-use std::boxed::Box;
+use ::actix_web::{HttpRequest, Json};
 
-pub fn get_bridge_status(
-    _req: HttpRequest,
-) -> Box<dyn Future<Item = Json<BridgeStatus>, Error = Error>> {
+pub fn get_bridge_status(_req: HttpRequest) -> Json<BridgeStatus> {
     trace!("/token_bridge/status hit");
-    TokenBridge::from_registry()
-        .send(GetBridgeStatus)
-        .from_err()
-        .and_then(|reply| Ok(Json(reply?)))
-        .responder()
+    Json(get_status())
 }

@@ -2,8 +2,8 @@ use crate::rita_common::blockchain_oracle::trigger_update_nonce;
 use crate::rita_common::blockchain_oracle::BlockchainOracle;
 use crate::rita_common::blockchain_oracle::ZeroWindowStart;
 use crate::rita_common::rita_loop::get_web3_server;
-use crate::rita_common::token_bridge::TokenBridge;
-use crate::rita_common::token_bridge::Withdraw;
+use crate::rita_common::token_bridge::withdraw as bridge_withdraw;
+use crate::rita_common::token_bridge::Withdraw as WithdrawMsg;
 use crate::SETTING;
 use ::actix::SystemService;
 use ::actix_web::http::StatusCode;
@@ -167,21 +167,19 @@ fn xdai_to_eth_withdraw(
     withdraw_all: bool,
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     Box::new(
-        TokenBridge::from_registry()
-            .send(Withdraw {
-                to: address,
-                amount,
-                withdraw_all,
-            })
-            .then(|val| match val {
-                Ok(_) => Box::new(future::ok(
-                    HttpResponse::Ok().json("View endpoints for progress"),
-                )),
-                Err(e) => Box::new(future::ok(
-                    HttpResponse::new(StatusCode::from_u16(500u16).unwrap())
-                        .into_builder()
-                        .json(format!("{:?}", e)),
-                )),
-            }),
+        match bridge_withdraw(WithdrawMsg {
+            to: address,
+            amount,
+            withdraw_all,
+        }) {
+            Ok(_) => Box::new(future::ok(
+                HttpResponse::Ok().json("View endpoints for progress"),
+            )),
+            Err(e) => Box::new(future::ok(
+                HttpResponse::new(StatusCode::from_u16(500u16).unwrap())
+                    .into_builder()
+                    .json(format!("{:?}", e)),
+            )),
+        },
     )
 }

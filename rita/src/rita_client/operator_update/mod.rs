@@ -5,8 +5,6 @@ use crate::rita_client::dashboard::wifi::reset_wifi_pass;
 use crate::rita_client::rita_loop::is_gateway_client;
 use crate::rita_client::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::rita_common::rita_loop::is_gateway;
-use crate::rita_common::token_bridge::ReloadAddresses;
-use crate::rita_common::token_bridge::TokenBridge;
 use crate::rita_common::tunnel_manager::shaping::flag_reset_shaper;
 use crate::rita_common::tunnel_manager::shaping::get_shaping_status;
 use crate::rita_common::utils::option_convert;
@@ -207,10 +205,6 @@ fn checkin() {
                     // avoid that on it's own
                     if new_settings.release_feed.is_some() {
                         handle_release_feed_update(new_settings.release_feed);
-                    }
-                    // Sends a message to reload bridge addresses live if needed
-                    if SETTING.get_payment().bridge_addresses != starting_token_bridge_core {
-                        TokenBridge::from_registry().do_send(ReloadAddresses());
                     }
 
                     match new_settings.operator_action {
