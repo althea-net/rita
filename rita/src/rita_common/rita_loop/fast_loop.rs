@@ -7,6 +7,7 @@ use crate::rita_common::peer_listener::GetPeers;
 use crate::rita_common::peer_listener::PeerListener;
 use crate::rita_common::rita_loop::set_gateway;
 use crate::rita_common::traffic_watcher::{TrafficWatcher, Watch};
+use crate::rita_common::tunnel_manager::gc::TriggerGC;
 use crate::rita_common::tunnel_manager::PeersToContact;
 use crate::rita_common::tunnel_manager::{GetNeighbors, TunnelManager};
 use crate::KI;
@@ -16,6 +17,7 @@ use actix::{
     SystemService,
 };
 use babel_monitor::open_babel_stream;
+use babel_monitor::parse_interfaces;
 use babel_monitor::parse_neighs;
 use babel_monitor::parse_routes;
 use babel_monitor::start_connection;
@@ -27,6 +29,13 @@ use std::time::{Duration, Instant};
 // the speed in seconds for the common loop
 pub const FAST_LOOP_SPEED: u64 = 5;
 pub const FAST_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
+
+/// if we haven't heard a hello from a peer after this time we clean up the tunnel
+/// 15 minutes currently, this is not the final say on this value we check if the tunnel
+/// has seen any handshakes in TUNNEL_HANDSHAKE_TIMEOUT seconds, if it has we spare it from
+/// reaping
+pub const TUNNEL_TIMEOUT: Duration = Duration::from_secs(900);
+pub const TUNNEL_HANDSHAKE_TIMEOUT: Duration = TUNNEL_TIMEOUT;
 
 pub struct RitaFastLoop {}
 
@@ -140,7 +149,10 @@ impl Handler<Tick> for RitaFastLoop {
                 }),
         );
 
-        // Observe the dataplane for status and problems
+        // Observe the dataplane for status and problems. Tunnel GC checks for specific issues
+        // (tunnels that are installed but not active) and cleans up cruft. We put these together
+        // because both can fail without anything truly bad happening and we get a slight efficiency
+        // bonus running them together (fewer babel socket connections per loop iteration)
         Arbiter::spawn(TunnelManager::from_registry().send(GetNeighbors).then(
             move |rita_neighbors| {
                 let rita_neighbors = rita_neighbors.unwrap().unwrap();
@@ -150,12 +162,26 @@ impl Handler<Tick> for RitaFastLoop {
                         start_connection(stream).and_then(move |stream| {
                             parse_routes(stream).and_then(move |(stream, babel_routes)| {
                                 parse_neighs(stream).and_then(move |(_stream, babel_neighbors)| {
-                                    NetworkMonitor::from_registry().do_send(NetworkMonitorTick {
-                                        rita_neighbors,
-                                        babel_routes,
-                                        babel_neighbors,
-                                    });
-                                    Ok(())
+                                    parse_interfaces(stream).and_then(
+                                        move |(stream, babel_interfaces)| {
+                                            trace!("Sending network monitor tick");
+                                            NetworkMonitor::from_registry().do_send(
+                                                NetworkMonitorTick {
+                                                    rita_neighbors,
+                                                    babel_routes,
+                                                    babel_neighbors,
+                                                },
+                                            );
+
+                                            trace!("Sending tunnel GC");
+                                            TunnelManager::from_registry().do_send(TriggerGC {
+                                                tunnel_timeout: TUNNEL_TIMEOUT,
+                                                tunnel_handshake_timeout: TUNNEL_HANDSHAKE_TIMEOUT,
+                                                babel_interfaces,
+                                            });
+                                            Ok(())
+                                        },
+                                    )
                                 })
                             })
                         })
