@@ -29,6 +29,8 @@ use std::io::Read;
 use std::io::Seek;
 use std::io::SeekFrom;
 use std::io::Write;
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
@@ -36,6 +38,14 @@ use std::time::UNIX_EPOCH;
 const MAX_ENTRIES: usize = 8760;
 /// Save every 4 hours
 const SAVE_FREQENCY: u64 = 4;
+
+lazy_static! {
+/// This is used to allow non-actix workers to add payments to the queue. An alternative to this would be
+/// to move all storage for this actor into this locked ref format and this should be done in Beta 16 or
+/// later, for now (Beta 15) we want to reduce the amount of changes. So instead these values will be
+/// read off any time this actor is triggered by another payment message
+    static ref PAYMENT_UPDATE_QUEUE: Arc<RwLock<Vec<PaymentTx>>> = Arc::new(RwLock::new(Vec::new()));
+}
 
 /// In an effort to converge this module between the three possible bw tracking
 /// use cases this enum is used to identify which sort of usage we are tracking
@@ -255,7 +265,7 @@ fn get_current_hour() -> Result<u64, Error> {
     Ok(seconds.as_secs() / (60 * 60))
 }
 
-/// The messauge used to update the current usage hour from each traffic
+/// The message used to update the current usage hour from each traffic
 /// watcher module
 #[derive(Clone, Copy, Debug)]
 pub struct UpdateUsage {
@@ -326,6 +336,11 @@ fn process_usage_update(current_hour: u64, msg: UpdateUsage, data: &mut UsageTra
     }
 }
 
+pub fn update_payments(payment: PaymentTx) {
+    let mut payments = PAYMENT_UPDATE_QUEUE.write().unwrap();
+    payments.push(payment);
+}
+
 pub struct UpdatePayments {
     pub payment: PaymentTx,
 }
@@ -337,40 +352,49 @@ impl Message for UpdatePayments {
 impl Handler<UpdatePayments> for UsageTracker {
     type Result = Result<(), Error>;
     fn handle(&mut self, msg: UpdatePayments, _: &mut Context<Self>) -> Self::Result {
-        let current_hour = match get_current_hour() {
-            Ok(hour) => hour,
-            Err(e) => {
-                error!("System time is set earlier than unix epoch! {:?}", e);
-                return Ok(());
-            }
-        };
-        let formatted_payment = to_formatted_payment_tx(msg.payment);
-        match self.payments.front_mut() {
-            None => self.payments.push_front(PaymentHour {
-                index: current_hour,
-                payments: vec![formatted_payment],
-            }),
-            Some(entry) => {
-                if entry.index == current_hour {
-                    entry.payments.push(formatted_payment);
-                } else {
-                    self.payments.push_front(PaymentHour {
-                        index: current_hour,
-                        payments: vec![formatted_payment],
-                    })
-                }
-            }
+        let mut queue = PAYMENT_UPDATE_QUEUE.write().unwrap();
+        for item in *queue {
+            let _res = handle_payments(&mut self, item);
         }
-        while self.payments.len() > MAX_ENTRIES {
-            let _discarded_entry = self.payments.pop_back();
-        }
-        if (current_hour - SAVE_FREQENCY) > self.last_save_hour {
-            self.last_save_hour = current_hour;
-            let res = self.save();
-            info!("Saving usage data: {:?}", res);
-        }
-        Ok(())
+        *queue = Vec::new();
+        handle_payments(&mut self, msg.payment)
     }
+}
+
+fn handle_payments(history: &mut UsageTracker, payment: PaymentTx) -> Result<(), Error> {
+    let current_hour = match get_current_hour() {
+        Ok(hour) => hour,
+        Err(e) => {
+            error!("System time is set earlier than unix epoch! {:?}", e);
+            return Ok(());
+        }
+    };
+    let formatted_payment = to_formatted_payment_tx(payment);
+    match history.payments.front_mut() {
+        None => history.payments.push_front(PaymentHour {
+            index: current_hour,
+            payments: vec![formatted_payment],
+        }),
+        Some(entry) => {
+            if entry.index == current_hour {
+                entry.payments.push(formatted_payment);
+            } else {
+                history.payments.push_front(PaymentHour {
+                    index: current_hour,
+                    payments: vec![formatted_payment],
+                })
+            }
+        }
+    }
+    while history.payments.len() > MAX_ENTRIES {
+        let _discarded_entry = history.payments.pop_back();
+    }
+    if (current_hour - SAVE_FREQENCY) > history.last_save_hour {
+        history.last_save_hour = current_hour;
+        let res = history.save();
+        info!("Saving usage data: {:?}", res);
+    }
+    Ok(())
 }
 
 pub struct GetUsage {

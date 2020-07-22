@@ -7,8 +7,7 @@
 
 use crate::rita_common::payment_controller::TRANSACTION_SUBMISSON_TIMEOUT;
 use crate::rita_common::rita_loop::get_web3_server;
-use crate::rita_common::simulated_txfee_manager::AddTxToTotal;
-use crate::rita_common::simulated_txfee_manager::SimulatedTxFeeManager;
+use crate::rita_common::simulated_txfee_manager::add_tx_to_total;
 use crate::rita_common::usage_tracker::UpdatePayments;
 use crate::rita_common::usage_tracker::UsageTracker;
 use crate::SETTING;
@@ -176,7 +175,7 @@ impl Handler<Tick> for OperatorFeeManager {
                             txid: Some(txid),
                         },
                     });
-                    SimulatedTxFeeManager::from_registry().do_send(AddTxToTotal(amount_to_pay));
+                    add_tx_to_total(amount_to_pay);
                     OperatorFeeManager::from_registry().do_send(SuccessfulPayment {
                         timestamp: payment_send_time,
                     });
