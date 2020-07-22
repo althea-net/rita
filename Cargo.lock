@@ -379,7 +379,6 @@ dependencies = [
  "openssl",
  "pin-project",
  "regex",
- "rustls",
  "serde 1.0.110",
  "serde_json",
  "serde_urlencoded 0.6.1",
@@ -3224,21 +3223,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ring"
-version = "0.16.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ba5a8ec64ee89a76c98c549af81ff14813df09c3e6dc4766c3856da48597a0c"
-dependencies = [
- "cc",
- "lazy_static",
- "libc",
- "spin",
- "untrusted",
- "web-sys",
- "winapi 0.3.8",
-]
-
-[[package]]
 name = "rita"
 version = "0.5.56"
 dependencies = [
@@ -3350,19 +3334,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustls"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b25a18b1bf7387f0145e7f8324e700805aade3842dd3db2e74e4cdeb4677c09e"
-dependencies = [
- "base64 0.10.1",
- "log",
- "ring",
- "sct",
- "webpki",
-]
-
-[[package]]
 name = "ryu"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3410,16 +3381,6 @@ name = "scopeguard"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
-
-[[package]]
-name = "sct"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3042af939fca8c3453b7af0f1c66e533a15a86169e39de2657310ade8f98d3c"
-dependencies = [
- "ring",
- "untrusted",
-]
 
 [[package]]
 name = "secp256k1"
@@ -3707,12 +3668,6 @@ dependencies = [
  "libsodium-sys",
  "serde 1.0.110",
 ]
-
-[[package]]
-name = "spin"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 
 [[package]]
 name = "stable_deref_trait"
@@ -4329,12 +4284,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "826e7639553986605ec5979c7dd957c7895e93eabed50ab2ffa7f6128a75097c"
 
 [[package]]
-name = "untrusted"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
-
-[[package]]
 name = "url"
 version = "1.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4555,16 +4504,6 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "tokio 0.2.21",
-]
-
-[[package]]
-name = "webpki"
-version = "0.21.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1f50e1972865d6b1adb54167d1c8ed48606004c2c9d0ea5f1eeb34d95e863ef"
-dependencies = [
- "ring",
- "untrusted",
 ]
 
 [[package]]

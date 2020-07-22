@@ -31,7 +31,7 @@ web30 = {git = "https://github.com/althea-net/web30", branch = "master"}
 # these will be kept here for quite some time until the switch is completed.
 async-web30 = {package="web30", git = "https://github.com/althea-net/web30", rev = "ced518b6a3f82756e46bf061f5eb547695cbe868" }
 actix-async = {package="actix", version = "0.9"}
-actix-web-async = {package="actix-web", version = "2.0", default_features = false, features= ["rust-tls"] }
+actix-web-async = {package="actix-web", version = "2.0", default_features = false, features= ["openssl"] }
 
 actix = "0.7"
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
