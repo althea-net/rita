@@ -12,6 +12,12 @@ use std::time::Duration;
 use web30::client::Web3;
 use web30::types::SendTxOption;
 
+// the estimate gas call is wildly inaccurate so we need to hardcode the expected gas
+// consumption of the following operations.
+pub static UNISWAP_GAS_LIMIT: u128 = 80_000;
+pub static ERC20_GAS_LIMIT: u128 = 40_000;
+pub static ETH_TRANSACTION_GAS_LIMIT: u128 = 21_000;
+
 #[derive(Clone)]
 pub struct TokenBridge {
     pub xdai_web3: Web3,
@@ -154,7 +160,7 @@ impl TokenBridge {
                 eth_amount,
                 own_address,
                 secret,
-                vec![SendTxOption::GasLimit(80_000u64.into())],
+                vec![SendTxOption::GasLimit(UNISWAP_GAS_LIMIT.into())],
             ),
         )
         .await??;
@@ -286,7 +292,7 @@ impl TokenBridge {
                 0u32.into(),
                 own_address,
                 secret,
-                vec![SendTxOption::GasLimit(80_000u64.into())],
+                vec![SendTxOption::GasLimit(UNISWAP_GAS_LIMIT.into())],
             ),
         )
         .await?;
@@ -320,7 +326,7 @@ impl TokenBridge {
         let own_address = self.own_address;
         let secret = self.secret;
 
-        // You basically just send it some coins to the bridge address and they show
+        // You basically just send it some dai to the bridge address and they show
         // up in the same address on the xdai side we have no idea when this has succeeded
         // since the events are not indexed
         let tx_hash = eth_web3
@@ -336,7 +342,7 @@ impl TokenBridge {
                 0u32.into(),
                 own_address,
                 secret,
-                vec![SendTxOption::GasLimit(80_000u64.into())],
+                vec![SendTxOption::GasLimit(ERC20_GAS_LIMIT.into())],
             )
             .await?;
 
@@ -349,8 +355,16 @@ impl TokenBridge {
         Ok(dai_amount)
     }
 
-    /// Bridge `xdai_amount` xdai to dai
-    pub async fn xdai_to_dai_bridge(&self, xdai_amount: Uint256) -> Result<Uint256, Error> {
+    /// Bridge `xdai_amount` xdai to dai, because xdai gas is strange we take in the
+    /// gas price as an argument. This allows all the existing xdai gas optimizations performed
+    /// in settings to handle the extra complexity. Remember on xdai you pay the full amount you
+    /// promise, not the lowest in the block like ETH so any temptation to specify a high number
+    /// and let it all get sorted out later is a bad idea.
+    pub async fn xdai_to_dai_bridge(
+        &self,
+        xdai_amount: Uint256,
+        xdai_gas_price: Uint256,
+    ) -> Result<Uint256, Error> {
         let xdai_web3 = self.xdai_web3.clone();
 
         let xdai_home_bridge_address = self.xdai_home_bridge_address;
@@ -368,7 +382,7 @@ impl TokenBridge {
                 own_address,
                 secret,
                 vec![
-                    SendTxOption::GasPrice(10_000_000_000u128.into()),
+                    SendTxOption::GasPrice(xdai_gas_price),
                     SendTxOption::NetworkId(100u64),
                 ],
             )
@@ -538,7 +552,7 @@ mod tests {
             // All we can really do here is test that it doesn't throw. Check your balances in
             // 5-10 minutes to see if the money got transferred.
             token_bridge
-                .xdai_to_dai_bridge(eth_to_wei(0.01f64))
+                .xdai_to_dai_bridge(eth_to_wei(0.01f64), 1_000_000_000u64.into())
                 .await
                 .unwrap();
             actix::System::current().stop();

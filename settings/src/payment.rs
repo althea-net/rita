@@ -86,11 +86,6 @@ fn default_bridge_addresses() -> TokenBridgeAddresses {
         .unwrap(),
         eth_full_node_url: "https://eth.althea.org".into(),
         xdai_full_node_url: "https://dai.althea.org".into(),
-        // TODO convert to u32 in Beta16 this is needed for migration
-        // only since we can't use serde_default within a struct the
-        // actual default values are set in TokenBridge
-        minimum_to_exchange: None,
-        reserve_amount: None,
     }
 }
 
@@ -129,8 +124,6 @@ pub struct TokenBridgeAddresses {
     pub foreign_dai_contract_address: Address,
     pub eth_full_node_url: String,
     pub xdai_full_node_url: String,
-    pub reserve_amount: Option<u32>,
-    pub minimum_to_exchange: Option<u32>,
 }
 
 /// This struct is used by both rita and rita_exit to configure the dummy payment controller and
