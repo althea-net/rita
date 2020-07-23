@@ -25,7 +25,7 @@ antenna_forwarding_client = {path = "../antenna_forwarding_client"}
 auto-bridge = {path = "../auto_bridge"}
 actix-web-httpauth = {git = "https://github.com/althea-net/actix-web-httpauth"}
 clarity = "0.1"
-web30 = {git = "https://github.com/althea-net/web30", branch = "master"}
+web30 = {git = "https://github.com/althea-net/web30", rev = "4002ac7deca2e7ecbda76676705fcfcf29669b3e"}
 
 # duplicate async dependencies, we are currently carrying both futures 0.1 and modern async/await dependencies
 # these will be kept here for quite some time until the switch is completed.
