@@ -1,7 +1,6 @@
 #[macro_use]
 extern crate log;
 
-use async_std::future::timeout as future_timeout;
 use clarity::abi::encode_call;
 use clarity::{Address, PrivateKey};
 use failure::bail;
@@ -9,6 +8,7 @@ use failure::Error;
 use num::Bounded;
 use num256::Uint256;
 use std::time::Duration;
+use tokio::time::timeout as future_timeout;
 use web30::client::Web3;
 use web30::types::SendTxOption;
 

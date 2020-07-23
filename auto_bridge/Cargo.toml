@@ -13,7 +13,7 @@ clarity = "0.1"
 rand = "0.7"
 num = "0.3"
 log = "0.4"
-async-std = "1.6"
+tokio = {version = "0.2", default_features = false, features = ["time"]}
 
 [dev-dependencies]
 actix = "0.9"
