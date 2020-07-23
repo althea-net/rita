@@ -165,7 +165,7 @@ pub async fn tick_token_bridge() {
     }
     drop(payment_settings);
 
-    trace!("Launching bridge future");
+    trace!("Launching bridge future with state {}", bridge.state);
     match system_chain {
         SystemChain::Xdai => state_change(xdai_bridge(bridge.state.clone()).await),
         SystemChain::Ethereum => eth_bridge().await,
@@ -334,7 +334,10 @@ async fn xdai_bridge(state: State) -> State {
     };
     let our_dai_balance = match bridge.get_dai_balance(bridge.own_address).await {
         Ok(val) => val,
-        Err(_e) => return state,
+        Err(e) => {
+            warn!("Failed to get dai balance {}", e);
+            return state;
+        }
     };
     // the amount of Eth to retain in WEI. This is the cost of our Uniswap exchange an ERC20 transfer
     // and one ETH transfer. To pay for Uniswap -> send to bridge and keep enough around for a withdraw
@@ -597,10 +600,11 @@ pub fn withdraw(msg: Withdraw) -> Result<(), Error> {
             _ => {
                 state_change(State::WithdrawRequest {
                     to,
-                    amount,
+                    amount: amount.clone(),
                     timestamp: Instant::now(),
                     withdraw_all,
                 });
+                detailed_state_change(DetailedBridgeState::XdaiToDai { amount });
                 Ok(())
             }
         }
