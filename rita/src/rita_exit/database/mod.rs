@@ -1,6 +1,6 @@
 //! This module contains all the tools and functions that integrate with the clients database
 //! for the exit, which is most exit logic in general. Keep in mind database connections are remote
-//! and therefore synronous database requests are quite expensive (on the order of tens of milliseconds)
+//! and therefore synchronous database requests are quite expensive (on the order of tens of milliseconds)
 
 use crate::rita_common::debt_keeper::get_debts_list_sync;
 use crate::rita_common::debt_keeper::DebtAction;
@@ -574,11 +574,11 @@ pub fn enforce_exit_clients(
     // TODO this is a hacky emergency kill switch for when we detect that
     // the actix loop may be running too slowly, when that happens requests to
     // the full node timeout and transactions will not be processed resulting in
-    // wallet drain, this is worse than the possiblity of the exit not coming back up
-    // As a method of detection this is just a decent proxy not a 100% acurate method
+    // wallet drain, this is worse than the possibility of the exit not coming back up
+    // As a method of detection this is just a decent proxy not a 100% accurate method
     // as it seems that http requests and anything that touches shelling out slow down
     // the most in these situations. Hopefully we can figure out more about why the
-    // futures loop starts acting stragely.
+    // futures loop starts acting strangely.
     const PANIC_TIME: u64 = 10;
     if start.elapsed().as_secs() > PANIC_TIME {
         let fail_mesg = format!("Exit enforcement took more than {} seconds!", PANIC_TIME);
