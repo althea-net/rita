@@ -818,12 +818,6 @@ impl TunnelManager {
                     // how many tunnels are still associated with that ID.
                     (value, tunnels.len())
                 };
-                // this is an inherent race condition, when we re-create the tunnel
-                // and monitor it this may not have already completed. This will be fixed
-                // in the async/await refactor of this module. In an attempt to reduce this
-                // race condition this code is placed as far up as possible.
-                tunnel.unmonitor(0);
-
                 if size == 0 {
                     // Remove this identity if there are no tunnels associated with it.
                     self.tunnels.remove(&key);
