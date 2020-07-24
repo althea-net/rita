@@ -79,6 +79,41 @@ impl dyn KernelInterface {
             }
         }
     }
+
+    /// Gets all the IPv4 addresses from an interface and returns the address and it's netmask
+    /// as a tuple.
+    pub fn get_ip_from_iface(&self, name: &str) -> Result<Vec<(IpAddr, u8)>, Error> {
+        let output = self.run_command("ip", &["address", "show", "dev", name])?;
+        let stdout = String::from_utf8(output.stdout)?;
+
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r"((\d){1,3}\.){3}(\d){1,3}/(\d){1,3}")
+                .expect("Unable to compile regular expression");
+        }
+        let mut ret = Vec::new();
+        for line in stdout.lines() {
+            let cap = RE.captures(&line);
+            // we captured something on this line
+            if let Some(cap) = cap {
+                for ip_cap in cap.iter() {
+                    if let Some(ip_cap) = ip_cap {
+                        let mut split = ip_cap.as_str().split('/');
+                        let ip_str = split.next();
+                        let netmask = split.next();
+                        if let (Some(ip_str), Some(netmask)) = (ip_str, netmask) {
+                            if let (Ok(parsed_ip), Ok(parsed_netmask)) =
+                                (ip_str.parse(), netmask.parse())
+                            {
+                                ret.push((parsed_ip, parsed_netmask));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(ret)
+    }
 }
 
 #[test]
@@ -157,4 +192,54 @@ fn test_get_wg_remote_ip() {
         KI.get_wg_remote_ip("wg0").unwrap(),
         "fe80::78e4:1cff:fe61:560d".parse::<IpAddr>().unwrap()
     );
+}
+
+#[test]
+fn test_get_ip_addresses_linux() {
+    use crate::KI;
+
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    use std::process::Output;
+
+    KI.set_mock(Box::new(move |program, args| {
+        assert_eq!(program, "ip");
+        assert_eq!(args, &["address", "show", "dev", "eth8"]);
+
+        Ok(Output {
+                stdout: b"
+    13: eth8: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:e0:4c:67:a1:57 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.1.203/32 scope global eth8
+       valid_lft forever preferred_lft forever
+    inet 192.168.1.154/32 scope global eth8
+       valid_lft forever preferred_lft forever
+    inet 192.168.1.73/32 scope global eth8
+       valid_lft forever preferred_lft forever
+    inet 192.168.1.137/32 scope global eth8
+       valid_lft forever preferred_lft forever
+    inet 192.168.88.20/32 scope global eth8
+       valid_lft forever preferred_lft forever
+    inet 192.168.88.197/32 scope global eth8
+       valid_lft forever preferred_lft forever
+    inet 192.168.88.214/32 scope global eth8
+       valid_lft forever preferred_lft forever
+    inet 192.168.1.206/32 scope global eth8
+       valid_lft forever preferred_lft forever
+    inet 192.168.1.35/32 scope global eth8
+       valid_lft forever preferred_lft forever
+    inet6 fde6::1/128 scope global
+       valid_lft forever preferred_lft forever
+    inet6 fe80::2e0:4cff:fe67:a157/64 scope link
+       valid_lft forever preferred_lft forever
+                "
+                    .to_vec(),
+                stderr: b"".to_vec(),
+                status: ExitStatus::from_raw(0),
+            })
+    }));
+
+    let interfaces = KI.get_ip_from_iface("eth8").unwrap();
+    let val = ("192.168.1.203".parse().unwrap(), 32);
+    assert!(interfaces.contains(&val))
 }

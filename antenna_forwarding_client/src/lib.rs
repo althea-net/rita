@@ -316,14 +316,13 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
         // dangerous if our default route overlaps, or if you enter an exit route ip
         let _ = KI.run_command("ip", &["route", "del", &format!("{}/32", target_ip)]);
         for iface in interfaces {
-            let _ = KI.run_command(
-                "ip",
-                &["addr", "del", &format!("{}/32", our_ip), "dev", iface],
-            );
-            let _ = KI.run_command(
-                "ip",
-                &["addr", "del", &format!("{}/32", target_ip), "dev", iface],
-            );
+            // cleans up all previous forwarding ip's in some way this is more dangerous than the previous
+            // solution, which only cleaned up the target and destination ip's. But the more through cleanup
+            // will hopefully prevent strange aliasing issues with devices on the lan or other networks that
+            // may overlap with these routes.
+            // this function only errors out when the underlying attempt at running a command fails. So it should
+            // not cause issues with failing the find antenna command
+            cleanup_interface(iface)?;
         }
         let res = KI.run_command(
             "ip",
@@ -432,6 +431,18 @@ fn send_error_message(server_stream: &mut TcpStream, message: String) {
     let msg = ForwardingProtocolMessage::new_error_message(message);
     let _res = write_all_spinlock(server_stream, &msg.get_message());
     let _res = server_stream.shutdown(Shutdown::Both);
+}
+
+fn cleanup_interface(iface: &str) -> Result<(), Error> {
+    let values = KI.get_ip_from_iface(iface)?;
+    for (ip, netmask) in values {
+        // we only clean up very specific routes, this doesn't prevent us from causing problems
+        // but it does help prevent us from doing things like removing the default route.
+        if netmask == 32 {
+            let _ = KI.run_command("ip", &["addr", "del", &format!("{}/32", ip), "dev", iface]);
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
