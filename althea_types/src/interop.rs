@@ -431,9 +431,11 @@ pub struct OperatorUpdateMessage {
     /// The withdraw blockchain that is currently being used, if it is 'none' here it is
     /// interpreted as "don't change anything"
     pub withdraw_chain: Option<SystemChain>,
+    /// To be removed in beta 16, moving to use the ReleaseStatus enum on 'firmware_release'
+    pub release_feed: Option<String>,
     /// A release feed to be applied to the /etc/opkg/customfeeds.config, None means do not
     /// change the currently configured release feed
-    pub release_feed: Option<String>,
+    pub firmware_feed: Option<ReleaseStatus>,
     /// A json payload to be merged into the existing settings, this payload is checked
     /// not to include a variety of things that might break the router but is still not
     /// risk free for example the url fields require http:// or https:// or the router will

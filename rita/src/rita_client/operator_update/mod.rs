@@ -19,7 +19,7 @@ use althea_kernel_interface::opkg_feeds::set_release_feed;
 use althea_types::NeighborStatus;
 use althea_types::OperatorAction;
 use althea_types::OperatorCheckinMessage;
-use althea_types::OperatorUpdateMessage;
+use althea_types::{OperatorUpdateMessage, ReleaseStatus};
 use futures01::Future;
 use num256::Uint256;
 use serde_json::Map;
@@ -202,8 +202,8 @@ fn checkin() {
                     // gated on "None" to prevent reading a file if there is
                     // no update. Maybe someday match will be smart enough to
                     // avoid that on it's own
-                    if new_settings.release_feed.is_some() {
-                        handle_release_feed_update(new_settings.release_feed);
+                    if new_settings.firmware_feed.is_some() {
+                        handle_release_feed_update(new_settings.firmware_feed);
                     }
 
                     match new_settings.operator_action {
@@ -240,22 +240,16 @@ fn checkin() {
 
 /// Allows for online updating of the release feed, note that this not run
 /// on every device startup meaning just editing it the config is not sufficient
-fn handle_release_feed_update(val: Option<String>) {
+fn handle_release_feed_update(val: Option<ReleaseStatus>) {
     match (val, get_release_feed()) {
         (None, _) => {}
         (Some(_new_feed), Err(e)) => {
             error!("Failed to read current release feed! {:?}", e);
         }
         (Some(new_feed), Ok(old_feed)) => {
-            // we parse rather than just matching on a ReleaseState enum because
-            // that's the easiest way to get the Custom(val) variant to deserialize
-            // since from_str is implemented in althea types to work well with that
-            // case, serde can't handle it well in the general case for various reasons
-            if let Ok(new_feed) = new_feed.parse() {
-                if new_feed != old_feed {
-                    if let Err(e) = set_release_feed(new_feed) {
-                        error!("Failed to set new release feed! {:?}", e);
-                    }
+            if new_feed != old_feed {
+                if let Err(e) = set_release_feed(new_feed) {
+                    error!("Failed to set new release feed! {:?}", e);
                 }
             }
         }
