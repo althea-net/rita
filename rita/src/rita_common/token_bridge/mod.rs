@@ -80,16 +80,6 @@ pub fn eth_to_wei(eth: u64) -> Uint256 {
     wei.into()
 }
 
-// /// 1c in of dai in wei
-// pub const DAI_WEI_CENT: u128 = 10_000_000_000_000_000u128;
-// fn wei_dai_to_dai_cents(dai_wei: Uint256) -> Uint256 {
-//     dai_wei / DAI_WEI_CENT.into()
-// }
-// /// Provided an amount in DAI (wei dai so 1*10^18 per dollar) returns the equal amount in wei (or ETH if divided by 1*10^18)
-// pub fn eth_equal(dai_in_wei: Uint256, wei_per_cent: Uint256) -> Uint256 {
-//     wei_dai_to_dai_cents(dai_in_wei) * wei_per_cent
-// }
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum State {
     Ready,
@@ -325,6 +315,7 @@ async fn xdai_bridge(state: State) -> State {
             return state;
         }
     };
+    let wei_per_cent = wei_per_dollar.clone() / 100u32.into();
     let our_eth_balance = match bridge.eth_web3.eth_get_balance(bridge.own_address).await {
         Ok(val) => val,
         Err(e) => {
@@ -345,8 +336,8 @@ async fn xdai_bridge(state: State) -> State {
     let reserve_amount = get_reserve_amount(eth_gas_price.clone());
     let minimum_to_exchange = reserve_amount.clone() * 2u32.into();
     set_last_amounts(
-        lossy_u32(minimum_to_exchange.clone() / wei_per_dollar.clone()),
-        lossy_u32(reserve_amount.clone() / wei_per_dollar.clone()),
+        lossy_u32(minimum_to_exchange.clone() / wei_per_cent.clone()),
+        lossy_u32(reserve_amount.clone() / wei_per_cent.clone()),
     );
     // the minimum amount to transfer, this is in DAI wei, but we want it to be equal to the value
     // of two ERC20 transfers.
@@ -354,8 +345,8 @@ async fn xdai_bridge(state: State) -> State {
     match state {
         State::Ready { .. } => {
             info!(
-                "Ticking in bridge State::Ready. Eth Address: {}",
-                bridge.own_address
+                "Ticking in bridge State::Ready. Eth Address: {}, Reserve amount: {}, Minimum to exchange: {}, Minimum DAI rescue: {}, Wei Per dollar: {}",
+                bridge.own_address, reserve_amount, minimum_to_exchange, minimum_stranded_dai_transfer, wei_per_dollar
             );
             let res = rescue_dai(
                 bridge.clone(),
@@ -683,10 +674,13 @@ pub fn get_bridge_status() -> BridgeStatus {
     let withdraw_chain = payment_settings.withdraw_chain;
     drop(payment_settings);
     let bridge = BRIDGE.read().unwrap().clone();
+    // amounts is in cents, we need to convert to dollars for the dashboard display
     let amounts = AMOUNTS.read().unwrap().clone();
+    let reserve_amount = div_round_closest(amounts.reserve_amount, 100);
+    let minimum_to_exchange = div_round_closest(amounts.minimum_to_exchange, 100);
     BridgeStatus {
-        reserve_amount: amounts.reserve_amount,
-        minimum_deposit: amounts.minimum_to_exchange,
+        reserve_amount,
+        minimum_deposit: minimum_to_exchange,
         withdraw_chain,
         state: bridge.detailed_state,
     }
@@ -717,4 +711,8 @@ fn lossy_u32(input: Uint256) -> u32 {
         // won't change etc.
         Err(_e) => u32::MAX,
     }
+}
+
+fn div_round_closest(a: u32, b: u32) -> u32 {
+    (a - (b + 1) / 2) / b + 1
 }
