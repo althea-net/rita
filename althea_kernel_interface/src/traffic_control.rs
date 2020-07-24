@@ -82,6 +82,7 @@ impl dyn KernelInterface {
         let stdout = &String::from_utf8(result.stdout)?;
         Ok((stdout.contains("htb") || stdout.contains("tbf"))
             && !stdout.contains("codel")
+            && !stdout.contains("cake")
             && !stdout.contains("noqueue"))
     }
 
@@ -102,52 +103,92 @@ impl dyn KernelInterface {
     }
 
     /// This sets up latency protecting flow control, either cake on openwrt
-    /// or fq_codel on older devices/kernels
-    pub fn set_codel_shaping(&self, iface_name: &str, speed: Option<usize>) -> Result<(), Error> {
+    /// or fq_codel on older devices/kernels, the Cake configuration sets several advanced parameters
+    /// that are not reflected if we fall back to codel
+    pub fn set_codel_shaping(
+        &self,
+        iface_name: &str,
+        speed: Option<usize>,
+        exit_tunnel: bool,
+    ) -> Result<(), Error> {
         let operator = if self.has_qdisc(iface_name)? {
             "change"
         } else {
             "add"
         };
-        // we need to duplicate most of this array because the borrow checker gets confused
-        // by references to vecs with contents of &str
-        let output = match speed {
-            Some(val) => self.run_command(
-                "tc",
-                &[
-                    "qdisc",
-                    operator,
-                    "dev",
-                    iface_name,
-                    "root",
-                    "handle",
-                    "1:",
-                    "cake",
-                    "bandwidth",
-                    &format!("{}mbit", val),
-                    "internet",
-                ],
-            )?,
-            None => self.run_command(
-                "tc",
-                &[
-                    "qdisc",
-                    operator,
-                    "dev",
-                    iface_name,
-                    "root",
-                    "handle",
-                    "1:",
-                    "cake",
-                    "unlimited",
-                    "internet",
-                ],
-            )?,
-        };
+        let mut cake_args = vec![
+            "qdisc", operator, "dev", iface_name, "root", "handle", "1:", "cake",
+        ];
+        // declared here but used only in the match to provide a longer lifetime
+        let mbit;
+
+        match speed {
+            Some(val) => {
+                mbit = format!("{}mbit", val);
+                cake_args.extend(&["bandwidth", &mbit])
+            }
+            None => cake_args.extend(&["unlimited"]),
+        }
+
+        if exit_tunnel {
+            // cake arguments for the *client side* of the wg_exit tunnel
+            cake_args.extend(&[
+                // we want to use the 'internet' parameter here because the total rtt
+                // of the path from endpoint to endpoint is what this value cares about
+                // not neighbor to neighbor
+                "internet",
+                // look at man tc-cake and the Ethernet default
+                // add 80 bytes for WireGuard overhead since this qdisc
+                // will always route double-encapsulated packets for the exit
+                "overhead",
+                "118",
+                "mpu",
+                "84",
+                "noatm",
+                // diffserv4 allocates 50% of the connection to video streams and
+                // generally recognizes more traffic classes than the default diffserv3
+                // there's some debate by cake maintainers internally if this is a good idea
+                "diffserv4",
+                // obviously this is a nat (in fact a double nat) but we want to do a lookup
+                // at this level
+                "nat",
+                // shape ingress traffic, rather than egress traffic, since most traffic coming
+                // into the client is download and the exit has to use tbf all the time to allow
+                // for enforcement, therefore there's no actual SQM within the exit tunnel that's
+                // aware of in network flows
+                "ingress",
+            ]);
+        } else {
+            // cake arguments for per hop tunnels only
+            cake_args.extend(&[
+                // we want to use the 'internet' parameter here because the total rtt
+                // of the path from endpoint to endpoint is what this value cares about
+                // not neighbor to neighbor
+                "internet",
+                // look at man tc-cake and the Ethernet default
+                // add 40 bytes for WireGuard overhead since this qdisc
+                // will always route encapsulated packets
+                "overhead",
+                "78",
+                "mpu",
+                "84",
+                "noatm",
+                // diffserv4 allocates 50% of the connection to video streams and
+                // generally recognizes more traffic classes than the default diffserv3
+                // there's some debate by cake maintainers internally if this is a good idea
+                "diffserv4",
+            ]);
+        }
+
+        let output = self.run_command("tc", &cake_args)?;
 
         if !output.status.success() {
-            warn!("No support for the cake qdisc is detected, falling back to fq_codel");
-            warn!("Cake is strongly recomended, you should install it");
+            trace!(
+                "No support for the Cake qdisc is detected, falling back to fq_codel. Error: {}",
+                String::from_utf8(output.stderr)?
+            );
+            trace!("Command was tc {}", crate::print_str_array(&cake_args));
+            warn!("sch_cake is strongly recommended, you should install it");
             let output = self.run_command(
                 "tc",
                 &[
@@ -158,6 +199,7 @@ impl dyn KernelInterface {
 
             if !output.status.success() {
                 let res = String::from_utf8(output.stderr)?;
+                error!("Cake and fallback fq_codel have both failed!");
                 bail!("Failed to create new qdisc limit! {:?}", res);
             }
         }

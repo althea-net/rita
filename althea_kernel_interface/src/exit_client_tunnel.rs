@@ -48,6 +48,10 @@ impl dyn KernelInterface {
             ],
         )?;
 
+        // we only want one peer on this link, technically that one peer is multihomed
+        // via babel, but it has the same key so it's the same 'peer' from wireguard's
+        // perspective, if we don't do this we'll end up with multiple exits on the same
+        // tunnel
         for i in self.get_peers("wg_exit")? {
             if i != args.pubkey {
                 self.run_command(
@@ -57,7 +61,9 @@ impl dyn KernelInterface {
             }
         }
 
-        // block rita hello port on the exit tunnel
+        // block rita hello port on the exit tunnel, this probably doesn't do anything
+        // useful these days as our peer discovery method no longer relies on interface
+        // indiscriminate broadcast.
         self.add_iptables_rule(
             "iptables",
             &[
@@ -134,6 +140,8 @@ impl dyn KernelInterface {
             ))
             .into());
         }
+
+        let _res = self.set_codel_shaping("wg_exit", None, true);
 
         Ok(())
     }
