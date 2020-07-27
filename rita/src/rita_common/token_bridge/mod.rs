@@ -345,8 +345,8 @@ async fn xdai_bridge(state: State) -> State {
     match state {
         State::Ready { .. } => {
             info!(
-                "Ticking in bridge State::Ready. Eth Address: {}, Reserve amount: {}, Minimum to exchange: {}, Minimum DAI rescue: {}, Wei Per dollar: {}",
-                bridge.own_address, reserve_amount, minimum_to_exchange, minimum_stranded_dai_transfer, wei_per_dollar
+                "Ticking in bridge State::Ready. Eth Address: {}, Reserve amount: {}, Minimum to exchange: {}, Minimum DAI rescue: {}, Wei Per dollar: {}, Eth Gas Price: {}",
+                bridge.own_address, reserve_amount, minimum_to_exchange, minimum_stranded_dai_transfer, wei_per_dollar, eth_gas_price
             );
             let res = rescue_dai(
                 bridge.clone(),
