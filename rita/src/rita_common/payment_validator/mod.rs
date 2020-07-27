@@ -97,7 +97,7 @@ impl Default for PaymentValidator {
 /// until they are validated, dropped for validity issues, or time out without being inserted
 /// into the blockchain. Transactions that are too old are prevented from being played back
 /// by using a history of successful transactions.
-/// This endpoint specifically (and only this one) is fully imdepotent so that we can retry
+/// This endpoint specifically (and only this one) is fully idempotent so that we can retry
 /// txid transmissions
 #[derive(Message)]
 pub struct ValidateLater(pub ToValidate);
@@ -229,7 +229,7 @@ pub fn validate_transaction(ts: &ToValidate) {
     let res = web3
         .eth_block_number()
         .join(web3.eth_get_transaction_by_hash(txid.clone()))
-        // even though we sepcify the timeout above don't remove this, we need it to 100% ensure that operations time out
+        // even though we specify the timeout above don't remove this, we need it to 100% ensure that operations time out
         // for example Actix may run slowly, web3 timeouts only care about actual request time
         .timeout(TRANSACTION_VERIFICATION_TIMEOUT)
         .and_then(move |(block_num, tx_status)| {
@@ -326,7 +326,7 @@ fn handle_tx_messaging(
                 .then(|_| Ok(()));
             Arbiter::spawn(res);
         }
-        // we suceessfully paid someone
+        // we successfully paid someone
         (false, true, true) => {
             let res = PaymentValidator::from_registry()
                 .send(Remove {
