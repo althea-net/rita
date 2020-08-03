@@ -98,6 +98,14 @@ pub struct WyreReservationRequest {
     pub street1: String,
     #[serde(rename = "postalCode")]
     pub postal_code: String,
+    #[serde(rename = "lockFields")]
+    pub lock_fields: Vec<String>,
+    #[serde(rename = "redirectUrl")]
+    pub redirect_url: String,
+    #[serde(rename = "failureRedirectUrl")]
+    pub failure_redirect_url: String,
+    #[serde(rename = "referrerAccountId")]
+    pub referrer_account_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
