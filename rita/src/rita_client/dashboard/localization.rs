@@ -47,6 +47,11 @@ pub struct AmountRequest {
     amount: f32,
 }
 
+/// This retrieves the reservation url from the operator tools server, which
+/// has to go through the process of getting a link using the bearer auth token
+/// wyre provides. In theory this is actually a general 'redirect user to payment
+/// processor' endpoint that we could integrate with Moonpay or another provider
+/// TODO generalize naming of this endpoint
 pub fn get_wyre_reservation(
     amount: Json<AmountRequest>,
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
@@ -57,9 +62,7 @@ pub fn get_wyre_reservation(
     let payload = WyreReservationRequestCarrier {
         amount: amount.amount,
         address: payment.eth_address.unwrap(),
-        // todo fix this
         contact_info: exit_client.contact_info.clone().unwrap().into(),
-        // todo fix this
         billing_details: operator.billing_details.clone().unwrap(),
     };
 
