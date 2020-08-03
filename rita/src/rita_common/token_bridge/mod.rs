@@ -695,8 +695,11 @@ fn get_core() -> TokenBridgeCore {
 /// the amount of Eth to retain in WEI. This is the cost of our Uniswap exchange an ERC20 transfer
 /// and one ETH transfer. To pay for Uniswap -> send to bridge and keep enough around for a withdraw
 /// which involves a Uniswap exchange -> Eth send (since the ERC20 send is paid by the bridge)
+/// this ensures that a withdraw is always possible. Currently we have reduced this to only ensure
+/// that the deposit goes through. Because reserving enough funds is too expensive.
 fn get_reserve_amount(eth_gas_price: Uint256) -> Uint256 {
-    eth_gas_price * (ERC20_GAS_LIMIT + (UNISWAP_GAS_LIMIT * 2) + ETH_TRANSACTION_GAS_LIMIT).into()
+    // eth_gas_price * (ERC20_GAS_LIMIT + (UNISWAP_GAS_LIMIT * 2) + ETH_TRANSACTION_GAS_LIMIT).into()
+    eth_gas_price * (ERC20_GAS_LIMIT + UNISWAP_GAS_LIMIT).into()
 }
 /// the amount of Eth to retain in WEI. This time for withdraws such that we always leave enough
 /// to pay for the next withdraw
