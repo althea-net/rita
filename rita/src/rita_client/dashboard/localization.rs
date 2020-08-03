@@ -21,7 +21,6 @@ pub struct LocalizationReturn {
     pub wyre_account_id: String,
     pub display_currency_symbol: bool,
     pub support_number: String,
-    pub wyre_reservation_flow: bool,
 }
 
 impl From<LocalizationSettings> for LocalizationReturn {
@@ -35,7 +34,6 @@ impl From<LocalizationSettings> for LocalizationReturn {
                 .format()
                 .mode(Mode::National)
                 .to_string(),
-            wyre_reservation_flow: input.wyre_reservation_flow,
         }
     }
 }
