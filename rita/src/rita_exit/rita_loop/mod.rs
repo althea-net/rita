@@ -57,6 +57,7 @@ pub const EXIT_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
 pub fn start_rita_exit_loop() {
     let system = System::current();
     setup_exit_wg_tunnel();
+    let mut last_restart = Instant::now();
     // outer thread is a watchdog, inner thread is the runner
     thread::spawn(move || {
         // this will always be an error, so it's really just a loop statement
@@ -90,6 +91,11 @@ pub fn start_rita_exit_loop() {
             .join()
         } {
             error!("Exit loop thread paniced! Respawning {:?}", e);
+            if Instant::now() - last_restart < Duration::from_secs(60) {
+                error!("Restarting too quickly, leaving it to systemd!");
+                system.stop_with_code(121)
+            }
+            last_restart = Instant::now();
         }
     });
 }
