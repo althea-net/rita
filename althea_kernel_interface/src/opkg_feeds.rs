@@ -124,3 +124,11 @@ fn test_regex_net() {
         get_arch("src/gz openwrt_althea https://updates.althea.net/packages/mipsel_24kc/althea");
     assert_eq!(&val.unwrap(), "mipsel_24kc");
 }
+
+#[test]
+fn test_regex_arm() {
+    let val = get_arch(
+        "src/gz openwrt_althea https://updates.althea.net/packages/arm_cortex-a9_vfpv3-d16/althea",
+    );
+    assert_eq!(&val.unwrap(), "arm_cortex-a9_vfpv3-d16");
+}
