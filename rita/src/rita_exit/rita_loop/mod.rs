@@ -32,7 +32,7 @@ use althea_types::Identity;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
 use babel_monitor::start_connection;
-use diesel::query_dsl::RunQueryDsl;
+use diesel::{query_dsl::RunQueryDsl, PgConnection};
 use exit_db::models;
 use futures01::future::Future;
 use settings::exit::RitaExitSettings;
@@ -146,7 +146,7 @@ fn rita_exit_loop(
 
                 // Make sure no one we are setting up is geoip unauthorized
                 info!("about to check regions");
-                check_regions(start, clients_list.clone());
+                check_regions(start, clients_list.clone(), &conn);
 
                 info!("About to enforce exit clients");
                 // handle enforcement on client tunnels by querying debt keeper
@@ -218,10 +218,10 @@ fn bill(babel_port: u16, tw: &Addr<TrafficWatcher>, start: Instant, ids: Vec<Ide
     }
 }
 
-fn check_regions(start: Instant, clients_list: Vec<models::Client>) {
+fn check_regions(start: Instant, clients_list: Vec<models::Client>, conn: &PgConnection) {
     let val = SETTING.get_allowed_countries().is_empty();
     if !val {
-        let res = validate_clients_region(clients_list);
+        let res = validate_clients_region(clients_list, &conn);
         match res {
             Err(e) => warn!(
                 "Failed to validate client region with {:?} {}ms since start",

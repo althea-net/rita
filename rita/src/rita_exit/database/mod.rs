@@ -11,7 +11,6 @@ use crate::rita_exit::database::database_tools::create_or_update_user_record;
 use crate::rita_exit::database::database_tools::delete_client;
 use crate::rita_exit::database::database_tools::get_client;
 use crate::rita_exit::database::database_tools::get_database_connection;
-use crate::rita_exit::database::database_tools::get_database_connection_sync;
 use crate::rita_exit::database::database_tools::set_client_timestamp;
 use crate::rita_exit::database::database_tools::update_client;
 use crate::rita_exit::database::database_tools::update_low_balance_notification_time;
@@ -314,7 +313,10 @@ fn low_balance_notification(
 /// Every 5 seconds we vlaidate all online clients to make sure that they are in the right region
 /// we also do this in the client status requests but we want to handle the edge case of a modified
 /// client that doesn't make status requests
-pub fn validate_clients_region(clients_list: Vec<exit_db::models::Client>) -> Result<(), Error> {
+pub fn validate_clients_region(
+    clients_list: Vec<exit_db::models::Client>,
+    conn: &PgConnection,
+) -> Result<(), Error> {
     info!("Starting exit region validation");
     let start = Instant::now();
 
@@ -335,7 +337,6 @@ pub fn validate_clients_region(clients_list: Vec<exit_db::models::Client>) -> Re
             Err(_e) => error!("Database entry with invalid mesh ip! {:?}", item),
         }
     }
-    let conn = get_database_connection_sync()?;
     let list = match wait_timeout(get_gateway_ip_bulk(ip_vec), EXIT_LOOP_TIMEOUT) {
         WaitResult::Err(e) => return Err(e),
         WaitResult::Ok(val) => val,
