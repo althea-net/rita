@@ -30,7 +30,7 @@ impl Message for TriggerGC {
 impl Handler<TriggerGC> for TunnelManager {
     type Result = Result<(), Error>;
     fn handle(&mut self, msg: TriggerGC, _ctx: &mut Context<Self>) -> Self::Result {
-        let interfaces = into_interfaces_hashmap(msg.babel_interfaces);
+        let interfaces = into_interfaces_hashmap(&msg.babel_interfaces);
         trace!("Starting tunnel gc {:?}", interfaces);
         let mut good: HashMap<Identity, Vec<Tunnel>> = HashMap::new();
         let mut to_delete: HashMap<Identity, Vec<Tunnel>> = HashMap::new();
@@ -39,12 +39,7 @@ impl Handler<TriggerGC> for TunnelManager {
         // checker issues, we should consider a method that does modify in place
         for (_identity, tunnels) in self.tunnels.iter() {
             for tunnel in tunnels.iter() {
-                // we keep tunnels that have not timed out or have a recent handshake and are marked as
-                // up in babel.
-                if (tunnel.last_contact.elapsed() < msg.tunnel_timeout
-                    || check_handshake_time(msg.tunnel_handshake_timeout, &tunnel.iface_name))
-                    && tunnel_up(&interfaces, &tunnel.iface_name)
-                {
+                if tunnel_should_be_kept(&tunnel, &msg, &interfaces) {
                     insert_into_tunnel_list(tunnel, &mut good);
                 } else {
                     insert_into_tunnel_list(tunnel, &mut to_delete)
@@ -87,6 +82,60 @@ impl Handler<TriggerGC> for TunnelManager {
     }
 }
 
+/// This routine has two independent purposes, first is to clear out tunnels
+/// that should be 'up' in babel but for some reason are not. In this case communication
+/// with babel has failed when creating the tunnel. We provide a grace period of TUNNEL_TIMEOUT
+/// from when the tunnel was first created to prevent immediate removal while tunnels are still
+/// bootstrapping. Second our goal is to remove tunnel that we have not heard from for a long time
+/// but these are only removed if they have a handshake and it's long enough ago to be the same as
+/// TUNNEL_TIMEOUT. This means tunnel that have never handshaked but are up will never be removed
+/// but this is an ok outcome.
+/// This routine has two independent purposes
+///
+/// 1) clean up tunnels we think are working but actually are not.
+///
+///   This can happen when Rita has successfully opened a tunnel, it's got handshakes
+///   and we've sent the listen command off to babel. But somehow the tunnel has been
+///   disrupted and babel has it marked as down. In this case we want to remove the tunnel
+///   to allow it to be recreated correctly.
+///
+///   There is a complication here, tunnels don't come up immediately, so we add a time check
+///   where we check the initial creation time of the tunnel and provide a grace period.
+///
+/// 2) Clean up tunnels for nodes that have long since gone offline
+///
+///   Long running nodes like gateways and exits may have thousands of nodes connect and go offline
+///   many for good. Since we don't have to run out of tunnel ports and also maintaining a longer list
+///   of tunnels is just a pain we want to garbage collect these. If we have not heard from the peer for
+///   Tunnel_Timeout time we will remove it.
+///
+///   The complication in this case is that sometimes sector antennas like to aggregate multicast communication
+///   meaning we may not 'hear' from a peer for quite some time because we never see it's multicast hello. But in
+///   fact the connection is both opening and working. To deal with this edge case we check the handshake time on
+///   the wireguard tunnel, which is the same as asking if unicast communication over this tunnel has been recently
+///   successful. In theory we could look for a neighbor that's online from the tunnel interface in the babel routing
+///   table and solve both this and the previous complication at once. So that's a possible improvement to this routine.
+fn tunnel_should_be_kept(
+    tunnel: &Tunnel,
+    msg: &TriggerGC,
+    interfaces: &HashMap<String, bool>,
+) -> bool {
+    // clippy wants the maximally compact rather than maximally readable conditionals here
+    // in this case readability far far outweighs code compactness
+    #[allow(clippy::all)]
+    if tunnel.created().elapsed() > msg.tunnel_timeout
+        && !tunnel_up(&interfaces, &tunnel.iface_name)
+    {
+        false
+    } else if tunnel.last_contact.elapsed() > msg.tunnel_timeout
+        && !check_handshake_time(msg.tunnel_handshake_timeout, &tunnel.iface_name)
+    {
+        false
+    } else {
+        true
+    }
+}
+
 /// A simple helper function to reduce the number of if/else statements in tunnel GC
 fn insert_into_tunnel_list(input: &Tunnel, tunnels_list: &mut HashMap<Identity, Vec<Tunnel>>) {
     let identity = &input.neigh_id.global;
@@ -100,8 +149,8 @@ fn insert_into_tunnel_list(input: &Tunnel, tunnels_list: &mut HashMap<Identity, 
 }
 
 /// This function checks the handshake time of a tunnel when compared to the handshake timeout,
-/// it returns true if we fail to get the handshake time (erring on the side of caution) and only
-/// false if all last tunnel handshakes are older than the allowed time limit
+/// it returns false if we fail to get the handshake time or if all last tunnel handshakes are
+/// older than the allowed time limit
 fn check_handshake_time(handshake_timeout: Duration, ifname: &str) -> bool {
     let res = KI.get_last_handshake_time(ifname);
     match res {
@@ -123,16 +172,16 @@ fn check_handshake_time(handshake_timeout: Duration, ifname: &str) -> bool {
         }
         Err(e) => {
             error!("Could not get tunnel handshake with {:?}", e);
-            true
+            false
         }
     }
 }
 
 /// sorts the interfaces vector into a hashmap of interface name to up status
-fn into_interfaces_hashmap(interfaces: Vec<Interface>) -> HashMap<String, bool> {
+fn into_interfaces_hashmap(interfaces: &[Interface]) -> HashMap<String, bool> {
     let mut ret = HashMap::new();
     for interface in interfaces {
-        ret.insert(interface.name, interface.up);
+        ret.insert(interface.name.clone(), interface.up);
     }
     ret
 }

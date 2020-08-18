@@ -137,6 +137,7 @@ pub struct Tunnel {
     pub listen_port: u16,  // the local port this tunnel is listening on
     pub neigh_id: LocalIdentity, // the identity of the counterparty tunnel
     pub last_contact: Instant, // When's the last we heard from the other end of this tunnel?
+    created: Instant,      // when this tunnel was created, private to prevent outside editing
     pub speed_limit: Option<usize>, // banwidth limit in mbps, used for Codel shaping
     pub light_client_details: Option<Ipv4Addr>, // if Some this tunnel is for a light client
     state: TunnelState,
@@ -175,6 +176,7 @@ impl Tunnel {
             listen_port: our_listen_port,
             neigh_id: their_id,
             last_contact: Instant::now(),
+            created: Instant::now(),
             speed_limit: None,
             light_client_details,
             // By default new tunnels are in Registered state
@@ -183,6 +185,10 @@ impl Tunnel {
                 registration_state: RegistrationState::Registered,
             },
         }
+    }
+
+    pub fn created(&self) -> Instant {
+        self.created
     }
 
     /// Open a real tunnel to match the virtual tunnel we store in memory
