@@ -2,8 +2,7 @@
 //! iptables and ipset counters on each per hop tunnel (the WireGuard tunnel between two devices). These counts
 //! are then stored and used to compute amounts for bills.
 
-use crate::rita_common::debt_keeper;
-use crate::rita_common::debt_keeper::DebtKeeper;
+use crate::rita_common::debt_keeper::traffic_update;
 use crate::rita_common::debt_keeper::Traffic;
 use crate::rita_common::tunnel_manager::Neighbor;
 use crate::rita_common::usage_tracker::UpdateUsage;
@@ -365,10 +364,7 @@ pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
             amount: amount.into(),
         });
     }
-    let update = debt_keeper::TrafficUpdate {
-        traffic: traffic_vec,
-    };
-    DebtKeeper::from_registry().do_send(update);
+    traffic_update(traffic_vec);
 
     Ok(())
 }

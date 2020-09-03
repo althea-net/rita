@@ -1,7 +1,7 @@
 //! Network endpoints for rita-exit that are not dashboard or local infromational endpoints
 //! these are called by rita instances to operate the mesh
 
-use crate::rita_common::debt_keeper::get_debts_list_sync;
+use crate::rita_common::debt_keeper::get_debts_list;
 use crate::rita_exit::database::database_tools::get_database_connection;
 #[cfg(feature = "development")]
 use crate::rita_exit::database::db_client::DbClient;
@@ -234,7 +234,7 @@ pub fn get_exit_info_http(_req: HttpRequest) -> Result<Json<ExitState>, Error> {
 /// TODO secure this endpoint with libsodium
 pub fn get_client_debt(client: Json<Identity>) -> HttpResponse {
     let client = client.into_inner();
-    let debts = get_debts_list_sync();
+    let debts = get_debts_list();
     for debt in debts {
         if debt.identity == client {
             return HttpResponse::Ok().json(debt.payment_details.debt * Int256::from(-1));

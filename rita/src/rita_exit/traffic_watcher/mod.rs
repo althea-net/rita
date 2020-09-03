@@ -8,8 +8,7 @@
 //!
 //! Also handles enforcement of nonpayment, since there's no need for a complicated TunnelManager for exits
 
-use crate::rita_common::debt_keeper;
-use crate::rita_common::debt_keeper::DebtKeeper;
+use crate::rita_common::debt_keeper::traffic_update;
 use crate::rita_common::debt_keeper::Traffic;
 use crate::rita_common::usage_tracker::UpdateUsage;
 use crate::rita_common::usage_tracker::UsageTracker;
@@ -296,10 +295,7 @@ pub fn watch(
             amount: amount.into(),
         })
     }
-    let update = debt_keeper::TrafficUpdate {
-        traffic: traffic_vec,
-    };
-    DebtKeeper::from_registry().do_send(update);
+    traffic_update(traffic_vec);
 
     Ok(())
 }

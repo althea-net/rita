@@ -1,4 +1,4 @@
-use crate::rita_common::debt_keeper::{DebtKeeper, Dump, NodeDebtData};
+use crate::rita_common::debt_keeper::{dump, NodeDebtData};
 use crate::rita_common::network_monitor::{GetStats, IfaceStats, NetworkMonitor, Stats};
 use crate::rita_common::tunnel_manager::{GetNeighbors, Neighbor, TunnelManager};
 use crate::SETTING;
@@ -59,47 +59,42 @@ pub fn get_routes(_req: HttpRequest) -> Box<dyn Future<Item = Json<Vec<Route>>, 
 pub fn get_neighbor_info(
     _req: HttpRequest,
 ) -> Box<dyn Future<Item = Json<Vec<NodeInfo>>, Error = Error>> {
+    let debts = dump();
     Box::new(
-        DebtKeeper::from_registry()
-            .send(Dump {})
+        TunnelManager::from_registry()
+            .send(GetNeighbors {})
             .from_err()
-            .and_then(|debts| {
-                TunnelManager::from_registry()
-                    .send(GetNeighbors {})
+            .and_then(|neighbors| {
+                let neighbors = neighbors.unwrap();
+
+                let combined_list = merge_debts_and_neighbors(neighbors, debts);
+
+                let babel_port = SETTING.get_network().babel_port;
+
+                open_babel_stream(babel_port)
                     .from_err()
-                    .and_then(|neighbors| {
-                        let debts = debts.unwrap();
-                        let neighbors = neighbors.unwrap();
+                    .and_then(move |stream| {
+                        start_connection(stream).and_then(move |stream| {
+                            parse_routes(stream)
+                                .and_then(|(_stream, routes)| {
+                                    let route_table_sample = routes;
 
-                        let combined_list = merge_debts_and_neighbors(neighbors, debts);
+                                    NetworkMonitor::from_registry()
+                                        .send(GetStats {})
+                                        .from_err()
+                                        .and_then(|stats| {
+                                            let stats = stats.unwrap();
+                                            let output = generate_neighbors_list(
+                                                stats,
+                                                route_table_sample,
+                                                combined_list,
+                                            );
 
-                        let babel_port = SETTING.get_network().babel_port;
-
-                        open_babel_stream(babel_port)
-                            .from_err()
-                            .and_then(move |stream| {
-                                start_connection(stream).and_then(move |stream| {
-                                    parse_routes(stream)
-                                        .and_then(|(_stream, routes)| {
-                                            let route_table_sample = routes;
-
-                                            NetworkMonitor::from_registry()
-                                                .send(GetStats {})
-                                                .from_err()
-                                                .and_then(|stats| {
-                                                    let stats = stats.unwrap();
-                                                    let output = generate_neighbors_list(
-                                                        stats,
-                                                        route_table_sample,
-                                                        combined_list,
-                                                    );
-
-                                                    Ok(Json(output))
-                                                })
+                                            Ok(Json(output))
                                         })
-                                        .responder()
                                 })
-                            })
+                                .responder()
+                        })
                     })
             }),
     )

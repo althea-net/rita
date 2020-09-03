@@ -3,9 +3,8 @@
 //! so long as we have not published it to a full node, once the payment is on
 //! the blockchain it's up to the reciever to validate that it's correct
 
-use crate::rita_common::debt_keeper::DebtKeeper;
-use crate::rita_common::debt_keeper::PaymentFailed;
-use crate::rita_common::payment_validator::{PaymentValidator, ToValidate, ValidateLater};
+use crate::rita_common::debt_keeper::payment_failed;
+use crate::rita_common::payment_validator::{validate_later, ToValidate};
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::SETTING;
 use actix::prelude::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
@@ -48,7 +47,7 @@ impl Handler<MakePayment> for PaymentController {
     fn handle(&mut self, msg: MakePayment, _ctx: &mut Context<Self>) -> Self::Result {
         let res = make_payment(msg.0.clone());
         if res.is_err() {
-            DebtKeeper::from_registry().do_send(PaymentFailed { to: msg.0.to });
+            payment_failed(msg.0.to);
         }
     }
 }
@@ -171,11 +170,11 @@ fn make_payment(mut pmt: PaymentTx) -> Result<(), Error> {
 
                                         let ts = ToValidate {
                                             payment: pmt,
-                                            recieved: Instant::now(),
+                                            received: Instant::now(),
                                             checked: false
                                        };
 
-                                      PaymentValidator::from_registry().do_send(ValidateLater(ts));
+                                      validate_later(ts);
 
                                         Ok(()) as Result<(), ()>
                                     }
@@ -202,9 +201,7 @@ fn make_payment(mut pmt: PaymentTx) -> Result<(), Error> {
 
                         // we have not yet published the tx (at least hopefully)
                         // so it's safe to add this debt back to our balances
-                        DebtKeeper::from_registry().do_send(PaymentFailed {
-                            to: pmt.to,
-                        });
+                        payment_failed(pmt.to);
                         Either::B(future::ok(()))
                     }
                 }
@@ -216,9 +213,7 @@ fn make_payment(mut pmt: PaymentTx) -> Result<(), Error> {
                     "Failed to connect to neighbor for bandwidth payment {:?}",
                     e
                 );
-                DebtKeeper::from_registry().do_send(PaymentFailed {
-                    to: pmt.to,
-                });
+                payment_failed(pmt.to);
                 Either::B(future::ok(()))
             }
         }));

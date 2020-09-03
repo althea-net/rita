@@ -74,9 +74,7 @@ pub fn start_core_rita_endpoints(workers: usize) {
 }
 
 pub fn check_rita_common_actors() {
-    assert!(crate::rita_common::debt_keeper::DebtKeeper::from_registry().connected());
     assert!(crate::rita_common::payment_controller::PaymentController::from_registry().connected());
-    assert!(crate::rita_common::payment_validator::PaymentValidator::from_registry().connected());
     assert!(crate::rita_common::tunnel_manager::TunnelManager::from_registry().connected());
     assert!(crate::rita_common::hello_handler::HelloHandler::from_registry().connected());
     assert!(crate::rita_common::traffic_watcher::TrafficWatcher::from_registry().connected());

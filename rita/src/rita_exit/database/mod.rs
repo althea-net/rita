@@ -2,7 +2,7 @@
 //! for the exit, which is most exit logic in general. Keep in mind database connections are remote
 //! and therefore synchronous database requests are quite expensive (on the order of tens of milliseconds)
 
-use crate::rita_common::debt_keeper::get_debts_list_sync;
+use crate::rita_common::debt_keeper::get_debts_list;
 use crate::rita_common::debt_keeper::DebtAction;
 use crate::rita_common::utils::wait_timeout::wait_timeout;
 use crate::rita_common::utils::wait_timeout::WaitResult;
@@ -508,7 +508,7 @@ pub fn enforce_exit_clients(
             clients_by_id.insert(id, client);
         }
     }
-    let list = get_debts_list_sync();
+    let list = get_debts_list();
     info!(
         "Exit enforcement finished grabbing data in {}s {}ms",
         start.elapsed().as_secs(),

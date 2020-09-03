@@ -1,8 +1,8 @@
 use crate::rita_common::blockchain_oracle::update as BlockchainOracleUpdate;
-use crate::rita_common::debt_keeper::{DebtKeeper, SendUpdate};
+use crate::rita_common::debt_keeper::{send_debt_update};
 use crate::rita_common::network_monitor::NetworkInfo as NetworkMonitorTick;
 use crate::rita_common::network_monitor::NetworkMonitor;
-use crate::rita_common::payment_validator::{PaymentValidator, Validate};
+use crate::rita_common::payment_validator::validate;
 use crate::rita_common::peer_listener::GetPeers;
 use crate::rita_common::peer_listener::PeerListener;
 use crate::rita_common::rita_loop::set_gateway;
@@ -99,11 +99,6 @@ impl Handler<Tick> for RitaFastLoop {
 
         let start = Instant::now();
 
-        // Check on payments, only really needs to be run this quickly
-        // on large nodes where very high variation in throughput can result
-        // in blowing through the entire grace in less than a minute
-        PaymentValidator::from_registry().do_send(Validate());
-
         // watch neighbors for billing
         Arbiter::spawn(
             TunnelManager::from_registry()
@@ -195,7 +190,9 @@ impl Handler<Tick> for RitaFastLoop {
         ));
 
         // Update debts
-        DebtKeeper::from_registry().do_send(SendUpdate {});
+        if let Err(e) = send_debt_update() {
+            warn!("Debt keeper update failed! {:?}", e);
+        }
 
         let start = Instant::now();
         trace!("Starting PeerListener tick");
@@ -259,6 +256,10 @@ pub fn start_rita_fast_loop() {
                         // like out of date nonces or balances, also users really really want fast
                         // balance updates, think very long and very hard before running this more slowly
                         BlockchainOracleUpdate().await;
+                        // Check on payments, only really needs to be run this quickly
+                        // on large nodes where very high variation in throughput can result
+                        // in blowing through the entire grace in less than a minute
+                        validate().await;
                         AsyncSystem::current().stop();
                     });
                 });

@@ -1,6 +1,6 @@
 //! Network endptoints for common Rita functionality (such as exchanging hello messages)
 
-use crate::rita_common::payment_validator::{PaymentValidator, ToValidate, ValidateLater};
+use crate::rita_common::payment_validator::{validate_later, ToValidate};
 use crate::rita_common::peer_listener::Peer;
 use crate::rita_common::tunnel_manager::id_callback::IdentityCallback;
 use crate::rita_common::tunnel_manager::TunnelManager;
@@ -57,10 +57,10 @@ pub fn make_payments(
     );
     let ts = ToValidate {
         payment: pmt.0.into_inner(),
-        recieved: Instant::now(),
+        received: Instant::now(),
         checked: false,
     };
-    PaymentValidator::from_registry().do_send(ValidateLater(ts));
+    validate_later(ts);
 
     Box::new(future::ok(HttpResponse::Ok().json("Payment Received!")))
 }

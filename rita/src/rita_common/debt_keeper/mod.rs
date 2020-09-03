@@ -18,7 +18,7 @@ use crate::rita_common::tunnel_manager::TunnelChange;
 use crate::rita_common::tunnel_manager::TunnelManager;
 use crate::rita_common::tunnel_manager::TunnelStateChange;
 use crate::SETTING;
-use ::actix::prelude::{Actor, Context, Handler, Message, Supervised, SystemService};
+use actix::SystemService;
 use althea_types::{Identity, PaymentTx};
 use failure::Error;
 use num256::{Int256, Uint256};
@@ -39,7 +39,9 @@ use std::time::Instant;
 const SAVE_FREQENCY: Duration = Duration::from_secs(1800);
 
 lazy_static! {
-    static ref DEBT_DATA: Arc<RwLock<DebtData>> = Arc::new(RwLock::new(HashMap::new()));
+    /// A locked global ref containing the state for this module. Note that the default implementation
+    /// loads saved data from teh disk if it exists.
+    static ref DEBT_DATA: Arc<RwLock<DebtKeeper>> = Arc::new(RwLock::new(DebtKeeper::default()));
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -152,82 +154,26 @@ pub struct DebtKeeper {
     debt_data: DebtData,
 }
 
-impl Actor for DebtKeeper {
-    type Context = Context<Self>;
+#[allow(dead_code)]
+pub fn dump() -> DebtData {
+    let dk = DEBT_DATA.read().unwrap();
+    dk.get_debts()
 }
 
-impl Supervised for DebtKeeper {}
-impl SystemService for DebtKeeper {
-    fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        info!("Debt Keeper started");
-    }
+pub fn payment_received(from: Identity, amount: Uint256) -> Result<(), Error> {
+    let mut dk = DEBT_DATA.write().unwrap();
+    dk.payment_received(&from, amount)
 }
 
-pub struct Dump;
-
-impl Message for Dump {
-    type Result = Result<DebtData, Error>;
+pub fn payment_failed(to: Identity) {
+    let mut dk = DEBT_DATA.write().unwrap();
+    dk.payment_failed(&to)
 }
 
-impl Handler<Dump> for DebtKeeper {
-    type Result = Result<DebtData, Error>;
-    fn handle(&mut self, _msg: Dump, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.get_debts())
-    }
-}
-
-#[derive(PartialEq, Eq, Debug)]
-pub struct PaymentReceived {
-    pub from: Identity,
-    pub amount: Uint256,
-}
-
-impl Message for PaymentReceived {
-    type Result = Result<(), Error>;
-}
-
-impl Handler<PaymentReceived> for DebtKeeper {
-    type Result = Result<(), Error>;
-
-    fn handle(&mut self, msg: PaymentReceived, _: &mut Context<Self>) -> Self::Result {
-        self.payment_received(&msg.from, msg.amount)
-    }
-}
-
-#[derive(PartialEq, Eq, Debug)]
-pub struct PaymentFailed {
-    pub to: Identity,
-}
-
-impl Message for PaymentFailed {
-    type Result = Result<(), Error>;
-}
-
-impl Handler<PaymentFailed> for DebtKeeper {
-    type Result = Result<(), Error>;
-
-    fn handle(&mut self, msg: PaymentFailed, _: &mut Context<Self>) -> Self::Result {
-        self.payment_failed(&msg.to)
-    }
-}
-
-#[derive(PartialEq, Eq, Debug)]
-pub struct PaymentSucceeded {
-    pub to: Identity,
-    pub amount: Uint256,
-}
-
-impl Message for PaymentSucceeded {
-    type Result = Result<(), Error>;
-}
-
-impl Handler<PaymentSucceeded> for DebtKeeper {
-    type Result = Result<(), Error>;
-
-    fn handle(&mut self, msg: PaymentSucceeded, _: &mut Context<Self>) -> Self::Result {
-        add_tx_to_total(msg.amount.clone());
-        self.payment_succeeded(&msg.to, msg.amount)
-    }
+pub fn payment_succeeded(to: Identity, amount: Uint256) -> Result<(), Error> {
+    let mut dk = DEBT_DATA.write().unwrap();
+    add_tx_to_total(amount.clone());
+    dk.payment_succeeded(&to, amount)
 }
 
 pub struct Traffic {
@@ -235,69 +181,36 @@ pub struct Traffic {
     pub amount: Int256,
 }
 
-#[derive(Message)]
-pub struct TrafficUpdate {
-    pub traffic: Vec<Traffic>,
-}
-
-impl Handler<TrafficUpdate> for DebtKeeper {
-    type Result = ();
-
-    fn handle(&mut self, msg: TrafficUpdate, _: &mut Context<Self>) -> Self::Result {
-        for t in msg.traffic.iter() {
-            self.traffic_update(&t.from, t.amount.clone());
-        }
+pub fn traffic_update(traffic: Vec<Traffic>) {
+    let mut dk = DEBT_DATA.write().unwrap();
+    for t in traffic.iter() {
+        dk.traffic_update(&t.from, t.amount.clone());
     }
 }
 
+#[allow(dead_code)]
 /// Special case traffic update for client gateway corner case, see rita client traffic watcher for more
 /// details. This updates a debt identity matching only ip address and eth address.
-#[derive(Message)]
-pub struct WgKeyInsensitiveTrafficUpdate {
-    pub traffic: Traffic,
-}
-
-impl Handler<WgKeyInsensitiveTrafficUpdate> for DebtKeeper {
-    type Result = ();
-
-    fn handle(
-        &mut self,
-        msg: WgKeyInsensitiveTrafficUpdate,
-        _: &mut Context<Self>,
-    ) -> Self::Result {
-        let partial_id = msg.traffic.from;
-        for (id, _) in self.debt_data.clone().iter() {
-            if id.eth_address == partial_id.eth_address
-                && id.mesh_ip == partial_id.mesh_ip
-                && id.wg_public_key != partial_id.wg_public_key
-            {
-                self.traffic_update(&id, msg.traffic.amount);
-                return;
-            }
+pub fn wgkey_insensitive_traffic_update(traffic: Traffic) {
+    let mut dk = DEBT_DATA.write().unwrap();
+    let partial_id = traffic.from;
+    for (id, _) in dk.debt_data.clone().iter() {
+        if id.eth_address == partial_id.eth_address
+            && id.mesh_ip == partial_id.mesh_ip
+            && id.wg_public_key != partial_id.wg_public_key
+        {
+            dk.traffic_update(&id, traffic.amount);
+            return;
         }
-        error!("Wg key insensitive billing has not found a target! Gateway billing incorrect!");
     }
+    error!("Wg key insensitive billing has not found a target! Gateway billing incorrect!");
 }
 
 /// A variant of traffic update that replaces one debts entry wholesale
 /// only used by the client to update it's own debt to the exit
-#[derive(Message)]
-pub struct TrafficReplace {
-    pub traffic: Traffic,
-}
-
-impl Handler<TrafficReplace> for DebtKeeper {
-    type Result = ();
-
-    fn handle(&mut self, msg: TrafficReplace, _: &mut Context<Self>) -> Self::Result {
-        self.traffic_replace(&msg.traffic.from, msg.traffic.amount);
-    }
-}
-
-pub struct SendUpdate;
-
-impl Message for SendUpdate {
-    type Result = Result<(), Error>;
+pub fn traffic_replace(traffic: Traffic) {
+    let mut dk = DEBT_DATA.write().unwrap();
+    dk.traffic_replace(&traffic.from, traffic.amount)
 }
 
 /// Actions to be taken upon a neighbor's debt reaching either a negative or positive
@@ -309,51 +222,51 @@ pub enum DebtAction {
     MakePayment { to: Identity, amount: Uint256 },
 }
 
-impl Handler<SendUpdate> for DebtKeeper {
-    type Result = Result<(), Error>;
+pub fn send_debt_update() -> Result<(), Error> {
+    let mut dk = DEBT_DATA.write().unwrap();
+    trace!("sending debt keeper update");
+    dk.save_if_needed();
 
-    fn handle(&mut self, _msg: SendUpdate, _ctx: &mut Context<Self>) -> Self::Result {
-        trace!("sending debt keeper update");
-        self.save_if_needed();
-        // copy debt data into this sync accessible struct
-        *DEBT_DATA.write().unwrap() = self.debt_data.clone();
+    // in order to keep from overloading actix when we have thousands of debts to process
+    // (mainly on exits) we batch tunnel change operations before sending them over
+    let mut debts_message = Vec::new();
 
-        // in order to keep from overloading actix when we have thousands of debts to process
-        // (mainly on exits) we batch tunnel change operations before sending them over
-        let mut debts_message = Vec::new();
-
-        for (k, _) in self.debt_data.clone() {
-            match self.send_update(&k)? {
-                DebtAction::SuspendTunnel => {
-                    debts_message.push(TunnelChange {
-                        identity: k,
-                        action: TunnelAction::PaymentOverdue,
-                    });
-                }
-                DebtAction::OpenTunnel => {
-                    debts_message.push(TunnelChange {
-                        identity: k,
-                        action: TunnelAction::PaidOnTime,
-                    });
-                }
-                DebtAction::MakePayment { to, amount } => PaymentController::from_registry()
-                    .do_send(payment_controller::MakePayment(PaymentTx {
-                        to,
-                        from: match SETTING.get_identity() {
-                            Some(id) => id,
-                            None => bail!("Identity has no mesh IP ready yet"),
-                        },
-                        amount,
-                        txid: None, // not yet published
-                    })),
+    for (k, _) in dk.debt_data.clone() {
+        match dk.send_update(&k)? {
+            DebtAction::SuspendTunnel => {
+                debts_message.push(TunnelChange {
+                    identity: k,
+                    action: TunnelAction::PaymentOverdue,
+                });
             }
+            DebtAction::OpenTunnel => {
+                debts_message.push(TunnelChange {
+                    identity: k,
+                    action: TunnelAction::PaidOnTime,
+                });
+            }
+            // this should always be called from within an actix context, when it comes time to move this out of the
+            // old rita fast loop these calls will need to be updated
+            DebtAction::MakePayment { to, amount } => PaymentController::from_registry().do_send(
+                payment_controller::MakePayment(PaymentTx {
+                    to,
+                    from: match SETTING.get_identity() {
+                        Some(id) => id,
+                        None => bail!("Identity has no mesh IP ready yet"),
+                    },
+                    amount,
+                    txid: None, // not yet published
+                }),
+            ),
         }
-
-        TunnelManager::from_registry().do_send(TunnelStateChange {
-            tunnels: debts_message,
-        });
-        Ok(())
     }
+
+    // this should always be called from within an actix context, when it comes time to move this out of the
+    // old rita fast loop these calls will need to be updated
+    TunnelManager::from_registry().do_send(TunnelStateChange {
+        tunnels: debts_message,
+    });
+    Ok(())
 }
 
 impl Default for DebtKeeper {
@@ -450,11 +363,10 @@ impl DebtKeeper {
             .or_insert_with(NodeDebtData::new)
     }
 
-    fn payment_failed(&mut self, to: &Identity) -> Result<(), Error> {
+    fn payment_failed(&mut self, to: &Identity) {
         let peer = self.get_debt_data_mut(to);
         peer.payment_in_flight = false;
         peer.payment_in_flight_start = None;
-        Ok(())
     }
 
     fn payment_succeeded(&mut self, to: &Identity, amount: Uint256) -> Result<(), Error> {
@@ -686,12 +598,6 @@ impl DebtKeeper {
     }
 }
 
-pub struct GetDebtsList;
-
-impl Message for GetDebtsList {
-    type Result = Result<Vec<GetDebtsResult>, Error>;
-}
-
 #[derive(Serialize)]
 pub struct GetDebtsResult {
     pub identity: Identity,
@@ -707,25 +613,10 @@ impl GetDebtsResult {
     }
 }
 
-impl Handler<GetDebtsList> for DebtKeeper {
-    type Result = Result<Vec<GetDebtsResult>, Error>;
-
-    fn handle(&mut self, _msg: GetDebtsList, _ctx: &mut Context<Self>) -> Self::Result {
-        let debts: Vec<GetDebtsResult> = self
-            .debt_data
-            .iter()
-            .map(|(key, value)| GetDebtsResult::new(&key, &value))
-            .collect();
-        trace!("Debts: {}", debts.len());
-        Ok(debts)
-    }
-}
-
-#[allow(dead_code)]
-pub fn get_debts_list_sync() -> Vec<GetDebtsResult> {
-    let debts: Vec<GetDebtsResult> = DEBT_DATA
-        .read()
-        .unwrap()
+pub fn get_debts_list() -> Vec<GetDebtsResult> {
+    let dk = DEBT_DATA.read().unwrap();
+    let debts: Vec<GetDebtsResult> = dk
+        .debt_data
         .iter()
         .map(|(key, value)| GetDebtsResult::new(&key, &value))
         .collect();
@@ -1016,7 +907,7 @@ mod tests {
             }
         );
         // simulate a payment failure
-        d.payment_failed(&ident).unwrap();
+        d.payment_failed(&ident);
 
         // make sure we haven't marked any payments as sent (because the payment failed)
         assert_eq!(
@@ -1095,7 +986,7 @@ mod tests {
             }
         );
         // simulate a payment failure
-        d.payment_failed(&ident).unwrap();
+        d.payment_failed(&ident);
 
         // make sure we haven't marked any payments as sent (because the payment failed)
         assert_eq!(

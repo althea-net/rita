@@ -1,7 +1,7 @@
 //! Because of the nature of pay per forward billing download traffic (the most common form of end user traffic)
 //! requires an exception, in which the Exit and Client have special billing rules that allow for download traffic
-//! to be paid for. This is still a net gain to system design simplicitly becuase the general case of an arbitrary number
-//! of nodes forwarding an arbitrariy amount of traffic can follow the simple pay per forward rules and we only need to
+//! to be paid for. This is still a net gain to system design simplicity because the general case of an arbitrary number
+//! of nodes forwarding an arbitrary amount of traffic can follow the simple pay per forward rules and we only need to
 //! account for exceptions on the endpoints of what may be an arbitrarily long, complicated, and changing path.
 //!
 //! The big advantage of pay per forward is that it reaches a passive consensus state even when there is packet loss.
@@ -9,7 +9,7 @@
 //! the client where to keep track of it's download usage all on it's own it would never be able to account for packet
 //! loss that the exit may see.
 //!
-//! So this module contains two major componetns.
+//! So this module contains two major components.
 //!
 //! TrafficWatcher monitors system traffic by interfacing with KernelInterface to create and check
 //! iptables and ip counters on each per hop tunnel (the WireGuard tunnel between two devices). These counts
@@ -17,13 +17,13 @@
 //!
 //! QueryExitDebts asks the exit what it thinks this particular client owes (over the secure channel of the exit tunnel)
 //! validating if this number is correct is difficult, because the exit is serving us with a total debt while our local
-//! billing implementation is only producing a delta change. Knowing if the update is fradulent or not requires heuristics
+//! billing implementation is only producing a delta change. Knowing if the update is fraudulent or not requires heuristics
 //! in debt keeper more than anything that can be done here. What we can do here is take action if several requests fail, falling
 //! back to local debt computation rather than running blind.
 
 use crate::rita_client::rita_loop::is_gateway_client;
 use crate::rita_common::debt_keeper::{
-    DebtKeeper, Traffic, TrafficReplace, TrafficUpdate, WgKeyInsensitiveTrafficUpdate,
+    traffic_replace, traffic_update, wgkey_insensitive_traffic_update, Traffic,
 };
 use crate::rita_common::usage_tracker::UpdateUsage;
 use crate::rita_common::usage_tracker::UsageTracker;
@@ -157,14 +157,12 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
                                     let we_owe_exit = debt >= Int256::zero();
                                     match (we_are_not_a_gateway, we_owe_exit) {
                                         (true, true) => {
-                                          let exit_replace = TrafficReplace {
-                                            traffic: Traffic {
+                                        traffic_replace(
+                                   Traffic {
                                                 from: exit_id,
                                                 amount: debt,
-                                            },
-                                        };
-
-                                        DebtKeeper::from_registry().do_send(exit_replace);
+                                            }
+                                        )
                                         },
                                         // the exit should never tell us it owes us, that doesn't make sense outside of the gateway
                                         // client corner case
@@ -172,13 +170,13 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
                                         (false, _) => {
                                             info!("We are a gateway!, Acting accordingly");
                                             if let Some(val) = local_debt {
-                                                let exit_update = WgKeyInsensitiveTrafficUpdate {
-                                                traffic: Traffic {
+                                                wgkey_insensitive_traffic_update(
+                                       Traffic {
                                                     from: exit_id,
                                                     amount: val,
-                                                    },
-                                                };
-                                                DebtKeeper::from_registry().do_send(exit_update);
+                                                    }
+
+                                                )
                                             }
                                         },
                                     }
@@ -186,13 +184,13 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
                                 Err(e) => {
                                     error!("Failed deserializing exit debts update with {:?}", e);
                                     if let Some(val) = local_debt {
-                                        let exit_update = TrafficUpdate {
-                                        traffic: vec![Traffic {
+                                        traffic_update(
+                                   vec![Traffic {
                                             from: exit_id,
                                             amount: val,
-                                            }],
-                                        };
-                                        DebtKeeper::from_registry().do_send(exit_update);
+                                            }]
+
+                                        )
                                     }
                                 }
                             }
@@ -201,13 +199,13 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
                         Err(e) => {
                             error!("Exit debts request to {} failed with {:?}", request, e);
                             if let Some(val) = local_debt {
-                                let exit_update = TrafficUpdate {
-                                traffic: vec![Traffic {
-                                    from: exit_id,
-                                    amount: val,
-                                    }],
-                                };
-                                DebtKeeper::from_registry().do_send(exit_update);
+                                traffic_update(
+                                   vec![Traffic {
+                                            from: exit_id,
+                                            amount: val,
+                                            }]
+
+                                        )
                             }
                             Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = ()>>
                         }
@@ -220,13 +218,15 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
                     e
                 );
                 if let Some(val) = local_debt {
-                    let exit_update = TrafficUpdate {
-                    traffic: vec![Traffic {
-                        from: exit_id,
-                        amount: val,
-                        }],
-                    };
-                    DebtKeeper::from_registry().do_send(exit_update);
+                                traffic_update(
+                                   vec![Traffic {
+                                            from: exit_id,
+                                            amount: val,
+                                            }]
+
+                                        )
+
+
                 }
                 Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = ()>>
             }

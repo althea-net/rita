@@ -6,8 +6,7 @@
 
 use crate::rita_client::traffic_watcher::GetExitDestPrice;
 use crate::rita_client::traffic_watcher::TrafficWatcher;
-use crate::rita_common::debt_keeper;
-use crate::rita_common::debt_keeper::DebtKeeper;
+use crate::rita_common::debt_keeper::traffic_update;
 use crate::rita_common::debt_keeper::Traffic;
 use crate::rita_common::peer_listener::Peer;
 use crate::rita_common::tunnel_manager::id_callback::IdentityCallback;
@@ -369,10 +368,7 @@ impl Handler<Watch> for LightClientManager {
                 amount: amount.into(),
             })
         }
-        let update = debt_keeper::TrafficUpdate {
-            traffic: traffic_vec,
-        };
-        DebtKeeper::from_registry().do_send(update);
+        traffic_update(traffic_vec);
 
         // tunnel address garbage collection
         return_addresses(&tunnels, &mut self.assigned_addresses);
