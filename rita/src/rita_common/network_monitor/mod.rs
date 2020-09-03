@@ -57,7 +57,7 @@ impl SystemService for NetworkMonitor {
 
         // if this assertion is failing you're running this slowly enough
         // that all the sample period logic is not relevent, go disable it
-        assert_eq!(SAMPLE_PERIOD as u64, FAST_LOOP_SPEED);
+        assert_eq!(SAMPLE_PERIOD as u64, FAST_LOOP_SPEED.as_secs());
         if !SAMPLE_PERIOD <= 16 {
             panic!("NetworkMonitor is running too slowly! Please adjust constants");
         }

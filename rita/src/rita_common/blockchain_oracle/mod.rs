@@ -6,17 +6,25 @@
 use crate::rita_common::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::SETTING;
-use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
+use async_web30::client::Web3;
 use clarity::Address;
-use futures01::Future;
+use futures::future::join4;
 use num256::Int256;
 use num256::Uint256;
 use num_traits::identities::Zero;
 use settings::payment::PaymentSettings;
 use settings::RitaCommonSettings;
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::Duration;
 use std::time::Instant;
-use web30::client::Web3;
+
+const ZERO_WINDOW_TIME: Duration = Duration::from_secs(300);
+
+lazy_static! {
+    static ref ORACLE: Arc<RwLock<BlockchainOracle>> =
+        Arc::new(RwLock::new(BlockchainOracle::new()));
+}
 
 pub struct BlockchainOracle {
     /// An instant representing the start of a short period where the balance can
@@ -26,17 +34,6 @@ pub struct BlockchainOracle {
     /// up a short five minute window during which we will actually trust the full node if it
     /// hands us a zero balance
     zero_window: Option<Instant>,
-}
-
-impl Actor for BlockchainOracle {
-    type Context = Context<Self>;
-}
-
-impl Supervised for BlockchainOracle {}
-impl SystemService for BlockchainOracle {
-    fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        info!("Oracle started");
-    }
 }
 
 impl BlockchainOracle {
@@ -51,16 +48,9 @@ impl Default for BlockchainOracle {
     }
 }
 
-const ZERO_WINDOW_TIME: Duration = Duration::from_secs(300);
-
-#[derive(Message)]
-pub struct ZeroWindowStart();
-
-impl Handler<ZeroWindowStart> for BlockchainOracle {
-    type Result = ();
-    fn handle(&mut self, _msg: ZeroWindowStart, _ctx: &mut Context<Self>) -> Self::Result {
-        self.zero_window = Some(Instant::now());
-    }
+pub fn zero_window_start() {
+    let mut res = ORACLE.write().unwrap();
+    res.zero_window = Some(Instant::now());
 }
 
 /// How long we wait for a response from the full node
@@ -68,26 +58,19 @@ impl Handler<ZeroWindowStart> for BlockchainOracle {
 /// in the rita_common fast loop
 pub const ORACLE_TIMEOUT: Duration = FAST_LOOP_TIMEOUT;
 
-#[derive(Message)]
-pub struct Update();
+pub async fn update() {
+    let payment_settings = SETTING.get_payment();
+    let our_address = payment_settings.eth_address.expect("No address!");
+    drop(payment_settings);
 
-impl Handler<Update> for BlockchainOracle {
-    type Result = ();
+    let full_node = get_web3_server();
+    let web3 = Web3::new(&full_node, ORACLE_TIMEOUT);
 
-    fn handle(&mut self, _msg: Update, _ctx: &mut Context<Self>) -> Self::Result {
-        let payment_settings = SETTING.get_payment();
-        let our_address = payment_settings.eth_address.expect("No address!");
-        drop(payment_settings);
-
-        let full_node = get_web3_server();
-        let web3 = Web3::new(&full_node, ORACLE_TIMEOUT);
-
-        info!("About to make web3 requests to {}", full_node);
-        update_blockchain_info(our_address, web3, full_node, Some(Instant::now()));
-    }
+    info!("About to make web3 requests to {}", full_node);
+    update_blockchain_info(our_address, web3, full_node, Some(Instant::now())).await;
 }
 
-fn update_blockchain_info(
+async fn update_blockchain_info(
     our_address: Address,
     web3: Web3,
     full_node: String,
@@ -97,29 +80,32 @@ fn update_blockchain_info(
     let nonce = web3.eth_get_transaction_count(our_address);
     let net_version = web3.net_version();
     let gas_price = web3.eth_gas_price();
-    let res = balance
-        .join4(nonce, net_version, gas_price)
-        .and_then(move |(balance, nonce, net_version, gas_price)| {
-            let mut payment_settings = SETTING.get_payment_mut();
-            update_balance(
-                &full_node,
-                zero_window,
-                &mut payment_settings.balance,
-                balance,
-            );
-            update_gas_price(&full_node, gas_price, &mut payment_settings);
-            update_nonce(&full_node, nonce, &mut payment_settings.nonce);
-            get_net_version(&full_node, &mut payment_settings.net_version, net_version);
-            Ok(())
-        })
-        .then(|res| {
-            if let Err(e) = res {
-                warn!("Failed to update blockchain info with {:?}", e);
-            }
-            Ok(())
-        });
-
-    Arbiter::spawn(res);
+    let (balance, nonce, net_version, gas_price) =
+        join4(balance, nonce, net_version, gas_price).await;
+    let mut payment_settings = SETTING.get_payment_mut();
+    match balance {
+        Ok(balance) => update_balance(
+            &full_node,
+            zero_window,
+            &mut payment_settings.balance,
+            balance,
+        ),
+        Err(e) => warn!("Failed to update balance with {:?}", e),
+    }
+    match gas_price {
+        Ok(gas_price) => update_gas_price(&full_node, gas_price, &mut payment_settings),
+        Err(e) => warn!("Failed to update gas price with {:?}", e),
+    }
+    match net_version {
+        Ok(net_version) => {
+            update_net_version(&full_node, &mut payment_settings.net_version, net_version)
+        }
+        Err(e) => warn!("Failed to update net_version with {:?}", e),
+    }
+    match nonce {
+        Ok(nonce) => update_nonce(&full_node, nonce, &mut payment_settings.nonce),
+        Err(e) => warn!("Failed to update nonce with {:?}", e),
+    }
 }
 
 /// Gets the balance for the provided eth address and updates it
@@ -157,7 +143,7 @@ fn update_balance(
 /// a different network than the one we are actually using. For example an address
 /// that contains both real eth and test eth may be tricked into singing a transaction
 /// for real eth while operating on the testnet. Because of this we have warnings behavior
-fn get_net_version(full_node: &str, net_version: &mut Option<u64>, new_net_version: String) {
+fn update_net_version(full_node: &str, net_version: &mut Option<u64>, new_net_version: String) {
     info!(
         "Got response from {} for net_version request {:?}",
         full_node, new_net_version
@@ -190,30 +176,6 @@ fn update_nonce(full_node: &str, transaction_count: Uint256, nonce: &mut Uint256
         full_node, transaction_count
     );
     *nonce = transaction_count;
-}
-
-/// A version of update nonce designed to be triggered from other parts of the code
-pub fn trigger_update_nonce(our_address: Address, web3: &Web3, full_node: String) {
-    let res = web3
-        .eth_get_transaction_count(our_address)
-        .then(move |transaction_count| match transaction_count {
-            Ok(value) => {
-                info!(
-                    "Got response from {} for triggered nonce request {:?}",
-                    full_node, value
-                );
-                let mut payment_settings = SETTING.get_payment_mut();
-                update_nonce(&full_node, value, &mut payment_settings.nonce);
-                Ok(())
-            }
-            Err(e) => {
-                warn!("nonce request to {} failed with {:?}", full_node, e);
-                Err(e)
-            }
-        })
-        .then(|_| Ok(()));
-
-    Arbiter::spawn(res);
 }
 
 /// This function updates the gas price and in the process adjusts our payment threshold

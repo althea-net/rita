@@ -42,8 +42,8 @@ pub fn start_rita_slow_loop() {
                 // could catch the edge case where babel is restarted under us
                 set_babel_price();
 
-                // sleep until it has been 5 seconds from start, whenever that may be
-                // if it has been more than 5 seconds from start, go right ahead
+                // sleep until it has been SLOW_LOOP_SPEED seconds from start, whenever that may be
+                // if it has been more than SLOW_LOOP_SPEED seconds from start, go right ahead
                 if start.elapsed() < SLOW_LOOP_SPEED {
                     thread::sleep(SLOW_LOOP_SPEED - start.elapsed());
                 }

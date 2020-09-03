@@ -1,4 +1,4 @@
-use crate::rita_common::blockchain_oracle::{BlockchainOracle, Update};
+use crate::rita_common::blockchain_oracle::update as BlockchainOracleUpdate;
 use crate::rita_common::debt_keeper::{DebtKeeper, SendUpdate};
 use crate::rita_common::network_monitor::NetworkInfo as NetworkMonitorTick;
 use crate::rita_common::network_monitor::NetworkMonitor;
@@ -16,6 +16,8 @@ use actix::{
     Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
     SystemService,
 };
+use actix_async::Arbiter as AsyncArbiter;
+use actix_async::System as AsyncSystem;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_interfaces;
 use babel_monitor::parse_neighs;
@@ -24,10 +26,11 @@ use babel_monitor::start_connection;
 use failure::Error;
 use futures01::Future;
 use settings::RitaCommonSettings;
+use std::thread;
 use std::time::{Duration, Instant};
 
 // the speed in seconds for the common loop
-pub const FAST_LOOP_SPEED: u64 = 5;
+pub const FAST_LOOP_SPEED: Duration = Duration::from_secs(5);
 pub const FAST_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
 
 /// if we haven't heard a hello from a peer after this time we clean up the tunnel
@@ -51,7 +54,7 @@ impl Actor for RitaFastLoop {
     fn started(&mut self, ctx: &mut Context<Self>) {
         trace!("Common rita loop started!");
 
-        ctx.run_interval(Duration::from_secs(FAST_LOOP_SPEED), |_act, ctx| {
+        ctx.run_interval(FAST_LOOP_SPEED, |_act, ctx| {
             let addr: Addr<Self> = ctx.address();
             addr.do_send(Tick);
         });
@@ -95,10 +98,6 @@ impl Handler<Tick> for RitaFastLoop {
         manage_gateway();
 
         let start = Instant::now();
-
-        // Update blockchain info put here because people really
-        // hate it when their deposits take a while to show up
-        BlockchainOracle::from_registry().do_send(Update());
 
         // Check on payments, only really needs to be run this quickly
         // on large nodes where very high variation in throughput can result
@@ -240,6 +239,44 @@ impl Handler<Tick> for RitaFastLoop {
 
         Ok(())
     }
+}
+
+/// Rita fast loop thread spawning function, there are currently two rita fast loops, one that
+/// runs as a thread with async/await support and one that runs as a actor using old futures
+/// slowly things will be migrated into this new sync loop as we move to async/await
+pub fn start_rita_fast_loop() {
+    thread::spawn(move || {
+        // this will always be an error, so it's really just a loop statement
+        // with some fancy destructuring
+        while let Err(e) = {
+            thread::spawn(move || loop {
+                let start = Instant::now();
+                trace!("Common Fast tick!");
+
+                let res = AsyncSystem::run(move || {
+                    AsyncArbiter::spawn(async move {
+                        // updating blockchain info often is easier than dealing with edge cases
+                        // like out of date nonces or balances, also users really really want fast
+                        // balance updates, think very long and very hard before running this more slowly
+                        BlockchainOracleUpdate().await;
+                        AsyncSystem::current().stop();
+                    });
+                });
+                if res.is_err() {
+                    error!("Error in actix system {:?}", res);
+                }
+
+                // sleep until it has been FAST_LOOP_SPEED seconds from start, whenever that may be
+                // if it has been more than FAST_LOOP_SPEED seconds from start, go right ahead
+                if start.elapsed() < FAST_LOOP_SPEED {
+                    thread::sleep(FAST_LOOP_SPEED - start.elapsed());
+                }
+            })
+            .join()
+        } {
+            error!("Rita common fast loop thread paniced! Respawning {:?}", e);
+        }
+    });
 }
 
 /// Manages gateway functionality and maintains the gateway parameter, this is different from the gateway

@@ -3,7 +3,6 @@
 //! so long as we have not published it to a full node, once the payment is on
 //! the blockchain it's up to the reciever to validate that it's correct
 
-use crate::rita_common::blockchain_oracle::trigger_update_nonce;
 use crate::rita_common::debt_keeper::DebtKeeper;
 use crate::rita_common::debt_keeper::PaymentFailed;
 use crate::rita_common::payment_validator::{PaymentValidator, ToValidate, ValidateLater};
@@ -200,10 +199,6 @@ fn make_payment(mut pmt: PaymentTx) -> Result<(), Error> {
                             "Failed to send bandwidth payment {:?}, using full node {}",
                             e, full_node
                         );
-
-                        // triggering a nonce update may help us if the oracle modules updates
-                        // are slow for some reason
-                        trigger_update_nonce(our_address, &web3, full_node);
 
                         // we have not yet published the tx (at least hopefully)
                         // so it's safe to add this debt back to our balances

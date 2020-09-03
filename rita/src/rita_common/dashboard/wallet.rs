@@ -1,20 +1,17 @@
-use crate::rita_common::blockchain_oracle::trigger_update_nonce;
-use crate::rita_common::blockchain_oracle::BlockchainOracle;
-use crate::rita_common::blockchain_oracle::ZeroWindowStart;
+use crate::rita_common::blockchain_oracle::zero_window_start;
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::rita_common::token_bridge::withdraw as bridge_withdraw;
 use crate::rita_common::token_bridge::Withdraw as WithdrawMsg;
 use crate::SETTING;
-use ::actix::SystemService;
-use ::actix_web::http::StatusCode;
-use ::actix_web::HttpResponse;
-use ::actix_web::Path;
-use ::settings::RitaCommonSettings;
+use actix_web::http::StatusCode;
+use actix_web::HttpResponse;
+use actix_web::Path;
 use althea_types::SystemChain;
 use clarity::{Address, Transaction};
 use failure::Error;
 use futures01::{future, Future};
 use num256::Uint256;
+use settings::RitaCommonSettings;
 use std::boxed::Box;
 use std::time::Duration;
 use web30::client::Web3;
@@ -58,7 +55,7 @@ pub fn withdraw_all(path: Path<Address>) -> Box<dyn Future<Item = HttpResponse, 
     let balance = payment_settings.balance.clone();
     drop(payment_settings);
 
-    BlockchainOracle::from_registry().do_send(ZeroWindowStart());
+    zero_window_start();
 
     let tx_gas: Uint256 =
         if (system_chain, withdraw_chain) == (SystemChain::Xdai, SystemChain::Ethereum) {
@@ -96,15 +93,12 @@ fn eth_compatable_withdraw(
     let full_node = get_web3_server();
     let web3 = Web3::new(&full_node, WITHDRAW_TIMEOUT);
     let payment_settings = SETTING.get_payment();
-    let our_address = match payment_settings.eth_address {
-        Some(address) => address,
-        None => {
-            return Box::new(future::ok(
-                HttpResponse::new(StatusCode::from_u16(504u16).unwrap())
-                    .into_builder()
-                    .json("No Address configured, withdraw impossible!"),
-            ))
-        }
+    if payment_settings.eth_address.is_none() {
+        return Box::new(future::ok(
+            HttpResponse::new(StatusCode::from_u16(504u16).unwrap())
+                .into_builder()
+                .json("No Address configured, withdraw impossible!"),
+        ));
     };
 
     let tx = Transaction {
@@ -142,7 +136,6 @@ fn eth_compatable_withdraw(
             HttpResponse::Ok().json(format!("txid:{:#066x}", tx_id))
         })),
         Err(e) => {
-            trigger_update_nonce(our_address, &web3, full_node);
             if e.to_string().contains("nonce") {
                 Box::new(future::ok(
                     HttpResponse::new(StatusCode::from_u16(500u16).unwrap())
