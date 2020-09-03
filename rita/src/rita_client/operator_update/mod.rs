@@ -290,7 +290,6 @@ fn merge_settings_safely(new_settings: Value) {
 fn contains_forbidden_key(map: Map<String, Value>, forbidden_values: &[&str]) -> bool {
     // check if any top level keys are forbidden
     for item in forbidden_values.iter() {
-        println!("Checking key {} versus {:?}", item, map);
         if map.contains_key(*item) {
             return true;
         }
