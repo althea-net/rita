@@ -217,6 +217,12 @@ fn checkin() {
                         Some(OperatorAction::ResetWiFiPassword) => {
                             let _res = reset_wifi_pass();
                         }
+                        Some(OperatorAction::UpdateNow) => {
+                            // this runs the update shell script, if an update is found a reboot will occur
+                            // it is possible that the script fails to grab the package index or a package
+                            // due to network conditions this will cause the operation to do nothing.
+                            let _res = KI.run_command("ash", &["/etc/update.ash"]);
+                        }
                         None => {}
                     }
 

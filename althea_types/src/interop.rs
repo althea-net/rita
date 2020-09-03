@@ -365,10 +365,26 @@ impl FromStr for ReleaseStatus {
 /// Something the operator may want to do to a router under their control
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub enum OperatorAction {
+    /// Resets the Rita dashboard password. This is the password users use to login
+    /// to the router dashboard, which is distinct from the WiFi password. This
+    /// password is also used for ssh login on the LAN. This reset operation does
+    /// not change that password but it will be changed when the dashboard password
+    /// is set again by the user.
     ResetRouterPassword,
+    /// This resets the WiFi password to the default 'ChangeMe' and restarts the wifi
+    /// subsystem (without restarting the router).
     ResetWiFiPassword,
+    /// This resets the traffic shaper to 'unlimited' speed for all connections. It can
+    /// be useful when the shaper is showing obviously incorrect values for some peer
+    /// usually caused by bad network transients. While the shaper will eventually recover
+    /// this allows a human to do it right away
     ResetShaper,
+    /// Fully reboots the router, this includes a power cycle not just a restart of the
+    /// routing processes. For x86 machines this action comes with some risk as devices may
+    /// get stuck in the BIOS if not configured properly.
     Reboot,
+    /// Runs the update script now instead of waiting for the cron job to run on the hour mark
+    UpdateNow,
 }
 
 impl FromStr for OperatorAction {
