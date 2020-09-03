@@ -46,7 +46,7 @@ fn get_load_avg() -> Result<(f32, f32, f32), Error> {
     // cpu load average
     let load_average_error = Err(format_err!("Failed to get load average"));
     let lines = get_lines("/proc/loadavg")?;
-    let load_avg = match lines.iter().next() {
+    let load_avg = match lines.get(0) {
         Some(line) => line,
         None => return load_average_error,
     };
@@ -109,20 +109,23 @@ fn get_numcpus() -> Result<u32, Error> {
 
 fn maybe_get_single_line_u64(path: &str) -> Option<u64> {
     match get_lines(path) {
-        Ok(line) => match line.iter().next() {
-            Some(val) => match val.parse() {
-                Ok(res) => Some(res),
-                Err(_e) => None,
-            },
-            None => None,
-        },
+        Ok(line) => {
+            let var_name = line.get(0);
+            match var_name {
+                Some(val) => match val.parse() {
+                    Ok(res) => Some(res),
+                    Err(_e) => None,
+                },
+                None => None,
+            }
+        }
         Err(_e) => None,
     }
 }
 
 fn maybe_get_single_line_string(path: &str) -> Option<String> {
     match get_lines(path) {
-        Ok(line) => match line.iter().next() {
+        Ok(line) => match line.get(0) {
             Some(val) => Some(val.to_string()),
             None => None,
         },
