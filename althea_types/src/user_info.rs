@@ -110,6 +110,6 @@ pub struct WyreReservationRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WyreReservationResponse {
-    url: String,
-    reservation: String,
+    pub url: String,
+    pub reservation: String,
 }
