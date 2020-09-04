@@ -165,7 +165,7 @@ fn make_payment(mut pmt: PaymentTx) -> Result<(), Error> {
                                                 attempt: 0u8,
                                             }));
                                         }
-                                        SETTING.get_payment_mut().nonce += 1u64.into();
+                                        {SETTING.get_payment_mut().nonce += 1u64.into();}
 
 
                                         let ts = ToValidate {

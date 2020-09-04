@@ -118,8 +118,7 @@ struct Remove {
 
 /// Removes a transaction from the pending validation queue, it may either
 /// have been discovered to be invalid or have been successfully accepted
-fn remove(msg: Remove) {
-    let mut history = HISTORY.write().unwrap();
+fn remove(msg: Remove, history: &mut PaymentValidator) {
     let was_present = history.unvalidated_transactions.remove(&msg.tx);
     // store successful transactions so that they can't be played back to us, at least
     // during this session
@@ -183,7 +182,7 @@ pub async fn validate() {
 
 /// Attempt to validate that a given transaction has been accepted into the blockchain and
 /// is at least some configurable number of blocks behind the head.
-pub async fn validate_transaction(ts: &ToValidate, mut history: &mut PaymentValidator) {
+pub async fn validate_transaction(ts: &ToValidate, history: &mut PaymentValidator) {
     trace!("validating transaction");
     // we validate that a txid is present before adding to the validation list
     let txid = ts.payment.clone().txid.unwrap();
@@ -198,9 +197,9 @@ pub async fn validate_transaction(ts: &ToValidate, mut history: &mut PaymentVali
 
     if let (Ok(Some(transaction)), Ok(block_num)) = res {
         if !ts.checked {
-            checked(ts.clone(), &mut history);
+            checked(ts.clone(), history);
         }
-        handle_tx_messaging(txid, transaction, ts.clone(), block_num);
+        handle_tx_messaging(txid, transaction, ts.clone(), block_num, history);
     } else {
         trace!("Failed to check transaction {:#066x}", txid)
     }
@@ -213,6 +212,7 @@ fn handle_tx_messaging(
     transaction: TransactionResponse,
     ts: ToValidate,
     current_block: Uint256,
+    history: &mut PaymentValidator,
 ) {
     let from_address = ts.payment.from.eth_address;
     let amount = ts.payment.amount.clone();
@@ -222,10 +222,13 @@ fn handle_tx_messaging(
         Some(val) => val,
         None => {
             error!("Invalid TX! No destination!");
-            remove(Remove {
-                tx: ts,
-                success: false,
-            });
+            remove(
+                Remove {
+                    tx: ts,
+                    success: false,
+                },
+                history,
+            );
             return;
         }
     };
@@ -238,33 +241,44 @@ fn handle_tx_messaging(
 
     if !value_correct {
         error!("Transaction with invalid amount!");
-        remove(Remove {
-            tx: ts,
-            success: false,
-        });
+        remove(
+            Remove {
+                tx: ts,
+                success: false,
+            },
+            history,
+        );
         return;
     }
 
     if is_old {
         error!("Transaction is more than 6 hours old! {:#066x}", txid);
-        remove(Remove {
-            tx: ts,
-            success: false,
-        });
+        remove(
+            Remove {
+                tx: ts,
+                success: false,
+            },
+            history,
+        );
         return;
     }
 
     match (to_us, from_us, is_in_chain) {
         // we where successfully paid
         (true, false, true) => {
-            remove(Remove {
-                tx: ts,
-                success: true,
-            });
+            // remove this transaction from our storage
+            remove(
+                Remove {
+                    tx: ts,
+                    success: true,
+                },
+                history,
+            );
             info!(
                 "payment {:#066x} from {} for {} wei successfully validated!",
                 txid, from_address, amount
             );
+            // update debt keeper with the details of this payment
             let _ = payment_received(pmt.from, pmt.amount.clone());
 
             // update the usage tracker with the details of this payment
@@ -276,10 +290,15 @@ fn handle_tx_messaging(
                 "payment {:#066x} from {} for {} wei successfully sent!",
                 txid, from_address, amount
             );
-            remove(Remove {
-                tx: ts,
-                success: true,
-            });
+            // remove this transaction from our storage
+            remove(
+                Remove {
+                    tx: ts,
+                    success: true,
+                },
+                history,
+            );
+            // update debt keeper with the details of this payment
             let _ = payment_succeeded(pmt.to, pmt.amount.clone());
 
             // update the usage tracker with the details of this payment
@@ -287,17 +306,23 @@ fn handle_tx_messaging(
         }
         (true, true, _) => {
             error!("Transaction to ourselves!");
-            remove(Remove {
-                tx: ts,
-                success: false,
-            });
+            remove(
+                Remove {
+                    tx: ts,
+                    success: false,
+                },
+                history,
+            );
         }
         (false, false, _) => {
             error!("Transaction has nothing to do with us?");
-            remove(Remove {
-                tx: ts,
-                success: false,
-            });
+            remove(
+                Remove {
+                    tx: ts,
+                    success: false,
+                },
+                history,
+            );
         }
         (_, _, false) => {
             //transaction waiting for validation, do nothing
