@@ -1,5 +1,5 @@
 use crate::rita_common::blockchain_oracle::update as BlockchainOracleUpdate;
-use crate::rita_common::debt_keeper::{send_debt_update};
+use crate::rita_common::debt_keeper::send_debt_update;
 use crate::rita_common::network_monitor::NetworkInfo as NetworkMonitorTick;
 use crate::rita_common::network_monitor::NetworkMonitor;
 use crate::rita_common::payment_validator::validate;
