@@ -226,6 +226,14 @@ fn checkin() {
                         Some(OperatorAction::ChangeOperatorAddress { new_address }) => {
                             SETTING.get_operator_mut().operator_address = new_address;
                         }
+                        Some(OperatorAction::ChangeReleaseFeedAndUpdate { feed }) => {
+                            handle_release_feed_update(Some(feed));
+                            // this runs the update shell script, if an update is found a reboot will occur
+                            // it is possible that the script fails to grab the package index or a package
+                            // due to network conditions this will cause the update to be delayed until the
+                            // next hour when the cron job runs or until an UpdateNow is sent
+                            let _res = KI.run_command("ash", &["/etc/update.ash"]);
+                        }
                         None => {}
                     }
 

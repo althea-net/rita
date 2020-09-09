@@ -331,7 +331,7 @@ pub struct PaymentTx {
     pub txid: Option<Uint256>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Hash, Clone, Debug, Eq, PartialEq)]
 pub enum ReleaseStatus {
     Custom(String),
     ReleaseCandidate,
@@ -363,7 +363,7 @@ impl FromStr for ReleaseStatus {
 }
 
 /// Something the operator may want to do to a router under their control
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub enum OperatorAction {
     /// Resets the Rita dashboard password. This is the password users use to login
     /// to the router dashboard, which is distinct from the WiFi password. This
@@ -385,6 +385,10 @@ pub enum OperatorAction {
     Reboot,
     /// Runs the update script now instead of waiting for the cron job to run on the hour mark
     UpdateNow,
+    /// Changes the release feed to the specified value and runs the update script immediately after
+    /// instead of waiting for the cron job to complete. This allows for a simple, single operation
+    /// update of a specific router.
+    ChangeReleaseFeedAndUpdate { feed: ReleaseStatus },
     /// Changes the operator address of a given router in order to support Beta 15 and below
     /// this has it's own logic in the operator tools that will later be removed for the logic
     /// you see in Althea_rs
@@ -414,6 +418,13 @@ impl FromStr for OperatorAction {
                             return Ok(OperatorAction::ChangeOperatorAddress {
                                 new_address: Some(address),
                             });
+                        }
+                    }
+                } else if s.to_lowercase().contains("changereleasefeedandupdate") {
+                    let feed = s.split('_').last();
+                    if let Some(feed) = feed {
+                        if let Ok(feed) = feed.parse() {
+                            return Ok(OperatorAction::ChangeReleaseFeedAndUpdate { feed });
                         }
                     }
                 }
