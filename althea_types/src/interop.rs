@@ -385,21 +385,44 @@ pub enum OperatorAction {
     Reboot,
     /// Runs the update script now instead of waiting for the cron job to run on the hour mark
     UpdateNow,
+    /// Changes the operator address of a given router in order to support Beta 15 and below
+    /// this has it's own logic in the operator tools that will later be removed for the logic
+    /// you see in Althea_rs
+    ChangeOperatorAddress { new_address: Option<Address> },
 }
 
 impl FromStr for OperatorAction {
     type Err = Error;
     fn from_str(s: &str) -> Result<OperatorAction, Error> {
         match s {
+            // todo this is kinda verbose, maybe use to_lower_case()?
             "ResetRouterPassword" => Ok(OperatorAction::ResetRouterPassword),
             "ResetWiFiPassword" => Ok(OperatorAction::ResetWiFiPassword),
             "ResetShaper" => Ok(OperatorAction::ResetShaper),
             "Reboot" => Ok(OperatorAction::Reboot),
+            "UpdateNow" => Ok(OperatorAction::UpdateNow),
             "resetrouterpassword" => Ok(OperatorAction::ResetRouterPassword),
             "resetwifipassword" => Ok(OperatorAction::ResetWiFiPassword),
             "resetshaper" => Ok(OperatorAction::ResetShaper),
             "reboot" => Ok(OperatorAction::Reboot),
-            _ => Err(format_err!("Invalid Operator Action")),
+            "updatenow" => Ok(OperatorAction::UpdateNow),
+            s => {
+                if s.to_lowercase().contains("changeoperatoraddress") {
+                    let address = s.split('_').last();
+                    if let Some(address) = address {
+                        if let Ok(address) = address.parse() {
+                            return Ok(OperatorAction::ChangeOperatorAddress {
+                                new_address: Some(address),
+                            });
+                        }
+                    }
+                }
+                let val: Result<OperatorAction, _> = serde_json::from_str(s);
+                match val {
+                    Ok(v) => Ok(v),
+                    Err(_e) => Err(format_err!("Invalid Operator Action")),
+                }
+            }
         }
     }
 }

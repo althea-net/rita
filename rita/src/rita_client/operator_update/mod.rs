@@ -223,6 +223,9 @@ fn checkin() {
                             // due to network conditions this will cause the operation to do nothing.
                             let _res = KI.run_command("ash", &["/etc/update.ash"]);
                         }
+                        Some(OperatorAction::ChangeOperatorAddress { new_address }) => {
+                            SETTING.get_operator_mut().operator_address = new_address;
+                        }
                         None => {}
                     }
 
