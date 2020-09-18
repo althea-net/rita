@@ -214,7 +214,7 @@ fn read_babel_sync(output: &str) -> Result<String, BabelMonitorError> {
     let mut ret = String::new();
     for line in output.lines() {
         ret.push_str(line);
-        ret.push_str("\n");
+        ret.push('\n');
         match line.trim() {
             "ok" => {
                 trace!(
@@ -794,7 +794,7 @@ ok\n";
         assert_eq!(route.price, 3072);
         // assert that these are equal within the minimum comparison difference
         // of float values
-        assert!(route.full_path_rtt - 22.805 < f32::EPSILON);
+        assert!(route.full_path_rtt - 22.805 < f32::EPSILON.abs());
     }
 
     #[test]
