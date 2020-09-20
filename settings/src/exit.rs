@@ -87,6 +87,10 @@ fn default_balance_notification_email_body() -> String {
     String::from("Your Althea router has a low balance! Your service will be slow until more funds are added. Visit althea.net/add-funds")
 }
 
+fn default_remote_log() -> bool {
+    false
+}
+
 /// These are the settings for email verification
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct EmailVerifSettings {
@@ -135,11 +139,11 @@ fn default_balance_notification_text_body() -> String {
 
 /// These are the settings for text message verification using the twillio api
 /// note that while you would expect the authentication and text notification flow
-/// to be the same they are in fact totally different and each have seperate
+/// to be the same they are in fact totally different and each have separate
 /// credentials below
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct PhoneVerifSettings {
-    /// API key used for the authenticaiton calls
+    /// API key used for the authentication calls
     pub auth_api_key: String,
     /// The Twillio number used to send the notification message
     pub notification_number: String,
@@ -168,10 +172,14 @@ pub enum ExitVerifSettings {
 /// This is the main settings struct for rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct RitaExitSettingsStruct {
-    // starts with file:// or postgres://username:password@localhost/diesel_demo
+    /// starts with file:// or postgres://username:password@localhost/diesel_demo
     db_uri: String,
-    // the size of the worker thread pool, the connection pool is this plus one
+    /// the size of the worker thread pool, the connection pool is this plus one
     workers: u32,
+    /// if we should log remotely or if we should send our logs to the logging server
+    #[serde(default = "default_remote_log")]
+    remote_log: bool,
+    /// The description of this exit, what is sent to clients and displayed to the user
     description: String,
     payment: PaymentSettings,
     #[serde(default)]
@@ -183,7 +191,7 @@ pub struct RitaExitSettingsStruct {
     #[serde(skip_serializing_if = "HashSet::is_empty", default)]
     allowed_countries: HashSet<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    verif_settings: Option<ExitVerifSettings>, // mailer's successor with new verif methods readiness
+    verif_settings: Option<ExitVerifSettings>,
     #[serde(skip)]
     future: bool,
 }
@@ -195,6 +203,7 @@ impl RitaExitSettingsStruct {
         RitaExitSettingsStruct {
             db_uri: "".to_string(),
             workers: 1,
+            remote_log: false,
             description: "".to_string(),
             payment: PaymentSettings::default(),
             localization: LocalizationSettings::default(),
@@ -216,6 +225,7 @@ pub trait RitaExitSettings {
         &'me self,
     ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, Option<ExitVerifSettings>>;
     fn get_db_uri(&self) -> String;
+    fn get_remote_log(&self) -> bool;
     fn get_workers(&self) -> u32;
     fn get_description(&self) -> String;
     fn get_allowed_countries<'ret, 'me: 'ret>(
@@ -231,6 +241,9 @@ impl RitaExitSettings for Arc<RwLock<RitaExitSettingsStruct>> {
     }
     fn get_db_uri(&self) -> String {
         self.read().unwrap().db_uri.clone()
+    }
+    fn get_remote_log(&self) -> bool {
+        self.read().unwrap().remote_log
     }
     fn get_workers(&self) -> u32 {
         self.read().unwrap().workers

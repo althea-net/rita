@@ -58,6 +58,7 @@ use crate::rita_client::rita_loop::start_rita_client_endpoints;
 use crate::rita_common::dashboard::own_info::READABLE_VERSION;
 use crate::rita_common::rita_loop::check_rita_common_actors;
 use crate::rita_common::rita_loop::start_core_rita_endpoints;
+use crate::rita_common::utils::env_vars_contains;
 
 use crate::rita_client::dashboard::auth::*;
 use crate::rita_client::dashboard::backup_created::*;
@@ -172,15 +173,6 @@ lazy_static! {
 lazy_static! {
     pub static ref SETTING: Arc<RwLock<RitaSettingsStruct>> =
         Arc::new(RwLock::new(RitaSettingsStruct::default()));
-}
-
-fn env_vars_contains(var_name: &str) -> bool {
-    for (key, _value) in env::vars_os() {
-        if key == var_name {
-            return true;
-        }
-    }
-    false
 }
 
 /// Some devices (n600/n750) will provide junk file reads during disk init

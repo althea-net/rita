@@ -59,11 +59,12 @@ mod rita_common;
 mod rita_exit;
 
 use crate::rita_common::dashboard::own_info::READABLE_VERSION;
+use crate::rita_common::utils::env_vars_contains;
 use rita_common::rita_loop::check_rita_common_actors;
 use rita_common::rita_loop::start_core_rita_endpoints;
-use rita_exit::rita_loop::check_rita_exit_actors;
 use rita_exit::rita_loop::start_rita_exit_endpoints;
 use rita_exit::rita_loop::start_rita_exit_loop;
+use rita_exit::{enable_remote_logging, rita_loop::check_rita_exit_actors};
 
 use crate::rita_common::dashboard::babel::*;
 use crate::rita_common::dashboard::debts::*;
@@ -222,7 +223,18 @@ fn main() {
     // On Linux static builds we need to probe ssl certs path to be able to
     // do TLS stuff.
     openssl_probe::init_ssl_cert_env_vars();
-    env_logger::init();
+
+    // An exit setting dictating if this exit operator wants to log remotely or locally
+    let should_remote_log = SETTING.get_remote_log();
+    // if remote logging is disabled, or the NO_REMOTE_LOG env var is set we should use the
+    // local logger and log to std-out. Note we don't care what is actually set in NO_REMOTE_LOG
+    // just that it is set
+    if !should_remote_log || env_vars_contains("NO_REMOTE_LOG") {
+        env_logger::init();
+    } else {
+        let res = enable_remote_logging();
+        println!("logging status {:?}", res);
+    }
 
     if cfg!(feature = "development") {
         println!("Warning!");
