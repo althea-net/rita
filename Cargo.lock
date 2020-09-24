@@ -213,12 +213,14 @@ dependencies = [
  "actix-utils 2.0.0",
  "base64 0.12.3",
  "bitflags",
+ "brotli2",
  "bytes 0.5.6",
  "cookie 0.14.2",
  "copyless",
  "derive_more",
  "either",
  "encoding_rs",
+ "flate2",
  "futures-channel",
  "futures-core",
  "futures-util",
@@ -3516,7 +3518,7 @@ dependencies = [
  "tokio-io",
  "trust-dns-resolver 0.10.3",
  "web30 0.4.3",
- "web30 0.5.0",
+ "web30 0.6.1",
 ]
 
 [[package]]
@@ -4875,6 +4877,28 @@ source = "git+https://github.com/althea-net/web30?rev=53d83bc74a0218eddc4221cf2f
 dependencies = [
  "actix 0.9.0",
  "actix-web 2.0.0",
+ "assert-json-diff",
+ "bytes 0.5.6",
+ "clarity",
+ "failure",
+ "futures 0.3.5",
+ "futures-timer 3.0.2",
+ "log",
+ "num256",
+ "serde 1.0.114",
+ "serde_derive",
+ "serde_json",
+ "tokio 0.2.22",
+]
+
+[[package]]
+name = "web30"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d511f2f203b133aaeee2142d191fcb85e9fb7537fed0868ae5a1da450b53bca5"
+dependencies = [
+ "actix 0.10.0",
+ "actix-web 3.0.2",
  "assert-json-diff",
  "bytes 0.5.6",
  "clarity",
