@@ -30,8 +30,8 @@ web30 = {git = "https://github.com/althea-net/web30", rev = "4002ac7deca2e7ecbda
 # duplicate async dependencies, we are currently carrying both futures 0.1 and modern async/await dependencies
 # these will be kept here for quite some time until the switch is completed.
 async-web30 = {package="web30", git = "https://github.com/althea-net/web30", rev = "53d83bc74a0218eddc4221cf2fb6eefe49fba1d9" }
-actix-async = {package="actix", version = "0.9"}
-actix-web-async = {package="actix-web", version = "2.0", default_features = false, features= ["openssl"] }
+actix-async = {package="actix", version = "0.10"}
+actix-web-async = {package="actix-web", version = "3.0", default_features = false, features= ["openssl"] }
 
 actix = "0.7"
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
@@ -45,12 +45,12 @@ env_logger = "0.7"
 failure = "0.1"
 futures01 = { package = "futures", version = "0.1"}
 futures = { version = "0.3", features = ["compat"] }
-handlebars = "3.0"
+handlebars = "3.5"
 ipnetwork = "0.14"
 lazy_static = "1.4"
 log = { version = "0.4", features = ["release_max_level_info"] }
 minihttpse = "0.1"
-mockito = "0.25"
+mockito = "0.27"
 mockstream = "0.0"
 rand = "0.7"
 serde = "1.0"
@@ -68,8 +68,8 @@ lettre = "0.9"
 lettre_email = "0.9"
 phonenumber = "0.2"
 r2d2 = "0.8"
-sha3 = "0.8"
-hex-literal = "0.2"
+sha3 = "0.9"
+hex-literal = "0.3"
 sodiumoxide = "0.2"
 compressed_log = "0.2"
 flate2 = { version = "1.0", features = ["rust_backend"], default-features = false }
