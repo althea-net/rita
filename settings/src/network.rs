@@ -107,6 +107,11 @@ pub struct NetworkSettings {
     /// where there is significant jitter that's not caused by traffic load
     #[serde(default = "default_shaper_settings")]
     pub shaper_settings: ShaperSettings,
+    /// This is a user provided bandwidth limit (upload and download) to be enforced
+    /// by cake. Traffic is shaped incoming on wg_exit and outgoing on br_lan resulting
+    /// in a symmetrical limit of the users choice. Specified in mbit/s
+    #[serde(default)]
+    pub user_bandwidth_limit: Option<usize>,
 }
 
 impl Default for NetworkSettings {
@@ -137,6 +142,7 @@ impl Default for NetworkSettings {
             device: None,
             nickname: None,
             usage_tracker_file: default_usage_tracker_file(),
+            user_bandwidth_limit: None,
         }
     }
 }

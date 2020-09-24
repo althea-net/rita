@@ -24,6 +24,10 @@ pub struct ClientExitTunnelConfig {
     /// interface, I'm nearly positive this can be safely removed because the implementation of
     /// peer discovery has been changed since it was first needed
     pub rita_hello_port: u16,
+    /// This is a user provided bandwidth limit (upload and download) to be enforced
+    /// by cake. Traffic is shaped incoming on wg_exit and outgoing on br_lan resulting
+    /// in a symmetrical limit of the users choice. Specified in mbit/s
+    pub user_specified_speed: Option<usize>,
 }
 
 impl dyn KernelInterface {
@@ -141,7 +145,8 @@ impl dyn KernelInterface {
             .into());
         }
 
-        let _res = self.set_codel_shaping("wg_exit", None, true);
+        let _res = self.set_codel_shaping("wg_exit", args.user_specified_speed, true);
+        let _res = self.set_codel_shaping("br-lan", args.user_specified_speed, false);
 
         Ok(())
     }

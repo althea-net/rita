@@ -67,6 +67,7 @@ fn linux_setup_exit_tunnel(
         local_ip: our_details.client_internal_ip,
         netmask: general_details.netmask,
         rita_hello_port: SETTING.get_network().rita_hello_port,
+        user_specified_speed: SETTING.get_network().user_bandwidth_limit,
     };
 
     KI.set_client_exit_tunnel_config(args)?;
