@@ -270,7 +270,7 @@ fn start_client_dashboard() {
             .route("/dao_fee", Method::GET, get_dao_fee)
             .route("/dao_fee/{fee}", Method::POST, set_dao_fee)
             .route("/operator", Method::GET, get_operator)
-            .route("/operator", Method::POST, change_operator)
+            .route("/operator/{address}", Method::POST, change_operator)
             .route("/operator/remove", Method::POST, remove_operator)
             .route("/operator_fee", Method::GET, get_operator_fee)
             .route("/operator_debt", Method::GET, get_operator_debt)
