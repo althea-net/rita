@@ -160,10 +160,7 @@ impl TokenBridge {
                 eth_amount,
                 own_address,
                 secret,
-                vec![
-                    SendTxOption::GasLimit(UNISWAP_GAS_LIMIT.into()),
-                    SendTxOption::GasPriceMultiplier(2u32.into()),
-                ],
+                vec![SendTxOption::GasLimit(UNISWAP_GAS_LIMIT.into())],
             ),
         )
         .await??;
@@ -295,10 +292,7 @@ impl TokenBridge {
                 0u32.into(),
                 own_address,
                 secret,
-                vec![
-                    SendTxOption::GasLimit(UNISWAP_GAS_LIMIT.into()),
-                    SendTxOption::GasPriceMultiplier(2u32.into()),
-                ],
+                vec![SendTxOption::GasLimit(UNISWAP_GAS_LIMIT.into())],
             ),
         )
         .await?;
@@ -348,10 +342,7 @@ impl TokenBridge {
                 0u32.into(),
                 own_address,
                 secret,
-                vec![
-                    SendTxOption::GasLimit(ERC20_GAS_LIMIT.into()),
-                    SendTxOption::GasPriceMultiplier(2u32.into()),
-                ],
+                vec![SendTxOption::GasLimit(ERC20_GAS_LIMIT.into())],
             )
             .await?;
 

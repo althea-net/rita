@@ -29,7 +29,7 @@ web30 = {git = "https://github.com/althea-net/web30", rev = "4002ac7deca2e7ecbda
 
 # duplicate async dependencies, we are currently carrying both futures 0.1 and modern async/await dependencies
 # these will be kept here for quite some time until the switch is completed.
-async-web30 = {package="web30", version = "0.6"}
+async-web30 = {package="web30", version = "0.6.1"}
 actix-async = {package="actix", version = "0.10"}
 actix-web-async = {package="actix-web", version = "3.0", default_features = false, features= ["openssl"] }
 
