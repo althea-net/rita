@@ -5,7 +5,7 @@ authors = ["Jehan <jehan.tremback@gmail.com>, Justin <justin@althea.net>"]
 edition = "2018"
 
 [dependencies]
-web30 = { git = "https://github.com/althea-net/web30", rev = "53d83bc74a0218eddc4221cf2fb6eefe49fba1d9" }
+web30 = "0.6"
 futures = "0.3"
 failure = "0.1"
 num256 = "0.2"
@@ -16,4 +16,4 @@ log = "0.4"
 tokio = {version = "0.2", default_features = false, features = ["time"]}
 
 [dev-dependencies]
-actix = "0.9"
+actix = "0.10"
