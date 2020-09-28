@@ -25,12 +25,13 @@ pub fn start_rita_slow_loop() {
         while let Err(e) = {
             thread::spawn(move || loop {
                 let start = Instant::now();
-                trace!("Common Slow tick!");
+                info!("Common Slow tick!");
 
                 let res = System::run(move || {
                     Arbiter::spawn(async move {
                         tick_token_bridge().await;
                         tick_simulated_tx().await;
+                        info!("Common Slow tick async completed!");
                         System::current().stop();
                     });
                 });
@@ -41,6 +42,7 @@ pub fn start_rita_slow_loop() {
                 // we really only need to run this on startup, but doing so periodically
                 // could catch the edge case where babel is restarted under us
                 set_babel_price();
+                info!("Common Slow tick completed!");
 
                 // sleep until it has been SLOW_LOOP_SPEED seconds from start, whenever that may be
                 // if it has been more than SLOW_LOOP_SPEED seconds from start, go right ahead

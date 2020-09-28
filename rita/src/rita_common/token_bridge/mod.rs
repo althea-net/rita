@@ -155,7 +155,7 @@ pub async fn tick_token_bridge() {
     }
     drop(payment_settings);
 
-    trace!("Launching bridge future with state {}", bridge.state);
+    info!("Launching bridge future with state {}", bridge.state);
     match system_chain {
         SystemChain::Xdai => state_change(xdai_bridge(bridge.state.clone()).await),
         SystemChain::Ethereum => eth_bridge().await,
