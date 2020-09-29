@@ -75,8 +75,10 @@ fn is_timed_out(started: Instant) -> bool {
     Instant::now() - started > BRIDGE_TIMEOUT
 }
 
+const WEI_PER_ETH: u128 = 1_000_000_000_000_000_000_u128;
+
 pub fn eth_to_wei(eth: u64) -> Uint256 {
-    let wei = (eth * 1_000_000_000_000_000_000_u64) as u64;
+    let wei = eth as u128 * WEI_PER_ETH;
     wei.into()
 }
 
@@ -402,7 +404,11 @@ async fn xdai_bridge(state: State) -> State {
             .xdai_to_dai_bridge(amount.clone(), SETTING.get_payment().gas_price.clone())
             .await
         {
-            Ok(_amount_bridged) => {
+            Ok(amount_bridged) => {
+                info!(
+                    "We sent {} across the bridge, the user requested {}",
+                    amount_bridged, amount
+                );
                 // Only change to Withdraw if there was no error
                 detailed_state_change(DetailedBridgeState::XdaiToDai {
                     amount: amount.clone(),
@@ -453,14 +459,14 @@ async fn xdai_bridge(state: State) -> State {
             if is_timed_out(timestamp) {
                 error!("Withdraw timed out!");
                 detailed_state_change(DetailedBridgeState::NoOp {
-                    eth_balance: Uint256::zero(),
-                    wei_per_dollar: Uint256::zero(),
+                    eth_balance: our_dai_balance,
+                    wei_per_dollar,
                 });
                 State::Ready
             } else {
                 info!(
-                    "bridge withdraw state is {} dai {} eth {} wei per dollar",
-                    our_dai_balance, our_eth_balance, wei_per_dollar
+                    "bridge withdraw state is {} dai {} eth {} wei per dollar {} amount {} withdraw_all {:?} amount_actually_exchanged",
+                    our_dai_balance, our_eth_balance, wei_per_dollar, amount, withdraw_all, amount_actually_exchanged
                 );
 
                 // this conversion is unique in that it's not lossy, when we withdraw
@@ -547,15 +553,22 @@ fn eth_balance_ready(
     dai_amount: Uint256,
     wei_per_dollar: Uint256,
 ) -> bool {
+    // padding is equal to 1/PADDING interpreted as a percent
+    // so 1/10 is 10%
     const PADDING: u32 = 10;
     if let Some(amount_actually_exchanged) = amount_actually_exchanged {
         let padding = amount_actually_exchanged.clone() / PADDING.into();
         let threshold = amount_actually_exchanged - padding;
+        info!("our_eth_balance {} >= {}", our_eth_balance, threshold);
         our_eth_balance >= threshold
     } else {
         let padding = dai_amount.clone() / PADDING.into();
         let threshold = dai_amount - padding;
-        our_eth_balance / wei_per_dollar > threshold
+        info!(
+            "our_eth_balance {} / {} wei_per_dollar >= {}",
+            our_eth_balance, wei_per_dollar, threshold
+        );
+        (our_eth_balance / wei_per_dollar) * WEI_PER_ETH.into() >= threshold
     }
 }
 
