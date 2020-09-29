@@ -62,6 +62,7 @@ use crate::rita_common::utils::env_vars_contains;
 
 use crate::rita_client::dashboard::auth::*;
 use crate::rita_client::dashboard::backup_created::*;
+use crate::rita_client::dashboard::bandwidth_limit::*;
 use crate::rita_client::dashboard::contact_info::*;
 use crate::rita_client::dashboard::eth_private_key::*;
 use crate::rita_client::dashboard::exits::*;
@@ -394,6 +395,12 @@ fn start_client_dashboard() {
             )
             .route("/billing_details", Method::GET, get_billing_details)
             .route("/billing_details", Method::POST, set_billing_details)
+            .route("/bandwidth_limit", Method::GET, get_bandwidth_limit)
+            .route(
+                "/bandwidth_limit/{limit}",
+                Method::POST,
+                set_bandwidth_limit,
+            )
             .route(
                 "/operator_setup/{enabled}",
                 Method::POST,

@@ -6,6 +6,7 @@
 
 pub mod auth;
 pub mod backup_created;
+pub mod bandwidth_limit;
 pub mod contact_info;
 pub mod eth_private_key;
 pub mod exits;

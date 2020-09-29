@@ -555,6 +555,9 @@ pub struct OperatorCheckinMessage {
     /// Info about the current state of this device, including it's model, CPU,
     /// memory, and temperature if sensors are available
     pub hardware_info: Option<HardwareInfo>,
+    /// This is a user set bandwidth limit value, it will cap the users download
+    /// and upload to the provided value of their choosing. Denoted in mbps
+    pub user_bandwidth_limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

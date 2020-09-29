@@ -102,6 +102,7 @@ fn checkin() {
     let contact_info = option_convert(SETTING.get_exit_client().contact_info.clone());
     let install_details = operator_settings.installation_details.clone();
     let billing_details = operator_settings.billing_details.clone();
+    let user_bandwidth_limit = SETTING.get_network().user_bandwidth_limit;
 
     drop(operator_settings);
 
@@ -149,6 +150,7 @@ fn checkin() {
             install_details,
             billing_details,
             hardware_info,
+            user_bandwidth_limit,
         })
         .unwrap()
         .send()
