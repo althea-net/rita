@@ -18,44 +18,25 @@ use web30::client::Web3;
 
 pub const WITHDRAW_TIMEOUT: Duration = Duration::from_secs(10);
 
-pub fn withdraw(
-    path: Path<(Address, Uint256)>,
+fn withdraw_handler(
+    address: Address,
+    amount: Option<Uint256>,
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
-    let address = path.0;
-    let amount = path.1.clone();
-    debug!("/withdraw/{:#x}/{} hit", address, amount);
-    let payment_settings = SETTING.get_payment();
-    let system_chain = payment_settings.system_chain;
-    let withdraw_chain = payment_settings.withdraw_chain;
-    drop(payment_settings);
-
-    match (system_chain, withdraw_chain) {
-        (SystemChain::Ethereum, SystemChain::Ethereum) => eth_compatable_withdraw(address, amount),
-        (SystemChain::Rinkeby, SystemChain::Rinkeby) => eth_compatable_withdraw(address, amount),
-        (SystemChain::Xdai, SystemChain::Xdai) => eth_compatable_withdraw(address, amount),
-        (SystemChain::Xdai, SystemChain::Ethereum) => xdai_to_eth_withdraw(address, amount, false),
-        (_, _) => Box::new(future::ok(
-            HttpResponse::new(StatusCode::from_u16(500u16).unwrap())
-                .into_builder()
-                .json(format!(
-                    "System chain is {} but withdraw chain is {}, withdraw impossible!",
-                    system_chain, withdraw_chain
-                )),
-        )),
-    }
-}
-
-pub fn withdraw_all(path: Path<Address>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
-    let address = path.into_inner();
-    debug!("/withdraw_all/{} hit", address);
+    debug!("/withdraw/{:#x}/{:?} hit", address, amount);
     let payment_settings = SETTING.get_payment();
     let system_chain = payment_settings.system_chain;
     let withdraw_chain = payment_settings.withdraw_chain;
     let mut gas_price = payment_settings.gas_price.clone();
     let balance = payment_settings.balance.clone();
     drop(payment_settings);
+    let mut withdraw_all = false;
 
-    zero_window_start();
+    // if no amount is specified we are withdrawing our entire balance
+    let mut amount = if let Some(amount) = amount {
+        amount
+    } else {
+        balance.clone()
+    };
 
     let tx_gas: Uint256 =
         if (system_chain, withdraw_chain) == (SystemChain::Xdai, SystemChain::Ethereum) {
@@ -68,12 +49,19 @@ pub fn withdraw_all(path: Path<Address>) -> Box<dyn Future<Item = HttpResponse, 
         };
 
     let tx_cost = gas_price * tx_gas;
-    let amount = balance - tx_cost;
+    if amount.clone() + tx_cost.clone() >= balance {
+        zero_window_start();
+        amount = balance - tx_cost;
+        withdraw_all = true
+    }
+
     match (system_chain, withdraw_chain) {
         (SystemChain::Ethereum, SystemChain::Ethereum) => eth_compatable_withdraw(address, amount),
         (SystemChain::Rinkeby, SystemChain::Rinkeby) => eth_compatable_withdraw(address, amount),
         (SystemChain::Xdai, SystemChain::Xdai) => eth_compatable_withdraw(address, amount),
-        (SystemChain::Xdai, SystemChain::Ethereum) => xdai_to_eth_withdraw(address, amount, true),
+        (SystemChain::Xdai, SystemChain::Ethereum) => {
+            xdai_to_eth_withdraw(address, amount, withdraw_all)
+        }
         (_, _) => Box::new(future::ok(
             HttpResponse::new(StatusCode::from_u16(500u16).unwrap())
                 .into_builder()
@@ -83,6 +71,18 @@ pub fn withdraw_all(path: Path<Address>) -> Box<dyn Future<Item = HttpResponse, 
                 )),
         )),
     }
+}
+
+pub fn withdraw(
+    path: Path<(Address, Uint256)>,
+) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+    withdraw_handler(path.0, Some(path.1.clone()))
+}
+
+pub fn withdraw_all(path: Path<Address>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+    let address = path.into_inner();
+    debug!("/withdraw_all/{} hit", address);
+    withdraw_handler(address, None)
 }
 
 /// Withdraw for eth compatible chains
