@@ -182,7 +182,7 @@ impl Tunnel {
         light_client_details: Option<Ipv4Addr>,
     ) -> Result<Tunnel, Error> {
         let speed_limit = None;
-        let iface_name = KI.setup_wg_if().unwrap();
+        let iface_name = KI.setup_wg_if()?;
         let mut network = SETTING.get_network_mut().clone();
         let args = TunnelOpenArgs {
             interface: iface_name.clone(),
@@ -1041,7 +1041,7 @@ fn tunnel_state_change(
         }
     }
 
-    // this is done ouside of the match to make the borrow checker happy
+    // this is done outside of the match to make the borrow checker happy
     if tunnel_bw_limits_need_change {
         let res = tunnel_bw_limit_update(&tunnels);
         // if this fails consistently it could be a wallet draining attack

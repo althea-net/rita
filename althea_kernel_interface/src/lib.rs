@@ -60,6 +60,8 @@ pub enum KernelInterfaceError {
     NoInterfaceError(String),
     #[fail(display = "Address isn't ready yet: {:?}", _0)]
     AddressNotReadyError(String),
+    #[fail(display = "Wireguard Interface Already exists")]
+    WgExistsError,
 }
 
 impl From<FromUtf8Error> for KernelInterfaceError {
