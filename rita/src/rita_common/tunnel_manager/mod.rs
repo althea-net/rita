@@ -131,15 +131,28 @@ fn test_payment_state() {
 
 #[derive(PartialEq, Debug, Clone, Eq, Hash)]
 pub struct Tunnel {
-    pub ip: IpAddr,                             // Tunnel endpoint
-    pub iface_name: String,                     // name of wg#
-    pub listen_ifidx: u32, // the physical interface this tunnel is listening on
-    pub listen_port: u16,  // the local port this tunnel is listening on
-    pub neigh_id: LocalIdentity, // the identity of the counterparty tunnel
-    pub last_contact: Instant, // When's the last we heard from the other end of this tunnel?
-    created: Instant,      // when this tunnel was created, private to prevent outside editing
-    pub speed_limit: Option<usize>, // banwidth limit in mbps, used for Codel shaping
-    pub light_client_details: Option<Ipv4Addr>, // if Some this tunnel is for a light client
+    /// The tunnel endpoint
+    pub ip: IpAddr,
+    /// the name of the tunnel in the format of wg# numbers are assigned
+    /// in an incrementing fashion but may become inconsistent as tunnels
+    /// are closed and reopened.
+    pub iface_name: String,
+    /// The linux interface id for the physical interface this tunnel is listening on
+    pub listen_ifidx: u32,
+    /// The port this tunnel is listening on
+    pub listen_port: u16,
+    /// The identity of the counter party tunnel
+    pub neigh_id: LocalIdentity,
+    /// An instant representing the last time we heard from this tunnel r
+    pub last_contact: Instant,
+    /// When this tunnel was created
+    created: Instant,
+    /// Bandwidth limit for codel shaping on this interface, set in mbps be aware this
+    /// many or may not actually be set depending on if the host supports codel although
+    /// all routers do only exits are in question
+    pub speed_limit: Option<usize>,
+    /// If true this tunnel is for a light client and is working over ipv4 endpoints
+    pub light_client_details: Option<Ipv4Addr>,
     state: TunnelState,
 }
 
