@@ -176,54 +176,63 @@ impl Display for Tunnel {
 impl Tunnel {
     pub fn new(
         ip: IpAddr,
-        iface_name: String,
         our_listen_port: u16,
         ifidx: u32,
-        their_id: LocalIdentity,
+        neigh_id: LocalIdentity,
         light_client_details: Option<Ipv4Addr>,
-    ) -> Tunnel {
-        Tunnel {
-            ip,
-            iface_name,
-            listen_ifidx: ifidx,
-            listen_port: our_listen_port,
-            neigh_id: their_id,
-            last_contact: Instant::now(),
-            created: Instant::now(),
-            speed_limit: None,
-            light_client_details,
-            // By default new tunnels are in Registered state
-            state: TunnelState {
-                payment_state: PaymentState::Paid,
-                registration_state: RegistrationState::Registered,
-            },
-        }
-    }
-
-    pub fn created(&self) -> Instant {
-        self.created
-    }
-
-    /// Open a real tunnel to match the virtual tunnel we store in memory
-    pub fn open(&self, light_client_details: Option<Ipv4Addr>) -> Result<(), Error> {
-        let network = SETTING.get_network().clone();
+    ) -> Result<Tunnel, Error> {
+        let speed_limit = None;
+        let iface_name = KI.setup_wg_if().unwrap();
+        let mut network = SETTING.get_network_mut().clone();
         let args = TunnelOpenArgs {
-            interface: self.iface_name.clone(),
-            port: self.listen_port,
-            endpoint: SocketAddr::new(self.ip, self.neigh_id.wg_port),
-            remote_pub_key: self.neigh_id.global.wg_public_key,
+            interface: iface_name.clone(),
+            port: our_listen_port,
+            endpoint: SocketAddr::new(ip, neigh_id.wg_port),
+            remote_pub_key: neigh_id.global.wg_public_key,
             private_key_path: Path::new(&network.wg_private_key_path),
             own_ip: match network.mesh_ip {
                 Some(ip) => ip,
                 None => bail!("No mesh IP configured yet"),
             },
             external_nic: network.external_nic.clone(),
-            settings_default_route: &mut SETTING.get_network_mut().default_route,
+            settings_default_route: &mut network.default_route,
             allowed_ipv4_address: light_client_details,
         };
 
         KI.open_tunnel(args)?;
-        KI.set_codel_shaping(&self.iface_name, self.speed_limit, false)
+        KI.set_codel_shaping(&iface_name, speed_limit, false)?;
+
+        let now = Instant::now();
+        let t = Tunnel {
+            ip,
+            iface_name,
+            listen_ifidx: ifidx,
+            listen_port: our_listen_port,
+            neigh_id,
+            last_contact: now,
+            created: now,
+            speed_limit,
+            light_client_details,
+            // By default new tunnels are in Registered state
+            state: TunnelState {
+                payment_state: PaymentState::Paid,
+                registration_state: RegistrationState::Registered,
+            },
+        };
+
+        match light_client_details {
+            None => {
+                // attach babel, the argument indicates that this is attempt zero
+                t.monitor(0);
+            }
+            Some(_) => {}
+        }
+
+        Ok(t)
+    }
+
+    pub fn created(&self) -> Instant {
+        self.created
     }
 
     /// Register this tunnel into Babel monitor
@@ -887,29 +896,23 @@ fn create_new_tunnel(
     // Create new tunnel
     let tunnel = Tunnel::new(
         peer_ip,
-        KI.setup_wg_if().unwrap(),
         our_port,
         ifidx,
         their_localid,
         light_client_details,
     );
-    let new_key = tunnel.neigh_id.global;
-
-    // actually create the tunnel
-    match tunnel.open(light_client_details) {
-        Ok(_) => trace!("Tunnel {:?} is open", tunnel),
+    let tunnel = match tunnel {
+        Ok(tunnel) => {
+            trace!("Tunnel {:?} is open", tunnel);
+            tunnel
+        }
         Err(e) => {
-            error!("Unable to open tunnel {:?}: {}", tunnel, e);
+            error!("Unable to open tunnel {}", e);
             return Err(e);
         }
-    }
-    match light_client_details {
-        None => {
-            // attach babel, the argument indicates that this is attempt zero
-            tunnel.monitor(0);
-        }
-        Some(_) => {}
-    }
+    };
+    let new_key = tunnel.neigh_id.global;
+
     Ok((new_key, tunnel))
 }
 
@@ -1088,12 +1091,16 @@ fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, Vec<Tunnel>>) -> Result<()
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
+    use super::PaymentState;
+    use super::TunnelState;
     use crate::rita_common::tunnel_manager::RegistrationState;
     use crate::rita_common::tunnel_manager::Tunnel;
     use crate::rita_common::tunnel_manager::TunnelManager;
     use althea_types::Identity;
     use althea_types::LocalIdentity;
+    use std::net::Ipv4Addr;
+    use std::time::Instant;
 
     /// gets a mutable reference tunnel from the list with the given index
     fn get_mut_tunnel_by_ifidx(ifidx: u32, tunnels: &mut Vec<Tunnel>) -> Option<&mut Tunnel> {
@@ -1109,6 +1116,42 @@ mod tests {
     pub fn test_tunnel_manager() {
         let mut tunnel_manager = TunnelManager::new();
         assert_eq!(tunnel_manager.free_ports.pop().unwrap(), 65534);
+    }
+
+    pub fn get_test_id() -> Identity {
+        Identity {
+            mesh_ip: "::1".parse().unwrap(),
+            eth_address: "0x4288C538A553357Bb6c3b77Cf1A60Da6E77931F6"
+                .parse()
+                .unwrap(),
+            wg_public_key: "GIaAXDi1PbGq3PsKqBnT6kIPoE2K1Ssv9HSb7++dzl4="
+                .parse()
+                .unwrap(),
+            nickname: None,
+        }
+    }
+
+    pub fn get_test_tunnel(ip: Ipv4Addr, light: bool) -> Tunnel {
+        let light_client_details = if light { Some(ip) } else { None };
+        Tunnel {
+            ip: ip.into(),
+            iface_name: "iface".to_string(),
+            listen_ifidx: 0,
+            listen_port: 65535,
+            neigh_id: LocalIdentity {
+                wg_port: 65535,
+                have_tunnel: Some(true),
+                global: get_test_id(),
+            },
+            last_contact: Instant::now(),
+            created: Instant::now(),
+            speed_limit: None,
+            light_client_details,
+            state: TunnelState {
+                payment_state: PaymentState::Paid,
+                registration_state: RegistrationState::Registered,
+            },
+        }
     }
 
     #[test]
@@ -1134,18 +1177,7 @@ mod tests {
             .tunnels
             .entry(id)
             .or_insert_with(Vec::new)
-            .push(Tunnel::new(
-                "0.0.0.0".parse().unwrap(),
-                "iface".into(),
-                65535,
-                0,
-                LocalIdentity {
-                    wg_port: 65535,
-                    have_tunnel: Some(true),
-                    global: id,
-                },
-                None,
-            ));
+            .push(get_test_tunnel("0.0.0.0".parse().unwrap(), false));
         {
             let existing_tunnel =
                 get_mut_tunnel_by_ifidx(0u32, tunnel_manager.tunnels.get_mut(&id).unwrap())

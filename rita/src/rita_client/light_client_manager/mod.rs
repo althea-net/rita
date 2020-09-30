@@ -387,35 +387,9 @@ fn subtract_or_insert_and_subtract(data: &mut HashMap<Identity, i128>, i: Identi
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rita_common::tunnel_manager::tests::get_test_id;
+    use crate::rita_common::tunnel_manager::tests::get_test_tunnel;
     use clu::generate_mesh_ip;
-
-    fn get_test_id() -> Identity {
-        Identity {
-            mesh_ip: "::1".parse().unwrap(),
-            eth_address: "0x4288C538A553357Bb6c3b77Cf1A60Da6E77931F6"
-                .parse()
-                .unwrap(),
-            wg_public_key: "GIaAXDi1PbGq3PsKqBnT6kIPoE2K1Ssv9HSb7++dzl4="
-                .parse()
-                .unwrap(),
-            nickname: None,
-        }
-    }
-
-    fn get_test_tunnel(ip: Ipv4Addr) -> Tunnel {
-        Tunnel::new(
-            ip.into(),
-            "iface".into(),
-            65535,
-            0,
-            LocalIdentity {
-                wg_port: 65535,
-                have_tunnel: Some(true),
-                global: get_test_id(),
-            },
-            Some(ip),
-        )
-    }
 
     fn get_random_id() -> Identity {
         Identity {
@@ -500,20 +474,10 @@ mod tests {
     #[test]
     fn test_not_gc() {
         let mut assigned_addresses = HashMap::new();
-        let _res = assign_client_address(
-            &mut assigned_addresses,
-            get_test_id(),
-            "192.168.1.0".parse().unwrap(),
-            24,
-        );
-        let _res = assign_client_address(
-            &mut assigned_addresses,
-            get_random_id(),
-            "192.168.1.0".parse().unwrap(),
-            24,
-        );
         let ip = "192.168.1.0".parse().unwrap();
-        let tunnels = [get_test_tunnel(ip)];
+        let _res = assign_client_address(&mut assigned_addresses, get_test_id(), ip, 24);
+        let _res = assign_client_address(&mut assigned_addresses, get_random_id(), ip, 24);
+        let tunnels = [get_test_tunnel(ip, true)];
         println!("{:?}", assigned_addresses);
         return_addresses(&tunnels, &mut assigned_addresses);
         assert_eq!(assigned_addresses.len(), 1);
