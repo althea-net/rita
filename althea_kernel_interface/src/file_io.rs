@@ -1,4 +1,4 @@
-use failure::Error;
+use crate::KernelInterfaceError as Error;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;

@@ -23,8 +23,8 @@ if ! modprobe wireguard ; then
 fi
 
 # cleanup docker junk or this script will quickly run you out of room in /
-echo "Docker images take up a lot of space in root if you are running out of space select Yes"
-docker system prune -a -f
+#echo "Docker images take up a lot of space in root if you are running out of space select Yes"
+#docker system prune -a -f
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 DOCKERFOLDER=$DIR/../integration-tests/container/

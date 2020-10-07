@@ -32,7 +32,7 @@ fn check_text(
     trace!("About to check text message status for {}", number);
     let number: PhoneNumber = match number.parse() {
         Ok(number) => number,
-        Err(e) => return Either::A(future::err(e)),
+        Err(e) => return Either::A(future::err(e.into())),
     };
     let url = "https://api.authy.com/protected/json/phones/verification/check";
     Either::B(
@@ -67,7 +67,7 @@ fn send_text(number: String, api_key: String) -> impl Future<Item = ClientRespon
     let url = "https://api.authy.com/protected/json/phones/verification/start";
     let number: PhoneNumber = match number.parse() {
         Ok(number) => number,
-        Err(e) => return Either::A(future::err(e)),
+        Err(e) => return Either::A(future::err(e.into())),
     };
     Either::B(
         actix_client::post(&url)

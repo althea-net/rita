@@ -1,3 +1,4 @@
+use crate::error::AltheaTypesError;
 /// This file under Apache 2.0
 use serde::de::{Deserialize, Error, Unexpected, Visitor};
 use serde::ser::{Serialize, Serializer};
@@ -50,18 +51,18 @@ impl fmt::Display for WgKey {
 }
 
 impl FromStr for WgKey {
-    type Err = base64::DecodeError;
+    type Err = AltheaTypesError;
 
     fn from_str(s: &str) -> Result<WgKey, Self::Err> {
         let mut output = [0u8; 32];
 
         if s.len() != 44 {
-            return Err(base64::DecodeError::InvalidLength);
+            return Err(base64::DecodeError::InvalidLength.into());
         }
 
         match base64::decode_config_slice(s, base64::STANDARD, &mut output) {
             Ok(_) => Ok(WgKey(output)),
-            Err(e) => Err(e),
+            Err(e) => Err(e.into()),
         }
     }
 }

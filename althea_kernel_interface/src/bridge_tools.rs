@@ -1,7 +1,7 @@
 //! Simple helper functions for brctl
 
 use super::KernelInterface;
-use failure::Error;
+use crate::KernelInterfaceError as Error;
 use std::process::Output;
 
 impl dyn KernelInterface {

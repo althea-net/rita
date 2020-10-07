@@ -1,12 +1,9 @@
 use super::KernelInterface;
-
+use crate::KernelInterfaceError as Error;
+use regex::Regex;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::str::FromStr;
-
-use regex::Regex;
-
-use failure::Error;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum FilterTarget {
@@ -113,7 +110,7 @@ add zxcv 1234:5678:9801:2345:6789:0123:4567:8902,wg0 packets 123456789 bytes 987
             assert_eq!(value2, &(987_654_320u64 + 123_456_789u64 * 40));
         }
         Err(e) => {
-            panic!("Unexpected error {:?}", e);
+            panic!("Unexpected error {}", e);
         }
     }
 }

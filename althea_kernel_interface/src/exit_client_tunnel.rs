@@ -1,6 +1,6 @@
-use super::{KernelInterface, KernelInterfaceError};
+use super::KernelInterface;
+use crate::KernelInterfaceError as Error;
 use althea_types::WgKey;
-use failure::Error;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 pub struct ClientExitTunnelConfig {
@@ -129,20 +129,18 @@ impl dyn KernelInterface {
 
         let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "mtu", "1340"])?;
         if !output.stderr.is_empty() {
-            return Err(KernelInterfaceError::RuntimeError(format!(
+            return Err(Error::RuntimeError(format!(
                 "received error adding wg link: {}",
                 String::from_utf8(output.stderr)?
-            ))
-            .into());
+            )));
         }
 
         let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "up"])?;
         if !output.stderr.is_empty() {
-            return Err(KernelInterfaceError::RuntimeError(format!(
+            return Err(Error::RuntimeError(format!(
                 "received error setting wg interface up: {}",
                 String::from_utf8(output.stderr)?
-            ))
-            .into());
+            )));
         }
 
         let _res = self.set_codel_shaping("wg_exit", args.user_specified_speed, true);
@@ -169,11 +167,10 @@ impl dyn KernelInterface {
             ],
         )?;
         if !output.stderr.is_empty() {
-            return Err(KernelInterfaceError::RuntimeError(format!(
+            return Err(Error::RuntimeError(format!(
                 "received error setting ip route: {}",
                 String::from_utf8(output.stderr)?
-            ))
-            .into());
+            )));
         }
 
         Ok(())

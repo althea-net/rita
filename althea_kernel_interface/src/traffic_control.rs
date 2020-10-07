@@ -1,11 +1,11 @@
-//! This module performs traffic control commands for botht the exit and rita common
-//! exit and common traffic control are fundamentally different becuase the exit is limiting
+//! This module performs traffic control commands for both the exit and rita common
+//! exit and common traffic control are fundamentally different because the exit is limiting
 //! clients on the single exit tunnel, requiring classification of traffic from specific ip's
 //! Rita common in contrast is a simple limitation of the neighbors tunnel, which does not do
 //! any classful categorization. As a result one uses tbf and the other uses the clsssful htb
 
-use super::KernelInterface;
-use failure::Error;
+use crate::KernelInterface;
+use crate::KernelInterfaceError as Error;
 use std::net::Ipv4Addr;
 
 impl dyn KernelInterface {
@@ -15,7 +15,10 @@ impl dyn KernelInterface {
 
         if !result.status.success() {
             let res = String::from_utf8(result.stderr)?;
-            bail!("Failed to check qdisc for {}! {:?}", iface_name, res);
+            return Err(Error::TrafficControlError(format!(
+                "Failed to check qdisc for {}! {:?}",
+                iface_name, res
+            )));
         }
 
         let stdout = &String::from_utf8(result.stdout)?;
@@ -31,7 +34,10 @@ impl dyn KernelInterface {
 
         if !result.status.success() {
             let res = String::from_utf8(result.stderr)?;
-            bail!("Failed to check filter for {}! {:?}", class_id, res);
+            return Err(Error::TrafficControlError(format!(
+                "Failed to check filter for {}! {:?}",
+                class_id, res
+            )));
         }
 
         let stdout = &String::from_utf8(result.stdout)?;
@@ -44,7 +50,10 @@ impl dyn KernelInterface {
 
         if !result.status.success() {
             let res = String::from_utf8(result.stderr)?;
-            bail!("Failed to get flows {:?}", res);
+            return Err(Error::TrafficControlError(format!(
+                "Failed to get flows {:?}",
+                res
+            )));
         }
         Ok(String::from_utf8(result.stdout)?)
     }
@@ -63,7 +72,10 @@ impl dyn KernelInterface {
 
         if !result.status.success() {
             let res = String::from_utf8(result.stderr)?;
-            bail!("Failed to check filter for {}! {:?}", class_id, res);
+            return Err(Error::TrafficControlError(format!(
+                "Failed to check filter for {}! {:?}",
+                class_id, res
+            )));
         }
 
         let stdout = &String::from_utf8(result.stdout)?;
@@ -76,7 +88,10 @@ impl dyn KernelInterface {
 
         if !result.status.success() {
             let res = String::from_utf8(result.stderr)?;
-            bail!("Failed to check limit for {}! {:?}", iface_name, res);
+            return Err(Error::TrafficControlError(format!(
+                "Failed to check limit for {}! {:?}",
+                iface_name, res
+            )));
         }
 
         let stdout = &String::from_utf8(result.stdout)?;
@@ -92,7 +107,10 @@ impl dyn KernelInterface {
 
         if !result.status.success() {
             let res = String::from_utf8(result.stderr)?;
-            bail!("Failed to check limit for {}! {:?}", iface_name, res);
+            return Err(Error::TrafficControlError(format!(
+                "Failed to check limit for {}! {:?}",
+                iface_name, res
+            )));
         }
 
         let stdout = &String::from_utf8(result.stdout)?;
@@ -200,7 +218,10 @@ impl dyn KernelInterface {
             if !output.status.success() {
                 let res = String::from_utf8(output.stderr)?;
                 error!("Cake and fallback fq_codel have both failed!");
-                bail!("Failed to create new qdisc limit! {:?}", res);
+                return Err(Error::TrafficControlError(format!(
+                    "Failed to create new qdisc limit! {:?}",
+                    res
+                )));
             }
         }
 
@@ -245,7 +266,10 @@ impl dyn KernelInterface {
             Ok(())
         } else {
             let res = String::from_utf8(output.stderr)?;
-            bail!("Failed to create new qdisc limit! {:?}", res);
+            Err(Error::TrafficControlError(format!(
+                "Failed to create new qdisc limit! {:?}",
+                res
+            )))
         }
     }
 
@@ -263,7 +287,10 @@ impl dyn KernelInterface {
             Ok(())
         } else {
             let res = String::from_utf8(output.stderr)?;
-            bail!("Failed to create new qdisc limit! {:?}", res);
+            Err(Error::TrafficControlError(format!(
+                "Failed to create new qdisc limit! {:?}",
+                res
+            )))
         }
     }
 
@@ -307,7 +334,10 @@ impl dyn KernelInterface {
 
         if !output.status.success() {
             let res = String::from_utf8(output.stderr)?;
-            bail!("Failed to update qdisc class limit! {:?}", res);
+            return Err(Error::TrafficControlError(format!(
+                "Failed to update qdisc class limit! {:?}",
+                res
+            )));
         }
 
         let output = self.run_command(
@@ -379,7 +409,10 @@ impl dyn KernelInterface {
             Ok(())
         } else {
             let res = String::from_utf8(output.stderr)?;
-            bail!("Failed to create limit by ip! {:?}", res);
+            Err(Error::TrafficControlError(format!(
+                "Failed to create limit by ip! {:?}",
+                res
+            )))
         }
     }
 
@@ -389,7 +422,9 @@ impl dyn KernelInterface {
         if output.status.success() {
             Ok(())
         } else {
-            bail!("Failed to delete qdisc limit!");
+            Err(Error::TrafficControlError(
+                "Failed to delete qdisc limit".to_string(),
+            ))
         }
     }
 }

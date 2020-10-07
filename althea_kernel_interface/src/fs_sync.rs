@@ -1,5 +1,5 @@
 use super::KernelInterface;
-use failure::Error;
+use crate::KernelInterfaceError as Error;
 
 impl dyn KernelInterface {
     /// Performs a full filesystem sync by running the sync command.

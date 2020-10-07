@@ -1,9 +1,12 @@
-use super::KernelInterface;
-
-use failure::Error;
+use crate::KernelInterface;
+use crate::KernelInterfaceError;
 
 impl dyn KernelInterface {
-    pub fn add_iptables_rule(&self, command: &str, rule: &[&str]) -> Result<(), Error> {
+    pub fn add_iptables_rule(
+        &self,
+        command: &str,
+        rule: &[&str],
+    ) -> Result<(), KernelInterfaceError> {
         assert!(rule.contains(&"-A") || rule.contains(&"-I") || rule.contains(&"-D"));
 
         // we replace the add or delete commands with a check command so that we can see if the rule is actually present

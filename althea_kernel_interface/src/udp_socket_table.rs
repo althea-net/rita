@@ -1,14 +1,13 @@
-use super::KernelInterface;
+use crate::KernelInterface;
+use crate::KernelInterfaceError;
+use crate::KernelInterfaceError as Error;
 use std::fs::File;
 use std::io::prelude::*;
 use std::u16;
 
-use super::KernelInterfaceError;
-use failure::Error;
-
 /// Returns a kernel interface runtime error with the given message.
 fn runtime_error<T>(msg: &str) -> Result<T, Error> {
-    Err(KernelInterfaceError::RuntimeError(msg.to_string()).into())
+    Err(KernelInterfaceError::RuntimeError(msg.to_string()))
 }
 
 /// Helper function for parsing out port number from local_address column

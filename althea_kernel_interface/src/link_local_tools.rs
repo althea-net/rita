@@ -1,10 +1,6 @@
-use super::{KernelInterface, KernelInterfaceError};
-
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-
+use crate::{KernelInterface, KernelInterfaceError};
 use regex::Regex;
-
-use failure::Error;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 impl dyn KernelInterface {
     /// This gets our link local ip for a given device
@@ -37,7 +33,7 @@ impl dyn KernelInterface {
     }
 
     /// This gets our global ip for a given device
-    pub fn get_global_device_ip(&self, dev: &str) -> Result<Ipv6Addr, Error> {
+    pub fn get_global_device_ip(&self, dev: &str) -> Result<Ipv6Addr, KernelInterfaceError> {
         let output = self.run_command("ip", &["addr", "show", "dev", dev, "scope", "global"])?;
         trace!("Got {:?} from `ip addr`", output);
 
@@ -54,12 +50,11 @@ impl dyn KernelInterface {
         } else {
             Err(KernelInterfaceError::RuntimeError(
                 "No global found or no interface found".to_string(),
-            )
-            .into())
+            ))
         }
     }
 
-    pub fn get_global_device_ip_v4(&self, dev: &str) -> Result<Ipv4Addr, Error> {
+    pub fn get_global_device_ip_v4(&self, dev: &str) -> Result<Ipv4Addr, KernelInterfaceError> {
         let output = self.run_command("ip", &["addr", "show", "dev", dev, "scope", "global"])?;
         trace!("Got {:?} from `ip addr`", output);
 
@@ -76,13 +71,12 @@ impl dyn KernelInterface {
         } else {
             Err(KernelInterfaceError::RuntimeError(
                 "No global found or no interface found".to_string(),
-            )
-            .into())
+            ))
         }
     }
 
     /// Given a neighboring link local ip, return the device name
-    pub fn get_device_name(&self, their_ip: IpAddr) -> Result<String, Error> {
+    pub fn get_device_name(&self, their_ip: IpAddr) -> Result<String, KernelInterfaceError> {
         let neigh = self.get_neighbors()?;
         trace!("looking for {:?} in {:?} for device name", their_ip, neigh);
         for (ip, dev) in neigh {
@@ -91,7 +85,9 @@ impl dyn KernelInterface {
             }
         }
 
-        Err(KernelInterfaceError::RuntimeError("Address not found in neighbors".to_string()).into())
+        Err(KernelInterfaceError::RuntimeError(
+            "Address not found in neighbors".to_string(),
+        ))
     }
 
     /// This gets our link local ip that can be reached by another node with link local ip
@@ -99,7 +95,7 @@ impl dyn KernelInterface {
         &self,
         their_ip: Ipv6Addr,
         external_interface: Option<String>,
-    ) -> Result<Ipv6Addr, Error> {
+    ) -> Result<Ipv6Addr, KernelInterfaceError> {
         let neigh = self.get_neighbors()?;
 
         trace!("Looking for {:?} in {:?} for reply ip", their_ip, neigh);
@@ -119,14 +115,13 @@ impl dyn KernelInterface {
             Ok(global_ip)
         } else {
             trace!("Didn't find {:?} in neighbors, bailing out", their_ip);
-            Err(
-                KernelInterfaceError::RuntimeError("Address not found in neighbors".to_string())
-                    .into(),
-            )
+            Err(KernelInterfaceError::RuntimeError(
+                "Address not found in neighbors".to_string(),
+            ))
         }
     }
     /// Returns the ifidx of the provided interface
-    pub fn get_iface_index(&self, name: &str) -> Result<u32, Error> {
+    pub fn get_iface_index(&self, name: &str) -> Result<u32, KernelInterfaceError> {
         let links = String::from_utf8(self.run_command("ip", &["link"])?.stdout)?;
 
         lazy_static! {
@@ -139,7 +134,9 @@ impl dyn KernelInterface {
                 return Ok(caps[1].parse()?);
             }
         }
-        Err(KernelInterfaceError::RuntimeError("Interface not found".to_string()).into())
+        Err(KernelInterfaceError::RuntimeError(
+            "Interface not found".to_string(),
+        ))
     }
 }
 

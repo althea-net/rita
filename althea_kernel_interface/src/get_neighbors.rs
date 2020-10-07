@@ -1,12 +1,9 @@
-use super::KernelInterface;
-
+use crate::KernelInterface;
+use crate::KernelInterfaceError as Error;
+use regex::Regex;
 use std::collections::HashSet;
 use std::net::IpAddr;
 use std::str::FromStr;
-
-use regex::Regex;
-
-use failure::Error;
 
 impl dyn KernelInterface {
     /// Returns a vector of neighbors reachable over layer 2, giving IP address of each.

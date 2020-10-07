@@ -1,8 +1,7 @@
-use super::KernelInterface;
-
+use crate::KernelInterface;
+use crate::KernelInterfaceError as Error;
 use std::net::IpAddr;
 
-use failure::Error;
 
 pub enum IpRoute {
     /// For creating default routes

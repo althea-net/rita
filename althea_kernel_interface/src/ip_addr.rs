@@ -1,6 +1,5 @@
-use super::KernelInterface;
-
-use failure::Error;
+use crate::KernelInterface;
+use crate::KernelInterfaceError as Error;
 use std::net::Ipv4Addr;
 
 impl dyn KernelInterface {
@@ -36,12 +35,15 @@ impl dyn KernelInterface {
                     if line.contains("File exists") {
                         Ok(false)
                     } else {
-                        Err(format_err!("Error setting ip {}", line))
+                        Err(Error::RuntimeError(format!("Error setting ip {}", line)))
                     }
                 }
                 None => Ok(true),
             },
-            Err(e) => Err(format_err!("Could not decode stderr from ip with {:?}", e)),
+            Err(e) => Err(Error::RuntimeError(format!(
+                "Could not decode stderr from ip with {:?}",
+                e
+            ))),
         }
     }
 }

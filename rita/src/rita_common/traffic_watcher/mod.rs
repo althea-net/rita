@@ -136,7 +136,7 @@ pub fn get_input_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
                 "Error getting input counters {:?} traffic has gone unaccounted!",
                 e
             );
-            return Err(e);
+            return Err(e.into());
         }
     };
     trace!("Got input counters: {:?}", input_counters);
@@ -148,7 +148,7 @@ pub fn get_input_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
                 "Error getting input counters {:?} traffic has gone unaccounted!",
                 e
             );
-            return Err(e);
+            return Err(e.into());
         }
     };
 
@@ -190,7 +190,7 @@ pub fn get_output_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
                 "Error getting output counters {:?} traffic has gone unaccounted!",
                 e
             );
-            return Err(e);
+            return Err(e.into());
         }
     };
     trace!("Got output counters: {:?}", output_counters);
@@ -202,7 +202,7 @@ pub fn get_output_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
                 "Error getting input counters {:?} traffic has gone unaccounted!",
                 e
             );
-            return Err(e);
+            return Err(e.into());
         }
     };
 

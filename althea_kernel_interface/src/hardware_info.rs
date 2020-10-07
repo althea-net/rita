@@ -1,7 +1,7 @@
 use crate::file_io::get_lines;
+use crate::KernelInterfaceError as Error;
 use althea_types::HardwareInfo;
 use althea_types::SensorReading;
-use failure::Error;
 use std::fs;
 
 /// Gets the load average and memory of the system from /proc should be plenty
@@ -27,7 +27,7 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
     };
     let allocated_memory = match mem_total.checked_sub(mem_free) {
         Some(val) => val,
-        None => return Err(format_err!("Failed to get accurate memory numbers")),
+        None => return Err(Error::FailedToGetMemoryUsage),
     };
 
     Ok(HardwareInfo {
@@ -44,7 +44,7 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
 
 fn get_load_avg() -> Result<(f32, f32, f32), Error> {
     // cpu load average
-    let load_average_error = Err(format_err!("Failed to get load average"));
+    let load_average_error = Err(Error::FailedToGetLoadAverage);
     let lines = get_lines("/proc/loadavg")?;
     let load_avg = match lines.get(0) {
         Some(line) => line,
@@ -74,7 +74,7 @@ fn get_memory_info() -> Result<(u64, u64), Error> {
     // memory info
     let lines = get_lines("/proc/meminfo")?;
     let mut lines = lines.iter();
-    let memory_info_error = Err(format_err!("Failed to get memory info"));
+    let memory_info_error = Err(Error::FailedToGetMemoryInfo);
     let mem_total: u64 = match lines.next() {
         Some(line) => match line.split_whitespace().nth(1) {
             Some(val) => val.parse()?,

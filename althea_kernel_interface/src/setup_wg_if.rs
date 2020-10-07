@@ -1,10 +1,7 @@
-use super::{KernelInterface, KernelInterfaceError};
+use crate::{KernelInterface, KernelInterfaceError, KernelInterfaceError as Error};
 use althea_types::WgKey;
-use failure::err_msg;
 use std::str::from_utf8;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
-use failure::Error;
 
 impl dyn KernelInterface {
     pub fn get_peers(&self, iface_name: &str) -> Result<Vec<WgKey>, Error> {
@@ -57,7 +54,7 @@ impl dyn KernelInterface {
         }
 
         if let Err(e) = res {
-            return Err(format_err!("{:?}", e));
+            return Err(e);
         }
         Ok(interface)
     }
@@ -88,9 +85,9 @@ impl dyn KernelInterface {
             let content: Vec<&str> = line.split('\t').collect();
             let mut itr = content.iter();
             itr.next();
-            let timestamp = itr
-                .next()
-                .ok_or_else(|| err_msg("Option did not contain a value."))?;
+            let timestamp = itr.next().ok_or_else(|| {
+                KernelInterfaceError::RuntimeError("Option did not contain a value.".to_string())
+            })?;
             let d = UNIX_EPOCH + Duration::from_secs(timestamp.parse()?);
 
             if SystemTime::now().duration_since(d)? < Duration::new(600, 0) {
@@ -110,11 +107,19 @@ impl dyn KernelInterface {
             let mut itr = content.iter();
             let wg_key: WgKey = match itr.next() {
                 Some(val) => val.parse()?,
-                None => return Err(format_err!("Invalid line!")),
+                None => {
+                    return Err(KernelInterfaceError::RuntimeError(
+                        "Invalid line!".to_string(),
+                    ))
+                }
             };
             let timestamp = match itr.next() {
                 Some(val) => val.parse()?,
-                None => return Err(format_err!("Invalid line!")),
+                None => {
+                    return Err(KernelInterfaceError::RuntimeError(
+                        "Invalid line!".to_string(),
+                    ))
+                }
             };
             let d = UNIX_EPOCH + Duration::from_secs(timestamp);
             timestamps.push((wg_key, d))

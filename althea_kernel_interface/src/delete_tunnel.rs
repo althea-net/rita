@@ -1,16 +1,14 @@
-use super::{KernelInterface, KernelInterfaceError};
-
-use failure::Error;
+use super::KernelInterface;
+use crate::KernelInterfaceError as Error;
 
 impl dyn KernelInterface {
     pub fn delete_tunnel(&self, interface: &str) -> Result<(), Error> {
         let output = self.run_command("ip", &["link", "del", &interface])?;
         if !output.stderr.is_empty() {
-            return Err(KernelInterfaceError::RuntimeError(format!(
+            return Err(Error::RuntimeError(format!(
                 "received error deleting wireguard interface: {}",
                 String::from_utf8(output.stderr)?
-            ))
-            .into());
+            )));
         }
         Ok(())
     }

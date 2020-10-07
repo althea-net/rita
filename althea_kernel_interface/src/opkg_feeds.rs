@@ -1,7 +1,7 @@
 use crate::file_io::get_lines;
 use crate::file_io::write_out;
+use crate::KernelInterfaceError as Error;
 use althea_types::ReleaseStatus;
-use failure::Error;
 use regex::Regex;
 
 static CUSTOMFEEDS: &str = "/etc/opkg/customfeeds.conf";
@@ -16,7 +16,7 @@ pub fn get_release_feed() -> Result<ReleaseStatus, Error> {
         }
         return get_feed(line);
     }
-    Err(format_err!("No feed openwrt_althea found!"))
+    Err(Error::NoAltheaReleaseFeedFound)
 }
 
 pub fn set_release_feed(val: ReleaseStatus) -> Result<(), Error> {

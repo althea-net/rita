@@ -19,4 +19,4 @@ owning_ref = "0.4"
 lazy_static = "1.4"
 clarity = "0.1"
 arrayvec = {version= "0.5", features = ["serde"]}
-phonenumber = "0.2"
+phonenumber = "0.3"

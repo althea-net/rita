@@ -276,7 +276,7 @@ pub fn local_traffic_calculation(
                 "Error getting router client input output counters {:?} traffic has gone unaccounted!",
                 e
             );
-            return Err(e);
+            return Err(e.into());
         }
     };
 

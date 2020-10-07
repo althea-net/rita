@@ -211,7 +211,7 @@ pub fn watch(
                 "Error getting input counters {:?} traffic has gone unaccounted!",
                 e
             );
-            return Err(e);
+            return Err(e.into());
         }
     };
 

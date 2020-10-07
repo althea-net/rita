@@ -1,6 +1,5 @@
-use super::KernelInterface;
-
-use failure::Error;
+use crate::KernelInterface;
+use crate::KernelInterfaceError;
 
 impl dyn KernelInterface {
     /// calls a ubus rpc
@@ -9,7 +8,7 @@ impl dyn KernelInterface {
         namespace: &str,
         function: &str,
         argument: &str,
-    ) -> Result<String, Error> {
+    ) -> Result<String, KernelInterfaceError> {
         let output = String::from_utf8(
             self.run_command("ubus", &["call", namespace, function, argument])?
                 .stdout,

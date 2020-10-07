@@ -2,14 +2,11 @@
 //! this is mostly used in client and exit billing where we only have to concern ourselves with
 //! a single destination and a single price.
 
-use failure::Error;
-use regex::Regex;
-
-use std::collections::HashMap;
-
+use crate::KernelInterfaceError as Error;
+use crate::{KernelInterface, KernelInterfaceError};
 use althea_types::WgKey;
-
-use super::{KernelInterface, KernelInterfaceError};
+use regex::Regex;
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, Copy)]
 pub struct WgUsage {
@@ -53,8 +50,7 @@ impl dyn KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error from wg command: {}",
                 String::from_utf8(output.stderr)?
-            ))
-            .into());
+            )));
         }
 
         lazy_static! {

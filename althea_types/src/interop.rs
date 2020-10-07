@@ -1,9 +1,9 @@
+use crate::error::AltheaTypesError as Error;
 use crate::{contact_info::ContactType, wg_key::WgKey, BillingDetails, InstallationDetails};
 use arrayvec::ArrayString;
 use babel_monitor::Neighbor;
 use babel_monitor::Route;
 use clarity::Address;
-use failure::Error;
 use num256::Uint256;
 use std::collections::hash_map::DefaultHasher;
 use std::fmt;
@@ -353,8 +353,8 @@ impl FromStr for ReleaseStatus {
                 if !s.is_empty() {
                     Ok(ReleaseStatus::Custom(s.to_string()))
                 } else {
-                    Err(format_err!(
-                        "Empty string can't possibly be a valid release!"
+                    Err(Error::ReleaseFeedParseError(
+                        "Empty string can't possibly be a valid release!".to_string(),
                     ))
                 }
             }
@@ -431,7 +431,7 @@ impl FromStr for OperatorAction {
                 let val: Result<OperatorAction, _> = serde_json::from_str(s);
                 match val {
                     Ok(v) => Ok(v),
-                    Err(_e) => Err(format_err!("Invalid Operator Action")),
+                    Err(e) => Err(Error::OperatorActionParseError(e.to_string())),
                 }
             }
         }

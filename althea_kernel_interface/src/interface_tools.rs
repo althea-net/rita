@@ -1,8 +1,6 @@
-use super::KernelInterface;
-
+use crate::KernelInterface;
+use crate::KernelInterfaceError as Error;
 use regex::Regex;
-
-use failure::Error;
 use std::net::IpAddr;
 use std::str::from_utf8;
 
@@ -62,7 +60,10 @@ impl dyn KernelInterface {
                                 cap.as_str()
                             }
                             None => {
-                                bail!("Cannot parse `wg show {} endpoints` output, got {}, captured {:?}", name, stdout, cap);
+                                return Err(Error::RuntimeError(format!(
+                                "Cannot parse `wg show {} endpoints` output, got {}, captured {:?}",
+                                name, stdout, cap
+                            )))
                             }
                         }
                     }
@@ -70,13 +71,10 @@ impl dyn KernelInterface {
 
                 Ok(ip_str.parse()?)
             }
-            None => {
-                bail!(
-                    "Cannot parse `wg show {} endpoints` output, got {}, nothing captured",
-                    name,
-                    stdout
-                );
-            }
+            None => Err(Error::RuntimeError(format!(
+                "Cannot parse `wg show {} endpoints` output, got {}, nothing captured",
+                name, stdout
+            ))),
         }
     }
 

@@ -1,6 +1,5 @@
-use super::{KernelInterface, KernelInterfaceError};
+use crate::{KernelInterface, KernelInterfaceError};
 use althea_types::WgKey;
-use failure::Error;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::Path;
 
@@ -76,7 +75,7 @@ pub struct TunnelOpenArgs<'a> {
 }
 
 impl dyn KernelInterface {
-    pub fn open_tunnel(&self, args: TunnelOpenArgs) -> Result<(), Error> {
+    pub fn open_tunnel(&self, args: TunnelOpenArgs) -> Result<(), KernelInterfaceError> {
         let external_peer;
         let phy_name = match self.get_device_name(args.endpoint.ip()) {
             Ok(phy_name) => {
@@ -119,8 +118,7 @@ impl dyn KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error from wg command: {}",
                 String::from_utf8(output.stderr)?
-            ))
-            .into());
+            )));
         }
         let _output = self.run_command(
             "ip",
@@ -153,8 +151,7 @@ impl dyn KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error setting wg interface up: {}",
                 String::from_utf8(output.stderr)?
-            ))
-            .into());
+            )));
         }
         Ok(())
     }

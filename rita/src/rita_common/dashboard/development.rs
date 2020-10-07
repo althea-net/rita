@@ -56,7 +56,7 @@ pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {
         Ok(_) => trace!("wipe: Restore default route success!"),
         Err(e) => {
             warn!("wipe: Unable to restore default route: {:?}", e);
-            return Err(e);
+            return Err(e.into());
         }
     }
 
@@ -85,7 +85,7 @@ pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {
         Ok(_) => trace!("wipe: Saved new WireGuard keys to disk"),
         Err(e) => {
             warn!("wipe: Unable to save new WireGuard keys: {:?}", e);
-            return Err(e);
+            return Err(e.into());
         }
     }
 

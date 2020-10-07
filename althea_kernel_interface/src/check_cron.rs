@@ -1,5 +1,5 @@
 use super::KernelInterface;
-use failure::Error;
+use crate::KernelInterfaceError as Error;
 use std::process::{Command, Stdio};
 
 impl dyn KernelInterface {

@@ -1,8 +1,8 @@
 use super::{KernelInterface, KernelInterfaceError};
 use althea_types::WgKey;
-use failure::Error;
 use std::collections::HashSet;
 use std::net::IpAddr;
+use KernelInterfaceError as Error;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct ExitClient {
@@ -95,8 +95,7 @@ impl dyn KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error adding wg link: {}",
                 String::from_utf8(output.stderr)?
-            ))
-            .into());
+            )));
         }
 
         let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "up"])?;
@@ -104,8 +103,7 @@ impl dyn KernelInterface {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error setting wg interface up: {}",
                 String::from_utf8(output.stderr)?
-            ))
-            .into());
+            )));
         }
 
         // this creates the root classful htb limit for which we will make

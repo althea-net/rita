@@ -494,8 +494,7 @@ name = "althea_kernel_interface"
 version = "0.1.0"
 dependencies = [
  "althea_types",
- "failure",
- "itertools 0.9.0",
+ "itertools",
  "lazy_static",
  "log",
  "oping",
@@ -516,9 +515,8 @@ dependencies = [
  "actix 0.7.11",
  "arrayvec",
  "babel_monitor",
- "base64 0.12.3",
+ "base64 0.13.0",
  "clarity",
- "failure",
  "hex",
  "lettre",
  "num256",
@@ -746,6 +744,12 @@ name = "base64"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3441f0f7b02788e948e47f457ca01f1d7e6d92c693bc132c22b087d3141c03ff"
+
+[[package]]
+name = "base64"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
 name = "bincode"
@@ -1994,15 +1998,6 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f56a2d0bc861f9165be4eb3442afd3c236d8a98afd426f65d92324ae1091a484"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "284f18f85651fe11e8a991b2adb42cb078325c996ed026d994719efcfca1d54b"
@@ -2784,15 +2779,14 @@ dependencies = [
 
 [[package]]
 name = "phonenumber"
-version = "0.2.4+8.11.3"
+version = "0.3.0+8.12.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "207b3a8b4b30da166f6d8175ad39b86aa84d190965be4533af3d5541754de358"
+checksum = "ea16a038942a5059c314e3b8455a01a0552027d195d44ed63fba15161621104b"
 dependencies = [
  "bincode",
  "either",
- "failure",
  "fnv",
- "itertools 0.8.2",
+ "itertools",
  "lazy_static",
  "nom 5.1.2",
  "quick-xml",
@@ -2800,6 +2794,7 @@ dependencies = [
  "regex-cache",
  "serde 1.0.114",
  "serde_derive",
+ "thiserror",
 ]
 
 [[package]]
@@ -2925,9 +2920,9 @@ checksum = "3ac73b1112776fc109b2e61909bc46c7e1bf0d7f690ffb1676553acce16d5cda"
 
 [[package]]
 name = "quick-xml"
-version = "0.17.2"
+version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe1e430bdcf30c9fdc25053b9c459bb1a4672af4617b6c783d7d91dc17c6bbb0"
+checksum = "3cc440ee4802a86e357165021e3e255a9143724da31db1e2ea540214c96a0f82"
 dependencies = [
  "memchr",
 ]

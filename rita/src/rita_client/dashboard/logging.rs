@@ -24,7 +24,7 @@ pub fn remote_logging(path: Path<bool>) -> Result<HttpResponse, Error> {
     }
 
     if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
-        return Err(e);
+        return Err(e.into());
     }
 
     Ok(HttpResponse::Ok().json(()))
@@ -56,7 +56,7 @@ pub fn remote_logging_level(path: Path<String>) -> Result<HttpResponse, Error> {
     }
 
     if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
-        return Err(e);
+        return Err(e.into());
     }
 
     Ok(HttpResponse::Ok().json(()))

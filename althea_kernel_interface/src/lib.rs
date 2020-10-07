@@ -1,15 +1,22 @@
 #[macro_use]
-extern crate failure;
-#[macro_use]
 extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
-use std::env;
-use std::io::ErrorKind;
-use std::process::{Command, Output};
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::{env, fmt};
+use std::{
+    error::Error,
+    time::{Instant, SystemTimeError},
+};
+use std::{io::ErrorKind, num::ParseIntError};
+use std::{
+    num::ParseFloatError,
+    process::{Command, Output},
+};
+use std::{
+    str::Utf8Error,
+    sync::{Arc, Mutex},
+};
 
 use std::str;
 
@@ -42,43 +49,115 @@ mod traffic_control;
 mod udp_socket_table;
 pub mod wg_iface_counter;
 
+use althea_types::error::AltheaTypesError;
+use oping::PingError;
+
 pub use crate::counter::FilterTarget;
 pub use crate::create_wg_key::WgKeypair;
 pub use crate::exit_server_tunnel::ExitClient;
 
-use failure::Error;
+use std::fmt::Result as FormatResult;
+use std::io::Error as IoError;
 use std::net::AddrParseError;
 use std::string::FromUtf8Error;
 
-type CommandFunction = Box<dyn FnMut(String, Vec<String>) -> Result<Output, Error> + Send>;
+type CommandFunction =
+    Box<dyn FnMut(String, Vec<String>) -> Result<Output, KernelInterfaceError> + Send>;
 
-#[derive(Debug, Fail)]
+#[derive(Clone, Debug)]
 pub enum KernelInterfaceError {
-    #[fail(display = "Runtime Error: {:?}", _0)]
     RuntimeError(String),
-    #[fail(display = "No interface by the name: {:?}", _0)]
     NoInterfaceError(String),
-    #[fail(display = "Address isn't ready yet: {:?}", _0)]
     AddressNotReadyError(String),
-    #[fail(display = "Wireguard Interface Already exists")]
     WgExistsError,
+    FailedToGetMemoryUsage,
+    FailedToGetMemoryInfo,
+    FailedToGetLoadAverage,
+    NoAltheaReleaseFeedFound,
+    TrafficControlError(String),
 }
 
-impl From<FromUtf8Error> for KernelInterfaceError {
-    fn from(e: FromUtf8Error) -> Self {
-        KernelInterfaceError::RuntimeError(format!("{:?}", e))
+impl fmt::Display for KernelInterfaceError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> FormatResult {
+        match self {
+            KernelInterfaceError::RuntimeError(val) => write!(f, "Runtime Error: {}", val),
+            KernelInterfaceError::NoInterfaceError(val) => {
+                write!(f, "No interface by the name: {}", val)
+            }
+            KernelInterfaceError::AddressNotReadyError(val) => {
+                write!(f, "Address isn't ready yet: {}", val)
+            }
+            KernelInterfaceError::WgExistsError => write!(f, "Wireguard Interface Already exists"),
+            KernelInterfaceError::FailedToGetMemoryUsage => {
+                write!(f, "Failed to get accurate memory usage!")
+            }
+            KernelInterfaceError::FailedToGetLoadAverage => {
+                write!(f, "Failed to get load average!")
+            }
+            KernelInterfaceError::FailedToGetMemoryInfo => write!(f, "Failed to get memory info!"),
+            KernelInterfaceError::NoAltheaReleaseFeedFound => {
+                write!(f, "Could not pares /etc/opkg/customfeeds.conf")
+            }
+            KernelInterfaceError::TrafficControlError(val) => {
+                write!(f, "TrafficControl error {}", val)
+            }
+        }
     }
 }
 
-impl From<Error> for KernelInterfaceError {
-    fn from(e: Error) -> Self {
-        KernelInterfaceError::RuntimeError(format!("{:?}", e))
+impl Error for KernelInterfaceError {}
+
+impl From<FromUtf8Error> for KernelInterfaceError {
+    fn from(e: FromUtf8Error) -> Self {
+        KernelInterfaceError::RuntimeError(format!("{}", e))
+    }
+}
+
+impl From<IoError> for KernelInterfaceError {
+    fn from(e: IoError) -> Self {
+        KernelInterfaceError::RuntimeError(format!("{}", e))
     }
 }
 
 impl From<AddrParseError> for KernelInterfaceError {
     fn from(e: AddrParseError) -> Self {
-        KernelInterfaceError::RuntimeError(format!("{:?}", e))
+        KernelInterfaceError::RuntimeError(format!("{}", e))
+    }
+}
+
+impl From<ParseIntError> for KernelInterfaceError {
+    fn from(e: ParseIntError) -> Self {
+        KernelInterfaceError::RuntimeError(format!("{}", e))
+    }
+}
+
+impl From<ParseFloatError> for KernelInterfaceError {
+    fn from(e: ParseFloatError) -> Self {
+        KernelInterfaceError::RuntimeError(format!("{}", e))
+    }
+}
+
+impl From<AltheaTypesError> for KernelInterfaceError {
+    fn from(e: AltheaTypesError) -> Self {
+        KernelInterfaceError::RuntimeError(format!("{}", e))
+    }
+}
+
+impl From<Utf8Error> for KernelInterfaceError {
+    fn from(e: Utf8Error) -> Self {
+        KernelInterfaceError::RuntimeError(format!("{}", e))
+    }
+}
+
+impl From<SystemTimeError> for KernelInterfaceError {
+    fn from(e: SystemTimeError) -> Self {
+        KernelInterfaceError::RuntimeError(format!("{}", e))
+    }
+}
+
+impl From<PingError> for KernelInterfaceError {
+    fn from(e: PingError) -> Self {
+        KernelInterfaceError::RuntimeError(format!("{}", e))
     }
 }
 
@@ -97,7 +176,7 @@ lazy_static! {
 }
 
 pub trait CommandRunner {
-    fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, Error>;
+    fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, KernelInterfaceError>;
     fn set_mock(&self, mock: CommandFunction);
 }
 
@@ -113,7 +192,7 @@ fn print_str_array(input: &[&str]) -> String {
 pub struct LinuxCommandRunner;
 
 impl CommandRunner for LinuxCommandRunner {
-    fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, Error> {
+    fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, KernelInterfaceError> {
         let start = Instant::now();
         let output = match Command::new(program).args(args).output() {
             Ok(o) => o,
@@ -162,7 +241,10 @@ impl CommandRunner for LinuxCommandRunner {
         Ok(output)
     }
 
-    fn set_mock(&self, _mock: Box<dyn FnMut(String, Vec<String>) -> Result<Output, Error> + Send>) {
+    fn set_mock(
+        &self,
+        _mock: Box<dyn FnMut(String, Vec<String>) -> Result<Output, KernelInterfaceError> + Send>,
+    ) {
         unimplemented!()
     }
 }
@@ -172,7 +254,7 @@ pub struct TestCommandRunner {
 }
 
 impl CommandRunner for TestCommandRunner {
-    fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, Error> {
+    fn run_command(&self, program: &str, args: &[&str]) -> Result<Output, KernelInterfaceError> {
         let mut args_owned = Vec::new();
         for a in args {
             args_owned.push((*a).to_string())

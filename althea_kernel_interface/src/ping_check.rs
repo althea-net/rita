@@ -1,12 +1,12 @@
-use super::KernelInterface;
-use failure::Error;
+use crate::KernelInterface;
+use crate::KernelInterfaceError;
 use oping::Ping;
 use std::net::IpAddr;
 use std::time::Duration;
 
 impl dyn KernelInterface {
     //Pings a ipv6 address to determine if it's online
-    pub fn ping_check(&self, ip: &IpAddr, timeout: Duration) -> Result<bool, Error> {
+    pub fn ping_check(&self, ip: &IpAddr, timeout: Duration) -> Result<bool, KernelInterfaceError> {
         trace!("starting ping");
         let mut ping = Ping::new();
         ping.add_host(&ip.to_string())?;

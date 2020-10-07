@@ -1,11 +1,8 @@
 #[macro_use]
 extern crate serde_derive;
-#[macro_use]
-extern crate failure;
-
-extern crate arrayvec;
 
 pub mod contact_info;
+pub mod error;
 pub mod interop;
 pub mod monitoring;
 pub mod user_info;

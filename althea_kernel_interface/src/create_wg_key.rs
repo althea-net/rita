@@ -1,13 +1,11 @@
 use super::KernelInterface;
-
+use crate::KernelInterfaceError as Error;
+use althea_types::wg_key::WgKey;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::str::FromStr;
-
-use althea_types::wg_key::WgKey;
-use failure::Error;
 
 #[derive(Debug)]
 pub struct WgKeypair {
