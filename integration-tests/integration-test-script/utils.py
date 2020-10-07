@@ -111,7 +111,6 @@ def assert_test(x, description, verbose=True, global_fail=True):
                              "{} Failed\n".format(description))
 
     if global_fail and not x:
-        global TEST_PASSES
         TEST_PASSES = False
     return x
 
@@ -192,14 +191,14 @@ def cleanup():
     os.system("mkdir mail")
     os.system("sync")
     # TODO: This is very inconsiderate
-    os.system("killall babeld rita rita_exit bounty_hunter iperf")
+    os.system("killall babeld rita rita_exit iperf")
 
 
 def teardown():
     os.system("rm -rf *.pid private-key*")
     os.system("sync")
     # TODO: This is very inconsiderate
-    os.system("killall babeld rita rita_exit bounty_hunter iperf")
+    os.system("killall babeld rita rita_exit iperf")
 
 
 def prep_netns(id):
@@ -233,25 +232,30 @@ def check_log_contains(f, x):
         return False
 
 
-def start_babel(node, BABELD):
+def start_babel(node, log, scale, BABELD):
+    hello_interval = 1
+    update_interval = 1
+    if scale:
+        hello_interval = 1
+        update_interval = 1
     exec_or_exit(
         (
             "ip netns exec netlab-{id} {babeld_path} " +
             "-I babeld-n{id}.pid " +
-            "-d 1 " +
+            "-d {log} " +
             "-r " +
             "-L babeld-n{id}.log " +
-            "-H 1 " +
+            "-H {hello_interval} " +
             "-G 6872 " +
             '-C "default enable-timestamps true" ' +
-            '-C "default update-interval 1" ' +
+            '-C "default update-interval {update_interval}" ' +
             "-w lo"
-        ).format(babeld_path=BABELD, ifaces=node.get_interfaces(), id=node.id),
+        ).format(babeld_path=BABELD, ifaces=node.get_interfaces(), id=node.id, log=log, hello_interval=hello_interval, update_interval=update_interval),
         blocking=False
     )
 
 
-def start_rita(node, dname, RITA, EXIT_SETTINGS):
+def start_rita(node, dname, log, RITA, EXIT_SETTINGS):
     id = node.id
     settings = get_rita_defaults()
 
@@ -265,10 +269,10 @@ def start_rita(node, dname, RITA, EXIT_SETTINGS):
     save_rita_settings(id, settings)
     time.sleep(0.2)
     os.system(
-        '(RUST_BACKTRACE=full RUST_LOG=TRACE ip netns exec netlab-{id} {rita} --config=rita-settings-n{id}.toml --platform=linux'
+        '(RUST_BACKTRACE=full RUST_LOG={log} ip netns exec netlab-{id} {rita} --config=rita-settings-n{id}.toml --platform=linux'
         ' 2>&1 & echo $! > rita-n{id}.pid) | '
         'grep -Ev "<unknown>|mio|tokio_core|tokio_reactor|hyper" > rita-n{id}.log &'.format(id=id, rita=RITA,
-                                                                                            pwd=dname)
+                                                                                            pwd=dname, log=log)
     )
     time.sleep(1)
 
@@ -310,7 +314,7 @@ def start_rita_exit(node, dname, RITA_EXIT):
 
 
 def ip_to_num(ip):
-    if ip in "fd00::00":
+    if ip in "fd00::aabb":
         return 0
     else:
         return int(ip.replace("fd00::", ""))
@@ -318,7 +322,7 @@ def ip_to_num(ip):
 
 def num_to_ip(num):
     if num is 0:
-        return "fd00::"
+        return "fd00::aabb"
     else:
         return "fd00::{}".format(num)
 

@@ -65,10 +65,13 @@ class World:
 
     def create(self, VERBOSE, COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA, RITA_EXIT, DIR_A, DIR_B, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B, NETWORK_LAB, BABELD, POSTGRES_DATABASE, POSTGRES_USER, POSTGRES_CONFIG, POSTGRES_BIN, INITDB_BIN, EXIT_NAMESPACE, EXIT_SETTINGS, dname):
         cleanup()
+        # scale config modifies tests to reduce disk usage and disable
+        # some infeasible tests to allow for larger numbers of nodes
+        scale_configuration = len(self.nodes.items()) > 10
 
         nodes = {}
         for id in self.nodes:
-            nodes[str(id)] = {"ip": "fd00::{}".format(id)}
+            nodes[str(id)] = {"ip": num_to_ip(id)}
 
         edges = []
 
@@ -123,8 +126,14 @@ class World:
 
         print("starting babel")
 
+        # if this is set to zero route checking won't work
+        # but it will reduce logging pressure in large networks
+        log = "1"
+        scale = False
+        if scale_configuration:
+            log = "0"
         for id, node in self.nodes.items():
-            start_babel(node, BABELD)
+            start_babel(node, log, scale_configuration, BABELD)
 
         print("babel started")
 
@@ -144,11 +153,16 @@ class World:
             self.exit_id)["payment"]["eth_address"]
 
         print("starting rita")
+        log = "TRACE"
+        # reduce logging in large configurations to keep disk pressure
+        # from going insane
+        if scale_configuration:
+            log = "ERROR"
         for id, node in self.nodes.items():
             if id != self.exit_id and id != self.external:
                 (RITA, RITA_EXIT) = switch_binaries(id, VERBOSE, RITA, RITA_EXIT,
                                                     COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B)
-                start_rita(node, dname, RITA, EXIT_SETTINGS)
+                start_rita(node, dname, log, RITA, EXIT_SETTINGS)
             time.sleep(0.5 + random.random() / 2)  # wait 0.5s - 1s
             print()
         print("rita started")

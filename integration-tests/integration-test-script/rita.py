@@ -70,9 +70,9 @@ RITA_EXIT = RITA_EXIT_DEFAULT
 COMPAT_LAYOUT = os.getenv('COMPAT_LAYOUT', None)
 
 BACKOFF_FACTOR = float(os.getenv('BACKOFF_FACTOR', 1))
-CONVERGENCE_DELAY = float(os.getenv('CONVERGENCE_DELAY', 300))
+CONVERGENCE_DELAY = float(os.getenv('CONVERGENCE_DELAY', 600))
 DEBUG = os.getenv('DEBUG') is not None
-INITIAL_POLL_INTERVAL = float(os.getenv('INITIAL_POLL_INTERVAL', 1))
+INITIAL_POLL_INTERVAL = float(os.getenv('INITIAL_POLL_INTERVAL', 10))
 PING6 = os.getenv('PING6', 'ping6')
 VERBOSE = os.getenv('VERBOSE', None)
 NODES = os.getenv('NODES', None)
@@ -334,6 +334,9 @@ def main():
     world.create(VERBOSE, COMPAT_LAYOUT, COMPAT_LAYOUTS, RITA, RITA_EXIT, DIR_A, DIR_B, RITA_A, RITA_EXIT_A, RITA_B, RITA_EXIT_B, NETWORK_LAB,
                  BABELD, POSTGRES_DATABASE, POSTGRES_USER, POSTGRES_CONFIG, POSTGRES_BIN, INITDB_BIN, EXIT_NAMESPACE, EXIT_SETTINGS, dname)
 
+    # in scale configuration we reduce some testing and otherwise reduce disk io
+    scale_configuration = len(world.nodes) > 10
+
     print("Waiting for network to stabilize")
     start_time = time.time()
 
@@ -350,8 +353,10 @@ def main():
     while (time.time() - start_time) <= CONVERGENCE_DELAY:
         all_reachable = world.test_reach_all(
             PING6, verbose=False, global_fail=False)
+        # test all routes, but not in the case of a scale configuration since we
+        # don't write out the logs in that case
         routes_ok = world.test_routes(
-            all_routes, verbose=False, global_fail=False)
+            all_routes, verbose=False, global_fail=False) or scale_configuration
         if all_reachable and routes_ok:
             break      # We converged!
         time.sleep(interval)  # Let's check again after a delay
@@ -360,13 +365,14 @@ def main():
             print("%.2fs/%.2fs (going to sleep for %.2fs)" %
                   (time.time() - start_time, CONVERGENCE_DELAY, interval))
 
-    print("Test reachabibility and optimum routes...")
-    time.sleep(120)
+    print("Test reachability and optimum routes...")
 
     duration = time.time() - start_time
 
-    # Test (and fail if necessary) for real and print stats on success
-    if world.test_reach_all(PING6) and world.test_routes(all_routes):
+    # Test (and fail if necessary) for real and print stats on success if we are in a scale
+    # configuration don't test routes. The route dumping produces disk load that's not possible
+    # to deal with above a few nodes
+    if world.test_reach_all(PING6) and (scale_configuration or world.test_routes(all_routes)):
         print(("Converged in " + colored("%.2f seconds", "green")) % duration)
     else:
         print(("No convergence after more than " +
@@ -406,7 +412,7 @@ def main():
     # wait a few seconds after traffic generation for all nodes to update their debts
     time.sleep(10)
     traffic = world.get_debts()
-    print("Test post-traffic blanace agreement...")
+    print("Test post-traffic balance agreement...")
     world.test_debts_reciprocal_matching(traffic)
     world.test_debts_values(traffic_test_pairs, TIME,
                             SPEED, traffic, all_routes, EXIT_ID, world.exit_price)
@@ -417,8 +423,10 @@ def main():
         assert_test(not check_log_contains("rita-n{}.log".format(id),
                                            "suspending forwarding"), "Suspension of {}".format(id))
 
-    assert_test(check_log_contains("rita-n{}.log".format(GATEWAY_ID),
-                                   "We are a gateway!, Acting accordingly"), "Successful gateway/exit detection")
+    # we reduce logging when doing larger tests and this check isn't possible.
+    if len(world.nodes) < 10:
+        assert_test(check_log_contains("rita-n{}.log".format(GATEWAY_ID),
+                                       "We are a gateway!, Acting accordingly"), "Successful gateway/exit detection")
 
     if DEBUG:
         print("Debug mode active, examine the mesh after tests and press " +
