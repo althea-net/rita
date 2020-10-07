@@ -44,6 +44,7 @@
 
 use crate::SETTING;
 use althea_types::SystemChain;
+use async_web30::types::SendTxOption;
 use auto_bridge::TokenBridge as TokenBridgeCore;
 use auto_bridge::ERC20_GAS_LIMIT;
 use auto_bridge::ETH_TRANSACTION_GAS_LIMIT;
@@ -67,12 +68,15 @@ lazy_static! {
     static ref AMOUNTS: Arc<RwLock<LastAmounts>> = Arc::new(RwLock::new(LastAmounts::default()));
 }
 
-const BRIDGE_TIMEOUT: Duration = Duration::from_secs(3600);
+/// Six hours wall time. Only withdraw operations have a timeout since
+/// they pause the movement of ETH -> DAI -> XDAI that is normal in the
+/// system. Otherwise the normal process will be attempted indefinitely
+const WITHDRAW_TIMEOUT: Duration = Duration::from_secs(3600 * 6);
 pub const ETH_TRANSFER_TIMEOUT: u64 = 600u64;
 const UNISWAP_TIMEOUT: u64 = ETH_TRANSFER_TIMEOUT;
 
-fn is_timed_out(started: Instant) -> bool {
-    Instant::now() - started > BRIDGE_TIMEOUT
+fn withdraw_is_timed_out(started: Instant) -> bool {
+    Instant::now() - started > WITHDRAW_TIMEOUT
 }
 
 const WEI_PER_ETH: u128 = 1_000_000_000_000_000_000_u128;
@@ -424,7 +428,7 @@ async fn xdai_bridge(state: State) -> State {
             Err(e) => {
                 error!("Error in State::Deposit WithdrawRequest handler: {:?}", e);
 
-                if is_timed_out(timestamp) {
+                if withdraw_is_timed_out(timestamp) {
                     error!("Withdraw timed out!");
                     detailed_state_change(DetailedBridgeState::NoOp {
                         eth_balance: our_eth_balance,
@@ -456,7 +460,7 @@ async fn xdai_bridge(state: State) -> State {
                 withdraw_all,
                 amount_actually_exchanged: amount_actually_exchanged.clone(),
             };
-            if is_timed_out(timestamp) {
+            if withdraw_is_timed_out(timestamp) {
                 error!("Withdraw timed out!");
                 detailed_state_change(DetailedBridgeState::NoOp {
                     eth_balance: our_dai_balance,
@@ -504,14 +508,16 @@ async fn xdai_bridge(state: State) -> State {
                     wei_per_dollar.clone(),
                 ) {
                     info!("Converted dai back to eth!");
+                    let eth_gas_price = eth_gas_price * 2u32.into();
                     let withdraw_amount = if withdraw_all {
-                        // this only works because the gas price is hardcoded in auto_bridge
-                        // that should be fixed someday and this should use dynamic gas
-                        let gas_price = eth_gas_price;
+                        // if we're withdrawing everything don't leave any amount behind
+                        let gas_price = eth_gas_price.clone();
                         let tx_cost = gas_price * ETH_TRANSACTION_GAS_LIMIT.into();
                         our_eth_balance - tx_cost
                     } else {
-                        our_eth_balance - get_withdraw_reserve_amount(eth_gas_price)
+                        // if we're not cleaning out this wallet leave enough behind for future
+                        // deposits and withdraws
+                        our_eth_balance - get_withdraw_reserve_amount(eth_gas_price.clone())
                     };
 
                     detailed_state_change(DetailedBridgeState::EthToDest {
@@ -520,8 +526,21 @@ async fn xdai_bridge(state: State) -> State {
                         dest_address: to,
                     });
 
+                    // we must pass arguments here because the send_transaction function in web30
+                    // won't modify the transaction amount. It will only reduce the gas price in
+                    // order to ensure that a transaction is potentially valid. We can modify the send
+                    // amount at this level and therefore we must compute the gas price. We also pass
+                    // in the tx gas limit to ensure that we're computing on the same numbers.
                     let res = bridge
-                        .eth_transfer(to, withdraw_amount, ETH_TRANSFER_TIMEOUT)
+                        .eth_transfer(
+                            to,
+                            withdraw_amount,
+                            ETH_TRANSFER_TIMEOUT,
+                            vec![
+                                SendTxOption::GasPrice(eth_gas_price),
+                                SendTxOption::GasLimit(ETH_TRANSACTION_GAS_LIMIT.into()),
+                            ],
+                        )
                         .await;
                     if res.is_ok() {
                         info!("Issued an eth transfer for withdraw! Now complete!");

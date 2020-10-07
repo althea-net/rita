@@ -63,13 +63,14 @@ impl TokenBridge {
         to: Address,
         amount: Uint256,
         timeout: u64,
+        options: Vec<SendTxOption>,
     ) -> Result<(), Error> {
         let web3 = self.eth_web3.clone();
         let own_address = self.own_address;
         let secret = self.secret;
 
         let tx_hash = web3
-            .send_transaction(to, Vec::new(), amount, own_address, secret, vec![])
+            .send_transaction(to, Vec::new(), amount, own_address, secret, options)
             .await?;
 
         future_timeout(
@@ -130,7 +131,9 @@ impl TokenBridge {
 
     /// Sell `eth_amount` ETH for Dai.
     /// This function will error out if it takes longer than 'timeout' and the transaction is guaranteed not
-    /// to be accepted on the blockchain after this time.
+    /// to be executed on the blockchain after this time. The transaction will be accepted and some gas
+    /// will be paid but the actual exchange will not complete as the contract will throw if the timeout time
+    /// has elapsed
     pub async fn eth_to_dai_swap(
         &self,
         eth_amount: Uint256,
@@ -292,7 +295,10 @@ impl TokenBridge {
                 0u32.into(),
                 own_address,
                 secret,
-                vec![SendTxOption::GasLimit(UNISWAP_GAS_LIMIT.into())],
+                vec![
+                    SendTxOption::GasLimit(UNISWAP_GAS_LIMIT.into()),
+                    SendTxOption::GasPriceMultiplier(2u32.into()),
+                ],
             ),
         )
         .await?;
