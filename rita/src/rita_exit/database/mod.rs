@@ -542,7 +542,7 @@ pub fn enforce_exit_clients(
                             info!("Exit is enforcing on {} because their debt of {} is greater than the limit of {}", client.wg_pubkey, debt_entry.payment_details.debt, close_threshold);
                             KI.set_class_limit("wg_exit", free_tier_limit, free_tier_limit, ip)
                         } else {
-                            // set to 500mbps garunteed bandwidth and 1gbps
+                            // set to 500mbps guaranteed bandwidth and 1gbps
                             // absolute max
                             KI.set_class_limit("wg_exit", 500_000, 1_000_000, ip)
                         };
@@ -571,20 +571,5 @@ pub fn enforce_exit_clients(
         start.elapsed().as_secs(),
         start.elapsed().subsec_millis(),
     );
-
-    // TODO this is a hacky emergency kill switch for when we detect that
-    // the actix loop may be running too slowly, when that happens requests to
-    // the full node timeout and transactions will not be processed resulting in
-    // wallet drain, this is worse than the possibility of the exit not coming back up
-    // As a method of detection this is just a decent proxy not a 100% accurate method
-    // as it seems that http requests and anything that touches shelling out slow down
-    // the most in these situations. Hopefully we can figure out more about why the
-    // futures loop starts acting strangely.
-    const PANIC_TIME: u64 = 10;
-    if start.elapsed().as_secs() > PANIC_TIME {
-        let fail_mesg = format!("Exit enforcement took more than {} seconds!", PANIC_TIME);
-        error!("{}", fail_mesg);
-        panic!("{}", fail_mesg);
-    }
     Ok(new_debt_actions)
 }
