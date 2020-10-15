@@ -60,6 +60,7 @@ mod rita_exit;
 
 use crate::rita_common::dashboard::own_info::READABLE_VERSION;
 use crate::rita_common::utils::env_vars_contains;
+use crate::rita_exit::database::sms::send_admin_notification_sms;
 use rita_common::rita_loop::check_rita_common_actors;
 use rita_common::rita_loop::start_core_rita_endpoints;
 use rita_exit::rita_loop::start_rita_exit_endpoints;
@@ -135,12 +136,15 @@ lazy_static! {
 
 // These are a set of vars that are never updated during runtime. This means we can have
 // read only versions of them available here to prevent lock contention on large exits.
+// this is probably an overengineered optimization that can be safely removed
 lazy_static! {
     pub static ref EXIT_WG_PRIVATE_KEY: WgKey = SETTING.get_exit_network().wg_private_key;
 }
 lazy_static! {
     pub static ref EXIT_VERIF_SETTINGS: Option<ExitVerifSettings> = SETTING.get_verif_settings();
 }
+// this value is actually updated so that exit prices can be changed live and we can hit the read
+// only lock the vast majority of the time.
 lazy_static! {
     pub static ref EXIT_NETWORK_SETTINGS: ExitNetworkSettings = SETTING.get_exit_network().clone();
 }
@@ -259,6 +263,7 @@ fn main() {
     );
     trace!("Starting with Identity: {:?}", SETTING.get_identity());
     sanity_check_config();
+    send_admin_notification_sms("Exit restarted");
 
     let system = actix::System::new(format!("main {:?}", SETTING.get_network().mesh_ip));
 

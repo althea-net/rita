@@ -59,7 +59,7 @@ pub mod database_tools;
 pub mod db_client;
 mod email;
 mod geoip;
-mod sms;
+pub mod sms;
 pub mod struct_tools;
 
 /// one day in seconds

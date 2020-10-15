@@ -3,6 +3,7 @@ use crate::rita_exit::database::database_tools::verify_client;
 use crate::rita_exit::database::get_database_connection;
 use crate::rita_exit::database::get_exit_info;
 use crate::rita_exit::database::struct_tools::texts_sent;
+use crate::SETTING;
 use actix_web::client as actix_client;
 use actix_web::client::ClientResponse;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState};
@@ -11,7 +12,7 @@ use futures01::future;
 use futures01::future::Either;
 use futures01::future::Future;
 use phonenumber::PhoneNumber;
-use settings::exit::PhoneVerifSettings;
+use settings::exit::{ExitVerifSettings, PhoneVerifSettings, RitaExitSettings};
 use std::time::Duration;
 
 #[derive(Serialize)]
@@ -197,6 +198,11 @@ pub struct SmsNotification {
     body: String,
 }
 
+/// This function sends a low balance message to a users device. This is no longer the primary
+/// Way to send these messages as they are now sent through the operator tools. That being said
+/// this functionality here has not been removed because a future FOSS version of rita_exit may
+/// use it. If you feel like this is a dumb reason to keep a few hundred lines of code around
+/// I don't disagree and you can remove it.
 pub fn send_low_balance_sms(number: &str, phone: PhoneVerifSettings) -> Result<(), Error> {
     info!("Sending low balance message for {}", number);
 
@@ -229,5 +235,51 @@ pub fn send_low_balance_sms(number: &str, phone: PhoneVerifSettings) -> Result<(
             );
             Err(e.into())
         }
+    }
+}
+
+/// This function is used to send texts to the admin notification list, in the case of no configured
+/// admin phones you will get an empty array
+pub fn send_admin_notification_sms(message: &str) {
+    let verif_settings = SETTING.get_verif_settings();
+    let exit_title = SETTING.get_description();
+    if let Some(ExitVerifSettings::Phone(phone)) = verif_settings {
+        info!("Sending Admin notification message for");
+
+        let url = format!(
+            "https://api.twilio.com/2010-04-01/Accounts/{}/Messages.json",
+            phone.twillio_account_id
+        );
+
+        for number in phone.operator_notification_number {
+            let client = reqwest::blocking::Client::new();
+            match client
+                .post(&url)
+                .basic_auth(
+                    phone.twillio_account_id.clone(),
+                    Some(phone.twillio_auth_token.clone()),
+                )
+                .form(&SmsNotification {
+                    to: number.to_string(),
+                    from: phone.notification_number.clone(),
+                    body: exit_title.clone() + ": " + message,
+                })
+                .timeout(Duration::from_secs(1))
+                .send()
+            {
+                Ok(val) => {
+                    info!("Admin notification text sent successfully with {:?}", val);
+                }
+                Err(e) => {
+                    error!(
+                        "Admin notification text to {} failed with {:?}",
+                        number.to_string(),
+                        e
+                    );
+                }
+            }
+        }
+    } else {
+        warn!("We don't send admin messages over email!");
     }
 }

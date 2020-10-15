@@ -356,7 +356,7 @@ pub fn local_traffic_calculation(
     Ok(owes_exit)
 }
 
-/// Grabs the exit desination price cached in the TrafficWatcher object
+/// Grabs the exit destination price cached in the TrafficWatcher object
 /// this allows users to avoid the rather complicated procedure of computing it
 /// themselves
 pub struct GetExitDestPrice;

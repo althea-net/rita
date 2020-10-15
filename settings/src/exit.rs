@@ -10,6 +10,7 @@ use config::Config;
 use core::str::FromStr;
 use failure::Error;
 use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
+use phonenumber::PhoneNumber;
 use std::collections::HashSet;
 use std::net::Ipv4Addr;
 use std::sync::{Arc, RwLock};
@@ -17,7 +18,7 @@ use std::sync::{Arc, RwLock};
 /// This is the network settings specific to rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitNetworkSettings {
-    /// This is the port which the exit registration happens over, and should only be accessable
+    /// This is the port which the exit registration happens over, and should only be accessible
     /// over the mesh
     pub exit_hello_port: u16,
     /// This is the port which the exit tunnel listens on
@@ -158,6 +159,9 @@ pub struct PhoneVerifSettings {
     pub balance_notification_interval: u32,
     /// True if the exit should notify clients when they have a low balance
     pub notify_low_balance: bool,
+    /// Operator notification numbers, used to text the operators when we need them
+    #[serde(default)]
+    pub operator_notification_number: Vec<PhoneNumber>,
 }
 
 /// Struct containing the different types of supported verification
