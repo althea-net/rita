@@ -166,6 +166,8 @@ pub async fn validate() {
             if !item.checked {
                 let msg = format!("We failed to check txid {:#066x} against full nodes for the full duration of it's timeout period, please check full nodes", item.payment.txid.clone().unwrap());
                 error!("{}", msg);
+                // drop history here to avoid poisoning the lock
+                drop(history);
                 panic!(msg);
             }
 

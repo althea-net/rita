@@ -19,6 +19,8 @@ pub const SLOW_LOOP_SPEED: Duration = Duration::from_secs(60);
 pub const SLOW_LOOP_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub fn start_rita_slow_loop() {
+    let system = System::current();
+    let mut last_restart = Instant::now();
     thread::spawn(move || {
         // this will always be an error, so it's really just a loop statement
         // with some fancy destructuring
@@ -52,7 +54,12 @@ pub fn start_rita_slow_loop() {
             })
             .join()
         } {
-            error!("Rita common slow loop thread paniced! Respawning {:?}", e);
+            error!("Rita common slow loop thread panicked! Respawning {:?}", e);
+            if Instant::now() - last_restart < Duration::from_secs(120) {
+                error!("Restarting too quickly, leaving it to auto rescue!");
+                system.stop_with_code(121)
+            }
+            last_restart = Instant::now();
         }
     });
 }

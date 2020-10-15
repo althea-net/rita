@@ -55,8 +55,9 @@ pub const EXIT_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
 /// TODO remove futures on the non http endpoint / actix parts of this
 /// TODO remove futures on the actix parts of this by moving to thread local state
 pub fn start_rita_exit_loop() {
-    let system = System::current();
     setup_exit_wg_tunnel();
+    // this is a reference to the non-async actix system
+    let system = System::current();
     let mut last_restart = Instant::now();
     // outer thread is a watchdog, inner thread is the runner
     thread::spawn(move || {
@@ -90,7 +91,7 @@ pub fn start_rita_exit_loop() {
             })
             .join()
         } {
-            error!("Exit loop thread paniced! Respawning {:?}", e);
+            error!("Exit loop thread panicked! Respawning {:?}", e);
             if Instant::now() - last_restart < Duration::from_secs(60) {
                 error!("Restarting too quickly, leaving it to systemd!");
                 system.stop_with_code(121)

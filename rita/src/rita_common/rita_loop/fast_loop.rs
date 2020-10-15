@@ -14,7 +14,7 @@ use crate::KI;
 use crate::SETTING;
 use actix::{
     Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
-    SystemService,
+    System, SystemService,
 };
 use actix_async::Arbiter as AsyncArbiter;
 use actix_async::System as AsyncSystem;
@@ -242,6 +242,10 @@ impl Handler<Tick> for RitaFastLoop {
 /// runs as a thread with async/await support and one that runs as a actor using old futures
 /// slowly things will be migrated into this new sync loop as we move to async/await
 pub fn start_rita_fast_loop() {
+    let mut last_restart = Instant::now();
+    // this is a reference to the non-async actix system since this can bring down the whole process
+    let system = System::current();
+    // outer thread is a watchdog inner thread is the runner
     thread::spawn(move || {
         // this will always be an error, so it's really just a loop statement
         // with some fancy destructuring
@@ -276,6 +280,11 @@ pub fn start_rita_fast_loop() {
             .join()
         } {
             error!("Rita common fast loop thread paniced! Respawning {:?}", e);
+            if Instant::now() - last_restart < Duration::from_secs(60) {
+                error!("Restarting too quickly, leaving it to auto rescue!");
+                system.stop_with_code(121)
+            }
+            last_restart = Instant::now();
         }
     });
 }
