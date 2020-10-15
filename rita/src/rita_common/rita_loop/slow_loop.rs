@@ -3,7 +3,8 @@ use crate::rita_common::token_bridge::tick_token_bridge;
 use crate::rita_common::utils::wait_timeout::wait_timeout;
 use crate::rita_common::utils::wait_timeout::WaitResult;
 use crate::SETTING;
-use actix_async::{Arbiter, System};
+use actix::System;
+use actix_async::{Arbiter, System as AsyncSystem};
 use babel_monitor::open_babel_stream;
 use babel_monitor::set_local_fee;
 use babel_monitor::set_metric_factor;
@@ -29,12 +30,12 @@ pub fn start_rita_slow_loop() {
                 let start = Instant::now();
                 info!("Common Slow tick!");
 
-                let res = System::run(move || {
+                let res = AsyncSystem::run(move || {
                     Arbiter::spawn(async move {
                         tick_token_bridge().await;
                         tick_simulated_tx().await;
                         info!("Common Slow tick async completed!");
-                        System::current().stop();
+                        AsyncSystem::current().stop();
                     });
                 });
                 if res.is_err() {
