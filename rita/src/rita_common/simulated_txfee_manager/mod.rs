@@ -1,6 +1,6 @@
 //! The maintainer fee is a fraction of all payments that is sent to the firmware maintainer
 
-use crate::rita_common::payment_controller::TRANSACTION_SUBMISSON_TIMEOUT;
+use crate::rita_common::payment_controller::TRANSACTION_SUBMISSION_TIMEOUT;
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::rita_common::usage_tracker::update_payments;
 use crate::SETTING;
@@ -69,7 +69,7 @@ pub async fn tick_simulated_tx() {
     };
 
     let full_node = get_web3_server();
-    let web3 = Web3::new(&full_node, TRANSACTION_SUBMISSON_TIMEOUT);
+    let web3 = Web3::new(&full_node, TRANSACTION_SUBMISSION_TIMEOUT);
 
     let tx = Transaction {
         nonce,

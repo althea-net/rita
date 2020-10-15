@@ -136,7 +136,7 @@ fn remove(msg: Remove, history: &mut PaymentValidator) {
 
 /// Marks a transaction as 'checked' in that we have talked to a full node about it
 /// if we fail to talk to a full node about a transaction for the full duration of
-/// the timeout we will panic and restart.
+/// the timeout we attempt to restart our node.
 fn checked(msg: ToValidate, history: &mut PaymentValidator) {
     if history.unvalidated_transactions.take(&msg).is_some() {
         let mut checked_tx = msg;
@@ -164,9 +164,9 @@ pub async fn validate() {
             );
 
             if !item.checked {
-                let msg = "We failed to check txid {:#066x} against full nodes for the full duration of it's timeout period, please check full nodes";
+                let msg = format!("We failed to check txid {:#066x} against full nodes for the full duration of it's timeout period, please check full nodes", item.payment.txid.clone().unwrap());
                 error!("{}", msg);
-                panic!(msg)
+                panic!(msg);
             }
 
             to_delete.push(item.clone());

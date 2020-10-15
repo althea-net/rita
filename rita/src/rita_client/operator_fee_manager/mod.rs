@@ -5,7 +5,7 @@
 //! to compute the amount it should pay at a time, these micropayments have the effect of pro-rating
 //! the DAO fee amount and preventing the router from drastically making a large payment
 
-use crate::rita_common::payment_controller::TRANSACTION_SUBMISSON_TIMEOUT;
+use crate::rita_common::payment_controller::TRANSACTION_SUBMISSION_TIMEOUT;
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::rita_common::simulated_txfee_manager::add_tx_to_total;
 use crate::rita_common::usage_tracker::UpdatePayments;
@@ -132,7 +132,7 @@ impl Handler<Tick> for OperatorFeeManager {
             };
 
             let full_node = get_web3_server();
-            let web3 = Web3::new(&full_node, TRANSACTION_SUBMISSON_TIMEOUT);
+            let web3 = Web3::new(&full_node, TRANSACTION_SUBMISSION_TIMEOUT);
 
             let tx = Transaction {
                 nonce,

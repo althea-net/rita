@@ -23,7 +23,7 @@ use std::time::Instant;
 use tokio::net::TcpStream as TokioTcpStream;
 use web30::client::Web3;
 
-pub const TRANSACTION_SUBMISSON_TIMEOUT: Duration = Duration::from_secs(15);
+pub const TRANSACTION_SUBMISSION_TIMEOUT: Duration = Duration::from_secs(15);
 pub const MAX_TXID_RETRIES: u8 = 15u8;
 
 pub struct PaymentController();
@@ -76,7 +76,7 @@ fn make_payment(mut pmt: PaymentTx) -> Result<(), Error> {
         balance, pmt.amount, our_address, pmt.to.eth_address, nonce
     );
     if balance < pmt.amount {
-        warn!("Not enough money to pay debts! Cutoff immenient");
+        warn!("Not enough money to pay debts! Cutoff imminent");
         bail!("Not enough money!")
     } else if pmt.amount == 0u32.into() {
         error!("Trying to pay nothing!");
@@ -109,10 +109,10 @@ fn make_payment(mut pmt: PaymentTx) -> Result<(), Error> {
     };
 
     let full_node = get_web3_server();
-    let web3 = Web3::new(&full_node, TRANSACTION_SUBMISSON_TIMEOUT);
+    let web3 = Web3::new(&full_node, TRANSACTION_SUBMISSION_TIMEOUT);
 
     let tx = Transaction {
-        nonce,
+        nonce: nonce.clone(),
         gas_price,
         gas_limit: "21000".parse().unwrap(),
         to: pmt.to.eth_address,
@@ -138,7 +138,10 @@ fn make_payment(mut pmt: PaymentTx) -> Result<(), Error> {
             Ok(open_stream) => Either::A(transaction_status.then(move |transaction_outcome| {
                 match transaction_outcome {
                     Ok(tx_id) => {
-                        info!("Sending bw payment with txid: {:#066x}", tx_id);
+                        info!(
+                            "Sending bw payment with txid {:#066x} current balance: {:?}, payment of {:?}, from address {} to address {} with nonce {}",
+                            tx_id, balance, pmt.amount, our_address, pmt.to.eth_address, nonce
+                        );
                         // add published txid to submission
                         pmt.txid = Some(tx_id.clone());
                         Either::A(
@@ -147,7 +150,7 @@ fn make_payment(mut pmt: PaymentTx) -> Result<(), Error> {
                                 .json(&pmt)
                                 .expect("Failed to serialize payment!")
                                 .send()
-                                .timeout(TRANSACTION_SUBMISSON_TIMEOUT)
+                                .timeout(TRANSACTION_SUBMISSION_TIMEOUT)
                                 .then(move |neigh_ack| match neigh_ack {
                                     Ok(msg) => {
                                         info!(
@@ -179,7 +182,7 @@ fn make_payment(mut pmt: PaymentTx) -> Result<(), Error> {
                                         Ok(()) as Result<(), ()>
                                     }
                                     Err(e) => {
-                                        warn!("Failed to notify our neighbor of payment {:?}", e);
+                                        warn!("Failed to notify our neighbor of payment {:?} txid: {:#066x}", e, tx_id);
                                         PaymentController::from_registry().do_send(ResendTxid(ResendInfo{
                                             txid: tx_id,
                                             contact_socket,
@@ -252,6 +255,10 @@ fn resend_txid(input: ResendInfo) {
 
     // at this point the chance of success is too tiny to be worth it
     if attempt > MAX_TXID_RETRIES {
+        error!(
+            "We have failed to send txid {:#066x} this payment will remain uncredited!",
+            txid
+        );
         return;
     }
 
@@ -265,7 +272,7 @@ fn resend_txid(input: ResendInfo) {
                     .json(&pmt)
                     .expect("Failed to serialize payment!")
                     .send()
-                    .timeout(TRANSACTION_SUBMISSON_TIMEOUT)
+                    .timeout(TRANSACTION_SUBMISSION_TIMEOUT)
                     .then(move |neigh_ack| match neigh_ack {
                         Ok(msg) => {
                             if !msg.status().is_success() {
@@ -284,7 +291,10 @@ fn resend_txid(input: ResendInfo) {
                             Ok(()) as Result<(), ()>
                         }
                         Err(e) => {
-                            warn!("Failed to notify our neighbor of payment {:?}", e);
+                            warn!(
+                                "Failed to notify our neighbor of payment attempt {} {:?}",
+                                attempt, e
+                            );
 
                             PaymentController::from_registry().do_send(ResendTxid(ResendInfo {
                                 txid,
@@ -299,8 +309,8 @@ fn resend_txid(input: ResendInfo) {
             ),
             Err(e) => {
                 warn!(
-                    "Failed to connect to neighbor for bandwidth payment {:?}",
-                    e
+                    "Failed to connect to neighbor for bandwidth payment txid: {:#066x} {:?}",
+                    txid, e
                 );
 
                 PaymentController::from_registry().do_send(ResendTxid(ResendInfo {
