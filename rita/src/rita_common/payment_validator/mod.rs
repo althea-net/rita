@@ -1,4 +1,4 @@
-//! This module stores txid's and other payment infromation for later validation
+//! This module stores txid's and other payment information for later validation
 //! while in theory we should be able to get the transaction from a txid within a few
 //! seconds experience shows that up to a minute is not unusual for a txid to spread to
 //! the whole network. During times of congestion may be even worse.
@@ -13,6 +13,7 @@ use crate::rita_common::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::rita_common::usage_tracker::update_payments;
 use crate::SETTING;
+use actix::System;
 use althea_types::PaymentTx;
 use async_web30::client::Web3;
 use async_web30::types::TransactionResponse;
@@ -27,13 +28,22 @@ use std::time::{Duration, Instant};
 
 pub const TRANSACTION_VERIFICATION_TIMEOUT: Duration = FAST_LOOP_TIMEOUT;
 
-// Discard payments after 15 minutes of failing to find txid
+/// Discard payments after 15 minutes of failing to find txid
 pub const PAYMENT_TIMEOUT: Duration = Duration::from_secs(900u64);
-// How many blocks before we assume finality
+/// How many blocks before we assume finality
 const BLOCKS_TO_CONFIRM: u32 = 4;
-// How old does a txid need to be before we don't accept it?
-// this is 12 hours
+/// How old does a txid need to be before we don't accept it?
+/// this is 12 hours
 const BLOCKS_TO_OLD: u32 = 1440;
+/// if more than x PAYMENT_FAILURE_AMOUNT of transactions within a 30 minute
+/// window can not contact the full node we will restart
+const PAYMENT_FAILURE_WINDOW: Duration = Duration::from_secs(1800);
+/// if more than x PAYMENT_FAILURE_AMOUNT of transactions within a 30 minute
+/// window can not contact the full node we will restart
+const PAYMENT_FAILURE_COUNT: u32 = 15;
+/// the maximum allowed number of failed payments in the payment failure storage
+/// to prevent running out of memory during a flood of payment errors
+const MAX_FAILED_PAYMENTS: usize = 1000;
 
 lazy_static! {
     static ref HISTORY: Arc<RwLock<PaymentValidator>> =
@@ -64,9 +74,64 @@ impl fmt::Display for ToValidate {
     }
 }
 
+/// Why a payment might have failed this struct is designed to allow for PaymentValidator
+/// to introspect on why payments failed and identify when too many payments are failing for
+/// a specific reason. This is part of an interesting balance between being hardened to hostile behavior
+/// and being able to identify when things are going wrong. This data will be displayed to a human in logs
+/// to determine if the automated action was valid and due to an error or exploitation
+///
+/// If you're looking at this in the future and you think this whole system is overengineered and that the
+/// executor is now simplified enough to never enter such wonky states go ahead and remove this. As of writing
+/// I suspect we may already be there since this code is designed in response to a flaw in long running actix
+/// executors that we no longer use, instead we spawn a new executor every loop of a thread we manage.
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+struct FailedPayment {
+    tx: ToValidate,
+    reason: PaymentFailureReason,
+    time: Instant,
+}
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+enum PaymentFailureReason {
+    WrongAmount,
+    InvalidTransaction,
+    Unpublished,
+    CouldNotContactFullNode,
+    TooOld,
+}
+
+impl fmt::Display for PaymentFailureReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self {
+            PaymentFailureReason::TooOld => write!(f, "Too old"),
+            PaymentFailureReason::WrongAmount => write!(f, "Wrong Amount"),
+            PaymentFailureReason::InvalidTransaction => write!(f, "InvalidTransaction"),
+            PaymentFailureReason::Unpublished => write!(f, "Transaction not published!"),
+            PaymentFailureReason::CouldNotContactFullNode => {
+                write!(f, "Could not connect to a full node!")
+            }
+        }
+    }
+}
+
+impl fmt::Display for FailedPayment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let seconds_since = if let Some(time) = Instant::now().checked_duration_since(self.time) {
+            time.as_secs()
+        } else {
+            0
+        };
+        write!(
+            f,
+            "FailedPayment: tx: {}, reason: {}, seconds ago: {}",
+            self.tx, self.reason, seconds_since
+        )
+    }
+}
+
 pub struct PaymentValidator {
     unvalidated_transactions: HashSet<ToValidate>,
     successful_transactions: HashSet<Uint256>,
+    failed_transactions: Vec<FailedPayment>,
 }
 
 impl PaymentValidator {
@@ -74,6 +139,7 @@ impl PaymentValidator {
         PaymentValidator {
             unvalidated_transactions: HashSet::new(),
             successful_transactions: HashSet::new(),
+            failed_transactions: Vec::new(),
         }
     }
 }
@@ -98,6 +164,11 @@ pub fn validate_later(ts: ToValidate) {
             history.unvalidated_transactions.insert(ts);
         }
     } else {
+        history.failed_transactions.push(FailedPayment {
+            reason: PaymentFailureReason::Unpublished,
+            time: Instant::now(),
+            tx: ts.clone(),
+        });
         error!(
             "Someone tried to insert an unpublished transaction to validate!? {:?}",
             ts
@@ -131,6 +202,9 @@ fn remove(msg: Remove, history: &mut PaymentValidator) {
         info!("Transaction {} was removed", msg.tx);
     } else {
         error!("Transaction {} was double removed", msg.tx);
+        // in a development env we want to draw attention to this case
+        #[cfg(feature = "development")]
+        panic!("Transaction double removed!");
     }
 }
 
@@ -166,9 +240,26 @@ pub async fn validate() {
             if !item.checked {
                 let msg = format!("We failed to check txid {:#066x} against full nodes for the full duration of it's timeout period, please check full nodes", item.payment.txid.clone().unwrap());
                 error!("{}", msg);
-                // drop history here to avoid poisoning the lock
-                drop(history);
-                panic!(msg);
+                history.failed_transactions.push(FailedPayment {
+                    reason: PaymentFailureReason::CouldNotContactFullNode,
+                    time: Instant::now(),
+                    tx: item.clone(),
+                });
+                if too_many_full_node_contact_errors(&history.failed_transactions) {
+                    // drop the lock to prevent poisoning if we don't manage to crash
+                    drop(history);
+                    // get the non-async actix system and try to shut down the whole process
+                    let system = System::current();
+                    system.stop_with_code(121);
+                    // this satisfies the borrow checker to let us drop history so that if we
+                    // fail to get the current actix system we don't poison the lock fatally
+                    return;
+                } else {
+                    // keep failed_transactions from growing too much
+                    while history.failed_transactions.len() > MAX_FAILED_PAYMENTS {
+                        let _ = history.failed_transactions.remove(0);
+                    }
+                }
             }
 
             to_delete.push(item.clone());
@@ -224,6 +315,11 @@ fn handle_tx_messaging(
         Some(val) => val,
         None => {
             error!("Invalid TX! No destination!");
+            history.failed_transactions.push(FailedPayment {
+                reason: PaymentFailureReason::InvalidTransaction,
+                time: Instant::now(),
+                tx: ts.clone(),
+            });
             remove(
                 Remove {
                     tx: ts,
@@ -243,6 +339,11 @@ fn handle_tx_messaging(
 
     if !value_correct {
         error!("Transaction with invalid amount!");
+        history.failed_transactions.push(FailedPayment {
+            reason: PaymentFailureReason::WrongAmount,
+            time: Instant::now(),
+            tx: ts.clone(),
+        });
         remove(
             Remove {
                 tx: ts,
@@ -255,6 +356,11 @@ fn handle_tx_messaging(
 
     if is_old {
         error!("Transaction is more than 6 hours old! {:#066x}", txid);
+        history.failed_transactions.push(FailedPayment {
+            reason: PaymentFailureReason::TooOld,
+            time: Instant::now(),
+            tx: ts.clone(),
+        });
         remove(
             Remove {
                 tx: ts,
@@ -308,6 +414,11 @@ fn handle_tx_messaging(
         }
         (true, true, _) => {
             error!("Transaction to ourselves!");
+            history.failed_transactions.push(FailedPayment {
+                reason: PaymentFailureReason::InvalidTransaction,
+                time: Instant::now(),
+                tx: ts.clone(),
+            });
             remove(
                 Remove {
                     tx: ts,
@@ -318,6 +429,11 @@ fn handle_tx_messaging(
         }
         (false, false, _) => {
             error!("Transaction has nothing to do with us?");
+            history.failed_transactions.push(FailedPayment {
+                reason: PaymentFailureReason::InvalidTransaction,
+                time: Instant::now(),
+                tx: ts.clone(),
+            });
             remove(
                 Remove {
                     tx: ts,
@@ -330,6 +446,29 @@ fn handle_tx_messaging(
             //transaction waiting for validation, do nothing
         }
     }
+}
+
+/// Determines if there have been too many payment failures due to full node contact
+/// in a recent time period. If this is the case then we will restart the process. This
+/// Check has been inspired by a series of problems where the application has been in some
+/// strange state where it could not properly query full nodes. The original conditions
+/// that caused this have been refactored away but we keep this around as a precaution
+fn too_many_full_node_contact_errors(failed_transactions: &[FailedPayment]) -> bool {
+    let mut count = 0;
+    for tx in failed_transactions.iter().rev() {
+        // check if we have reached the end of the time window and return if we have
+        if let Some(time) = Instant::now().checked_duration_since(tx.time) {
+            if time > PAYMENT_FAILURE_WINDOW {
+                return false;
+            }
+        } else if let PaymentFailureReason::CouldNotContactFullNode = tx.reason {
+            count += 1;
+            if count > PAYMENT_FAILURE_COUNT {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Determine if a given payment satisfies our criteria for being in the blockchain
