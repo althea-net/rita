@@ -5,8 +5,19 @@ use actix::{Context, Handler, Message};
 use althea_types::Identity;
 use babel_monitor::Interface;
 use failure::Error;
-use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
+use std::{sync::Arc, sync::RwLock, time::Duration};
+
+/// We will not run TunnelGC more frequently than this duration. This lets us call TunnelGC in the fast loop
+/// once ever 5 seconds but run it as little as we like. We must run TunnelGC in the fast loop, at least until
+/// tunnels are async/await refactored, then it can be moved back to the slow loop.
+const GC_FREQUENCY: Duration = Duration::from_secs(60);
+
+lazy_static! {
+    /// for lack of a better way to do it until we move TunnelManager to a lock format this keeps
+    /// track of when we last ran GC
+    static ref LAST_GC: Arc<RwLock<Instant>> = Arc::new(RwLock::new(Instant::now()));
+}
 
 /// A message type for deleting all tunnels we haven't heard from for more than the duration.
 pub struct TriggerGC {
@@ -30,6 +41,19 @@ impl Message for TriggerGC {
 impl Handler<TriggerGC> for TunnelManager {
     type Result = Result<(), Error>;
     fn handle(&mut self, msg: TriggerGC, _ctx: &mut Context<Self>) -> Self::Result {
+        let mut last_gc = LAST_GC.write().unwrap();
+        let time_since = Instant::now().checked_duration_since(*last_gc);
+        match time_since {
+            Some(time) => {
+                if time < GC_FREQUENCY {
+                    return Ok(());
+                }
+            }
+            None => return Ok(()),
+        }
+        *last_gc = Instant::now();
+        drop(last_gc);
+
         let interfaces = into_interfaces_hashmap(&msg.babel_interfaces);
         trace!("Starting tunnel gc {:?}", interfaces);
         let mut good: HashMap<Identity, Vec<Tunnel>> = HashMap::new();
