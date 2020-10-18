@@ -36,7 +36,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 /// How often we save the nodes debt data, currently 30 minutes
-const SAVE_FREQENCY: Duration = Duration::from_secs(1800);
+const SAVE_FREQUENCY: Duration = Duration::from_secs(1800);
 
 lazy_static! {
     /// A locked global ref containing the state for this module. Note that the default implementation
@@ -328,7 +328,7 @@ impl DebtKeeper {
     fn save_if_needed(&mut self) {
         match self.last_save {
             Some(val) => {
-                if Instant::now() - val > SAVE_FREQENCY {
+                if Instant::now() - val > SAVE_FREQUENCY {
                     if let Err(e) = self.save() {
                         error!("Failed to save debts {:?}", e);
                     } else {
