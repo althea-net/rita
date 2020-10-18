@@ -155,7 +155,7 @@ fn tunnel_should_be_kept(
     // for the next gc round in that case.
     if let (Some(since_created), Some(since_last_contact)) = (since_created, since_last_contact) {
         let handshake_timeout =
-            check_handshake_time(msg.tunnel_handshake_timeout, &tunnel.iface_name);
+            !check_handshake_time(msg.tunnel_handshake_timeout, &tunnel.iface_name);
         let created_recently = since_created < msg.tunnel_timeout;
         let tunnel_up = tunnel_up(&interfaces, &tunnel.iface_name);
         let contact_timeout = since_last_contact > msg.tunnel_timeout;
