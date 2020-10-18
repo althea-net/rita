@@ -3221,7 +3221,7 @@ dependencies = [
 
 [[package]]
 name = "rita"
-version = "0.5.65"
+version = "0.5.66"
 dependencies = [
  "actix 0.10.0",
  "actix 0.7.11",
