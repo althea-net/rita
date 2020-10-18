@@ -143,7 +143,7 @@ pub struct Tunnel {
     pub listen_port: u16,
     /// The identity of the counter party tunnel
     pub neigh_id: LocalIdentity,
-    /// An instant representing the last time we heard from this tunnel r
+    /// An instant representing the last time we heard from this tunnel
     pub last_contact: Instant,
     /// When this tunnel was created
     created: Instant,

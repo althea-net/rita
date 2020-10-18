@@ -5,8 +5,8 @@ use actix::{Context, Handler, Message};
 use althea_types::Identity;
 use babel_monitor::Interface;
 use failure::Error;
-use std::collections::HashMap;
 use std::time::Duration;
+use std::{collections::HashMap, time::Instant};
 
 /// A message type for deleting all tunnels we haven't heard from for more than the duration.
 pub struct TriggerGC {
@@ -102,6 +102,11 @@ impl Handler<TriggerGC> for TunnelManager {
 ///   There is a complication here, tunnels don't come up immediately, so we add a time check
 ///   where we check the initial creation time of the tunnel and provide a grace period.
 ///
+///   A second case where this can happen is if tunnel negotiation fails somehow, with proper timing
+///   tunnel negotiation can't fail but I believe there to be a race condition that causes incorrect
+///   tunnel negotiation, in that case we see that the tunnel has had no successful handshakes within
+///   the timeout period and we remove it.
+///
 /// 2) Clean up tunnels for nodes that have long since gone offline
 ///
 ///   Long running nodes like gateways and exits may have thousands of nodes connect and go offline
@@ -120,17 +125,43 @@ fn tunnel_should_be_kept(
     msg: &TriggerGC,
     interfaces: &HashMap<String, bool>,
 ) -> bool {
-    // clippy wants the maximally compact rather than maximally readable conditionals here
-    // in this case readability far far outweighs code compactness
-    #[allow(clippy::all)]
-    if tunnel.created().elapsed() > msg.tunnel_timeout
-        && !tunnel_up(&interfaces, &tunnel.iface_name)
-    {
-        false
-    } else if tunnel.last_contact.elapsed() > msg.tunnel_timeout
-        && !check_handshake_time(msg.tunnel_handshake_timeout, &tunnel.iface_name)
-    {
-        false
+    let since_created = Instant::now().checked_duration_since(tunnel.created());
+    let since_last_contact = Instant::now().checked_duration_since(tunnel.last_contact);
+    // this is almost always true, unless one of the two is in the future versus 'now' it's safe to just skip this
+    // for the next gc round in that case.
+    if let (Some(since_created), Some(since_last_contact)) = (since_created, since_last_contact) {
+        let handshake_timeout =
+            check_handshake_time(msg.tunnel_handshake_timeout, &tunnel.iface_name);
+        let created_recently = since_created < msg.tunnel_timeout;
+        let tunnel_up = tunnel_up(&interfaces, &tunnel.iface_name);
+        let contact_timeout = since_last_contact > msg.tunnel_timeout;
+
+        match (
+            created_recently,
+            contact_timeout,
+            handshake_timeout,
+            tunnel_up,
+        ) {
+            // recently created tunnels should always be kept while they converge
+            (true, _, _, _) => true,
+            // this is a good tunnel
+            (false, false, false, true) => true,
+            // contact timeout, but handshakes are going and babel is connected, this is a good tunnel suffering
+            // from multicast optimization
+            (false, true, false, true) => true,
+            // we haven't heard from the neighbors Rita or Wireguard, fully disconnected
+            (false, true, true, _) => false,
+            // No recent handshakes, but recent contact from Rita, we should recreate this tunnel as it's probably
+            // suffering from the negotiation race condition
+            (false, false, true, _) => false,
+            // tunnel up, handshakes moving, but not up in babel, needs to be recreated in order to pass traffic
+            (false, false, false, false) => false,
+            // tunnel up, handshakes moving, but not up in babel, needs to be recreated in order to pass traffic but
+            // it's also suffering from multicast optimization, meaning this tunnel may not re-open quickly.
+            // Better to take that chance than simply not function. A better solution her may be to unlisten
+            // and re-listen in babel on this tunnel
+            (false, true, false, false) => false,
+        }
     } else {
         true
     }
