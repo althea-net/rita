@@ -11,7 +11,7 @@
 
 use crate::rita_common::payment_controller;
 use crate::rita_common::payment_controller::PaymentController;
-use crate::rita_common::payment_validator::PAYMENT_TIMEOUT;
+use crate::rita_common::payment_validator::PAYMENT_SEND_TIMEOUT;
 use crate::rita_common::simulated_txfee_manager::add_tx_to_total;
 use crate::rita_common::tunnel_manager::TunnelAction;
 use crate::rita_common::tunnel_manager::TunnelChange;
@@ -580,7 +580,7 @@ impl DebtKeeper {
                 // But for the sake of parinoia we provide a handler here which will time out in such a situation
                 match debt_data.payment_in_flight_start {
                     Some(start_time) => {
-                        if Instant::now() - start_time > PAYMENT_TIMEOUT {
+                        if Instant::now() - start_time > PAYMENT_SEND_TIMEOUT {
                             error!("Payment in flight for more than payment timeout! Resetting!");
                             debt_data.payment_in_flight = false;
                             debt_data.payment_in_flight_start = None;
