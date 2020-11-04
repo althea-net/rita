@@ -26,7 +26,7 @@ use actix::registry::SystemService;
 use actix::{Actor, Arbiter, Context, Handler, ResponseFuture, Supervised};
 use actix_web::client::Connection;
 use actix_web::{client, HttpMessage, Result};
-use althea_kernel_interface::exit_client_tunnel::ClientExitTunnelConfig;
+use althea_kernel_interface::{exit_client_tunnel::ClientExitTunnelConfig, KernelInterfaceError};
 use althea_types::ExitClientDetails;
 use althea_types::ExitDetails;
 use althea_types::WgKey;
@@ -57,7 +57,9 @@ fn linux_setup_exit_tunnel(
 ) -> Result<(), Error> {
     KI.update_settings_route(&mut SETTING.get_network_mut().default_route)?;
 
-    KI.setup_wg_if_named("wg_exit")?;
+    if let Err(KernelInterfaceError::RuntimeError(v)) = KI.setup_wg_if_named("wg_exit") {
+        return Err(format_err!("{}", v));
+    }
 
     let args = ClientExitTunnelConfig {
         endpoint: SocketAddr::new(current_exit.id.mesh_ip, general_details.wg_exit_port),
