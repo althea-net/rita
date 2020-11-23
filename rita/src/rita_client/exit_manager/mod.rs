@@ -1,13 +1,13 @@
 //! This module contains utility functions for dealing with the exit signup and connection procedure
 //! the procedure goes as follows.
 //!
-//! Exit is preconfigured with wireguard, mesh ip, and eth address info, this removes the possiblity
+//! Exit is preconfigured with wireguard, mesh ip, and eth address info, this removes the possibility
 //! of an effective MITM attack.
 //!
-//! The exit is quiered for info about it that might change, such as it's subnet settings and default
+//! The exit is queried for info about it that might change, such as it's subnet settings and default
 //! route.
 //!
-//! Once the 'general' settings are aquired we contact the exit with our email, after getting an email
+//! Once the 'general' settings are acquire we contact the exit with our email, after getting an email
 //! we input the confirmation code.
 //!
 //! The exit then serves up our user specific settings (our own exit internal ip) which we configure
@@ -261,17 +261,30 @@ pub fn exit_setup_request(
         Some(exit_struct) => exit_struct.clone(),
         None => return Box::new(future::err(format_err!("Could not find exit {:?}", exit))),
     };
+    let exit_server = current_exit.id.mesh_ip;
+    let exit_pubkey = current_exit.id.wg_public_key;
     let exit_auth_type = match current_exit.info.general_details() {
         Some(details) => details.verif_mode,
         None => return Box::new(future::err(format_err!("Exit is not ready to be setup!"))),
     };
+
     let mut reg_details: ExitRegistrationDetails =
         match SETTING.get_exit_client().contact_info.clone() {
             Some(val) => val.into(),
-            None => return Box::new(future::err(format_err!("No registration info set!"))),
+            None => {
+                if let ExitVerifMode::Off = exit_auth_type {
+                    ExitRegistrationDetails {
+                        email: None,
+                        email_code: None,
+                        phone: None,
+                        phone_code: None,
+                    }
+                } else {
+                    return Box::new(future::err(format_err!("No registration info set!")));
+                }
+            }
         };
-    let exit_server = current_exit.id.mesh_ip;
-    let exit_pubkey = current_exit.id.wg_public_key;
+
     match exit_auth_type {
         ExitVerifMode::Email => {
             reg_details.email_code = code;
