@@ -172,10 +172,7 @@ pub async fn tick_token_bridge() {
 fn token_bridge_core_from_settings(payment_settings: &PaymentSettings) -> TokenBridgeCore {
     let addresses = payment_settings.bridge_addresses.clone();
     TokenBridgeCore::new(
-        addresses.uniswap_address,
-        addresses.xdai_foreign_bridge_address,
-        addresses.xdai_home_bridge_address,
-        addresses.foreign_dai_contract_address,
+        addresses.clone(),
         payment_settings.eth_address.unwrap(),
         payment_settings.eth_private_key.unwrap(),
         addresses.eth_full_node_url,

@@ -1,7 +1,8 @@
 use althea_types::SystemChain;
+use auto_bridge::default_bridge_addresses;
+use auto_bridge::TokenBridgeAddresses;
 use clarity::{Address, PrivateKey};
 use num256::{Int256, Uint256};
-use std::str::FromStr;
 
 pub const XDAI_FEE_MULTIPLIER: u32 = 6000;
 pub const XDAI_MAX_GAS: u64 = 1_000_000_000;
@@ -71,24 +72,6 @@ fn default_debts_file() -> String {
     "/etc/rita-debts.json".to_string()
 }
 
-fn default_bridge_addresses() -> TokenBridgeAddresses {
-    TokenBridgeAddresses {
-        uniswap_address: Address::from_str("0x2a1530C4C41db0B0b2bB646CB5Eb1A67b7158667").unwrap(),
-        xdai_foreign_bridge_address: Address::from_str(
-            "0x7301CFA0e1756B71869E93d4e4Dca5c7d0eb0AA6",
-        )
-        .unwrap(),
-        xdai_home_bridge_address: Address::from_str("0x4aa42145Aa6Ebf72e164C9bBC74fbD3788045016")
-            .unwrap(),
-        foreign_dai_contract_address: Address::from_str(
-            "0x6b175474e89094c44da98b954eedeac495271d0f",
-        )
-        .unwrap(),
-        eth_full_node_url: "https://eth.althea.org".into(),
-        xdai_full_node_url: "https://dai.althea.org".into(),
-    }
-}
-
 fn default_simulated_transaction_fee_address() -> Address {
     "0xee8bba37508cd6f9db7c8ad0ae2b3de0168c1b36"
         .parse()
@@ -114,16 +97,6 @@ fn default_max_gas() -> u64 {
 /// By default we forgive nodes of their debts on reboot
 fn default_forgive_on_reboot() -> bool {
     true
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
-pub struct TokenBridgeAddresses {
-    pub uniswap_address: Address,
-    pub xdai_home_bridge_address: Address,
-    pub xdai_foreign_bridge_address: Address,
-    pub foreign_dai_contract_address: Address,
-    pub eth_full_node_url: String,
-    pub xdai_full_node_url: String,
 }
 
 /// This struct is used by both rita and rita_exit to configure the dummy payment controller and

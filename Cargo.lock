@@ -602,6 +602,8 @@ dependencies = [
  "num 0.3.0",
  "num256",
  "rand 0.7.3",
+ "serde 1.0.116",
+ "serde_derive",
  "tokio 0.2.22",
  "web30 0.6.1",
 ]
@@ -3534,6 +3536,7 @@ dependencies = [
  "althea_kernel_interface",
  "althea_types",
  "arrayvec",
+ "auto-bridge",
  "clarity",
  "config",
  "failure",

@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate serde_derive;
 
 use clarity::abi::encode_call;
 use clarity::{Address, PrivateKey};
@@ -7,7 +9,7 @@ use failure::bail;
 use failure::Error;
 use num::Bounded;
 use num256::Uint256;
-use std::time::Duration;
+use std::{str::FromStr, time::Duration};
 use tokio::time::timeout as future_timeout;
 use web30::client::Web3;
 use web30::types::SendTxOption;
@@ -18,6 +20,17 @@ pub static UNISWAP_GAS_LIMIT: u128 = 80_000;
 pub static ERC20_GAS_LIMIT: u128 = 40_000;
 pub static ETH_TRANSACTION_GAS_LIMIT: u128 = 21_000;
 
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub struct TokenBridgeAddresses {
+    pub uniswap_address: Address,
+    pub xdai_home_bridge_address: Address,
+    pub xdai_home_helper_address: Address,
+    pub xdai_foreign_bridge_address: Address,
+    pub foreign_dai_contract_address: Address,
+    pub eth_full_node_url: String,
+    pub xdai_full_node_url: String,
+}
+
 #[derive(Clone)]
 pub struct TokenBridge {
     pub xdai_web3: Web3,
@@ -27,6 +40,8 @@ pub struct TokenBridge {
     pub xdai_foreign_bridge_address: Address,
     /// This is the address of the xDai bridge on xDai
     pub xdai_home_bridge_address: Address,
+    /// This is the helper contract on xDai
+    pub xdai_home_helper_address: Address,
     /// This is the address of the Dai token contract on Eth
     pub foreign_dai_contract_address: Address,
     pub own_address: Address,
@@ -34,22 +49,19 @@ pub struct TokenBridge {
 }
 
 impl TokenBridge {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        uniswap_address: Address,
-        xdai_home_bridge_address: Address,
-        xdai_foreign_bridge_address: Address,
-        foreign_dai_contract_address: Address,
+        addresses: TokenBridgeAddresses,
         own_address: Address,
         secret: PrivateKey,
         eth_full_node_url: String,
         xdai_full_node_url: String,
     ) -> TokenBridge {
         TokenBridge {
-            uniswap_address,
-            xdai_home_bridge_address,
-            xdai_foreign_bridge_address,
-            foreign_dai_contract_address,
+            uniswap_address: addresses.uniswap_address,
+            xdai_home_bridge_address: addresses.xdai_home_bridge_address,
+            xdai_foreign_bridge_address: addresses.xdai_foreign_bridge_address,
+            foreign_dai_contract_address: addresses.foreign_dai_contract_address,
+            xdai_home_helper_address: addresses.xdai_home_helper_address,
             own_address,
             secret,
             xdai_web3: Web3::new(&xdai_full_node_url, Duration::from_secs(10)),
@@ -418,6 +430,29 @@ impl TokenBridge {
     }
 }
 
+/// This function provides the default bridge addresses to be used by the token contract,
+/// these are for the most part constants, but it is possible they may be updated or changed
+/// if the xDai or Maker DAO or Uniswap team deploy new contracts
+pub fn default_bridge_addresses() -> TokenBridgeAddresses {
+    TokenBridgeAddresses {
+        uniswap_address: Address::from_str("0x2a1530C4C41db0B0b2bB646CB5Eb1A67b7158667").unwrap(),
+        xdai_home_bridge_address: Address::from_str("0x4aa42145Aa6Ebf72e164C9bBC74fbD3788045016")
+            .unwrap(),
+        xdai_home_helper_address: Address::from_str("0x6A92e97A568f5F58590E8b1f56484e6268CdDC51")
+            .unwrap(),
+        xdai_foreign_bridge_address: Address::from_str(
+            "0x7301CFA0e1756B71869E93d4e4Dca5c7d0eb0AA6",
+        )
+        .unwrap(),
+        foreign_dai_contract_address: Address::from_str(
+            "0x6b175474e89094c44da98b954eedeac495271d0f",
+        )
+        .unwrap(),
+        eth_full_node_url: "https://eth.althea.org".into(),
+        xdai_full_node_url: "https://dai.althea.org".into(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -431,11 +466,8 @@ mod tests {
         .unwrap();
 
         TokenBridge::new(
-            Address::from_str("0x09cabEC1eAd1c0Ba254B09efb3EE13841712bE14").unwrap(),
-            Address::from_str("0x7301CFA0e1756B71869E93d4e4Dca5c7d0eb0AA6").unwrap(),
-            Address::from_str("0x4aa42145Aa6Ebf72e164C9bBC74fbD3788045016").unwrap(),
-            Address::from_str("0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359").unwrap(),
-            Address::from_str("0x79AE13432950bF5CDC3499f8d4Cf5963c3F0d42c").unwrap(),
+            default_bridge_addresses(),
+            Address::parse_and_validate("0x79AE13432950bF5CDC3499f8d4Cf5963c3F0d42c").unwrap(),
             pk,
             "https://eth.althea.org".into(),
             "https://dai.althea.org".into(),
@@ -461,11 +493,8 @@ mod tests {
         let token_bridge = new_token_bridge();
 
         let unapproved_token_bridge = TokenBridge::new(
-            Address::from_str("0x09cabEC1eAd1c0Ba254B09efb3EE13841712bE14").unwrap(),
-            Address::from_str("0x7301CFA0e1756B71869E93d4e4Dca5c7d0eb0AA6").unwrap(),
-            Address::from_str("0x4aa42145Aa6Ebf72e164C9bBC74fbD3788045016").unwrap(),
-            Address::from_str("0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359").unwrap(),
-            Address::from_str("0x6d943740746934b2f5D9c9E6Cb1908758A42452f").unwrap(),
+            default_bridge_addresses(),
+            Address::parse_and_validate("0x79AE13432950bF5CDC3499f8d4Cf5963c3F0d42c").unwrap(),
             pk,
             "https://eth.althea.org".into(),
             "https://dai.althea.org".into(),
