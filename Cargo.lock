@@ -947,9 +947,9 @@ dependencies = [
 
 [[package]]
 name = "compressed_log"
-version = "0.3.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d371acfe8d922e4a53841aecb50cd68f71743d02459d40160209c7bcd15db43b"
+checksum = "42fc69f2ce1ebfd76ddf10a61910b6aaab8f361bac438c9c1632337db7d704ad"
 dependencies = [
  "actix 0.10.0",
  "actix-web 3.1.0",

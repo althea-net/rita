@@ -38,7 +38,7 @@ pub fn enable_remote_logging() -> Result<(), Error> {
         )
         .set_compression_level(Compression::Fast)
         .set_sink_url(logging_url)
-        .set_threshold(1000)
+        .set_threshold(10_000)
         .set_format(Box::new(move |record: &Record| {
             format!(
                 "{} {} rita: {}\n",
