@@ -430,24 +430,22 @@ impl TokenBridge {
     }
 }
 
+pub const UNISWAP_ADDRESS: &str = "0x2a1530C4C41db0B0b2bB646CB5Eb1A67b7158667";
+pub const XDAI_HOME_BRIDGE_ADDRESS: &str = "0x4aa42145Aa6Ebf72e164C9bBC74fbD3788045016";
+pub const XDAI_HOME_HELPER_ADDRESS: &str = "0x6A92e97A568f5F58590E8b1f56484e6268CdDC51";
+pub const XDAI_FOREIGN_BRIDGE_ADDRESS: &str = "0x7301CFA0e1756B71869E93d4e4Dca5c7d0eb0AA6";
+pub const FOREIGN_DAI_CONTRACT_ADDRESS: &str = "0x6B175474E89094C44Da98b954EedeAC495271d0F";
+
 /// This function provides the default bridge addresses to be used by the token contract,
 /// these are for the most part constants, but it is possible they may be updated or changed
 /// if the xDai or Maker DAO or Uniswap team deploy new contracts
 pub fn default_bridge_addresses() -> TokenBridgeAddresses {
     TokenBridgeAddresses {
-        uniswap_address: Address::from_str("0x2a1530C4C41db0B0b2bB646CB5Eb1A67b7158667").unwrap(),
-        xdai_home_bridge_address: Address::from_str("0x4aa42145Aa6Ebf72e164C9bBC74fbD3788045016")
-            .unwrap(),
-        xdai_home_helper_address: Address::from_str("0x6A92e97A568f5F58590E8b1f56484e6268CdDC51")
-            .unwrap(),
-        xdai_foreign_bridge_address: Address::from_str(
-            "0x7301CFA0e1756B71869E93d4e4Dca5c7d0eb0AA6",
-        )
-        .unwrap(),
-        foreign_dai_contract_address: Address::from_str(
-            "0x6b175474e89094c44da98b954eedeac495271d0f",
-        )
-        .unwrap(),
+        uniswap_address: Address::from_str(UNISWAP_ADDRESS).unwrap(),
+        xdai_home_bridge_address: Address::from_str(XDAI_HOME_BRIDGE_ADDRESS).unwrap(),
+        xdai_home_helper_address: Address::from_str(XDAI_HOME_HELPER_ADDRESS).unwrap(),
+        xdai_foreign_bridge_address: Address::from_str(XDAI_FOREIGN_BRIDGE_ADDRESS).unwrap(),
+        foreign_dai_contract_address: Address::from_str(FOREIGN_DAI_CONTRACT_ADDRESS).unwrap(),
         eth_full_node_url: "https://eth.althea.org".into(),
         xdai_full_node_url: "https://dai.althea.org".into(),
     }
@@ -477,6 +475,20 @@ mod tests {
     fn eth_to_wei(eth: f64) -> Uint256 {
         let wei = (eth * 1000000000000000000f64) as u64;
         wei.into()
+    }
+
+    /// ensures all bridge addresses pass EIP-55 parsing
+    #[test]
+    fn validate_bridge_addresses() {
+        Address::parse_and_validate(UNISWAP_ADDRESS).expect("Invalid uniswap address");
+        Address::parse_and_validate(XDAI_HOME_BRIDGE_ADDRESS)
+            .expect("Invalid xdai home bridge address");
+        Address::parse_and_validate(XDAI_HOME_HELPER_ADDRESS)
+            .expect("Invalid xdai home helper address");
+        Address::parse_and_validate(XDAI_FOREIGN_BRIDGE_ADDRESS)
+            .expect("Invalid xdai foreign bridge address");
+        Address::parse_and_validate(FOREIGN_DAI_CONTRACT_ADDRESS)
+            .expect("Invalid foreign dai contract address");
     }
 
     #[test]
