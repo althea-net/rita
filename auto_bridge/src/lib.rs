@@ -20,10 +20,15 @@ pub static UNISWAP_GAS_LIMIT: u128 = 80_000;
 pub static ERC20_GAS_LIMIT: u128 = 40_000;
 pub static ETH_TRANSACTION_GAS_LIMIT: u128 = 21_000;
 
+fn default_xdai_home_helper_address() -> Address {
+    default_bridge_addresses().xdai_home_helper_address
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct TokenBridgeAddresses {
     pub uniswap_address: Address,
     pub xdai_home_bridge_address: Address,
+    #[serde(default = "default_xdai_home_helper_address")]
     pub xdai_home_helper_address: Address,
     pub xdai_foreign_bridge_address: Address,
     pub foreign_dai_contract_address: Address,
