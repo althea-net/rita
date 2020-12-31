@@ -784,10 +784,8 @@ impl TunnelManager {
             None => false,
         };
 
-        let they_have_tunnel = match their_localid.have_tunnel {
-            Some(v) => v,
-            None => true, // when we don't know take the more conservative option
-        };
+        // when we don't know take the more conservative option and assume they do have a tunnel
+        let they_have_tunnel = their_localid.have_tunnel.unwrap_or(true);
 
         let mut return_bool = false;
         if we_have_tunnel {

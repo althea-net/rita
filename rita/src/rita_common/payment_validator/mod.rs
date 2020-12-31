@@ -165,6 +165,7 @@ fn checked(msg: ToValidate, history: &mut PaymentValidator) {
     }
 }
 
+#[allow(clippy::await_holding_lock)]
 pub async fn validate() {
     // we panic on a failed receive so it should always be longer than the minimum
     // time we expect payments to take to enter the blockchain (the send timeout)

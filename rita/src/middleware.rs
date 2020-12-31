@@ -39,7 +39,7 @@ impl<S> Middleware<S> for Headers {
             *resp.status_mut() = StatusCode::OK;
         }
 
-        if origin != "" {
+        if !origin.is_empty() {
             #[cfg(not(feature = "dash_debug"))]
             resp.headers_mut().insert(
                 header::HeaderName::try_from("Access-Control-Allow-Origin").unwrap(),

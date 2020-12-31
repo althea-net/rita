@@ -298,10 +298,7 @@ fn manage_gateway() {
     // the is_up detection is mostly useless because these ports reside on switches which mark
     // all ports as up all the time.
     let gateway = match SETTING.get_network().external_nic {
-        Some(ref external_nic) => match KI.is_iface_up(external_nic) {
-            Some(val) => val,
-            None => false,
-        },
+        Some(ref external_nic) => KI.is_iface_up(external_nic).unwrap_or(false),
         None => false,
     };
 

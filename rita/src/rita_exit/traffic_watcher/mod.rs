@@ -224,7 +224,7 @@ pub fn watch(
 
     // Setup the debts table
     for (_, ident) in identities.clone() {
-        debts.insert(ident, 0 as i128);
+        debts.insert(ident, 0i128);
     }
 
     // accounting for 'input'

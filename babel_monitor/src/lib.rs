@@ -478,16 +478,9 @@ fn parse_neighs_sync(output: String) -> Result<Vec<Neighbor>, Error> {
                     Ok(entry) => entry,
                     Err(_) => continue,
                 },
-                rtt: match find_and_parse_babel_val("rtt", entry) {
-                    Ok(entry) => entry,
-                    // it's possible that our neigh does not have rtt enabled, handle
-                    Err(_) => 0.0,
-                },
-                rttcost: match find_and_parse_babel_val("rttcost", entry) {
-                    Ok(entry) => entry,
-                    // it's possible that our neigh does not have rtt enabled, handle
-                    Err(_) => 0,
-                },
+                // it's possible that the neighbor does not have rtt enabled
+                rtt: find_and_parse_babel_val("rtt", entry).unwrap_or(0.0),
+                rttcost: find_and_parse_babel_val("rttcost", entry).unwrap_or(0),
                 cost: match find_and_parse_babel_val("cost", entry) {
                     Ok(entry) => entry,
                     Err(_) => continue,
