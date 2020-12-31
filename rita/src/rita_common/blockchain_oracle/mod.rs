@@ -143,22 +143,17 @@ fn update_balance(
 /// a different network than the one we are actually using. For example an address
 /// that contains both real eth and test eth may be tricked into singing a transaction
 /// for real eth while operating on the testnet. Because of this we have warnings behavior
-fn update_net_version(full_node: &str, net_version: &mut Option<u64>, new_net_version: String) {
+fn update_net_version(full_node: &str, net_version: &mut Option<u64>, new_net_version: u64) {
     info!(
         "Got response from {} for net_version request {:?}",
         full_node, new_net_version
     );
-    match new_net_version.parse::<u64>() {
-        Ok(net_id_num) => {
-            // we could just take the first value and keept it but for now
-            // lets check that all nodes always agree on net version constantly
-            if net_version.is_some() && net_version.unwrap() != net_id_num {
-                error!("GOT A DIFFERENT NETWORK ID VALUE, IT IS CRITICAL THAT YOU REVIEW YOUR NODE LIST FOR HOSTILE/MISCONFIGURED NODES");
-            } else if net_version.is_none() {
-                *net_version = Some(net_id_num);
-            }
-        }
-        Err(e) => warn!("Failed to parse ETH network ID {:?}", e),
+    // we could just take the first value and kept it but for now
+    // lets check that all nodes always agree on net version constantly
+    if net_version.is_some() && net_version.unwrap() != new_net_version {
+        error!("GOT A DIFFERENT NETWORK ID VALUE, IT IS CRITICAL THAT YOU REVIEW YOUR NODE LIST FOR HOSTILE/MISCONFIGURED NODES");
+    } else if net_version.is_none() {
+        *net_version = Some(new_net_version);
     }
 }
 

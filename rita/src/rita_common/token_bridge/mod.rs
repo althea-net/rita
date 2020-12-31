@@ -45,10 +45,10 @@
 use crate::SETTING;
 use althea_types::SystemChain;
 use async_web30::types::SendTxOption;
-use auto_bridge::TokenBridge as TokenBridgeCore;
 use auto_bridge::ERC20_GAS_LIMIT;
 use auto_bridge::ETH_TRANSACTION_GAS_LIMIT;
 use auto_bridge::UNISWAP_GAS_LIMIT;
+use auto_bridge::{TokenBridge as TokenBridgeCore, TokenBridgeError};
 use clarity::Address;
 use failure::Error;
 use num256::Uint256;
@@ -72,8 +72,8 @@ lazy_static! {
 /// they pause the movement of ETH -> DAI -> XDAI that is normal in the
 /// system. Otherwise the normal process will be attempted indefinitely
 const WITHDRAW_TIMEOUT: Duration = Duration::from_secs(3600 * 6);
-pub const ETH_TRANSFER_TIMEOUT: u64 = 600u64;
-const UNISWAP_TIMEOUT: u64 = ETH_TRANSFER_TIMEOUT;
+pub const ETH_TRANSFER_TIMEOUT: Duration = Duration::from_secs(600);
+const UNISWAP_TIMEOUT: Duration = ETH_TRANSFER_TIMEOUT;
 
 fn withdraw_is_timed_out(started: Instant) -> bool {
     Instant::now() - started > WITHDRAW_TIMEOUT
@@ -199,7 +199,7 @@ async fn rescue_dai(
     bridge: TokenBridgeCore,
     our_address: Address,
     minimum_stranded_dai_transfer: Uint256,
-) -> Result<(), Error> {
+) -> Result<(), TokenBridgeError> {
     let dai_balance = bridge.get_dai_balance(our_address).await?;
     info!("Our DAI balance is {}", dai_balance);
     if dai_balance > minimum_stranded_dai_transfer {
