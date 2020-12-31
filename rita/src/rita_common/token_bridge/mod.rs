@@ -705,8 +705,8 @@ pub fn get_bridge_status() -> BridgeStatus {
     let bridge = BRIDGE.read().unwrap().clone();
     // amounts is in cents, we need to convert to dollars for the dashboard display
     let amounts = AMOUNTS.read().unwrap().clone();
-    let reserve_amount = div_round_closest(amounts.reserve_amount, 100);
-    let minimum_to_exchange = div_round_closest(amounts.minimum_to_exchange, 100);
+    let reserve_amount = amounts.reserve_amount / 100;
+    let minimum_to_exchange = amounts.minimum_to_exchange / 100;
     BridgeStatus {
         reserve_amount,
         minimum_deposit: minimum_to_exchange,
@@ -743,8 +743,4 @@ fn lossy_u32(input: Uint256) -> u32 {
         // won't change etc.
         Err(_e) => u32::MAX,
     }
-}
-
-fn div_round_closest(a: u32, b: u32) -> u32 {
-    (a - (b + 1) / 2) / b + 1
 }
