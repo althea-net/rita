@@ -5,14 +5,14 @@ extern crate serde_derive;
 
 use clarity::abi::encode_call;
 use clarity::{Address, PrivateKey};
-use failure::bail;
-use failure::Error;
 use num::Bounded;
 use num256::Uint256;
 use std::{str::FromStr, time::Duration};
-use tokio::time::timeout as future_timeout;
 use web30::client::Web3;
 use web30::types::SendTxOption;
+
+mod error;
+pub use error::TokenBridgeError;
 
 // the estimate gas call is wildly inaccurate so we need to hardcode the expected gas
 // consumption of the following operations.
@@ -48,6 +48,19 @@ pub struct TokenBridge {
     pub secret: PrivateKey,
 }
 
+/// takes an address and spits out an event
+fn address_to_event(address: Address) -> [u8; 32] {
+    // addresses are 20 bytes and must be placed into the top bytes of the
+    // 32 byte uint256
+    let mut topic: [u8; 32] = [0; 32];
+    let mut address_bytes = address.as_bytes().to_vec();
+    for _ in 0..12 {
+        address_bytes.insert(0, 0);
+    }
+    topic.copy_from_slice(&address_bytes);
+    topic
+}
+
 impl TokenBridge {
     pub fn new(
         addresses: TokenBridgeAddresses,
@@ -74,9 +87,9 @@ impl TokenBridge {
         &self,
         to: Address,
         amount: Uint256,
-        timeout: u64,
+        timeout: Duration,
         options: Vec<SendTxOption>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), TokenBridgeError> {
         let web3 = self.eth_web3.clone();
         let own_address = self.own_address;
         let secret = self.secret;
@@ -85,16 +98,12 @@ impl TokenBridge {
             .send_transaction(to, Vec::new(), amount, own_address, secret, options)
             .await?;
 
-        future_timeout(
-            Duration::from_secs(timeout),
-            web3.wait_for_transaction(tx_hash.into()),
-        )
-        .await??;
+        web3.wait_for_transaction(tx_hash, timeout, None).await?;
         Ok(())
     }
 
     /// Price of ETH in Dai
-    pub async fn eth_to_dai_price(&self, amount: Uint256) -> Result<Uint256, Error> {
+    pub async fn eth_to_dai_price(&self, amount: Uint256) -> Result<Uint256, TokenBridgeError> {
         let web3 = self.eth_web3.clone();
         let uniswap_address = self.uniswap_address;
         let own_address = self.own_address;
@@ -110,15 +119,17 @@ impl TokenBridge {
 
         Ok(Uint256::from_bytes_be(match tokens_bought.get(0..32) {
             Some(val) => val,
-            None => bail!(
-                "Malformed output from uniswap getEthToTokenInputPrice call {:?}",
-                tokens_bought
-            ),
+            None => {
+                return Err(TokenBridgeError::BadUniswapOutput(format!(
+                    "Malformed output from uniswap getEthToTokenInputPrice call {:?}",
+                    tokens_bought
+                )))
+            }
         }))
     }
 
     /// Price of Dai in Eth
-    pub async fn dai_to_eth_price(&self, amount: Uint256) -> Result<Uint256, Error> {
+    pub async fn dai_to_eth_price(&self, amount: Uint256) -> Result<Uint256, TokenBridgeError> {
         let web3 = self.eth_web3.clone();
         let uniswap_address = self.uniswap_address;
         let own_address = self.own_address;
@@ -134,10 +145,12 @@ impl TokenBridge {
 
         Ok(Uint256::from_bytes_be(match eth_bought.get(0..32) {
             Some(val) => val,
-            None => bail!(
-                "Malformed output from uniswap getTokenToEthInputPrice call {:?}",
-                eth_bought
-            ),
+            None => {
+                return Err(TokenBridgeError::BadUniswapOutput(format!(
+                    "Malformed output from uniswap getEthToTokenInputPrice call {:?}",
+                    eth_bought
+                )))
+            }
         }))
     }
 
@@ -149,8 +162,8 @@ impl TokenBridge {
     pub async fn eth_to_dai_swap(
         &self,
         eth_amount: Uint256,
-        timeout: u64,
-    ) -> Result<Uint256, Error> {
+        timeout: Duration,
+    ) -> Result<Uint256, TokenBridgeError> {
         let uniswap_address = self.uniswap_address;
         let own_address = self.own_address;
         let secret = self.secret;
@@ -161,44 +174,44 @@ impl TokenBridge {
 
         // Equivalent to `amount * (1 - 0.025)` without using decimals
         let expected_dai = (expected_dai / 40u64.into()) * 39u64.into();
-        let deadline = block.timestamp + timeout.into();
+        let deadline = block.timestamp + timeout.as_secs().into();
         let payload = encode_call(
             "ethToTokenSwapInput(uint256,uint256)",
             &[expected_dai.into(), deadline.into()],
-        );
+        )
+        .unwrap();
 
-        let _tx = future_timeout(
-            Duration::from_secs(timeout),
-            web3.send_transaction(
+        let _tx = web3
+            .send_transaction(
                 uniswap_address,
                 payload,
                 eth_amount,
                 own_address,
                 secret,
                 vec![SendTxOption::GasLimit(UNISWAP_GAS_LIMIT.into())],
-            ),
-        )
-        .await??;
+            )
+            .await?;
 
-        let response = future_timeout(
-            Duration::from_secs(timeout),
-            web3.wait_for_event_alt(
-                uniswap_address,
+        let topic = address_to_event(own_address);
+        let mut topics = Vec::new();
+        topics.push(topic);
+
+        let response = web3
+            .wait_for_event_alt(
+                timeout,
+                vec![uniswap_address],
                 "TokenPurchase(address,uint256,uint256)",
-                Some(vec![own_address.into()]),
-                None,
-                None,
+                vec![topics],
                 |_| true,
-            ),
-        )
-        .await??;
+            )
+            .await?;
 
-        let transfered_dai = Uint256::from_bytes_be(&response.topics[3]);
-        Ok(transfered_dai)
+        let transferred_dai = Uint256::from_bytes_be(&response.topics[3]);
+        Ok(transferred_dai)
     }
 
     /// Checks if the uniswap contract has been approved to spend dai from our account.
-    pub async fn check_if_uniswap_dai_approved(&self) -> Result<bool, Error> {
+    pub async fn check_if_uniswap_dai_approved(&self) -> Result<bool, TokenBridgeError> {
         let web3 = self.eth_web3.clone();
         let uniswap_address = self.uniswap_address;
         let dai_address = self.foreign_dai_contract_address;
@@ -215,10 +228,12 @@ impl TokenBridge {
 
         let allowance = Uint256::from_bytes_be(match allowance.get(0..32) {
             Some(val) => val,
-            None => bail!(
-                "Malformed output from uniswap getTokenToEthInputPrice call {:?}",
-                allowance
-            ),
+            None => {
+                return Err(TokenBridgeError::BadUniswapOutput(format!(
+                    "Malformed output from uniswap getEthToTokenInputPrice call {:?}",
+                    allowance
+                )))
+            }
         });
 
         // Check if the allowance remaining is greater than half of a Uint256- it's as good
@@ -228,7 +243,10 @@ impl TokenBridge {
 
     /// Sends transaction to the DAI contract to approve uniswap transactions, this future will not
     /// resolve until the process is either successful for the timeout finishes
-    pub async fn approve_uniswap_dai_transfers(&self, timeout: Duration) -> Result<(), Error> {
+    pub async fn approve_uniswap_dai_transfers(
+        &self,
+        timeout: Duration,
+    ) -> Result<(), TokenBridgeError> {
         let dai_address = self.foreign_dai_contract_address;
         let own_address = self.own_address;
         let uniswap_address = self.uniswap_address;
@@ -238,33 +256,33 @@ impl TokenBridge {
         let payload = encode_call(
             "approve(address,uint256)",
             &[uniswap_address.into(), Uint256::max_value().into()],
-        );
+        )
+        .unwrap();
 
-        let _res = future_timeout(
-            timeout,
-            web3.send_transaction(
+        let _res = web3
+            .send_transaction(
                 dai_address,
                 payload,
                 0u32.into(),
                 own_address,
                 secret,
                 vec![SendTxOption::GasPriceMultiplier(2u32.into())],
-            ),
-        )
-        .await??;
+            )
+            .await?;
 
-        let _res = future_timeout(
-            timeout,
-            web3.wait_for_event_alt(
-                dai_address,
+        let mut topics = Vec::new();
+        topics.push(address_to_event(own_address));
+        topics.push(address_to_event(uniswap_address));
+
+        let _res = web3
+            .wait_for_event_alt(
+                timeout,
+                vec![dai_address],
                 "Approval(address,address,uint256)",
-                Some(vec![own_address.into()]),
-                Some(vec![uniswap_address.into()]),
-                None,
+                vec![topics],
                 |_| true,
-            ),
-        )
-        .await??;
+            )
+            .await?;
 
         Ok(())
     }
@@ -275,8 +293,8 @@ impl TokenBridge {
     pub async fn dai_to_eth_swap(
         &self,
         dai_amount: Uint256,
-        timeout: u64,
-    ) -> Result<Uint256, Error> {
+        timeout: Duration,
+    ) -> Result<Uint256, TokenBridgeError> {
         let uniswap_address = self.uniswap_address;
         let own_address = self.own_address;
         let secret = self.secret;
@@ -293,15 +311,15 @@ impl TokenBridge {
         let expected_eth = self.dai_to_eth_price(dai_amount.clone()).await?;
         // Equivalent to `amount * (1 - 0.025)` without using decimals
         let expected_eth = (expected_eth / 40u64.into()) * 39u64.into();
-        let deadline = block.timestamp + timeout.into();
+        let deadline = block.timestamp + timeout.as_secs().into();
         let payload = encode_call(
             "tokenToEthSwapInput(uint256,uint256,uint256)",
             &[dai_amount.into(), expected_eth.into(), deadline.into()],
-        );
+        )
+        .unwrap();
 
-        let _tx = future_timeout(
-            Duration::from_secs(timeout),
-            web3.send_transaction(
+        let _tx = web3
+            .send_transaction(
                 uniswap_address,
                 payload,
                 0u32.into(),
@@ -311,22 +329,22 @@ impl TokenBridge {
                     SendTxOption::GasLimit(UNISWAP_GAS_LIMIT.into()),
                     SendTxOption::GasPriceMultiplier(2u32.into()),
                 ],
-            ),
-        )
-        .await?;
+            )
+            .await?;
 
-        let response = future_timeout(
-            Duration::from_secs(timeout),
-            web3.wait_for_event_alt(
-                uniswap_address,
+        let topic = address_to_event(own_address);
+        let mut topics = Vec::new();
+        topics.push(topic);
+
+        let response = web3
+            .wait_for_event_alt(
+                timeout,
+                vec![uniswap_address],
                 "EthPurchase(address,uint256,uint256)",
-                Some(vec![own_address.into()]),
-                None,
-                None,
+                vec![topics],
                 |_| true,
-            ),
-        )
-        .await??;
+            )
+            .await?;
 
         let transfered_eth = Uint256::from_bytes_be(&response.topics[3]);
         Ok(transfered_eth)
@@ -336,8 +354,8 @@ impl TokenBridge {
     pub async fn dai_to_xdai_bridge(
         &self,
         dai_amount: Uint256,
-        timeout: u64,
-    ) -> Result<Uint256, Error> {
+        timeout: Duration,
+    ) -> Result<Uint256, TokenBridgeError> {
         let eth_web3 = self.eth_web3.clone();
         let foreign_dai_contract_address = self.foreign_dai_contract_address;
         let xdai_foreign_bridge_address = self.xdai_foreign_bridge_address;
@@ -356,7 +374,8 @@ impl TokenBridge {
                         xdai_foreign_bridge_address.into(),
                         dai_amount.clone().into(),
                     ],
-                ),
+                )
+                .unwrap(),
                 0u32.into(),
                 own_address,
                 secret,
@@ -364,11 +383,9 @@ impl TokenBridge {
             )
             .await?;
 
-        future_timeout(
-            Duration::from_secs(timeout),
-            eth_web3.wait_for_transaction(tx_hash.into()),
-        )
-        .await??;
+        eth_web3
+            .wait_for_transaction(tx_hash, timeout, None)
+            .await?;
 
         Ok(dai_amount)
     }
@@ -382,7 +399,7 @@ impl TokenBridge {
         &self,
         xdai_amount: Uint256,
         xdai_gas_price: Uint256,
-    ) -> Result<Uint256, Error> {
+    ) -> Result<Uint256, TokenBridgeError> {
         let xdai_web3 = self.xdai_web3.clone();
 
         let xdai_home_bridge_address = self.xdai_home_bridge_address;
@@ -392,7 +409,7 @@ impl TokenBridge {
 
         // You basically just send it some coins to the contract address on the Xdai side
         // and it will show up on the Eth side in the same address
-        xdai_web3
+        Ok(xdai_web3
             .send_transaction(
                 xdai_home_bridge_address,
                 Vec::new(),
@@ -404,29 +421,13 @@ impl TokenBridge {
                     SendTxOption::NetworkId(100u64),
                 ],
             )
-            .await
+            .await?)
     }
 
-    pub async fn get_dai_balance(&self, address: Address) -> Result<Uint256, Error> {
+    pub async fn get_dai_balance(&self, address: Address) -> Result<Uint256, TokenBridgeError> {
         let web3 = self.eth_web3.clone();
         let dai_address = self.foreign_dai_contract_address;
-        let own_address = self.own_address;
-        let balance = web3
-            .contract_call(
-                dai_address,
-                "balanceOf(address)",
-                &[address.into()],
-                own_address,
-            )
-            .await?;
-
-        Ok(Uint256::from_bytes_be(match balance.get(0..32) {
-            Some(val) => val,
-            None => bail!(
-                "Got bad output for DAI balance from the full node {:?}",
-                balance
-            ),
-        }))
+        Ok(web3.get_erc20_balance(dai_address, address).await?)
     }
 }
 
@@ -455,6 +456,8 @@ pub fn default_bridge_addresses() -> TokenBridgeAddresses {
 mod tests {
     use super::*;
     use std::str::FromStr;
+
+    const TIMEOUT: Duration = Duration::from_secs(600);
 
     fn new_token_bridge() -> TokenBridge {
         let pk = PrivateKey::from_str(&format!(
@@ -538,7 +541,7 @@ mod tests {
                 .await
                 .unwrap();
             token_bridge
-                .eth_to_dai_swap(one_cent_in_eth, 600)
+                .eth_to_dai_swap(one_cent_in_eth, TIMEOUT)
                 .await
                 .unwrap();
             actix::System::current().stop();
@@ -555,11 +558,11 @@ mod tests {
 
         actix::spawn(async move {
             token_bridge
-                .approve_uniswap_dai_transfers(Duration::from_secs(600))
+                .approve_uniswap_dai_transfers(TIMEOUT)
                 .await
                 .unwrap();
             token_bridge
-                .dai_to_eth_swap(eth_to_wei(0.01f64), 600)
+                .dai_to_eth_swap(eth_to_wei(0.01f64), TIMEOUT)
                 .await
                 .unwrap();
             actix::System::current().stop();
@@ -579,7 +582,7 @@ mod tests {
             // All we can really do here is test that it doesn't throw. Check your balances in
             // 5-10 minutes to see if the money got transferred.
             token_bridge
-                .dai_to_xdai_bridge(eth_to_wei(0.01f64), 600)
+                .dai_to_xdai_bridge(eth_to_wei(0.01f64), TIMEOUT)
                 .await
                 .unwrap();
             actix::System::current().stop();
