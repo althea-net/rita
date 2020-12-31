@@ -16,6 +16,7 @@ test.db-journal
 
 /scripts/staging_dir/
 integration-tests/private-key*
+integration-tests/deps*
 integration-tests/rita-settings*
 integration-tests/staging*
 integration-tests/althea_rs_*
