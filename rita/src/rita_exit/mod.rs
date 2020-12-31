@@ -40,9 +40,15 @@ pub fn enable_remote_logging() -> Result<(), Error> {
                 record.args()
             )
         }))
-        .build()?;
+        .build();
+    if let Err(e) = logger {
+        bail!(format_err!("{}", e))
+    }
+    let logger = logger.unwrap();
 
-    log::set_boxed_logger(Box::new(logger))?;
+    if let Err(e) = log::set_boxed_logger(Box::new(logger)) {
+        bail!(format_err!("{}", e))
+    }
     log::set_max_level(level);
 
     println!(

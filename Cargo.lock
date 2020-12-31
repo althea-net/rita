@@ -659,12 +659,12 @@ dependencies = [
 
 [[package]]
 name = "backoff"
-version = "0.1.6"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66483433ebf577e03c6546df761778e4cc40b00e5a1ea7ed850733ffb555d71f"
+checksum = "721c249ab59cbc483ad4294c9ee2671835c1e43e9ffc277e6b4ecfef733cfdc5"
 dependencies = [
  "instant",
- "rand 0.6.5",
+ "rand 0.7.3",
 ]
 
 [[package]]
@@ -947,17 +947,16 @@ dependencies = [
 
 [[package]]
 name = "compressed_log"
-version = "0.2.2"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9af3e5ff9d575755caa41a1e669c952345892f961aa0fd2e2f04e71c9f7fd278"
+checksum = "d371acfe8d922e4a53841aecb50cd68f71743d02459d40160209c7bcd15db43b"
 dependencies = [
- "actix 0.7.11",
- "actix-web 0.7.19",
+ "actix 0.10.0",
+ "actix-web 3.1.0",
  "backoff",
  "chrono",
- "failure",
  "flate2",
- "futures 0.1.30",
+ "futures 0.3.6",
  "log",
  "serde 1.0.116",
  "serde_derive",
