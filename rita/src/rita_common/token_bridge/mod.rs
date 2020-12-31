@@ -45,9 +45,9 @@
 use crate::SETTING;
 use althea_types::SystemChain;
 use async_web30::types::SendTxOption;
-use auto_bridge::ERC20_GAS_LIMIT;
 use auto_bridge::ETH_TRANSACTION_GAS_LIMIT;
 use auto_bridge::UNISWAP_GAS_LIMIT;
+use auto_bridge::{HelperWithdrawInfo, ERC20_GAS_LIMIT};
 use auto_bridge::{TokenBridge as TokenBridgeCore, TokenBridgeError};
 use clarity::Address;
 use failure::Error;
@@ -96,6 +96,10 @@ pub enum State {
         withdraw_all: bool,
     },
     Withdrawing {
+        // the txid of the transaction to the xdai bridge, required
+        // to complete the process https://www.xdaichain.com/for-users/converting-xdai-via-bridge/transfer-sai-dai-without-the-ui-using-web3-or-mobile-wallet#transfer-xdai-to-dai-from-the-xdai-chain-to-the-ethereum-mainnet
+        withdraw_xdai_txid: Uint256,
+        unlock_details: Option<HelperWithdrawInfo>,
         amount: Uint256,
         to: Address,
         timestamp: Instant,
@@ -119,6 +123,8 @@ impl Display for State {
                 a, t, ti, w
             ),
             State::Withdrawing {
+                withdraw_xdai_txid: wt,
+                unlock_details: ud,
                 amount: a,
                 to: t,
                 timestamp: ti,
@@ -126,8 +132,8 @@ impl Display for State {
                 amount_actually_exchanged: aae
             } => write!(
                 f,
-                "Withdrawing:{{amount: {}, to: {}, timestamp: {:?}, withdraw_all: {}, amount_exchanged: {:?}}}",
-                a, t, ti, w, aae
+                "Withdrawing:{{amount: {}, to: {}, timestamp: {:?}, withdraw_all: {}, amount_exchanged: {:?}, unlock_details {:?}, xdai_txid {:#066x}}}",
+                a, t, ti, w, aae, ud, wt
             ),
         }
     }
@@ -405,16 +411,18 @@ async fn xdai_bridge(state: State) -> State {
             .xdai_to_dai_bridge(amount.clone(), SETTING.get_payment().gas_price.clone())
             .await
         {
-            Ok(amount_bridged) => {
+            Ok(bridge_tx_id) => {
                 info!(
-                    "We sent {} across the bridge, the user requested {}",
-                    amount_bridged, amount
+                    "We sent txid {:#066x} to the bridge with amount {}",
+                    bridge_tx_id, amount
                 );
                 // Only change to Withdraw if there was no error
                 detailed_state_change(DetailedBridgeState::XdaiToDai {
                     amount: amount.clone(),
                 });
                 State::Withdrawing {
+                    unlock_details: None,
+                    withdraw_xdai_txid: bridge_tx_id,
                     to,
                     amount,
                     timestamp: Instant::now(),
@@ -423,7 +431,7 @@ async fn xdai_bridge(state: State) -> State {
                 }
             }
             Err(e) => {
-                error!("Error in State::Deposit WithdrawRequest handler: {:?}", e);
+                error!("Error in State::WithdrawRequest handler: {:?}", e);
 
                 if withdraw_is_timed_out(timestamp) {
                     error!("Withdraw timed out!");
@@ -443,6 +451,8 @@ async fn xdai_bridge(state: State) -> State {
             }
         },
         State::Withdrawing {
+            withdraw_xdai_txid,
+            unlock_details,
             to,
             amount,
             timestamp,
@@ -450,7 +460,11 @@ async fn xdai_bridge(state: State) -> State {
             amount_actually_exchanged,
         } => {
             info!("Ticking in bridge State:Withdrawing");
+            // we can't get the match variable as a state withdrawing type
+            // without some real tricks, so we just re-create it.
             let our_withdrawing_state = State::Withdrawing {
+                withdraw_xdai_txid: withdraw_xdai_txid.clone(),
+                unlock_details: unlock_details.clone(),
                 to,
                 amount: amount.clone(),
                 timestamp,
@@ -470,11 +484,52 @@ async fn xdai_bridge(state: State) -> State {
                     our_dai_balance, our_eth_balance, wei_per_dollar, amount, withdraw_all, amount_actually_exchanged
                 );
 
+                // we wait here until the xdai validators have produced the signatures we need to unlock the funds
+                // on the ethereum side
+                if unlock_details.is_none() {
+                    let res = bridge
+                        .get_relay_message_hash(withdraw_xdai_txid.clone(), amount.clone())
+                        .await;
+                    if let Ok(info) = res {
+                        return State::Withdrawing {
+                            withdraw_xdai_txid: withdraw_xdai_txid.clone(),
+                            unlock_details: Some(info),
+                            to,
+                            amount: amount.clone(),
+                            timestamp,
+                            withdraw_all,
+                            amount_actually_exchanged: amount_actually_exchanged.clone(),
+                        };
+                    } else {
+                        return our_withdrawing_state;
+                    }
+
+                // now that we have the details that we need we must create a transaction
+                // to unlock the funds and send it off, we will sit here until we see the
+                // funds causing at which point we will progress. The transition between
+                // a high dai balance and having the eth balance we need is atomic (one block)
+                // so this will progress properly once funds are unlocked.
+                } else if our_dai_balance < amount
+                    && !eth_balance_ready(
+                        amount_actually_exchanged.clone(),
+                        our_eth_balance.clone(),
+                        amount.clone(),
+                        wei_per_dollar.clone(),
+                    )
+                {
+                    // can't panic because of the above if/else tree
+                    let unlock_details = unlock_details.unwrap();
+                    let _ = bridge
+                        .submit_signatures_to_unlock_funds(unlock_details, UNISWAP_TIMEOUT)
+                        .await;
+
+                    return our_withdrawing_state;
+
                 // this conversion is unique in that it's not lossy, when we withdraw
                 // a given amount of xdai we will get exactly that many wei in dai back
                 // into our balances, so we know for sure that this means the bridge has
                 // come through
-                if our_dai_balance >= amount {
+                } else if our_dai_balance >= amount {
                     detailed_state_change(DetailedBridgeState::DaiToEth {
                         amount_of_dai: amount.clone(),
                         wei_per_dollar,
@@ -485,6 +540,8 @@ async fn xdai_bridge(state: State) -> State {
                         .await
                     {
                         Ok(amount_actually_exchanged) => State::Withdrawing {
+                            unlock_details,
+                            withdraw_xdai_txid,
                             to,
                             amount: amount.clone(),
                             timestamp,

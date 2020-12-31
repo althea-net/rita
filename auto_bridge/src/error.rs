@@ -8,6 +8,7 @@ use web30::jsonrpc::error::Web3Error;
 pub enum TokenBridgeError {
     Web3Error(Web3Error),
     BadUniswapOutput(String),
+    HelperMessageNotReady,
 }
 
 impl From<Web3Error> for TokenBridgeError {
@@ -21,6 +22,10 @@ impl Display for TokenBridgeError {
         match self {
             TokenBridgeError::Web3Error(e) => write!(f, "{}", e),
             TokenBridgeError::BadUniswapOutput(e) => write!(f, "{}", e),
+            TokenBridgeError::HelperMessageNotReady => write!(
+                f,
+                "xDai validators are not finished preparing this withdraw",
+            ),
         }
     }
 }

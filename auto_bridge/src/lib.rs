@@ -3,7 +3,7 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
-use clarity::abi::encode_call;
+use clarity::abi::{encode_call, Token};
 use clarity::{Address, PrivateKey};
 use num::Bounded;
 use num256::Uint256;
@@ -34,6 +34,15 @@ pub struct TokenBridgeAddresses {
     pub foreign_dai_contract_address: Address,
     pub eth_full_node_url: String,
     pub xdai_full_node_url: String,
+}
+
+/// Just a little helper struct to keep us from getting
+/// the two arguments to executeSignatures() on the Eth
+/// side of the xDai bridge mixed up.
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct HelperWithdrawInfo {
+    msg: Vec<u8>,
+    sigs: Vec<u8>,
 }
 
 #[derive(Clone)]
@@ -434,10 +443,98 @@ impl TokenBridge {
         let dai_address = self.foreign_dai_contract_address;
         Ok(web3.get_erc20_balance(dai_address, address).await?)
     }
+
+    /// this uses the xdai helper contract on the xdai chain to retrieve the required
+    /// info for relaying. This call occurs on the xdai side and gets info to submit
+    /// to ethereum
+    pub async fn get_relay_message_hash(
+        &self,
+        xdai_withdraw_txid: Uint256,
+        amount_sent: Uint256,
+    ) -> Result<HelperWithdrawInfo, TokenBridgeError> {
+        let own_address = self.own_address;
+        // the hash that is then used to look up the signatures, this will always
+        // succeed, whereas the signature lookup may need to wait for all sigs
+        // to be submitted
+        let msg_hash = self
+            .xdai_web3
+            .contract_call(
+                self.xdai_home_helper_address,
+                "getMessageHash(address,uint256,bytes32)",
+                &[
+                    own_address.into(),
+                    amount_sent.into(),
+                    Token::Bytes(xdai_withdraw_txid.to_bytes_be()),
+                ],
+                own_address,
+            )
+            .await?;
+        // this may return 0x0 if the value is not yet ready, in this case
+        // we fail with a not ready error
+        let msg = self
+            .xdai_web3
+            .contract_call(
+                self.xdai_home_helper_address,
+                "getMessage(bytes32)",
+                &[Token::Bytes(msg_hash.clone())],
+                own_address,
+            )
+            .await?;
+        if msg == vec![0] {
+            return Err(TokenBridgeError::HelperMessageNotReady);
+        }
+        let sigs_payload = self
+            .xdai_web3
+            .contract_call(
+                self.xdai_home_helper_address,
+                "getSignatures(bytes32)",
+                &[Token::Bytes(msg_hash)],
+                own_address,
+            )
+            .await?;
+
+        Ok(HelperWithdrawInfo {
+            msg,
+            sigs: sigs_payload,
+        })
+    }
+
+    /// input is the packed signatures output from get_relay_message_hash
+    pub async fn submit_signatures_to_unlock_funds(
+        &self,
+        data: HelperWithdrawInfo,
+        timeout: Duration,
+    ) -> Result<Uint256, TokenBridgeError> {
+        let own_address = self.own_address;
+        let payload = encode_call(
+            "executeSignatures(bytes32,bytes32)",
+            &[data.msg.into(), data.sigs.into()],
+        )
+        .unwrap();
+
+        let txid = self
+            .eth_web3
+            .send_transaction(
+                self.xdai_home_bridge_address,
+                payload,
+                0u32.into(),
+                own_address,
+                self.secret,
+                Vec::new(),
+            )
+            .await?;
+
+        let _ = self
+            .eth_web3
+            .wait_for_transaction(txid.clone(), timeout, None)
+            .await;
+        Ok(txid)
+    }
 }
 
 pub const UNISWAP_ADDRESS: &str = "0x2a1530C4C41db0B0b2bB646CB5Eb1A67b7158667";
 pub const XDAI_HOME_BRIDGE_ADDRESS: &str = "0x4aa42145Aa6Ebf72e164C9bBC74fbD3788045016";
+// TODO this is a misnomer change to FOREIGN
 pub const XDAI_HOME_HELPER_ADDRESS: &str = "0x6A92e97A568f5F58590E8b1f56484e6268CdDC51";
 pub const XDAI_FOREIGN_BRIDGE_ADDRESS: &str = "0x7301CFA0e1756B71869E93d4e4Dca5c7d0eb0AA6";
 pub const FOREIGN_DAI_CONTRACT_ADDRESS: &str = "0x6B175474E89094C44Da98b954EedeAC495271d0F";
