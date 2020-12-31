@@ -66,7 +66,7 @@ pub fn client_to_new_db_client(
     country: String,
 ) -> models::Client {
     let mut rng = rand::thread_rng();
-    let rand_code: u64 = rng.gen_range(0, 999_999);
+    let rand_code: u64 = rng.gen_range(0..999_999);
     models::Client {
         wg_port: i32::from(client.wg_port),
         mesh_ip: client.global.mesh_ip.to_string(),

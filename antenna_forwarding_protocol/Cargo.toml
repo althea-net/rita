@@ -11,9 +11,9 @@ serde_derive = "1.0"
 serde = "1.0"
 sodiumoxide = "0.2"
 failure = "0.1"
-clarity = "0.1"
+clarity = "0.4"
 log = "0.4"
 lazy_static = "1.4"
 
 [dev-dependencies]
-rand = "0.7"
+rand = "0.8"

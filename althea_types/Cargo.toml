@@ -22,5 +22,5 @@ phonenumber = "0.3"
 lettre = {version = "0.9", features = ["serde"]}
 
 [dev-dependencies]
-rand = "0.4"
+rand = "0.8"
 

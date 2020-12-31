@@ -46,7 +46,7 @@ pub fn get_web3_server() -> String {
     }
     let node_list = SETTING.get_payment().node_list.clone();
     let mut rng = thread_rng();
-    let val = rng.gen_range(0, node_list.len());
+    let val = rng.gen_range(0..node_list.len());
 
     node_list[val].clone()
 }

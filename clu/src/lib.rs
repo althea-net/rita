@@ -29,7 +29,8 @@ pub enum CluError {
 }
 
 pub fn generate_mesh_ip() -> Result<IpAddr, Error> {
-    let seed: String = thread_rng().sample_iter(&Alphanumeric).take(50).collect();
+    let seed: String =
+        String::from_utf8(thread_rng().sample_iter(&Alphanumeric).take(50).collect()).unwrap();
     let mesh_ip = match ipgen::ip(&seed, "fd00::/8") {
         Ok(ip) => ip,
         Err(msg) => bail!(msg), // For some reason, ipgen devs decided to use Strings for all errors
@@ -297,10 +298,26 @@ pub fn exit_init(platform: &str, settings: Arc<RwLock<settings::exit::RitaExitSe
 
 #[cfg(test)]
 mod tests {
+    use crate::generate_mesh_ip;
     use crate::validate_mesh_ip;
     use althea_types::WgKey;
     use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
+    use std::collections::HashSet;
     use std::net::IpAddr;
+
+    /// generate 1000 mesh ip's make sure we succeed and that all are unique
+    #[test]
+    fn test_generate_mesh_ip() {
+        let mut history = HashSet::new();
+        for _ in 0..1000 {
+            let ip = generate_mesh_ip().unwrap();
+            if history.get(&ip).is_some() {
+                panic!("Got duplicate ip {}", ip)
+            } else {
+                history.insert(ip);
+            }
+        }
+    }
 
     #[test]
     fn test_validate_mesh_ip() {

@@ -646,7 +646,7 @@ impl TunnelManager {
     fn get_port(&mut self, level: usize) -> Option<u16> {
         let udp_table = KI.used_ports();
         let mut rng = thread_rng();
-        let val = rng.gen_range(0, self.free_ports.len());
+        let val = rng.gen_range(0..self.free_ports.len());
         let port = self.free_ports.remove(val);
         match (port, udp_table) {
             (p, Ok(used_ports)) => {
