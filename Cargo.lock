@@ -603,7 +603,7 @@ dependencies = [
  "rand 0.8.0",
  "serde 1.0.116",
  "serde_derive",
- "web30 0.10.2",
+ "web30 0.10.4",
 ]
 
 [[package]]
@@ -3327,7 +3327,7 @@ dependencies = [
  "tokio-codec",
  "tokio-io",
  "trust-dns-resolver 0.10.3",
- "web30 0.10.2",
+ "web30 0.10.4",
  "web30 0.4.3",
 ]
 
@@ -4629,9 +4629,9 @@ dependencies = [
 
 [[package]]
 name = "web30"
-version = "0.10.2"
+version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1492467879d37c07f4d94a2398a957693b1808e32eb077d6c64a3c2f720bcc7"
+checksum = "7d5a65640d3ca3d11d6ca48c29f9fd4fd6af7fc51416d8c7b9af267bf7ec497e"
 dependencies = [
  "actix 0.10.0",
  "actix-web 3.1.0",
