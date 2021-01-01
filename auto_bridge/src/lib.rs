@@ -7,7 +7,7 @@ use clarity::abi::{encode_call, Token};
 use clarity::{Address, PrivateKey};
 use num::Bounded;
 use num256::Uint256;
-use std::{str::FromStr, time::Duration};
+use std::time::Duration;
 use web30::address_to_event;
 use web30::client::Web3;
 use web30::types::SendTxOption;
@@ -21,18 +21,38 @@ pub static UNISWAP_GAS_LIMIT: u128 = 80_000;
 pub static ERC20_GAS_LIMIT: u128 = 40_000;
 pub static ETH_TRANSACTION_GAS_LIMIT: u128 = 21_000;
 
-fn default_xdai_home_helper_address() -> Address {
-    default_bridge_addresses().xdai_home_helper_address
+fn default_helper_on_xdai_address() -> Address {
+    default_bridge_addresses().helper_on_xdai
+}
+
+fn default_uniswap_on_eth_address() -> Address {
+    default_bridge_addresses().uniswap_on_eth_address
+}
+
+fn default_xdai_bridge_on_eth_address() -> Address {
+    default_bridge_addresses().xdai_bridge_on_eth
+}
+
+fn default_xdai_bridge_on_xdai_address() -> Address {
+    default_bridge_addresses().xdai_bridge_on_xdai
+}
+
+fn default_dai_erc20_contract_on_eth() -> Address {
+    default_bridge_addresses().dai_erc20_contract_on_eth
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct TokenBridgeAddresses {
-    pub uniswap_address: Address,
-    pub xdai_home_bridge_address: Address,
-    #[serde(default = "default_xdai_home_helper_address")]
-    pub xdai_home_helper_address: Address,
-    pub xdai_foreign_bridge_address: Address,
-    pub foreign_dai_contract_address: Address,
+    #[serde(default = "default_uniswap_on_eth_address")]
+    pub uniswap_on_eth_address: Address,
+    #[serde(default = "default_xdai_bridge_on_eth_address")]
+    pub xdai_bridge_on_eth: Address,
+    #[serde(default = "default_helper_on_xdai_address")]
+    pub helper_on_xdai: Address,
+    #[serde(default = "default_xdai_bridge_on_xdai_address")]
+    pub xdai_bridge_on_xdai: Address,
+    #[serde(default = "default_dai_erc20_contract_on_eth")]
+    pub dai_erc20_contract_on_eth: Address,
     pub eth_full_node_url: String,
     pub xdai_full_node_url: String,
 }
@@ -50,15 +70,11 @@ pub struct HelperWithdrawInfo {
 pub struct TokenBridge {
     pub xdai_web3: Web3,
     pub eth_web3: Web3,
-    pub uniswap_address: Address,
-    /// This is the address of the xDai bridge on Eth
-    pub xdai_foreign_bridge_address: Address,
-    /// This is the address of the xDai bridge on xDai
-    pub xdai_home_bridge_address: Address,
-    /// This is the helper contract on xDai
-    pub xdai_home_helper_address: Address,
-    /// This is the address of the Dai token contract on Eth
-    pub foreign_dai_contract_address: Address,
+    pub uniswap_on_eth_address: Address,
+    pub xdai_bridge_on_eth: Address,
+    pub helper_on_xdai: Address,
+    pub xdai_bridge_on_xdai: Address,
+    pub dai_erc20_contract_on_eth: Address,
     pub own_address: Address,
     pub secret: PrivateKey,
 }
@@ -73,11 +89,11 @@ impl TokenBridge {
         timeout: Duration,
     ) -> TokenBridge {
         TokenBridge {
-            uniswap_address: addresses.uniswap_address,
-            xdai_home_bridge_address: addresses.xdai_home_bridge_address,
-            xdai_foreign_bridge_address: addresses.xdai_foreign_bridge_address,
-            foreign_dai_contract_address: addresses.foreign_dai_contract_address,
-            xdai_home_helper_address: addresses.xdai_home_helper_address,
+            uniswap_on_eth_address: addresses.uniswap_on_eth_address,
+            xdai_bridge_on_xdai: addresses.xdai_bridge_on_xdai,
+            helper_on_xdai: addresses.helper_on_xdai,
+            xdai_bridge_on_eth: addresses.xdai_bridge_on_eth,
+            dai_erc20_contract_on_eth: addresses.dai_erc20_contract_on_eth,
             own_address,
             secret,
             xdai_web3: Web3::new(&xdai_full_node_url, timeout),
@@ -108,7 +124,7 @@ impl TokenBridge {
     /// Price of ETH in Dai
     pub async fn eth_to_dai_price(&self, amount: Uint256) -> Result<Uint256, TokenBridgeError> {
         let web3 = self.eth_web3.clone();
-        let uniswap_address = self.uniswap_address;
+        let uniswap_address = self.uniswap_on_eth_address;
         let own_address = self.own_address;
 
         let tokens_bought = web3
@@ -134,7 +150,7 @@ impl TokenBridge {
     /// Price of Dai in Eth
     pub async fn dai_to_eth_price(&self, amount: Uint256) -> Result<Uint256, TokenBridgeError> {
         let web3 = self.eth_web3.clone();
-        let uniswap_address = self.uniswap_address;
+        let uniswap_address = self.uniswap_on_eth_address;
         let own_address = self.own_address;
 
         let eth_bought = web3
@@ -167,7 +183,7 @@ impl TokenBridge {
         eth_amount: Uint256,
         timeout: Duration,
     ) -> Result<Uint256, TokenBridgeError> {
-        let uniswap_address = self.uniswap_address;
+        let uniswap_address = self.uniswap_on_eth_address;
         let own_address = self.own_address;
         let secret = self.secret;
         let web3 = self.eth_web3.clone();
@@ -216,8 +232,8 @@ impl TokenBridge {
     /// Checks if the uniswap contract has been approved to spend dai from our account.
     pub async fn check_if_uniswap_dai_approved(&self) -> Result<bool, TokenBridgeError> {
         let web3 = self.eth_web3.clone();
-        let uniswap_address = self.uniswap_address;
-        let dai_address = self.foreign_dai_contract_address;
+        let uniswap_address = self.uniswap_on_eth_address;
+        let dai_address = self.dai_erc20_contract_on_eth;
         let own_address = self.own_address;
 
         let allowance = web3
@@ -250,9 +266,9 @@ impl TokenBridge {
         &self,
         timeout: Duration,
     ) -> Result<(), TokenBridgeError> {
-        let dai_address = self.foreign_dai_contract_address;
+        let dai_address = self.dai_erc20_contract_on_eth;
         let own_address = self.own_address;
-        let uniswap_address = self.uniswap_address;
+        let uniswap_address = self.uniswap_on_eth_address;
         let secret = self.secret;
         let web3 = self.eth_web3.clone();
 
@@ -298,7 +314,7 @@ impl TokenBridge {
         dai_amount: Uint256,
         timeout: Duration,
     ) -> Result<Uint256, TokenBridgeError> {
-        let uniswap_address = self.uniswap_address;
+        let uniswap_address = self.uniswap_on_eth_address;
         let own_address = self.own_address;
         let secret = self.secret;
         let web3 = self.eth_web3.clone();
@@ -360,8 +376,6 @@ impl TokenBridge {
         timeout: Duration,
     ) -> Result<Uint256, TokenBridgeError> {
         let eth_web3 = self.eth_web3.clone();
-        let foreign_dai_contract_address = self.foreign_dai_contract_address;
-        let xdai_foreign_bridge_address = self.xdai_foreign_bridge_address;
         let own_address = self.own_address;
         let secret = self.secret;
 
@@ -370,13 +384,10 @@ impl TokenBridge {
         // since the events are not indexed
         let tx_hash = eth_web3
             .send_transaction(
-                foreign_dai_contract_address,
+                self.dai_erc20_contract_on_eth,
                 encode_call(
                     "transfer(address,uint256)",
-                    &[
-                        xdai_foreign_bridge_address.into(),
-                        dai_amount.clone().into(),
-                    ],
+                    &[self.xdai_bridge_on_eth.into(), dai_amount.clone().into()],
                 )
                 .unwrap(),
                 0u32.into(),
@@ -405,8 +416,6 @@ impl TokenBridge {
     ) -> Result<Uint256, TokenBridgeError> {
         let xdai_web3 = self.xdai_web3.clone();
 
-        let xdai_home_bridge_address = self.xdai_home_bridge_address;
-
         let own_address = self.own_address;
         let secret = self.secret;
 
@@ -414,7 +423,7 @@ impl TokenBridge {
         // and it will show up on the Eth side in the same address
         Ok(xdai_web3
             .send_transaction(
-                xdai_home_bridge_address,
+                self.xdai_bridge_on_xdai,
                 Vec::new(),
                 xdai_amount,
                 own_address,
@@ -429,7 +438,7 @@ impl TokenBridge {
 
     pub async fn get_dai_balance(&self, address: Address) -> Result<Uint256, TokenBridgeError> {
         let web3 = self.eth_web3.clone();
-        let dai_address = self.foreign_dai_contract_address;
+        let dai_address = self.dai_erc20_contract_on_eth;
         Ok(web3.get_erc20_balance(dai_address, address).await?)
     }
 
@@ -448,7 +457,7 @@ impl TokenBridge {
         let msg_hash = self
             .xdai_web3
             .contract_call(
-                self.xdai_home_helper_address,
+                self.helper_on_xdai,
                 "getMessageHash(address,uint256,bytes32)",
                 &[
                     own_address.into(),
@@ -463,7 +472,7 @@ impl TokenBridge {
         let msg = self
             .xdai_web3
             .contract_call(
-                self.xdai_home_helper_address,
+                self.helper_on_xdai,
                 "getMessage(bytes32)",
                 &[Token::Bytes(msg_hash.clone())],
                 own_address,
@@ -475,7 +484,7 @@ impl TokenBridge {
         let sigs_payload = self
             .xdai_web3
             .contract_call(
-                self.xdai_home_helper_address,
+                self.helper_on_xdai,
                 "getSignatures(bytes32)",
                 &[Token::Bytes(msg_hash)],
                 own_address,
@@ -504,7 +513,7 @@ impl TokenBridge {
         let txid = self
             .eth_web3
             .send_transaction(
-                self.xdai_home_bridge_address,
+                self.xdai_bridge_on_eth,
                 payload,
                 0u32.into(),
                 own_address,
@@ -521,23 +530,22 @@ impl TokenBridge {
     }
 }
 
-pub const UNISWAP_ADDRESS: &str = "0x2a1530C4C41db0B0b2bB646CB5Eb1A67b7158667";
-pub const XDAI_HOME_BRIDGE_ADDRESS: &str = "0x4aa42145Aa6Ebf72e164C9bBC74fbD3788045016";
-// TODO this is a misnomer change to FOREIGN
-pub const XDAI_HOME_HELPER_ADDRESS: &str = "0x6A92e97A568f5F58590E8b1f56484e6268CdDC51";
-pub const XDAI_FOREIGN_BRIDGE_ADDRESS: &str = "0x7301CFA0e1756B71869E93d4e4Dca5c7d0eb0AA6";
-pub const FOREIGN_DAI_CONTRACT_ADDRESS: &str = "0x6B175474E89094C44Da98b954EedeAC495271d0F";
+pub const UNISWAP_ON_ETH_ADDRESS: &str = "0x2a1530C4C41db0B0b2bB646CB5Eb1A67b7158667";
+pub const XDAI_BRIDGE_ON_ETH_ADDRESS: &str = "0x4aa42145Aa6Ebf72e164C9bBC74fbD3788045016";
+pub const HELPER_ON_XDAI_ADDRESS: &str = "0x6A92e97A568f5F58590E8b1f56484e6268CdDC51";
+pub const XDAI_BRIDGE_ON_XDAI_ADDRESS: &str = "0x7301CFA0e1756B71869E93d4e4Dca5c7d0eb0AA6";
+pub const DAI_ERC20_CONTRACT_ON_ETH_ADDRESS: &str = "0x6B175474E89094C44Da98b954EedeAC495271d0F";
 
 /// This function provides the default bridge addresses to be used by the token contract,
 /// these are for the most part constants, but it is possible they may be updated or changed
 /// if the xDai or Maker DAO or Uniswap team deploy new contracts
 pub fn default_bridge_addresses() -> TokenBridgeAddresses {
     TokenBridgeAddresses {
-        uniswap_address: Address::from_str(UNISWAP_ADDRESS).unwrap(),
-        xdai_home_bridge_address: Address::from_str(XDAI_HOME_BRIDGE_ADDRESS).unwrap(),
-        xdai_home_helper_address: Address::from_str(XDAI_HOME_HELPER_ADDRESS).unwrap(),
-        xdai_foreign_bridge_address: Address::from_str(XDAI_FOREIGN_BRIDGE_ADDRESS).unwrap(),
-        foreign_dai_contract_address: Address::from_str(FOREIGN_DAI_CONTRACT_ADDRESS).unwrap(),
+        uniswap_on_eth_address: UNISWAP_ON_ETH_ADDRESS.parse().unwrap(),
+        dai_erc20_contract_on_eth: DAI_ERC20_CONTRACT_ON_ETH_ADDRESS.parse().unwrap(),
+        helper_on_xdai: HELPER_ON_XDAI_ADDRESS.parse().unwrap(),
+        xdai_bridge_on_eth: XDAI_BRIDGE_ON_ETH_ADDRESS.parse().unwrap(),
+        xdai_bridge_on_xdai: XDAI_BRIDGE_ON_XDAI_ADDRESS.parse().unwrap(),
         eth_full_node_url: "https://eth.althea.org".into(),
         xdai_full_node_url: "https://dai.althea.org".into(),
     }
@@ -575,14 +583,14 @@ mod tests {
     /// ensures all bridge addresses pass EIP-55 parsing
     #[test]
     fn validate_bridge_addresses() {
-        Address::parse_and_validate(UNISWAP_ADDRESS).expect("Invalid uniswap address");
-        Address::parse_and_validate(XDAI_HOME_BRIDGE_ADDRESS)
+        Address::parse_and_validate(UNISWAP_ON_ETH_ADDRESS).expect("Invalid uniswap address");
+        Address::parse_and_validate(XDAI_BRIDGE_ON_ETH_ADDRESS)
             .expect("Invalid xdai home bridge address");
-        Address::parse_and_validate(XDAI_HOME_HELPER_ADDRESS)
+        Address::parse_and_validate(HELPER_ON_XDAI_ADDRESS)
             .expect("Invalid xdai home helper address");
-        Address::parse_and_validate(XDAI_FOREIGN_BRIDGE_ADDRESS)
+        Address::parse_and_validate(XDAI_BRIDGE_ON_XDAI_ADDRESS)
             .expect("Invalid xdai foreign bridge address");
-        Address::parse_and_validate(FOREIGN_DAI_CONTRACT_ADDRESS)
+        Address::parse_and_validate(DAI_ERC20_CONTRACT_ON_ETH_ADDRESS)
             .expect("Invalid foreign dai contract address");
     }
 
