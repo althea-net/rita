@@ -4,6 +4,7 @@ extern crate log;
 extern crate serde_derive;
 
 use clarity::abi::{encode_call, Token};
+use clarity::utils::bytes_to_hex_str;
 use clarity::{Address, PrivateKey};
 use num::Bounded;
 use num256::Uint256;
@@ -450,6 +451,7 @@ impl TokenBridge {
         xdai_withdraw_txid: Uint256,
         amount_sent: Uint256,
     ) -> Result<HelperWithdrawInfo, TokenBridgeError> {
+        info!("bridge getting message hashes");
         let own_address = self.own_address;
         // the hash that is then used to look up the signatures, this will always
         // succeed, whereas the signature lookup may need to wait for all sigs
@@ -478,7 +480,7 @@ impl TokenBridge {
                 own_address,
             )
             .await?;
-        if msg == vec![0] {
+        if msg == vec![0] || msg.len() <= 64 {
             return Err(TokenBridgeError::HelperMessageNotReady);
         }
         let sigs_payload = self
@@ -490,10 +492,35 @@ impl TokenBridge {
                 own_address,
             )
             .await?;
+        if sigs_payload == vec![0] || sigs_payload.len() <= 64 {
+            return Err(TokenBridgeError::HelperMessageNotReady);
+        }
+        // what we've gotten out of this helper contract is a packed
+        // encoded message, since we don't have code to unpack it or
+        // even the a type definition to work with we've got to do some
+        // hand massaging to get it into the right format.
+        //  1. discard the first uint256 type specifier, we know what we have
+        //  2. take the second uint256 it's the length in bytes of the rest of the message
+        //  3. take the bytes between START (2 uint256 offset) and END (offset plus message length)
+        let msg_len = Uint256::from_bytes_be(&msg[32..64]);
+        let sigs_len = Uint256::from_bytes_be(&sigs_payload[32..64]);
+        if msg_len > usize::MAX.into() || sigs_len > usize::MAX.into() {
+            return Err(TokenBridgeError::HelperMessageIncorrect);
+        }
+        let msg_len: usize = msg_len.to_string().parse().unwrap();
+        let sigs_len: usize = sigs_len.to_string().parse().unwrap();
+        const START: usize = 2 * 32;
+        let msg_end = START + (msg_len);
+        let sigs_end = START + (sigs_len);
+        if msg_end > msg.len() || sigs_end > sigs_payload.len() {
+            return Err(TokenBridgeError::HelperMessageIncorrect);
+        }
+        let cleaned_msg = msg[START..msg_end].to_vec();
+        let cleaned_sigs = sigs_payload[START..sigs_end].to_vec();
 
         Ok(HelperWithdrawInfo {
-            msg,
-            sigs: sigs_payload,
+            msg: cleaned_msg,
+            sigs: cleaned_sigs,
         })
     }
 
@@ -504,11 +531,12 @@ impl TokenBridge {
         timeout: Duration,
     ) -> Result<Uint256, TokenBridgeError> {
         let own_address = self.own_address;
-        let payload = encode_call(
-            "executeSignatures(bytes32,bytes32)",
-            &[data.msg.into(), data.sigs.into()],
-        )
-        .unwrap();
+        let payload = get_payload_for_funds_unlock(&data);
+        trace!(
+            "bridge unlocking funds with! {} bytes payload! {}",
+            data.msg.len(),
+            bytes_to_hex_str(&payload),
+        );
 
         let txid = self
             .eth_web3
@@ -518,7 +546,7 @@ impl TokenBridge {
                 0u32.into(),
                 own_address,
                 self.secret,
-                Vec::new(),
+                vec![SendTxOption::GasLimit(200_000u64.into())],
             )
             .await?;
 
@@ -528,6 +556,18 @@ impl TokenBridge {
             .await;
         Ok(txid)
     }
+}
+
+/// helper function for easier tests
+fn get_payload_for_funds_unlock(data: &HelperWithdrawInfo) -> Vec<u8> {
+    encode_call(
+        "executeSignatures(bytes,bytes)",
+        &[
+            Token::UnboundedBytes(data.msg.clone()),
+            Token::UnboundedBytes(data.sigs.clone()),
+        ],
+    )
+    .unwrap()
 }
 
 pub const UNISWAP_ON_ETH_ADDRESS: &str = "0x2a1530C4C41db0B0b2bB646CB5Eb1A67b7158667";
@@ -553,6 +593,8 @@ pub fn default_bridge_addresses() -> TokenBridgeAddresses {
 
 #[cfg(test)]
 mod tests {
+    use clarity::utils::hex_str_to_bytes;
+
     use super::*;
     use std::str::FromStr;
 
@@ -624,6 +666,114 @@ mod tests {
                 .await
                 .unwrap();
             assert!(is_approved);
+            actix::System::current().stop();
+        });
+        system.run().unwrap();
+    }
+
+    #[test]
+    #[ignore]
+    fn test_funds_unlock_boilerplate() {
+        let system = actix::System::new("test");
+
+        let bridge = new_token_bridge();
+
+        actix::spawn(async move {
+            let details = bridge
+                .get_relay_message_hash(
+                    "0x83b76e9e2acfaf57422f1fc194fd672a2bc267f8fe7a6220d78df3a9260b0a65"
+                        .parse()
+                        .unwrap(),
+                    38279145422101674969u128.into(),
+                )
+                .await
+                .unwrap();
+            println!(
+                "Got sigs, msg: {} sigs {}",
+                bytes_to_hex_str(&details.msg),
+                bytes_to_hex_str(&details.sigs),
+            );
+            bridge
+                .submit_signatures_to_unlock_funds(details, TIMEOUT)
+                .await
+                .unwrap();
+            actix::System::current().stop();
+        });
+        system.run().unwrap();
+    }
+
+    #[test]
+    /// This tests unlocking funds from the POA Xdai bridge using a lot of specially collected
+    /// test data for the entire process
+    fn test_funds_unlock() {
+        use futures::future::join;
+        let system = actix::System::new("test");
+        let dest_address = "0x310d72afc5eef50b52a47362b6dd1913d4c87972"
+            .parse()
+            .unwrap();
+        let correct_payload_1 = hex_str_to_bytes("0x3f7658fd000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000000000000068310d72afc5eef50b52a47362b6dd1913d4c8797200000000000000000000000000000000000000000000000191d1a75300d852c57b2606e78f2b6b1622598084446fcab1af95828465b0745f345052379ad4c3654aa42145aa6ebf72e164c9bbc74fbd378804501600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c4031b1c1cd0e52f961e3fe727d5fb76ac7ea6789c4359a124c4ea662451471218dcc87e10b8aa42f77d03075e5bbdd768b01f359090d228543aa9cf98e7cac1ac43502829b2e01a41c3b9647ebe869a5030e5d3ac885926bbffe8a709fb06b0701e12a879575df42e83cbbb0087a82814be3390ff2fda83234866d91bc61e405e2be750a17d8c38ff65aadb5bdb42643355584290c0e907a07c3f37983444814ad1035d1e487ee5aa9273fa59dc5d6afc707eb5e2ca6a6d0991e6cf5f773db18552a80ca000000000000000000000000000000000000000000000000000000000").unwrap();
+        let _correct_msg_hash_1 =
+            hex_str_to_bytes("0xab89d6524aeb99b0afb21bc4acbcad80d99b22decb725a8b91901ef2fc60b8ee")
+                .unwrap();
+        let correct_msg_1 = hex_str_to_bytes("0x310d72afc5eef50b52a47362b6dd1913d4c8797200000000000000000000000000000000000000000000000191d1a75300d852c57b2606e78f2b6b1622598084446fcab1af95828465b0745f345052379ad4c3654aa42145aa6ebf72e164c9bbc74fbd3788045016").unwrap();
+        let correct_sigs_1 = hex_str_to_bytes("0x031b1c1cd0e52f961e3fe727d5fb76ac7ea6789c4359a124c4ea662451471218dcc87e10b8aa42f77d03075e5bbdd768b01f359090d228543aa9cf98e7cac1ac43502829b2e01a41c3b9647ebe869a5030e5d3ac885926bbffe8a709fb06b0701e12a879575df42e83cbbb0087a82814be3390ff2fda83234866d91bc61e405e2be750a17d8c38ff65aadb5bdb42643355584290c0e907a07c3f37983444814ad1035d1e487ee5aa9273fa59dc5d6afc707eb5e2ca6a6d0991e6cf5f773db18552a80ca0").unwrap();
+        let tx_id_1 = "0x7b2606e78f2b6b1622598084446fcab1af95828465b0745f345052379ad4c365"
+            .parse()
+            .unwrap();
+        let amount_1 = 28954107454279930565u128;
+        let correct_payload_2 = hex_str_to_bytes("0x3f7658fd000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000000000000068310d72afc5eef50b52a47362b6dd1913d4c87972000000000000000000000000000000000000000000000002133ad7f325e3fbd983b76e9e2acfaf57422f1fc194fd672a2bc267f8fe7a6220d78df3a9260b0a654aa42145aa6ebf72e164c9bbc74fbd378804501600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c4031c1b1b9421be403593fed7ce937bcf6c1f59bc418d04ed6b3dd5f1a75109923ba969306a1bec5bb6b9d5a625af09fffa94a8f4e6c0e1f97e45e53701627af6b2bbd517b8a090e28b6f7d9e86b8ad5c6c6f4778c3e41e2c83b8fe216b425020389fffe263e350426291d8daae63d788acb0cb676d8efb5e5176865d7ddc8089d4260376213ef8ebcb05ff18181eee34edfec9524cc7c6398fef8c7b6ecc31c09fe80bd70dbb75c1380a000c8d231dc5f49db2a3948ee2d9c87fd083c334969d5c54e65500000000000000000000000000000000000000000000000000000000").unwrap();
+        let _correct_msg_hash_2 =
+            hex_str_to_bytes("0xcfdd7edcad5241f5f1660879fa46ecd545dbb52c87c361286a32162dc0e64e13")
+                .unwrap();
+        let correct_msg_2 =
+            hex_str_to_bytes("0x310d72afc5eef50b52a47362b6dd1913d4c87972000000000000000000000000000000000000000000000002133ad7f325e3fbd983b76e9e2acfaf57422f1fc194fd672a2bc267f8fe7a6220d78df3a9260b0a654aa42145aa6ebf72e164c9bbc74fbd3788045016")
+                .unwrap();
+        let correct_sigs_2 =
+            hex_str_to_bytes("0x031c1b1b9421be403593fed7ce937bcf6c1f59bc418d04ed6b3dd5f1a75109923ba969306a1bec5bb6b9d5a625af09fffa94a8f4e6c0e1f97e45e53701627af6b2bbd517b8a090e28b6f7d9e86b8ad5c6c6f4778c3e41e2c83b8fe216b425020389fffe263e350426291d8daae63d788acb0cb676d8efb5e5176865d7ddc8089d4260376213ef8ebcb05ff18181eee34edfec9524cc7c6398fef8c7b6ecc31c09fe80bd70dbb75c1380a000c8d231dc5f49db2a3948ee2d9c87fd083c334969d5c54e655")
+                .unwrap();
+        let tx_id_2 = "0x83b76e9e2acfaf57422f1fc194fd672a2bc267f8fe7a6220d78df3a9260b0a65"
+            .parse()
+            .unwrap();
+        let amount_2 = 38279145422101674969u128;
+
+        let mut bridge = new_token_bridge();
+        // this will break any tx sending! but we don't do that here.
+        bridge.own_address = dest_address;
+
+        actix::spawn(async move {
+            // this test may fail if we can't reach our xdai node cluster as we actually go out, call the contract and check
+            let details_1 = bridge.get_relay_message_hash(tx_id_1, amount_1.into());
+            let details_2 = bridge.get_relay_message_hash(tx_id_2, amount_2.into());
+            let (details_1, details_2) = join(details_1, details_2).await;
+            let details_1 = details_1.unwrap();
+            let details_2 = details_2.unwrap();
+            assert_eq!(
+                bytes_to_hex_str(&details_1.msg),
+                bytes_to_hex_str(&correct_msg_1)
+            );
+            assert_eq!(
+                bytes_to_hex_str(&details_1.sigs),
+                bytes_to_hex_str(&correct_sigs_1)
+            );
+            assert_eq!(
+                bytes_to_hex_str(&details_2.msg),
+                bytes_to_hex_str(&correct_msg_2)
+            );
+            assert_eq!(
+                bytes_to_hex_str(&details_2.sigs),
+                bytes_to_hex_str(&correct_sigs_2)
+            );
+
+            let payload_1 = get_payload_for_funds_unlock(&details_1);
+            let payload_2 = get_payload_for_funds_unlock(&details_2);
+            assert_eq!(
+                bytes_to_hex_str(&payload_1),
+                bytes_to_hex_str(&correct_payload_1)
+            );
+            assert_eq!(
+                bytes_to_hex_str(&payload_2),
+                bytes_to_hex_str(&correct_payload_2)
+            );
             actix::System::current().stop();
         });
         system.run().unwrap();

@@ -9,6 +9,7 @@ pub enum TokenBridgeError {
     Web3Error(Web3Error),
     BadUniswapOutput(String),
     HelperMessageNotReady,
+    HelperMessageIncorrect,
 }
 
 impl From<Web3Error> for TokenBridgeError {
@@ -26,6 +27,9 @@ impl Display for TokenBridgeError {
                 f,
                 "xDai validators are not finished preparing this withdraw",
             ),
+            TokenBridgeError::HelperMessageIncorrect => {
+                write!(f, "This can't possibly be a valid helper message",)
+            }
         }
     }
 }
