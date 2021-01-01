@@ -520,10 +520,12 @@ async fn xdai_bridge(state: State) -> State {
                     )
                 {
                     // can't panic because of the above if/else tree
+                    info!("bridge in Withdraw state attempting to unlock funds");
                     let unlock_details = unlock_details.unwrap();
-                    let _ = bridge
+                    let res = bridge
                         .submit_signatures_to_unlock_funds(unlock_details, UNISWAP_TIMEOUT)
                         .await;
+                    info!("Submitting signatures to Ethereum {:?}", res);
 
                     return our_withdrawing_state;
 
