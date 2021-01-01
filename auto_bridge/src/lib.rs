@@ -8,6 +8,7 @@ use clarity::{Address, PrivateKey};
 use num::Bounded;
 use num256::Uint256;
 use std::{str::FromStr, time::Duration};
+use web30::address_to_event;
 use web30::client::Web3;
 use web30::types::SendTxOption;
 
@@ -62,19 +63,6 @@ pub struct TokenBridge {
     pub secret: PrivateKey,
 }
 
-/// takes an address and spits out an event
-fn address_to_event(address: Address) -> [u8; 32] {
-    // addresses are 20 bytes and must be placed into the top bytes of the
-    // 32 byte uint256
-    let mut topic: [u8; 32] = [0; 32];
-    let mut address_bytes = address.as_bytes().to_vec();
-    for _ in 0..12 {
-        address_bytes.insert(0, 0);
-    }
-    topic.copy_from_slice(&address_bytes);
-    topic
-}
-
 impl TokenBridge {
     pub fn new(
         addresses: TokenBridgeAddresses,
@@ -82,6 +70,7 @@ impl TokenBridge {
         secret: PrivateKey,
         eth_full_node_url: String,
         xdai_full_node_url: String,
+        timeout: Duration,
     ) -> TokenBridge {
         TokenBridge {
             uniswap_address: addresses.uniswap_address,
@@ -91,8 +80,8 @@ impl TokenBridge {
             xdai_home_helper_address: addresses.xdai_home_helper_address,
             own_address,
             secret,
-            xdai_web3: Web3::new(&xdai_full_node_url, Duration::from_secs(10)),
-            eth_web3: Web3::new(&eth_full_node_url, Duration::from_secs(10)),
+            xdai_web3: Web3::new(&xdai_full_node_url, timeout),
+            eth_web3: Web3::new(&eth_full_node_url, timeout),
         }
     }
 
@@ -211,7 +200,7 @@ impl TokenBridge {
         topics.push(topic);
 
         let response = web3
-            .wait_for_event_alt(
+            .wait_for_event(
                 timeout,
                 vec![uniswap_address],
                 "TokenPurchase(address,uint256,uint256)",
@@ -289,7 +278,7 @@ impl TokenBridge {
         topics.push(address_to_event(uniswap_address));
 
         let _res = web3
-            .wait_for_event_alt(
+            .wait_for_event(
                 timeout,
                 vec![dai_address],
                 "Approval(address,address,uint256)",
@@ -351,7 +340,7 @@ impl TokenBridge {
         topics.push(topic);
 
         let response = web3
-            .wait_for_event_alt(
+            .wait_for_event(
                 timeout,
                 vec![uniswap_address],
                 "EthPurchase(address,uint256,uint256)",
@@ -570,10 +559,11 @@ mod tests {
 
         TokenBridge::new(
             default_bridge_addresses(),
-            Address::parse_and_validate("0x79AE13432950bF5CDC3499f8d4Cf5963c3F0d42c").unwrap(),
+            pk.to_public_key().unwrap(),
             pk,
-            "https://eth.althea.org".into(),
-            "https://dai.althea.org".into(),
+            "https://eth.altheamesh.com".into(),
+            "https://dai.altheamesh.com".into(),
+            TIMEOUT,
         )
     }
 
@@ -613,8 +603,9 @@ mod tests {
             default_bridge_addresses(),
             Address::parse_and_validate("0x79AE13432950bF5CDC3499f8d4Cf5963c3F0d42c").unwrap(),
             pk,
-            "https://eth.althea.org".into(),
-            "https://dai.althea.org".into(),
+            "https://eth.altheamesh.com".into(),
+            "https://dai.altheamesh.com".into(),
+            TIMEOUT,
         );
 
         actix::spawn(async move {

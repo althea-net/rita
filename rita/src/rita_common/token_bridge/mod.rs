@@ -42,6 +42,7 @@
 //!         Future waits on Uniswap and upon successful swap, sends eth to "to" address. Another future
 //!         waits on this transfer to complete. When it is complete, the state switches back to State::Ready
 
+use crate::rita_common::rita_loop::slow_loop::SLOW_LOOP_TIMEOUT;
 use crate::SETTING;
 use althea_types::SystemChain;
 use async_web30::types::SendTxOption;
@@ -183,6 +184,7 @@ fn token_bridge_core_from_settings(payment_settings: &PaymentSettings) -> TokenB
         payment_settings.eth_private_key.unwrap(),
         addresses.eth_full_node_url,
         addresses.xdai_full_node_url,
+        SLOW_LOOP_TIMEOUT,
     )
 }
 
@@ -209,7 +211,7 @@ async fn rescue_dai(
     let dai_balance = bridge.get_dai_balance(our_address).await?;
     info!("Our DAI balance is {}", dai_balance);
     if dai_balance > minimum_stranded_dai_transfer {
-        info!("rescuing dais");
+        info!("rescuing dais, failure to wait for event");
         detailed_state_change(DetailedBridgeState::DaiToXdai {
             amount: dai_balance.clone(),
         });
