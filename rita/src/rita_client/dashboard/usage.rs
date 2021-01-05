@@ -12,7 +12,7 @@ use std::collections::VecDeque;
 pub fn get_client_usage(
     _req: HttpRequest,
 ) -> Box<dyn Future<Item = Json<VecDeque<UsageHour>>, Error = Error>> {
-    trace!("/usage/relay hit");
+    trace!("/usage/client hit");
     UsageTracker::from_registry()
         .send(GetUsage {
             kind: UsageType::Client,
