@@ -395,6 +395,20 @@ pub enum OperatorAction {
     ChangeOperatorAddress { new_address: Option<Address> },
 }
 
+impl OperatorAction {
+    /// is this a list of actions on the whitelist for normal operator tools users
+    pub fn is_user_action(&self) -> bool {
+        matches!(
+            self,
+            OperatorAction::ResetRouterPassword
+                | OperatorAction::ResetWiFiPassword
+                | OperatorAction::ResetShaper
+                | OperatorAction::Reboot
+                | OperatorAction::UpdateNow
+        )
+    }
+}
+
 impl FromStr for OperatorAction {
     type Err = Error;
     fn from_str(s: &str) -> Result<OperatorAction, Error> {
