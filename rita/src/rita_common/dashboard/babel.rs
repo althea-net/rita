@@ -63,6 +63,8 @@ pub fn set_local_fee(path: Path<u32>) -> Box<dyn Future<Item = HttpResponse, Err
     }))
 }
 
+/// Sets the metric factor for this node, lower values mean a higher price preference while higher
+/// values mean a higher weight on route quality.
 pub fn set_metric_factor(path: Path<u32>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let new_factor = path.into_inner();
     debug!("/metric_factor/{} POST hit", new_factor);
