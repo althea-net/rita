@@ -1,3 +1,4 @@
+use althea_kernel_interface::DefaultRoute;
 use althea_types::ShaperSettings;
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
@@ -85,7 +86,8 @@ pub struct NetworkSettings {
     pub manual_peers: Vec<String>,
     /// This is a route in the format of `ip route` which is set by default (assuming it will reach
     /// the internet), used to tunnel manual peers over a specific route
-    pub default_route: Vec<String>,
+    #[serde(default)]
+    pub last_default_route: Option<DefaultRoute>,
     /// This is the NIC which connects to the internet, used by gateways/exits to find its
     /// globally routable ip
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -138,7 +140,7 @@ impl Default for NetworkSettings {
             peer_interfaces: HashSet::new(),
             manual_peers: Vec::new(),
             external_nic: None,
-            default_route: Vec::new(),
+            last_default_route: None,
             device: None,
             nickname: None,
             usage_tracker_file: default_usage_tracker_file(),

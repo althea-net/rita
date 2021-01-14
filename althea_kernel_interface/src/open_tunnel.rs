@@ -1,4 +1,4 @@
-use crate::{KernelInterface, KernelInterfaceError};
+use crate::{DefaultRoute, KernelInterface, KernelInterfaceError};
 use althea_types::WgKey;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::Path;
@@ -68,7 +68,7 @@ pub struct TunnelOpenArgs<'a> {
     pub external_nic: Option<String>,
     /// the default route that we use to get to the internet if we are a gateway, only used to handle
     /// default route considerations on the gateway
-    pub settings_default_route: &'a mut Vec<String>,
+    pub settings_default_route: &'a mut Option<DefaultRoute>,
     /// a single ipv4 address that we may allow to access this tunnel, used by light clients (aka phones) for
     /// their special case ipv4 only tunnels
     pub allowed_ipv4_address: Option<Ipv4Addr>,
@@ -161,6 +161,7 @@ impl dyn KernelInterface {
 fn test_open_tunnel_linux() {
     use crate::KI;
 
+    use crate::ip_route::DefaultRoute;
     use std::net::SocketAddrV6;
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
@@ -259,6 +260,14 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
         }
     }));
 
+    let def_route = DefaultRoute {
+        via: "192.168.8.1".parse().unwrap(),
+        nic: "wifiinterface".to_string(),
+        proto: Some("dhcp".to_string()),
+        metric: Some(600),
+        src: None,
+    };
+
     let args = TunnelOpenArgs {
         interface,
         port: 8088,
@@ -267,7 +276,7 @@ fe80::433:25ff:fe8c:e1ea dev eth0 lladdr 1a:32:06:78:05:0a STALE
         private_key_path,
         own_ip: own_mesh_ip,
         external_nic: None,
-        settings_default_route: &mut vec![],
+        settings_default_route: &mut Some(def_route),
         allowed_ipv4_address: None,
     };
 

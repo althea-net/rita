@@ -70,7 +70,8 @@ pub fn cleanup() -> Result<(), Error> {
 
 fn linux_init(config: Arc<RwLock<settings::client::RitaSettingsStruct>>) -> Result<(), Error> {
     cleanup()?;
-    KI.restore_default_route(&mut config.get_network_mut().default_route)?;
+    // this value will be none for most routers but a route for gateways.
+    KI.restore_default_route(&mut config.get_network_mut().last_default_route)?;
 
     // handle things we need to generate at runtime
     let mut network_settings = config.get_network_mut();

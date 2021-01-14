@@ -195,7 +195,7 @@ impl Tunnel {
                 None => bail!("No mesh IP configured yet"),
             },
             external_nic: network.external_nic.clone(),
-            settings_default_route: &mut network.default_route,
+            settings_default_route: &mut network.last_default_route,
             allowed_ipv4_address: light_client_details,
         };
 
@@ -578,7 +578,7 @@ impl Handler<PeersToContact> for TunnelManager {
 fn contact_neighbor(peer: &Peer, our_port: u16) -> Result<(), Error> {
     KI.manual_peers_route(
         &peer.contact_socket.ip(),
-        &mut SETTING.get_network_mut().default_route,
+        &mut SETTING.get_network_mut().last_default_route,
     )?;
 
     HelloHandler::from_registry().do_send(Hello {

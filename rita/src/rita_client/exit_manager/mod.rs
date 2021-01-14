@@ -26,7 +26,9 @@ use actix::registry::SystemService;
 use actix::{Actor, Arbiter, Context, Handler, ResponseFuture, Supervised};
 use actix_web::client::Connection;
 use actix_web::{client, HttpMessage, Result};
-use althea_kernel_interface::{exit_client_tunnel::ClientExitTunnelConfig, KernelInterfaceError};
+use althea_kernel_interface::{
+    exit_client_tunnel::ClientExitTunnelConfig, DefaultRoute, KernelInterfaceError,
+};
 use althea_types::ExitClientDetails;
 use althea_types::ExitDetails;
 use althea_types::WgKey;
@@ -55,7 +57,7 @@ fn linux_setup_exit_tunnel(
     general_details: &ExitDetails,
     our_details: &ExitClientDetails,
 ) -> Result<(), Error> {
-    KI.update_settings_route(&mut SETTING.get_network_mut().default_route)?;
+    KI.update_settings_route(&mut SETTING.get_network_mut().last_default_route);
 
     if let Err(KernelInterfaceError::RuntimeError(v)) = KI.setup_wg_if_named("wg_exit") {
         return Err(format_err!("{}", v));
@@ -413,6 +415,13 @@ impl SystemService for ExitManager {
     }
 }
 
+fn correct_default_route(input: Option<DefaultRoute>) -> bool {
+    match input {
+        Some(v) => v.is_althea_default_route(),
+        None => false,
+    }
+}
+
 impl Handler<Tick> for ExitManager {
     type Result = ResponseFuture<(), Error>;
 
@@ -433,10 +442,7 @@ impl Handler<Tick> for ExitManager {
                 let signed_up_for_exit = exit.info.our_details().is_some();
                 let exit_has_changed =
                     !(self.last_exit.is_some() && self.last_exit.clone().unwrap() == exit);
-                let correct_default_route = KI
-                    .get_default_route()
-                    .unwrap_or_default()
-                    .contains(&String::from("wg_exit"));
+                let correct_default_route = correct_default_route(KI.get_default_route());
 
                 match (signed_up_for_exit, exit_has_changed, correct_default_route) {
                     (true, true, _) => {

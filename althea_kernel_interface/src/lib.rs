@@ -2,6 +2,8 @@
 extern crate lazy_static;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate serde_derive;
 
 use std::{env, fmt};
 use std::{
@@ -55,6 +57,9 @@ use oping::PingError;
 pub use crate::counter::FilterTarget;
 pub use crate::create_wg_key::WgKeypair;
 pub use crate::exit_server_tunnel::ExitClient;
+pub use crate::ip_route::DefaultRoute;
+pub use crate::ip_route::IpRoute;
+pub use crate::ip_route::ToSubnet;
 
 use std::fmt::Result as FormatResult;
 use std::io::Error as IoError;
@@ -74,6 +79,8 @@ pub enum KernelInterfaceError {
     FailedToGetMemoryInfo,
     FailedToGetLoadAverage,
     NoAltheaReleaseFeedFound,
+    EmptyRouteString,
+    InvalidRouteString(String),
     TrafficControlError(String),
 }
 
@@ -100,6 +107,12 @@ impl fmt::Display for KernelInterfaceError {
             }
             KernelInterfaceError::TrafficControlError(val) => {
                 write!(f, "TrafficControl error {}", val)
+            }
+            KernelInterfaceError::EmptyRouteString => {
+                write!(f, "Can't parse an empty string into a route!")
+            }
+            KernelInterfaceError::InvalidRouteString(val) => {
+                write!(f, "InvalidRouteString {}", val)
             }
         }
     }

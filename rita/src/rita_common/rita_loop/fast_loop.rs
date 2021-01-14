@@ -310,7 +310,7 @@ fn manage_gateway() {
             Ok(s) => {
                 for ip in s.iter() {
                     trace!("Resolv route {:?}", ip);
-                    KI.manual_peers_route(&ip, &mut SETTING.get_network_mut().default_route)
+                    KI.manual_peers_route(&ip, &mut SETTING.get_network_mut().last_default_route)
                         .unwrap();
                 }
             }

@@ -52,7 +52,7 @@ pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {
     }
 
     // Restore default route
-    match KI.restore_default_route(&mut network_settings.default_route) {
+    match KI.restore_default_route(&mut network_settings.last_default_route) {
         Ok(_) => trace!("wipe: Restore default route success!"),
         Err(e) => {
             warn!("wipe: Unable to restore default route: {:?}", e);
