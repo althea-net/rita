@@ -60,7 +60,7 @@ tokio = "0.1"
 tokio-io = "0.1"
 tokio-codec = "0.1"
 trust-dns-resolver = "0.10"
-byteorder = { version = "1.3", features = ["i128"] }
+byteorder = { version = "1.4", features = ["i128"] }
 openssl-probe = "0.1"
 num-traits="0.2"
 arrayvec = {version= "0.5", features = ["serde"]}
