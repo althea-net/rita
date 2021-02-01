@@ -1,4 +1,4 @@
-use crate::ContactType;
+use crate::{ContactType, Identity};
 use clarity::Address;
 use std::net::Ipv4Addr;
 use std::time::SystemTime;
@@ -71,7 +71,11 @@ pub struct InstallationDetails {
 pub struct WyreReservationRequestCarrier {
     /// the actual amount the user is requesting to deposit
     pub amount: f32,
-    pub address: Address,
+    /// The address to deposit to, this is being replaced in Beta 17
+    /// to provide a full identity for easier router lookup
+    pub address: Option<Address>,
+    /// The id of the requesting router, only provided in Beta 17 and later
+    pub id: Option<Identity>,
     pub contact_info: ContactType,
     pub billing_details: BillingDetails,
 }

@@ -58,10 +58,11 @@ pub fn get_wyre_reservation(
     trace!("Getting wyre reservation");
     let exit_client = SETTING.get_exit_client();
     let operator = SETTING.get_operator();
-    let payment = SETTING.get_payment();
+    let id = SETTING.get_identity();
     let payload = WyreReservationRequestCarrier {
         amount: amount.amount,
-        address: payment.eth_address.unwrap(),
+        address: None,
+        id,
         contact_info: exit_client.contact_info.clone().unwrap().into(),
         billing_details: operator.billing_details.clone().unwrap(),
     };
