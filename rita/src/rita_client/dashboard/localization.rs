@@ -55,7 +55,7 @@ pub struct AmountRequest {
 pub fn get_wyre_reservation(
     amount: Json<AmountRequest>,
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
-    trace!("Getting wyre reservation");
+    info!("Getting wyre reservation");
     let exit_client = SETTING.get_exit_client();
     let operator = SETTING.get_operator();
     let id = SETTING.get_identity();
@@ -82,13 +82,13 @@ pub fn get_wyre_reservation(
                     move |value: Result<WyreReservationResponse, JsonPayloadError>| match value {
                         Ok(value) => Ok(HttpResponse::Ok().json(value)),
                         Err(e) => {
-                            trace!("Failed to deserialize wyre response {:?}", e);
+                            error!("Failed to deserialize wyre response  {:?}", e);
                             Ok(HttpResponse::InternalServerError().finish())
                         }
                     },
                 )),
                 Err(e) => {
-                    trace!("Failed to send wyre request {:?}", e);
+                    error!("Failed to send wyre request {:?}", e);
                     Either::B(future::ok(HttpResponse::InternalServerError().finish()))
                 }
             }),
