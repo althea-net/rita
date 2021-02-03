@@ -1,4 +1,5 @@
 use crate::KI;
+use crate::SETTING;
 use actix_web::http::StatusCode;
 use actix_web::HttpRequest;
 use actix_web::HttpResponse;
@@ -6,6 +7,7 @@ use actix_web::Path;
 use althea_kernel_interface::opkg_feeds::get_release_feed;
 use althea_kernel_interface::opkg_feeds::set_release_feed;
 use failure::Error;
+use settings::RitaCommonSettings;
 
 pub fn get_release_feed_http(_req: HttpRequest) -> Result<HttpResponse, Error> {
     if !KI.is_openwrt() {
@@ -36,5 +38,7 @@ pub fn set_release_feed_http(path: Path<String>) -> HttpResponse {
             .json(format!("Failed to write new release feed with {:?}", e));
     }
 
+    let mut settings = SETTING.get_network_mut();
+    settings.user_set_release_feed = true;
     HttpResponse::Ok().json(())
 }

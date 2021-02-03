@@ -31,6 +31,10 @@ fn default_light_client_hello_port() -> u16 {
     4878
 }
 
+fn default_user_set_release_feed() -> bool {
+    false
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
     /// How much non-financial metrics matter compared to a route's cost. By default a 2x more
@@ -114,6 +118,11 @@ pub struct NetworkSettings {
     /// in a symmetrical limit of the users choice. Specified in mbit/s
     #[serde(default)]
     pub user_bandwidth_limit: Option<usize>,
+    /// we store this if the user sets their own release feed, if so we don't update from
+    /// the operator update message but instead only accept 'update now' commands. Users
+    /// probably won't like the feed snapping back to 'Custom' every time they change it
+    #[serde(default = "default_user_set_release_feed")]
+    pub user_set_release_feed: bool,
 }
 
 impl Default for NetworkSettings {
@@ -145,6 +154,7 @@ impl Default for NetworkSettings {
             nickname: None,
             usage_tracker_file: default_usage_tracker_file(),
             user_bandwidth_limit: None,
+            user_set_release_feed: false,
         }
     }
 }

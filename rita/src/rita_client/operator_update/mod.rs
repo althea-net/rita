@@ -103,6 +103,7 @@ fn checkin() {
     let install_details = operator_settings.installation_details.clone();
     let billing_details = operator_settings.billing_details.clone();
     let user_bandwidth_limit = SETTING.get_network().user_bandwidth_limit;
+    let user_set_release_feed = SETTING.get_network().user_set_release_feed;
 
     drop(operator_settings);
 
@@ -204,7 +205,10 @@ fn checkin() {
                     // gated on "None" to prevent reading a file if there is
                     // no update. Maybe someday match will be smart enough to
                     // avoid that on it's own
-                    if new_settings.firmware_feed.is_some() {
+                    // Also disabled if the user has set their own release feed
+                    // so that they can do that without the operator tools just
+                    // setting it back every time.
+                    if new_settings.firmware_feed.is_some() && !user_set_release_feed {
                         handle_release_feed_update(new_settings.firmware_feed);
                     }
 
@@ -230,6 +234,10 @@ fn checkin() {
                         }
                         Some(OperatorAction::ChangeReleaseFeedAndUpdate { feed }) => {
                             handle_release_feed_update(Some(feed));
+                            // this is the escape hatch for the user setting their own release feed. Once an operator manually
+                            // updates them they are back in the 'normal' group
+                            let mut network = SETTING.get_network_mut();
+                            network.user_set_release_feed = false;
                             // this runs the update shell script, if an update is found a reboot will occur
                             // it is possible that the script fails to grab the package index or a package
                             // due to network conditions this will cause the update to be delayed until the
