@@ -362,6 +362,17 @@ impl FromStr for ReleaseStatus {
     }
 }
 
+impl Display for ReleaseStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ReleaseStatus::ReleaseCandidate => write!(f, "ReleaseCandidate"),
+            ReleaseStatus::PreRelease => write!(f, "PreRelease"),
+            ReleaseStatus::GeneralAvailability => write!(f, "GeneralAvailability"),
+            ReleaseStatus::Custom(s) => write!(f, "{}", s),
+        }
+    }
+}
+
 /// Something the operator may want to do to a router under their control
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub enum OperatorAction {
