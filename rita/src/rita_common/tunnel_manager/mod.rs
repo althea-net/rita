@@ -933,19 +933,13 @@ impl Handler<TunnelStateChange> for TunnelManager {
 
     fn handle(&mut self, msg: TunnelStateChange, _: &mut Context<Self>) -> Self::Result {
         for tunnel in msg.tunnels {
-            let res = tunnel_state_change(tunnel, &mut self.tunnels);
-            if res.is_err() {
-                error!("Tunnel state change failed with {:?}", res);
-            }
+            tunnel_state_change(tunnel, &mut self.tunnels);
         }
         Ok(())
     }
 }
 
-fn tunnel_state_change(
-    msg: TunnelChange,
-    tunnels: &mut HashMap<Identity, Vec<Tunnel>>,
-) -> Result<(), Error> {
+fn tunnel_state_change(msg: TunnelChange, tunnels: &mut HashMap<Identity, Vec<Tunnel>>) {
     let id = msg.identity;
     let action = msg.action;
     trace!(
@@ -1048,8 +1042,6 @@ fn tunnel_state_change(
             error!("Bandwidth limiting failed with {:?}", res);
         }
     }
-
-    Ok(())
 }
 
 /// Takes the tunnels list and iterates over it to update all of the traffic control settings

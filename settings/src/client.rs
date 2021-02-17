@@ -167,7 +167,7 @@ impl RitaSettingsStruct {
 
         trace!("starting with settings: {:?}", settings.read().unwrap());
 
-        spawn_watch_thread(settings.clone(), file_name).unwrap();
+        spawn_watch_thread(settings.clone(), file_name);
 
         Ok(settings)
     }

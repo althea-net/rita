@@ -60,7 +60,11 @@ fn get_arch(line: &str) -> Result<String, Error> {
         .replace("packages", "")
         .replace("althea", "")
         .replace("/", "");
-    Ok(arch)
+    if arch.is_empty() {
+        Err(Error::InvalidArchString(arch))
+    } else {
+        Ok(arch)
+    }
 }
 
 fn get_feed(line: &str) -> Result<ReleaseStatus, Error> {

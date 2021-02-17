@@ -94,19 +94,9 @@ impl Handler<Tick> for PeerListener {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
         trace!("Starting PeerListener tick!");
-        let res = send_im_here(&mut self.interfaces);
-        if res.is_err() {
-            error!("Sending ImHere failed with {:?}", res);
-        }
+        send_im_here(&mut self.interfaces);
 
-        match receive_im_here(&mut self.interfaces) {
-            Ok(new_peers) => {
-                self.peers = new_peers;
-            }
-            Err(e) => {
-                error!("Receiving ImHere failed with {:?}", e);
-            }
-        }
+        self.peers = receive_im_here(&mut self.interfaces);
 
         self.listen_to_available_ifaces();
 
@@ -244,7 +234,7 @@ impl ListenInterface {
     }
 }
 
-fn send_im_here(interfaces: &mut HashMap<String, ListenInterface>) -> Result<(), Error> {
+fn send_im_here(interfaces: &mut HashMap<String, ListenInterface>) {
     trace!("About to send ImHere");
     for obj in interfaces.iter_mut() {
         let listen_interface = obj.1;
@@ -258,13 +248,13 @@ fn send_im_here(interfaces: &mut HashMap<String, ListenInterface>) -> Result<(),
             .linklocal_socket
             .send_to(&message.encode(), listen_interface.multicast_socketaddr);
         trace!("Sending ImHere to broadcast gets {:?}", result);
+        if result.is_err() {
+            info!("Sending ImHere failed with {:?}", result);
+        }
     }
-    Ok(())
 }
 
-fn receive_im_here(
-    interfaces: &mut HashMap<String, ListenInterface>,
-) -> Result<HashMap<IpAddr, Peer>, Error> {
+fn receive_im_here(interfaces: &mut HashMap<String, ListenInterface>) -> HashMap<IpAddr, Peer> {
     trace!("About to dequeue ImHere");
     let mut output = HashMap::<IpAddr, Peer>::new();
     for obj in interfaces.iter_mut() {
@@ -314,5 +304,5 @@ fn receive_im_here(
             output.insert(peer.contact_socket.ip(), peer);
         }
     }
-    Ok(output)
+    output
 }

@@ -21,10 +21,7 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
 
     let num_cpus = get_numcpus()?;
 
-    let sensor_readings = match get_sensor_readings() {
-        Ok(readings) => Some(readings),
-        Err(_e) => None,
-    };
+    let sensor_readings = get_sensor_readings();
     let allocated_memory = match mem_total.checked_sub(mem_free) {
         Some(val) => val,
         None => return Err(Error::FailedToGetMemoryUsage),
@@ -133,7 +130,7 @@ fn maybe_get_single_line_string(path: &str) -> Option<String> {
     }
 }
 
-fn get_sensor_readings() -> Result<Vec<SensorReading>, Error> {
+fn get_sensor_readings() -> Option<Vec<SensorReading>> {
     // sensors are zero indexed and there will never be gaps
     let mut sensor_num = 0;
     let mut ret = Vec::new();
@@ -155,7 +152,11 @@ fn get_sensor_readings() -> Result<Vec<SensorReading>, Error> {
         sensor_num += 1;
         path = format!("/sys/class/hwmon/hwmon{}", sensor_num);
     }
-    Ok(ret)
+    if ret.is_empty() {
+        None
+    } else {
+        Some(ret)
+    }
 }
 
 #[test]
@@ -176,5 +177,5 @@ fn test_numcpus() {
 fn test_sensors() {
     let res = get_sensor_readings();
     println!("{:?}", res);
-    assert!(res.is_ok());
+    assert!(res.is_some());
 }

@@ -108,10 +108,7 @@ pub trait FileWrite {
     fn write(&self, file_name: &str) -> Result<(), Error>;
 }
 
-fn spawn_watch_thread<'de, T: 'static>(
-    settings: Arc<RwLock<T>>,
-    file_path: &str,
-) -> Result<(), Error>
+fn spawn_watch_thread<'de, T: 'static>(settings: Arc<RwLock<T>>, file_path: &str)
 where
     T: serde::Deserialize<'de> + Sync + Send + std::fmt::Debug + Clone + Eq + FileWrite,
 {
@@ -132,8 +129,6 @@ where
             }
         }
     });
-
-    Ok(())
 }
 
 impl<T> FileWrite for T

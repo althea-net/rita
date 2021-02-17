@@ -82,6 +82,7 @@ pub enum KernelInterfaceError {
     EmptyRouteString,
     InvalidRouteString(String),
     TrafficControlError(String),
+    InvalidArchString(String),
 }
 
 impl fmt::Display for KernelInterfaceError {
@@ -113,6 +114,9 @@ impl fmt::Display for KernelInterfaceError {
             }
             KernelInterfaceError::InvalidRouteString(val) => {
                 write!(f, "InvalidRouteString {}", val)
+            }
+            KernelInterfaceError::InvalidArchString(val) => {
+                write!(f, "InvalidArchString {}", val)
             }
         }
     }

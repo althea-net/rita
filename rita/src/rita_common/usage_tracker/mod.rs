@@ -357,16 +357,17 @@ impl Handler<UpdatePayments> for UsageTracker {
             let _res = handle_payments(self, item);
         }
         *queue = Vec::new();
-        handle_payments(self, &msg.payment)
+        handle_payments(self, &msg.payment);
+        Ok(())
     }
 }
 
-fn handle_payments(history: &mut UsageTracker, payment: &PaymentTx) -> Result<(), Error> {
+fn handle_payments(history: &mut UsageTracker, payment: &PaymentTx) {
     let current_hour = match get_current_hour() {
         Ok(hour) => hour,
         Err(e) => {
             error!("System time is set earlier than unix epoch! {:?}", e);
-            return Ok(());
+            return;
         }
     };
     let formatted_payment = to_formatted_payment_tx(payment.clone());
@@ -394,7 +395,6 @@ fn handle_payments(history: &mut UsageTracker, payment: &PaymentTx) -> Result<()
         let res = history.save();
         info!("Saving usage data: {:?}", res);
     }
-    Ok(())
 }
 
 pub struct GetUsage {
