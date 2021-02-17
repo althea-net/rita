@@ -1,9 +1,18 @@
-//! In the longer term this is supposed to manage SubnetDAO membership, for the time being
-//! it simply manages payments to a multisig walllet address without any of the other indtended
-//! features of the subnet DAO system.
-//! The multisig payments are performed much like the bandwidth payments, using a target fee amount
-//! to compute the amount it should pay at a time, these micropayments have the effect of pro-rating
-//! the DAO fee amount and preventing the router from drastically making a large payment
+//! The operator fee is a fixed fee for service paid to an organizer address
+//! The organizer address is also used as the index for all live Althea networks
+//! in operator tools, any router with any new operator address will simply poof
+//! a network into existence in operator tools.
+//!
+//! This file contains the logic for the 'operator fee' a pro-rated fixed fee paid
+//! out over time by the router automatically, the operator fee can be configured in
+//! operator tools or locally on the router.
+//!
+//! In order to compute the fee a timer is used. So a $100/mo fee equates to 30 microcents
+//! a second. The reason we pay out this way is because users really don't like it when their
+//! balance changes suddenly, so if they deposit $125 and the router instantly takes $100 to
+//! pay their fee it's not a great situation. All that being said it's probable that this
+//! will need to be re-written to better reflect a normal billing system at some point, perhaps
+//! querying an API for an individual bill. As this is not designed to be a trustless payment
 
 use crate::rita_common::payment_controller::TRANSACTION_SUBMISSION_TIMEOUT;
 use crate::rita_common::rita_loop::get_web3_server;
@@ -33,7 +42,12 @@ pub fn get_operator_fee_debt() -> Uint256 {
 }
 
 pub struct OperatorFeeManager {
-    last_payment_time: Instant,
+    /// the operator fee is denominated in wei per second, so every time this routine runs
+    /// we take the number of seconds since the last time it ran and multiply that by the
+    /// operator fee and add to operator_fee_debt which we eventually pay
+    last_updated: Instant,
+    /// the amount in operator fees we owe to the operator address
+    operator_fee_debt: Uint256,
 }
 
 impl Actor for OperatorFeeManager {
@@ -55,13 +69,14 @@ impl Default for OperatorFeeManager {
 impl OperatorFeeManager {
     fn new() -> OperatorFeeManager {
         OperatorFeeManager {
-            last_payment_time: Instant::now(),
+            last_updated: Instant::now(),
+            operator_fee_debt: 0u8.into(),
         }
     }
 }
 
 pub struct SuccessfulPayment {
-    timestamp: Instant,
+    amount: Uint256,
 }
 impl Message for SuccessfulPayment {
     type Result = ();
@@ -71,7 +86,18 @@ impl Handler<SuccessfulPayment> for OperatorFeeManager {
     type Result = ();
 
     fn handle(&mut self, msg: SuccessfulPayment, _: &mut Context<Self>) -> Self::Result {
-        self.last_payment_time = msg.timestamp;
+        if msg.amount > self.operator_fee_debt {
+            self.operator_fee_debt = 0u8.into();
+            // this should never happen, in theory the amount might go up (routine gets run again
+            // before this call back is run) but there's no way I can think of for the counter to
+            // run backwards, nonetheless we should handle it.
+            error!(
+                "Payment is greater than op debt? Should be impossible! {} > {}",
+                msg.amount, self.operator_fee_debt
+            )
+        } else {
+            self.operator_fee_debt -= msg.amount;
+        }
     }
 }
 
@@ -85,7 +111,7 @@ impl Handler<Tick> for OperatorFeeManager {
     type Result = ();
 
     fn handle(&mut self, _msg: Tick, _: &mut Context<Self>) -> Self::Result {
-        let payment_send_time = Instant::now();
+        // get variables
         let operator_settings = SETTING.get_operator();
         let payment_settings = SETTING.get_payment();
         let eth_private_key = payment_settings.eth_private_key;
@@ -102,9 +128,18 @@ impl Handler<Tick> for OperatorFeeManager {
             None => return,
         };
         let operator_fee = operator_settings.operator_fee.clone();
-        let amount_to_pay =
-            Uint256::from(self.last_payment_time.elapsed().as_secs()) * operator_fee;
         let net_version = payment_settings.net_version;
+
+        // accumulate what we owe
+        self.operator_fee_debt +=
+            Uint256::from(self.last_updated.elapsed().as_secs()) * operator_fee;
+        self.last_updated = Instant::now();
+
+        // reassign to immutable variable to avoid accidents
+        let amount_to_pay = self.operator_fee_debt.clone();
+
+        // update globally accessible lock value, will be removed when this module goes async
+        *OPERATOR_FEE_DEBT.write().unwrap() = amount_to_pay.clone();
 
         // we should pay if the amount is greater than the pay threshold and if we have the
         // balance to do so. If we don't have the balance then we'll do all the signing and
@@ -114,8 +149,6 @@ impl Handler<Tick> for OperatorFeeManager {
             && amount_to_pay <= our_balance;
         drop(payment_settings);
         trace!("We should pay our operator {}", should_pay);
-
-        *OPERATOR_FEE_DEBT.write().unwrap() = amount_to_pay.clone();
 
         if should_pay {
             trace!("Paying subnet operator fee to {}", operator_address);
@@ -175,9 +208,9 @@ impl Handler<Tick> for OperatorFeeManager {
                             txid: Some(txid),
                         },
                     });
-                    add_tx_to_total(amount_to_pay);
+                    add_tx_to_total(amount_to_pay.clone());
                     OperatorFeeManager::from_registry().do_send(SuccessfulPayment {
-                        timestamp: payment_send_time,
+                        amount: amount_to_pay,
                     });
                     Ok(())
                 }
