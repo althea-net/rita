@@ -11,19 +11,19 @@ This is primarily an infrastructure repo, to get a working version of Althea for
 
 Debian:
 
-    sudo apt-get install build-essential libssl-dev libsqlite3-dev pkg-config postgresql-server-dev-all
+    sudo apt-get install build-essential libssl-dev libsqlite3-dev pkg-config postgresql-server-dev-all automake liboping-dev libtool
 
 Ubuntu:
 
-    sudo apt-get install build-essential libssl-dev libsqlite3-dev pkg-config postgresql-server-dev-all
+    sudo apt-get install build-essential libssl-dev libsqlite3-dev pkg-config postgresql-server-dev-all autoamke liboping-dev libtool
 
 Centos:
 
-    sudo yum install gcc gcc-c++ openssl-devel sqlite-devel make postgresql-devel
+    sudo yum install gcc gcc-c++ openssl-devel sqlite-devel make postgresql-devel automake liboping-devel libtool
 
 Fedora:
 
-    sudo dnf install gcc gcc-c++ openssl-devel sqlite-devel make postgresql-devel
+    sudo dnf install gcc gcc-c++ openssl-devel sqlite-devel make postgresql-devel automake liboping-devel libtool
 
 Arch:
 
