@@ -304,10 +304,22 @@ impl Tunnel {
                         // We must wait until we have flushed the interface before deleting it
                         // otherwise we will experience this error
                         // https://github.com/sudomesh/bugs/issues/24
-                        if let Err(e) = KI.del_interface(&tunnel.iface_name) {
-                            error!("Failed to delete wg interface! {:?}", e);
-                        }
-                        TunnelManager::from_registry().do_send(PortCallback(tunnel.listen_port));
+                        // if you see interfaces in babel dump with 'up false' check the stderror
+                        // FD on the prod device /proc/<pid>/fd/1 and you'll find this exact error
+                        // this can be reduced by waiting here (which is what we do now) or a proper
+                        // fix to kernel_setup_interface in bableld
+                        let when = Instant::now() + Duration::from_secs(60);
+                        let fut = Delay::new(when)
+                            .map_err(move |e| panic!("timer failed; err={:?}", e))
+                            .and_then(move |_| {
+                                if let Err(e) = KI.del_interface(&tunnel.iface_name) {
+                                    error!("Failed to delete wg interface! {:?}", e);
+                                }
+                                TunnelManager::from_registry()
+                                    .do_send(PortCallback(tunnel.listen_port));
+                                Ok(())
+                            });
+                        Arbiter::spawn(fut);
                     }
                     Ok(())
                 }),

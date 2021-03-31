@@ -246,9 +246,6 @@ fn into_interfaces_hashmap(interfaces: &[Interface]) -> HashMap<String, bool> {
 /// needs to be deleted. If we do not find the tunnel return true. Because it is possible
 /// that during a tunnel monitor failure we may encounter such a tunnel. We log this case
 /// for later inspection to determine if this ever actually happens.
-///
-/// TODO: this does not seem to work, the detection works, the deletion works, but the
-/// tunnel that is remade has the same issue, requires further root cause investigation
 fn tunnel_up(interfaces: &HashMap<String, bool>, tunnel_name: &str) -> bool {
     trace!("Checking if {} is up", tunnel_name);
     if let Some(up) = interfaces.get(tunnel_name) {
