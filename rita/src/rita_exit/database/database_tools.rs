@@ -145,7 +145,7 @@ pub fn get_client(
                     wg, key, ip
                 );
                 error!("{}", err_msg);
-                panic!(err_msg);
+                panic!("{}", err_msg);
             } else if entry.is_empty() {
                 return Ok(None);
             }

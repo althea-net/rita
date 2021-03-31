@@ -114,7 +114,7 @@ pub fn get_gateway_ip_bulk(
 }
 
 #[derive(Deserialize, Debug)]
-struct GeoIPRet {
+struct GeoIpRet {
     country: CountryDetails,
 }
 
@@ -196,7 +196,7 @@ pub fn get_country(ip: IpAddr) -> Result<String, Error> {
             {
                 trace!("Got geoip result {:?}", res);
                 if let Ok(res) = res.json() {
-                    let value: GeoIPRet = res;
+                    let value: GeoIpRet = res;
                     let code = value.country.iso_code;
                     trace!("Adding GeoIP value {:?} to cache", code);
                     GEOIP_CACHE.write().unwrap().insert(ip, code.clone());

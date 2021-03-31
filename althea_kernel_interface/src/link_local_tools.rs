@@ -101,7 +101,7 @@ impl dyn KernelInterface {
         trace!("Looking for {:?} in {:?} for reply ip", their_ip, neigh);
         for (ip, dev) in neigh {
             if ip == their_ip {
-                return Ok(self.get_link_local_device_ip(&dev)?);
+                return self.get_link_local_device_ip(&dev);
             }
         }
 

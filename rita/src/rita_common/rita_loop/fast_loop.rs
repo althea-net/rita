@@ -7,7 +7,7 @@ use crate::rita_common::peer_listener::GetPeers;
 use crate::rita_common::peer_listener::PeerListener;
 use crate::rita_common::rita_loop::set_gateway;
 use crate::rita_common::traffic_watcher::{TrafficWatcher, Watch};
-use crate::rita_common::tunnel_manager::gc::TriggerGC;
+use crate::rita_common::tunnel_manager::gc::TriggerGc;
 use crate::rita_common::tunnel_manager::PeersToContact;
 use crate::rita_common::tunnel_manager::{GetNeighbors, TunnelManager};
 use crate::KI;
@@ -168,7 +168,7 @@ impl Handler<Tick> for RitaFastLoop {
                                             );
 
                                             trace!("Sending tunnel GC");
-                                            TunnelManager::from_registry().do_send(TriggerGC {
+                                            TunnelManager::from_registry().do_send(TriggerGc {
                                                 tunnel_timeout: TUNNEL_TIMEOUT,
                                                 tunnel_handshake_timeout: TUNNEL_HANDSHAKE_TIMEOUT,
                                                 babel_interfaces,

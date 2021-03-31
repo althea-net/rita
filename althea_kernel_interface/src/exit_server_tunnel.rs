@@ -21,13 +21,14 @@ impl dyn KernelInterface {
     ) -> Result<(), Error> {
         let command = "wg".to_string();
 
-        let mut args = Vec::new();
-        args.push("set".into());
-        args.push("wg_exit".into());
-        args.push("listen-port".into());
-        args.push(format!("{}", listen_port));
-        args.push("private-key".into());
-        args.push(private_key_path.to_string());
+        let mut args = vec![
+            "set".into(),
+            "wg_exit".into(),
+            "listen-port".into(),
+            format!("{}", listen_port),
+            "private-key".into(),
+            private_key_path.to_string(),
+        ];
 
         let mut client_pubkeys = HashSet::new();
 

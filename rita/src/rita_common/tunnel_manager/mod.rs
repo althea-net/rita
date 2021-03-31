@@ -400,7 +400,7 @@ impl Handler<TunnelMonitorFailure> for TunnelManager {
             let message =
                 "ERROR: Monitoring tunnel has failed! The tunnels cache is an incorrect state";
             error!("{}", message);
-            panic!(message);
+            panic!("{}", message);
         }
     }
 }

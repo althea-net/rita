@@ -213,8 +213,7 @@ impl TokenBridge {
             .await?;
 
         let topic = address_to_event(own_address);
-        let mut topics = Vec::new();
-        topics.push(topic);
+        let topics = vec![topic];
 
         let response = web3
             .wait_for_event(
@@ -290,9 +289,10 @@ impl TokenBridge {
             )
             .await?;
 
-        let mut topics = Vec::new();
-        topics.push(address_to_event(own_address));
-        topics.push(address_to_event(uniswap_address));
+        let topics = vec![
+            address_to_event(own_address),
+            address_to_event(uniswap_address),
+        ];
 
         let _res = web3
             .wait_for_event(
@@ -353,8 +353,7 @@ impl TokenBridge {
             .await?;
 
         let topic = address_to_event(own_address);
-        let mut topics = Vec::new();
-        topics.push(topic);
+        let topics = vec![topic];
 
         let response = web3
             .wait_for_event(

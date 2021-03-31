@@ -20,7 +20,7 @@ lazy_static! {
 }
 
 /// A message type for deleting all tunnels we haven't heard from for more than the duration.
-pub struct TriggerGC {
+pub struct TriggerGc {
     /// if we do not receive a hello within this many seconds we attempt to gc the tunnel
     /// this garbage collection can be avoided if the tunnel has seen a handshake within
     /// tunnel_handshake_timeout time
@@ -34,13 +34,13 @@ pub struct TriggerGC {
     pub babel_interfaces: Vec<Interface>,
 }
 
-impl Message for TriggerGC {
+impl Message for TriggerGc {
     type Result = Result<(), Error>;
 }
 
-impl Handler<TriggerGC> for TunnelManager {
+impl Handler<TriggerGc> for TunnelManager {
     type Result = Result<(), Error>;
-    fn handle(&mut self, msg: TriggerGC, _ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: TriggerGc, _ctx: &mut Context<Self>) -> Self::Result {
         let mut last_gc = LAST_GC.write().unwrap();
         let time_since = Instant::now().checked_duration_since(*last_gc);
         match time_since {
@@ -146,7 +146,7 @@ impl Handler<TriggerGC> for TunnelManager {
 ///   table and solve both this and the previous complication at once. So that's a possible improvement to this routine.
 fn tunnel_should_be_kept(
     tunnel: &Tunnel,
-    msg: &TriggerGC,
+    msg: &TriggerGc,
     interfaces: &HashMap<String, bool>,
 ) -> bool {
     let since_created = Instant::now().checked_duration_since(tunnel.created());

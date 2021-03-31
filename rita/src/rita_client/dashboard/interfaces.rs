@@ -31,15 +31,15 @@ pub enum InterfaceMode {
     /// LAN port is essentially defined as any port attached to the br-lan bridge. The br-lan
     /// bridge then provides DHCP. Finally Rita comes in and places a default route though the
     /// exit server so that users can actually reach the internet.
-    LAN,
+    Lan,
     /// WAN port, specifically means that this device is listening for DHCP (instead of providing DHCP
     /// like on LAN). This route will be accepted and installed. Keep in mind if a WAN port is set this
     /// device will count itself as a 'gateway' regardless of if there is actual activity on the port.
     /// Example effects of a device being defined as a 'gateway' include making DHCP requests for manual_peers
     /// in tunnel_manager and taking the gateway price in operator_update
-    WAN,
+    Wan,
     /// Same as WAN but configures a static IP for this device.
-    StaticWAN {
+    StaticWan {
         netmask: Ipv4Addr,
         ipaddr: Ipv4Addr,
         gateway: Ipv4Addr,
@@ -57,9 +57,9 @@ impl ToString for InterfaceMode {
     fn to_string(&self) -> String {
         match self {
             InterfaceMode::Mesh => "mesh".to_owned(),
-            InterfaceMode::LAN => "LAN".to_owned(),
-            InterfaceMode::WAN => "WAN".to_owned(),
-            InterfaceMode::StaticWAN { .. } => "StaticWAN".to_owned(),
+            InterfaceMode::Lan => "LAN".to_owned(),
+            InterfaceMode::Wan => "WAN".to_owned(),
+            InterfaceMode::StaticWan { .. } => "StaticWAN".to_owned(),
             InterfaceMode::Phone => "Phone".to_owned(),
             InterfaceMode::Unknown => "unknown".to_owned(),
         }
@@ -108,7 +108,7 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
     // Match parent section name
     Ok(match &setting_name.replace(".ifname", "") {
         s if s.contains("rita_") => InterfaceMode::Mesh,
-        s if s.contains("lan") => InterfaceMode::LAN,
+        s if s.contains("lan") => InterfaceMode::Lan,
         s if s.contains("pbs") => InterfaceMode::Phone,
         s if s.contains("backhaul") => {
             let prefix = "network.backhaul";
@@ -121,7 +121,7 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
             };
 
             if proto.contains("dhcp") {
-                return Ok(InterfaceMode::WAN);
+                return Ok(InterfaceMode::Wan);
             } else if proto.contains("static") {
                 let opt_tuple = (
                     backhaul.get(&format!("{}.netmask", prefix)),
@@ -129,7 +129,7 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
                     backhaul.get(&format!("{}.gateway", prefix)),
                 );
                 if let (Some(netmask), Some(ipaddr), Some(gateway)) = opt_tuple {
-                    return Ok(InterfaceMode::StaticWAN {
+                    return Ok(InterfaceMode::StaticWan {
                         netmask: netmask.parse()?,
                         ipaddr: ipaddr.parse()?,
                         gateway: gateway.parse()?,
@@ -158,13 +158,13 @@ fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), Error
     let current_mode = get_current_interface_mode(&interfaces, iface_name);
     if !interfaces.contains_key(iface_name) {
         bail!("Attempted to configure non-existant or unavailable interface!");
-    } else if target_mode == InterfaceMode::WAN {
+    } else if target_mode == InterfaceMode::Wan {
         // we can only have one WAN interface, check for others
         // StaticWAN entires are not identified seperately but if they ever are
         // you'll have to handle them here
         for entry in interfaces {
             let mode = entry.1;
-            if mode == InterfaceMode::WAN {
+            if mode == InterfaceMode::Wan {
                 bail!("There can only be one WAN interface!");
             }
         }
@@ -201,7 +201,7 @@ pub fn ethernet_transform_mode(
 
     match a {
         // Wan is very simple, just delete it
-        InterfaceMode::WAN | InterfaceMode::StaticWAN { .. } => {
+        InterfaceMode::Wan | InterfaceMode::StaticWan { .. } => {
             SETTING.get_network_mut().external_nic = None;
 
             let ret = KI.del_uci_var("network.backhaul");
@@ -210,7 +210,7 @@ pub fn ethernet_transform_mode(
         // LAN is a bridge and the lan bridge must always remain because things
         // like WiFi interfaces are attached to it. So we just remove the interface
         // from the list
-        InterfaceMode::LAN => {
+        InterfaceMode::Lan => {
             let list = KI.get_uci_var("network.lan.ifname")?;
             let new_list = list_remove(&list, ifname);
             let ret = KI.set_uci_var("network.lan.ifname", &new_list);
@@ -239,7 +239,7 @@ pub fn ethernet_transform_mode(
 
     match b {
         // here we add back all the properties of backhaul we removed
-        InterfaceMode::WAN => {
+        InterfaceMode::Wan => {
             SETTING.get_network_mut().external_nic = Some(ifname.to_string());
 
             let ret = KI.set_uci_var("network.backhaul", "interface");
@@ -249,7 +249,7 @@ pub fn ethernet_transform_mode(
             let ret = KI.set_uci_var("network.backhaul.proto", "dhcp");
             return_codes.push(ret);
         }
-        InterfaceMode::StaticWAN {
+        InterfaceMode::StaticWan {
             netmask,
             ipaddr,
             gateway,
@@ -270,7 +270,7 @@ pub fn ethernet_transform_mode(
             return_codes.push(ret);
         }
         // since we left lan mostly unmodified we just pop in the ifname
-        InterfaceMode::LAN => {
+        InterfaceMode::Lan => {
             trace!("Converting interface to lan with ifname {:?}", ifname);
             let ret = KI.get_uci_var("network.lan.ifname");
             match ret {

@@ -60,7 +60,7 @@ pub struct WifiDevice {
 }
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
-pub struct WifiSSID {
+pub struct WifiSsid {
     pub radio: String,
     pub ssid: String,
 }
@@ -80,7 +80,7 @@ pub struct WifiChannel {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum WifiToken {
     WifiChannel(WifiChannel),
-    WifiSSID(WifiSSID),
+    WifiSsid(WifiSsid),
     WifiPass(WifiPass),
 }
 
@@ -107,7 +107,7 @@ pub enum ValidationError {
     TooShort(usize),
 }
 
-fn set_ssid(wifi_ssid: &WifiSSID) -> Result<HttpResponse, Error> {
+fn set_ssid(wifi_ssid: &WifiSsid) -> Result<HttpResponse, Error> {
     let mut ret: HashMap<String, String> = HashMap::new();
 
     if let Err(e) = validate_config_value(&wifi_ssid.ssid) {
@@ -229,7 +229,7 @@ pub fn set_wifi_multi(wifi_changes: Json<Vec<WifiToken>>) -> Result<HttpResponse
         match token {
             WifiToken::WifiChannel(val) => set_channel(val)?,
             WifiToken::WifiPass(val) => set_pass(val)?,
-            WifiToken::WifiSSID(val) => set_ssid(val)?,
+            WifiToken::WifiSsid(val) => set_ssid(val)?,
         };
     }
     Ok(HttpResponse::Ok().json(()))

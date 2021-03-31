@@ -173,7 +173,7 @@ fn rita_exit_loop(
                 );
                 error!("{}", message);
                 system.stop();
-                panic!(message);
+                panic!("{}", message);
             }
         }
     }

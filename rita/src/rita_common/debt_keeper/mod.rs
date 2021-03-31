@@ -1062,12 +1062,13 @@ mod tests {
         test_have_credit_and_they_owe.incoming_payments = Uint256::from(1000u64);
         let have_credit_and_they_owe = (get_random_test_identity(), test_have_credit_and_they_owe);
 
-        let mut input: DebtDataSer = DebtDataSer::new();
-        input.push(they_owe);
-        input.push(we_owe);
-        input.push(have_credit);
-        input.push(have_credit_and_we_owe);
-        input.push(have_credit_and_they_owe);
+        let input: DebtDataSer = vec![
+            they_owe,
+            we_owe,
+            have_credit,
+            have_credit_and_we_owe,
+            have_credit_and_they_owe,
+        ];
 
         let dd = ser_to_debt_data(input);
         let mut one_pos_debt = false;

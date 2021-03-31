@@ -158,10 +158,10 @@ fn checked(msg: ToValidate, history: &mut PaymentValidator) {
         error!("Tried to mark a tx {:?} we don't have as checked!", msg);
 
         #[cfg(feature = "development")]
-        panic!(format!(
+        panic!(
             "Tried to mark a tx {:?} we don't have as checked!",
             msg
-        ));
+        );
     }
 }
 
