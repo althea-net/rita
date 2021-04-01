@@ -702,6 +702,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     /// This tests unlocking funds from the POA Xdai bridge using a lot of specially collected
     /// test data for the entire process
     fn test_funds_unlock() {
