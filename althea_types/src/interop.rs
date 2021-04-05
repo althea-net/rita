@@ -233,7 +233,6 @@ pub struct ExitClientIdentity {
     pub wg_port: u16,
     pub global: Identity,
     pub reg_details: ExitRegistrationDetails,
-    pub low_balance: Option<bool>,
 }
 
 /// Wrapper for secure box containing an exit client identity

@@ -17,7 +17,6 @@ use lettre::smtp::extension::ClientId;
 use lettre::smtp::ConnectionReuseParameters;
 use lettre::{SmtpClient, Transport};
 use lettre_email::EmailBuilder;
-use settings::exit::EmailVerifSettings;
 use settings::exit::ExitVerifSettings;
 use settings::exit::RitaExitSettings;
 
@@ -119,31 +118,4 @@ pub fn handle_email_registration(
             })
         }
     }
-}
-
-pub fn send_low_balance_email(email: &str, mailer: EmailVerifSettings) -> Result<(), Error> {
-    info!("Sending low balance email to {}", email);
-
-    let email = EmailBuilder::new()
-        .to(email)
-        .from(mailer.from_address)
-        .subject(mailer.balance_notification_subject)
-        .text(mailer.balance_notification_body)
-        .build()?;
-
-    if mailer.test {
-        let mut mailer = FileTransport::new(&mailer.test_dir);
-        mailer.send(email.into())?;
-    } else {
-        let mut mailer = SmtpClient::new_simple(&mailer.smtp_url)?
-            .hello_name(ClientId::Domain(mailer.smtp_domain))
-            .credentials(Credentials::new(mailer.smtp_username, mailer.smtp_password))
-            .smtp_utf8(true)
-            .authentication_mechanism(Mechanism::Plain)
-            .connection_reuse(ConnectionReuseParameters::ReuseUnlimited)
-            .transport();
-        mailer.send(email.into())?;
-    }
-
-    Ok(())
 }

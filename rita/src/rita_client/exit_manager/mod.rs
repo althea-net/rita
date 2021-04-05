@@ -308,7 +308,6 @@ pub fn exit_setup_request(
         },
         wg_port: SETTING.get_exit_client().wg_listen_port,
         reg_details,
-        low_balance: None,
     };
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
@@ -366,7 +365,6 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
         },
         wg_port: SETTING.get_exit_client().wg_listen_port,
         reg_details,
-        low_balance: Some(false),
     };
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);

@@ -13,18 +13,15 @@ use crate::rita_exit::database::database_tools::get_client;
 use crate::rita_exit::database::database_tools::get_database_connection;
 use crate::rita_exit::database::database_tools::set_client_timestamp;
 use crate::rita_exit::database::database_tools::update_client;
-use crate::rita_exit::database::database_tools::update_low_balance_notification_time;
 use crate::rita_exit::database::database_tools::verify_client;
 use crate::rita_exit::database::database_tools::verify_db_client;
 use crate::rita_exit::database::email::handle_email_registration;
-use crate::rita_exit::database::email::send_low_balance_email;
 use crate::rita_exit::database::geoip::get_country_async;
 use crate::rita_exit::database::geoip::get_gateway_ip_bulk;
 use crate::rita_exit::database::geoip::get_gateway_ip_single;
 use crate::rita_exit::database::geoip::verify_ip;
 use crate::rita_exit::database::geoip::verify_ip_sync;
 use crate::rita_exit::database::sms::handle_sms_registration;
-use crate::rita_exit::database::sms::send_low_balance_sms;
 use crate::rita_exit::database::struct_tools::display_hashset;
 use crate::rita_exit::database::struct_tools::to_exit_client;
 use crate::rita_exit::database::struct_tools::to_identity;
@@ -212,8 +209,6 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
 
         update_client(&client, &their_record, &conn)?;
 
-        low_balance_notification(client, &their_record, EXIT_VERIF_SETTINGS.clone(), &conn);
-
         Ok(ExitState::Registered {
             our_details: ExitClientDetails {
                 client_internal_ip: current_ip,
@@ -229,88 +224,7 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
     }
 }
 
-/// Handles the dispatching of low balance notifications based on what validation method the exit
-/// is currently using and what the configured interval is. There are many many possible combinations
-/// of state to handle so this is a bit of a mess. May be possible to clean up by making more things
-/// mandatory?
-fn low_balance_notification(
-    client: ExitClientIdentity,
-    their_record: &exit_db::models::Client,
-    config: Option<ExitVerifSettings>,
-    conn: &PgConnection,
-) {
-    trace!("Checking low balance notification");
-
-    // maybe this needs a trait 'enabled'?
-    if let Some(ref config) = config {
-        match config {
-            ExitVerifSettings::Phone(ref val) => {
-                if !val.notify_low_balance {
-                    return;
-                }
-            }
-            ExitVerifSettings::Email(ref val) => {
-                if !val.notify_low_balance {
-                    return;
-                }
-            }
-        }
-    }
-
-    let time_since_last_notification =
-        secs_since_unix_epoch() - their_record.last_balance_warning_time;
-
-    match (client.low_balance, config) {
-        (Some(true), Some(ExitVerifSettings::Phone(val))) => match (
-            client.reg_details.phone.clone(),
-            time_since_last_notification > i64::from(val.balance_notification_interval),
-        ) {
-            (Some(number), true) => {
-                let res = send_low_balance_sms(&number, val);
-                if let Err(e) = res {
-                    warn!(
-                        "Failed to notify {} of their low balance with {:?}",
-                        number, e
-                    );
-                } else if let Err(e) = update_low_balance_notification_time(&client, conn) {
-                    error!(
-                        "Failed to find {:?} in the database to update notified time! {:?}",
-                        client, e
-                    );
-                }
-            }
-            (Some(_), false) => {}
-            (None, _) => error!(
-                "Client {} is registered but has no phone number!",
-                client.global.wg_public_key
-            ),
-        },
-        (Some(true), Some(ExitVerifSettings::Email(val))) => match (
-            client.reg_details.email.clone(),
-            time_since_last_notification > i64::from(val.balance_notification_interval),
-        ) {
-            (Some(email), true) => {
-                let res = send_low_balance_email(&email, val);
-                if let Err(e) = res {
-                    warn!(
-                        "Failed to notify {} of their low balance with {:?}",
-                        email, e
-                    );
-                } else if let Err(e) = update_low_balance_notification_time(&client, conn) {
-                    error!(
-                        "Failed to find {:?} in the database to update notified time! {:?}",
-                        client, e
-                    );
-                }
-            }
-            (Some(_), false) => {}
-            (None, _) => error!("No notification method to notify of low balance!"),
-        },
-        (_, _) => {}
-    }
-}
-
-/// Every 5 seconds we vlaidate all online clients to make sure that they are in the right region
+/// Every 5 seconds we validate all online clients to make sure that they are in the right region
 /// we also do this in the client status requests but we want to handle the edge case of a modified
 /// client that doesn't make status requests
 pub fn validate_clients_region(

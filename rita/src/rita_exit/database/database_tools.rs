@@ -300,23 +300,6 @@ pub fn update_mail_sent_time(
     Ok(())
 }
 
-pub fn update_low_balance_notification_time(
-    client: &ExitClientIdentity,
-    conn: &PgConnection,
-) -> Result<(), Error> {
-    use self::schema::clients::dsl::{clients, last_balance_warning_time, wg_pubkey};
-    info!(
-        "Updating low balance notification time for {} {:?}",
-        client.global.wg_public_key, client
-    );
-
-    diesel::update(clients.filter(wg_pubkey.eq(client.global.wg_public_key.to_string())))
-        .set(last_balance_warning_time.eq(secs_since_unix_epoch()))
-        .execute(&*conn)?;
-
-    Ok(())
-}
-
 /// Gets the Postgres database connection from the threadpool, since there are dedicated
 /// connections for each threadpool member error if non is available right away
 pub fn get_database_connection(

@@ -12,7 +12,7 @@ use futures01::future;
 use futures01::future::Either;
 use futures01::future::Future;
 use phonenumber::PhoneNumber;
-use settings::exit::{ExitVerifSettings, PhoneVerifSettings, RitaExitSettings};
+use settings::exit::{ExitVerifSettings, RitaExitSettings};
 use std::time::Duration;
 
 #[derive(Serialize)]
@@ -196,46 +196,6 @@ pub struct SmsNotification {
     from: String,
     #[serde(rename = "Body")]
     body: String,
-}
-
-/// This function sends a low balance message to a users device. This is no longer the primary
-/// Way to send these messages as they are now sent through the operator tools. That being said
-/// this functionality here has not been removed because a future FOSS version of rita_exit may
-/// use it. If you feel like this is a dumb reason to keep a few hundred lines of code around
-/// I don't disagree and you can remove it.
-pub fn send_low_balance_sms(number: &str, phone: PhoneVerifSettings) -> Result<(), Error> {
-    info!("Sending low balance message for {}", number);
-
-    let url = format!(
-        "https://api.twilio.com/2010-04-01/Accounts/{}/Messages.json",
-        phone.twillio_account_id
-    );
-    let number: PhoneNumber = number.parse()?;
-    let client = reqwest::blocking::Client::new();
-    match client
-        .post(&url)
-        .basic_auth(phone.twillio_account_id, Some(phone.twillio_auth_token))
-        .form(&SmsNotification {
-            to: number.to_string(),
-            from: phone.notification_number,
-            body: phone.balance_notification_body,
-        })
-        .timeout(Duration::from_secs(1))
-        .send()
-    {
-        Ok(val) => {
-            info!("Low balance text sent successfully with {:?}", val);
-            Ok(())
-        }
-        Err(e) => {
-            error!(
-                "Low blanace text to {} failed with {:?}",
-                number.to_string(),
-                e
-            );
-            Err(e.into())
-        }
-    }
 }
 
 /// This function is used to send texts to the admin notification list, in the case of no configured

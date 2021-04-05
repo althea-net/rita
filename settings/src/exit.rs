@@ -134,10 +134,6 @@ pub struct EmailVerifSettings {
     pub notify_low_balance: bool,
 }
 
-fn default_balance_notification_text_body() -> String {
-    String::from("Your Althea router has a low balance! Your service will be slow until more funds are added. Visit althea.net/add-funds")
-}
-
 /// These are the settings for text message verification using the twillio api
 /// note that while you would expect the authentication and text notification flow
 /// to be the same they are in fact totally different and each have separate
@@ -152,13 +148,6 @@ pub struct PhoneVerifSettings {
     pub twillio_account_id: String,
     /// The auth token used to authenticate for notifications
     pub twillio_auth_token: String,
-    /// the text for the balance notification
-    #[serde(default = "default_balance_notification_text_body")]
-    pub balance_notification_body: String,
-    /// time in seconds between notifications
-    pub balance_notification_interval: u32,
-    /// True if the exit should notify clients when they have a low balance
-    pub notify_low_balance: bool,
     /// Operator notification numbers, used to text the operators when we need them
     #[serde(default)]
     pub operator_notification_number: Vec<PhoneNumber>,
