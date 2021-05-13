@@ -5,15 +5,15 @@ authors = ["Jehan <jehan.tremback@gmail.com>, Justin <justin@althea.net>"]
 edition = "2018"
 
 [dependencies]
-web30 = "0.10"
+web30 = "0.13"
 num256 = "0.3"
 clarity = "0.4"
 rand = "0.8"
-num = "0.3"
+num = "0.4"
 log = "0.4"
 serde_derive = "1.0"
 serde = "1.0"
 
 [dev-dependencies]
-actix = "0.10"
+actix = "0.11"
 futures = "0.3"

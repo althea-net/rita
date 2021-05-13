@@ -134,6 +134,7 @@ impl TokenBridge {
                 "getEthToTokenInputPrice(uint256)",
                 &[amount.into()],
                 own_address,
+                None,
             )
             .await?;
 
@@ -160,6 +161,7 @@ impl TokenBridge {
                 "getTokenToEthInputPrice(uint256)",
                 &[amount.into()],
                 own_address,
+                None,
             )
             .await?;
 
@@ -242,6 +244,7 @@ impl TokenBridge {
                 "allowance(address,address)",
                 &[own_address.into(), uniswap_address.into()],
                 own_address,
+                None,
             )
             .await?;
 
@@ -466,6 +469,7 @@ impl TokenBridge {
                     Token::Bytes(xdai_withdraw_txid.to_bytes_be()),
                 ],
                 own_address,
+                None,
             )
             .await?;
         // this may return 0x0 if the value is not yet ready, in this case
@@ -477,6 +481,7 @@ impl TokenBridge {
                 "getMessage(bytes32)",
                 &[Token::Bytes(msg_hash.clone())],
                 own_address,
+                None,
             )
             .await?;
         if msg == vec![0] || msg.len() <= 64 {
@@ -489,6 +494,7 @@ impl TokenBridge {
                 "getSignatures(bytes32)",
                 &[Token::Bytes(msg_hash)],
                 own_address,
+                None,
             )
             .await?;
         if sigs_payload == vec![0] || sigs_payload.len() <= 64 {
@@ -644,7 +650,7 @@ mod tests {
         ))
         .unwrap();
 
-        let system = actix::System::new("test");
+        let system = actix::System::new();
 
         let token_bridge = new_token_bridge();
 
@@ -673,7 +679,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_funds_unlock_boilerplate() {
-        let system = actix::System::new("test");
+        let system = actix::System::new();
 
         let bridge = new_token_bridge();
 
@@ -707,7 +713,7 @@ mod tests {
     /// test data for the entire process
     fn test_funds_unlock() {
         use futures::future::join;
-        let system = actix::System::new("test");
+        let system = actix::System::new();
         let dest_address = "0x310d72afc5eef50b52a47362b6dd1913d4c87972"
             .parse()
             .unwrap();
@@ -782,7 +788,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_eth_to_dai_swap() {
-        let system = actix::System::new("test");
+        let system = actix::System::new();
 
         let token_bridge = new_token_bridge();
 
@@ -804,7 +810,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_dai_to_eth_swap() {
-        let system = actix::System::new("test");
+        let system = actix::System::new();
         let token_bridge = new_token_bridge();
 
         actix::spawn(async move {
@@ -825,7 +831,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_dai_to_xdai_bridge() {
-        let system = actix::System::new("test");
+        let system = actix::System::new();
 
         let token_bridge = new_token_bridge();
 
@@ -845,7 +851,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_xdai_to_dai_bridge() {
-        let system = actix::System::new("test");
+        let system = actix::System::new();
 
         let token_bridge = new_token_bridge();
 
