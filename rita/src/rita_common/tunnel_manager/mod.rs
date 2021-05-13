@@ -6,6 +6,7 @@
 
 pub mod gc;
 pub mod id_callback;
+pub mod neighbor_status;
 pub mod shaping;
 
 use crate::rita_common;
@@ -55,14 +56,9 @@ pub enum TunnelManagerError {
     _InvalidStateError,
 }
 
-/// Action that progresses the state machine
+/// Used to trigger the enforcement handler
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub enum TunnelAction {
-    /// Received confirmed membership of an identity
-    MembershipConfirmed,
-    /// Membership expired for an identity
-    MembershipExpired,
     /// Payment is not up to date for identity
     PaymentOverdue,
     /// Payment has resumed
@@ -75,25 +71,9 @@ impl fmt::Display for TunnelAction {
     }
 }
 
-/// TunnelState indicates a state where a tunnel is currently in. Made into an enum for adding new
-/// states more easily
-///
-/// State changes:
-/// NotRegistered -> MembershipConfirmed(not implemented therefore not added) -> Registered
-#[derive(PartialEq, Debug, Eq, Hash, Clone, Copy)]
-pub struct TunnelState {
-    payment_state: PaymentState,
-    registration_state: RegistrationState,
-}
-
-#[derive(PartialEq, Debug, Clone, Copy, Eq, Hash)]
-pub enum RegistrationState {
-    /// Tunnel is not registered
-    NotRegistered,
-    /// Tunnel is registered (default)
-    Registered,
-}
-
+/// TunnelState indicates the payment state a tunnel is currently in
+/// if this is Overdue the tunnel will use a tbf qdisc to limit traffic on
+/// the interface
 #[derive(PartialEq, Debug, Clone, Copy, Eq, Hash)]
 pub enum PaymentState {
     /// Tunnel is paid (default)
@@ -102,25 +82,10 @@ pub enum PaymentState {
     Overdue,
 }
 
-impl fmt::Display for RegistrationState {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
 impl fmt::Display for PaymentState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
-}
-
-#[test]
-fn test_registration_state() {
-    assert_eq!(
-        RegistrationState::NotRegistered.to_string(),
-        "NotRegistered"
-    );
-    assert_eq!(RegistrationState::Registered.to_string(), "Registered");
 }
 
 #[test]
@@ -153,12 +118,12 @@ pub struct Tunnel {
     pub speed_limit: Option<usize>,
     /// If true this tunnel is for a light client and is working over ipv4 endpoints
     pub light_client_details: Option<Ipv4Addr>,
-    state: TunnelState,
+    payment_state: PaymentState,
 }
 
 impl Display for Tunnel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Tunnel: IP: {} IFACE_NAME: {} IFIDX: {}, PORT: {} WG: {} ETH: {} MESH_IP: {} LAST_SEEN {}, SPEED_LIMIT {:?}, LC {:?}, STATE: {:?}" , 
+        write!(f, "Tunnel: IP: {} IFACE_NAME: {} IFIDX: {}, PORT: {} WG: {} ETH: {} MESH_IP: {} LAST_SEEN {}, SPEED_LIMIT {:?}, LC {:?}, PAYMENT_STATE: {:?}" , 
         self.ip,
         self.iface_name,
         self.listen_ifidx,
@@ -169,7 +134,7 @@ impl Display for Tunnel {
         (Instant::now() - self.last_contact).as_secs(),
         self.speed_limit,
         self.light_client_details,
-        self.state)
+        self.payment_state)
     }
 }
 
@@ -213,11 +178,8 @@ impl Tunnel {
             created: now,
             speed_limit,
             light_client_details,
-            // By default new tunnels are in Registered state
-            state: TunnelState {
-                payment_state: PaymentState::Paid,
-                registration_state: RegistrationState::Registered,
-            },
+            // By default new tunnels are in paid state
+            payment_state: PaymentState::Paid,
         };
 
         match light_client_details {
@@ -967,41 +929,9 @@ fn tunnel_state_change(msg: TunnelChange, tunnels: &mut HashMap<Identity, Vec<Tu
             for tunnel in tunnels.iter_mut() {
                 trace!("Handle action {} on tunnel {:?}", action, tunnel);
                 match action {
-                    TunnelAction::MembershipConfirmed => {
-                        trace!(
-                            "Membership confirmed for identity {:?} returned tunnel {:?}",
-                            id,
-                            tunnel
-                        );
-                        match tunnel.state.registration_state {
-                            RegistrationState::NotRegistered => {
-                                if tunnel.light_client_details.is_none() {
-                                    tunnel.monitor(0);
-                                }
-                                tunnel.state.registration_state = RegistrationState::Registered;
-                            }
-                            RegistrationState::Registered => {
-                                continue;
-                            }
-                        }
-                    }
-                    TunnelAction::MembershipExpired => {
-                        trace!("Membership for identity {:?} is expired", id);
-                        match tunnel.state.registration_state {
-                            RegistrationState::Registered => {
-                                if tunnel.light_client_details.is_none() {
-                                    tunnel.unmonitor(0);
-                                }
-                                tunnel.state.registration_state = RegistrationState::NotRegistered;
-                            }
-                            RegistrationState::NotRegistered => {
-                                continue;
-                            }
-                        }
-                    }
                     TunnelAction::PaidOnTime => {
                         trace!("identity {:?} has paid!", id);
-                        match tunnel.state.payment_state {
+                        match tunnel.payment_state {
                             PaymentState::Paid => {
                                 continue;
                             }
@@ -1010,7 +940,7 @@ fn tunnel_state_change(msg: TunnelChange, tunnels: &mut HashMap<Identity, Vec<Tu
                                     "Tunnel {} has returned to a paid state.",
                                     tunnel.neigh_id.global.wg_public_key
                                 );
-                                tunnel.state.payment_state = PaymentState::Paid;
+                                tunnel.payment_state = PaymentState::Paid;
                                 tunnel_bw_limits_need_change = true;
                                 // latency detector probably got confused while enforcement
                                 // occurred
@@ -1020,13 +950,13 @@ fn tunnel_state_change(msg: TunnelChange, tunnels: &mut HashMap<Identity, Vec<Tu
                     }
                     TunnelAction::PaymentOverdue => {
                         trace!("No payment from identity {:?}", id);
-                        match tunnel.state.payment_state {
+                        match tunnel.payment_state {
                             PaymentState::Paid => {
                                 info!(
                                     "Tunnel {} has entered an overdue state.",
                                     tunnel.neigh_id.global.wg_public_key
                                 );
-                                tunnel.state.payment_state = PaymentState::Overdue;
+                                tunnel.payment_state = PaymentState::Overdue;
                                 tunnel_bw_limits_need_change = true;
                             }
                             PaymentState::Overdue => {
@@ -1065,7 +995,7 @@ fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, Vec<Tunnel>>) -> Result<()
     let mut limited_interfaces = 0u16;
     for sublist in tunnels.iter() {
         for tunnel in sublist.1.iter() {
-            if tunnel.state.payment_state == PaymentState::Overdue {
+            if tunnel.payment_state == PaymentState::Overdue {
                 limited_interfaces += 1;
             }
         }
@@ -1078,7 +1008,7 @@ fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, Vec<Tunnel>>) -> Result<()
 
     for sublist in tunnels.iter() {
         for tunnel in sublist.1.iter() {
-            let payment_state = &tunnel.state.payment_state;
+            let payment_state = &tunnel.payment_state;
             let iface_name = &tunnel.iface_name;
             let has_limit = KI.has_limit(iface_name)?;
 
@@ -1095,8 +1025,6 @@ fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, Vec<Tunnel>>) -> Result<()
 #[cfg(test)]
 pub mod tests {
     use super::PaymentState;
-    use super::TunnelState;
-    use crate::rita_common::tunnel_manager::RegistrationState;
     use crate::rita_common::tunnel_manager::Tunnel;
     use crate::rita_common::tunnel_manager::TunnelManager;
     use althea_types::Identity;
@@ -1149,10 +1077,7 @@ pub mod tests {
             created: Instant::now(),
             speed_limit: None,
             light_client_details,
-            state: TunnelState {
-                payment_state: PaymentState::Paid,
-                registration_state: RegistrationState::Registered,
-            },
+            payment_state: PaymentState::Paid,
         }
     }
 
@@ -1184,12 +1109,9 @@ pub mod tests {
             let existing_tunnel =
                 get_mut_tunnel_by_ifidx(0u32, tunnel_manager.tunnels.get_mut(&id).unwrap())
                     .expect("Unable to find existing tunnel");
-            assert_eq!(
-                existing_tunnel.state.registration_state,
-                RegistrationState::Registered
-            );
+            assert_eq!(existing_tunnel.payment_state, PaymentState::Paid);
             // Verify mutability - manual modifications shouldn't happen elsewhere
-            existing_tunnel.state.registration_state = RegistrationState::NotRegistered;
+            existing_tunnel.payment_state = PaymentState::Overdue;
         }
 
         // Verify if object is modified
@@ -1197,10 +1119,7 @@ pub mod tests {
             let existing_tunnel =
                 get_mut_tunnel_by_ifidx(0u32, tunnel_manager.tunnels.get_mut(&id).unwrap())
                     .expect("Unable to find existing tunnel");
-            assert_eq!(
-                existing_tunnel.state.registration_state,
-                RegistrationState::NotRegistered
-            );
+            assert_eq!(existing_tunnel.payment_state, PaymentState::Overdue);
         }
     }
 }
