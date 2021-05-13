@@ -183,10 +183,9 @@ fn get_rita_neigh_option(
     rita_neighbors: &[RitaNeighbor],
 ) -> Option<(Neighbor, RitaNeighbor)> {
     match neigh {
-        Some(neigh) => match get_rita_neighbor(&neigh, rita_neighbors) {
-            Some(rita_neigh) => Some((neigh, rita_neigh)),
-            None => None,
-        },
+        Some(neigh) => {
+            get_rita_neighbor(&neigh, rita_neighbors).map(|rita_neigh| (neigh, rita_neigh))
+        }
         None => None,
     }
 }

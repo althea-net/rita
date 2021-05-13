@@ -4,7 +4,7 @@ use crate::rita_common::utils::wait_timeout::wait_timeout;
 use crate::rita_common::utils::wait_timeout::WaitResult;
 use crate::SETTING;
 use actix::System;
-use actix_async::{Arbiter, System as AsyncSystem};
+use actix_async::System as AsyncSystem;
 use babel_monitor::open_babel_stream;
 use babel_monitor::set_local_fee;
 use babel_monitor::set_metric_factor;
@@ -30,17 +30,13 @@ pub fn start_rita_slow_loop() {
                 let start = Instant::now();
                 info!("Common Slow tick!");
 
-                let res = AsyncSystem::run(move || {
-                    Arbiter::spawn(async move {
-                        tick_token_bridge().await;
-                        tick_simulated_tx().await;
-                        info!("Common Slow tick async completed!");
-                        AsyncSystem::current().stop();
-                    });
+                let runner = AsyncSystem::new();
+                runner.block_on(async move {
+                    tick_token_bridge().await;
+                    tick_simulated_tx().await;
+                    info!("Common Slow tick async completed!");
+                    AsyncSystem::current().stop();
                 });
-                if res.is_err() {
-                    error!("Error in actix system {:?}", res);
-                }
 
                 // we really only need to run this on startup, but doing so periodically
                 // could catch the edge case where babel is restarted under us

@@ -173,10 +173,11 @@ pub fn get_country(ip: IpAddr) -> Result<String, Error> {
 
     // we have to turn this option into a string in order to avoid
     // the borrow checker trying to keep this lock open for a long period
-    let cache_result = match GEOIP_CACHE.read().unwrap().get(&ip) {
-        Some(val) => Some(val.to_string()),
-        None => None,
-    };
+    let cache_result = GEOIP_CACHE
+        .read()
+        .unwrap()
+        .get(&ip)
+        .map(|val| val.to_string());
 
     match cache_result {
         Some(code) => Ok(code),

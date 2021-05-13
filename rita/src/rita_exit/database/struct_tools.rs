@@ -15,7 +15,7 @@ pub fn to_identity(client: &Client) -> Result<Identity, Error> {
         mesh_ip: client.mesh_ip.clone().parse()?,
         eth_address: client.eth_address.clone().parse()?,
         wg_public_key: client.wg_pubkey.clone().parse()?,
-        nickname: Some(ArrayString::<[u8; 32]>::from(&client.nickname).unwrap_or_default()),
+        nickname: Some(ArrayString::<32>::from(&client.nickname).unwrap_or_default()),
     })
 }
 

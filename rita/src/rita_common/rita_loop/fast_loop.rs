@@ -16,7 +16,6 @@ use actix::{
     Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
     System, SystemService,
 };
-use actix_async::Arbiter as AsyncArbiter;
 use actix_async::System as AsyncSystem;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_interfaces;
@@ -161,9 +160,9 @@ impl Handler<Tick> for RitaFastLoop {
                                             trace!("Sending network monitor tick");
                                             NetworkMonitor::from_registry().do_send(
                                                 NetworkMonitorTick {
-                                                    rita_neighbors,
-                                                    babel_routes,
                                                     babel_neighbors,
+                                                    babel_routes,
+                                                    rita_neighbors,
                                                 },
                                             );
 
@@ -254,22 +253,17 @@ pub fn start_rita_fast_loop() {
                 let start = Instant::now();
                 trace!("Common Fast tick!");
 
-                let res = AsyncSystem::run(move || {
-                    AsyncArbiter::spawn(async move {
-                        // updating blockchain info often is easier than dealing with edge cases
-                        // like out of date nonces or balances, also users really really want fast
-                        // balance updates, think very long and very hard before running this more slowly
-                        BlockchainOracleUpdate().await;
-                        // Check on payments, only really needs to be run this quickly
-                        // on large nodes where very high variation in throughput can result
-                        // in blowing through the entire grace in less than a minute
-                        validate().await;
-                        AsyncSystem::current().stop();
-                    });
+                let runner = AsyncSystem::new();
+                runner.block_on(async move {
+                    // updating blockchain info often is easier than dealing with edge cases
+                    // like out of date nonces or balances, also users really really want fast
+                    // balance updates, think very long and very hard before running this more slowly
+                    BlockchainOracleUpdate().await;
+                    // Check on payments, only really needs to be run this quickly
+                    // on large nodes where very high variation in throughput can result
+                    // in blowing through the entire grace in less than a minute
+                    validate().await;
                 });
-                if res.is_err() {
-                    error!("Error in actix system {:?}", res);
-                }
 
                 // sleep until it has been FAST_LOOP_SPEED seconds from start, whenever that may be
                 // if it has been more than FAST_LOOP_SPEED seconds from start, go right ahead

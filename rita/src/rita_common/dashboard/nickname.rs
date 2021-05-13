@@ -23,7 +23,7 @@ pub struct Nickname {
 
 pub fn set_nickname(nickname: Json<Nickname>) -> Result<HttpResponse, Error> {
     let new_nick = &nickname.nickname;
-    match ArrayString::<[u8; 32]>::from(new_nick) {
+    match ArrayString::<32>::from(new_nick) {
         Ok(new) => {
             SETTING.get_network_mut().nickname = Some(new);
 
@@ -42,7 +42,7 @@ pub fn set_nickname(nickname: Json<Nickname>) -> Result<HttpResponse, Error> {
 pub fn maybe_set_nickname(new_nick: String) -> Result<(), Error> {
     let mut network = SETTING.get_network_mut();
     if network.nickname.is_none() && (new_nick != "AltheaHome-2.4" || new_nick != "AltheaHome-5") {
-        match ArrayString::<[u8; 32]>::from(&new_nick) {
+        match ArrayString::<32>::from(&new_nick) {
             Ok(new) => {
                 network.nickname = Some(new);
                 drop(network);

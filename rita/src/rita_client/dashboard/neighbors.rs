@@ -114,7 +114,7 @@ fn generate_neighbors_list(
     for (identity, (debt_info, neigh)) in debts.iter() {
         let nickname = match identity.nickname {
             Some(val) => val,
-            None => ArrayString::<[u8; 32]>::from("No Nickname").unwrap(),
+            None => ArrayString::<32>::from("No Nickname").unwrap(),
         };
         let maybe_route = get_installed_route(&identity.mesh_ip, &route_table_sample);
         if maybe_route.is_err() {
@@ -197,7 +197,7 @@ fn merge_debts_and_neighbors(
 }
 
 fn nonviable_node_info(
-    nickname: ArrayString<[u8; 32]>,
+    nickname: ArrayString<32>,
     neigh_metric: u16,
     ip: String,
     id: Identity,

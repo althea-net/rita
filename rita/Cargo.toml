@@ -29,15 +29,15 @@ web30 = {git = "https://github.com/althea-net/web30", rev = "a600b8b8ebf2c49bade
 
 # duplicate async dependencies, we are currently carrying both futures 0.1 and modern async/await dependencies
 # these will be kept here for quite some time until the switch is completed.
-async-web30 = {package="web30", version = "0.10"}
-actix-async = {package="actix", version = "0.10"}
-actix-web-async = {package="actix-web", version = "3.0", default_features = false, features= ["openssl"] }
+async-web30 = {package="web30", version = "0.13.1"}
+actix-async = {package="actix", version = "0.11.1"}
+actix-web-async = {package="actix-web", version = "4.0.0-beta.6", default_features = false, features= ["openssl"] }
 
 actix = "0.7"
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
 actix_derive = "0.5"
 bytes = "1.0"
-config = "0.10"
+config = "0.11"
 diesel = { version = "1.4", features = ["postgres", "r2d2"] }
 docopt = "1.1"
 dotenv = "0.15"
@@ -50,7 +50,7 @@ ipnetwork = "0.14"
 lazy_static = "1.4"
 log = { version = "0.4", features = ["release_max_level_info"] }
 minihttpse = "0.1"
-mockito = "0.28"
+mockito = "0.30"
 mockstream = "0.0"
 rand = "0.8"
 serde = "1.0"
@@ -63,7 +63,7 @@ trust-dns-resolver = "0.10"
 byteorder = { version = "1.4", features = ["i128"] }
 openssl-probe = "0.1"
 num-traits="0.2"
-arrayvec = {version= "0.5", features = ["serde"]}
+arrayvec = {version= "0.7", features = ["serde"]}
 lettre = "0.9"
 lettre_email = "0.9"
 phonenumber = "0.3"
@@ -73,7 +73,7 @@ hex-literal = "0.3"
 sodiumoxide = "0.2"
 compressed_log = "0.3.2"
 flate2 = { version = "1.0", features = ["rust_backend"], default-features = false }
-reqwest = { version = "0.10", features = ["blocking", "json"] }
+reqwest = { version = "0.11", features = ["blocking", "json"] }
 jemallocator = {version = "0.3", optional = true}
 # we don't call or us OpenSSL directly in this codebase, but by adding
 # this dependency with this feature we can enforce that openssl is compiled
