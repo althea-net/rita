@@ -101,7 +101,7 @@ pub struct NetworkSettings {
     pub device: Option<String>,
     /// Nickname of the device on the network
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub nickname: Option<ArrayString<[u8; 32]>>,
+    pub nickname: Option<ArrayString<32>>,
     /// Full file path for usage tracker storage
     #[serde(default = "default_usage_tracker_file")]
     pub usage_tracker_file: String,
