@@ -158,7 +158,7 @@ impl Handler<Tick> for RitaLoop {
 
         // Check Operator payments
         OperatorFeeManager::from_registry().do_send(OperatorTick);
-        // Check in with Organizer
+        // Check in with Operator
         OperatorUpdate::from_registry().do_send(Update);
 
         info!(

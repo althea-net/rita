@@ -25,7 +25,7 @@ use serde_json::Map;
 use serde_json::Value;
 use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Things that you are not allowed to put into the merge json field of the OperatorUpdate,
 /// this mostly includes dangerous local things like eth private keys (erase money)
@@ -38,7 +38,13 @@ const FORBIDDEN_MERGE_VALUES: [&str; 5] = [
     "peer_interfaces",
 ];
 
-pub struct OperatorUpdate;
+/// Perform operator updates every UPDATE_FREQUENCY seconds,
+/// even if we are called more often than that
+const UPDATE_FREQUENCY: Duration = Duration::from_secs(60);
+
+pub struct OperatorUpdate {
+    last_update: Instant,
+}
 
 impl Actor for OperatorUpdate {
     type Context = Context<Self>;
@@ -53,7 +59,9 @@ impl SystemService for OperatorUpdate {
 
 impl OperatorUpdate {
     pub fn new() -> Self {
-        OperatorUpdate
+        OperatorUpdate {
+            last_update: Instant::now(),
+        }
     }
 }
 
@@ -75,7 +83,11 @@ impl Handler<Update> for OperatorUpdate {
     type Result = ();
 
     fn handle(&mut self, _msg: Update, _ctx: &mut Context<Self>) -> Self::Result {
-        checkin();
+        let time_elapsed = Instant::now().checked_duration_since(self.last_update);
+        if time_elapsed.is_some() && time_elapsed.unwrap() > UPDATE_FREQUENCY {
+            checkin();
+            self.last_update = Instant::now();
+        }
     }
 }
 
