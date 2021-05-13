@@ -133,11 +133,11 @@ impl FromStr for IpRoute {
                     Ok(IpRoute::ToSubnet(ToSubnet {
                         dst,
                         subnet,
-                        nic,
                         via,
+                        nic,
                         proto,
-                        metric,
                         src,
+                        metric,
                         scope,
                     }))
                 } else {

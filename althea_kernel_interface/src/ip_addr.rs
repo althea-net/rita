@@ -12,10 +12,7 @@ impl dyn KernelInterface {
 
         // Get the first line, check if it has state "UP"
         match String::from_utf8(output.stdout) {
-            Ok(stdout) => match stdout.lines().next() {
-                Some(line) => Some(line.contains("state UP")),
-                _ => None,
-            },
+            Ok(stdout) => stdout.lines().next().map(|line| line.contains("state UP")),
             _ => None,
         }
     }

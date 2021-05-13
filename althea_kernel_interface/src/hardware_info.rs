@@ -122,10 +122,7 @@ fn maybe_get_single_line_u64(path: &str) -> Option<u64> {
 
 fn maybe_get_single_line_string(path: &str) -> Option<String> {
     match get_lines(path) {
-        Ok(line) => match line.get(0) {
-            Some(val) => Some(val.to_string()),
-            None => None,
-        },
+        Ok(line) => line.get(0).map(|val| val.to_string()),
         Err(_e) => None,
     }
 }

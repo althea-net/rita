@@ -93,17 +93,16 @@ impl dyn KernelInterface {
             let cap = RE.captures(&line);
             // we captured something on this line
             if let Some(cap) = cap {
-                for ip_cap in cap.iter() {
-                    if let Some(ip_cap) = ip_cap {
-                        let mut split = ip_cap.as_str().split('/');
-                        let ip_str = split.next();
-                        let netmask = split.next();
-                        if let (Some(ip_str), Some(netmask)) = (ip_str, netmask) {
-                            if let (Ok(parsed_ip), Ok(parsed_netmask)) =
-                                (ip_str.parse(), netmask.parse())
-                            {
-                                ret.push((parsed_ip, parsed_netmask));
-                            }
+                // flatten drops the 'none' values in this array
+                for ip_cap in cap.iter().flatten() {
+                    let mut split = ip_cap.as_str().split('/');
+                    let ip_str = split.next();
+                    let netmask = split.next();
+                    if let (Some(ip_str), Some(netmask)) = (ip_str, netmask) {
+                        if let (Ok(parsed_ip), Ok(parsed_netmask)) =
+                            (ip_str.parse(), netmask.parse())
+                        {
+                            ret.push((parsed_ip, parsed_netmask));
                         }
                     }
                 }
