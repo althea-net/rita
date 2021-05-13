@@ -48,10 +48,7 @@ impl ContactType {
             phone_code: None,
             email_code: None,
         };
-        match ContactStorage::convert(same) {
-            Some(val) => Some(val.into()),
-            None => None,
-        }
+        ContactStorage::convert(same).map(|val| val.into())
     }
 }
 

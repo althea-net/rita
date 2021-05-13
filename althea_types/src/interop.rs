@@ -22,7 +22,7 @@ pub struct Identity {
     pub mesh_ip: IpAddr,
     pub eth_address: Address,
     pub wg_public_key: WgKey,
-    pub nickname: Option<ArrayString<[u8; 32]>>,
+    pub nickname: Option<ArrayString<32>>,
 }
 
 impl Display for Identity {
@@ -47,7 +47,7 @@ impl Identity {
         mesh_ip: IpAddr,
         eth_address: Address,
         wg_public_key: WgKey,
-        nickname: Option<ArrayString<[u8; 32]>>,
+        nickname: Option<ArrayString<32>>,
     ) -> Identity {
         Identity {
             mesh_ip,
