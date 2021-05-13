@@ -5,8 +5,8 @@ use crate::rita_client::dashboard::wifi::reset_wifi_pass;
 use crate::rita_client::rita_loop::is_gateway_client;
 use crate::rita_client::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::rita_common::rita_loop::is_gateway;
+use crate::rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use crate::rita_common::tunnel_manager::shaping::flag_reset_shaper;
-use crate::rita_common::tunnel_manager::shaping::get_shaping_status;
 use crate::rita_common::utils::option_convert;
 use crate::KI;
 use crate::SETTING;
@@ -16,7 +16,6 @@ use actix_web::{client, HttpMessage};
 use althea_kernel_interface::hardware_info::get_hardware_info;
 use althea_kernel_interface::opkg_feeds::get_release_feed;
 use althea_kernel_interface::opkg_feeds::set_release_feed;
-use althea_types::NeighborStatus;
 use althea_types::OperatorAction;
 use althea_types::OperatorCheckinMessage;
 use althea_types::{OperatorUpdateMessage, ReleaseStatus};
@@ -123,13 +122,10 @@ fn checkin() {
         ),
     }
 
-    let speeds = get_shaping_status();
+    let status = get_neighbor_status();
     let mut neighbor_info = Vec::new();
-    for (id, speed) in speeds {
-        neighbor_info.push(NeighborStatus {
-            id,
-            shaper_speed: speed,
-        });
+    for (_, status) in status {
+        neighbor_info.push(status);
     }
 
     let hardware_info = match get_hardware_info(SETTING.get_network().device.clone()) {

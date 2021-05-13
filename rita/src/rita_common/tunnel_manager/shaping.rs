@@ -2,30 +2,12 @@ use super::TunnelManager;
 use crate::KI;
 use crate::SETTING;
 use actix::{Context, Handler, Message};
-use althea_types::Identity;
 use settings::RitaCommonSettings;
-use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, RwLock};
-
-lazy_static! {
-    static ref INTERFACE_MBPS: Arc<RwLock<HashMap<Identity, Option<usize>>>> =
-        Arc::new(RwLock::new(HashMap::new()));
-}
 
 lazy_static! {
     static ref RESET_FLAG: AtomicBool = AtomicBool::new(false);
-}
-
-/// A cross thread accessible object representing the shaping level of a given interface, this is not perfect as it's
-/// a mapping by identity, meaning that if a given id has multiple tunnels using different shaped speeds it may not
-/// paint the full picture, that being said my observation is that this never seems to be the case, I can of course be wrong
-/// TODO we only ever interact with tunnel speed shaping here, we should consider moving this subcomponent to locked data
-/// rather than actor data as part of the actix-removal refactor
-#[allow(dead_code)]
-pub fn get_shaping_status() -> HashMap<Identity, Option<usize>> {
-    INTERFACE_MBPS.read().unwrap().clone()
 }
 
 #[allow(dead_code)]
@@ -62,27 +44,6 @@ impl Handler<ShapeMany> for TunnelManager {
         let starting_bandwidth_limit = network_settings.shaper_settings.max_speed;
         let bandwidth_limit_enabled = network_settings.shaper_settings.enabled;
         drop(network_settings);
-
-        // get the lowest speed from each set of tunnels by
-        // id and store that for external reference
-        let mut external_list = INTERFACE_MBPS.write().unwrap();
-        for (id, tunnel_list) in self.tunnels.iter() {
-            let mut lowest = None;
-            for tunnel in tunnel_list.iter() {
-                match (tunnel.speed_limit, lowest) {
-                    (Some(new), Some(current)) => {
-                        if new < current {
-                            lowest = Some(new);
-                        }
-                    }
-                    (Some(new), None) => lowest = Some(new),
-                    (None, Some(_)) => {}
-                    (None, None) => {}
-                }
-            }
-            external_list.insert(*id, lowest);
-        }
-        drop(external_list);
 
         // removes shaping without requiring a restart if the flag is set or
         // if it's set in the settings

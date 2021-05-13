@@ -32,6 +32,8 @@ use std::collections::HashMap;
 use std::time::Duration;
 use std::time::Instant;
 
+use super::tunnel_manager::neighbor_status::UpdateNeighborStatus;
+
 /// 10 minutes in seconds, the amount of time we wait for an interface to be
 /// 'good' before we start trying to increase it's speed
 const BACK_OFF_TIME: Duration = Duration::from_secs(600);
@@ -282,7 +284,11 @@ fn observe_network(
 
     // shape the misbehaving tunnels, we do this all at once for the sake
     // of efficiency as lots of do_sends have a high chance of getting lost
+    // also there's nontrivial overhead
     TunnelManager::from_registry().do_send(ShapeMany { to_shape });
+
+    // update NeighborStatus info for operator tools
+    TunnelManager::from_registry().do_send(UpdateNeighborStatus);
 }
 
 fn get_wg_key_by_ifname(neigh: &BabelNeighbor, rita_neighbors: &[RitaNeighbor]) -> Option<WgKey> {
