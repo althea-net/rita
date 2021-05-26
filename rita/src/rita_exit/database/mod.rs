@@ -456,9 +456,8 @@ pub fn enforce_exit_clients(
                             info!("Exit is enforcing on {} because their debt of {} is greater than the limit of {}", client.wg_pubkey, debt_entry.payment_details.debt, close_threshold);
                             KI.set_class_limit("wg_exit", free_tier_limit, free_tier_limit, ip)
                         } else {
-                            // set to 500mbps guaranteed bandwidth and 1gbps
-                            // absolute max
-                            KI.set_class_limit("wg_exit", 500_000, 1_000_000, ip)
+                            // 10gbit rate and ceil value's we don't want to limit this
+                            KI.set_class_limit("wg_exit", 10_000_000, 10_000_000, ip)
                         };
                         if res.is_err() {
                             panic!("Failed to limit {} with {:?}", ip, res);
