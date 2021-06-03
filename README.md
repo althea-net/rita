@@ -11,23 +11,23 @@ This is primarily an infrastructure repo, to get a working version of Althea for
 
 Debian:
 
-    sudo apt-get install build-essential libssl-dev libsqlite3-dev pkg-config postgresql-server-dev-all automake liboping-dev libtool
+    sudo apt-get install build-essential libssl-dev libsqlite3-dev pkg-config postgresql-server-dev-all automake liboping-dev libtool perl
 
 Ubuntu:
 
-    sudo apt-get install build-essential libssl-dev libsqlite3-dev pkg-config postgresql-server-dev-all autoamke liboping-dev libtool
+    sudo apt-get install build-essential libssl-dev libsqlite3-dev pkg-config postgresql-server-dev-all autoamke liboping-dev libtool perl
 
 Centos:
 
-    sudo yum install gcc gcc-c++ openssl-devel sqlite-devel make postgresql-devel automake liboping-devel libtool
+    sudo yum install gcc gcc-c++ openssl-devel sqlite-devel make postgresql-devel automake liboping-devel libtool perl
 
 Fedora:
 
-    sudo dnf install gcc gcc-c++ openssl-devel sqlite-devel make postgresql-devel automake liboping-devel libtool
+    sudo dnf install gcc gcc-c++ openssl-devel sqlite-devel make postgresql-devel automake liboping-devel libtool perl
 
 Arch:
 
-    sudo pacman -S gcc gcc-libs openssl sqlite postgressql
+    sudo pacman -S gcc gcc-libs openssl sqlite postgressql perl
 
 Finally install [Rust](https://www.rustup.rs/) and add Rustup to your PATH
 
