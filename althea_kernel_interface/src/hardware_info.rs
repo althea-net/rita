@@ -3,6 +3,8 @@ use crate::KernelInterfaceError as Error;
 use althea_types::HardwareInfo;
 use althea_types::SensorReading;
 use std::fs;
+use std::time::Duration;
+use std::u64;
 
 /// Gets the load average and memory of the system from /proc should be plenty
 /// efficient and safe to run. Requires the device name to be passed in because
@@ -27,6 +29,8 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
         None => return Err(Error::FailedToGetMemoryUsage),
     };
 
+    let system_uptime = get_sys_uptime()?;
+
     Ok(HardwareInfo {
         logical_processors: num_cpus,
         load_avg_one_minute: one_minute_load_avg,
@@ -36,7 +40,34 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
         allocated_memory,
         model,
         sensor_readings,
+        system_uptime,
     })
+}
+
+fn get_sys_uptime() -> Result<Duration, Error> {
+    let sys_time_error = Err(Error::FailedToGetSystemTime);
+
+    let lines= get_lines("/proc/uptime")?;
+    let line = match lines.get(0) {
+        Some(line) => line,
+        None => return sys_time_error,
+    };
+
+    let mut times= line.split_whitespace();
+
+    //Split to convert to unsigned integer as it has a decimal
+    let uptime:u64 = match times.next() {
+        Some(val) => 
+            match val.split('.').next() {
+                Some(val) => val.parse()?,
+                None => return sys_time_error,
+            },
+        None => return sys_time_error,
+    };
+
+    let dur_time = Duration::new(uptime, 0);
+    
+    Ok(dur_time)
 }
 
 fn get_load_avg() -> Result<(f32, f32, f32), Error> {
@@ -175,4 +206,19 @@ fn test_sensors() {
     let res = get_sensor_readings();
     println!("{:?}", res);
     assert!(res.is_some());
+}
+
+#[cfg(test)]
+mod test {
+
+}
+
+#[test]
+fn test_sys_time() {
+    let res = get_sys_uptime();
+    let dur:Duration = res.unwrap();
+
+    let hours = dur.as_secs()/3600;
+    let minutes = (dur.as_secs()%3600)/60;
+    println!("Hours {}, Minutes {}, Seconds {}",hours,minutes,(dur.as_secs()%3600)%60);
 }

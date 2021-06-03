@@ -12,6 +12,7 @@ use std::hash::{Hash, Hasher};
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
+use std::time::Duration;
 
 #[cfg(feature = "actix")]
 use actix::Message;
@@ -618,6 +619,11 @@ pub struct HardwareInfo {
     /// An array of sensors data, one entry for each sensor discovered by
     /// traversing /sys/class/hwmon
     pub sensor_readings: Option<Vec<SensorReading>>,
+    /// A 64 bit float representing the system uptime located in /proc/uptime
+    /// This is provided by the linux kernel and is generated on the fly in
+    /// a tuple format with no commas in the following format.
+    /// (Up time of system in seconds               Time of each core idling)
+    pub system_uptime: Duration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
