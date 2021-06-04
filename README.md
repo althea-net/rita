@@ -41,6 +41,12 @@ If you want to build a development build that contains unsafe options that are n
 
 ## Testing
 
+Prior to running the tests, make sure you have the following installed: cross
+
+```
+    cargo install cross
+```
+
 If you wish to test a commit you are developing, or just see Rita in action locally run
 
     bash scripts/test.sh
