@@ -5,7 +5,7 @@ authors = ["Jehan <jehan.tremback@gmail.com>, Justin <justin@althea.net>"]
 edition = "2018"
 
 [dependencies]
-web30 = "0.13"
+web30 = "0.14"
 num256 = "0.3"
 clarity = "0.4"
 rand = "0.8"

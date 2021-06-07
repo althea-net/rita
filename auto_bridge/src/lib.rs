@@ -288,7 +288,7 @@ impl TokenBridge {
                 0u32.into(),
                 own_address,
                 secret,
-                vec![SendTxOption::GasPriceMultiplier(2u32.into())],
+                vec![SendTxOption::GasPriceMultiplier(2.0)],
             )
             .await?;
 
@@ -350,7 +350,7 @@ impl TokenBridge {
                 secret,
                 vec![
                     SendTxOption::GasLimit(UNISWAP_GAS_LIMIT.into()),
-                    SendTxOption::GasPriceMultiplier(2u32.into()),
+                    SendTxOption::GasPriceMultiplier(2.0),
                 ],
             )
             .await?;

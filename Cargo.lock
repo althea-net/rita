@@ -847,7 +847,7 @@ dependencies = [
  "rand 0.8.3",
  "serde 1.0.126",
  "serde_derive",
- "web30 0.13.1",
+ "web30 0.14.0",
 ]
 
 [[package]]
@@ -2057,9 +2057,9 @@ dependencies = [
 
 [[package]]
 name = "handlebars"
-version = "3.5.5"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4498fc115fa7d34de968184e473529abb40eeb6be8bc5f7faba3d08c316cb3e3"
+checksum = "28f0fe89affef47e2c9729030a8f6e79df34cb66b8a44ecf91dad43f31150559"
 dependencies = [
  "log",
  "pest",
@@ -3748,7 +3748,7 @@ dependencies = [
  "tokio-codec",
  "tokio-io",
  "trust-dns-resolver 0.10.3",
- "web30 0.13.1",
+ "web30 0.14.0",
  "web30 0.4.3",
 ]
 
@@ -5073,9 +5073,9 @@ dependencies = [
 
 [[package]]
 name = "web30"
-version = "0.13.1"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edc06904de0714b95144d3fad8a0de9fc03404e6ad33d5820b3dbda78c1ade7b"
+checksum = "d771de6834b84f5fde0e5a7fe0f0d60a220654f4bd5c2f62b1a6708a63493842"
 dependencies = [
  "actix 0.11.1",
  "awc 3.0.0-beta.5",

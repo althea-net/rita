@@ -29,8 +29,8 @@ web30 = {git = "https://github.com/althea-net/web30", rev = "a600b8b8ebf2c49bade
 
 # duplicate async dependencies, we are currently carrying both futures 0.1 and modern async/await dependencies
 # these will be kept here for quite some time until the switch is completed.
-async-web30 = {package="web30", version = "0.13.1"}
-actix-async = {package="actix", version = "0.11.1"}
+async-web30 = {package="web30", version = "0.14"}
+actix-async = {package="actix", version = "0.11"}
 actix-web-async = {package="actix-web", version = "4.0.0-beta.6", default_features = false, features= ["openssl"] }
 
 actix = "0.7"
@@ -45,7 +45,7 @@ env_logger = "0.8"
 failure = "0.1"
 futures01 = { package = "futures", version = "0.1"}
 futures = { version = "0.3", features = ["compat"] }
-handlebars = "3.5"
+handlebars = "4.0"
 ipnetwork = "0.14"
 lazy_static = "1.4"
 log = { version = "0.4", features = ["release_max_level_info"] }
