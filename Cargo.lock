@@ -902,9 +902,9 @@ dependencies = [
 
 [[package]]
 name = "compressed_log"
-version = "0.3.3"
+version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "604aff130d37c0a7e752c73fa65ff8a5921c8fb4c933b9c6808250657cf57e6e"
+checksum = "988a21770ae28427f5a507fe6c01d4f9f004e67a3b087603e439153589b39648"
 dependencies = [
  "actix 0.11.1",
  "awc",
@@ -3196,7 +3196,7 @@ dependencies = [
 
 [[package]]
 name = "rita"
-version = "0.17.4"
+version = "0.17.5"
 dependencies = [
  "actix 0.11.1",
  "actix 0.7.11",
