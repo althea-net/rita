@@ -623,6 +623,7 @@ pub struct HardwareInfo {
     /// This is provided by the linux kernel and is generated on the fly in
     /// a tuple format with no commas in the following format.
     /// (Up time of system in seconds               Time of each core idling)
+    #[serde(default)]
     pub system_uptime: Duration,
 }
 
@@ -655,6 +656,7 @@ pub struct NeighborStatus {
     /// their shaped wg interface speed in mbps
     pub shaper_speed: Option<usize>,
     /// If this user is currently being enforced upon
+    #[serde(default)]
     pub enforced: bool,
 }
 
