@@ -1,4 +1,5 @@
 #!/bin/bash
+set -eux
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Parse command line arguments
