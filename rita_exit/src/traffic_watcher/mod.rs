@@ -1,0 +1,299 @@
+//! Traffic watcher monitors system traffic by interfacing with KernelInterface to create and check
+//! iptables and ipset counters on each per hop tunnel (the WireGuard tunnel between two devices). These counts
+//! are then stored and used to compute amounts for bills.
+//!
+//! This is the exit specific billing code used to determine how exits should be compensted. Which is
+//! different in that mesh nodes are paid by forwarding traffic, but exits have to return traffic and
+//! must get paid for doing so.
+//!
+//! Also handles enforcement of nonpayment, since there's no need for a complicated TunnelManager for exits
+
+use failure::bail;
+use rita_common::debt_keeper::traffic_update;
+use rita_common::debt_keeper::Traffic;
+use rita_common::usage_tracker::update_usage_data;
+use rita_common::usage_tracker::UpdateUsage;
+use rita_common::usage_tracker::UsageType;
+
+use actix::{Actor, Context, Handler, Message, Supervised, SystemService};
+use althea_kernel_interface::wg_iface_counter::prepare_usage_history;
+use althea_kernel_interface::wg_iface_counter::WgUsage;
+use althea_kernel_interface::KI;
+use althea_types::Identity;
+use althea_types::WgKey;
+use babel_monitor::Route as RouteLegacy;
+use failure::Error;
+use ipnetwork::IpNetwork;
+use std::collections::HashMap;
+use std::net::IpAddr;
+pub struct TrafficWatcher {
+    last_seen_bytes: HashMap<WgKey, WgUsage>,
+}
+
+impl Actor for TrafficWatcher {
+    type Context = Context<Self>;
+}
+
+impl Supervised for TrafficWatcher {}
+impl SystemService for TrafficWatcher {
+    fn service_started(&mut self, _ctx: &mut Context<Self>) {
+        info!("Traffic Watcher started");
+    }
+}
+impl Default for TrafficWatcher {
+    fn default() -> TrafficWatcher {
+        TrafficWatcher {
+            last_seen_bytes: HashMap::new(),
+        }
+    }
+}
+
+pub struct Watch {
+    pub users: Vec<Identity>,
+    pub routes: Vec<RouteLegacy>,
+}
+
+impl Message for Watch {
+    type Result = Result<(), Error>;
+}
+
+impl Handler<Watch> for TrafficWatcher {
+    type Result = Result<(), Error>;
+
+    fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
+        watch(&mut self.last_seen_bytes, &msg.routes, &msg.users)
+    }
+}
+
+fn get_babel_info(
+    routes: &[RouteLegacy],
+    our_id: Identity,
+    id_from_ip: HashMap<IpAddr, Identity>,
+) -> HashMap<WgKey, u64> {
+    // we assume this matches what is actually set it babel becuase we
+    // panic on startup if it does not get set correctly
+    let local_fee = settings::get_rita_exit().payment.local_fee;
+
+    // insert ourselves as a destination, don't think this is actually needed
+    let mut destinations = HashMap::new();
+    destinations.insert(our_id.wg_public_key, u64::from(local_fee));
+
+    let max_fee = settings::get_rita_exit().payment.max_fee;
+    for route in routes {
+        // Only ip6
+        if let IpNetwork::V6(ref ip) = route.prefix {
+            // Only host addresses and installed routes
+            if ip.prefix() == 128 && route.installed {
+                match id_from_ip.get(&IpAddr::V6(ip.ip())) {
+                    Some(id) => {
+                        let price = if route.price > max_fee {
+                            max_fee
+                        } else {
+                            route.price
+                        };
+
+                        destinations.insert(id.wg_public_key, u64::from(price));
+                    }
+                    None => trace!("Can't find destination for client {:?}", ip.ip()),
+                }
+            }
+        }
+    }
+    destinations
+}
+
+struct HelperMapReturn {
+    wg_to_id: HashMap<WgKey, Identity>,
+    ip_to_id: HashMap<IpAddr, Identity>,
+}
+
+fn generate_helper_maps(our_id: &Identity, clients: &[Identity]) -> HelperMapReturn {
+    let mut identities: HashMap<WgKey, Identity> = HashMap::new();
+    let mut id_from_ip: HashMap<IpAddr, Identity> = HashMap::new();
+    let rita_exit = settings::get_rita_exit();
+    let our_settings = rita_exit.network;
+    id_from_ip.insert(our_settings.mesh_ip.unwrap(), *our_id);
+
+    for ident in clients.iter() {
+        identities.insert(ident.wg_public_key, *ident);
+        id_from_ip.insert(ident.mesh_ip, *ident);
+    }
+
+    HelperMapReturn {
+        wg_to_id: identities,
+        ip_to_id: id_from_ip,
+    }
+}
+
+fn counters_logging(
+    counters: &HashMap<WgKey, WgUsage>,
+    history: &HashMap<WgKey, WgUsage>,
+    exit_fee: u32,
+) {
+    trace!("exit counters: {:?}", counters);
+
+    let mut total_in: u64 = 0;
+    for entry in counters.iter() {
+        let key = entry.0;
+        let val = entry.1;
+        if let Some(history_val) = history.get(key) {
+            let moved_bytes = val.download - history_val.download;
+            trace!("Exit accounted {} uploaded {} bytes", key, moved_bytes,);
+            total_in += moved_bytes;
+        }
+    }
+
+    info!("Total Exit input of {} bytes this round", total_in);
+
+    let mut total_out: u64 = 0;
+    for entry in counters.iter() {
+        let key = entry.0;
+        let val = entry.1;
+        if let Some(history_val) = history.get(key) {
+            let moved_bytes = val.upload - history_val.upload;
+            trace!("Exit accounted {} downloaded {} bytes", key, moved_bytes);
+            total_out += moved_bytes;
+        }
+    }
+
+    update_usage_data(UpdateUsage {
+        kind: UsageType::Exit,
+        up: total_out,
+        down: total_in,
+        price: exit_fee,
+    });
+
+    info!("Total Exit output of {} bytes this round", total_out);
+}
+
+fn debts_logging(debts: &HashMap<Identity, i128>) {
+    trace!("Collated total exit debts: {:?}", debts);
+
+    info!("Computed exit debts for {:?} clients", debts.len());
+    let mut total_income = 0i128;
+    for (_identity, income) in debts.iter() {
+        total_income += income;
+    }
+    info!("Total exit income of {:?} Wei this round", total_income);
+
+    match KI.get_wg_exit_clients_online() {
+        Ok(users) => info!("Total of {} users online", users),
+        Err(e) => warn!("Getting clients failed with {:?}", e),
+    }
+}
+
+/// This traffic watcher watches how much traffic each we send and receive from each client.
+pub fn watch(
+    usage_history: &mut HashMap<WgKey, WgUsage>,
+    routes: &[RouteLegacy],
+    clients: &[Identity],
+) -> Result<(), Error> {
+    let our_price = settings::get_rita_exit().exit_network.exit_price;
+    let our_id = match settings::get_rita_exit().get_identity() {
+        Some(id) => id,
+        None => {
+            warn!("Our identity is not ready!");
+            bail!("Identity is not ready");
+        }
+    };
+
+    let ret = generate_helper_maps(&our_id, clients);
+    let identities = ret.wg_to_id;
+    let id_from_ip = ret.ip_to_id;
+    let destinations = get_babel_info(routes, our_id, id_from_ip);
+
+    let counters = match KI.read_wg_counters("wg_exit") {
+        Ok(res) => res,
+        Err(e) => {
+            warn!(
+                "Error getting input counters {:?} traffic has gone unaccounted!",
+                e
+            );
+            return Err(e.into());
+        }
+    };
+
+    // creates new usage entires does not actualy update the values
+    prepare_usage_history(&counters, usage_history);
+
+    counters_logging(&counters, &usage_history, our_price as u32);
+
+    let mut debts = HashMap::new();
+
+    // Setup the debts table
+    for (_, ident) in identities.clone() {
+        debts.insert(ident, 0i128);
+    }
+
+    // accounting for 'input'
+    for (wg_key, bytes) in counters.clone() {
+        let state = (
+            identities.get(&wg_key),
+            destinations.get(&wg_key),
+            usage_history.get_mut(&wg_key),
+        );
+        match state {
+            (Some(id), Some(_dest), Some(history)) => match debts.get_mut(&id) {
+                Some(debt) => {
+                    let used = bytes.download - history.download;
+                    let value = i128::from(our_price) * i128::from(used);
+                    trace!("We are billing for {} bytes input (client output) times a exit price of {} for a total of -{}", used, our_price, value);
+                    *debt -= value;
+                    // update history so that we know what was used from previous cycles
+                    history.download = bytes.download;
+                }
+                // debts is generated from identities, this should be impossible
+                None => warn!("No debts entry for input entry id {}", id),
+            },
+            (Some(id), Some(_dest), None) => warn!("Entry for {} should have been created", id),
+            // this can be caused by a peer that has not yet formed a babel route
+            (Some(id), None, _) => trace!("We have an id {} but not destination", id),
+            // if we have a babel route we should have a peer it's possible we have a mesh client sneaking in?
+            (None, Some(dest), _) => trace!("We have a destination {} but no id", dest),
+            // dead entry?
+            (None, None, _) => warn!("We have no id or dest for an input counter on {}", wg_key),
+        }
+    }
+
+    // accounting for 'output'
+    for (wg_key, bytes) in counters {
+        let state = (
+            identities.get(&wg_key),
+            destinations.get(&wg_key),
+            usage_history.get_mut(&wg_key),
+        );
+        match state {
+            (Some(id), Some(dest), Some(history)) => match debts.get_mut(&id) {
+                Some(debt) => {
+                    let used = bytes.upload - history.upload;
+                    let value = i128::from(dest + our_price) * i128::from(used);
+                    trace!("We are billing for {} bytes output (client input) times a exit dest price of {} for a total of -{}", used, dest + our_price, value);
+                    *debt -= value;
+                    history.upload = bytes.upload;
+                }
+                // debts is generated from identities, this should be impossible
+                None => warn!("No debts entry for input entry id {}", id),
+            },
+            (Some(id), Some(_dest), None) => warn!("Entry for {} should have been created", id),
+            // this can be caused by a peer that has not yet formed a babel route
+            (Some(id), None, _) => trace!("We have an id {} but not destination", id),
+            // if we have a babel route we should have a peer it's possible we have a mesh client sneaking in?
+            (None, Some(dest), _) => warn!("We have a destination {} but no id", dest),
+            // dead entry?
+            (None, None, _) => warn!("We have no id or dest for an input counter on {}", wg_key),
+        }
+    }
+
+    debts_logging(&debts);
+
+    let mut traffic_vec = Vec::new();
+    for (from, amount) in debts {
+        traffic_vec.push(Traffic {
+            from,
+            amount: amount.into(),
+        })
+    }
+    traffic_update(traffic_vec);
+
+    Ok(())
+}

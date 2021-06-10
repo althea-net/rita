@@ -13,14 +13,13 @@ use failure::Error;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use regex::Regex;
-use settings::exit::RitaExitSettings;
-use settings::RitaCommonSettings;
+use settings::client::RitaClientSettings;
+use settings::exit::RitaExitSettingsStruct;
 use std::fs::File;
 use std::io::Read;
 use std::net::IpAddr;
 use std::path::Path;
 use std::str;
-use std::sync::{Arc, RwLock};
 
 #[derive(Debug, Fail)]
 pub enum CluError {
@@ -68,13 +67,14 @@ pub fn cleanup() -> Result<(), Error> {
     Ok(())
 }
 
-fn linux_init(config: Arc<RwLock<settings::client::RitaSettingsStruct>>) -> Result<(), Error> {
+fn linux_init(settings: RitaClientSettings) -> Result<RitaClientSettings, Error> {
     cleanup()?;
+    let mut settings = settings;
+    let mut network_settings = settings.network;
     // this value will be none for most routers but a route for gateways.
-    KI.restore_default_route(&mut config.get_network_mut().last_default_route)?;
+    KI.restore_default_route(&mut network_settings.last_default_route)?;
 
     // handle things we need to generate at runtime
-    let mut network_settings = config.get_network_mut();
     let mesh_ip_option = network_settings.mesh_ip;
     let wg_pubkey_option = network_settings.wg_public_key;
     let wg_privkey_option = network_settings.wg_private_key;
@@ -161,11 +161,9 @@ fn linux_init(config: Arc<RwLock<settings::client::RitaSettingsStruct>>) -> Resu
             warn!("Duplicate interface removed!");
         }
     }
+    settings.network = network_settings;
 
-    // Yield the mut lock
-    drop(network_settings);
-
-    let mut payment_settings = config.get_payment_mut();
+    let mut payment_settings = settings.payment;
     let eth_private_key_option = payment_settings.eth_private_key;
 
     match eth_private_key_option {
@@ -187,20 +185,19 @@ fn linux_init(config: Arc<RwLock<settings::client::RitaSettingsStruct>>) -> Resu
         }
     }
 
-    Ok(())
+    settings.payment = payment_settings;
+
+    trace!("Starting with settings (after clu) : {:?}", settings);
+    assert!(settings.get_identity().is_some());
+    Ok(settings)
 }
 
-fn linux_exit_init(
-    config: Arc<RwLock<settings::exit::RitaExitSettingsStruct>>,
-) -> Result<(), Error> {
+fn linux_exit_init(settings: RitaExitSettingsStruct) -> Result<RitaExitSettingsStruct, Error> {
     cleanup()?;
+    let mut settings = settings;
 
-    // we need to avoid a deadlock by copying things out explicitly
-    let exit_network_settings_ref = config.get_exit_network();
-    let exit_network_settings = exit_network_settings_ref.clone();
-    drop(exit_network_settings_ref);
-
-    let mut network_settings = config.get_network_mut();
+    let mut network_settings = settings.network;
+    let exit_network_settings = settings.exit_network;
     let mesh_ip_option = network_settings.mesh_ip;
     let wg_pubkey_option = network_settings.wg_public_key;
     let wg_privkey_option = network_settings.wg_private_key;
@@ -246,9 +243,7 @@ fn linux_exit_init(
         &exit_network_settings.wg_private_key.clone(),
     )?;
 
-    drop(network_settings);
-
-    let mut payment_settings = config.get_payment_mut();
+    let mut payment_settings = settings.payment;
     let eth_private_key_option = payment_settings.eth_private_key;
 
     match eth_private_key_option {
@@ -269,30 +264,26 @@ fn linux_exit_init(
             payment_settings.eth_address = Some(new_private_key.to_public_key()?)
         }
     }
-
-    Ok(())
+    settings.payment = payment_settings;
+    settings.network = network_settings;
+    settings.exit_network = exit_network_settings;
+    trace!("Starting with settings (after clu) : {:?}", settings);
+    assert!(settings.get_identity().is_some());
+    Ok(settings)
 }
 
-pub fn init(platform: &str, settings: Arc<RwLock<settings::client::RitaSettingsStruct>>) {
+pub fn init(platform: &str, settings: RitaClientSettings) -> RitaClientSettings {
     match platform {
-        "linux" => linux_init(settings.clone()).unwrap(),
+        "linux" => linux_init(settings).unwrap(),
         _ => unimplemented!(),
     }
-    trace!(
-        "Starting with settings (after clu) : {:?}",
-        settings.read().unwrap()
-    );
 }
 
-pub fn exit_init(platform: &str, settings: Arc<RwLock<settings::exit::RitaExitSettingsStruct>>) {
+pub fn exit_init(platform: &str, settings: RitaExitSettingsStruct) -> RitaExitSettingsStruct {
     match platform {
-        "linux" => linux_exit_init(settings.clone()).unwrap(),
+        "linux" => linux_exit_init(settings).unwrap(),
         _ => unimplemented!(),
     }
-    trace!(
-        "Starting with settings (after clu) : {:?}",
-        settings.read().unwrap()
-    );
 }
 
 #[cfg(test)]

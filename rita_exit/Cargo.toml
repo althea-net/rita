@@ -1,0 +1,43 @@
+[package]
+name = "rita_exit"
+version = "0.18.0"
+edition = "2018"
+license = "Apache-2.0"
+
+[lib]
+
+
+[dependencies]
+compressed_log = "0.3.4"
+sodiumoxide = "0.2"
+num256 = "0.3"
+rita_common = { path = "../rita_common" }
+althea_kernel_interface = { path = "../althea_kernel_interface" }
+althea_types = { path = "../althea_types" }
+settings = { path = "../settings" }
+babel_monitor = { path = "../babel_monitor" }
+actix = "0.7"
+handlebars = "4.0"
+rand = "0.8.0"
+lazy_static = "1.4"
+ipnetwork = "0.14"
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
+lettre = "0.9"
+lettre_email = "0.9"
+r2d2 = "0.8"
+phonenumber = "0.3"
+failure = "0.1"
+arrayvec = {version= "0.7", features = ["serde"]}
+log = { version = "0.4", features = ["release_max_level_info"] }
+reqwest = { version = "0.11", features = ["blocking", "json"] }
+exit_db = { path = "../exit_db" }
+
+babel_monitor_legacy = {path = "../babel_monitor_legacy"}
+
+actix-web-httpauth = {git = "https://github.com/althea-net/actix-web-httpauth"}
+actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
+
+diesel = { version = "1.4", features = ["postgres", "r2d2"] }
+futures01 = { package = "futures", version = "0.1"}

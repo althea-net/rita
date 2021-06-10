@@ -1,19 +1,14 @@
-use crate::json_merge;
 use crate::localization::LocalizationSettings;
 use crate::network::NetworkSettings;
 use crate::payment::PaymentSettings;
-use crate::spawn_watch_thread;
-use crate::RitaCommonSettings;
-use althea_types::Identity;
-use althea_types::WgKey;
+use crate::{json_merge, set_rita_exit, spawn_watch_thread_exit};
+use althea_types::{Identity, WgKey};
 use config::Config;
 use core::str::FromStr;
 use failure::Error;
-use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
 use phonenumber::PhoneNumber;
 use std::collections::HashSet;
 use std::net::Ipv4Addr;
-use std::sync::{Arc, RwLock};
 
 /// This is the network settings specific to rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -166,27 +161,27 @@ pub enum ExitVerifSettings {
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct RitaExitSettingsStruct {
     /// starts with file:// or postgres://username:password@localhost/diesel_demo
-    db_uri: String,
+    pub db_uri: String,
     /// the size of the worker thread pool, the connection pool is this plus one
-    workers: u32,
+    pub workers: u32,
     /// if we should log remotely or if we should send our logs to the logging server
     #[serde(default = "default_remote_log")]
-    remote_log: bool,
+    pub remote_log: bool,
     /// The description of this exit, what is sent to clients and displayed to the user
-    description: String,
-    payment: PaymentSettings,
+    pub description: String,
+    pub payment: PaymentSettings,
     #[serde(default)]
-    localization: LocalizationSettings,
-    network: NetworkSettings,
-    exit_network: ExitNetworkSettings,
+    pub localization: LocalizationSettings,
+    pub network: NetworkSettings,
+    pub exit_network: ExitNetworkSettings,
     /// Countries which the clients to the exit are allowed from, blank for no geoip validation.
     /// (ISO country code)
     #[serde(skip_serializing_if = "HashSet::is_empty", default)]
-    allowed_countries: HashSet<String>,
+    pub allowed_countries: HashSet<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    verif_settings: Option<ExitVerifSettings>,
+    pub verif_settings: Option<ExitVerifSettings>,
     #[serde(skip)]
-    future: bool,
+    pub future: bool,
 }
 
 impl RitaExitSettingsStruct {
@@ -207,59 +202,40 @@ impl RitaExitSettingsStruct {
             future: false,
         }
     }
-}
+    pub fn get_network(&self) -> NetworkSettings {
+        self.network.clone()
+    }
+    pub fn get_payment(&self) -> PaymentSettings {
+        self.payment.clone()
+    }
 
-pub trait RitaExitSettings {
-    fn get_exit_network<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, ExitNetworkSettings>;
-    fn get_verif_settings(&self) -> Option<ExitVerifSettings>;
-    fn get_verif_settings_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, Option<ExitVerifSettings>>;
-    fn get_db_uri(&self) -> String;
-    fn get_remote_log(&self) -> bool;
-    fn get_workers(&self) -> u32;
-    fn get_description(&self) -> String;
-    fn get_allowed_countries<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, HashSet<String>>;
-}
+    pub fn get_identity(&self) -> Option<Identity> {
+        Some(Identity::new(
+            self.network.mesh_ip?,
+            self.payment.eth_address?,
+            self.network.wg_public_key?,
+            self.network.nickname,
+        ))
+    }
 
-impl RitaExitSettings for Arc<RwLock<RitaExitSettingsStruct>> {
-    fn get_exit_network<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, ExitNetworkSettings> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.exit_network)
+    pub fn get_all(&self) -> Result<serde_json::Value, Error> {
+        Ok(serde_json::to_value(self.clone())?)
     }
-    fn get_db_uri(&self) -> String {
-        self.read().unwrap().db_uri.clone()
-    }
-    fn get_remote_log(&self) -> bool {
-        self.read().unwrap().remote_log
-    }
-    fn get_workers(&self) -> u32 {
-        self.read().unwrap().workers
-    }
-    fn get_description(&self) -> String {
-        self.read().unwrap().description.clone()
-    }
-    fn get_allowed_countries<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, HashSet<String>> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.allowed_countries)
-    }
-    fn get_verif_settings(&self) -> Option<ExitVerifSettings> {
-        self.read().unwrap().verif_settings.clone()
-    }
-    fn get_verif_settings_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, Option<ExitVerifSettings>> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.verif_settings)
-    }
-}
 
-impl RitaExitSettingsStruct {
+    pub fn merge(&mut self, changed_settings: serde_json::Value) -> Result<(), Error> {
+        let mut settings_value = serde_json::to_value(self.clone())?;
+
+        json_merge(&mut settings_value, &changed_settings);
+
+        match serde_json::from_value(settings_value) {
+            Ok(new_settings) => {
+                *self = new_settings;
+                Ok(())
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
     pub fn new(file_name: &str) -> Result<Self, Error> {
         let mut s = Config::new();
         s.merge(config::File::with_name(file_name).required(false))?;
@@ -267,98 +243,15 @@ impl RitaExitSettingsStruct {
         Ok(settings)
     }
 
-    pub fn new_watched(file_name: &str) -> Result<Arc<RwLock<Self>>, Error> {
+    pub fn new_watched(file_name: &str) -> Result<Self, Error> {
         let mut s = Config::new();
         s.merge(config::File::with_name(file_name).required(false))?;
         let settings: Self = s.try_into()?;
 
-        let settings = Arc::new(RwLock::new(settings));
+        set_rita_exit(settings.clone());
 
-        trace!("starting with settings: {:?}", settings.read().unwrap());
-
-        spawn_watch_thread(settings.clone(), file_name);
+        spawn_watch_thread_exit(settings.clone(), file_name);
 
         Ok(settings)
-    }
-}
-
-impl RitaCommonSettings<RitaExitSettingsStruct> for Arc<RwLock<RitaExitSettingsStruct>> {
-    fn get_payment<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, PaymentSettings> {
-        RwLockReadGuardRef::new(self.read().expect("Read payment settings!")).map(|g| &g.payment)
-    }
-
-    fn get_payment_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, PaymentSettings> {
-        RwLockWriteGuardRefMut::new(self.write().expect("Failed to write payment settings!"))
-            .map_mut(|g| &mut g.payment)
-    }
-
-    fn get_localization_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, LocalizationSettings> {
-        RwLockWriteGuardRefMut::new(
-            self.write()
-                .expect("Failed to write localization settings!"),
-        )
-        .map_mut(|g| &mut g.localization)
-    }
-
-    fn get_localization<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, LocalizationSettings> {
-        RwLockReadGuardRef::new(self.read().expect("Failed to read localization settings!"))
-            .map(|g| &g.localization)
-    }
-
-    fn get_network<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaExitSettingsStruct, NetworkSettings> {
-        RwLockReadGuardRef::new(self.read().expect("Failed to read network settings!"))
-            .map(|g| &g.network)
-    }
-
-    fn get_network_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaExitSettingsStruct, NetworkSettings> {
-        RwLockWriteGuardRefMut::new(self.write().expect("Failed to write network settings!"))
-            .map_mut(|g| &mut g.network)
-    }
-
-    fn merge(&self, changed_settings: serde_json::Value) -> Result<(), Error> {
-        let mut settings_value = serde_json::to_value(self.read().unwrap().clone())?;
-
-        json_merge(&mut settings_value, &changed_settings);
-
-        match serde_json::from_value(settings_value) {
-            Ok(new_settings) => {
-                *self.write().unwrap() = new_settings;
-                Ok(())
-            }
-            Err(e) => Err(e.into()),
-        }
-    }
-
-    fn get_all(&self) -> Result<serde_json::Value, Error> {
-        Ok(serde_json::to_value(self.read().unwrap().clone())?)
-    }
-
-    fn get_identity(&self) -> Option<Identity> {
-        Some(Identity::new(
-            self.get_network().mesh_ip?,
-            self.get_payment().eth_address?,
-            self.get_network().wg_public_key?,
-            self.get_network().nickname,
-        ))
-    }
-
-    fn get_future(&self) -> bool {
-        self.read().unwrap().future
-    }
-
-    fn set_future(&self, future: bool) {
-        self.write().unwrap().future = future
     }
 }

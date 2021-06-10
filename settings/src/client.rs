@@ -1,17 +1,13 @@
-use crate::json_merge;
 use crate::localization::LocalizationSettings;
 use crate::logging::LoggingSettings;
 use crate::network::NetworkSettings;
 use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
-use crate::spawn_watch_thread;
-use crate::RitaCommonSettings;
+use crate::{json_merge, set_rita_client, spawn_watch_thread_client};
 use althea_types::{ContactStorage, ExitState, Identity};
 use config::Config;
 use failure::Error;
-use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, RwLock};
 
 /// This struct is used by rita to store exit specific information
 /// There is one instance per exit
@@ -73,83 +69,7 @@ impl ExitClientSettings {
     }
 }
 
-pub trait RitaClientSettings {
-    fn get_exit_client<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, ExitClientSettings>;
-    fn get_exit_client_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, ExitClientSettings>;
-    fn get_exits<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, HashMap<String, ExitServer>>;
-    fn get_exits_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, HashMap<String, ExitServer>>;
-    fn get_log<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, LoggingSettings>;
-    fn get_log_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, LoggingSettings>;
-    fn get_operator<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, OperatorSettings>;
-    fn get_operator_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, OperatorSettings>;
-}
-
-impl RitaClientSettings for Arc<RwLock<RitaSettingsStruct>> {
-    fn get_exit_client<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, ExitClientSettings> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.exit_client)
-    }
-    fn get_exit_client_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, ExitClientSettings> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.exit_client)
-    }
-
-    fn get_exits<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, HashMap<String, ExitServer>> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.exit_client.exits)
-    }
-
-    fn get_exits_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, HashMap<String, ExitServer>> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.exit_client.exits)
-    }
-
-    fn get_log<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, LoggingSettings> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.log)
-    }
-
-    fn get_log_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, LoggingSettings> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.log)
-    }
-
-    fn get_operator<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, OperatorSettings> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.operator)
-    }
-
-    fn get_operator_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, OperatorSettings> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.operator)
-    }
-}
-
-impl RitaSettingsStruct {
+impl RitaClientSettings {
     pub fn new(file_name: &str) -> Result<Self, Error> {
         let mut s = Config::new();
         s.merge(config::File::with_name(file_name).required(false))?;
@@ -158,16 +78,14 @@ impl RitaSettingsStruct {
         Ok(settings)
     }
 
-    pub fn new_watched(file_name: &str) -> Result<Arc<RwLock<Self>>, Error> {
+    pub fn new_watched(file_name: &str) -> Result<Self, Error> {
         let mut s = Config::new();
         s.merge(config::File::with_name(file_name).required(false))?;
         let settings: Self = s.try_into()?;
 
-        let settings = Arc::new(RwLock::new(settings));
+        set_rita_client(settings.clone());
 
-        trace!("starting with settings: {:?}", settings.read().unwrap());
-
-        spawn_watch_thread(settings.clone(), file_name);
+        spawn_watch_thread_client(settings.clone(), file_name);
 
         Ok(settings)
     }
@@ -179,76 +97,52 @@ impl RitaSettingsStruct {
 
 /// This is the main struct for rita
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
-pub struct RitaSettingsStruct {
-    payment: PaymentSettings,
+pub struct RitaClientSettings {
+    pub payment: PaymentSettings,
     #[serde(default)]
-    log: LoggingSettings,
+    pub log: LoggingSettings,
     #[serde(default)]
-    operator: OperatorSettings,
+    pub operator: OperatorSettings,
     #[serde(default)]
-    localization: LocalizationSettings,
-    network: NetworkSettings,
-    exit_client: ExitClientSettings,
+    pub localization: LocalizationSettings,
+    pub network: NetworkSettings,
+    pub exit_client: ExitClientSettings,
     #[serde(skip)]
-    future: bool,
+    pub future: bool,
 }
 
-impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> {
-    fn get_payment<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, PaymentSettings> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.payment)
+impl RitaClientSettings {
+    pub fn get_payment(&self) -> PaymentSettings {
+        self.payment.clone()
     }
 
-    fn get_payment_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, PaymentSettings> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.payment)
+    pub fn get_localization(&self) -> LocalizationSettings {
+        self.localization.clone()
     }
 
-    fn get_localization<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, LocalizationSettings> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.localization)
+    pub fn get_network(&self) -> NetworkSettings {
+        self.network.clone()
     }
 
-    fn get_localization_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, LocalizationSettings> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.localization)
-    }
-
-    fn get_network<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, RitaSettingsStruct, NetworkSettings> {
-        RwLockReadGuardRef::new(self.read().unwrap()).map(|g| &g.network)
-    }
-
-    fn get_network_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, RitaSettingsStruct, NetworkSettings> {
-        RwLockWriteGuardRefMut::new(self.write().unwrap()).map_mut(|g| &mut g.network)
-    }
-
-    fn merge(&self, changed_settings: serde_json::Value) -> Result<(), Error> {
-        let mut settings_value = serde_json::to_value(self.read().unwrap().clone())?;
+    pub fn merge(&mut self, changed_settings: serde_json::Value) -> Result<(), Error> {
+        let mut settings_value = serde_json::to_value(self.clone())?;
 
         json_merge(&mut settings_value, &changed_settings);
 
         match serde_json::from_value(settings_value) {
             Ok(new_settings) => {
-                *self.write().unwrap() = new_settings;
+                *self = new_settings;
                 Ok(())
             }
             Err(e) => Err(e.into()),
         }
     }
 
-    fn get_all(&self) -> Result<serde_json::Value, Error> {
-        Ok(serde_json::to_value(self.read().unwrap().clone())?)
+    pub fn get_all(&self) -> Result<serde_json::Value, Error> {
+        Ok(serde_json::to_value(self.clone())?)
     }
 
-    fn get_identity(&self) -> Option<Identity> {
+    pub fn get_identity(&self) -> Option<Identity> {
         Some(Identity::new(
             self.get_network().mesh_ip?,
             self.get_payment().eth_address?,
@@ -257,11 +151,11 @@ impl RitaCommonSettings<RitaSettingsStruct> for Arc<RwLock<RitaSettingsStruct>> 
         ))
     }
 
-    fn get_future(&self) -> bool {
-        self.read().unwrap().future
+    pub fn get_future(&self) -> bool {
+        self.future
     }
 
-    fn set_future(&self, future: bool) {
-        self.write().unwrap().future = future
+    pub fn set_future(&mut self, future: bool) {
+        self.future = future
     }
 }

@@ -30,8 +30,10 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
     };
 
     let system_uptime = get_sys_uptime()?;
-    let line = get_kernel_version()?;
-    let (entire_system_kernel_version, system_kernel_version) = parse_kernel_version(line)?;
+
+    let system_kernel_version = get_kernel_version()?;
+    let (entire_system_kernel_version, system_kernel_version) =
+        parse_kernel_version(system_kernel_version)?;
 
     Ok(HardwareInfo {
         logical_processors: num_cpus,
@@ -47,6 +49,7 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
         entire_system_kernel_version,
     })
 }
+
 fn get_kernel_version() -> Result<String, Error> {
     let sys_kernel_ver_error = Err(Error::FailedToGetSystemKernelVersion);
 

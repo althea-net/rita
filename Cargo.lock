@@ -432,7 +432,7 @@ dependencies = [
 name = "althea_rs"
 version = "0.1.11"
 dependencies = [
- "rita",
+ "rita_bin",
 ]
 
 [[package]]
@@ -525,16 +525,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4259cbe96513d2f1073027a259fc2ca917feb3026a5a8d984e3628e490255cc0"
 dependencies = [
  "extend",
- "serde 1.0.126",
- "serde_json",
-]
-
-[[package]]
-name = "assert-json-diff"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50f1c3703dd33532d7f0ca049168930e9099ecac238e23cf932f3a69c42f06da"
-dependencies = [
  "serde 1.0.126",
  "serde_json",
 ]
@@ -892,17 +882,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "colored"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3616f750b84d8f0de8a58bda93e08e2a81ad3f523089b05f1dffecab48c6cbd"
-dependencies = [
- "atty",
- "lazy_static",
- "winapi 0.3.9",
-]
-
-[[package]]
 name = "compressed_log"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1125,12 +1104,6 @@ dependencies = [
  "quote 1.0.9",
  "syn 1.0.73",
 ]
-
-[[package]]
-name = "difference"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "524cbf6897b527295dff137cec09ecf3a05f4fddffd7dfcd1585403449e74198"
 
 [[package]]
 name = "digest"
@@ -2205,12 +2178,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "minihttpse"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e50e8cee436b4318ec759930d6ea5f839d14dab94e81b6fba37d492d07ebf55"
-
-[[package]]
 name = "miniz_oxide"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2283,30 +2250,6 @@ checksum = "b9f1c5b025cda876f66ef43a113f91ebc9f4ccef34843000e0adf6ebbab84e21"
 dependencies = [
  "winapi 0.3.9",
 ]
-
-[[package]]
-name = "mockito"
-version = "0.30.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d10030163d67f681db11810bc486df3149e6d91c8b4f3f96fa8b62b546c2cef8"
-dependencies = [
- "assert-json-diff 2.0.1",
- "colored",
- "difference",
- "httparse",
- "lazy_static",
- "log",
- "rand 0.8.4",
- "regex",
- "serde_json",
- "serde_urlencoded 0.7.0",
-]
-
-[[package]]
-name = "mockstream"
-version = "0.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35bbe0c0c9d254b463b13734bc361d1423289547e052b1e77e5a77292496ba2e"
 
 [[package]]
 name = "native-tls"
@@ -3223,7 +3166,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rita"
+name = "rita_bin"
 version = "0.18.0"
 dependencies = [
  "actix 0.11.1",
@@ -3236,44 +3179,58 @@ dependencies = [
  "althea_types",
  "antenna_forwarding_client",
  "arrayvec 0.7.1",
- "auto-bridge",
- "babel_monitor",
- "babel_monitor_legacy",
- "byteorder",
- "bytes 1.0.1",
- "clarity",
  "clu",
  "compressed_log",
- "config",
  "diesel",
  "docopt",
- "dotenv",
  "env_logger",
- "exit_db",
  "failure",
  "flate2",
- "futures 0.1.31",
- "futures 0.3.15",
- "handlebars",
  "hex-literal",
- "ipnetwork 0.14.0",
  "jemallocator",
  "lazy_static",
- "lettre",
- "lettre_email",
  "log",
- "minihttpse",
- "mockito",
- "mockstream",
- "num-traits 0.2.14",
- "num256",
  "openssl",
  "openssl-probe",
  "phonenumber",
  "r2d2",
- "rand 0.8.4",
  "regex",
  "reqwest",
+ "rita_client",
+ "rita_common",
+ "rita_exit",
+ "rita_tower",
+ "serde 1.0.126",
+ "serde_derive",
+ "serde_json",
+ "settings",
+]
+
+[[package]]
+name = "rita_client"
+version = "0.18.0"
+dependencies = [
+ "actix 0.7.11",
+ "actix-web 0.7.19",
+ "althea_kernel_interface",
+ "althea_types",
+ "arrayvec 0.7.1",
+ "babel_monitor",
+ "babel_monitor_legacy",
+ "clarity",
+ "clu",
+ "compressed_log",
+ "failure",
+ "futures 0.1.31",
+ "hex-literal",
+ "lazy_static",
+ "lettre",
+ "lettre_email",
+ "log",
+ "num-traits 0.2.14",
+ "num256",
+ "phonenumber",
+ "rita_common",
  "serde 1.0.126",
  "serde_derive",
  "serde_json",
@@ -3283,9 +3240,94 @@ dependencies = [
  "tokio 0.1.22",
  "tokio-codec",
  "tokio-io",
- "trust-dns-resolver",
+ "web30 0.4.3",
+]
+
+[[package]]
+name = "rita_common"
+version = "0.18.0"
+dependencies = [
+ "actix 0.11.1",
+ "actix 0.7.11",
+ "actix-web 0.7.19",
+ "actix-web-httpauth",
+ "althea_kernel_interface",
+ "althea_types",
+ "antenna_forwarding_client",
+ "arrayvec 0.7.1",
+ "auto-bridge",
+ "babel_monitor",
+ "babel_monitor_legacy",
+ "byteorder",
+ "bytes 1.0.1",
+ "clarity",
+ "docopt",
+ "failure",
+ "flate2",
+ "futures 0.1.31",
+ "futures 0.3.15",
+ "hex-literal",
+ "ipnetwork 0.14.0",
+ "lazy_static",
+ "log",
+ "num-traits 0.2.14",
+ "num256",
+ "rand 0.8.4",
+ "serde 1.0.126",
+ "serde_derive",
+ "serde_json",
+ "settings",
+ "tokio 0.1.22",
  "web30 0.14.6",
  "web30 0.4.3",
+]
+
+[[package]]
+name = "rita_exit"
+version = "0.18.0"
+dependencies = [
+ "actix 0.7.11",
+ "actix-web 0.7.19",
+ "actix-web-httpauth",
+ "althea_kernel_interface",
+ "althea_types",
+ "arrayvec 0.7.1",
+ "babel_monitor",
+ "babel_monitor_legacy",
+ "compressed_log",
+ "diesel",
+ "exit_db",
+ "failure",
+ "futures 0.1.31",
+ "handlebars",
+ "ipnetwork 0.14.0",
+ "lazy_static",
+ "lettre",
+ "lettre_email",
+ "log",
+ "num256",
+ "phonenumber",
+ "r2d2",
+ "rand 0.8.4",
+ "reqwest",
+ "rita_common",
+ "serde 1.0.126",
+ "serde_derive",
+ "serde_json",
+ "settings",
+ "sodiumoxide",
+]
+
+[[package]]
+name = "rita_tower"
+version = "0.18.0"
+dependencies = [
+ "althea_types",
+ "lazy_static",
+ "log",
+ "serde 1.0.126",
+ "serde_derive",
+ "serde_json",
 ]
 
 [[package]]
@@ -4530,7 +4572,7 @@ source = "git+https://github.com/althea-net/web30?rev=a600b8b8ebf2c49badee6b65ac
 dependencies = [
  "actix 0.7.11",
  "actix-web 0.7.19",
- "assert-json-diff 1.1.0",
+ "assert-json-diff",
  "bytes 1.0.1",
  "clarity",
  "failure",

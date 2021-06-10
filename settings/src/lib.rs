@@ -17,23 +17,14 @@ extern crate serde_derive;
 extern crate log;
 extern crate arrayvec;
 
-use crate::localization::LocalizationSettings;
-use crate::network::NetworkSettings;
-use crate::payment::PaymentSettings;
-use althea_kernel_interface::KernelInterface;
-#[cfg(not(test))]
-use althea_kernel_interface::LinuxCommandRunner;
-#[cfg(test)]
-use althea_kernel_interface::TestCommandRunner;
 use althea_types::Identity;
 use failure::Error;
-use owning_ref::{RwLockReadGuardRef, RwLockWriteGuardRefMut};
-use serde::{Deserialize, Serialize};
+use network::NetworkSettings;
+use payment::PaymentSettings;
+use serde::Serialize;
 use serde_json::Value;
 use std::fs::File;
 use std::io::Write;
-#[cfg(test)]
-use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
@@ -45,49 +36,187 @@ pub mod logging;
 pub mod network;
 pub mod operator;
 pub mod payment;
+// pub mod tower;
 
-#[cfg(test)]
+use crate::client::RitaClientSettings;
+use crate::exit::RitaExitSettingsStruct;
+
 lazy_static! {
-    static ref KI: Box<dyn KernelInterface> = Box::new(TestCommandRunner {
-        run_command: Arc::new(Mutex::new(Box::new(|_program, _args| {
-            panic!("kernel interface used before initialized");
-        })))
-    });
+    static ref EXIT_SETTING: Arc<RwLock<Option<RitaExitSettingsStruct>>> =
+        Arc::new(RwLock::new(None));
 }
 
-#[cfg(not(test))]
 lazy_static! {
-    /// This is the network settings for rita and rita_exit which generally only applies to networking
-    /// _within_ the mesh or setting up pre hop tunnels (so nothing on exits)
-    static ref KI: Box<dyn KernelInterface> = Box::new(LinuxCommandRunner {});
+    static ref CLIENT_SETTING: Arc<RwLock<Option<RitaClientSettings>>> =
+        Arc::new(RwLock::new(None));
 }
 
-pub trait RitaCommonSettings<T: Serialize + Deserialize<'static>> {
-    fn get_payment<'ret, 'me: 'ret>(&'me self) -> RwLockReadGuardRef<'ret, T, PaymentSettings>;
-    fn get_payment_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, T, PaymentSettings>;
+lazy_static! {
+    static ref GIT_HASH: Arc<RwLock<String>> = Arc::new(RwLock::new(String::new()));
+}
 
-    fn get_localization<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockReadGuardRef<'ret, T, LocalizationSettings>;
-    fn get_localization_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, T, LocalizationSettings>;
+lazy_static! {
+    static ref FLAG_CONFIG: Arc<RwLock<String>> = Arc::new(RwLock::new(String::new()));
+}
 
-    fn get_network<'ret, 'me: 'ret>(&'me self) -> RwLockReadGuardRef<'ret, T, NetworkSettings>;
-    fn get_network_mut<'ret, 'me: 'ret>(
-        &'me self,
-    ) -> RwLockWriteGuardRefMut<'ret, T, NetworkSettings>;
+pub struct RitaSettings {
+    payment: PaymentSettings,
+    network: NetworkSettings,
+    identity: Option<Identity>,
+}
 
-    fn merge(&self, changed_settings: Value) -> Result<(), Error>;
-    fn get_all(&self) -> Result<serde_json::Value, Error>;
+impl RitaSettings {
+    pub fn get_payment(&self) -> PaymentSettings {
+        self.payment.clone()
+    }
+    pub fn get_network(&self) -> NetworkSettings {
+        self.network.clone()
+    }
+    pub fn get_identity(&self) -> Option<Identity> {
+        self.identity
+    }
+    pub fn set_payment(&mut self, payment: PaymentSettings) {
+        self.payment = payment;
+    }
+    pub fn set_network(&mut self, network: NetworkSettings) {
+        self.network = network;
+    }
+    pub fn set_identity(&mut self, id: Identity) {
+        self.identity = Some(id);
+    }
+}
 
-    // Can be None if the mesh ip was not configured yet
-    fn get_identity(&self) -> Option<Identity>;
+pub fn write_config() -> Result<(), Error> {
+    let client_settings = &mut *CLIENT_SETTING.write().unwrap();
+    let exit_settings = &mut *EXIT_SETTING.write().unwrap();
+    let filename = FLAG_CONFIG.read().unwrap();
+    match (client_settings, exit_settings) {
+        (Some(client), None) => client.write(&filename),
+        (None, Some(exit)) => exit.write(&filename),
+        (Some(_), Some(_)) => {
+            panic!("Both types of config are loaded, this is impossible in production!")
+        }
+        (None, None) => panic!("No config has been loaded, check init"),
+    }
+}
 
-    fn get_future(&self) -> bool;
-    fn set_future(&self, future: bool);
+pub fn get_config_json() -> Result<serde_json::Value, Error> {
+    let client_settings = &mut *CLIENT_SETTING.write().unwrap();
+    let exit_settings = &mut *EXIT_SETTING.write().unwrap();
+    match (client_settings, exit_settings) {
+        (Some(client), None) => client.get_all(),
+        (None, Some(exit)) => exit.get_all(),
+        (Some(_), Some(_)) => {
+            panic!("Both types of config are loaded, this is impossible in production!")
+        }
+        (None, None) => panic!("No config has been loaded, check init"),
+    }
+}
+
+pub fn merge_config_json(changed_settings: serde_json::Value) -> Result<(), Error> {
+    let client_settings = &mut *CLIENT_SETTING.write().unwrap();
+    let exit_settings = &mut *EXIT_SETTING.write().unwrap();
+    match (client_settings, exit_settings) {
+        (Some(client), None) => client.merge(changed_settings),
+        (None, Some(exit)) => exit.merge(changed_settings),
+        (Some(_), Some(_)) => {
+            panic!("Both types of config are loaded, this is impossible in production!")
+        }
+        (None, None) => panic!("No config has been loaded, check init"),
+    }
+}
+
+/// Set the RitaClientSettings Struct or RitaExitSettingsStruct
+/// depending on which one is called from the argument parameter
+/// does not currently save the identity paramater, as we don't
+/// need to modify that in a generic context.
+pub fn set_rita_common(input: RitaSettings) {
+    let client_settings = &mut *CLIENT_SETTING.write().unwrap();
+    let exit_settings = &mut *EXIT_SETTING.write().unwrap();
+    match (client_settings, exit_settings) {
+        (Some(client), None) => {
+            client.network = input.network;
+            client.payment = input.payment;
+        }
+        // do the other way around for rita exit, panic if both are Some()
+        // if both are none also panic becuase rita_client or rita_exit must first
+        // initialize
+        (None, Some(exit)) => {
+            exit.network = input.network;
+            exit.payment = input.payment;
+        }
+        (Some(_), Some(_)) => {
+            panic!("Both types of config are loaded, this is impossible in production!")
+        }
+        (None, None) => panic!("No config has been loaded, check init"),
+    }
+}
+
+/// Get the RitaClientSettingsStruct or RitaExitSettingsStruct
+/// depending on which one is set
+pub fn get_rita_common() -> RitaSettings {
+    let client_settings = &*CLIENT_SETTING.read().unwrap();
+    let exit_settings = &*EXIT_SETTING.read().unwrap();
+    match (client_settings, exit_settings) {
+        (Some(client), None) => RitaSettings {
+            network: client.get_network(),
+            payment: client.get_payment(),
+            identity: client.get_identity(),
+        },
+        (None, Some(exit)) => RitaSettings {
+            network: exit.get_network(),
+            payment: exit.get_payment(),
+            identity: exit.get_identity(),
+        },
+        (Some(_), Some(_)) => panic!("Rita_common cannot be both exit and client"),
+        (None, None) => panic!("Both types are none. One needs to be initalized!"),
+    }
+}
+
+pub fn set_git_hash(git_hash: String) {
+    *GIT_HASH.write().unwrap() = git_hash;
+}
+
+pub fn get_git_hash() -> String {
+    let ret = &*GIT_HASH.read().unwrap();
+    ret.clone()
+}
+
+pub fn set_flag_config(flag_config: String) {
+    *FLAG_CONFIG.write().unwrap() = flag_config;
+}
+
+pub fn get_flag_config() -> String {
+    let ret = &*FLAG_CONFIG.read().unwrap();
+    ret.clone()
+}
+
+pub fn set_rita_client(client_setting: RitaClientSettings) {
+    *CLIENT_SETTING.write().unwrap() = Some(client_setting);
+}
+
+/// This function retrieves the rita client binary settings.
+pub fn get_rita_client() -> RitaClientSettings {
+    let temp = &*CLIENT_SETTING.read().unwrap();
+    let ret = match temp {
+        Some(val) => val,
+        None => panic!("Attempted to get_rita_client() before initialization"),
+    };
+    ret.clone()
+}
+
+pub fn set_rita_exit(exit_setting: RitaExitSettingsStruct) {
+    *EXIT_SETTING.write().unwrap() = Some(exit_setting);
+}
+
+/// This function retrieves the rita exit binary settings.
+pub fn get_rita_exit() -> RitaExitSettingsStruct {
+    let temp = &*EXIT_SETTING.read().unwrap();
+    let ret = match temp {
+        Some(val) => val,
+        None => panic!("Attempted to get_rita_exit() before initialization"),
+    };
+    ret.clone()
 }
 
 /// This merges 2 json objects, overwriting conflicting values in `a`
@@ -108,24 +237,50 @@ pub trait FileWrite {
     fn write(&self, file_name: &str) -> Result<(), Error>;
 }
 
-fn spawn_watch_thread<'de, T: 'static>(settings: Arc<RwLock<T>>, file_path: &str)
-where
-    T: serde::Deserialize<'de> + Sync + Send + std::fmt::Debug + Clone + Eq + FileWrite,
-{
+/// Spawns a thread that will grab a copy of the updated RitaSettings
+/// struct and then write it to the disk, if it changes every so often
+/// currently this period is 600 seconds or 10 minutes per write. The value
+/// should be kept low on routers due to low write endurance of storage
+fn spawn_watch_thread_client(settings: RitaClientSettings, file_path: &str) {
     let file_path = file_path.to_string();
 
     thread::spawn(move || {
-        let old_settings = settings.read().unwrap().clone();
+        let mut old_settings = settings.clone();
         loop {
             thread::sleep(Duration::from_secs(600));
 
-            let new_settings = settings.read().unwrap().clone();
+            let new_settings = get_rita_client();
+
+            if old_settings != new_settings {
+                if let Err(e) = new_settings.write(&file_path) {
+                    warn!("writing updated config failed {:?}", e);
+                }
+                old_settings = new_settings.clone();
+            }
+        }
+    });
+}
+
+/// Spawns a thread that will grab a copy of the updated RitaSettings
+/// struct and then write it to the disk, if it changes every so often
+/// currently this period is 600 seconds or 10 minutes per write. The value
+/// should be kept low on routers due to low write endurance of storage
+fn spawn_watch_thread_exit(settings: RitaExitSettingsStruct, file_path: &str) {
+    let file_path = file_path.to_string();
+
+    thread::spawn(move || {
+        let mut old_settings = settings.clone();
+        loop {
+            thread::sleep(Duration::from_secs(600));
+
+            let new_settings = get_rita_exit();
 
             if old_settings != new_settings {
                 trace!("writing updated config: {:?}", new_settings);
-                if let Err(e) = settings.read().unwrap().write(&file_path) {
+                if let Err(e) = new_settings.write(&file_path) {
                     warn!("writing updated config failed {:?}", e);
                 }
+                old_settings = new_settings.clone();
             }
         }
     });
@@ -143,24 +298,23 @@ where
         file.flush().unwrap();
         file.sync_all().unwrap();
         drop(file);
-        KI.fs_sync()?;
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::client::RitaSettingsStruct;
+    use crate::client::RitaClientSettings;
     use crate::exit::RitaExitSettingsStruct;
 
     #[test]
     fn test_settings_test() {
-        RitaSettingsStruct::new("test.toml").unwrap();
+        RitaClientSettings::new("test.toml").unwrap();
     }
 
     #[test]
     fn test_settings_example() {
-        RitaSettingsStruct::new("example.toml").unwrap();
+        RitaClientSettings::new("example.toml").unwrap();
     }
 
     #[test]

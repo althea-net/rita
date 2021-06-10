@@ -1,0 +1,45 @@
+[package]
+name = "rita_client"
+version = "0.18.0"
+edition = "2018"
+license = "Apache-2.0"
+
+
+[dependencies]
+compressed_log = "0.3.4"
+num-traits="0.2"
+num256 = "0.3"
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
+lazy_static = "1.4"
+hex-literal = "0.3"
+failure = "0.1"
+rita_common = { path = "../rita_common" }
+futures01 = { package = "futures", version = "0.1"}
+log = { version = "0.4", features = ["release_max_level_info"] }
+althea_types = { path = "../althea_types" }
+althea_kernel_interface = { path = "../althea_kernel_interface" }
+settings = { path = "../settings" }
+sha3 = "0.9"
+lettre = "0.9"
+lettre_email = "0.9"
+phonenumber = "0.3"
+babel_monitor = { path = "../babel_monitor" }
+babel_monitor_legacy = {path = "../babel_monitor_legacy"}
+arrayvec = {version= "0.7", features = ["serde"]}
+tokio = "0.1"
+tokio-io = "0.1"
+tokio-codec = "0.1"
+sodiumoxide = "0.2"
+clu = { path = "../clu" }
+web30 = {git = "https://github.com/althea-net/web30", rev = "a600b8b8ebf2c49badee6b65ac90a56bbdad4ab9"}
+
+actix = "0.7"
+actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
+
+clarity = "0.4"
+
+[lib]
+name = "rita_client"
+path = "src/lib.rs"

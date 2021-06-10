@@ -5,17 +5,17 @@ authors = ["Stan Drozd <drozdziak1@gmail.com>"]
 edition = "2018"
 
 [features]
-development = ["rita/development"]
-dash_debug = ["rita/dash_debug"]
-server = ["rita/server"]
-bundle_openssl = ["rita/bundle_openssl"]
-jemalloc = ["rita/jemalloc"]
+development = ["rita_bin/development"]
+dash_debug = ["rita_bin/dash_debug"]
+server = ["rita_bin/server"]
+bundle_openssl = ["rita_bin/bundle_openssl"]
+jemalloc = ["rita_bin/jemalloc"]
 
 [dependencies]
-rita = { path = "./rita" }
+rita_bin = { path = "./rita_bin" }
 
 [workspace]
-members = ["althea_kernel_interface", "settings", "clu", "exit_db", "antenna_forwarding_client", "antenna_forwarding_protocol", "auto_bridge", "babel_monitor_legacy"]
+members = ["althea_kernel_interface", "settings", "clu", "exit_db", "antenna_forwarding_client", "antenna_forwarding_protocol", "auto_bridge", "babel_monitor_legacy","rita_common","rita_exit","rita_tower","rita_client"]
 
 [profile.release]
 opt-level = "z"
