@@ -630,10 +630,13 @@ pub struct HardwareInfo {
     /// running. The format will be a string as it's the most logical format
     #[serde(default = "default_kernel_version")]
     pub system_kernel_version: String,
+<<<<<<< HEAD
     /// The entire linux kernel version string just in case we want the extra
     /// information. It may be useful for debugging purposes.
     #[serde(default = "default_kernel_version")]
     pub entire_system_kernel_version: String,
+=======
+>>>>>>> e94ae69d (Modified several files for kernel version number)
 }
 
 fn default_kernel_version() -> String {
