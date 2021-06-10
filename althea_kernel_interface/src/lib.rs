@@ -84,6 +84,7 @@ pub enum KernelInterfaceError {
     TrafficControlError(String),
     InvalidArchString(String),
     FailedToGetSystemTime,
+    FailedToGetSystemKernelVersion,
 }
 
 impl fmt::Display for KernelInterfaceError {
@@ -121,6 +122,9 @@ impl fmt::Display for KernelInterfaceError {
             }
             KernelInterfaceError::FailedToGetSystemTime => {
                 write!(f, "Failed to get system time!")
+            }
+            KernelInterfaceError::FailedToGetSystemKernelVersion => {
+                write!(f, "Failed to get system kernel version!")
             }
         }
     }

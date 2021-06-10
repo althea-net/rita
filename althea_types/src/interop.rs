@@ -625,6 +625,15 @@ pub struct HardwareInfo {
     /// (Up time of system in seconds               Time of each core idling)
     #[serde(default)]
     pub system_uptime: Duration,
+    /// The linux kernel version of this router will be inserted into the hard-
+    /// structure allowing us to upload into the dashboard what version we're
+    /// running. The format will be a string as it's the most logical format
+    #[serde(default = "default_kernel_version")]
+    pub system_kernel_version: String,
+}
+
+fn default_kernel_version() -> String {
+    "Unknown".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

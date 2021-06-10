@@ -30,6 +30,7 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
     };
 
     let system_uptime = get_sys_uptime()?;
+    let system_kernel_version = get_kernel_version()?;
 
     Ok(HardwareInfo {
         logical_processors: num_cpus,
@@ -41,7 +42,31 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
         model,
         sensor_readings,
         system_uptime,
+        system_kernel_version,
     })
+}
+
+fn get_kernel_version() -> Result<String, Error> {
+    let sys_kernel_ver_error = Err(Error::FailedToGetSystemKernelVersion);
+
+    let lines= get_lines("/proc/version")?;
+    let line = match lines.get(0) {
+        Some(line) => line,
+        None => return sys_kernel_ver_error,
+    };
+
+    let mut times= line.split_whitespace().peekable();
+
+    let mut kernel_ver = "".to_string();
+    while times.peek().is_some() {
+        if times.next().unwrap().to_string().eq("Linux")  && times.next().unwrap().to_string().eq("version") {
+            kernel_ver = times.next().unwrap().to_string();
+            break;
+        }
+        times.next();
+    }
+    
+    Ok(kernel_ver)
 }
 
 fn get_sys_uptime() -> Result<Duration, Error> {
@@ -208,17 +233,22 @@ fn test_sensors() {
     assert!(res.is_some());
 }
 
-#[cfg(test)]
-mod test {
-
-}
-
 #[test]
 fn test_sys_time() {
     let res = get_sys_uptime();
     let dur:Duration = res.unwrap();
 
+    println!("{}",dur.as_secs());
+
     let hours = dur.as_secs()/3600;
     let minutes = (dur.as_secs()%3600)/60;
     println!("Hours {}, Minutes {}, Seconds {}",hours,minutes,(dur.as_secs()%3600)%60);
+}
+
+#[test]
+fn test_kernel_version() {
+    let res = get_kernel_version();
+    let str = res.unwrap();
+
+    println!("{}",str);
 }
