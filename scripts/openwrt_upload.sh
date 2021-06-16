@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -eux
-export TARGET=mipsel
-export TRIPLE=mipsel-unknown-linux-musl
+export TARGET=ipq40xx
+export TRIPLE=armv7-unknown-linux-musleabihf
 export ROUTER_IP=192.168.10.1
-bash scripts/openwrt_build_$TARGET.sh $@
+bash scripts/openwrt_build_$TARGET.sh --features development
 set +e
 ssh root@$ROUTER_IP killall -9 rita
 set -e
