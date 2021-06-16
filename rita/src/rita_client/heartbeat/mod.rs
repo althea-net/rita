@@ -48,10 +48,19 @@ pub struct HeartbeatCache {
     exit_neighbor_rita: RitaNeighbor,
 }
 
+#[cfg(not(feature = "operator_debug"))]
 lazy_static! {
     pub static ref HEARTBEAT_SERVER_KEY: WgKey = "hizclQFo/ArWY+/9+AJ0LBY2dTiQK4smy5icM7GA5ng="
         .parse()
         .unwrap();
+}
+#[cfg(feature = "operator_debug")]
+lazy_static! {
+    pub static ref HEARTBEAT_SERVER_KEY: WgKey = "RECW5xQfDzo3bzaZtzepM/+qWRuFTohChKKzUqGA0n4="
+        .parse()
+        .unwrap();
+}
+lazy_static! {
     pub static ref HEARTBEAT_CACHE: Arc<RwLock<Option<HeartbeatCache>>> =
         Arc::new(RwLock::new(None));
 }
