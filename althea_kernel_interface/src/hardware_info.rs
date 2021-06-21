@@ -30,11 +30,7 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
     };
 
     let system_uptime = get_sys_uptime()?;
-<<<<<<< HEAD
-    let (entire_system_kernel_version,system_kernel_version) = get_kernel_version()?;
-=======
-    let system_kernel_version = get_kernel_version()?;
->>>>>>> e94ae69d (Modified several files for kernel version number)
+    let (entire_system_kernel_version, system_kernel_version) = get_kernel_version()?;
 
     Ok(HardwareInfo {
         logical_processors: num_cpus,
@@ -47,80 +43,59 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
         sensor_readings,
         system_uptime,
         system_kernel_version,
-<<<<<<< HEAD
         entire_system_kernel_version,
     })
 }
 
-fn get_kernel_version() -> Result<(String,String), Error> {
-=======
-    })
-}
-
-fn get_kernel_version() -> Result<String, Error> {
->>>>>>> e94ae69d (Modified several files for kernel version number)
+fn get_kernel_version() -> Result<(String, String), Error> {
     let sys_kernel_ver_error = Err(Error::FailedToGetSystemKernelVersion);
 
-    let lines= get_lines("/proc/version")?;
+    let lines = get_lines("/proc/version")?;
     let line = match lines.get(0) {
         Some(line) => line,
         None => return sys_kernel_ver_error,
     };
 
-<<<<<<< HEAD
     let mut times = line.split_whitespace().peekable();
 
     let mut kernel_ver = "".to_string();
     let mut kernel_ver_entire = "".to_string();
     while times.peek().is_some() {
-        if times.next().unwrap().to_string().eq("Linux")  && times.next().unwrap().to_string().eq("version") {
+        if times.next().unwrap().to_string().eq("Linux")
+            && times.next().unwrap().to_string().eq("version")
+        {
             kernel_ver = times.next().unwrap().to_string();
             kernel_ver_entire.push_str(&times.next().unwrap().to_string());
         }
         kernel_ver_entire.push_str(&times.next().unwrap().to_string());
         times.next();
     }
-    
-    Ok((kernel_ver_entire,kernel_ver))
-=======
-    let mut times= line.split_whitespace().peekable();
 
-    let mut kernel_ver = "".to_string();
-    while times.peek().is_some() {
-        if times.next().unwrap().to_string().eq("Linux")  && times.next().unwrap().to_string().eq("version") {
-            kernel_ver = times.next().unwrap().to_string();
-            break;
-        }
-        times.next();
-    }
-    
-    Ok(kernel_ver)
->>>>>>> e94ae69d (Modified several files for kernel version number)
+    Ok((kernel_ver_entire, kernel_ver))
 }
 
 fn get_sys_uptime() -> Result<Duration, Error> {
     let sys_time_error = Err(Error::FailedToGetSystemTime);
 
-    let lines= get_lines("/proc/uptime")?;
+    let lines = get_lines("/proc/uptime")?;
     let line = match lines.get(0) {
         Some(line) => line,
         None => return sys_time_error,
     };
 
-    let mut times= line.split_whitespace();
+    let mut times = line.split_whitespace();
 
     //Split to convert to unsigned integer as it has a decimal
-    let uptime:u64 = match times.next() {
-        Some(val) => 
-            match val.split('.').next() {
-                Some(val) => val.parse()?,
-                None => return sys_time_error,
-            },
+    let uptime: u64 = match times.next() {
+        Some(val) => match val.split('.').next() {
+            Some(val) => val.parse()?,
+            None => return sys_time_error,
+        },
         None => return sys_time_error,
     };
 
     let dur_time = Duration::new(uptime, 0);
-    
+
     Ok(dur_time)
 }
 
@@ -265,25 +240,24 @@ fn test_sensors() {
 #[test]
 fn test_sys_time() {
     let res = get_sys_uptime();
-    let dur:Duration = res.unwrap();
+    let dur: Duration = res.unwrap();
 
-    println!("{}",dur.as_secs());
+    println!("{}", dur.as_secs());
 
-    let hours = dur.as_secs()/3600;
-    let minutes = (dur.as_secs()%3600)/60;
-    println!("Hours {}, Minutes {}, Seconds {}",hours,minutes,(dur.as_secs()%3600)%60);
+    let hours = dur.as_secs() / 3600;
+    let minutes = (dur.as_secs() % 3600) / 60;
+    println!(
+        "Hours {}, Minutes {}, Seconds {}",
+        hours,
+        minutes,
+        (dur.as_secs() % 3600) % 60
+    );
 }
 
 #[test]
 fn test_kernel_version() {
     let res = get_kernel_version();
-<<<<<<< HEAD
-    let (str1,str2) = res.unwrap();
+    let (str1, str2) = res.unwrap();
 
-    println!("{} {}",str1,str2);
-=======
-    let str = res.unwrap();
-
-    println!("{}",str);
->>>>>>> e94ae69d (Modified several files for kernel version number)
+    println!("{} {}", str1, str2);
 }

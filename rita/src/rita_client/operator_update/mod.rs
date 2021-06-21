@@ -25,6 +25,7 @@ use serde_json::Map;
 use serde_json::Value;
 use settings::client::RitaClientSettings;
 use settings::RitaCommonSettings;
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
 /// Things that you are not allowed to put into the merge json field of the OperatorUpdate,
@@ -37,6 +38,31 @@ const FORBIDDEN_MERGE_VALUES: [&str; 5] = [
     "external_nic",
     "peer_interfaces",
 ];
+pub struct UptimeStruct {
+    pub prev_time: Duration,
+}
+impl UptimeStruct {
+    pub fn new() -> UptimeStruct {
+        UptimeStruct {
+            prev_time: Duration::new(0, 0),
+        }
+    }
+    pub fn time_elapsed(&mut self, rita_uptime: &Instant) -> Duration {
+        let cur_time = rita_uptime.elapsed();
+        if cur_time.as_secs() < self.prev_time.as_secs() {
+            Duration::new(0, 0)
+        } else {
+            self.prev_time = cur_time;
+            cur_time
+        }
+    }
+}
+
+lazy_static! {
+    pub static ref RITA_UPTIME: Instant = Instant::now();
+    pub static ref TIME_PASSED: Arc<RwLock<UptimeStruct>> =
+        Arc::new(RwLock::new(UptimeStruct::new()));
+}
 
 /// Perform operator updates every UPDATE_FREQUENCY seconds,
 /// even if we are called more often than that
@@ -147,7 +173,6 @@ fn checkin() {
             None
         }
     };
-
     let res = client::post(url)
         .header("User-Agent", "Actix-web")
         .json(OperatorCheckinMessage {
@@ -160,6 +185,7 @@ fn checkin() {
             billing_details,
             hardware_info,
             user_bandwidth_limit,
+            rita_uptime: TIME_PASSED.write().unwrap().time_elapsed(&RITA_UPTIME),
         })
         .unwrap()
         .send()
@@ -364,4 +390,11 @@ mod tests {
             panic!("Not a json map!");
         }
     }
+}
+#[test]
+fn test_rita_uptime() {
+    // exact key match should fail
+    let uptime = TIME_PASSED.read().unwrap();
+    let time = uptime.prev_time;
+    println!("Time: {}", time.as_secs());
 }
