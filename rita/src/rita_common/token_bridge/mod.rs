@@ -493,7 +493,7 @@ async fn xdai_bridge(state: State) -> State {
                         .get_relay_message_hash(withdraw_xdai_txid.clone(), amount.clone())
                         .await;
                     if let Ok(info) = res {
-                        return State::Withdrawing {
+                        State::Withdrawing {
                             withdraw_xdai_txid: withdraw_xdai_txid.clone(),
                             unlock_details: Some(info),
                             to,
@@ -501,9 +501,9 @@ async fn xdai_bridge(state: State) -> State {
                             timestamp,
                             withdraw_all,
                             amount_actually_exchanged: amount_actually_exchanged.clone(),
-                        };
+                        }
                     } else {
-                        return our_withdrawing_state;
+                        our_withdrawing_state
                     }
 
                 // now that we have the details that we need we must create a transaction
@@ -527,7 +527,7 @@ async fn xdai_bridge(state: State) -> State {
                         .await;
                     info!("Submitting signatures to Ethereum {:?}", res);
 
-                    return our_withdrawing_state;
+                    our_withdrawing_state
 
                 // this conversion is unique in that it's not lossy, when we withdraw
                 // a given amount of xdai we will get exactly that many wei in dai back

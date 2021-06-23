@@ -66,7 +66,7 @@ fn test_add_ipv4() {
     let val = KI
         .add_ipv4("192.168.31.2".parse().unwrap(), "eth0")
         .expect("Failure to run ip test");
-    assert_eq!(false, val);
+    assert!(!val);
 
     KI.set_mock(Box::new(move |program, args| {
         assert_eq!(program, "ip");
@@ -94,7 +94,7 @@ fn test_add_ipv4() {
     let val = KI
         .add_ipv4("192.168.31.2".parse().unwrap(), "eth0")
         .expect("Failure to run ip test");
-    assert_eq!(true, val);
+    assert!(val);
 }
 
 #[test]

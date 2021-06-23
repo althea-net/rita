@@ -150,7 +150,6 @@ fn linux_init(config: Arc<RwLock<settings::client::RitaSettingsStruct>>) -> Resu
         &Path::new(&network_settings.wg_private_key_path),
         &network_settings
             .wg_private_key
-            .clone()
             .expect("How did we get here without generating a key above?"),
     )?;
 
@@ -239,7 +238,6 @@ fn linux_exit_init(
         &Path::new(&network_settings.wg_private_key_path),
         &network_settings
             .wg_private_key
-            .clone()
             .expect("How did we get here without generating a key above?"),
     )?;
     // same thing but with the exit key
@@ -324,8 +322,8 @@ mod tests {
     fn test_validate_mesh_ip() {
         let good_ip = "fd44:94c:41e2::9e6".parse::<IpAddr>().unwrap();
         let bad_ip = "192.168.1.1".parse::<IpAddr>().unwrap();
-        assert_eq!(validate_mesh_ip(&good_ip), true);
-        assert_eq!(validate_mesh_ip(&bad_ip), false);
+        assert!(validate_mesh_ip(&good_ip));
+        assert!(!validate_mesh_ip(&bad_ip));
     }
 
     #[test]

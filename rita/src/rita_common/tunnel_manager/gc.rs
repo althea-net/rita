@@ -195,12 +195,10 @@ fn tunnel_should_be_kept(
 fn insert_into_tunnel_list(input: &Tunnel, tunnels_list: &mut HashMap<Identity, Vec<Tunnel>>) {
     let identity = &input.neigh_id.global;
     let input = input.clone();
-    if tunnels_list.contains_key(identity) {
-        tunnels_list.get_mut(identity).unwrap().push(input);
-    } else {
+    if !tunnels_list.contains_key(identity) {
         tunnels_list.insert(*identity, Vec::new());
-        tunnels_list.get_mut(identity).unwrap().push(input);
     }
+    tunnels_list.get_mut(identity).unwrap().push(input);
 }
 
 /// This function checks the handshake time of a tunnel when compared to the handshake timeout,
