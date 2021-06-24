@@ -11,6 +11,7 @@
 #![allow(clippy::pedantic)]
 #![forbid(unsafe_code)]
 
+use antenna_forwarding_client::start_antenna_forwarding_proxy;
 #[cfg(feature = "jemalloc")]
 use jemallocator::Jemalloc;
 #[cfg(feature = "jemalloc")]
@@ -36,6 +37,7 @@ extern crate arrayvec;
 use actix_web::http::Method;
 use actix_web::{http, server, App};
 use docopt::Docopt;
+use rita_client::rita_loop::metrics_permitted;
 use settings::client::{RitaClientSettings, RitaSettingsStruct};
 use settings::RitaCommonSettings;
 use std::env;
@@ -81,6 +83,7 @@ use crate::rita_client::dashboard::router::*;
 use crate::rita_client::dashboard::system_chain::*;
 use crate::rita_client::dashboard::usage::*;
 use crate::rita_client::dashboard::wifi::*;
+use crate::rita_client::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::rita_common::dashboard::babel::*;
 use crate::rita_common::dashboard::debts::*;
 use crate::rita_common::dashboard::development::*;
@@ -248,9 +251,35 @@ fn main() {
     start_core_rita_endpoints(4);
     start_rita_client_endpoints(1);
     start_client_dashboard();
+    start_antenna_forwarder();
 
     system.run();
     info!("Started Rita Client!");
+}
+
+/// starts the antenna forwarder, this is a logically independent set of code
+/// that does not care about anything else Rita is doing, it only deals with the
+/// actual physical interfaces and attempting to find antennas to forward on them.
+fn start_antenna_forwarder() {
+    if metrics_permitted() {
+        #[cfg(not(feature = "operator_debug"))]
+        let url = "operator.althea.net:33334";
+        #[cfg(feature = "operator_debug")]
+        let url = "192.168.10.2:33334";
+
+        let network = SETTING.get_network();
+        let our_id = SETTING.get_identity().unwrap();
+        let mut interfaces = network.peer_interfaces.clone();
+        interfaces.insert("br-pbs".to_string());
+        start_antenna_forwarding_proxy(
+            url.to_string(),
+            our_id,
+            *HEARTBEAT_SERVER_KEY,
+            network.wg_public_key.unwrap(),
+            network.wg_private_key.unwrap(),
+            interfaces,
+        );
+    }
 }
 
 fn start_client_dashboard() {

@@ -1,4 +1,4 @@
-//! This is the primary actor loop for rita-client, where periodic tasks are spawed and Actors are
+//! This is the primary actor loop for rita-client, where periodic tasks are spawned and Actors are
 //! tied together with message calls.
 //!
 //! This loop manages exit signup based on the settings configuration state and deploys an exit vpn
@@ -6,7 +6,6 @@
 
 use crate::rita_client::exit_manager::ExitManager;
 use crate::rita_client::heartbeat::send_udp_heartbeat;
-use crate::rita_client::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::rita_client::light_client_manager::light_client_hello_response;
 use crate::rita_client::light_client_manager::LightClientManager;
 use crate::rita_client::light_client_manager::Watch;
@@ -26,7 +25,6 @@ use actix::{
 use actix_web::http::Method;
 use actix_web::{server, App};
 use althea_types::ExitState;
-use antenna_forwarding_client::start_antenna_forwarding_proxy;
 use failure::Error;
 use futures01::future::Future;
 use settings::client::RitaClientSettings;
@@ -49,15 +47,21 @@ pub fn set_gateway_client(input: bool) {
     IS_GATEWAY_CLIENT.store(input, Ordering::Relaxed)
 }
 
-pub struct RitaLoop {
-    antenna_forwarder_started: bool,
+/// This function determines if metrics are permitted for this device, if the user has
+/// disabled logging we should not send any logging data. If they are a member of a network
+/// with an operator address this overrides the logging setting to ensure metrics are sent.
+/// Since an operator address indicates an operator that is being paid for supporting this user
+/// and needs info to assist them. The logging setting may be inspected to disable metrics
+/// not required for a normal operator
+pub fn metrics_permitted() -> bool {
+    SETTING.get_log().enabled || SETTING.get_operator().operator_address.is_some()
 }
+
+pub struct RitaLoop {}
 
 impl Default for RitaLoop {
     fn default() -> Self {
-        RitaLoop {
-            antenna_forwarder_started: false,
-        }
+        RitaLoop {}
     }
 }
 
@@ -131,29 +135,8 @@ impl Handler<Tick> for RitaLoop {
                 .then(|_res| Ok(()))
         }));
 
-        if SETTING.get_log().enabled || SETTING.get_operator().operator_address.is_some() {
+        if metrics_permitted() {
             send_udp_heartbeat();
-
-            if !self.antenna_forwarder_started {
-                #[cfg(not(feature = "operator_debug"))]
-                let url = "operator.althea.net:33334";
-                #[cfg(feature = "operator_debug")]
-                let url = "192.168.10.2:33334";
-
-                let network = SETTING.get_network();
-                let our_id = SETTING.get_identity().unwrap();
-                let mut interfaces = network.peer_interfaces.clone();
-                interfaces.insert("br-pbs".to_string());
-                start_antenna_forwarding_proxy(
-                    url.to_string(),
-                    our_id,
-                    *HEARTBEAT_SERVER_KEY,
-                    network.wg_public_key.unwrap(),
-                    network.wg_private_key.unwrap(),
-                    interfaces,
-                );
-                self.antenna_forwarder_started = true;
-            }
         }
 
         // Check Operator payments
