@@ -5,12 +5,7 @@
 //! or graph usage they query an endpoint which will request the data from this module.
 
 use crate::SETTING;
-use actix::Actor;
-use actix::Context;
-use actix::Handler;
 use actix::Message;
-use actix::Supervised;
-use actix::SystemService;
 use althea_types::Identity;
 use althea_types::PaymentTx;
 use failure::Error;
@@ -45,6 +40,7 @@ lazy_static! {
 /// later, for now (Beta 15) we want to reduce the amount of changes. So instead these values will be
 /// read off any time this actor is triggered by another payment message
     static ref PAYMENT_UPDATE_QUEUE: Arc<RwLock<Vec<PaymentTx>>> = Arc::new(RwLock::new(Vec::new()));
+    static ref USAGE_TRACKER: Arc<RwLock<UsageTracker>> = Arc::new(RwLock::new(UsageTracker::default()));
 }
 
 /// In an effort to converge this module between the three possible bw tracking
@@ -248,16 +244,6 @@ impl UsageTracker {
     }
 }
 
-impl Actor for UsageTracker {
-    type Context = Context<Self>;
-}
-
-impl Supervised for UsageTracker {}
-impl SystemService for UsageTracker {
-    fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        info!("UsageTracker started");
-    }
-}
 
 /// Gets the current hour since the unix epoch
 fn get_current_hour() -> Result<u64, Error> {
@@ -279,21 +265,23 @@ impl Message for UpdateUsage {
     type Result = Result<(), Error>;
 }
 
-impl Handler<UpdateUsage> for UsageTracker {
-    type Result = Result<(), Error>;
-    fn handle(&mut self, msg: UpdateUsage, _: &mut Context<Self>) -> Self::Result {
-        let current_hour = match get_current_hour() {
-            Ok(hour) => hour,
-            Err(e) => {
-                error!("System time is set earlier than unix epoch! {:?}", e);
-                return Ok(());
-            }
-        };
-        process_usage_update(current_hour, msg, self);
 
-        Ok(())
-    }
+
+pub fn update_usage_data(msg: UpdateUsage) {
+
+    let curr_hour = match get_current_hour() {
+        Ok(hour) => hour,
+        Err(e) => {
+            error!("System time is set earlier than unix epoch {:?}", e);
+            return;
+        }
+    };
+
+    process_usage_update(curr_hour, msg, &mut *(USAGE_TRACKER.write().unwrap()));
+
 }
+
+
 
 fn process_usage_update(current_hour: u64, msg: UpdateUsage, data: &mut UsageTracker) {
     // history contains a reference to whatever the correct storage array is
@@ -349,17 +337,15 @@ impl Message for UpdatePayments {
     type Result = Result<(), Error>;
 }
 
-impl Handler<UpdatePayments> for UsageTracker {
-    type Result = Result<(), Error>;
-    fn handle(&mut self, msg: UpdatePayments, _: &mut Context<Self>) -> Self::Result {
-        let mut queue = PAYMENT_UPDATE_QUEUE.write().unwrap();
-        for item in (*queue).iter() {
-            let _res = handle_payments(self, item);
-        }
-        *queue = Vec::new();
-        handle_payments(self, &msg.payment);
-        Ok(())
+#[allow(dead_code)]
+pub fn handle_payment_data(msg: UpdatePayments) {
+    let mut queue = PAYMENT_UPDATE_QUEUE.write().unwrap();
+    for item in (*queue).iter() {
+        let _res = handle_payments(&mut *(USAGE_TRACKER.write().unwrap()), item);
     }
+    *queue = Vec::new();
+    handle_payments(&mut *(USAGE_TRACKER.write().unwrap()), &msg.payment);
+    
 }
 
 fn handle_payments(history: &mut UsageTracker, payment: &PaymentTx) {
@@ -405,14 +391,13 @@ impl Message for GetUsage {
     type Result = Result<VecDeque<UsageHour>, Error>;
 }
 
-impl Handler<GetUsage> for UsageTracker {
-    type Result = Result<VecDeque<UsageHour>, Error>;
-    fn handle(&mut self, msg: GetUsage, _: &mut Context<Self>) -> Self::Result {
-        match msg.kind {
-            UsageType::Client => Ok(self.client_bandwidth.clone()),
-            UsageType::Relay => Ok(self.relay_bandwidth.clone()),
-            UsageType::Exit => Ok(self.exit_bandwidth.clone()),
-        }
+#[allow(dead_code)]
+pub fn handle_usage_data(msg: GetUsage) -> VecDeque<UsageHour> {
+    let usage_tracker_var = &*(USAGE_TRACKER.write().unwrap());
+    match msg.kind {
+        UsageType::Client => usage_tracker_var.client_bandwidth.clone(),
+        UsageType::Relay => usage_tracker_var.relay_bandwidth.clone(),
+        UsageType::Exit => usage_tracker_var.exit_bandwidth.clone(),
     }
 }
 
@@ -422,9 +407,8 @@ impl Message for GetPayments {
     type Result = Result<VecDeque<PaymentHour>, Error>;
 }
 
-impl Handler<GetPayments> for UsageTracker {
-    type Result = Result<VecDeque<PaymentHour>, Error>;
-    fn handle(&mut self, _msg: GetPayments, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.payments.clone())
-    }
+
+pub fn handle_get_payments_data(_msg: GetPayments) -> VecDeque<PaymentHour> {
+    let usage_tracker_var = &*(USAGE_TRACKER.write().unwrap());
+    usage_tracker_var.payments.clone()
 }

@@ -26,8 +26,8 @@ use crate::rita_common::debt_keeper::{
     traffic_replace, traffic_update, wgkey_insensitive_traffic_update, Traffic,
 };
 use crate::rita_common::usage_tracker::UpdateUsage;
-use crate::rita_common::usage_tracker::UsageTracker;
 use crate::rita_common::usage_tracker::UsageType;
+use crate::rita_common::usage_tracker::update_usage_data;
 use crate::KI;
 use crate::SETTING;
 use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
@@ -342,7 +342,9 @@ pub fn local_traffic_calculation(
     if owes_exit > 0 {
         info!("Total client debt of {} this round", owes_exit);
         // update the usage tracker with the details of this round's usage
-        UsageTracker::from_registry().do_send(UpdateUsage {
+
+
+        update_usage_data(UpdateUsage {
             kind: UsageType::Client,
             up: output,
             down: input,

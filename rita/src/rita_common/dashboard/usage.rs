@@ -1,20 +1,15 @@
 use crate::rita_common::usage_tracker::GetPayments;
 use crate::rita_common::usage_tracker::PaymentHour;
-use crate::rita_common::usage_tracker::UsageTracker;
-use ::actix::registry::SystemService;
-use ::actix_web::{AsyncResponder, HttpRequest, Json};
-use failure::Error;
-use futures01::Future;
-use std::boxed::Box;
+use crate::rita_common::usage_tracker::handle_get_payments_data;
+use ::actix_web::{HttpRequest, Json};
 use std::collections::VecDeque;
 
 pub fn get_payments(
     _req: HttpRequest,
-) -> Box<dyn Future<Item = Json<VecDeque<PaymentHour>>, Error = Error>> {
+) -> Json<VecDeque<PaymentHour>> {
     trace!("/usage/relay hit");
-    UsageTracker::from_registry()
-        .send(GetPayments {})
-        .from_err()
-        .and_then(|reply| Ok(Json(reply?)))
-        .responder()
+
+    Json(handle_get_payments_data(GetPayments{}))
+
+
 }
