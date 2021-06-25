@@ -1,109 +1,110 @@
 image: rust:latest
 
 before_script:
+  - echo 'deb http://deb.debian.org/debian buster-backports main contrib non-free' > /etc/apt/sources.list.d/buster-backports.list
   - apt-get -qq update
-  - apt-get install -y libsqlite3-dev curl git libssl-dev build-essential libpq-dev
-  - rustup component add rustfmt
-  - rustup component add clippy
-
+  - apt-get install -y libsqlite3-dev curl ipset iperf3 git libssl-dev build-essential libpq-dev sudo python3-pip jq psmisc postgresql postgresql-client kmod wireguard
+  - curl -fsSL https://get.docker.com -o get-docker.sh
+  - sh ./get-docker.sh
+  - service docker start
 
 stages:
-  - build
   - lint
   - test
-  
-build_rita_exit_x86:
-  stage: build
-  script:
-    - "cd rita && cargo build --bin rita_exit"
+  - cross-arch
 
-build_rita:
-  stage: build
+unit_tests:
+  stage: test
   script:
-    - "cd rita && cargo build --bin rita"
+    # unit tests
+    - "RUST_TEST_THREADS=1 cargo test --all --verbose"
 
+# the lint checks as their own tests for easy failure
+# identification
 lint_opt_level:
   stage: lint
   script:
     - 'grep -q ''opt-level = "z"'' Cargo.toml'
-lint_audit:
-  stage: lint
-  script:
-    - "cargo install cargo-audit --force && cargo audit"
-lint_geiger:
-  stage: lint
-  script:
-    - "cargo install cargo-geiger --force && cargo geiger"
 lint_fmt:
   stage: lint
   script:
-   - cargo fmt --all -- --check
-
-
-test_rita_exit_x86:
-  stage: test
+    - rustup component add rustfmt
+    - cargo fmt --all -- --check
+# lint_audit:
+#   stage: lint
+#   script:
+#     - "cargo install cargo-audit"
+#     - "cargo audit"
+lint_geiger:
+  stage: lint
   script:
-    - "cd rita && RUST_TEST_THREADS=1 cargo test --verbose --bin rita_exit"
-
-test_rita_x86:
-  stage: test
+    - "cargo install cargo-geiger"
+    - "cargo geiger"
+lint_clippy:
+  stage: lint
   script:
-    - "cd rita && RUST_TEST_THREADS=1 cargo test --bin rita --verbose"
+    - "rustup component add clippy"
+    - "cargo clippy --all --all-targets --all-features -- -D warnings"
 
-test_all:
-  stage: test
+cross_arch_mips:
+  stage: cross-arch
+  variables:
+    CROSS_TEST_ARGS: "--verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
   script:
-    - "cd rita && RUST_TEST_THREADS=1 cargo test --verbose --all"
+    - "cargo install cross"
+    - "cross test --target mips-unknown-linux-gnu $CROSS_TEST_ARGS"
 
+cross_arch_mips_64:
+  stage: cross-arch
+  variables:
+    CROSS_TEST_ARGS: "--verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
+  script:
+    - "cargo install cross"
+    - "cross test --target mips64-unknown-linux-gnuabi64 $CROSS_TEST_ARGS"
+
+cross_arch_arm64:
+  stage: cross-arch
+  variables:
+    CROSS_TEST_ARGS: "--verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
+  script:
+    - "cargo install cross"
+    - "cross test --target aarch64-unknown-linux-gnu $CROSS_TEST_ARGS"
 # integration_test_basic:
-#   stage: integration_test
+#   stage: integration
 #   script:
 #     - ./integration-tests/rita.sh
 #   variables:
 #     SPEEDTEST_THROUGHPUT: "20"
 #     SPEEDTEST_DURATION: "15"
-#     INITIAL_POLL_INTERVAL: 5 
-#     BACKOFF_FACTOR: "1.5" 
+#     INITIAL_POLL_INTERVAL: 5
+#     BACKOFF_FACTOR: "1.5"
 #     VERBOSE: 1
-#     POSTGRES_USER: postgres 
-#     POSTGRES_BIN: /usr/lib/postgresql/9.6/bin/postgres
-#     POSTGRES_DATABASE: /var/ramfs/postgresql/9.6/main
-#     POSTGRES_CONFIG: /etc/postgresql/9.6/main/postgresql.conf
-
+#     POSTGRES_USER: postgres
+#     POSTGRES_BIN: /usr/lib/postgresql/11/bin/postgres
+#     POSTGRES_CONFIG: /etc/postgresql/11/main/postgresql.conf
+# integration_test_docker:
+#   stage: integration
+#   script:
+#     - git archive --format=tar.gz -o $DOCKERFOLDER/rita.tar.gz --prefix=althea_rs/ HEAD
+#     - pushd $DOCKERFOLDER
+#     - time docker build -t rita-test .
+#     - time docker run --name rita-test --privileged -it rita-test
+#   variables:
+#     DOCKERFOLDER: integration-tests/container/
 # integration_test_backwards_to_master:
-#   stage: integration_test
+#   stage: integration
 #   script:
 #     - ./integration-tests/rita.sh
 #   variables:
-#     REVISION_B: master 
+#     REVISION_B: master
 #     REMOTE_A: ".."
 #     REMOTE_B: "https://github.com/althea-mesh/althea_rs.git"
 #     COMPAT_LAYOUT: "inner_ring_old"
 #     SPEEDTEST_THROUGHPUT: "20"
 #     SPEEDTEST_DURATION: "15"
-#     INITIAL_POLL_INTERVAL: 5 
-#     BACKOFF_FACTOR: "1.5" 
+#     INITIAL_POLL_INTERVAL: 5
+#     BACKOFF_FACTOR: "1.5"
 #     VERBOSE: 1
-#     POSTGRES_USER: postgres 
-#     POSTGRES_BIN: /usr/lib/postgresql/9.6/bin/postgres
-#     POSTGRES_DATABASE: /var/ramfs/postgresql/9.6/main
-#     POSTGRES_CONFIG: /etc/postgresql/9.6/main/postgresql.conf
-
-# integration_test_backwards_to_release:
-#   stage: integration_test
-#   script:
-#     - ./integration-tests/rita.sh
-#   variables:
-#     REVISION_B: release 
-#     REMOTE_A: ".."
-#     REMOTE_B: "https://github.com/althea-mesh/althea_rs.git"
-#     COMPAT_LAYOUT: "inner_ring_old"
-#     SPEEDTEST_THROUGHPUT: "20"
-#     SPEEDTEST_DURATION: "15"
-#     INITIAL_POLL_INTERVAL: 5 
-#     BACKOFF_FACTOR: "1.5" 
-#     VERBOSE: 1
-#     POSTGRES_USER: postgres 
-#     POSTGRES_BIN: /usr/lib/postgresql/9.6/bin/postgres
-#     POSTGRES_DATABASE: /var/ramfs/postgresql/9.6/main
-#     POSTGRES_CONFIG: /etc/postgresql/9.6/main/postgresql.conf
+#     POSTGRES_USER: postgres
+#     POSTGRES_BIN: /usr/lib/postgresql/11/bin/postgres
+#     POSTGRES_CONFIG: /etc/postgresql/11/main/postgresql.conf
