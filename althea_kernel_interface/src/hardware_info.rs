@@ -30,8 +30,8 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
     };
 
     let system_uptime = get_sys_uptime()?;
-    let line = parse_kernel_version()?;
-    let (entire_system_kernel_version, system_kernel_version) = get_kernel_version(line)?;
+    let line = get_kernel_version()?;
+    let (entire_system_kernel_version, system_kernel_version) = parse_kernel_version(line)?;
 
     Ok(HardwareInfo {
         logical_processors: num_cpus,
@@ -47,7 +47,7 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
         entire_system_kernel_version,
     })
 }
-fn parse_kernel_version() -> Result<String, Error> {
+fn get_kernel_version() -> Result<String, Error> {
     let sys_kernel_ver_error = Err(Error::FailedToGetSystemKernelVersion);
 
     let lines = get_lines("/proc/version")?;
@@ -58,7 +58,7 @@ fn parse_kernel_version() -> Result<String, Error> {
     Ok(line.to_string())
 }
 
-fn get_kernel_version(line: String) -> Result<(String, String), Error> {
+fn parse_kernel_version(line: String) -> Result<(String, String), Error> {
     let mut times = line.split_whitespace().peekable();
 
     let mut kernel_ver = "".to_string();
@@ -304,36 +304,28 @@ mod test {
     }
     #[test]
     fn test_kernel_version_temp() {
-        let res = get_kernel_version("Linux version 4.19.78-coreos (jenkins@ip-10-7-32-103) (gcc version 8.3.0 (Gentoo Hardened 8.3.0-r1 p1.1)) #1 SMP Mon Oct 14 22:56:39 -00 2019".to_string());
+        let res = parse_kernel_version("Linux version 4.19.78-coreos (jenkins@ip-10-7-32-103) (gcc version 8.3.0 (Gentoo Hardened 8.3.0-r1 p1.1)) #1 SMP Mon Oct 14 22:56:39 -00 2019".to_string());
         let (str1, str2) = res.unwrap();
         println!(
             "Entire Kernel String: {} \nKernel String:{}\n\n",
             str1, str2
         );
 
-        let res = get_kernel_version("".to_string());
+        let res = parse_kernel_version("".to_string());
         let (str1, str2) = res.unwrap();
         println!(
             "Entire Kernel String: {} \nKernel String:{}\n\n",
             str1, str2
         );
 
-        let res = get_kernel_version("Hello world".to_string());
+        let res = parse_kernel_version("Hello world".to_string());
         let (str1, str2) = res.unwrap();
         println!(
             "Entire Kernel String: {} \nKernel String:{}\n\n",
             str1, str2
         );
 
-        let res = get_kernel_version("ã̸͙̪̖̮͖̘̼̯̱̙̮̩̝͐ḁ̶̛̘̼̥͙̰̂͆̋̓͗́͑́͛̔̏̉̈́͌̇̓͂͊̉̄̕̕͝͝ͅş̴̢͎͕̲̙̮̻̝͔̗̥̰̝͍̳͉̗̈́̅̋́ͅͅf̴̢̡̙͙̭̪̗̯͆̊̏̒͊͋̄̂͋́͌͂̃̆̽̂͛̓̌̽̒̒̐͂͘͘͘͝͝ą̷̭̬̪̀̆̇͋̂̒̅ď̵̢̢̧̛͓̜̦̻̻̜͈͎̼͇͈̖͔̼̫̻̗͉͍̻̟̙̇̉̈͐̀̈͜͜".to_string());
-        let (str1, str2) = res.unwrap();
-
-        println!(
-            "Entire Kernel String: {} \nKernel String:{}\n\n",
-            str1, str2
-        );
-
-        let res = get_kernel_version("ã̸͙̪̖̮͖̘̼̯̱̙̮̩̝͐ḁ̶̛̘̼̥͙̰̂͆̋̓͗́͑́͛̔̏̉̈́͌̇̓͂͊̉̄̕̕͝͝ͅş̴̢͎͕̲̙̮̻̝͔̗̥̰̝͍̳͉̗̈́̅̋́ͅͅf̴̢̡̙͙̭̪̗̯͆̊̏̒͊͋̄̂͋́͌͂̃̆̽̂͛̓̌̽̒̒̐͂͘͘͘͝͝ą̷̭̬̪̀̆̇͋̂̒̅ď̵̢̢̧̛͓̜̦̻̻̜͈͎̼͇͈̖͔̼̫̻̗͉͍̻̟̙̇̉̈͐̀̈͜͜".to_string());
+        let res = parse_kernel_version("ã̸͙̪̖̮͖̘̼̯̱̙̮̩̝͐ḁ̶̛̘̼̥͙̰̂͆̋̓͗́͑́͛̔̏̉̈́͌̇̓͂͊̉̄̕̕͝͝ͅş̴̢͎͕̲̙̮̻̝͔̗̥̰̝͍̳͉̗̈́̅̋́ͅͅf̴̢̡̙͙̭̪̗̯͆̊̏̒͊͋̄̂͋́͌͂̃̆̽̂͛̓̌̽̒̒̐͂͘͘͘͝͝ą̷̭̬̪̀̆̇͋̂̒̅ď̵̢̢̧̛͓̜̦̻̻̜͈͎̼͇͈̖͔̼̫̻̗͉͍̻̟̙̇̉̈͐̀̈͜͜".to_string());
         let (str1, str2) = res.unwrap();
 
         println!(
@@ -341,8 +333,8 @@ mod test {
             str1, str2
         );
 
-        let line = parse_kernel_version().unwrap();
-        let res = get_kernel_version(line);
+        let line = get_kernel_version().unwrap();
+        let res = parse_kernel_version(line);
         let (str1, str2) = res.unwrap();
 
         println!(
