@@ -5,9 +5,9 @@
 use crate::rita_common::debt_keeper::traffic_update;
 use crate::rita_common::debt_keeper::Traffic;
 use crate::rita_common::tunnel_manager::Neighbor;
+use crate::rita_common::usage_tracker::update_usage_data;
 use crate::rita_common::usage_tracker::UpdateUsage;
 use crate::rita_common::usage_tracker::UsageType;
-use crate::rita_common::usage_tracker::update_usage_data;
 use crate::KI;
 use crate::SETTING;
 use ::actix::{Actor, Context, Handler, Message, Supervised, SystemService};
@@ -254,7 +254,6 @@ fn update_usage(
     );
 
     // update the usage tracker with the details of this round's usage
-
 
     update_usage_data(UpdateUsage {
         kind: UsageType::Relay,

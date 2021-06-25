@@ -10,9 +10,9 @@
 
 use crate::rita_common::debt_keeper::traffic_update;
 use crate::rita_common::debt_keeper::Traffic;
+use crate::rita_common::usage_tracker::update_usage_data;
 use crate::rita_common::usage_tracker::UpdateUsage;
 use crate::rita_common::usage_tracker::UsageType;
-use crate::rita_common::usage_tracker::update_usage_data;
 use crate::SETTING;
 use actix::{Actor, Context, Handler, Message, Supervised, SystemService};
 use althea_kernel_interface::wg_iface_counter::prepare_usage_history;
@@ -156,7 +156,6 @@ fn counters_logging(
             total_out += moved_bytes;
         }
     }
-
 
     update_usage_data(UpdateUsage {
         kind: UsageType::Exit,

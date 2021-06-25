@@ -244,7 +244,6 @@ impl UsageTracker {
     }
 }
 
-
 /// Gets the current hour since the unix epoch
 fn get_current_hour() -> Result<u64, Error> {
     let seconds = SystemTime::now().duration_since(UNIX_EPOCH)?;
@@ -265,10 +264,7 @@ impl Message for UpdateUsage {
     type Result = Result<(), Error>;
 }
 
-
-
 pub fn update_usage_data(msg: UpdateUsage) {
-
     let curr_hour = match get_current_hour() {
         Ok(hour) => hour,
         Err(e) => {
@@ -278,10 +274,7 @@ pub fn update_usage_data(msg: UpdateUsage) {
     };
 
     process_usage_update(curr_hour, msg, &mut *(USAGE_TRACKER.write().unwrap()));
-
 }
-
-
 
 fn process_usage_update(current_hour: u64, msg: UpdateUsage, data: &mut UsageTracker) {
     // history contains a reference to whatever the correct storage array is
@@ -345,7 +338,6 @@ pub fn handle_payment_data(msg: UpdatePayments) {
     }
     *queue = Vec::new();
     handle_payments(&mut *(USAGE_TRACKER.write().unwrap()), &msg.payment);
-    
 }
 
 fn handle_payments(history: &mut UsageTracker, payment: &PaymentTx) {
@@ -406,7 +398,6 @@ pub struct GetPayments;
 impl Message for GetPayments {
     type Result = Result<VecDeque<PaymentHour>, Error>;
 }
-
 
 pub fn handle_get_payments_data(_msg: GetPayments) -> VecDeque<PaymentHour> {
     let usage_tracker_var = &*(USAGE_TRACKER.write().unwrap());

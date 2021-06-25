@@ -17,8 +17,8 @@
 use crate::rita_common::payment_controller::TRANSACTION_SUBMISSION_TIMEOUT;
 use crate::rita_common::rita_loop::get_web3_server;
 use crate::rita_common::simulated_txfee_manager::add_tx_to_total;
-use crate::rita_common::usage_tracker::UpdatePayments;
 use crate::rita_common::usage_tracker::handle_payment_data;
+use crate::rita_common::usage_tracker::UpdatePayments;
 use crate::SETTING;
 use ::actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use althea_types::Identity;
@@ -201,14 +201,13 @@ impl Handler<Tick> for OperatorFeeManager {
                         amount_to_pay, txid
                     );
 
-
                     handle_payment_data(UpdatePayments {
                         payment: PaymentTx {
                             to: operator_identity,
                             from: our_id,
                             amount: amount_to_pay.clone(),
-                            txid:Some(txid),
-                        }
+                            txid: Some(txid),
+                        },
                     });
 
                     add_tx_to_total(amount_to_pay.clone());
