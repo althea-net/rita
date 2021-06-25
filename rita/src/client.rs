@@ -4,7 +4,7 @@
 //! vpn system integrated into the Althea network design, as well as API endpoints for a management
 //! dashboard of router functions like wifi, which the exit is not expected to have.
 //!
-//! This file initilizes the dashboard endpoints for the client as well as the common and client
+//! This file initializes the dashboard endpoints for the client as well as the common and client
 //! specific actors.
 
 #![warn(clippy::all)]

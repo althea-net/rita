@@ -1,6 +1,6 @@
-//! Placehodler payment manager, handles single transaction payments as well as
+//! This modules handles single transaction payments as well as
 //! managing the retry flow for failed payment attempts. We will retry a payment
-//! so long as we have not published it to a full node, once the payment is on
+//! until it is successfully in a block, see payment_validator, once the payment is on
 //! the blockchain it's up to the reciever to validate that it's correct
 
 use crate::rita_common::debt_keeper::payment_failed;

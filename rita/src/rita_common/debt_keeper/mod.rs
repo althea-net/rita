@@ -1,12 +1,12 @@
 //! While traffic watcher keeps an eye on how much traffic flows and what that is worth debtkeeper
-//! maintains the long term memory of who owes who what so that it may later be quiered and paid
+//! maintains the long term memory of who owes who what so that it may later be queried and paid
 //! by payment_controller
 //!
 //! You may be wondering what's up with incoming payments, why can't we just have debt?
 //! Well this whole module is only slightly more complicated than it needs to be.
 //! Lets say for example that we owe Bob some money, but for reasons unknown Bob pays us, do we
 //! increase the amount we owe Bob? That's probably a vulnerability rabbit hole at the very least.
-//! Hence we need an incoming paymetns parameter to take money out of. This of course implies half
+//! Hence we need an incoming payments parameter to take money out of. This of course implies half
 //! of the excess complexity you see, managing an incoming payments pool versus a incoming debts pool
 
 use crate::rita_common::payment_controller;
