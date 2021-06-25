@@ -30,7 +30,8 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
     };
 
     let system_uptime = get_sys_uptime()?;
-    let (entire_system_kernel_version, system_kernel_version) = get_kernel_version()?;
+    let line = parse_kernel_version()?;
+    let (entire_system_kernel_version, system_kernel_version) = get_kernel_version(line)?;
 
     Ok(HardwareInfo {
         logical_processors: num_cpus,
@@ -46,8 +47,7 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
         entire_system_kernel_version,
     })
 }
-
-fn get_kernel_version() -> Result<(String, String), Error> {
+fn parse_kernel_version() -> Result<String, Error> {
     let sys_kernel_ver_error = Err(Error::FailedToGetSystemKernelVersion);
 
     let lines = get_lines("/proc/version")?;
@@ -55,20 +55,65 @@ fn get_kernel_version() -> Result<(String, String), Error> {
         Some(line) => line,
         None => return sys_kernel_ver_error,
     };
+    Ok(line.to_string())
+}
 
+fn get_kernel_version(line: String) -> Result<(String, String), Error> {
     let mut times = line.split_whitespace().peekable();
 
     let mut kernel_ver = "".to_string();
     let mut kernel_ver_entire = "".to_string();
     while times.peek().is_some() {
-        if times.next().unwrap().to_string().eq("Linux")
-            && times.next().unwrap().to_string().eq("version")
-        {
-            kernel_ver = times.next().unwrap().to_string();
-            kernel_ver_entire.push_str(&times.next().unwrap().to_string());
+        match times.next() {
+            Some(val) => {
+                if val.to_string().eq("Linux") {
+                    match times.next() {
+                        Some(val) => {
+                            if val.to_string().eq("version") {
+                                match times.next() {
+                                    Some(val) => kernel_ver.push_str(val),
+                                    None => {
+                                        info!("None value encountered");
+                                        break;
+                                    }
+                                }
+                                match times.next() {
+                                    Some(val) => kernel_ver_entire.push_str(val),
+                                    None => {
+                                        info!("None value encountered");
+                                        break;
+                                    }
+                                }
+                            } else {
+                                match times.next() {
+                                    Some(val) => kernel_ver_entire.push_str(val),
+                                    None => {
+                                        info!("None value encountered");
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        None => {
+                            info!("None value encountered");
+                            break;
+                        }
+                    }
+                } else {
+                    match times.next() {
+                        Some(val) => kernel_ver_entire.push_str(val),
+                        None => {
+                            info!("None value encountered");
+                            break;
+                        }
+                    }
+                }
+            }
+            None => {
+                info!("None value encountered");
+                break;
+            }
         }
-        kernel_ver_entire.push_str(&times.next().unwrap().to_string());
-        times.next();
     }
 
     Ok((kernel_ver_entire, kernel_ver))
@@ -215,49 +260,95 @@ fn get_sensor_readings() -> Option<Vec<SensorReading>> {
         Some(ret)
     }
 }
+// Test for kernel version
+#[cfg(test)]
+mod test {
 
-#[test]
-fn test_read_hw_info() {
-    let res = get_hardware_info(Some("test".to_string()));
-    let hw_info = res.unwrap();
-    assert_eq!(hw_info.model, "test");
-}
+    use super::*;
 
-#[test]
-fn test_numcpus() {
-    let res = get_numcpus();
-    let cpus = res.unwrap();
-    assert!(cpus != 0);
-}
+    #[test]
+    fn test_read_hw_info() {
+        let res = get_hardware_info(Some("test".to_string()));
+        let hw_info = res.unwrap();
+        assert_eq!(hw_info.model, "test");
+    }
 
-#[test]
-fn test_sensors() {
-    let res = get_sensor_readings();
-    println!("{:?}", res);
-    assert!(res.is_some());
-}
+    #[test]
+    fn test_numcpus() {
+        let res = get_numcpus();
+        let cpus = res.unwrap();
+        assert!(cpus != 0);
+    }
 
-#[test]
-fn test_sys_time() {
-    let res = get_sys_uptime();
-    let dur: Duration = res.unwrap();
+    #[test]
+    fn test_sensors() {
+        let res = get_sensor_readings();
+        println!("{:?}", res);
+        assert!(res.is_some());
+    }
 
-    println!("{}", dur.as_secs());
+    #[test]
+    fn test_sys_time() {
+        let res = get_sys_uptime();
+        let dur: Duration = res.unwrap();
 
-    let hours = dur.as_secs() / 3600;
-    let minutes = (dur.as_secs() % 3600) / 60;
-    println!(
-        "Hours {}, Minutes {}, Seconds {}",
-        hours,
-        minutes,
-        (dur.as_secs() % 3600) % 60
-    );
-}
+        println!("{}", dur.as_secs());
 
-#[test]
-fn test_kernel_version() {
-    let res = get_kernel_version();
-    let (str1, str2) = res.unwrap();
+        let hours = dur.as_secs() / 3600;
+        let minutes = (dur.as_secs() % 3600) / 60;
+        println!(
+            "Hours {}, Minutes {}, Seconds {}",
+            hours,
+            minutes,
+            (dur.as_secs() % 3600) % 60
+        );
+    }
+    #[test]
+    fn test_kernel_version_temp() {
+        let res = get_kernel_version("Linux version 4.19.78-coreos (jenkins@ip-10-7-32-103) (gcc version 8.3.0 (Gentoo Hardened 8.3.0-r1 p1.1)) #1 SMP Mon Oct 14 22:56:39 -00 2019".to_string());
+        let (str1, str2) = res.unwrap();
+        println!(
+            "Entire Kernel String: {} \nKernel String:{}\n\n",
+            str1, str2
+        );
 
-    println!("{} {}", str1, str2);
+        let res = get_kernel_version("".to_string());
+        let (str1, str2) = res.unwrap();
+        println!(
+            "Entire Kernel String: {} \nKernel String:{}\n\n",
+            str1, str2
+        );
+
+        let res = get_kernel_version("Hello world".to_string());
+        let (str1, str2) = res.unwrap();
+        println!(
+            "Entire Kernel String: {} \nKernel String:{}\n\n",
+            str1, str2
+        );
+
+        let res = get_kernel_version("ã̸͙̪̖̮͖̘̼̯̱̙̮̩̝͐ḁ̶̛̘̼̥͙̰̂͆̋̓͗́͑́͛̔̏̉̈́͌̇̓͂͊̉̄̕̕͝͝ͅş̴̢͎͕̲̙̮̻̝͔̗̥̰̝͍̳͉̗̈́̅̋́ͅͅf̴̢̡̙͙̭̪̗̯͆̊̏̒͊͋̄̂͋́͌͂̃̆̽̂͛̓̌̽̒̒̐͂͘͘͘͝͝ą̷̭̬̪̀̆̇͋̂̒̅ď̵̢̢̧̛͓̜̦̻̻̜͈͎̼͇͈̖͔̼̫̻̗͉͍̻̟̙̇̉̈͐̀̈͜͜".to_string());
+        let (str1, str2) = res.unwrap();
+
+        println!(
+            "Entire Kernel String: {} \nKernel String:{}\n\n",
+            str1, str2
+        );
+
+        let res = get_kernel_version("ã̸͙̪̖̮͖̘̼̯̱̙̮̩̝͐ḁ̶̛̘̼̥͙̰̂͆̋̓͗́͑́͛̔̏̉̈́͌̇̓͂͊̉̄̕̕͝͝ͅş̴̢͎͕̲̙̮̻̝͔̗̥̰̝͍̳͉̗̈́̅̋́ͅͅf̴̢̡̙͙̭̪̗̯͆̊̏̒͊͋̄̂͋́͌͂̃̆̽̂͛̓̌̽̒̒̐͂͘͘͘͝͝ą̷̭̬̪̀̆̇͋̂̒̅ď̵̢̢̧̛͓̜̦̻̻̜͈͎̼͇͈̖͔̼̫̻̗͉͍̻̟̙̇̉̈͐̀̈͜͜".to_string());
+        let (str1, str2) = res.unwrap();
+
+        println!(
+            "Entire Kernel String: {} \nKernel String:{}\n\n",
+            str1, str2
+        );
+
+        let line = parse_kernel_version().unwrap();
+        let res = get_kernel_version(line);
+        let (str1, str2) = res.unwrap();
+
+        println!(
+            "Entire Kernel String: {} \nKernel String:{}\n\n",
+            str1, str2
+        );
+    }
 }
