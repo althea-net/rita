@@ -3,7 +3,7 @@ use super::TunnelManager;
 use crate::KI;
 use actix::{Context, Handler, Message};
 use althea_types::Identity;
-use babel_monitor::Interface;
+use babel_monitor::Interface as InterfaceLegacy;
 use failure::Error;
 use std::{collections::HashMap, time::Instant};
 use std::{sync::Arc, sync::RwLock, time::Duration};
@@ -31,7 +31,7 @@ pub struct TriggerGc {
     /// a vector of babel interfaces, if we find an interface that babel doesn't classify as
     /// 'up' we will gc it for recreation via the normal hello/ihu process, this prevents us
     /// from having tunnels that don't work for babel peers
-    pub babel_interfaces: Vec<Interface>,
+    pub babel_interfaces: Vec<InterfaceLegacy>,
 }
 
 impl Message for TriggerGc {
@@ -231,7 +231,7 @@ fn check_handshake_time(handshake_timeout: Duration, ifname: &str) -> bool {
 }
 
 /// sorts the interfaces vector into a hashmap of interface name to up status
-fn into_interfaces_hashmap(interfaces: &[Interface]) -> HashMap<String, bool> {
+fn into_interfaces_hashmap(interfaces: &[InterfaceLegacy]) -> HashMap<String, bool> {
     let mut ret = HashMap::new();
     for interface in interfaces {
         ret.insert(interface.name.clone(), interface.up);

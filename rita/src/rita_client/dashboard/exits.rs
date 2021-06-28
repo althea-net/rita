@@ -11,10 +11,10 @@ use actix_web::AsyncResponder;
 use actix_web::Path;
 use actix_web::{HttpRequest, HttpResponse, Json};
 use althea_types::ExitState;
-use babel_monitor::do_we_have_route;
-use babel_monitor::open_babel_stream;
-use babel_monitor::parse_routes;
-use babel_monitor::start_connection;
+use babel_monitor_legacy::do_we_have_route_legacy;
+use babel_monitor_legacy::open_babel_stream_legacy;
+use babel_monitor_legacy::parse_routes_legacy;
+use babel_monitor_legacy::start_connection_legacy;
 use failure::Error;
 use futures01::{future, Future};
 use settings::client::{ExitServer, RitaClientSettings};
@@ -71,11 +71,11 @@ impl Handler<GetExitInfo> for Dashboard {
         let babel_port = SETTING.get_network().babel_port;
 
         Box::new(
-            open_babel_stream(babel_port)
+            open_babel_stream_legacy(babel_port)
                 .from_err()
                 .and_then(move |stream| {
-                    start_connection(stream).and_then(move |stream| {
-                        parse_routes(stream).and_then(move |routes| {
+                    start_connection_legacy(stream).and_then(move |stream| {
+                        parse_routes_legacy(stream).and_then(move |routes| {
                             let route_table_sample = routes.1;
                             let mut output = Vec::new();
 
@@ -84,8 +84,10 @@ impl Handler<GetExitInfo> for Dashboard {
 
                             for exit in exit_client.exits.clone().into_iter() {
                                 let selected = is_selected(&exit.1, current_exit);
-                                let have_route =
-                                    do_we_have_route(&exit.1.id.mesh_ip, &route_table_sample)?;
+                                let have_route = do_we_have_route_legacy(
+                                    &exit.1.id.mesh_ip,
+                                    &route_table_sample,
+                                )?;
 
                                 // failed pings block for one second, so we should be sure it's at least reasonable
                                 // to expect the pings to work before issuing them.

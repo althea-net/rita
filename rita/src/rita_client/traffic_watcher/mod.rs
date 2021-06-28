@@ -35,8 +35,8 @@ use actix_web::client;
 use actix_web::client::Connection;
 use actix_web::HttpMessage;
 use althea_types::Identity;
-use babel_monitor::get_installed_route;
-use babel_monitor::Route;
+use babel_monitor::Route as RouteLegacy;
+use babel_monitor_legacy::get_installed_route_legacy;
 use failure::Error;
 use futures01::future::ok as future_ok;
 use futures01::future::Future;
@@ -98,7 +98,7 @@ pub struct QueryExitDebts {
     pub exit_port: u16,
     pub exit_id: Identity,
     pub exit_price: u64,
-    pub routes: Vec<Route>,
+    pub routes: Vec<RouteLegacy>,
 }
 
 impl Message for QueryExitDebts {
@@ -237,9 +237,12 @@ impl Handler<QueryExitDebts> for TrafficWatcher {
 }
 
 /// Returns the babel route to a given mesh ip with the properly capped price
-fn find_exit_route_capped(exit_mesh_ip: IpAddr, routes: Vec<Route>) -> Result<Route, Error> {
+fn find_exit_route_capped(
+    exit_mesh_ip: IpAddr,
+    routes: Vec<RouteLegacy>,
+) -> Result<RouteLegacy, Error> {
     let max_fee = SETTING.get_payment().max_fee;
-    let mut exit_route = get_installed_route(&exit_mesh_ip, &routes)?;
+    let mut exit_route = get_installed_route_legacy(&exit_mesh_ip, &routes)?;
     if exit_route.price > max_fee {
         let mut capped_route = exit_route.clone();
         capped_route.price = max_fee;
@@ -252,7 +255,7 @@ pub fn local_traffic_calculation(
     history: &mut TrafficWatcher,
     exit: &Identity,
     exit_price: u64,
-    routes: Vec<Route>,
+    routes: Vec<RouteLegacy>,
 ) -> Result<i128, Error> {
     let exit_route = find_exit_route_capped(exit.mesh_ip, routes)?;
     info!("Exit metric: {}", exit_route.metric);

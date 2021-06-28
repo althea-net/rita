@@ -1,8 +1,8 @@
 use crate::error::AltheaTypesError as Error;
 use crate::{contact_info::ContactType, wg_key::WgKey, BillingDetails, InstallationDetails};
 use arrayvec::ArrayString;
-use babel_monitor::Neighbor;
-use babel_monitor::Route;
+use babel_monitor::Neighbor as NeighborLegacy;
+use babel_monitor::Route as RouteLegacy;
 use clarity::Address;
 use num256::Uint256;
 use std::collections::hash_map::DefaultHasher;
@@ -697,10 +697,10 @@ pub struct HeartbeatMessage {
     pub upstream_id: Identity,
     /// The babel Route to the exit, including details such as metric and
     /// full path rtt
-    pub exit_route: Route,
+    pub exit_route: RouteLegacy,
     /// The babel Neighbor over which our traffic flows, this gives us the Reach
     /// (packet loss over 16 seconds) as well as the neighbor RTT
-    pub exit_neighbor: Neighbor,
+    pub exit_neighbor: NeighborLegacy,
     /// If this user wants to be notified when they have a low balance
     pub notify_balance: bool,
     /// The router version stored in semver format as found in the Cargo.toml

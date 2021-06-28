@@ -441,6 +441,7 @@ dependencies = [
  "actix 0.7.11",
  "arrayvec 0.7.1",
  "babel_monitor",
+ "babel_monitor_legacy",
  "base64 0.13.0",
  "clarity",
  "hex",
@@ -607,6 +608,20 @@ name = "babel_monitor"
 version = "0.1.0"
 dependencies = [
  "ascii",
+ "env_logger",
+ "failure",
+ "ipnetwork 0.14.0",
+ "log",
+ "serde 1.0.126",
+ "serde_derive",
+]
+
+[[package]]
+name = "babel_monitor_legacy"
+version = "0.1.0"
+dependencies = [
+ "ascii",
+ "babel_monitor",
  "env_logger",
  "failure",
  "futures 0.1.31",
@@ -3212,6 +3227,7 @@ dependencies = [
  "arrayvec 0.7.1",
  "auto-bridge",
  "babel_monitor",
+ "babel_monitor_legacy",
  "byteorder",
  "bytes 1.0.1",
  "clarity",

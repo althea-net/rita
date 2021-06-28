@@ -29,9 +29,9 @@ use actix_web::http::Method;
 use actix_web::{server, App};
 use althea_kernel_interface::ExitClient;
 use althea_types::Identity;
-use babel_monitor::open_babel_stream;
-use babel_monitor::parse_routes;
-use babel_monitor::start_connection;
+use babel_monitor_legacy::open_babel_stream_legacy;
+use babel_monitor_legacy::parse_routes_legacy;
+use babel_monitor_legacy::start_connection_legacy;
 use diesel::{query_dsl::RunQueryDsl, PgConnection};
 use exit_db::models;
 use futures01::future::Future;
@@ -187,19 +187,21 @@ fn rita_exit_loop(
 fn bill(babel_port: u16, tw: &Addr<TrafficWatcher>, start: Instant, ids: Vec<Identity>) {
     trace!("about to try opening babel stream");
     let res = wait_timeout(
-        open_babel_stream(babel_port).from_err().and_then(|stream| {
-            trace!("got babel stream");
-            start_connection(stream).and_then(|stream| {
-                parse_routes(stream).and_then(|routes| {
-                    trace!("Sending traffic watcher message?");
-                    tw.do_send(Watch {
-                        users: ids,
-                        routes: routes.1,
-                    });
-                    Ok(())
+        open_babel_stream_legacy(babel_port)
+            .from_err()
+            .and_then(|stream| {
+                trace!("got babel stream");
+                start_connection_legacy(stream).and_then(|stream| {
+                    parse_routes_legacy(stream).and_then(|routes| {
+                        trace!("Sending traffic watcher message?");
+                        tw.do_send(Watch {
+                            users: ids,
+                            routes: routes.1,
+                        });
+                        Ok(())
+                    })
                 })
-            })
-        }),
+            }),
         EXIT_LOOP_TIMEOUT,
     );
     match res {

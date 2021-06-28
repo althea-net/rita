@@ -5,10 +5,14 @@ use ::actix_web::Path;
 use ::actix_web::{HttpRequest, HttpResponse, Result};
 use ::settings::FileWrite;
 use ::settings::RitaCommonSettings;
-use babel_monitor::open_babel_stream;
-use babel_monitor::set_local_fee as babel_set_local_fee;
-use babel_monitor::set_metric_factor as babel_set_metric_factor;
-use babel_monitor::start_connection;
+// use babel_monitor::open_babel_stream;
+// use babel_monitor::set_local_fee as babel_set_local_fee;
+// use babel_monitor::set_metric_factor as babel_set_metric_factor;
+// use babel_monitor::start_connection;
+use babel_monitor_legacy::open_babel_stream_legacy;
+use babel_monitor_legacy::set_local_fee_legacy as babel_set_local_fee_legacy;
+use babel_monitor_legacy::set_metric_factor_legacy as babel_set_metric_factor_legacy;
+use babel_monitor_legacy::start_connection_legacy;
 use failure::Error;
 use futures01::future::Future;
 use std::collections::HashMap;
@@ -38,11 +42,11 @@ pub fn set_local_fee(path: Path<u32>) -> Box<dyn Future<Item = HttpResponse, Err
     // themselves
     let new_fee = if new_fee > max_fee { max_fee } else { new_fee };
 
-    Box::new(open_babel_stream(babel_port).then(move |stream| {
+    Box::new(open_babel_stream_legacy(babel_port).then(move |stream| {
         // if we can't get to babel here we panic
         let stream = stream.expect("Can't reach Babel!");
-        start_connection(stream).and_then(move |stream| {
-            babel_set_local_fee(stream, new_fee).then(move |res| {
+        start_connection_legacy(stream).and_then(move |stream| {
+            babel_set_local_fee_legacy(stream, new_fee).then(move |res| {
                 if let Err(e) = res {
                     error!("Failed to set babel fee with {:?}", e);
                     Ok(HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
@@ -70,11 +74,11 @@ pub fn set_metric_factor(path: Path<u32>) -> Box<dyn Future<Item = HttpResponse,
     debug!("/metric_factor/{} POST hit", new_factor);
     let babel_port = SETTING.get_network().babel_port;
 
-    Box::new(open_babel_stream(babel_port).then(move |stream| {
+    Box::new(open_babel_stream_legacy(babel_port).then(move |stream| {
         // if we can't get to babel here we panic
         let stream = stream.expect("Can't reach Babel!");
-        start_connection(stream).and_then(move |stream| {
-            babel_set_metric_factor(stream, new_factor).then(move |res| {
+        start_connection_legacy(stream).and_then(move |stream| {
+            babel_set_metric_factor_legacy(stream, new_factor).then(move |res| {
                 if let Err(e) = res {
                     error!("Failed to set babel metric factor with {:?}", e);
                     Ok(HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)

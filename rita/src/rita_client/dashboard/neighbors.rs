@@ -7,12 +7,12 @@ use actix_web::AsyncResponder;
 use actix_web::{HttpRequest, Json};
 use althea_types::Identity;
 use arrayvec::ArrayString;
-use babel_monitor::get_installed_route;
-use babel_monitor::get_route_via_neigh;
-use babel_monitor::open_babel_stream;
-use babel_monitor::parse_routes;
-use babel_monitor::start_connection;
-use babel_monitor::Route;
+use babel_monitor::Route as RouteLegacy;
+use babel_monitor_legacy::get_installed_route_legacy;
+use babel_monitor_legacy::get_route_via_neigh_legacy;
+use babel_monitor_legacy::open_babel_stream_legacy;
+use babel_monitor_legacy::parse_routes_legacy;
+use babel_monitor_legacy::start_connection_legacy;
 use failure::Error;
 use futures01::Future;
 use num256::{Int256, Uint256};
@@ -36,14 +36,16 @@ pub struct NodeInfo {
     pub stats: IfaceStats,
 }
 
-pub fn get_routes(_req: HttpRequest) -> Box<dyn Future<Item = Json<Vec<Route>>, Error = Error>> {
+pub fn get_routes(
+    _req: HttpRequest,
+) -> Box<dyn Future<Item = Json<Vec<RouteLegacy>>, Error = Error>> {
     let babel_port = SETTING.get_network().babel_port;
     Box::new(
-        open_babel_stream(babel_port)
+        open_babel_stream_legacy(babel_port)
             .from_err()
             .and_then(move |stream| {
-                start_connection(stream).and_then(move |stream| {
-                    parse_routes(stream)
+                start_connection_legacy(stream).and_then(move |stream| {
+                    parse_routes_legacy(stream)
                         .and_then(|(_stream, routes)| Ok(Json(routes)))
                         .responder()
                 })
@@ -71,11 +73,11 @@ pub fn get_neighbor_info(
 
                 let babel_port = SETTING.get_network().babel_port;
 
-                open_babel_stream(babel_port)
+                open_babel_stream_legacy(babel_port)
                     .from_err()
                     .and_then(move |stream| {
-                        start_connection(stream).and_then(move |stream| {
-                            parse_routes(stream)
+                        start_connection_legacy(stream).and_then(move |stream| {
+                            parse_routes_legacy(stream)
                                 .and_then(|(_stream, routes)| {
                                     let route_table_sample = routes;
 
@@ -103,7 +105,7 @@ pub fn get_neighbor_info(
 /// generates a list of neighbors coorelated with the quality of the route to the exit they provide
 fn generate_neighbors_list(
     stats: Stats,
-    route_table_sample: Vec<Route>,
+    route_table_sample: Vec<RouteLegacy>,
     debts: HashMap<Identity, (NodeDebtData, Neighbor)>,
 ) -> Vec<NodeInfo> {
     let mut output = Vec::new();
@@ -116,7 +118,7 @@ fn generate_neighbors_list(
             Some(val) => val,
             None => ArrayString::<32>::from("No Nickname").unwrap(),
         };
-        let maybe_route = get_installed_route(&identity.mesh_ip, &route_table_sample);
+        let maybe_route = get_installed_route_legacy(&identity.mesh_ip, &route_table_sample);
         if maybe_route.is_err() {
             output.push(nonviable_node_info(
                 nickname,
@@ -133,7 +135,7 @@ fn generate_neighbors_list(
         if let (Some(current_exit), Some(stats_entry)) = tup {
             let exit_ip = current_exit.id.mesh_ip;
             let maybe_exit_route =
-                get_route_via_neigh(identity.mesh_ip, exit_ip, &route_table_sample);
+                get_route_via_neigh_legacy(identity.mesh_ip, exit_ip, &route_table_sample);
 
             // We have a peer that is an exit, so we can't find a route
             // from them to our selected exit. Other errors can also get

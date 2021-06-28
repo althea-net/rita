@@ -14,7 +14,7 @@ use ::actix::{Actor, Context, Handler, Message, Supervised, SystemService};
 use althea_kernel_interface::open_tunnel::is_link_local;
 use althea_kernel_interface::FilterTarget;
 use althea_types::Identity;
-use babel_monitor::Route;
+use babel_monitor::Route as RouteLegacy;
 use failure::Error;
 use ipnetwork::IpNetwork;
 use settings::RitaCommonSettings;
@@ -49,11 +49,11 @@ impl Default for TrafficWatcher {
 pub struct Watch {
     /// List of neighbors to watch
     pub neighbors: Vec<Neighbor>,
-    pub routes: Vec<Route>,
+    pub routes: Vec<RouteLegacy>,
 }
 
 impl Watch {
-    pub fn new(neighbors: Vec<Neighbor>, routes: Vec<Route>) -> Watch {
+    pub fn new(neighbors: Vec<Neighbor>, routes: Vec<RouteLegacy>) -> Watch {
         Watch { neighbors, routes }
     }
 }
@@ -85,7 +85,7 @@ pub fn prepare_helper_maps(
     (identities, if_to_id)
 }
 
-pub fn get_babel_info(routes: Vec<Route>) -> Result<(HashMap<IpAddr, i128>, u32), Error> {
+pub fn get_babel_info(routes: Vec<RouteLegacy>) -> Result<(HashMap<IpAddr, i128>, u32), Error> {
     trace!("Got {} routes: {:?}", routes.len(), routes);
     let mut destinations = HashMap::new();
     // we assume this matches what is actually set it babel because we
@@ -270,7 +270,7 @@ fn update_usage(
 ///
 /// This first time this is run, it will create the rules and then immediately read and zero them.
 /// (should return 0)
-pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), Error> {
+pub fn watch(routes: Vec<RouteLegacy>, neighbors: &[Neighbor]) -> Result<(), Error> {
     let (identities, if_to_id) = prepare_helper_maps(neighbors);
 
     let (destinations, local_fee) = get_babel_info(routes)?;

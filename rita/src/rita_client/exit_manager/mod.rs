@@ -34,9 +34,12 @@ use althea_types::ExitDetails;
 use althea_types::WgKey;
 use althea_types::{EncryptedExitClientIdentity, EncryptedExitState};
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState, ExitVerifMode};
-use babel_monitor::open_babel_stream;
-use babel_monitor::parse_routes;
-use babel_monitor::start_connection;
+// use babel_monitor::open_babel_stream;
+// use babel_monitor::parse_routes;
+// use babel_monitor::start_connection;
+use babel_monitor_legacy::open_babel_stream_legacy;
+use babel_monitor_legacy::parse_routes_legacy;
+use babel_monitor_legacy::start_connection_legacy;
 use failure::Error;
 use futures01::future;
 use futures01::future::join_all;
@@ -512,11 +515,11 @@ impl Handler<Tick> for ExitManager {
                     trace!("We are signed up for the selected exit!");
 
                     Arbiter::spawn(
-                        open_babel_stream(babel_port)
+                        open_babel_stream_legacy(babel_port)
                             .from_err()
                             .and_then(move |stream| {
-                                start_connection(stream).and_then(move |stream| {
-                                    parse_routes(stream).and_then(move |routes| {
+                                start_connection_legacy(stream).and_then(move |stream| {
+                                    parse_routes_legacy(stream).and_then(move |routes| {
                                         TrafficWatcher::from_registry().do_send(QueryExitDebts {
                                             exit_id,
                                             exit_price,

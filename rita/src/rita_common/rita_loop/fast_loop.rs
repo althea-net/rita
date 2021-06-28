@@ -17,11 +17,11 @@ use actix::{
     System, SystemService,
 };
 use actix_async::System as AsyncSystem;
-use babel_monitor::open_babel_stream;
-use babel_monitor::parse_interfaces;
-use babel_monitor::parse_neighs;
-use babel_monitor::parse_routes;
-use babel_monitor::start_connection;
+use babel_monitor_legacy::open_babel_stream_legacy;
+use babel_monitor_legacy::parse_interfaces_legacy;
+use babel_monitor_legacy::parse_neighs_legacy;
+use babel_monitor_legacy::parse_routes_legacy;
+use babel_monitor_legacy::start_connection_legacy;
 use failure::Error;
 use futures01::Future;
 use settings::RitaCommonSettings;
@@ -114,11 +114,11 @@ impl Handler<Tick> for RitaFastLoop {
                         start.elapsed().subsec_millis()
                     );
 
-                    open_babel_stream(babel_port)
+                    open_babel_stream_legacy(babel_port)
                         .from_err()
                         .and_then(move |stream| {
-                            start_connection(stream).and_then(move |stream| {
-                                parse_routes(stream).and_then(move |routes| {
+                            start_connection_legacy(stream).and_then(move |stream| {
+                                parse_routes_legacy(stream).and_then(move |routes| {
                                     TrafficWatcher::from_registry()
                                         .send(Watch::new(neighbors, routes.1))
                                         .timeout(FAST_LOOP_TIMEOUT)
@@ -149,33 +149,36 @@ impl Handler<Tick> for RitaFastLoop {
         Arbiter::spawn(TunnelManager::from_registry().send(GetNeighbors).then(
             move |rita_neighbors| {
                 let rita_neighbors = rita_neighbors.unwrap().unwrap();
-                open_babel_stream(babel_port)
+                open_babel_stream_legacy(babel_port)
                     .from_err()
                     .and_then(move |stream| {
-                        start_connection(stream).and_then(move |stream| {
-                            parse_routes(stream).and_then(move |(stream, babel_routes)| {
-                                parse_neighs(stream).and_then(move |(stream, babel_neighbors)| {
-                                    parse_interfaces(stream).and_then(
-                                        move |(_stream, babel_interfaces)| {
-                                            trace!("Sending network monitor tick");
-                                            NetworkMonitor::from_registry().do_send(
-                                                NetworkMonitorTick {
-                                                    babel_neighbors,
-                                                    babel_routes,
-                                                    rita_neighbors,
-                                                },
-                                            );
+                        start_connection_legacy(stream).and_then(move |stream| {
+                            parse_routes_legacy(stream).and_then(move |(stream, babel_routes)| {
+                                parse_neighs_legacy(stream).and_then(
+                                    move |(stream, babel_neighbors)| {
+                                        parse_interfaces_legacy(stream).and_then(
+                                            move |(_stream, babel_interfaces)| {
+                                                trace!("Sending network monitor tick");
+                                                NetworkMonitor::from_registry().do_send(
+                                                    NetworkMonitorTick {
+                                                        babel_neighbors,
+                                                        babel_routes,
+                                                        rita_neighbors,
+                                                    },
+                                                );
 
-                                            trace!("Sending tunnel GC");
-                                            TunnelManager::from_registry().do_send(TriggerGc {
-                                                tunnel_timeout: TUNNEL_TIMEOUT,
-                                                tunnel_handshake_timeout: TUNNEL_HANDSHAKE_TIMEOUT,
-                                                babel_interfaces,
-                                            });
-                                            Ok(())
-                                        },
-                                    )
-                                })
+                                                trace!("Sending tunnel GC");
+                                                TunnelManager::from_registry().do_send(TriggerGc {
+                                                    tunnel_timeout: TUNNEL_TIMEOUT,
+                                                    tunnel_handshake_timeout:
+                                                        TUNNEL_HANDSHAKE_TIMEOUT,
+                                                    babel_interfaces,
+                                                });
+                                                Ok(())
+                                            },
+                                        )
+                                    },
+                                )
                             })
                         })
                     })

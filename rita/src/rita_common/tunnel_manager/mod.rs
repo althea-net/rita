@@ -21,10 +21,10 @@ use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService
 use althea_kernel_interface::open_tunnel::TunnelOpenArgs;
 use althea_types::Identity;
 use althea_types::LocalIdentity;
-use babel_monitor::monitor;
-use babel_monitor::open_babel_stream;
-use babel_monitor::start_connection;
-use babel_monitor::unmonitor;
+use babel_monitor_legacy::monitor_legacy;
+use babel_monitor_legacy::open_babel_stream_legacy;
+use babel_monitor_legacy::start_connection_legacy;
+use babel_monitor_legacy::unmonitor_legacy;
 use failure::Error;
 use futures01::Future;
 use rand::thread_rng;
@@ -205,10 +205,11 @@ impl Tunnel {
         let tunnel = self.clone();
 
         Arbiter::spawn(
-            open_babel_stream(babel_port)
+            open_babel_stream_legacy(babel_port)
                 .from_err()
                 .and_then(move |stream| {
-                    start_connection(stream).and_then(move |stream| monitor(stream, &iface_name))
+                    start_connection_legacy(stream)
+                        .and_then(move |stream| monitor_legacy(stream, &iface_name))
                 })
                 .then(move |res| {
                     // Errors here seem very very rare, I've only ever seen it happen
@@ -240,10 +241,11 @@ impl Tunnel {
         let tunnel = self.clone();
 
         Arbiter::spawn(
-            open_babel_stream(babel_port)
+            open_babel_stream_legacy(babel_port)
                 .from_err()
                 .and_then(move |stream| {
-                    start_connection(stream).and_then(move |stream| unmonitor(stream, &iface_name))
+                    start_connection_legacy(stream)
+                        .and_then(move |stream| unmonitor_legacy(stream, &iface_name))
                 })
                 .then(move |res| {
                     // Errors here seem very very rare, I've only ever seen it happen

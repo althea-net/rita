@@ -8,6 +8,7 @@ license = "Apache-2.0"
 
 [dependencies]
 babel_monitor = { path = "../babel_monitor" }
+babel_monitor_legacy = {path = "../babel_monitor_legacy"}
 num256 = "0.3"
 base64 = "0.13"
 serde_derive = "1.0"

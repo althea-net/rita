@@ -23,10 +23,10 @@ use actix::{Arbiter, SystemService};
 use althea_types::HeartbeatMessage;
 use althea_types::Identity;
 use althea_types::WgKey;
-use babel_monitor::get_installed_route;
-use babel_monitor::get_neigh_given_route;
-use babel_monitor::Neighbor;
-use babel_monitor::Route;
+use babel_monitor::Neighbor as NeighborLegacy;
+use babel_monitor::Route as RouteLegacy;
+use babel_monitor_legacy::get_installed_route_legacy;
+use babel_monitor_legacy::get_neigh_given_route_legacy;
 use failure::Error;
 use futures01::future::Future;
 use settings::client::ExitServer;
@@ -43,8 +43,8 @@ type Resolver = resolver::Resolver;
 
 pub struct HeartbeatCache {
     dns: VecDeque<SocketAddr>,
-    exit_route: Route,
-    exit_neighbor_babel: Neighbor,
+    exit_route: RouteLegacy,
+    exit_neighbor_babel: NeighborLegacy,
     exit_neighbor_rita: RitaNeighbor,
 }
 
@@ -100,7 +100,7 @@ pub fn send_udp_heartbeat() {
                 match get_selected_exit_route(&network_info.babel_routes) {
                     Ok(route) => {
                         let neigh_option =
-                            get_neigh_given_route(&route, &network_info.babel_neighbors);
+                            get_neigh_given_route_legacy(&route, &network_info.babel_neighbors);
                         let neigh_option =
                             get_rita_neigh_option(neigh_option, &network_info.rita_neighbors);
                         if let Some((neigh, rita_neigh)) = neigh_option {
@@ -171,14 +171,14 @@ pub fn send_udp_heartbeat() {
     Arbiter::spawn(res);
 }
 
-fn get_selected_exit_route(route_dump: &[Route]) -> Result<Route, Error> {
+fn get_selected_exit_route(route_dump: &[RouteLegacy]) -> Result<RouteLegacy, Error> {
     let exit_client = SETTING.get_exit_client();
     let exit_mesh_ip = if let Some(e) = exit_client.get_current_exit() {
         e.id.mesh_ip
     } else {
         return Err(format_err!("No Exit"));
     };
-    get_installed_route(&exit_mesh_ip, route_dump)
+    get_installed_route_legacy(&exit_mesh_ip, route_dump)
 }
 
 fn get_selected_exit() -> Option<ExitServer> {
@@ -188,9 +188,9 @@ fn get_selected_exit() -> Option<ExitServer> {
 }
 
 fn get_rita_neigh_option(
-    neigh: Option<Neighbor>,
+    neigh: Option<NeighborLegacy>,
     rita_neighbors: &[RitaNeighbor],
-) -> Option<(Neighbor, RitaNeighbor)> {
+) -> Option<(NeighborLegacy, RitaNeighbor)> {
     match neigh {
         Some(neigh) => {
             get_rita_neighbor(&neigh, rita_neighbors).map(|rita_neigh| (neigh, rita_neigh))
@@ -199,7 +199,10 @@ fn get_rita_neigh_option(
     }
 }
 
-fn get_rita_neighbor(neigh: &Neighbor, rita_neighbors: &[RitaNeighbor]) -> Option<RitaNeighbor> {
+fn get_rita_neighbor(
+    neigh: &NeighborLegacy,
+    rita_neighbors: &[RitaNeighbor],
+) -> Option<RitaNeighbor> {
     for rita_neighbor in rita_neighbors.iter() {
         if rita_neighbor.iface_name.contains(&neigh.iface) {
             return Some(rita_neighbor.clone());
@@ -212,8 +215,8 @@ fn send_udp_heartbeat_packet(
     dns_socket: &SocketAddr,
     our_id: Identity,
     exit_price: u64,
-    exit_route: Route,
-    exit_neighbor: Neighbor,
+    exit_route: RouteLegacy,
+    exit_neighbor: NeighborLegacy,
     exit_neighbor_id: Identity,
 ) {
     trace!("building heartbeat packet");

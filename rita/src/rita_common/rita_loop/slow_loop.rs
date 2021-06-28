@@ -5,10 +5,14 @@ use crate::rita_common::utils::wait_timeout::WaitResult;
 use crate::SETTING;
 use actix::System;
 use actix_async::System as AsyncSystem;
-use babel_monitor::open_babel_stream;
-use babel_monitor::set_local_fee;
-use babel_monitor::set_metric_factor;
-use babel_monitor::start_connection;
+// use babel_monitor::open_babel_stream;
+// use babel_monitor::set_local_fee;
+// use babel_monitor::set_metric_factor;
+// use babel_monitor::start_connection;
+use babel_monitor_legacy::open_babel_stream_legacy;
+use babel_monitor_legacy::set_local_fee_legacy;
+use babel_monitor_legacy::set_metric_factor_legacy;
+use babel_monitor_legacy::start_connection_legacy;
 use futures01::future::Future;
 use settings::RitaCommonSettings;
 use std::thread;
@@ -67,12 +71,12 @@ fn set_babel_price() {
     let local_fee = SETTING.get_payment().local_fee;
     let metric_factor = SETTING.get_network().metric_factor;
     let res = wait_timeout(
-        open_babel_stream(babel_port)
+        open_babel_stream_legacy(babel_port)
             .from_err()
             .and_then(move |stream| {
-                start_connection(stream).and_then(move |stream| {
-                    set_local_fee(stream, local_fee)
-                        .and_then(move |stream| Ok(set_metric_factor(stream, metric_factor)))
+                start_connection_legacy(stream).and_then(move |stream| {
+                    set_local_fee_legacy(stream, local_fee)
+                        .and_then(move |stream| Ok(set_metric_factor_legacy(stream, metric_factor)))
                 })
             }),
         SLOW_LOOP_TIMEOUT,

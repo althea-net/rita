@@ -17,6 +17,7 @@ path = "src/client.rs"
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 althea_types = { path = "../althea_types", features = ["actix"]}
 babel_monitor = { path = "../babel_monitor" }
+babel_monitor_legacy = {path = "../babel_monitor_legacy"}
 clu = { path = "../clu" }
 exit_db = { path = "../exit_db" }
 num256 = "0.3"
