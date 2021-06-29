@@ -6,6 +6,8 @@ NODES=${NODES:='None'}
 RUST_TEST_THREADS=1 cargo test --all
 # check for nits
 cargo clippy --all --all-targets --all-features -- -D warnings
+# check for fmt errors
+cargo fmt --all -- --check
 
 # test rita only on many architectures
 CROSS_TEST_ARGS="--verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
