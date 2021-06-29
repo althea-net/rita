@@ -16,14 +16,9 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 
 # Parse command line arguments
 source $DIR/build_common.sh
-
-RUST_TOOLCHAIN="stable"
-CARGO_ROOT="$HOME/.cargo"
-CARGO_GIT="$CARGO_ROOT/.git"
-CARGO_REGISTRY="$CARGO_ROOT/registry"
-
-docker pull ekidd/rust-musl-builder
-RUST_MUSL_BUILDER="docker run --rm -it -v "$(pwd)":/home/rust/src -v $CARGO_GIT:/home/rust/.cargo/git -v $CARGO_REGISTRY:/home/rust/.cargo/registry ekidd/rust-musl-builder"
-$RUST_MUSL_BUILDER sudo chown -R rust:rust /home/rust/.cargo/git /home/rust/.cargo/registry
-
-$RUST_MUSL_BUILDER cargo build --all ${PROFILE} ${FEATURES}
+pushd $DIR/dockerfile
+docker build -t cross-rita .
+popd
+pushd $DIR/../
+cross build --target x86_64-unknown-linux-gnu --all ${PROFILE} --features rita/openssl
+popd
