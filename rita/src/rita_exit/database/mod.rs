@@ -4,19 +4,18 @@
 
 use crate::rita_common::debt_keeper::get_debts_list;
 use crate::rita_common::debt_keeper::DebtAction;
-use crate::rita_common::utils::wait_timeout::wait_timeout;
-use crate::rita_common::utils::wait_timeout::WaitResult;
 use crate::rita_exit::database::database_tools::client_conflict;
 use crate::rita_exit::database::database_tools::create_or_update_user_record;
 use crate::rita_exit::database::database_tools::delete_client;
 use crate::rita_exit::database::database_tools::get_client;
 use crate::rita_exit::database::database_tools::get_database_connection;
+use crate::rita_exit::database::database_tools::get_database_connection_sync;
 use crate::rita_exit::database::database_tools::set_client_timestamp;
 use crate::rita_exit::database::database_tools::update_client;
 use crate::rita_exit::database::database_tools::verify_client;
 use crate::rita_exit::database::database_tools::verify_db_client;
 use crate::rita_exit::database::email::handle_email_registration;
-use crate::rita_exit::database::geoip::get_country_async;
+use crate::rita_exit::database::geoip::get_country;
 use crate::rita_exit::database::geoip::get_gateway_ip_bulk;
 use crate::rita_exit::database::geoip::get_gateway_ip_single;
 use crate::rita_exit::database::geoip::verify_ip;
@@ -26,7 +25,6 @@ use crate::rita_exit::database::struct_tools::display_hashset;
 use crate::rita_exit::database::struct_tools::to_exit_client;
 use crate::rita_exit::database::struct_tools::to_identity;
 use crate::rita_exit::database::struct_tools::verif_done;
-use crate::rita_exit::rita_loop::EXIT_LOOP_TIMEOUT;
 use crate::EXIT_ALLOWED_COUNTRIES;
 use crate::EXIT_DESCRIPTION;
 use crate::EXIT_NETWORK_SETTINGS;
@@ -107,77 +105,82 @@ pub fn secs_since_unix_epoch() -> i64 {
 /// ip and then sends out an email of phone message
 pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState, Error = Error> {
     info!("got setup request {:?}", client);
-    get_gateway_ip_single(client.global.mesh_ip).and_then(move |gateway_ip| {
-        info!("got gateway ip {:?}", client);
-        verify_ip(gateway_ip).and_then(move |verify_status| {
-            info!("verified the ip country {:?}", client);
-            get_country_async(gateway_ip).and_then(move |user_country| {
-                info!("got the country  {:?}", client);
-                get_database_connection().and_then(move |conn| {
-                    info!("Doing database work for {:?} in country {} with verify_status {}", client, user_country, verify_status);
-                    // check if we have any users with conflicting details
-                    match client_conflict(&client, &conn) {
-                        Ok(true) => {
-                            return Box::new(future::ok(ExitState::Denied {
-                                message: format!(
-                                    "Partially changed registration details! Please reset your router and re-register with all new details. Backup your key first! {}",
-                                    display_hashset(&*EXIT_ALLOWED_COUNTRIES),
-                                ),
-                            }))
-                                as Box<dyn Future<Item = ExitState, Error = Error>>
-                        }
-                        Ok(false) => {}
-                        Err(e) => return Box::new(future::err(e)),
-                    }
+    let gateway_ip = match get_gateway_ip_single(client.global.mesh_ip) {
+        Ok(a) => a,
+        Err(e) => {
+            return Box::new(future::err(e)) as Box<dyn Future<Item = ExitState, Error = Error>>
+        }
+    };
 
-                    let their_record =
-                        match create_or_update_user_record(&conn, &client, user_country) {
-                            Ok(record) => record,
-                            Err(e) => return Box::new(future::err(e)),
-                        };
+    info!("got gateway ip {:?}", client);
+    let verify_status = verify_ip(gateway_ip).unwrap();
+    info!("verified the ip country {:?}", client);
+    let user_country = get_country(gateway_ip).unwrap();
+    info!("got the country  {:?}", client);
 
-                    // either update and grab an existing entry or create one
-                    match (verify_status, EXIT_VERIF_SETTINGS.clone()) {
-                        (true, Some(ExitVerifSettings::Email(mailer))) => {
-                            Box::new(handle_email_registration(
-                                &client,
-                                &their_record,
-                                &conn,
-                                mailer.email_cooldown as i64,
-                            ))
-                        }
-                        (true, Some(ExitVerifSettings::Phone(phone))) => Box::new(
-                            handle_sms_registration(client, their_record, phone.auth_api_key),
-                        ),
-                        (true, None) => {
-                            match verify_client(&client, true, &conn) {
-                                Ok(_) => (),
-                                Err(e) => return Box::new(future::err(e)),
-                            }
-                            let client_internal_ip = match their_record.internal_ip.parse() {
-                                Ok(ip) => ip,
-                                Err(e) => return Box::new(future::err(format_err!("{:?}", e))),
-                            };
+    let conn = match get_database_connection_sync() {
+        Ok(a) => a,
+        Err(e) => return Box::new(future::err(e)),
+    };
 
-                            Box::new(future::ok(ExitState::Registered {
-                                our_details: ExitClientDetails { client_internal_ip },
-                                general_details: get_exit_info(),
-                                message: "Registration OK".to_string(),
-                            }))
-                        }
-                        (false, _) => Box::new(future::ok(ExitState::Denied {
-                            message: format!(
-                                "This exit only accepts connections from {}",
-                                display_hashset(&*EXIT_ALLOWED_COUNTRIES),
-                            ),
-                        })),
-                    }
-                })
-            })
-        })
-    })
+    info!(
+        "Doing database work for {:?} in country {} with verify_status {}",
+        client, user_country, verify_status
+    );
+    // check if we have any users with conflicting details
+    match client_conflict(&client, &conn) {
+        Ok(true) => {
+            return Box::new(future::ok(ExitState::Denied {
+                message: format!(
+                    "Partially changed registration details! Please reset your router and re-register with all new details. Backup your key first! {}",
+                    display_hashset(&*EXIT_ALLOWED_COUNTRIES),
+                ),
+            }))
+                as Box<dyn Future<Item = ExitState, Error = Error>>
+        }
+        Ok(false) => {}
+        Err(e) => return Box::new(future::err(e)),
+    }
+    let their_record = match create_or_update_user_record(&conn, &client, user_country) {
+        Ok(record) => record,
+        Err(e) => return Box::new(future::err(e)),
+    };
+    // either update and grab an existing entry or create one
+    match (verify_status, EXIT_VERIF_SETTINGS.clone()) {
+        (true, Some(ExitVerifSettings::Email(mailer))) => Box::new(handle_email_registration(
+            &client,
+            &their_record,
+            &conn,
+            mailer.email_cooldown as i64,
+        )),
+        (true, Some(ExitVerifSettings::Phone(phone))) => Box::new(handle_sms_registration(
+            client,
+            their_record,
+            phone.auth_api_key,
+        )),
+        (true, None) => {
+            match verify_client(&client, true, &conn) {
+                Ok(_) => (),
+                Err(e) => return Box::new(future::err(e)),
+            }
+            let client_internal_ip = match their_record.internal_ip.parse() {
+                Ok(ip) => ip,
+                Err(e) => return Box::new(future::err(format_err!("{:?}", e))),
+            };
+            Box::new(future::ok(ExitState::Registered {
+                our_details: ExitClientDetails { client_internal_ip },
+                general_details: get_exit_info(),
+                message: "Registration OK".to_string(),
+            }))
+        }
+        (false, _) => Box::new(future::ok(ExitState::Denied {
+            message: format!(
+                "This exit only accepts connections from {}",
+                display_hashset(&*EXIT_ALLOWED_COUNTRIES),
+            ),
+        })),
+    }
 }
-
 /// Gets the status of a client and updates it in the database
 pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<ExitState, Error> {
     trace!("Checking if record exists for {:?}", client.global.mesh_ip);
@@ -251,11 +254,7 @@ pub fn validate_clients_region(
             Err(_e) => error!("Database entry with invalid mesh ip! {:?}", item),
         }
     }
-    let list = match wait_timeout(get_gateway_ip_bulk(ip_vec), EXIT_LOOP_TIMEOUT) {
-        WaitResult::Err(e) => return Err(e),
-        WaitResult::Ok(val) => val,
-        WaitResult::TimedOut(_) => return Err(format_err!("Timed out!")),
-    };
+    let list = get_gateway_ip_bulk(ip_vec)?;
     for item in list.iter() {
         let res = verify_ip_sync(item.gateway_ip);
         match res {
