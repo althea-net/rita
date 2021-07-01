@@ -33,3 +33,24 @@ cargo install diesel_cli --no-default-features --features sqlite
 bpkg install sudomesh/network-lab
 bash rita.sh
 ```
+
+
+
+Running Docker to check logs:
+
+Docker is useful when encountering errors when running integration tests. These error messages are usually not very descriptive, so to view the backtrace and 
+debugging lines (for instance 'info!' macro), we can view log files of rita instances, which we can access with docker container. Get docker running by following the instructions below.
+
+run the test using the command
+    bash scripts/test.sh
+once you have the test env running, open a new terminal and run:
+  docker exec -it rita-test /bin/bash
+once you are in the docker, navigate to 
+    althea_rs/integration-tests
+
+wait for the error and then check this directory for corresponding logs messages.
+log files are of the format rita-n*.log
+When adding more info! macro debugging lines, make sure to commit these changes to see these in the logs.
+
+
+

@@ -7,9 +7,9 @@ use actix_web::AsyncResponder;
 use actix_web::{HttpRequest, Json};
 use althea_types::Identity;
 use arrayvec::ArrayString;
+use babel_monitor::get_installed_route;
+use babel_monitor::get_route_via_neigh;
 use babel_monitor::Route as RouteLegacy;
-use babel_monitor_legacy::get_installed_route_legacy;
-use babel_monitor_legacy::get_route_via_neigh_legacy;
 use babel_monitor_legacy::open_babel_stream_legacy;
 use babel_monitor_legacy::parse_routes_legacy;
 use babel_monitor_legacy::start_connection_legacy;
@@ -118,7 +118,7 @@ fn generate_neighbors_list(
             Some(val) => val,
             None => ArrayString::<32>::from("No Nickname").unwrap(),
         };
-        let maybe_route = get_installed_route_legacy(&identity.mesh_ip, &route_table_sample);
+        let maybe_route = get_installed_route(&identity.mesh_ip, &route_table_sample);
         if maybe_route.is_err() {
             output.push(nonviable_node_info(
                 nickname,
@@ -135,7 +135,7 @@ fn generate_neighbors_list(
         if let (Some(current_exit), Some(stats_entry)) = tup {
             let exit_ip = current_exit.id.mesh_ip;
             let maybe_exit_route =
-                get_route_via_neigh_legacy(identity.mesh_ip, exit_ip, &route_table_sample);
+                get_route_via_neigh(identity.mesh_ip, exit_ip, &route_table_sample);
 
             // We have a peer that is an exit, so we can't find a route
             // from them to our selected exit. Other errors can also get

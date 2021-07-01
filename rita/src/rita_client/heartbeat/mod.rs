@@ -23,10 +23,10 @@ use actix::{Arbiter, SystemService};
 use althea_types::HeartbeatMessage;
 use althea_types::Identity;
 use althea_types::WgKey;
+use babel_monitor::get_installed_route;
+use babel_monitor::get_neigh_given_route;
 use babel_monitor::Neighbor as NeighborLegacy;
 use babel_monitor::Route as RouteLegacy;
-use babel_monitor_legacy::get_installed_route_legacy;
-use babel_monitor_legacy::get_neigh_given_route_legacy;
 use failure::Error;
 use futures01::future::Future;
 use settings::client::ExitServer;
@@ -100,7 +100,7 @@ pub fn send_udp_heartbeat() {
                 match get_selected_exit_route(&network_info.babel_routes) {
                     Ok(route) => {
                         let neigh_option =
-                            get_neigh_given_route_legacy(&route, &network_info.babel_neighbors);
+                            get_neigh_given_route(&route, &network_info.babel_neighbors);
                         let neigh_option =
                             get_rita_neigh_option(neigh_option, &network_info.rita_neighbors);
                         if let Some((neigh, rita_neigh)) = neigh_option {
@@ -178,7 +178,7 @@ fn get_selected_exit_route(route_dump: &[RouteLegacy]) -> Result<RouteLegacy, Er
     } else {
         return Err(format_err!("No Exit"));
     };
-    get_installed_route_legacy(&exit_mesh_ip, route_dump)
+    get_installed_route(&exit_mesh_ip, route_dump)
 }
 
 fn get_selected_exit() -> Option<ExitServer> {

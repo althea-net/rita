@@ -11,7 +11,7 @@ use actix_web::AsyncResponder;
 use actix_web::Path;
 use actix_web::{HttpRequest, HttpResponse, Json};
 use althea_types::ExitState;
-use babel_monitor_legacy::do_we_have_route_legacy;
+use babel_monitor::do_we_have_route;
 use babel_monitor_legacy::open_babel_stream_legacy;
 use babel_monitor_legacy::parse_routes_legacy;
 use babel_monitor_legacy::start_connection_legacy;
@@ -84,10 +84,8 @@ impl Handler<GetExitInfo> for Dashboard {
 
                             for exit in exit_client.exits.clone().into_iter() {
                                 let selected = is_selected(&exit.1, current_exit);
-                                let have_route = do_we_have_route_legacy(
-                                    &exit.1.id.mesh_ip,
-                                    &route_table_sample,
-                                )?;
+                                let have_route =
+                                    do_we_have_route(&exit.1.id.mesh_ip, &route_table_sample)?;
 
                                 // failed pings block for one second, so we should be sure it's at least reasonable
                                 // to expect the pings to work before issuing them.

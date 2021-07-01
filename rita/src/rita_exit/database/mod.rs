@@ -19,7 +19,6 @@ use crate::rita_exit::database::geoip::get_country;
 use crate::rita_exit::database::geoip::get_gateway_ip_bulk;
 use crate::rita_exit::database::geoip::get_gateway_ip_single;
 use crate::rita_exit::database::geoip::verify_ip;
-use crate::rita_exit::database::geoip::verify_ip_sync;
 use crate::rita_exit::database::sms::handle_sms_registration;
 use crate::rita_exit::database::struct_tools::display_hashset;
 use crate::rita_exit::database::struct_tools::to_exit_client;
@@ -113,9 +112,21 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
     };
 
     info!("got gateway ip {:?}", client);
-    let verify_status = verify_ip(gateway_ip).unwrap();
+    let verify_status = match verify_ip(gateway_ip) {
+        Ok(a) => a,
+        Err(e) => {
+            return Box::new(future::err(e)) as Box<dyn Future<Item = ExitState, Error = Error>>
+        }
+    };
+
     info!("verified the ip country {:?}", client);
-    let user_country = get_country(gateway_ip).unwrap();
+    let user_country = match get_country(gateway_ip) {
+        Ok(a) => a,
+        Err(e) => {
+            return Box::new(future::err(e)) as Box<dyn Future<Item = ExitState, Error = Error>>
+        }
+    };
+
     info!("got the country  {:?}", client);
 
     let conn = match get_database_connection_sync() {
@@ -256,7 +267,7 @@ pub fn validate_clients_region(
     }
     let list = get_gateway_ip_bulk(ip_vec)?;
     for item in list.iter() {
-        let res = verify_ip_sync(item.gateway_ip);
+        let res = verify_ip(item.gateway_ip);
         match res {
             Ok(true) => trace!("{:?} is from an allowed ip", item),
             Ok(false) => {

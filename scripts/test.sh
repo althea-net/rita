@@ -18,6 +18,7 @@ cross test --target mips64-unknown-linux-gnuabi64 $CROSS_TEST_ARGS
 cross test --target mips64el-unknown-linux-gnuabi64 $CROSS_TEST_ARGS
 cross test --target aarch64-unknown-linux-gnu $CROSS_TEST_ARGS
 
+
 if ! modprobe wireguard ; then
 	echo "The container can't load modules into the host kernel"
 	echo "Please install WireGuard https://www.wireguard.com/ and load the kernel module using 'sudo modprobe wireguard'"

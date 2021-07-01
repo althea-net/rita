@@ -18,6 +18,7 @@ use ipnetwork::IpNetwork;
 use std::error::Error as ErrorTrait;
 use std::f32;
 use std::fmt::Debug;
+use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Write;
 use std::iter::Iterator;
@@ -53,16 +54,16 @@ pub enum BabelMonitorError {
     NoTerminator(String),
     #[fail(display = "No Neighbor was found matching address:\n{}", _0)]
     NoNeighbor(String),
-    #[fail(display = "Tokio had a failure while it was talking to babel:\n{}", _0)]
-    TokioError(String),
+    #[fail(display = "Tcp connection failure while talking to babel:\n{}", _0)]
+    TcpError(String),
 }
 
 use crate::BabelMonitorError::{
     CommandFailed, InvalidPreamble, LocalFeeNotFound, NoNeighbor, NoTerminator, ReadFailed,
-    TokioError, VariableNotFound,
+    TcpError, VariableNotFound,
 };
 
-fn find_babel_val(val: &str, line: &str) -> Result<String, Error> {
+pub fn find_babel_val(val: &str, line: &str) -> Result<String, Error> {
     let mut iter = line.split(' ');
     while let Some(entry) = iter.next() {
         if entry == val {
@@ -76,7 +77,7 @@ fn find_babel_val(val: &str, line: &str) -> Result<String, Error> {
     Err(VariableNotFound(String::from(val), String::from(line)).into())
 }
 
-fn find_and_parse_babel_val<T: FromStr>(val: &str, line: &str) -> Result<T, Error>
+pub fn find_and_parse_babel_val<T: FromStr>(val: &str, line: &str) -> Result<T, Error>
 where
     <T as FromStr>::Err: Debug + ErrorTrait + Sync + Send + 'static,
 {
@@ -134,13 +135,22 @@ pub fn open_babel_stream(babel_port: u16, timeout: Duration) -> Result<TcpStream
     let socket_string = format!("[::1]:{}", babel_port);
     trace!("About to open Babel socket using {}", socket_string);
     let socket: SocketAddr = socket_string.parse().unwrap();
-    let stream = TcpStream::connect_timeout(&socket, timeout).expect("connect_timeout error");
+    let mut stream = TcpStream::connect_timeout(&socket, timeout).expect("connect_timeout error");
     stream
         .set_read_timeout(Some(timeout))
         .expect("set_read_timeout failed");
     stream
         .set_write_timeout(Some(timeout))
         .expect("set_write_timeout failed");
+
+    // Consumes the automated Preamble and validates configuration api version
+    info!("Starting babel connection");
+    let result = read_babel(&mut stream, String::new(), 0);
+    if let Err(e) = result {
+        return Err(e);
+    }
+    let preamble = result.unwrap();
+    validate_preamble(preamble)?;
     Ok(stream)
 }
 
@@ -152,25 +162,38 @@ fn read_babel(
     previous_contents: String,
     depth: usize,
 ) -> Result<String, Error> {
+    info!(
+        "starting read babel with {} and {}",
+        previous_contents, depth
+    );
     // 500kbytes / 0.5mbyte
     const BUFFER_SIZE: usize = 500_000;
-    let buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+    let mut buffer = vec![0; BUFFER_SIZE];
 
-    let result = stream.read(&mut buffer.to_vec());
+    let result = stream.read(&mut buffer);
+
+    if let Err(e) = result {
+        if e.kind() == ErrorKind::WouldBlock {
+            // response is not yet on the wire wait for it
+            thread::sleep(SLEEP_TIME);
+            return read_babel(stream, previous_contents, depth + 1);
+        } else {
+            return Err(e.into());
+        }
+    }
 
     let bytes = result?;
     let full_buffer = bytes == BUFFER_SIZE;
 
     let output = String::from_utf8(buffer.to_vec());
     if let Err(e) = output {
-        return Err(TokioError(format!("{:?}", e)).into());
+        return Err(TcpError(format!("{:?}", e)).into());
     }
     let output = output.unwrap();
     let output = output.trim_matches(char::from(0));
-    trace!(
+    info!(
         "Babel monitor got {} bytes with the message {}",
-        bytes,
-        output
+        bytes, output
     );
 
     // It's possible we caught babel in the middle of writing to the socket
@@ -194,7 +217,7 @@ fn read_babel(
         // we must have caught babel while it was interrupted (only really happens
         // in single cpu situations)
         thread::sleep(SLEEP_TIME);
-        trace!("we didn't get the whole message yet, trying again");
+        info!("we didn't get the whole message yet, trying again");
         return read_babel(stream, full_message, depth + 1);
     } else if let Err(e) = babel_data {
         // some other error
@@ -237,7 +260,7 @@ fn read_babel_sync(output: &str) -> Result<String, BabelMonitorError> {
 }
 
 pub fn run_command(stream: &mut TcpStream, cmd: &str) -> Result<String, Error> {
-    trace!("Running babel command {}", cmd);
+    info!("Running babel command {}", cmd);
     let cmd = format!("{}\n", cmd);
     let bytes = cmd.as_bytes().to_vec();
     let out = stream.write_all(&bytes);
@@ -247,24 +270,11 @@ pub fn run_command(stream: &mut TcpStream, cmd: &str) -> Result<String, Error> {
     }
 
     let _res = out.unwrap();
-    trace!("Command write succeeded, returning output");
+    info!("Command write succeeded, returning output");
     read_babel(stream, String::new(), 0)
 }
 
-// Consumes the automated Preamble and validates configuration api version
-pub fn start_connection(stream: &mut TcpStream) -> Result<(), Error> {
-    trace!("Starting babel connection");
-    let result = read_babel(stream, String::new(), 0);
-
-    if let Err(e) = result {
-        return Err(e);
-    }
-    let preamble = result.unwrap();
-    validate_preamble(preamble)?;
-    Ok(())
-}
-
-fn validate_preamble(preamble: String) -> Result<(), Error> {
+pub fn validate_preamble(preamble: String) -> Result<(), Error> {
     // Note you have changed the config interface, bump to 1.1 in babel
     if preamble.contains("ALTHEA 0.1") {
         trace!("Attached OK to Babel with preamble: {}", preamble);
@@ -284,7 +294,7 @@ pub fn parse_interfaces(stream: &mut TcpStream) -> Result<Vec<Interface>, Error>
     parse_interfaces_sync(babel_output)
 }
 
-fn parse_interfaces_sync(output: String) -> Result<Vec<Interface>, Error> {
+pub fn parse_interfaces_sync(output: String) -> Result<Vec<Interface>, Error> {
     let mut vector: Vec<Interface> = Vec::new();
     let mut found_interface = false;
     for entry in output.split('\n') {
@@ -327,7 +337,7 @@ pub fn get_local_fee(stream: &mut TcpStream) -> Result<u32, Error> {
     get_local_fee_sync(babel_output)
 }
 
-fn get_local_fee_sync(babel_output: String) -> Result<u32, Error> {
+pub fn get_local_fee_sync(babel_output: String) -> Result<u32, Error> {
     let fee_entry = match babel_output.split('\n').next() {
         Some(entry) => entry,
         // Even an empty string wouldn't yield None
@@ -417,7 +427,7 @@ pub fn parse_neighs(stream: &mut TcpStream) -> Result<Vec<Neighbor>, Error> {
     parse_neighs_sync(output)
 }
 
-fn parse_neighs_sync(output: String) -> Result<Vec<Neighbor>, Error> {
+pub fn parse_neighs_sync(output: String) -> Result<Vec<Neighbor>, Error> {
     let mut vector: Vec<Neighbor> = Vec::with_capacity(5);
     let mut found_neigh = false;
     for entry in output.split('\n') {
@@ -484,7 +494,7 @@ pub fn parse_routes(stream: &mut TcpStream) -> Result<Vec<Route>, Error> {
 pub fn parse_routes_sync(babel_out: String) -> Result<Vec<Route>, Error> {
     let mut vector: Vec<Route> = Vec::with_capacity(20);
     let mut found_route = false;
-    trace!("Got from babel dump: {}", babel_out);
+    info!("Got from babel dump: {}", babel_out);
 
     for entry in babel_out.split('\n') {
         if entry.contains("add route") {

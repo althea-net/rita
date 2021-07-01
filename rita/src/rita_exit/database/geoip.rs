@@ -4,7 +4,6 @@ use crate::KI;
 use crate::SETTING;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
-use babel_monitor::start_connection;
 use failure::Error;
 use ipnetwork::IpNetwork;
 use settings::exit::RitaExitSettings;
@@ -24,7 +23,6 @@ pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Result<IpAddr, Error> {
     let babel_port = SETTING.get_network().babel_port;
 
     let mut stream = open_babel_stream(babel_port, EXIT_LOOP_TIMEOUT)?;
-    let _start_conn = start_connection(&mut stream);
 
     let routes = parse_routes(&mut stream)?;
 
@@ -58,8 +56,6 @@ pub fn get_gateway_ip_bulk(mesh_ip_list: Vec<IpAddr>) -> Result<Vec<IpPair>, Err
     trace!("getting gateway ip bulk");
 
     let mut stream = open_babel_stream(babel_port, EXIT_LOOP_TIMEOUT)?;
-
-    let _start_conn = start_connection(&mut stream);
 
     let routes = parse_routes(&mut stream)?;
 
@@ -196,15 +192,6 @@ pub fn get_country(ip: IpAddr) -> Result<String, Error> {
 /// Returns true or false if an ip is confirmed to be inside or outside the region and error
 /// if an api error is encountered trying to figure that out.
 pub fn verify_ip(request_ip: IpAddr) -> Result<bool, Error> {
-    match verify_ip_sync(request_ip) {
-        Ok(item) => Ok(item),
-        Err(e) => Err(e),
-    }
-}
-
-/// Returns true or false if an ip is confirmed to be inside or outside the region and error
-/// if an api error is encountered trying to figure that out.
-pub fn verify_ip_sync(request_ip: IpAddr) -> Result<bool, Error> {
     // in this case we have a gateway directly attached to the exit, so our
     // peer address for them will be an fe80 linklocal ip address. When we
     // detect this we know that they are in the allowed countries list because

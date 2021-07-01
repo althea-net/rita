@@ -12,6 +12,11 @@ extern crate failure;
 extern crate log;
 extern crate futures;
 
+use babel_monitor::get_local_fee_sync;
+use babel_monitor::parse_interfaces_sync;
+use babel_monitor::parse_neighs_sync;
+use babel_monitor::parse_routes_sync;
+use babel_monitor::validate_preamble;
 use babel_monitor::Interface;
 use babel_monitor::Neighbor;
 use babel_monitor::Route;
@@ -20,14 +25,10 @@ use futures::future;
 use futures::future::result as future_result;
 use futures::future::Either;
 use futures::future::Future;
-use ipnetwork::IpNetwork;
-use std::error::Error as ErrorTrait;
 use std::fmt::Debug;
-use std::iter::Iterator;
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::str;
-use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
 use tokio::io::read;
@@ -63,40 +64,7 @@ pub enum BabelMonitorError {
     TokioError(String),
 }
 
-use crate::BabelMonitorError::{
-    CommandFailed, InvalidPreamble, LocalFeeNotFound, NoNeighbor, NoTerminator, ReadFailed,
-    TokioError, VariableNotFound,
-};
-
-fn find_babel_val(val: &str, line: &str) -> Result<String, Error> {
-    let mut iter = line.split(' ');
-    while let Some(entry) = iter.next() {
-        if entry == val {
-            match iter.next() {
-                Some(v) => return Ok(v.to_string()),
-                None => continue,
-            }
-        }
-    }
-    trace!("find_babel_val warn! Can not find {} in {}", val, line);
-    Err(VariableNotFound(String::from(val), String::from(line)).into())
-}
-
-fn find_and_parse_babel_val<T: FromStr>(val: &str, line: &str) -> Result<T, Error>
-where
-    <T as FromStr>::Err: Debug + ErrorTrait + Sync + Send + 'static,
-{
-    match find_babel_val(val, line) {
-        Ok(string_val) => match string_val.parse() {
-            Ok(parsed_val) => Ok(parsed_val),
-            Err(e) => {
-                warn!("Error parsing {} from {} with {:?}", val, line, e);
-                Err(e.into())
-            }
-        },
-        Err(e) => Err(e),
-    }
-}
+use crate::BabelMonitorError::{CommandFailed, NoTerminator, ReadFailed, TokioError};
 
 /// Opens a tcpstream to the babel management socket using a standard timeout
 /// for both the open and read operations
@@ -238,16 +206,6 @@ pub fn start_connection_legacy(stream: TcpStream) -> impl Future<Item = TcpStrea
     })
 }
 
-fn validate_preamble(preamble: String) -> Result<(), Error> {
-    // Note you have changed the config interface, bump to 1.1 in babel
-    if preamble.contains("ALTHEA 0.1") {
-        trace!("Attached OK to Babel with preamble: {}", preamble);
-        Ok(())
-    } else {
-        Err(InvalidPreamble(preamble).into())
-    }
-}
-
 pub fn parse_interfaces_legacy(
     stream: TcpStream,
 ) -> impl Future<Item = (TcpStream, Vec<Interface>), Error = Error> {
@@ -260,39 +218,6 @@ pub fn parse_interfaces_legacy(
     })
 }
 
-fn parse_interfaces_sync(output: String) -> Result<Vec<Interface>, Error> {
-    let mut vector: Vec<Interface> = Vec::new();
-    let mut found_interface = false;
-    for entry in output.split('\n') {
-        if entry.contains("add interface") {
-            found_interface = true;
-            let interface = Interface {
-                name: match find_babel_val("interface", entry) {
-                    Ok(val) => val,
-                    Err(_) => continue,
-                },
-                up: match find_and_parse_babel_val("up", entry) {
-                    Ok(val) => val,
-                    Err(_) => continue,
-                },
-                ipv4: match find_and_parse_babel_val("ipv4", entry) {
-                    Ok(val) => Some(val),
-                    Err(_) => None,
-                },
-                ipv6: match find_and_parse_babel_val("ipv6", entry) {
-                    Ok(val) => Some(val),
-                    Err(_) => None,
-                },
-            };
-            vector.push(interface);
-        }
-    }
-    if vector.is_empty() && found_interface {
-        bail!("All Babel Interface parsing failed!")
-    }
-    Ok(vector)
-}
-
 pub fn get_local_fee(stream: TcpStream) -> impl Future<Item = (TcpStream, u32), Error = Error> {
     run_command(stream, "dump").then(|output| {
         if let Err(e) = output {
@@ -301,22 +226,6 @@ pub fn get_local_fee(stream: TcpStream) -> impl Future<Item = (TcpStream, u32), 
         let (stream, babel_output) = output.unwrap();
         Ok((stream, get_local_fee_sync(babel_output)?))
     })
-}
-
-fn get_local_fee_sync(babel_output: String) -> Result<u32, Error> {
-    let fee_entry = match babel_output.split('\n').next() {
-        Some(entry) => entry,
-        // Even an empty string wouldn't yield None
-        None => return Err(LocalFeeNotFound(String::from("<Babel output is None>")).into()),
-    };
-
-    if fee_entry.contains("local fee") {
-        let fee = find_babel_val("fee", fee_entry)?.parse()?;
-        trace!("Retrieved a local fee of {}", fee);
-        return Ok(fee);
-    }
-
-    Err(LocalFeeNotFound(String::from(fee_entry)).into())
 }
 
 pub fn set_local_fee_legacy(
@@ -411,60 +320,6 @@ pub fn parse_neighs_legacy(
     })
 }
 
-fn parse_neighs_sync(output: String) -> Result<Vec<Neighbor>, Error> {
-    let mut vector: Vec<Neighbor> = Vec::with_capacity(5);
-    let mut found_neigh = false;
-    for entry in output.split('\n') {
-        if entry.contains("add neighbour") {
-            found_neigh = true;
-            let neigh = Neighbor {
-                id: match find_babel_val("neighbour", entry) {
-                    Ok(val) => val,
-                    Err(_) => continue,
-                },
-                address: match find_and_parse_babel_val("address", entry) {
-                    Ok(entry) => entry,
-                    Err(_) => continue,
-                },
-                iface: match find_babel_val("if", entry) {
-                    Ok(val) => val,
-                    Err(_) => continue,
-                },
-                reach: match find_babel_val("reach", entry) {
-                    Ok(val) => match u16::from_str_radix(&val, 16) {
-                        Ok(val) => val,
-                        Err(e) => {
-                            warn!("Failed to convert reach {:?} {}", e, entry);
-                            continue;
-                        }
-                    },
-                    Err(_) => continue,
-                },
-                txcost: match find_and_parse_babel_val("txcost", entry) {
-                    Ok(entry) => entry,
-                    Err(_) => continue,
-                },
-                rxcost: match find_and_parse_babel_val("rxcost", entry) {
-                    Ok(entry) => entry,
-                    Err(_) => continue,
-                },
-                // it's possible that the neighbor does not have rtt enabled
-                rtt: find_and_parse_babel_val("rtt", entry).unwrap_or(0.0),
-                rttcost: find_and_parse_babel_val("rttcost", entry).unwrap_or(0),
-                cost: match find_and_parse_babel_val("cost", entry) {
-                    Ok(entry) => entry,
-                    Err(_) => continue,
-                },
-            };
-            vector.push(neigh);
-        }
-    }
-    if vector.is_empty() && found_neigh {
-        bail!("All Babel neigh parsing failed!")
-    }
-    Ok(vector)
-}
-
 pub fn parse_routes_legacy(
     stream: TcpStream,
 ) -> impl Future<Item = (TcpStream, Vec<Route>), Error = Error> {
@@ -477,139 +332,10 @@ pub fn parse_routes_legacy(
     })
 }
 
-pub fn parse_routes_sync(babel_out: String) -> Result<Vec<Route>, Error> {
-    let mut vector: Vec<Route> = Vec::with_capacity(20);
-    let mut found_route = false;
-    trace!("Got from babel dump: {}", babel_out);
-
-    for entry in babel_out.split('\n') {
-        if entry.contains("add route") {
-            trace!("Parsing 'add route' entry: {}", entry);
-            found_route = true;
-            let route = Route {
-                id: match find_babel_val("route", entry) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                },
-                iface: match find_babel_val("if", entry) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                },
-                xroute: false,
-                installed: match find_babel_val("installed", entry) {
-                    Ok(value) => value.contains("yes"),
-                    Err(_) => continue,
-                },
-                neigh_ip: match find_and_parse_babel_val("via", entry) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                },
-                prefix: match find_and_parse_babel_val("prefix", entry) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                },
-                metric: match find_and_parse_babel_val("metric", entry) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                },
-                refmetric: match find_and_parse_babel_val("refmetric", entry) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                },
-                full_path_rtt: match find_and_parse_babel_val("full-path-rtt", entry) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                },
-                price: match find_and_parse_babel_val("price", entry) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                },
-                fee: match find_and_parse_babel_val("fee", entry) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                },
-            };
-
-            vector.push(route);
-        }
-    }
-    if vector.is_empty() && found_route {
-        bail!("All Babel route parsing failed!")
-    }
-    Ok(vector)
-}
-
-/// In this function we take a route snapshot then loop over the routes list twice
-/// to find the neighbor local address and then the route to the destination
-/// via that neighbor. This could be dramatically more efficient if we had the neighbors
-/// local ip lying around somewhere.
-pub fn get_route_via_neigh_legacy(
-    neigh_mesh_ip: IpAddr,
-    dest_mesh_ip: IpAddr,
-    routes: &[Route],
-) -> Result<Route, Error> {
-    // First find the neighbors route to itself to get the local address
-    for neigh_route in routes.iter() {
-        // This will fail on v4 babel routes etc
-        if let IpNetwork::V6(ref ip) = neigh_route.prefix {
-            if ip.ip() == neigh_mesh_ip {
-                let neigh_local_ip = neigh_route.neigh_ip;
-                // Now we take the neigh_local_ip and search for a route via that
-                for route in routes.iter() {
-                    if let IpNetwork::V6(ref ip) = route.prefix {
-                        if ip.ip() == dest_mesh_ip && route.neigh_ip == neigh_local_ip {
-                            return Ok(route.clone());
-                        }
-                    }
-                }
-            }
-        }
-    }
-    Err(NoNeighbor(neigh_mesh_ip.to_string()).into())
-}
-
-/// Very simple utility function to get a neighbor given a route that traverses that neighbor
-pub fn get_neigh_given_route_legacy(route: &Route, neighs: &[Neighbor]) -> Option<Neighbor> {
-    for neigh in neighs.iter() {
-        if route.neigh_ip == neigh.address {
-            return Some(neigh.clone());
-        }
-    }
-    None
-}
-
-/// Checks if Babel has an installed route to the given destination
-pub fn do_we_have_route_legacy(mesh_ip: &IpAddr, routes: &[Route]) -> Result<bool, Error> {
-    for route in routes.iter() {
-        if let IpNetwork::V6(ref ip) = route.prefix {
-            if ip.ip() == *mesh_ip && route.installed {
-                return Ok(true);
-            }
-        }
-    }
-    Ok(false)
-}
-/// Returns the installed route to a given destination
-pub fn get_installed_route_legacy(mesh_ip: &IpAddr, routes: &[Route]) -> Result<Route, Error> {
-    let mut exit_route = None;
-    for route in routes.iter() {
-        // Only ip6
-        if let IpNetwork::V6(ref ip) = route.prefix {
-            // Only host addresses and installed routes
-            if ip.prefix() == 128 && route.installed && IpAddr::V6(ip.ip()) == *mesh_ip {
-                exit_route = Some(route);
-                break;
-            }
-        }
-    }
-    if exit_route.is_none() {
-        bail!("No installed route to that destination!");
-    }
-    Ok(exit_route.unwrap().clone())
-}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use babel_monitor::find_babel_val;
 
     static TABLE: &str =
 "local fee 1024\n\

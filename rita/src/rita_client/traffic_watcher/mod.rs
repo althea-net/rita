@@ -35,8 +35,8 @@ use actix_web::client;
 use actix_web::client::Connection;
 use actix_web::HttpMessage;
 use althea_types::Identity;
+use babel_monitor::get_installed_route;
 use babel_monitor::Route as RouteLegacy;
-use babel_monitor_legacy::get_installed_route_legacy;
 use failure::Error;
 use futures01::future::ok as future_ok;
 use futures01::future::Future;
@@ -242,7 +242,7 @@ fn find_exit_route_capped(
     routes: Vec<RouteLegacy>,
 ) -> Result<RouteLegacy, Error> {
     let max_fee = SETTING.get_payment().max_fee;
-    let mut exit_route = get_installed_route_legacy(&exit_mesh_ip, &routes)?;
+    let mut exit_route = get_installed_route(&exit_mesh_ip, &routes)?;
     if exit_route.price > max_fee {
         let mut capped_route = exit_route.clone();
         capped_route.price = max_fee;
