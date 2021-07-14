@@ -3,8 +3,8 @@ use crate::rita_common::debt_keeper::send_debt_update;
 use crate::rita_common::network_monitor::NetworkInfo as NetworkMonitorTick;
 use crate::rita_common::network_monitor::NetworkMonitor;
 use crate::rita_common::payment_validator::validate;
-use crate::rita_common::peer_listener::GetPeers;
-use crate::rita_common::peer_listener::PeerListener;
+use crate::rita_common::peer_listener::get_peers;
+use crate::rita_common::peer_listener::tick;
 use crate::rita_common::rita_loop::set_gateway;
 use crate::rita_common::traffic_watcher::{TrafficWatcher, Watch};
 use crate::rita_common::tunnel_manager::gc::TriggerGc;
@@ -198,43 +198,26 @@ impl Handler<Tick> for RitaFastLoop {
 
         let start = Instant::now();
         trace!("Starting PeerListener tick");
-        Arbiter::spawn(
-            PeerListener::from_registry()
-                .send(Tick {})
-                .timeout(FAST_LOOP_TIMEOUT)
-                .then(move |res| {
-                    info!(
-                        "PeerListener tick completed in {}s {}ms, with result {:?}",
-                        start.elapsed().as_secs(),
-                        start.elapsed().subsec_millis(),
-                        res
-                    );
-                    res
-                })
-                .then(|_| Ok(())),
+
+        tick();
+
+        info!(
+            "PeerListener tick completed in {}s {}ms",
+            start.elapsed().as_secs(),
+            start.elapsed().subsec_millis(),
         );
 
         let start = Instant::now();
         trace!("Getting Peers from PeerListener to pass to TunnelManager");
-        Arbiter::spawn(
-            PeerListener::from_registry()
-                .send(GetPeers {})
-                .timeout(FAST_LOOP_TIMEOUT)
-                .and_then(move |peers| {
-                    // GetPeers never fails so unwrap is safe
-                    let peers = peers.unwrap();
-                    info!(
-                        "PeerListener get {} peers completed in {}s {}ms",
-                        peers.len(),
-                        start.elapsed().as_secs(),
-                        start.elapsed().subsec_millis(),
-                    );
-                    TunnelManager::from_registry()
-                        .send(PeersToContact::new(peers))
-                        .timeout(FAST_LOOP_TIMEOUT)
-                })
-                .then(|_| Ok(())),
+
+        let peers = get_peers();
+        info!(
+            "PeerListener get {} peers completed in {}s {}ms",
+            peers.len(),
+            start.elapsed().as_secs(),
+            start.elapsed().subsec_millis(),
         );
+        TunnelManager::from_registry().do_send(PeersToContact::new(peers));
 
         Ok(())
     }

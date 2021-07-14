@@ -1,10 +1,8 @@
 //! A generalized interface for modifying networking interface assignments using UCI
-use crate::rita_common::peer_listener::PeerListener;
-use crate::rita_common::peer_listener::UnListen;
+use crate::rita_common::peer_listener::unlisten_interface;
 use crate::ARGS;
 use crate::KI;
 use crate::SETTING;
-use actix::SystemService;
 use actix_web::Path;
 use actix_web::{HttpRequest, HttpResponse, Json};
 use failure::Error;
@@ -228,7 +226,7 @@ pub fn ethernet_transform_mode(
         // listening then we can remove the section, we also need to remove it
         // from the config
         InterfaceMode::Mesh => {
-            PeerListener::from_registry().do_send(UnListen(ifname.to_string()));
+            unlisten_interface(ifname.to_string());
             SETTING.get_network_mut().peer_interfaces.remove(ifname);
 
             let ret = KI.del_uci_var(&filtered_ifname);

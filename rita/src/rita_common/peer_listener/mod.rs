@@ -10,15 +10,19 @@
 mod message;
 
 use self::message::PeerMessage;
-use crate::rita_common::rita_loop::fast_loop::Tick;
 use crate::KI;
 use crate::SETTING;
-use ::actix::{Actor, Context};
-use ::actix::{Handler, Message, Supervised, SystemService};
 use failure::Error;
 use settings::RitaCommonSettings;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
+use std::sync::Arc;
+use std::sync::RwLock;
+
+lazy_static! {
+    static ref PEER_LISTENER: Arc<RwLock<PeerListener>> =
+        Arc::new(RwLock::new(PeerListener::default()));
+}
 
 #[derive(Debug)]
 pub struct PeerListener {
@@ -43,10 +47,6 @@ impl Peer {
     }
 }
 
-impl Actor for PeerListener {
-    type Context = Context<Self>;
-}
-
 impl Default for PeerListener {
     fn default() -> PeerListener {
         PeerListener::new().unwrap()
@@ -62,122 +62,52 @@ impl PeerListener {
     }
 }
 
-impl Supervised for PeerListener {}
-
-impl PeerListener {
-    fn listen_to_available_ifaces(&mut self) {
-        let interfaces = SETTING.get_network().peer_interfaces.clone();
-        let iface_list = interfaces;
-        for iface in iface_list.iter() {
-            if !self.interfaces.contains_key(iface) {
-                match ListenInterface::new(iface) {
-                    Ok(new_listen_interface) => {
-                        self.interfaces
-                            .insert(new_listen_interface.ifname.clone(), new_listen_interface);
-                    }
-                    Err(_e) => {}
+fn listen_to_available_ifaces(peer_listener: &mut PeerListener) {
+    let interfaces = SETTING.get_network().peer_interfaces.clone();
+    let iface_list = interfaces;
+    for iface in iface_list.iter() {
+        if !peer_listener.interfaces.contains_key(iface) {
+            match ListenInterface::new(iface) {
+                Ok(new_listen_interface) => {
+                    peer_listener
+                        .interfaces
+                        .insert(new_listen_interface.ifname.clone(), new_listen_interface);
                 }
+                Err(_e) => {}
             }
         }
     }
 }
 
-impl SystemService for PeerListener {
-    // Binds to all ready interfaces
-    fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        info!("PeerListener starting");
-        self.listen_to_available_ifaces();
+pub fn tick() {
+    trace!("Starting PeerListener tick!");
+
+    let mut writer = PEER_LISTENER.write().unwrap();
+    send_im_here(&mut writer.interfaces);
+
+    (*writer).peers = receive_im_here(&mut writer.interfaces);
+
+    listen_to_available_ifaces(&mut writer);
+}
+
+#[allow(dead_code)]
+pub fn unlisten_interface(interface: String) {
+    trace!("Peerlistener unlisten on {:?}", interface);
+    let ifname_to_delete = interface;
+    let mut writer = PEER_LISTENER.write().unwrap();
+    if writer.interfaces.contains_key(&ifname_to_delete) {
+        writer.interfaces.remove(&ifname_to_delete);
+        SETTING
+            .get_network_mut()
+            .peer_interfaces
+            .remove(&ifname_to_delete);
+    } else {
+        error!("Tried to unlisten interface that's not present!")
     }
 }
 
-impl Handler<Tick> for PeerListener {
-    type Result = Result<(), Error>;
-    fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
-        trace!("Starting PeerListener tick!");
-        send_im_here(&mut self.interfaces);
-
-        self.peers = receive_im_here(&mut self.interfaces);
-
-        self.listen_to_available_ifaces();
-
-        Ok(())
-    }
-}
-
-// message containing interface name as a string
-pub struct Listen(pub String);
-impl Message for Listen {
-    type Result = ();
-}
-
-/// Adds a given interface to the list of interfaces on which peers can be found
-/// and contacted
-impl Handler<Listen> for PeerListener {
-    type Result = ();
-
-    fn handle(&mut self, listen: Listen, _: &mut Context<Self>) -> Self::Result {
-        trace!("Peerlistener listen on {:?}", listen.0);
-        let new_iface_name = listen.0;
-
-        if self.interfaces.contains_key(&new_iface_name) {
-            error!("Someone attempted a double listen!");
-            return;
-        }
-
-        let new_iface = ListenInterface::new(&new_iface_name);
-        match new_iface {
-            Ok(n) => {
-                SETTING
-                    .get_network_mut()
-                    .peer_interfaces
-                    .insert(new_iface_name.clone());
-                self.interfaces.insert(new_iface_name, n);
-            }
-            Err(e) => {
-                error!("Peer listener failed to listen on {:?}", e);
-            }
-        }
-    }
-}
-
-// message containing interface name as a string
-pub struct UnListen(pub String);
-impl Message for UnListen {
-    type Result = ();
-}
-
-/// Removes a given interface to the list of interfaces on which peers can be found
-/// and contacted
-impl Handler<UnListen> for PeerListener {
-    type Result = ();
-
-    fn handle(&mut self, un_listen: UnListen, _: &mut Context<Self>) -> Self::Result {
-        trace!("Peerlistener unlisten on {:?}", un_listen.0);
-        let ifname_to_delete = un_listen.0;
-        if self.interfaces.contains_key(&ifname_to_delete) {
-            self.interfaces.remove(&ifname_to_delete);
-            SETTING
-                .get_network_mut()
-                .peer_interfaces
-                .remove(&ifname_to_delete);
-        } else {
-            error!("Tried to unlisten interface that's not present!")
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct GetPeers();
-impl Message for GetPeers {
-    type Result = Result<HashMap<IpAddr, Peer>, Error>;
-}
-
-impl Handler<GetPeers> for PeerListener {
-    type Result = Result<HashMap<IpAddr, Peer>, Error>;
-
-    fn handle(&mut self, _: GetPeers, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.peers.clone())
-    }
+pub fn get_peers() -> HashMap<IpAddr, Peer> {
+    PEER_LISTENER.read().unwrap().peers.clone()
 }
 
 #[derive(Debug)]
