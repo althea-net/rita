@@ -9,26 +9,57 @@
 pub mod message;
 
 use self::message::PeerMessage;
+use crate::tunnel_manager::TunnelManager;
+use crate::IdentityCallback;
 use crate::KI;
+use actix::Arbiter;
+use actix::SystemService;
+use althea_types::LocalIdentity;
 use failure::Error;
-
+use futures01::Future;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
 use std::sync::Arc;
 use std::sync::RwLock;
 
 lazy_static! {
-    static ref PEER_LISTENER: Arc<RwLock<PeerListener>> =
+    pub static ref PEER_LISTENER: Arc<RwLock<PeerListener>> =
         Arc::new(RwLock::new(PeerListener::default()));
 }
 
 #[derive(Debug)]
 pub struct PeerListener {
-    interfaces: HashMap<String, ListenInterface>,
-    peers: HashMap<IpAddr, Peer>,
+    pub interfaces: HashMap<String, ListenInterface>,
+    pub peers: HashMap<IpAddr, Peer>,
+
+    ///This hashmap is used to map a SocketAddr to the ListenInterface name. This way we are able to get
+    /// all the information of the interface after receiving a hello message. For instance, when receiving a
+    /// Hello, we are able to determine the udp port to sent the response on using this map.
+    pub interface_map: HashMap<SocketAddr, String>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+///There are two types of hello messages. When we receive a inital hello (not a response)
+///and when we receive a response to a hello we sent. 1 indicates we received a response hello message.
+///This is the internal struct that carries information about local identity and which peer to send
+///this message to, as well as whether this is a response or intial contact message.
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct Hello {
+    pub my_id: LocalIdentity,
+    pub to: Peer,
+    pub response: bool,
+}
+
+impl Hello {
+    pub fn new(id: LocalIdentity, peer: Peer, res: bool) -> Hello {
+        Hello {
+            my_id: id,
+            to: peer,
+            response: res,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, Copy)]
 pub struct Peer {
     pub ifidx: u32,
     pub contact_socket: SocketAddr,
@@ -56,6 +87,7 @@ impl PeerListener {
         Ok(PeerListener {
             interfaces: HashMap::new(),
             peers: HashMap::new(),
+            interface_map: HashMap::new(),
         })
     }
 }
@@ -83,7 +115,13 @@ pub fn tick() {
     let mut writer = PEER_LISTENER.write().unwrap();
     send_im_here(&mut writer.interfaces);
 
-    (*writer).peers = receive_im_here(&mut writer.interfaces);
+    let (a, b) = receive_im_here(&mut writer.interfaces);
+    {
+        (*writer).peers = a;
+        (*writer).interface_map = b;
+    }
+
+    receive_hello(&mut writer);
 
     listen_to_available_ifaces(&mut writer);
 }
@@ -116,8 +154,9 @@ pub struct ListenInterface {
     ifname: String,
     ifidx: u32,
     multicast_socketaddr: SocketAddrV6,
-    multicast_socket: UdpSocket,
-    linklocal_socket: UdpSocket,
+    linklocal_socketaddr: SocketAddrV6,
+    pub multicast_socket: UdpSocket,
+    pub linklocal_socket: UdpSocket,
     linklocal_ip: Ipv6Addr,
 }
 
@@ -160,6 +199,7 @@ impl ListenInterface {
             multicast_socket,
             linklocal_socket,
             multicast_socketaddr,
+            linklocal_socketaddr,
             linklocal_ip: link_ip,
         })
     }
@@ -185,9 +225,12 @@ fn send_im_here(interfaces: &mut HashMap<String, ListenInterface>) {
     }
 }
 
-fn receive_im_here(interfaces: &mut HashMap<String, ListenInterface>) -> HashMap<IpAddr, Peer> {
+fn receive_im_here(
+    interfaces: &mut HashMap<String, ListenInterface>,
+) -> (HashMap<IpAddr, Peer>, HashMap<SocketAddr, String>) {
     trace!("About to dequeue ImHere");
     let mut output = HashMap::<IpAddr, Peer>::new();
+    let mut interface_map = HashMap::<SocketAddr, String>::new();
     for obj in interfaces.iter_mut() {
         let listen_interface = obj.1;
         // Since the only datagrams we are interested in are very small (22 bytes plus overhead)
@@ -216,6 +259,10 @@ fn receive_im_here(interfaces: &mut HashMap<String, ListenInterface>) -> HashMap
                     warn!("ImHere decode failed: {:?}", e);
                     continue;
                 }
+                _ => {
+                    error!("Received Hello on multicast socket, Error");
+                    panic!("Should not receive Hello message on multicast socket");
+                }
             };
 
             if ipaddr == listen_interface.linklocal_ip {
@@ -233,7 +280,156 @@ fn receive_im_here(interfaces: &mut HashMap<String, ListenInterface>) -> HashMap
             info!("ImHere with {:?}", ipaddr);
             let peer = Peer::new(ipaddr, listen_interface.ifidx);
             output.insert(peer.contact_socket.ip(), peer);
+            interface_map.insert(peer.contact_socket, listen_interface.ifname.clone());
         }
     }
-    output
+    (output, interface_map)
+}
+
+pub fn send_hello(msg: &Hello, socket: &UdpSocket, send_addr: SocketAddr, sender_wgport: u16) {
+    trace!("Sending a Hello message");
+
+    let message = PeerMessage::Hello {
+        my_id: msg.my_id,
+        response: msg.response,
+        sender_wgport,
+    };
+    let encoded_message = PeerMessage::encode(&message).to_vec();
+    let result = socket.send_to(&encoded_message, send_addr);
+    if result.is_err() {
+        info!("Sending Hello message failed with {:?}", result);
+    }
+}
+
+pub fn receive_hello(writer: &mut PeerListener) {
+    trace!("Dequeing Hello");
+    for obj in writer.interfaces.iter_mut() {
+        let listen_interface = obj.1;
+
+        //datagrams are larger than im here, so buffer is larger
+        loop {
+            const BUFFER_SIZE: usize = 500;
+            let mut datagram: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+            let (bytes_read, sock_addr) =
+                match listen_interface.linklocal_socket.recv_from(&mut datagram) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        trace!("Could not recv Hello: {:?}", e);
+                        break;
+                    }
+                };
+            if bytes_read == BUFFER_SIZE {
+                error!(
+                    "Failed to read entire datagram on linklocal peer socket! {:?}",
+                    datagram
+                );
+                continue;
+            }
+            trace!(
+                "Received {} bytes on linklocal socket from {:?}",
+                bytes_read,
+                sock_addr
+            );
+            let peer_to_send = Peer {
+                contact_socket: sock_addr,
+                ifidx: listen_interface.ifidx,
+            };
+
+            writer
+                .interface_map
+                .insert(sock_addr, listen_interface.ifname.clone());
+
+            let encoded_msg = datagram.to_vec();
+            match PeerMessage::decode(&encoded_msg) {
+                Ok(PeerMessage::ImHere(_ipaddr)) => {
+                    error!("Should not revceive Im Here on linklocal socket, Error");
+                    panic!("Received an ImHere message on a linkLocal socket")
+                }
+                Ok(PeerMessage::Hello {
+                    my_id,
+                    response,
+                    sender_wgport,
+                }) => {
+                    //We received an initial hello contact message
+                    if !response {
+                        trace!(
+                            "Received a PeerMessage with fields: {:?}, {:?}, {:?}",
+                            my_id,
+                            response,
+                            sender_wgport
+                        );
+
+                        let their_id = my_id;
+                        let peer = Peer {
+                            contact_socket: sock_addr,
+                            ifidx: 0,
+                        };
+
+                        let future = TunnelManager::from_registry()
+                            .send(IdentityCallback::new(their_id, peer, None, None))
+                            .from_err()
+                            .and_then(move |tunnel| {
+                                let tunnel = match tunnel {
+                                    Some(val) => val,
+                                    None => return Err(format_err!("tunnel open failure!")),
+                                };
+
+                                let our_id = LocalIdentity {
+                                    global: match settings::get_rita_common().get_identity() {
+                                        Some(id) => id,
+                                        None => {
+                                            return Err(format_err!(
+                                                "Identity has no mesh IP ready yet"
+                                            ))
+                                        }
+                                    },
+                                    wg_port: tunnel.0.listen_port,
+                                    have_tunnel: Some(tunnel.1),
+                                };
+
+
+                                let response_hello = Hello::new(our_id, peer, true);
+
+                                let reader = PEER_LISTENER.read().unwrap();
+                                match reader.interface_map.get(&sock_addr) {
+                                    Some(str) => {
+                                        let peer_reader = PEER_LISTENER.read().unwrap();
+                                        match peer_reader.interfaces.get(str) {
+                                            Some(l_inter) => {
+                                                send_hello(&response_hello, &l_inter.linklocal_socket, sock_addr, sender_wgport);
+                                            },
+                                            None => info!("No udpsocket present for interface inorder to send a response"),
+                                        }
+                                    }
+                                    None => {
+                                        info!("No interface present for peer inorder to send a response");
+                                    }
+                                };
+                                Ok(())
+                            })
+                            .then(|_| Ok(()));
+                        Arbiter::spawn(future);
+
+                        //we received a hello response message
+                    } else {
+                        trace!(
+                            "Received a hello response with id wgport and peer: {:?}",
+                            my_id.wg_port
+                        );
+                        let their_id = my_id;
+                        TunnelManager::from_registry().do_send(IdentityCallback::new(
+                            their_id,
+                            peer_to_send,
+                            Some(sender_wgport),
+                            None,
+                        ));
+                    }
+                }
+                Err(e) => {
+                    warn!("Hello decode failed: {:?}", e);
+                    continue;
+                }
+            };
+        }
+    }
 }

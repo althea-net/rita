@@ -10,7 +10,9 @@ pub mod neighbor_status;
 pub mod shaping;
 
 use crate::hello_handler::Hello;
-use crate::peer_listener::Peer;
+use crate::peer_listener::Hello as NewHello;
+use crate::peer_listener::PEER_LISTENER;
+use crate::peer_listener::{send_hello, Peer};
 use crate::rita_loop::is_gateway;
 use crate::KI;
 #[cfg(test)]
@@ -28,11 +30,10 @@ use failure::Error;
 use futures01::Future;
 use rand::thread_rng;
 use rand::Rng;
-
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Display;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 use std::path::Path;
 use std::time::{Duration, Instant};
 use tokio::timer::Delay;
@@ -549,11 +550,31 @@ impl Handler<PeersToContact> for TunnelManager {
 
 /// Sets out to contact a neighbor, takes a speculative port (only assigned if the neighbor
 /// responds successfully)
-fn contact_neighbor(peer: &Peer, our_port: u16) -> Result<(), Error> {
-    let mut network = settings::get_rita_common().get_network();
+fn contact_neighbor(
+    peer: &Peer,
+    our_port: u16,
+    socket: &UdpSocket,
+    send_addr: SocketAddr,
+) -> Result<(), Error> {
+    let mut settings = settings::get_rita_common();
+    let mut network = settings.get_network();
     KI.manual_peers_route(&peer.contact_socket.ip(), &mut network.last_default_route)?;
 
-    HelloHandler::from_registry().do_send(Hello {
+    let msg = Hello {
+        my_id: LocalIdentity {
+            global: settings
+                .get_identity()
+                .ok_or_else(|| format_err!("Identity has no mesh IP ready yet"))?,
+            wg_port: our_port,
+            have_tunnel: None,
+        },
+        to: *peer,
+    };
+
+    settings.set_network(network);
+    settings::set_rita_common(settings);
+
+    let new_msg = NewHello {
         my_id: LocalIdentity {
             global: settings::get_rita_common()
                 .get_identity()
@@ -561,8 +582,16 @@ fn contact_neighbor(peer: &Peer, our_port: u16) -> Result<(), Error> {
             wg_port: our_port,
             have_tunnel: None,
         },
-        to: peer.clone(),
-    });
+        to: *peer,
+        response: false,
+    };
+
+    //new send_hello call using udp socket
+    send_hello(&new_msg, &socket, send_addr, our_port);
+
+    //old hello manager over http
+    HelloHandler::from_registry().do_send(msg);
+
     Ok(())
 }
 
@@ -686,7 +715,18 @@ impl TunnelManager {
                                 ifidx: 0,
                                 contact_socket: socket,
                             };
-                            let res = contact_neighbor(&man_peer, our_port);
+
+                            let reader = PEER_LISTENER.read().unwrap();
+                            let iface_name =
+                                match reader.interface_map.get(&man_peer.contact_socket) {
+                                    Some(a) => a,
+                                    None => panic!("No interface in the hashmap to send a message"),
+                                };
+                            let udp_socket = match reader.interfaces.get(iface_name) {
+                                Some(a) => &a.linklocal_socket,
+                                None => panic!("No udp socket present for given interface"),
+                            };
+                            let res = contact_neighbor(&man_peer, our_port, &udp_socket, socket);
                             if res.is_err() {
                                 warn!("Contact neighbor failed with {:?}", res);
                             }
@@ -729,7 +769,17 @@ impl TunnelManager {
             }
         };
 
-        contact_neighbor(peer, our_port)
+        let reader = PEER_LISTENER.read().unwrap();
+
+        let iface_name = match reader.interface_map.get(&peer.contact_socket) {
+            Some(a) => a,
+            None => panic!("No interface in the hashmap to send a message"),
+        };
+        let udp_socket = match reader.interfaces.get(iface_name) {
+            Some(a) => &a.linklocal_socket,
+            None => panic!("No udp socket present for given interface"),
+        };
+        contact_neighbor(peer, our_port, &udp_socket, peer.contact_socket)
     }
 
     /// Given a LocalIdentity, connect to the neighbor over wireguard
