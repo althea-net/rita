@@ -7,7 +7,7 @@
 
 use crate::peer_listener::Peer;
 use crate::tunnel_manager::id_callback::IdentityCallback;
-use crate::tunnel_manager::{PortCallback, TunnelManager};
+use crate::tunnel_manager::TunnelManager;
 use actix::{Actor, Context, Handler, Message, ResponseFuture, Supervised, SystemService};
 use actix_web::client::Connection;
 use actix_web::{client, HttpMessage, Result};
@@ -67,7 +67,6 @@ impl Handler<Hello> for HelloHandler {
                 Ok(s) => s,
                 Err(e) => {
                     trace!("Error getting stream from hello {:?}", e);
-                    TunnelManager::from_registry().do_send(PortCallback(wg_port));
                     return Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = Error>>;
                 }
             };
@@ -80,7 +79,6 @@ impl Handler<Hello> for HelloHandler {
                 Ok(n) => n,
                 Err(e) => {
                     trace!("Error serializing our request {:?}", e);
-                    TunnelManager::from_registry().do_send(PortCallback(wg_port));
                     return Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = Error>>;
                 }
             };
@@ -102,14 +100,12 @@ impl Handler<Hello> for HelloHandler {
                         }
                         Err(e) => {
                             trace!("Got error deserializing Hello {:?}", e);
-                            TunnelManager::from_registry().do_send(PortCallback(wg_port));
                             Ok(())
                         }
                     }))
                         as Box<dyn Future<Item = (), Error = Error>>,
                     Err(e) => {
                         trace!("Got error getting Hello response {:?}", e);
-                        TunnelManager::from_registry().do_send(PortCallback(wg_port));
                         Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = Error>>
                     }
                 }

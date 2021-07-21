@@ -44,13 +44,7 @@ impl Handler<IdentityCallback> for TunnelManager {
     fn handle(&mut self, msg: IdentityCallback, _: &mut Context<Self>) -> Self::Result {
         let our_port = match msg.our_port {
             Some(port) => port,
-            _ => match self.get_port(0) {
-                Some(p) => p,
-                None => {
-                    warn!("Failed to allocate tunnel port! All tunnel opening will fail");
-                    return None;
-                }
-            },
+            _ => self.get_port(),
         };
 
         let res = self.open_tunnel(

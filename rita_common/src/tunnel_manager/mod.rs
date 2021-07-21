@@ -28,9 +28,8 @@ use babel_monitor_legacy::start_connection_legacy;
 use babel_monitor_legacy::unmonitor_legacy;
 use failure::Error;
 use futures01::Future;
-use rand::thread_rng;
-use rand::Rng;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::Display;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
@@ -49,8 +48,6 @@ type Resolver = resolver::Resolver;
 
 #[derive(Debug, Fail)]
 pub enum TunnelManagerError {
-    #[fail(display = "Port Error: {:?}", _0)]
-    PortError(String),
     #[fail(display = "Invalid state")]
     _InvalidStateError,
 }
@@ -278,8 +275,6 @@ impl Tunnel {
                                 if let Err(e) = KI.del_interface(&tunnel.iface_name) {
                                     error!("Failed to delete wg interface! {:?}", e);
                                 }
-                                TunnelManager::from_registry()
-                                    .do_send(PortCallback(tunnel.listen_port));
                                 Ok(())
                             });
                         Arbiter::spawn(fut);
@@ -296,7 +291,6 @@ impl Tunnel {
         if let Err(e) = KI.del_interface(&self.iface_name) {
             error!("Failed to delete wg interface! {:?}", e);
         }
-        TunnelManager::from_registry().do_send(PortCallback(self.listen_port));
         // deletes the leftover iptables rule, be sure this matches the rule
         // generated in light client manager exactly
         let _res = KI.add_iptables_rule(
@@ -318,7 +312,7 @@ impl Tunnel {
 }
 
 pub struct TunnelManager {
-    free_ports: Vec<u16>,
+    free_ports: VecDeque<u16>,
     tunnels: HashMap<Identity, Vec<Tunnel>>,
 }
 
@@ -392,22 +386,6 @@ impl Handler<TunnelUnMonitorFailure> for TunnelManager {
                 "Unmonitoring tunnel has failed! Babel will now listen on a non-existent tunnel"
             );
         }
-    }
-}
-
-// An attempt to contact a neighbor has failed and we need to return the port to
-// the available ports list
-pub struct PortCallback(pub u16);
-impl Message for PortCallback {
-    type Result = ();
-}
-
-impl Handler<PortCallback> for TunnelManager {
-    type Result = ();
-
-    fn handle(&mut self, msg: PortCallback, _: &mut Context<Self>) -> Self::Result {
-        let port = msg.0;
-        self.free_ports.push(port);
     }
 }
 
@@ -641,40 +619,32 @@ impl TunnelManager {
     }
 
     /// Gets a port off of the internal port list after checking that said port is free
-    /// with the operating system, level argument is always zero for callers and is used
-    /// interally to prevent unchecked recursion
-    fn get_port(&mut self, level: usize) -> Option<u16> {
+    /// with the operating system. It maintains a list of all possible ports and gives out
+    /// the oldest port, i.e. when it gives out a port, it pushes it back on the end of the
+    /// vecdeque so that by the time we come back around to it, it is either in use, or tunnel
+    /// allocation has failed so we can use it without issues.
+    fn get_port(&mut self) -> u16 {
         let udp_table = KI.used_ports();
-        let mut rng = thread_rng();
-        let val = rng.gen_range(0..self.free_ports.len());
-        let port = self.free_ports.remove(val);
-        match (port, udp_table) {
-            (p, Ok(used_ports)) => {
-                if used_ports.contains(&p) {
-                    warn!(
-                        "We tried to allocate a used port {}!, there are {} ports remaining",
-                        p,
-                        self.free_ports.len()
-                    );
 
-                    if level < 10 {
-                        self.free_ports.push(p);
-                        self.get_port(level + 1)
+        loop {
+            let port = match self.free_ports.pop_front() {
+                Some(a) => a,
+                None => panic!("No elements present in the ports vecdeque"),
+            };
+            self.free_ports.push_back(port);
+            match (port, &udp_table) {
+                (p, Ok(used_ports)) => {
+                    if used_ports.contains(&p) {
+                        continue;
                     } else {
-                        // we've tried a bunch of ports and all are used
-                        // break recusion and die, hopefully to be restarted in 15min
-                        error!("We ran out of ports!");
-                        panic!("We ran out of ports!");
+                        return p;
                     }
-                } else {
-                    Some(p)
                 }
-            }
-            (_p, Err(e)) => {
-                // better not to open an individual tunnel than it is to
-                // risk having a failed one
-                warn!("Failed to check if port was in use! {:?}", e);
-                None
+                (_p, Err(e)) => {
+                    // better not to open an individual tunnel than it is to
+                    // risk having a failed one
+                    panic!("Failed to check if port was in use! UdpTable from get_port returned error {:?}", e);
+                }
             }
         }
     }
@@ -688,15 +658,7 @@ impl TunnelManager {
         let is_gateway = is_gateway();
         let rita_hello_port = network_settings.rita_hello_port;
 
-        let our_port = match self.get_port(0) {
-            Some(p) => p,
-            None => {
-                warn!("Failed to allocate tunnel port! All tunnel opening will fail");
-                return Err(
-                    TunnelManagerError::PortError("No remaining ports!".to_string()).into(),
-                );
-            }
-        };
+        let our_port = self.get_port();
 
         let res = Resolver::from_registry()
             .send(resolver::Resolve::host(their_hostname.clone()))
@@ -741,13 +703,11 @@ impl TunnelManager {
                 }
                 Err(e) => {
                     warn!("Actor mailbox failure from DNS resolver! {:?}", e);
-                    TunnelManager::from_registry().do_send(PortCallback(our_port));
                     Ok(())
                 }
 
                 Ok(Err(e)) => {
                     warn!("DNS resolution failed with {:?}", e);
-                    TunnelManager::from_registry().do_send(PortCallback(our_port));
                     Ok(())
                 }
             });
@@ -759,15 +719,7 @@ impl TunnelManager {
     /// interface name.
     pub fn neighbor_inquiry(&mut self, peer: &Peer) -> Result<(), Error> {
         trace!("TunnelManager neigh inquiry for {:?}", peer);
-        let our_port = match self.get_port(0) {
-            Some(p) => p,
-            None => {
-                warn!("Failed to allocate tunnel port! All tunnel opening will fail");
-                return Err(
-                    TunnelManagerError::PortError("No remaining ports!".to_string()).into(),
-                );
-            }
-        };
+        let our_port = self.get_port();
 
         let reader = PEER_LISTENER.read().unwrap();
 
@@ -828,8 +780,6 @@ impl TunnelManager {
             }
 
             if they_have_tunnel {
-                // return allocated port as it's not required
-                self.free_ports.push(our_port);
                 trace!("Looking up for a tunnels by {:?}", key);
                 // Unwrap is safe because we confirm membership
                 let tunnels = &self.tunnels[&key];
@@ -878,7 +828,6 @@ impl TunnelManager {
                     );
                 }
 
-                self.free_ports.push(tunnel.listen_port);
                 return_bool = true;
             }
         }
@@ -1127,7 +1076,7 @@ pub mod tests {
     #[test]
     pub fn test_tunnel_manager() {
         let mut tunnel_manager = TunnelManager::new();
-        assert_eq!(tunnel_manager.free_ports.pop().unwrap(), 65534);
+        assert_eq!(tunnel_manager.free_ports.pop_back().unwrap(), 65534);
     }
 
     #[test]
