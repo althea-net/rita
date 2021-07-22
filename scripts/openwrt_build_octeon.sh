@@ -22,4 +22,4 @@ export OPENSSL_STATIC=1
 
 rustup target add mips64-unknown-linux-gnuabi64
 
-cargo build --target mips64-unknown-linux-gnuabi64 ${PROFILE} ${FEATURES} -p rita --bin rita
+cargo build --target mips64-unknown-linux-gnuabi64 ${PROFILE} ${FEATURES} -p rita_bin --bin rita

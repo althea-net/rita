@@ -49,7 +49,7 @@ lint_clippy:
 cross_arch_mips:
   stage: cross-arch
   variables:
-    CROSS_TEST_ARGS: "--verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
+    CROSS_TEST_ARGS: "--verbose -p rita_bin --bin rita --features bundle_openssl -- --test-threads=1"
   script:
     - "cargo install cross"
     - "cross test --target mips-unknown-linux-gnu $CROSS_TEST_ARGS"
@@ -57,7 +57,7 @@ cross_arch_mips:
 cross_arch_mips_64:
   stage: cross-arch
   variables:
-    CROSS_TEST_ARGS: "--verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
+    CROSS_TEST_ARGS: "--verbose -p rita_bin --bin rita --features bundle_openssl -- --test-threads=1"
   script:
     - "cargo install cross"
     - "cross test --target mips64-unknown-linux-gnuabi64 $CROSS_TEST_ARGS"
@@ -65,7 +65,7 @@ cross_arch_mips_64:
 cross_arch_arm64:
   stage: cross-arch
   variables:
-    CROSS_TEST_ARGS: "--verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1"
+    CROSS_TEST_ARGS: "--verbose -p rita_bin --bin rita --features bundle_openssl -- --test-threads=1"
   script:
     - "cargo install cross"
     - "cross test --target aarch64-unknown-linux-gnu $CROSS_TEST_ARGS"
