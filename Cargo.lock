@@ -55,6 +55,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "actix"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3720d0064a0ce5c0de7bd93bdb0a6caebab2a9b5668746145d7b3b0c5da02914"
+dependencies = [
+ "actix-rt",
+ "actix_derive 0.6.0",
+ "bitflags",
+ "bytes 1.0.1",
+ "crossbeam-channel 0.5.1",
+ "futures-core",
+ "futures-sink",
+ "futures-task",
+ "futures-util",
+ "log",
+ "once_cell",
+ "parking_lot 0.11.1",
+ "pin-project-lite",
+ "smallvec 1.6.1",
+ "tokio 1.8.2",
+ "tokio-util",
+]
+
+[[package]]
 name = "actix-codec"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -544,7 +568,7 @@ dependencies = [
 name = "auto-bridge"
 version = "0.1.5"
 dependencies = [
- "actix 0.11.1",
+ "actix 0.12.0",
  "clarity",
  "futures 0.3.15",
  "log",

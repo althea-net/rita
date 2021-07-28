@@ -650,8 +650,6 @@ mod tests {
         ))
         .unwrap();
 
-        let system = actix::System::new();
-
         let token_bridge = new_token_bridge();
 
         let unapproved_token_bridge = TokenBridge::new(
@@ -663,7 +661,9 @@ mod tests {
             TIMEOUT,
         );
 
-        actix::spawn(async move {
+        let runner = actix::System::new();
+
+        runner.block_on(async move {
             let is_approved = token_bridge.check_if_uniswap_dai_approved().await.unwrap();
             assert!(is_approved);
             let is_approved = unapproved_token_bridge
@@ -671,19 +671,17 @@ mod tests {
                 .await
                 .unwrap();
             assert!(is_approved);
-            actix::System::current().stop();
         });
-        system.run().unwrap();
     }
 
     #[test]
     #[ignore]
     fn test_funds_unlock_boilerplate() {
-        let system = actix::System::new();
+        let runner = actix::System::new();
 
         let bridge = new_token_bridge();
 
-        actix::spawn(async move {
+        runner.block_on(async move {
             let details = bridge
                 .get_relay_message_hash(
                     "0x83b76e9e2acfaf57422f1fc194fd672a2bc267f8fe7a6220d78df3a9260b0a65"
@@ -704,7 +702,6 @@ mod tests {
                 .unwrap();
             actix::System::current().stop();
         });
-        system.run().unwrap();
     }
 
     #[test]
@@ -713,7 +710,7 @@ mod tests {
     /// test data for the entire process
     fn test_funds_unlock() {
         use futures::future::join;
-        let system = actix::System::new();
+        let runner = actix::System::new();
         let dest_address = "0x310d72afc5eef50b52a47362b6dd1913d4c87972"
             .parse()
             .unwrap();
@@ -746,7 +743,7 @@ mod tests {
         // this will break any tx sending! but we don't do that here.
         bridge.own_address = dest_address;
 
-        actix::spawn(async move {
+        runner.block_on(async move {
             // this test may fail if we can't reach our xdai node cluster as we actually go out, call the contract and check
             let details_1 = bridge.get_relay_message_hash(tx_id_1, amount_1.into());
             let details_2 = bridge.get_relay_message_hash(tx_id_2, amount_2.into());
@@ -782,17 +779,16 @@ mod tests {
             );
             actix::System::current().stop();
         });
-        system.run().unwrap();
     }
 
     #[test]
     #[ignore]
     fn test_eth_to_dai_swap() {
-        let system = actix::System::new();
+        let runner = actix::System::new();
 
         let token_bridge = new_token_bridge();
 
-        actix::spawn(async move {
+        runner.block_on(async move {
             let one_cent_in_eth = token_bridge
                 .dai_to_eth_price(eth_to_wei(0.01f64))
                 .await
@@ -801,19 +797,16 @@ mod tests {
                 .eth_to_dai_swap(one_cent_in_eth, TIMEOUT)
                 .await
                 .unwrap();
-            actix::System::current().stop();
         });
-
-        system.run().unwrap();
     }
 
     #[test]
     #[ignore]
     fn test_dai_to_eth_swap() {
-        let system = actix::System::new();
+        let runner = actix::System::new();
         let token_bridge = new_token_bridge();
 
-        actix::spawn(async move {
+        runner.block_on(async move {
             token_bridge
                 .approve_uniswap_dai_transfers(TIMEOUT)
                 .await
@@ -824,47 +817,39 @@ mod tests {
                 .unwrap();
             actix::System::current().stop();
         });
-
-        system.run().unwrap();
     }
 
     #[test]
     #[ignore]
     fn test_dai_to_xdai_bridge() {
-        let system = actix::System::new();
+        let runner = actix::System::new();
 
         let token_bridge = new_token_bridge();
 
-        actix::spawn(async move {
+        runner.block_on(async move {
             // All we can really do here is test that it doesn't throw. Check your balances in
             // 5-10 minutes to see if the money got transferred.
             token_bridge
                 .dai_to_xdai_bridge(eth_to_wei(0.01f64), TIMEOUT)
                 .await
                 .unwrap();
-            actix::System::current().stop();
         });
-
-        system.run().unwrap();
     }
 
     #[test]
     #[ignore]
     fn test_xdai_to_dai_bridge() {
-        let system = actix::System::new();
+        let runner = actix::System::new();
 
         let token_bridge = new_token_bridge();
 
-        actix::spawn(async move {
+        runner.block_on(async move {
             // All we can really do here is test that it doesn't throw. Check your balances in
             // 5-10 minutes to see if the money got transferred.
             token_bridge
                 .xdai_to_dai_bridge(eth_to_wei(0.01f64), 1_000_000_000u64.into())
                 .await
                 .unwrap();
-            actix::System::current().stop();
         });
-
-        system.run().unwrap();
     }
 }
