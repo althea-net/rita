@@ -11,6 +11,8 @@ use num256::Uint256;
 use std::time::Duration;
 use web30::address_to_event;
 use web30::client::Web3;
+use web30::jsonrpc::error::Web3Error;
+use web30::types::Log;
 use web30::types::SendTxOption;
 
 mod error;
@@ -65,6 +67,15 @@ pub struct TokenBridgeAddresses {
 pub struct HelperWithdrawInfo {
     msg: Vec<u8>,
     sigs: Vec<u8>,
+}
+
+/// This represents the xdai withdraw event, including the address that is executing the withdraw
+/// and the destination address of the withdraw on ethereum
+#[derive(Clone, Debug)]
+pub struct WithdrawEvent {
+    sender: Address,
+    receiver: Address,
+    ammount: Uint256,
 }
 
 #[derive(Clone)]
@@ -596,6 +607,149 @@ pub fn default_bridge_addresses() -> TokenBridgeAddresses {
     }
 }
 
+/// Helper function that returns the start and end block number when searching for events
+fn compute_start_end(
+    iter: u64,
+    latest_block: Uint256,
+    total_blocks: u64,
+    max_iter: u64,
+) -> (Uint256, Uint256) {
+    let start_block = (latest_block.clone() - total_blocks.into()) + (max_iter * iter).into();
+    let end_block = if start_block.clone() + max_iter.into() > latest_block {
+        latest_block
+    } else {
+        start_block.clone() + max_iter.into()
+    };
+
+    (start_block, end_block)
+}
+
+/// This helper function parses the data field in the logs returned from when checking for withdraw events related to us in xdai block chain
+/// This parses and returns the sender/receiver addresses and the ammount.
+async fn parse_withdraw_event(log_data: &Log, client: &Web3) -> Result<WithdrawEvent, Web3Error> {
+    let receiver_data = &*log_data.data;
+    let sender_data = match log_data.clone().transaction_hash {
+        Some(a) => a.clone(),
+        None => {
+            return Err(Web3Error::BadResponse(
+                "There is no transaction hash present for the given log".to_string(),
+            ));
+        }
+    };
+    let sender_data = &*sender_data;
+
+    // first receive receiver and ammount
+    let (receiver, ammount) = parse_receiver_data(receiver_data)?;
+
+    println!("Ammount is {:?}", ammount);
+
+    let sender = parse_sender_data(sender_data, client).await?;
+
+    Ok(WithdrawEvent {
+        sender,
+        receiver,
+        ammount,
+    })
+}
+
+/// This function is called at regular intervals to check the 'n' most recent blocks for the event signature 'UserRequestForSignature(_receiver,valueToTransfer)'
+/// This event is called when a user request a withdrawal process, but withdrawals may not be reliable in cases such as when there is a power outage or
+/// if the user does not have enough eth funds to unlock the funds on their side. To alleviate this, this function is called, looks for withdrawal events related to
+/// us and returns these events.
+pub async fn check_withdrawals(
+    blocks_to_check: u64,
+    contract: Address,
+    xdai_web3: Web3,
+    search_addresses: Vec<Address>,
+) -> Result<Vec<WithdrawEvent>, Web3Error> {
+    /// Total number of blocks on the xdai blockchain we retrieve at once. If the blocks to check is greater than this we loop.
+    const MAX_ITER: u64 = 10_000;
+    let mut blocks_left: u64 = blocks_to_check;
+    let mut vec_of_withdraws = Vec::new();
+
+    //get latest xdai block
+    let xdai_client = xdai_web3;
+    let xdai_latest_block = xdai_client.eth_block_number().await?;
+    let mut iter: u64 = 0;
+
+    // iterate MAX_ITER blocks at a time
+    loop {
+        let (start, end) =
+            compute_start_end(iter, xdai_latest_block.clone(), blocks_to_check, MAX_ITER);
+        iter += 1;
+
+        //We search for the phrase UserRequestForSignature(_receiver,valueToTransfer)
+        let phrase_sig = "UserRequestForSignature(address,uint256)";
+
+        let logs = xdai_client
+            .check_for_events(start, Some(end), vec![contract], vec![phrase_sig])
+            .await?;
+
+        for log in logs.iter() {
+            let withdraw_event = parse_withdraw_event(log, &xdai_client).await?;
+            for &search_address in search_addresses.iter() {
+                if withdraw_event.sender == search_address {
+                    vec_of_withdraws.push(withdraw_event.clone());
+                }
+            }
+        }
+
+        // Break from loop if there are no more blocks to check
+        if MAX_ITER > blocks_left {
+            break;
+        }
+        blocks_left -= MAX_ITER;
+    }
+
+    Ok(vec_of_withdraws)
+}
+
+/// This helper function parses the 'Data' field in the Logs returned from when checking for the event signature "UserRequestForSignature(address,uint256)"
+/// This parses and returns the receiver Address and the ammount field.
+fn parse_receiver_data(data: &[u8]) -> Result<(Address, Uint256), Web3Error> {
+    if data.len() < 64 {
+        return Err(Web3Error::BadInput(
+            "Length of the log data is not long enough".to_string(),
+        ));
+    }
+
+    // The address is 20 bytes, and a word is 32 bytes, so our actual address is stored from bytes 12 - 32
+    let address_bytes = &data[12..32];
+    let address = Address::from_slice(address_bytes)?;
+
+    // The next word in payload represents the ammount. this is bytes 32 - 64
+    let ammount_bytes = &data[32..64];
+    let ammount = Uint256::from_bytes_be(ammount_bytes);
+
+    Ok((address, ammount))
+}
+
+/// This helper function parses the transaction_hash field in the Logs returned when checking for the event signature "UserRequestForSignature(address,uint256)"
+/// This parses and returns the senders Address
+async fn parse_sender_data(data: &[u8], client: &Web3) -> Result<Address, Web3Error> {
+    // Transaction hash should be one word
+    if data.len() < 32 {
+        return Err(Web3Error::BadInput(
+            "Length of the transaction hash is not long enough".to_string(),
+        ));
+    }
+
+    let tx_hash = Uint256::from_bytes_be(data);
+    let response = client.eth_get_transaction_by_hash(tx_hash).await?;
+
+    let tx_res = match response {
+        Some(a) => a,
+        None => {
+            return Err(Web3Error::BadResponse(
+                "No Transaction present for the given Hash".to_string(),
+            ));
+        }
+    };
+
+    let sender = tx_res.from;
+    Ok(sender)
+}
+
 #[cfg(test)]
 mod tests {
     use clarity::utils::hex_str_to_bytes;
@@ -850,6 +1004,94 @@ mod tests {
                 .xdai_to_dai_bridge(eth_to_wei(0.01f64), 1_000_000_000u64.into())
                 .await
                 .unwrap();
+        });
+    }
+
+    #[test]
+    fn test_check_withdrawals() {
+        let runner = actix::System::new();
+
+        let token_bridge = new_token_bridge();
+
+        let blocks_to_check = 10000;
+        runner.block_on(async move {
+            // res is empty since we use a dummy address
+            let res = check_withdrawals(
+                blocks_to_check,
+                token_bridge.xdai_bridge_on_xdai,
+                token_bridge.xdai_web3,
+                vec![token_bridge.own_address],
+            )
+            .await
+            .unwrap();
+            println!("{:?}", res);
+        });
+    }
+
+    #[test]
+    fn test_parse_data() {
+        let data: [u8; 64] = [
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 121, 48, 20, 183, 133, 34, 51, 49, 47, 6, 31, 35,
+            114, 158, 231, 84, 35, 113, 40, 143, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 52, 10, 173, 33, 179, 183, 0, 0, 0,
+        ];
+
+        let address_bytes = [
+            121, 48, 20, 183, 133, 34, 51, 49, 47, 6, 31, 35, 114, 158, 231, 84, 35, 113, 40, 143,
+        ];
+        assert_eq!(&data[12..32], address_bytes);
+
+        let ammount_bytes = [
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 52, 10, 173, 33,
+            179, 183, 0, 0, 0,
+        ];
+        assert_eq!(&data[32..64], ammount_bytes);
+
+        let (address, ammount) = parse_receiver_data(&data).unwrap();
+
+        assert_eq!(address, Address::from_slice(&address_bytes).unwrap());
+        assert_eq!(ammount, Uint256::from_bytes_be(&ammount_bytes));
+
+        assert_eq!(address.as_bytes(), address_bytes);
+    }
+
+    #[test]
+    fn test_looping_logic() {
+        let runner = actix::System::new();
+        runner.block_on(async move {
+            let max_iter = 10000;
+
+            let mut blocks_to_search = 99999;
+            let xdai_client = Web3::new("https://dai.althea.net", Duration::from_secs(5));
+            let latest_block = xdai_client.eth_block_number().await.unwrap();
+
+            let (start, end) =
+                compute_start_end(0, latest_block.clone(), blocks_to_search, max_iter);
+            assert_eq!(start, latest_block.clone() - blocks_to_search.into());
+            assert_eq!(end, start + max_iter.into());
+
+            blocks_to_search = 9999;
+            let (start, end) =
+                compute_start_end(0, latest_block.clone(), blocks_to_search, max_iter);
+            assert_eq!(start, latest_block.clone() - blocks_to_search.into());
+            assert_eq!(end, start + blocks_to_search.into());
+
+            blocks_to_search = 10000;
+            let (start, end) =
+                compute_start_end(0, latest_block.clone(), blocks_to_search, max_iter);
+            assert_eq!(start, latest_block.clone() - blocks_to_search.into());
+            assert_eq!(end, start + blocks_to_search.into());
+
+            blocks_to_search = 10001;
+            let (start, end) =
+                compute_start_end(0, latest_block.clone(), blocks_to_search, max_iter);
+            assert_eq!(start, latest_block.clone() - blocks_to_search.into());
+            assert_eq!(end, start + max_iter.into());
+
+            let (start, end) =
+                compute_start_end(1, latest_block.clone(), blocks_to_search, max_iter);
+            assert_eq!(start, latest_block - 1u32.into());
+            assert_eq!(end, start + 1u32.into());
         });
     }
 }

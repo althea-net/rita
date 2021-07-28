@@ -13,6 +13,9 @@ num = "0.4"
 log = "0.4"
 serde_derive = "1.0"
 serde = "1.0"
+failure = "0.1"
+tokio = "1.0"
+futures = {version="0.3", features = ["thread-pool"]}
 
 [dev-dependencies]
 actix = "0.12"

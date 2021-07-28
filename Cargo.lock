@@ -570,6 +570,7 @@ version = "0.1.5"
 dependencies = [
  "actix 0.12.0",
  "clarity",
+ "failure",
  "futures 0.3.15",
  "log",
  "num 0.4.0",
@@ -577,6 +578,7 @@ dependencies = [
  "rand 0.8.4",
  "serde 1.0.126",
  "serde_derive",
+ "tokio 1.8.2",
  "web30 0.14.7",
 ]
 
@@ -1501,6 +1503,7 @@ dependencies = [
  "futures-core",
  "futures-task",
  "futures-util",
+ "num_cpus",
 ]
 
 [[package]]
