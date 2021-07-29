@@ -18,25 +18,16 @@ althea_kernel_interface = { path = "../althea_kernel_interface" }
 antenna_forwarding_client = {path = "../antenna_forwarding_client"}
 althea_types = { path = "../althea_types", features = ["actix"]}
 clu = { path = "../clu" }
-
-
 actix-web-httpauth = {git = "https://github.com/althea-net/actix-web-httpauth"}
-
 actix-async = {package="actix", version = "0.11"}
 actix-web-async = {package="actix-web", version = "4.0.0-beta.6", default_features = false, features= ["openssl"] }
-
 actix = "0.7"
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
 actix_derive = "0.5"
-
 docopt = "1.1"
-
 compressed_log = "0.3.4"
-
 settings = { path = "../settings" }
-
 diesel = { version = "1.4", features = ["postgres", "r2d2"] }
-
 log = { version = "0.4", features = ["release_max_level_info"] }
 serde = "1.0"
 serde_derive = "1.0"
@@ -45,18 +36,13 @@ arrayvec = {version= "0.7", features = ["serde"]}
 hex-literal = "0.3"
 openssl-probe = "0.1"
 env_logger = "0.8"
-
 lazy_static = "1.4"
 failure = "0.1"
-
 phonenumber = "0.3"
 r2d2 = "0.8"
-
-
 rita_common = { path = "../rita_common"}
 rita_client = { path = "../rita_client"}
 rita_exit = { path = "../rita_exit"}
-
 flate2 = { version = "1.0", features = ["rust_backend"], default-features = false }
 reqwest = { version = "0.11", features = ["blocking", "json"] }
 jemallocator = {version = "0.3", optional = true}

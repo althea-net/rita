@@ -4,8 +4,6 @@ version = "0.18.0"
 edition = "2018"
 license = "Apache-2.0"
 
-[lib]
-
 
 [dependencies]
 compressed_log = "0.3.4"
@@ -33,11 +31,8 @@ arrayvec = {version= "0.7", features = ["serde"]}
 log = { version = "0.4", features = ["release_max_level_info"] }
 reqwest = { version = "0.11", features = ["blocking", "json"] }
 exit_db = { path = "../exit_db" }
-
 babel_monitor_legacy = {path = "../babel_monitor_legacy"}
-
 actix-web-httpauth = {git = "https://github.com/althea-net/actix-web-httpauth"}
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
-
 diesel = { version = "1.4", features = ["postgres", "r2d2"] }
 futures01 = { package = "futures", version = "0.1"}
