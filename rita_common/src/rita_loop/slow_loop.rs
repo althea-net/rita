@@ -66,9 +66,10 @@ pub fn start_rita_slow_loop() {
 
 fn set_babel_price() {
     let start = Instant::now();
-    let babel_port = settings::get_rita_common().get_network().babel_port;
-    let local_fee = settings::get_rita_common().get_payment().local_fee;
-    let metric_factor = settings::get_rita_common().get_network().metric_factor;
+    let common = settings::get_rita_common();
+    let babel_port = common.network.babel_port;
+    let local_fee = common.payment.local_fee;
+    let metric_factor = common.network.metric_factor;
     let res = wait_timeout(
         open_babel_stream_legacy(babel_port)
             .from_err()

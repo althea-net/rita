@@ -126,7 +126,7 @@ fn ser_to_debt_data(input: DebtDataSer) -> DebtData {
         // discard the entry, in the case that they do have some incoming payments the user
         // deserves to have that credit applied in the future so we must retain the entry and
         // reset the debt
-        if settings::get_rita_common().get_payment().forgive_on_reboot {
+        if settings::get_rita_common().payment.forgive_on_reboot {
             if d.debt <= Int256::zero() && d.incoming_payments == Uint256::zero() {
                 continue;
             } else if d.debt <= Int256::zero() {
@@ -283,9 +283,10 @@ pub fn send_debt_update() -> Result<(), Error> {
 
 impl Default for DebtKeeper {
     fn default() -> DebtKeeper {
-        assert!(settings::get_rita_common().get_payment().pay_threshold >= Int256::zero());
-        assert!(settings::get_rita_common().get_payment().close_threshold <= Int256::zero());
-        let file = File::open(settings::get_rita_common().get_payment().debts_file);
+        let common = settings::get_rita_common();
+        assert!(common.payment.pay_threshold >= Int256::zero());
+        assert!(common.payment.close_threshold <= Int256::zero());
+        let file = File::open(common.payment.debts_file);
         // if the loading process goes wrong for any reason, we just start again
         let blank_debt_keeper = DebtKeeper {
             last_save: None,
@@ -328,8 +329,9 @@ impl Default for DebtKeeper {
 impl DebtKeeper {
     #[cfg(test)]
     pub fn new() -> Self {
-        assert!(settings::get_rita_common().get_payment().pay_threshold >= Int256::zero());
-        assert!(settings::get_rita_common().get_payment().close_threshold <= Int256::zero());
+        let common = settings::get_rita_common();
+        assert!(common.payment.pay_threshold >= Int256::zero());
+        assert!(common.payment.close_threshold <= Int256::zero());
 
         DebtKeeper {
             last_save: None,
@@ -361,7 +363,7 @@ impl DebtKeeper {
     fn save(&mut self) -> Result<(), IOError> {
         // convert to the serializeable format and dump to the disk
         let serialized = serde_json::to_string(&debt_data_to_ser(self.debt_data.clone()))?;
-        let mut file = File::create(settings::get_rita_common().get_payment().debts_file)?;
+        let mut file = File::create(settings::get_rita_common().payment.debts_file)?;
         file.write_all(serialized.as_bytes())
     }
 
@@ -495,12 +497,12 @@ impl DebtKeeper {
             );
         }
 
-        let payment_settings = settings::get_rita_common().get_payment();
+        let payment_settings = settings::get_rita_common().payment;
         let close_threshold = payment_settings.close_threshold.clone();
         let pay_threshold = payment_settings.pay_threshold.clone();
         let fudge_factor = payment_settings.fudge_factor;
         let debt_limit_enabled = payment_settings.debt_limit_enabled;
-        drop(payment_settings);
+        let apply_incoming_credit_immediately = payment_settings.apply_incoming_credit_immediately;
 
         trace!(
             "Debt is {} and close is {}",
@@ -575,11 +577,7 @@ impl DebtKeeper {
                 // routers where this unapplied credit is several dollars worth, so it's best to remit
                 // that to the users by applying it here.
                 let zero = Uint256::zero();
-                if settings::get_rita_common()
-                    .get_payment()
-                    .apply_incoming_credit_immediately
-                    && debt_data.incoming_payments > zero
-                {
+                if apply_incoming_credit_immediately && debt_data.incoming_payments > zero {
                     debt_data.action = DebtAction::OpenTunnel;
                     self.payment_received(ident, zero)?;
                     return Ok(DebtAction::OpenTunnel);
@@ -681,18 +679,15 @@ mod tests {
     fn test_single_suspend() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
-        let mut payment = settings::get_rita_common().get_payment();
-        payment.pay_threshold = Int256::from(5);
-        payment.close_threshold = Int256::from(-10);
+        common.payment.pay_threshold = Int256::from(5);
+        common.payment.close_threshold = Int256::from(-10);
+        settings::set_rita_common(common);
 
         let mut d = DebtKeeper::new();
 
         let ident = get_test_identity();
 
         d.traffic_update(&ident, Int256::from(-100i64));
-
-        common.set_payment(payment);
-        settings::set_rita_common(common);
 
         assert_eq!(d.send_update(&ident).unwrap(), DebtAction::SuspendTunnel);
     }
@@ -701,11 +696,8 @@ mod tests {
     fn test_single_overpay() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
-        let mut payment = settings::get_rita_common().get_payment();
-
-        payment.pay_threshold = Int256::from(5);
-        payment.close_threshold = Int256::from(-10);
-        common.set_payment(payment);
+        common.payment.pay_threshold = Int256::from(5);
+        common.payment.close_threshold = Int256::from(-10);
         settings::set_rita_common(common);
 
         let mut d = DebtKeeper::new();
@@ -722,19 +714,15 @@ mod tests {
     fn test_single_pay() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
-        let mut payment = settings::get_rita_common().get_payment();
-
-        payment.pay_threshold = Int256::from(5);
-        payment.close_threshold = Int256::from(-10);
-        payment.debt_limit_enabled = false;
+        common.payment.pay_threshold = Int256::from(5);
+        common.payment.close_threshold = Int256::from(-10);
+        common.payment.debt_limit_enabled = false;
+        settings::set_rita_common(common);
 
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
 
         d.traffic_update(&ident, Int256::from(100));
-
-        common.set_payment(payment);
-        settings::set_rita_common(common);
 
         assert_eq!(
             d.send_update(&ident).unwrap(),
@@ -748,20 +736,16 @@ mod tests {
     #[test]
     fn test_single_pay_limited() {
         settings::set_rita_client(RitaClientSettings::default());
-        let mut payment = settings::get_rita_common().get_payment();
-
-        payment.pay_threshold = Int256::from(5);
-        payment.close_threshold = Int256::from(-10);
-        payment.debt_limit_enabled = true;
+        let mut common = settings::get_rita_common();
+        common.payment.pay_threshold = Int256::from(5);
+        common.payment.close_threshold = Int256::from(-10);
+        common.payment.debt_limit_enabled = true;
+        settings::set_rita_common(common);
 
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
 
         d.traffic_update(&ident, Int256::from(100));
-
-        let mut common = settings::get_rita_common();
-        common.set_payment(payment);
-        settings::set_rita_common(common);
 
         assert_eq!(
             d.send_update(&ident).unwrap(),
@@ -775,13 +759,9 @@ mod tests {
     #[test]
     fn test_single_reopen() {
         settings::set_rita_client(RitaClientSettings::default());
-
-        let mut payment = settings::get_rita_common().get_payment();
-
-        payment.pay_threshold = Int256::from(5);
-        payment.close_threshold = Int256::from(-10);
         let mut common = settings::get_rita_common();
-        common.set_payment(payment);
+        common.payment.pay_threshold = Int256::from(5);
+        common.payment.close_threshold = Int256::from(-10);
         settings::set_rita_common(common);
 
         let mut d = DebtKeeper::new();
@@ -799,11 +779,11 @@ mod tests {
     #[test]
     fn test_multi_pay() {
         settings::set_rita_client(RitaClientSettings::default());
-        let mut payment = settings::get_rita_common().get_payment();
-
-        payment.pay_threshold = Int256::from(5);
-        payment.close_threshold = Int256::from(-10);
-        payment.debt_limit_enabled = false;
+        let mut common = settings::get_rita_common();
+        common.payment.pay_threshold = Int256::from(5);
+        common.payment.close_threshold = Int256::from(-10);
+        common.payment.debt_limit_enabled = false;
+        settings::set_rita_common(common);
 
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
@@ -811,10 +791,6 @@ mod tests {
         for _ in 0..100 {
             d.traffic_update(&ident, Int256::from(100))
         }
-
-        let mut common = settings::get_rita_common();
-        common.set_payment(payment);
-        settings::set_rita_common(common);
 
         assert_eq!(
             d.send_update(&ident).unwrap(),
@@ -828,11 +804,11 @@ mod tests {
     #[test]
     fn test_multi_pay_lmited() {
         settings::set_rita_client(RitaClientSettings::default());
-        let mut payment = settings::get_rita_common().get_payment();
-
-        payment.pay_threshold = Int256::from(5);
-        payment.close_threshold = Int256::from(-10);
-        payment.debt_limit_enabled = true;
+        let mut common = settings::get_rita_common();
+        common.payment.pay_threshold = Int256::from(5);
+        common.payment.close_threshold = Int256::from(-10);
+        common.payment.debt_limit_enabled = true;
+        settings::set_rita_common(common);
 
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
@@ -840,10 +816,6 @@ mod tests {
         for _ in 0..100 {
             d.traffic_update(&ident, Int256::from(100))
         }
-
-        let mut common = settings::get_rita_common();
-        common.set_payment(payment);
-        settings::set_rita_common(common);
 
         assert_eq!(
             d.send_update(&ident).unwrap(),
@@ -857,19 +829,15 @@ mod tests {
     #[test]
     fn test_multi_fail() {
         settings::set_rita_client(RitaClientSettings::default());
-        let mut payment = settings::get_rita_common().get_payment();
-
-        payment.pay_threshold = Int256::from(5);
-        payment.close_threshold = Int256::from(-10);
+        let mut common = settings::get_rita_common();
+        common.payment.pay_threshold = Int256::from(5);
+        common.payment.close_threshold = Int256::from(-10);
+        settings::set_rita_common(common);
 
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
 
         d.traffic_update(&ident, Int256::from(-10100i64));
-
-        let mut common = settings::get_rita_common();
-        common.set_payment(payment);
-        settings::set_rita_common(common);
 
         // send lots of payments
         for _ in 0..100 {
@@ -882,10 +850,10 @@ mod tests {
     #[test]
     fn test_multi_reopen() {
         settings::set_rita_client(RitaClientSettings::default());
-        let mut payment = settings::get_rita_common().get_payment();
-
-        payment.pay_threshold = Int256::from(5);
-        payment.close_threshold = Int256::from(-10);
+        let mut common = settings::get_rita_common();
+        common.payment.pay_threshold = Int256::from(5);
+        common.payment.close_threshold = Int256::from(-10);
+        settings::set_rita_common(common);
 
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
@@ -895,10 +863,6 @@ mod tests {
         for _ in 0..100 {
             d.payment_received(&ident, Uint256::from(100u64)).unwrap();
         }
-
-        let mut common = settings::get_rita_common();
-        common.set_payment(payment);
-        settings::set_rita_common(common);
 
         assert_eq!(d.send_update(&ident).unwrap(), DebtAction::SuspendTunnel);
 
@@ -910,12 +874,10 @@ mod tests {
     #[test]
     fn test_credit_reopen() {
         settings::set_rita_client(RitaClientSettings::default());
-        let mut payment = settings::get_rita_common().get_payment();
-        payment.pay_threshold = Int256::from(5);
-        payment.close_threshold = Int256::from(-10);
-        payment.debt_limit_enabled = false;
         let mut common = settings::get_rita_common();
-        common.set_payment(payment);
+        common.payment.pay_threshold = Int256::from(5);
+        common.payment.close_threshold = Int256::from(-10);
+        common.payment.debt_limit_enabled = false;
         settings::set_rita_common(common);
 
         let mut d = DebtKeeper::new();
@@ -940,18 +902,14 @@ mod tests {
 
     #[test]
     fn test_credit_reopen_limited() {
-        let mut payment = settings::get_rita_common().get_payment();
-
-        payment.pay_threshold = Int256::from(10);
-        payment.close_threshold = Int256::from(-100);
-        payment.debt_limit_enabled = true;
+        let mut common = settings::get_rita_common();
+        common.payment.pay_threshold = Int256::from(10);
+        common.payment.close_threshold = Int256::from(-100);
+        common.payment.debt_limit_enabled = true;
+        settings::set_rita_common(common);
 
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
-
-        let mut common = settings::get_rita_common();
-        common.set_payment(payment);
-        settings::set_rita_common(common);
 
         // when the debt limit is enabled these tests have to get a little more real
         // the values stop making sense once you eceed the close_threshold because that's
@@ -977,17 +935,13 @@ mod tests {
     fn test_payment_fail() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
-        let mut payment = settings::get_rita_common().get_payment();
-
-        payment.pay_threshold = Int256::from(5);
-        payment.close_threshold = Int256::from(-10);
-        payment.debt_limit_enabled = false;
+        common.payment.pay_threshold = Int256::from(5);
+        common.payment.close_threshold = Int256::from(-10);
+        common.payment.debt_limit_enabled = false;
+        settings::set_rita_common(common);
 
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
-
-        common.set_payment(payment);
-        settings::set_rita_common(common);
 
         // generate a bunch of traffic
         for _ in 0..100 {
@@ -1061,13 +1015,9 @@ mod tests {
         settings::set_rita_client(RitaClientSettings::default());
 
         let mut common = settings::get_rita_common();
-        let mut payment = common.get_payment();
-
-        payment.pay_threshold = Int256::from(5);
-        payment.close_threshold = Int256::from(-10);
-        payment.debt_limit_enabled = true;
-
-        common.set_payment(payment);
+        common.payment.pay_threshold = Int256::from(5);
+        common.payment.close_threshold = Int256::from(-10);
+        common.payment.debt_limit_enabled = true;
         settings::set_rita_common(common);
 
         // same as above except debt is limited, so we will be paying much

@@ -20,11 +20,10 @@ lazy_static! {
 // this is sent when a transaction is successful in another module and it registers
 // some amount to be paid as part of the fee
 pub fn add_tx_to_total(amount: Uint256) {
-    let to_add = amount
-        / settings::get_rita_common()
-            .get_payment()
-            .simulated_transaction_fee
-            .into();
+    let simulated_transaction_fee = settings::get_rita_common()
+        .payment
+        .simulated_transaction_fee;
+    let to_add = amount / simulated_transaction_fee.into();
     let mut amount_owed = AMOUNT_OWED.write().unwrap();
     info!(
         "Simulated txfee total is {} with {} to add",
@@ -34,7 +33,7 @@ pub fn add_tx_to_total(amount: Uint256) {
 }
 
 pub async fn tick_simulated_tx() {
-    let payment_settings = settings::get_rita_common().get_payment();
+    let payment_settings = settings::get_rita_common().payment;
     let eth_private_key = payment_settings.eth_private_key;
     let our_id = match settings::get_rita_common().get_identity() {
         Some(id) => id,

@@ -65,7 +65,7 @@ impl Handler<GetExitInfo> for Dashboard {
     type Result = ResponseFuture<Vec<ExitInfo>, Error>;
 
     fn handle(&mut self, _msg: GetExitInfo, _ctx: &mut Self::Context) -> Self::Result {
-        let babel_port = settings::get_rita_client().get_network().babel_port;
+        let babel_port = settings::get_rita_client().network.babel_port;
 
         Box::new(
             open_babel_stream_legacy(babel_port)

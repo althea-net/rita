@@ -36,7 +36,7 @@ impl From<LocalizationSettings> for LocalizationReturn {
 
 pub fn get_localization(_req: HttpRequest) -> Json<LocalizationReturn> {
     debug!("/localization GET hit");
-    let localization = settings::get_rita_client().get_localization();
+    let localization = settings::get_rita_client().localization;
     Json(localization.into())
 }
 

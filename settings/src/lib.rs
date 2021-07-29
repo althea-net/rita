@@ -59,30 +59,18 @@ lazy_static! {
     static ref FLAG_CONFIG: Arc<RwLock<String>> = Arc::new(RwLock::new(String::new()));
 }
 
+/// A generic version of the more specific Rita settings struts use for Rita common
 pub struct RitaSettings {
-    payment: PaymentSettings,
-    network: NetworkSettings,
+    pub payment: PaymentSettings,
+    pub network: NetworkSettings,
+    /// This member kept private to prevent modification since it's not
+    /// saved in set_rita_common()
     identity: Option<Identity>,
 }
 
 impl RitaSettings {
-    pub fn get_payment(&self) -> PaymentSettings {
-        self.payment.clone()
-    }
-    pub fn get_network(&self) -> NetworkSettings {
-        self.network.clone()
-    }
     pub fn get_identity(&self) -> Option<Identity> {
         self.identity
-    }
-    pub fn set_payment(&mut self, payment: PaymentSettings) {
-        self.payment = payment;
-    }
-    pub fn set_network(&mut self, network: NetworkSettings) {
-        self.network = network;
-    }
-    pub fn set_identity(&mut self, id: Identity) {
-        self.identity = Some(id);
     }
 }
 
@@ -159,13 +147,13 @@ pub fn get_rita_common() -> RitaSettings {
     let exit_settings = &*EXIT_SETTING.read().unwrap();
     match (client_settings, exit_settings) {
         (Some(client), None) => RitaSettings {
-            network: client.get_network(),
-            payment: client.get_payment(),
+            network: client.network.clone(),
+            payment: client.payment.clone(),
             identity: client.get_identity(),
         },
         (None, Some(exit)) => RitaSettings {
-            network: exit.get_network(),
-            payment: exit.get_payment(),
+            network: exit.network.clone(),
+            payment: exit.payment.clone(),
             identity: exit.get_identity(),
         },
         (Some(_), Some(_)) => panic!("Rita_common cannot be both exit and client"),

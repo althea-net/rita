@@ -58,9 +58,8 @@ pub fn zero_window_start() {
 pub const ORACLE_TIMEOUT: Duration = FAST_LOOP_TIMEOUT;
 
 pub async fn update() {
-    let payment_settings = settings::get_rita_common().get_payment();
+    let payment_settings = settings::get_rita_common().payment;
     let our_address = payment_settings.eth_address.expect("No address!");
-    drop(payment_settings);
 
     let full_node = get_web3_server();
     let web3 = Web3::new(&full_node, ORACLE_TIMEOUT);
@@ -81,33 +80,31 @@ async fn update_blockchain_info(
     let gas_price = web3.eth_gas_price();
     let (balance, nonce, net_version, gas_price) =
         join4(balance, nonce, net_version, gas_price).await;
-    let mut payment_settings = settings::get_rita_common().get_payment();
+    let mut settings = settings::get_rita_common();
     match balance {
         Ok(balance) => update_balance(
             &full_node,
             zero_window,
-            &mut payment_settings.balance,
+            &mut settings.payment.balance,
             balance,
         ),
         Err(e) => warn!("Failed to update balance with {:?}", e),
     }
     match gas_price {
-        Ok(gas_price) => update_gas_price(&full_node, gas_price, &mut payment_settings),
+        Ok(gas_price) => update_gas_price(&full_node, gas_price, &mut settings.payment),
         Err(e) => warn!("Failed to update gas price with {:?}", e),
     }
     match net_version {
         Ok(net_version) => {
-            update_net_version(&full_node, &mut payment_settings.net_version, net_version)
+            update_net_version(&full_node, &mut settings.payment.net_version, net_version)
         }
         Err(e) => warn!("Failed to update net_version with {:?}", e),
     }
     match nonce {
-        Ok(nonce) => update_nonce(&full_node, nonce, &mut payment_settings.nonce),
+        Ok(nonce) => update_nonce(&full_node, nonce, &mut settings.payment.nonce),
         Err(e) => warn!("Failed to update nonce with {:?}", e),
     }
-    let mut common = settings::get_rita_common();
-    common.set_payment(payment_settings);
-    settings::set_rita_common(common);
+    settings::set_rita_common(settings);
 }
 
 /// Gets the balance for the provided eth address and updates it
@@ -236,7 +233,7 @@ fn update_gas_price(
 /// A very simple function placed here for convinence that indicates
 /// if the system should go into low balance mode
 pub fn low_balance() -> bool {
-    let payment_settings = settings::get_rita_common().get_payment();
+    let payment_settings = settings::get_rita_common().payment;
     let balance = payment_settings.balance.clone();
     let balance_warning_level = payment_settings.balance_warning_level;
 

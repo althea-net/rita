@@ -8,9 +8,7 @@ use rita_common::KI;
 use settings::FileWrite;
 
 pub fn get_bandwidth_limit(_req: HttpRequest) -> HttpResponse {
-    let val = settings::get_rita_client()
-        .get_network()
-        .user_bandwidth_limit;
+    let val = settings::get_rita_client().network.user_bandwidth_limit;
     HttpResponse::Ok().json(val)
 }
 

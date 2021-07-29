@@ -139,7 +139,7 @@ impl UsageTrackerMisspelled {
 
 impl Default for UsageTracker {
     fn default() -> UsageTracker {
-        let file = File::open(settings::get_rita_common().get_network().usage_tracker_file);
+        let file = File::open(settings::get_rita_common().network.usage_tracker_file);
         // if the loading process goes wrong for any reason, we just start again
         let blank_usage_tracker = UsageTracker {
             last_save_hour: 0,
@@ -233,7 +233,7 @@ impl Default for UsageTracker {
 impl UsageTracker {
     fn save(&mut self) -> Result<(), IOError> {
         let serialized = serde_json::to_vec(self)?;
-        let mut file = File::create(settings::get_rita_common().get_network().usage_tracker_file)?;
+        let mut file = File::create(settings::get_rita_common().network.usage_tracker_file)?;
         let buffer: Vec<u8> = Vec::new();
         let mut encoder = ZlibEncoder::new(buffer, Compression::fast());
         encoder.write_all(&serialized)?;

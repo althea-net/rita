@@ -10,7 +10,7 @@ pub fn get_backup_created(_req: HttpRequest) -> Result<HttpResponse, Error> {
     ret.insert(
         "backup_created",
         settings::get_rita_client()
-            .get_network()
+            .network
             .backup_created
             .to_string(),
     );

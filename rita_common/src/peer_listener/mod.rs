@@ -67,7 +67,7 @@ pub struct Peer {
 
 impl Peer {
     pub fn new(ip: Ipv6Addr, idx: u32) -> Peer {
-        let port = settings::get_rita_common().get_network().rita_hello_port;
+        let port = settings::get_rita_common().network.rita_hello_port;
         let socket = SocketAddrV6::new(ip, port, 0, idx);
         Peer {
             ifidx: idx,
@@ -93,7 +93,7 @@ impl PeerListener {
 }
 
 fn listen_to_available_ifaces(peer_listener: &mut PeerListener) {
-    let interfaces = settings::get_rita_common().get_network().peer_interfaces;
+    let interfaces = settings::get_rita_common().network.peer_interfaces;
     let iface_list = interfaces;
     for iface in iface_list.iter() {
         if !peer_listener.interfaces.contains_key(iface) {
@@ -134,11 +134,9 @@ pub fn unlisten_interface(interface: String) {
     if writer.interfaces.contains_key(&ifname_to_delete) {
         writer.interfaces.remove(&ifname_to_delete);
         let mut common = settings::get_rita_common();
-        let mut network = common.get_network();
 
-        network.peer_interfaces.remove(&ifname_to_delete);
+        common.network.peer_interfaces.remove(&ifname_to_delete);
 
-        common.set_network(network);
         settings::set_rita_common(common);
     } else {
         error!("Tried to unlisten interface that's not present!")
@@ -162,8 +160,9 @@ pub struct ListenInterface {
 
 impl ListenInterface {
     pub fn new(ifname: &str) -> Result<ListenInterface, Error> {
-        let port = settings::get_rita_common().get_network().rita_hello_port;
-        let disc_ip = settings::get_rita_common().get_network().discovery_ip;
+        let network = settings::get_rita_common().network;
+        let port = network.rita_hello_port;
+        let disc_ip = network.discovery_ip;
         debug!("Binding to {:?} for ListenInterface", ifname);
         // Lookup interface link local ip
         let link_ip = KI.get_link_local_device_ip(&ifname)?;

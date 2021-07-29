@@ -202,7 +202,7 @@ fn main() {
     check_rita_client_actors();
     start_core_rita_endpoints(4);
     start_rita_client_endpoints(1);
-    start_client_dashboard();
+    start_client_dashboard(settings.network.rita_dashboard_port);
     start_antenna_forwarder(settings);
 
     system.run();
@@ -234,7 +234,7 @@ fn start_antenna_forwarder(settings: RitaClientSettings) {
     }
 }
 
-fn start_client_dashboard() {
+fn start_client_dashboard(rita_dashboard_password: u16) {
     // dashboard
     server::new(|| {
         App::new()
@@ -394,12 +394,7 @@ fn start_client_dashboard() {
             .route("/email", Method::POST, set_email)
     })
     .workers(1)
-    .bind(format!(
-        "[::0]:{}",
-        settings::get_rita_client()
-            .get_network()
-            .rita_dashboard_port
-    ))
+    .bind(format!("[::0]:{}", rita_dashboard_password))
     .unwrap()
     .shutdown_timeout(0)
     .start();

@@ -90,7 +90,7 @@ impl Message for Tick {
 impl Handler<Tick> for RitaFastLoop {
     type Result = Result<(), Error>;
     fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
-        let babel_port = settings::get_rita_common().get_network().babel_port;
+        let babel_port = settings::get_rita_common().network.babel_port;
         trace!("Common tick!");
 
         manage_gateway();
@@ -276,7 +276,7 @@ fn manage_gateway() {
     // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
     // the is_up detection is mostly useless because these ports reside on switches which mark
     // all ports as up all the time.
-    let gateway = match settings::get_rita_common().get_network().external_nic {
+    let gateway = match settings::get_rita_common().network.external_nic {
         Some(ref external_nic) => KI.is_iface_up(external_nic).unwrap_or(false),
         None => false,
     };
@@ -285,16 +285,15 @@ fn manage_gateway() {
     set_gateway(gateway);
 
     if gateway {
+        let mut common = settings::get_rita_common();
         match KI.get_resolv_servers() {
             Ok(s) => {
                 for ip in s.iter() {
                     trace!("Resolv route {:?}", ip);
-                    KI.manual_peers_route(
-                        &ip,
-                        &mut settings::get_rita_common().get_network().last_default_route,
-                    )
-                    .unwrap();
+                    KI.manual_peers_route(&ip, &mut common.network.last_default_route)
+                        .unwrap();
                 }
+                settings::set_rita_common(common);
             }
             Err(e) => warn!("Failed to add DNS routes with {:?}", e),
         }

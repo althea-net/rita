@@ -144,7 +144,7 @@ impl Tunnel {
     ) -> Result<Tunnel, Error> {
         let speed_limit = None;
         let iface_name = KI.setup_wg_if()?;
-        let mut network = settings::get_rita_common().get_network();
+        let mut network = settings::get_rita_common().network;
         let args = TunnelOpenArgs {
             interface: iface_name.clone(),
             port: our_listen_port,
@@ -197,7 +197,7 @@ impl Tunnel {
     pub fn monitor(&self, retry_count: u8) {
         info!("Monitoring tunnel {}", self.iface_name);
         let iface_name = self.iface_name.clone();
-        let babel_port = settings::get_rita_common().get_network().babel_port;
+        let babel_port = settings::get_rita_common().network.babel_port;
         let tunnel = self.clone();
 
         Arbiter::spawn(
@@ -233,7 +233,7 @@ impl Tunnel {
     pub fn unmonitor(&self, retry_count: u8) {
         warn!("Unmonitoring tunnel {}", self.iface_name);
         let iface_name = self.iface_name.clone();
-        let babel_port = settings::get_rita_common().get_network().babel_port;
+        let babel_port = settings::get_rita_common().network.babel_port;
         let tunnel = self.clone();
 
         Arbiter::spawn(
@@ -475,7 +475,7 @@ impl Message for PeersToContact {
 impl Handler<PeersToContact> for TunnelManager {
     type Result = ();
     fn handle(&mut self, msg: PeersToContact, _ctx: &mut Context<Self>) -> Self::Result {
-        let network_settings = settings::get_rita_common().get_network();
+        let network_settings = settings::get_rita_common().network;
         let manual_peers = network_settings.manual_peers.clone();
         let is_gateway = is_gateway();
         let rita_hello_port = network_settings.rita_hello_port;
@@ -535,8 +535,10 @@ fn contact_neighbor(
     send_addr: SocketAddr,
 ) -> Result<(), Error> {
     let mut settings = settings::get_rita_common();
-    let mut network = settings.get_network();
-    KI.manual_peers_route(&peer.contact_socket.ip(), &mut network.last_default_route)?;
+    KI.manual_peers_route(
+        &peer.contact_socket.ip(),
+        &mut settings.network.last_default_route,
+    )?;
 
     let msg = Hello {
         my_id: LocalIdentity {
@@ -549,7 +551,6 @@ fn contact_neighbor(
         to: *peer,
     };
 
-    settings.set_network(network);
     settings::set_rita_common(settings);
 
     let new_msg = NewHello {
@@ -610,7 +611,7 @@ fn del_tunnel(to_del: &Tunnel, tunnels: &mut Vec<Tunnel>) {
 
 impl TunnelManager {
     pub fn new() -> Self {
-        let start = settings::get_rita_common().get_network().wg_start_port;
+        let start = settings::get_rita_common().network.wg_start_port;
         let ports = (start..65535).collect();
         TunnelManager {
             free_ports: ports,
@@ -654,7 +655,7 @@ impl TunnelManager {
     /// callback continue execution flow. But this function itself returns syncronously
     pub fn neighbor_inquiry_hostname(&mut self, their_hostname: String) -> Result<(), Error> {
         trace!("Getting tunnel, inq");
-        let network_settings = settings::get_rita_common().get_network();
+        let network_settings = settings::get_rita_common().network;
         let is_gateway = is_gateway();
         let rita_hello_port = network_settings.rita_hello_port;
 
@@ -995,15 +996,11 @@ fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, Vec<Tunnel>>) -> Result<()
             }
         }
     }
+    let payment = settings::get_rita_common().payment;
     let bw_per_iface = if limited_interfaces > 0 {
-        settings::get_rita_common()
-            .get_payment()
-            .free_tier_throughput
-            / u32::from(limited_interfaces)
+        payment.free_tier_throughput / u32::from(limited_interfaces)
     } else {
-        settings::get_rita_common()
-            .get_payment()
-            .free_tier_throughput
+        payment.free_tier_throughput
     };
 
     for sublist in tunnels.iter() {

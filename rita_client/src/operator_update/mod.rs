@@ -129,8 +129,8 @@ fn checkin() {
     #[cfg(feature = "operator_debug")]
     let url = "http://192.168.10.2:8080/checkin";
 
-    let mut rita_client = settings::get_rita_client();
-
+    let rita_client = settings::get_rita_client();
+    let id = rita_client.get_identity().unwrap();
     let logging_enabled = rita_client.log.enabled;
     let operator_settings = rita_client.operator;
     let system_chain = rita_client.payment.system_chain;
@@ -141,19 +141,12 @@ fn checkin() {
     // exit as a mesh client, even if the is_gateway var mostly governs things related to WAN use.
     // So we accept either of these conditions being true.
     let is_gateway = is_gateway() || is_gateway_client();
-    let id = settings::get_rita_client().get_identity().unwrap();
 
     let contact_info = option_convert(rita_client.exit_client.contact_info.clone());
     let install_details = operator_settings.installation_details.clone();
-    let billing_details = operator_settings.billing_details.clone();
-    let user_bandwidth_limit = settings::get_rita_client()
-        .get_network()
-        .user_bandwidth_limit;
-    let user_set_release_feed = settings::get_rita_client()
-        .get_network()
-        .user_set_release_feed;
-
-    rita_client.operator = operator_settings;
+    let billing_details = operator_settings.billing_details;
+    let user_bandwidth_limit = rita_client.network.user_bandwidth_limit;
+    let user_set_release_feed = rita_client.network.user_set_release_feed;
 
     // if the user has disabled logging and has no operator configured we don't check in
     // if the user configures an operator but has disabled logging then we assume they still
@@ -177,7 +170,7 @@ fn checkin() {
         neighbor_info.push(status);
     }
 
-    let hardware_info = match get_hardware_info(rita_client.get_network().device) {
+    let hardware_info = match get_hardware_info(rita_client.network.device) {
         Ok(info) => Some(info),
         Err(e) => {
             error!("Failed to get hardware info with {:?}", e);
@@ -210,6 +203,8 @@ fn checkin() {
                 .json()
                 .from_err()
                 .and_then(move |new_settings: OperatorUpdateMessage| {
+                    let mut rita_client = settings::get_rita_client();
+
                     let mut network = rita_client.network;
                     trace!("Updating from operator settings");
                     let mut payment = rita_client.payment;
@@ -296,8 +291,7 @@ fn checkin() {
                     network.shaper_settings = new_settings.shaper_settings;
                     rita_client.network = network;
 
-                    let copy = rita_client;
-                    settings::set_rita_client(copy);
+                    settings::set_rita_client(rita_client);
                     trace!("Successfully completed OperatorUpdate");
                     Ok(())
                 })

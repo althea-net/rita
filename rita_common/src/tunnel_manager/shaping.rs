@@ -37,7 +37,7 @@ impl Handler<ShapeMany> for TunnelManager {
     type Result = ();
 
     fn handle(&mut self, msg: ShapeMany, _: &mut Context<Self>) -> Self::Result {
-        let network_settings = settings::get_rita_common().get_network();
+        let network_settings = settings::get_rita_common().network;
         let minimum_bandwidth_limit = network_settings.shaper_settings.min_speed;
         let starting_bandwidth_limit = network_settings.shaper_settings.max_speed;
         let bandwidth_limit_enabled = network_settings.shaper_settings.enabled;

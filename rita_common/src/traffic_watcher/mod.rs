@@ -88,11 +88,11 @@ pub fn prepare_helper_maps(
 pub fn get_babel_info(routes: Vec<RouteLegacy>) -> Result<(HashMap<IpAddr, i128>, u32), Error> {
     trace!("Got {} routes: {:?}", routes.len(), routes);
     let mut destinations = HashMap::new();
+    let common = settings::get_rita_common();
     // we assume this matches what is actually set it babel because we
     // panic on startup if it does not get set correctly
-    let local_fee = settings::get_rita_common().get_payment().local_fee;
-
-    let max_fee = settings::get_rita_common().get_payment().max_fee;
+    let local_fee = common.payment.local_fee;
+    let max_fee = common.payment.max_fee;
     for route in &routes {
         // Only ip6
         if let IpNetwork::V6(ref ip) = route.prefix {
@@ -114,7 +114,7 @@ pub fn get_babel_info(routes: Vec<RouteLegacy>) -> Result<(HashMap<IpAddr, i128>
     }
 
     destinations.insert(
-        match settings::get_rita_common().get_network().mesh_ip {
+        match common.network.mesh_ip {
             Some(ip) => ip,
             None => bail!("No mesh IP configured yet"),
         },

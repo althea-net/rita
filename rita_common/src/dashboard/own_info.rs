@@ -25,7 +25,7 @@ pub struct OwnInfo {
 
 pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
     debug!("Get own info endpoint hit!");
-    let payment_settings = settings::get_rita_common().get_payment();
+    let payment_settings = settings::get_rita_common().payment;
     let eth_address = payment_settings.eth_address.unwrap();
     let balance = payment_settings.balance.clone();
     let pay_threshold = payment_settings.pay_threshold.clone();
@@ -33,7 +33,7 @@ pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
     let local_fee = payment_settings.local_fee;
     let client_can_use_free_tier = payment_settings.client_can_use_free_tier;
 
-    let network_settings = settings::get_rita_common().get_network();
+    let network_settings = settings::get_rita_common().network;
     let metric_factor = network_settings.metric_factor;
     let device = network_settings.device;
     let is_gateway = is_gateway();

@@ -249,7 +249,7 @@ fn validate_channel(
     let channel_width_is_40 = channel_width.contains("40");
     let channel_width_is_80 = channel_width.contains("80");
     let channel_width_is_160 = channel_width.contains("160");
-    let model = settings::get_rita_client().get_network().device;
+    let model = settings::get_rita_client().network.device;
     // trying to swap from 5ghz to 2.4ghz or vice versa, usually this
     // is impossible, although some multifunction cards allow it
     if (old_is_two && new_is_five) || (old_is_five && new_is_two) {
@@ -305,7 +305,7 @@ pub fn get_allowed_wifi_channels(radio: Path<String>) -> Result<HttpResponse, Er
         .get_uci_var(&format!("wireless.{}.channel", radio))?
         .parse()?;
     let five_channel_width = KI.get_uci_var(&format!("wireless.{}.htmode", radio))?;
-    let model = settings::get_rita_client().get_network().device;
+    let model = settings::get_rita_client().network.device;
 
     if current_channel < 20 {
         Ok(HttpResponse::Ok().json(ALLOWED_TWO))

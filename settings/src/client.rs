@@ -112,18 +112,6 @@ pub struct RitaClientSettings {
 }
 
 impl RitaClientSettings {
-    pub fn get_payment(&self) -> PaymentSettings {
-        self.payment.clone()
-    }
-
-    pub fn get_localization(&self) -> LocalizationSettings {
-        self.localization.clone()
-    }
-
-    pub fn get_network(&self) -> NetworkSettings {
-        self.network.clone()
-    }
-
     pub fn merge(&mut self, changed_settings: serde_json::Value) -> Result<(), Error> {
         let mut settings_value = serde_json::to_value(self.clone())?;
 
@@ -144,10 +132,10 @@ impl RitaClientSettings {
 
     pub fn get_identity(&self) -> Option<Identity> {
         Some(Identity::new(
-            self.get_network().mesh_ip?,
-            self.get_payment().eth_address?,
-            self.get_network().wg_public_key?,
-            self.get_network().nickname,
+            self.network.mesh_ip?,
+            self.payment.eth_address?,
+            self.network.wg_public_key?,
+            self.network.nickname,
         ))
     }
 

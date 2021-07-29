@@ -34,7 +34,7 @@ pub struct NodeInfo {
 pub fn get_routes(
     _req: HttpRequest,
 ) -> Box<dyn Future<Item = Json<Vec<RouteLegacy>>, Error = Error>> {
-    let babel_port = settings::get_rita_client().get_network().babel_port;
+    let babel_port = settings::get_rita_client().network.babel_port;
     Box::new(
         open_babel_stream_legacy(babel_port)
             .from_err()
@@ -66,7 +66,7 @@ pub fn get_neighbor_info(
 
                 let combined_list = merge_debts_and_neighbors(neighbors, debts);
 
-                let babel_port = settings::get_rita_client().get_network().babel_port;
+                let babel_port = settings::get_rita_client().network.babel_port;
 
                 open_babel_stream_legacy(babel_port)
                     .from_err()

@@ -39,14 +39,11 @@ pub fn set_gateway(input: bool) {
 /// one or more a random entry from the list is returned in an attempt
 /// to load balance across fullnodes
 pub fn get_web3_server() -> String {
-    if settings::get_rita_common()
-        .get_payment()
-        .node_list
-        .is_empty()
-    {
+    let common = settings::get_rita_common();
+    if common.payment.node_list.is_empty() {
         panic!("no full nodes configured!");
     }
-    let node_list = settings::get_rita_common().get_payment().node_list;
+    let node_list = common.payment.node_list;
     let mut rng = thread_rng();
     let val = rng.gen_range(0..node_list.len());
 
@@ -54,13 +51,11 @@ pub fn get_web3_server() -> String {
 }
 
 pub fn start_core_rita_endpoints(workers: usize) {
+    let common = settings::get_rita_common();
     // Rita hello function
     server::new(|| App::new().resource("/hello", |r| r.method(Method::POST).with(hello_response)))
         .workers(workers)
-        .bind(format!(
-            "[::0]:{}",
-            settings::get_rita_common().get_network().rita_hello_port
-        ))
+        .bind(format!("[::0]:{}", common.network.rita_hello_port))
         .unwrap()
         .shutdown_timeout(0)
         .start();
@@ -72,10 +67,7 @@ pub fn start_core_rita_endpoints(workers: usize) {
         })
     })
     .workers(workers)
-    .bind(format!(
-        "[::0]:{}",
-        settings::get_rita_common().get_network().rita_contact_port
-    ))
+    .bind(format!("[::0]:{}", common.network.rita_contact_port))
     .unwrap()
     .shutdown_timeout(0)
     .start();

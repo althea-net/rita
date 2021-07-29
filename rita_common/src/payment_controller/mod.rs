@@ -66,7 +66,8 @@ impl PaymentController {
 /// This is called by debt_keeper to make payments. It sends a
 /// PaymentTx to the `mesh_ip` in its `to` field.
 fn make_payment(mut pmt: PaymentTx) -> Result<(), Error> {
-    let payment_settings = settings::get_rita_common().get_payment();
+    let common = settings::get_rita_common();
+    let payment_settings = common.payment;
     let balance = payment_settings.balance.clone();
     let nonce = payment_settings.nonce.clone();
     let gas_price = payment_settings.gas_price.clone();
@@ -83,18 +84,13 @@ fn make_payment(mut pmt: PaymentTx) -> Result<(), Error> {
         bail!("Zero payment!");
     }
 
-    let contact_socket: SocketAddr = match format!(
-        "[{}]:{}",
-        pmt.to.mesh_ip,
-        settings::get_rita_common().get_network().rita_contact_port
-    )
-    .parse()
-    {
-        Ok(socket) => socket,
-        Err(e) => {
-            bail!("Failed to make socket for payment message! {:?}", e);
-        }
-    };
+    let contact_socket: SocketAddr =
+        match format!("[{}]:{}", pmt.to.mesh_ip, common.network.rita_contact_port).parse() {
+            Ok(socket) => socket,
+            Err(e) => {
+                bail!("Failed to make socket for payment message! {:?}", e);
+            }
+        };
     let stream = TokioTcpStream::connect(&contact_socket);
 
     // testing hack
@@ -170,9 +166,7 @@ fn make_payment(mut pmt: PaymentTx) -> Result<(), Error> {
                                         }
                                         {
                                             let mut common = settings::get_rita_common();
-                                            let mut payment = common.get_payment();
-                                            payment.nonce += 1u64.into();
-                                            common.set_payment( payment);
+                                            common.payment.nonce += 1u64.into();
                                             settings::set_rita_common(common);
                                         }
 

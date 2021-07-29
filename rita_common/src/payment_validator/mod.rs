@@ -168,14 +168,7 @@ pub async fn validate() {
     // time we expect payments to take to enter the blockchain (the send timeout)
     assert!(PAYMENT_RECEIVE_TIMEOUT > PAYMENT_SEND_TIMEOUT);
 
-    // get our address BEFORE we grab the history lock and scope the call to make
-    // sure that the borrow checker drops it and we don't hold both locks at once
-    let our_address = {
-        settings::get_rita_common()
-            .get_payment()
-            .eth_address
-            .unwrap()
-    };
+    let our_address = settings::get_rita_common().payment.eth_address.unwrap();
 
     let mut history = HISTORY.write().unwrap();
 
@@ -283,7 +276,7 @@ fn handle_tx_messaging(
     let amount = ts.payment.amount.clone();
     let pmt = ts.payment.clone();
     let our_address = settings::get_rita_common()
-        .get_payment()
+        .payment
         .eth_address
         .expect("No Address!");
     let to = match transaction.to {

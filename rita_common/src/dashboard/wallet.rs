@@ -22,7 +22,7 @@ fn withdraw_handler(
     amount: Option<Uint256>,
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     debug!("/withdraw/{:#x}/{:?} hit", address, amount);
-    let payment_settings = settings::get_rita_common().get_payment();
+    let payment_settings = settings::get_rita_common().payment;
     let system_chain = payment_settings.system_chain;
     let withdraw_chain = payment_settings.withdraw_chain;
     let mut gas_price = payment_settings.gas_price.clone();
@@ -90,7 +90,7 @@ fn eth_compatable_withdraw(
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let full_node = get_web3_server();
     let web3 = Web3::new(&full_node, WITHDRAW_TIMEOUT);
-    let payment_settings = settings::get_rita_common().get_payment();
+    let payment_settings = settings::get_rita_common().payment;
     if payment_settings.eth_address.is_none() {
         return Box::new(future::ok(
             HttpResponse::new(StatusCode::from_u16(504u16).unwrap())
@@ -131,10 +131,9 @@ fn eth_compatable_withdraw(
     Box::new(transaction_status.then(move |result| match result {
         Ok(tx_id) => Box::new(future::ok({
             let mut common = settings::get_rita_common();
-            let mut payment = settings::get_rita_common().get_payment();
 
-            payment.nonce += 1u64.into();
-            common.set_payment(payment);
+            common.payment.nonce += 1u64.into();
+
             settings::set_rita_common(common);
             HttpResponse::Ok().json(format!("txid:{:#066x}", tx_id))
         })),

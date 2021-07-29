@@ -202,12 +202,6 @@ impl RitaExitSettingsStruct {
             future: false,
         }
     }
-    pub fn get_network(&self) -> NetworkSettings {
-        self.network.clone()
-    }
-    pub fn get_payment(&self) -> PaymentSettings {
-        self.payment.clone()
-    }
 
     pub fn get_identity(&self) -> Option<Identity> {
         Some(Identity::new(

@@ -159,7 +159,7 @@ pub struct LastAmounts {
 
 pub async fn tick_token_bridge() {
     let bridge: TokenBridgeState = BRIDGE.read().unwrap().clone();
-    let payment_settings = settings::get_rita_common().get_payment();
+    let payment_settings = settings::get_rita_common().payment;
     let system_chain = payment_settings.system_chain;
 
     if !payment_settings.bridge_enabled {
@@ -283,7 +283,7 @@ async fn eth_bridge() {
         let res = bridge
             .xdai_to_dai_bridge(
                 amount.clone(),
-                settings::get_rita_common().get_payment().gas_price.clone(),
+                settings::get_rita_common().payment.gas_price.clone(),
             )
             .await;
         if res.is_err() {
@@ -414,7 +414,7 @@ async fn xdai_bridge(state: State) -> State {
         } => match bridge
             .xdai_to_dai_bridge(
                 amount.clone(),
-                settings::get_rita_common().get_payment().gas_price.clone(),
+                settings::get_rita_common().payment.gas_price.clone(),
             )
             .await
         {
@@ -663,7 +663,7 @@ pub struct Withdraw {
 }
 
 pub fn withdraw(msg: Withdraw) -> Result<(), Error> {
-    let payment_settings = settings::get_rita_common().get_payment();
+    let payment_settings = settings::get_rita_common().payment;
     let system_chain = payment_settings.system_chain;
     drop(payment_settings);
     let bridge = BRIDGE.read().unwrap().clone();
@@ -765,7 +765,7 @@ pub struct BridgeStatus {
 }
 
 pub fn get_bridge_status() -> BridgeStatus {
-    let payment_settings = settings::get_rita_common().get_payment();
+    let payment_settings = settings::get_rita_common().payment;
     let withdraw_chain = payment_settings.withdraw_chain;
     drop(payment_settings);
     let bridge = BRIDGE.read().unwrap().clone();
@@ -783,7 +783,7 @@ pub fn get_bridge_status() -> BridgeStatus {
 
 /// Grab state parameters from settings
 fn get_core() -> TokenBridgeCore {
-    let payment_settings = settings::get_rita_common().get_payment();
+    let payment_settings = settings::get_rita_common().payment;
     token_bridge_core_from_settings(&payment_settings)
 }
 
