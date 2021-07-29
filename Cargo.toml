@@ -15,7 +15,7 @@ jemalloc = ["rita_bin/jemalloc"]
 rita_bin = { path = "./rita_bin" }
 
 [workspace]
-members = ["althea_kernel_interface", "settings", "clu", "exit_db", "antenna_forwarding_client", "antenna_forwarding_protocol", "auto_bridge", "babel_monitor_legacy","rita_common","rita_exit","rita_tower","rita_client"]
+members = ["althea_kernel_interface", "settings", "clu", "exit_db", "antenna_forwarding_client", "antenna_forwarding_protocol", "auto_bridge", "babel_monitor_legacy","rita_common","rita_exit","rita_client"]
 
 [profile.release]
 opt-level = "z"

@@ -3229,7 +3229,6 @@ dependencies = [
  "rita_client",
  "rita_common",
  "rita_exit",
- "rita_tower",
  "serde 1.0.126",
  "serde_derive",
  "serde_json",
@@ -3348,18 +3347,6 @@ dependencies = [
  "serde_json",
  "settings",
  "sodiumoxide",
-]
-
-[[package]]
-name = "rita_tower"
-version = "0.18.0"
-dependencies = [
- "althea_types",
- "lazy_static",
- "log",
- "serde 1.0.126",
- "serde_derive",
- "serde_json",
 ]
 
 [[package]]
