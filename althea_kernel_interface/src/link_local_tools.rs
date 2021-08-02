@@ -150,7 +150,7 @@ fn test_get_device_name_linux() {
 
     KI.set_mock(Box::new(move |program, args| {
         assert_eq!(program, "ip");
-        assert_eq!(args, &["neighbor"]);
+        assert_eq!(args, &["neigh"]);
 
         Ok(Output {
             stdout: b"10.0.2.2 dev eth0 lladdr 00:00:00:aa:00:03 STALE
@@ -216,7 +216,7 @@ fn test_get_link_local_reply_ip_linux() {
         match counter {
             1 => {
                 assert_eq!(program, "ip");
-                assert_eq!(args, &["neighbor"]);
+                assert_eq!(args, &["neigh"]);
 
                 Ok(Output {
                     stdout: b"

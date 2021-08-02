@@ -9,7 +9,7 @@ impl dyn KernelInterface {
     /// Returns a vector of neighbors reachable over layer 2, giving IP address of each.
     /// Implemented with `ip neighbor` on Linux.
     pub fn get_neighbors(&self) -> Result<Vec<(IpAddr, String)>, Error> {
-        let output = self.run_command("ip", &["neighbor"])?;
+        let output = self.run_command("ip", &["neigh"])?;
         trace!("Got {:?} from `ip neighbor`", output);
 
         let mut vec = Vec::new();
@@ -46,7 +46,7 @@ fn test_get_neighbors_linux() {
 
     KI.set_mock(Box::new(move |program, args| {
         assert_eq!(program, "ip");
-        assert_eq!(args, &["neighbor"]);
+        assert_eq!(args, &["neigh"]);
 
         Ok(Output {
             stdout: b"10.0.2.2 dev eth0 lladdr 00:00:00:aa:00:03 STALE

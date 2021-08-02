@@ -76,7 +76,7 @@ pub struct TunnelOpenArgs<'a> {
 
 impl dyn KernelInterface {
     pub fn open_tunnel(&self, args: TunnelOpenArgs) -> Result<(), KernelInterfaceError> {
-        let external_peer;
+        let external_peer;                
         let phy_name = match self.get_device_name(args.endpoint.ip()) {
             Ok(phy_name) => {
                 external_peer = false;
@@ -92,7 +92,7 @@ impl dyn KernelInterface {
             None => "::/0".to_string(),
             Some(_) => "::/0,0.0.0.0/0".to_string(),
         };
-
+ 
         let socket_connect_str = socket_to_string(&args.endpoint, phy_name);
         trace!("socket conenct string: {}", socket_connect_str);
         let output = self.run_command(
@@ -201,7 +201,7 @@ fn test_open_tunnel_linux() {
             1 => {
                 //get interfaces
                 assert_eq!(program, "ip");
-                assert_eq!(args, &["neighbor"]);
+                assert_eq!(args, &["neigh"]);
 
                 Ok(Output {
                     stdout: b"10.0.2.2 dev eth0 lladdr 00:00:00:aa:00:03 STALE
