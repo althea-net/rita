@@ -211,7 +211,7 @@ pub fn wgkey_insensitive_traffic_update(traffic: Traffic) {
             && id.mesh_ip == partial_id.mesh_ip
             && id.wg_public_key != partial_id.wg_public_key
         {
-            dk.traffic_update(&id, traffic.amount);
+            dk.traffic_update(id, traffic.amount);
             return;
         }
     }
@@ -630,7 +630,7 @@ pub fn get_debts_list() -> Vec<GetDebtsResult> {
     let debts: Vec<GetDebtsResult> = dk
         .debt_data
         .iter()
-        .map(|(key, value)| GetDebtsResult::new(&key, &value))
+        .map(|(key, value)| GetDebtsResult::new(key, value))
         .collect();
     trace!("Debts: {}", debts.len());
     debts

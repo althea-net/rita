@@ -3,7 +3,7 @@ use crate::KernelInterfaceError as Error;
 
 impl dyn KernelInterface {
     pub fn delete_tunnel(&self, interface: &str) -> Result<(), Error> {
-        let output = self.run_command("ip", &["link", "del", &interface])?;
+        let output = self.run_command("ip", &["link", "del", interface])?;
         if !output.stderr.is_empty() {
             return Err(Error::RuntimeError(format!(
                 "received error deleting wireguard interface: {}",

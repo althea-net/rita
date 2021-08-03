@@ -147,7 +147,7 @@ fn linux_init(settings: RitaClientSettings) -> Result<RitaClientSettings, Error>
 
     // Creates file on disk containing key
     KI.create_wg_key(
-        &Path::new(&network_settings.wg_private_key_path),
+        Path::new(&network_settings.wg_private_key_path),
         &network_settings
             .wg_private_key
             .expect("How did we get here without generating a key above?"),
@@ -232,14 +232,14 @@ fn linux_exit_init(settings: RitaExitSettingsStruct) -> Result<RitaExitSettingsS
 
     // Creates file on disk containing key
     KI.create_wg_key(
-        &Path::new(&network_settings.wg_private_key_path),
+        Path::new(&network_settings.wg_private_key_path),
         &network_settings
             .wg_private_key
             .expect("How did we get here without generating a key above?"),
     )?;
     // same thing but with the exit key
     KI.create_wg_key(
-        &Path::new(&exit_network_settings.wg_private_key_path),
+        Path::new(&exit_network_settings.wg_private_key_path),
         &exit_network_settings.wg_private_key.clone(),
     )?;
 

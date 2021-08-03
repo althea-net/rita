@@ -57,7 +57,7 @@ fn setup_light_client_forwarding(client_addr: Ipv4Addr, nic: &str) -> Result<(),
             "-I",
             "FORWARD",
             "-i",
-            &nic,
+            nic,
             "--src",
             &format!("{}/32", client_addr),
             "-j",
@@ -351,7 +351,7 @@ impl Handler<Watch> for LightClientManager {
                     // get only the first element
                     let (key, usage) = counter.iter().next().unwrap();
                     // unwrap is safe before prepare usage history will ensure an entry exits
-                    let last_seen_usage = self.last_seen_bytes.get_mut(&key).unwrap();
+                    let last_seen_usage = self.last_seen_bytes.get_mut(key).unwrap();
                     let round_upload = usage.upload - last_seen_usage.upload;
                     let round_download = usage.download - last_seen_usage.download;
                     *last_seen_usage = *usage;

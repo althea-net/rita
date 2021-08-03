@@ -192,7 +192,7 @@ fn process_messages(
                 *last_message = Instant::now();
                 let stream_id = stream_id;
                 if let Some(antenna_stream) = streams.get_mut(stream_id) {
-                    if let Err(e) = write_all_spinlock(&mut antenna_stream.stream, &payload) {
+                    if let Err(e) = write_all_spinlock(&mut antenna_stream.stream, payload) {
                         error!(
                             "Failed to write to antenna stream id {} with {:?}",
                             stream_id, e
@@ -202,7 +202,7 @@ fn process_messages(
                     trace!("Opening stream for {}", stream_id);
                     // we don't have a stream, we need to dial out to the server now
                     if let Ok(mut new_stream) = TcpStream::connect(antenna_sockaddr) {
-                        match write_all_spinlock(&mut new_stream, &payload) {
+                        match write_all_spinlock(&mut new_stream, payload) {
                             Ok(_) => {
                                 streams.insert(
                                     *stream_id,

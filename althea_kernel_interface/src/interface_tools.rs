@@ -90,7 +90,7 @@ impl dyn KernelInterface {
         }
         let mut ret = Vec::new();
         for line in stdout.lines() {
-            let cap = RE.captures(&line);
+            let cap = RE.captures(line);
             // we captured something on this line
             if let Some(cap) = cap {
                 // flatten drops the 'none' values in this array

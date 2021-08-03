@@ -28,7 +28,7 @@ impl dyn KernelInterface {
 
     //Sets an arbitrary UCI list on OpenWRT
     pub fn set_uci_list(&self, key: &str, value: &[&str]) -> Result<(), KernelInterfaceError> {
-        if let Err(e) = self.del_uci_var(&key) {
+        if let Err(e) = self.del_uci_var(key) {
             trace!("Delete uci var failed! {:?}", e);
         }
 
@@ -40,13 +40,13 @@ impl dyn KernelInterface {
 
     //Deletes an arbitrary UCI variable on OpenWRT
     pub fn del_uci_var(&self, key: &str) -> Result<(), KernelInterfaceError> {
-        self.run_uci("uci", &["delete", &key])?;
+        self.run_uci("uci", &["delete", key])?;
         Ok(())
     }
 
     //Retrieves the value of a given UCI path, could be one or multiple values
     pub fn get_uci_var(&self, key: &str) -> Result<String, KernelInterfaceError> {
-        let output = self.run_command("uci", &["get", &key])?;
+        let output = self.run_command("uci", &["get", key])?;
         if !output.stderr.is_empty() {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error while getting UCI: {}",

@@ -457,7 +457,7 @@ impl Handler<Tick> for ExitManager {
                         linux_setup_exit_tunnel(
                             &exit,
                             &general_details.clone(),
-                            &exit.info.our_details().unwrap(),
+                            exit.info.our_details().unwrap(),
                         )
                         .expect("failure setting up exit tunnel");
                         self.nat_setup = true;
@@ -468,7 +468,7 @@ impl Handler<Tick> for ExitManager {
                         linux_setup_exit_tunnel(
                             &exit,
                             &general_details.clone(),
-                            &exit.info.our_details().unwrap(),
+                            exit.info.our_details().unwrap(),
                         )
                         .expect("failure setting up exit tunnel");
                         self.nat_setup = true;

@@ -123,7 +123,7 @@ fn set_ssid(wifi_ssid: &WifiSsid) -> Result<HttpResponse, Error> {
     let section_name = format!("default_{}", iface_name);
     KI.set_uci_var(&format!("wireless.{}.ssid", section_name), &ssid)?;
 
-    KI.uci_commit(&"wireless")?;
+    KI.uci_commit("wireless")?;
     KI.openwrt_reset_wireless()?;
 
     // We edited disk contents, force global sync
@@ -179,7 +179,7 @@ fn set_pass(wifi_pass: &WifiPass) -> Result<HttpResponse, Error> {
     let section_name = format!("default_{}", iface_name);
     KI.set_uci_var(&format!("wireless.{}.key", section_name), &pass)?;
 
-    KI.uci_commit(&"wireless")?;
+    KI.uci_commit("wireless")?;
     KI.openwrt_reset_wireless()?;
 
     // We edited disk contents, force global sync
@@ -208,7 +208,7 @@ fn set_channel(wifi_channel: &WifiChannel) -> Result<HttpResponse, Error> {
         &format!("wireless.{}.channel", wifi_channel.radio),
         &wifi_channel.channel.to_string(),
     )?;
-    KI.uci_commit(&"wireless")?;
+    KI.uci_commit("wireless")?;
     KI.openwrt_reset_wireless()?;
 
     // We edited disk contents, force global sync

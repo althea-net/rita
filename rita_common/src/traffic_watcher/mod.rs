@@ -296,7 +296,7 @@ pub fn watch(routes: Vec<RouteLegacy>, neighbors: &[Neighbor]) -> Result<(), Err
         let state = (destinations.get(&ip), if_to_id.get(&interface));
         match state {
             (Some(dest), Some(id_from_if)) => {
-                match debts.get_mut(&id_from_if) {
+                match debts.get_mut(id_from_if) {
                     Some(debt) => {
                         *debt -= dest * i128::from(bytes);
                     }
@@ -325,7 +325,7 @@ pub fn watch(routes: Vec<RouteLegacy>, neighbors: &[Neighbor]) -> Result<(), Err
     for ((ip, interface), bytes) in total_output_counters {
         let state = (destinations.get(&ip), if_to_id.get(&interface));
         match state {
-            (Some(dest), Some(id_from_if)) => match debts.get_mut(&id_from_if) {
+            (Some(dest), Some(id_from_if)) => match debts.get_mut(id_from_if) {
                 Some(debt) => {
                     *debt += (dest - i128::from(local_fee)) * i128::from(bytes);
                 }

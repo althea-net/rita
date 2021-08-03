@@ -30,7 +30,7 @@ impl dyn KernelInterface {
 
     pub fn trigger_neighbor_disc(&self, interfaces: &HashSet<String>) -> Result<(), Error> {
         for interface in interfaces.iter() {
-            self.run_command("ping6", &["-c1", "-I", &interface, "ff02::1"])?;
+            self.run_command("ping6", &["-c1", "-I", interface, "ff02::1"])?;
         }
         Ok(())
     }

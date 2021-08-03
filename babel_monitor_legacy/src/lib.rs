@@ -263,7 +263,7 @@ pub fn monitor_legacy(
         iface
     );
     let iface = iface.to_string();
-    run_command(stream, &command).then(move |result| {
+    run_command(stream, command).then(move |result| {
         if let Err(e) = result {
             return Err(e);
         }

@@ -19,7 +19,7 @@ pub fn prepare_usage_history<S: ::std::hash::BuildHasher>(
     usage_history: &mut HashMap<WgKey, WgUsage, S>,
 ) {
     for (wg_key, bytes) in counters.iter() {
-        match usage_history.get_mut(&wg_key) {
+        match usage_history.get_mut(wg_key) {
             Some(history) => {
                 // tunnel has been reset somehow, reset usage
                 if history.download > bytes.download {

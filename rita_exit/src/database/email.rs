@@ -73,7 +73,7 @@ pub fn handle_email_registration(
     if client.reg_details.email_code == Some(their_record.email_code.clone()) {
         info!("email verification complete for {:?}", client);
 
-        match verify_client(&client, true, &conn) {
+        match verify_client(client, true, conn) {
             Ok(_) => (),
             Err(e) => return future::err(e),
         }
@@ -104,7 +104,7 @@ pub fn handle_email_registration(
                 ),
             })
         } else {
-            match update_mail_sent_time(&client, &conn) {
+            match update_mail_sent_time(client, conn) {
                 Ok(_) => (),
                 Err(e) => return future::err(e),
             }

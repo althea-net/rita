@@ -483,7 +483,7 @@ impl Handler<PeersToContact> for TunnelManager {
 
         trace!("TunnelManager contacting peers");
         for (_, peer) in msg.peers.iter() {
-            let res = self.neighbor_inquiry(&peer);
+            let res = self.neighbor_inquiry(peer);
             if res.is_err() {
                 warn!("Neighbor inqury for {:?} failed! with {:?}", peer, res);
             }
@@ -566,7 +566,7 @@ fn contact_neighbor(
     };
 
     //new send_hello call using udp socket
-    send_hello(&new_msg, &socket, send_addr, our_port);
+    send_hello(&new_msg, socket, send_addr, our_port);
 
     //old hello manager over http
     HelloHandler::from_registry().do_send(msg);
@@ -689,7 +689,7 @@ impl TunnelManager {
                                 Some(a) => &a.linklocal_socket,
                                 None => panic!("No udp socket present for given interface"),
                             };
-                            let res = contact_neighbor(&man_peer, our_port, &udp_socket, socket);
+                            let res = contact_neighbor(&man_peer, our_port, udp_socket, socket);
                             if res.is_err() {
                                 warn!("Contact neighbor failed with {:?}", res);
                             }
@@ -732,7 +732,7 @@ impl TunnelManager {
             Some(a) => &a.linklocal_socket,
             None => panic!("No udp socket present for given interface"),
         };
-        contact_neighbor(peer, our_port, &udp_socket, peer.contact_socket)
+        contact_neighbor(peer, our_port, udp_socket, peer.contact_socket)
     }
 
     /// Given a LocalIdentity, connect to the neighbor over wireguard
@@ -973,7 +973,7 @@ fn tunnel_state_change(msg: TunnelChange, tunnels: &mut HashMap<Identity, Vec<Tu
 
     // this is done outside of the match to make the borrow checker happy
     if tunnel_bw_limits_need_change {
-        let res = tunnel_bw_limit_update(&tunnels);
+        let res = tunnel_bw_limit_update(tunnels);
         // if this fails consistently it could be a wallet draining attack
         // TODO check for that case
         if res.is_err() {

@@ -129,7 +129,7 @@ fn rita_exit_loop(
 
                 info!("about to setup clients");
                 // Create and update client tunnels
-                match setup_clients(&clients_list, &wg_clients) {
+                match setup_clients(&clients_list, wg_clients) {
                     Ok(new_wg_clients) => {
                         *successful_setup = true;
                         *wg_clients = new_wg_clients;
@@ -223,7 +223,7 @@ fn bill(babel_port: u16, tw: &Addr<TrafficWatcher>, start: Instant, ids: Vec<Ide
 fn check_regions(start: Instant, clients_list: Vec<models::Client>, conn: &PgConnection) {
     let val = settings::get_rita_exit().allowed_countries.is_empty();
     if !val {
-        let res = validate_clients_region(clients_list, &conn);
+        let res = validate_clients_region(clients_list, conn);
         match res {
             Err(e) => warn!(
                 "Failed to validate client region with {:?} {}ms since start",

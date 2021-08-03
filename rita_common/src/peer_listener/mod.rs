@@ -165,10 +165,10 @@ impl ListenInterface {
         let disc_ip = network.discovery_ip;
         debug!("Binding to {:?} for ListenInterface", ifname);
         // Lookup interface link local ip
-        let link_ip = KI.get_link_local_device_ip(&ifname)?;
+        let link_ip = KI.get_link_local_device_ip(ifname)?;
 
         // Lookup interface index
-        let iface_index = KI.get_iface_index(&ifname).unwrap_or(0);
+        let iface_index = KI.get_iface_index(ifname).unwrap_or(0);
         // Bond to multicast discovery address on each listen port
         let multicast_socketaddr = SocketAddrV6::new(disc_ip, port, 0, iface_index);
 

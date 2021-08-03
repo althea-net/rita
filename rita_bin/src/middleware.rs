@@ -73,7 +73,7 @@ impl<S> Middleware<S> for Auth {
         }
 
         config.realm("Admin");
-        let auth = BasicAuth::from_request(&req, &config)?;
+        let auth = BasicAuth::from_request(req, &config)?;
         // hardcoded username since we don't have a user system
         if auth.username() == "rita"
             && auth.password().is_some()

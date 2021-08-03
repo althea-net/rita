@@ -216,7 +216,7 @@ pub fn watch(
     // creates new usage entires does not actualy update the values
     prepare_usage_history(&counters, usage_history);
 
-    counters_logging(&counters, &usage_history, our_price as u32);
+    counters_logging(&counters, usage_history, our_price as u32);
 
     let mut debts = HashMap::new();
 
@@ -233,7 +233,7 @@ pub fn watch(
             usage_history.get_mut(&wg_key),
         );
         match state {
-            (Some(id), Some(_dest), Some(history)) => match debts.get_mut(&id) {
+            (Some(id), Some(_dest), Some(history)) => match debts.get_mut(id) {
                 Some(debt) => {
                     let used = bytes.download - history.download;
                     let value = i128::from(our_price) * i128::from(used);
@@ -263,7 +263,7 @@ pub fn watch(
             usage_history.get_mut(&wg_key),
         );
         match state {
-            (Some(id), Some(dest), Some(history)) => match debts.get_mut(&id) {
+            (Some(id), Some(dest), Some(history)) => match debts.get_mut(id) {
                 Some(debt) => {
                     let used = bytes.upload - history.upload;
                     let value = i128::from(dest + our_price) * i128::from(used);

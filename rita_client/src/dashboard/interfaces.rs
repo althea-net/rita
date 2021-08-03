@@ -274,7 +274,7 @@ pub fn ethernet_transform_mode(
             match ret {
                 Ok(list) => {
                     trace!("The existing LAN interfaces list is {:?}", list);
-                    let new_list = list_add(&list, &ifname);
+                    let new_list = list_add(&list, ifname);
                     trace!("Setting the new list {:?}", new_list);
                     let ret = KI.set_uci_var("network.lan.ifname", &new_list);
                     return_codes.push(ret);
@@ -282,7 +282,7 @@ pub fn ethernet_transform_mode(
                 Err(e) => {
                     if e.to_string().contains("Entry not found") {
                         trace!("No LAN interfaces found, setting one now");
-                        let ret = KI.set_uci_var("network.lan.ifname", &ifname);
+                        let ret = KI.set_uci_var("network.lan.ifname", ifname);
                         return_codes.push(ret);
                     } else {
                         warn!("Trying to read lan ifname returned {:?}", e);
@@ -297,7 +297,7 @@ pub fn ethernet_transform_mode(
             match ret {
                 Ok(list) => {
                     trace!("The existing Phone interfaces list is {:?}", list);
-                    let new_list = list_add(&list, &ifname);
+                    let new_list = list_add(&list, ifname);
                     trace!("Setting the new list {:?}", new_list);
                     let ret = KI.set_uci_var("network.pbs.ifname", &new_list);
                     return_codes.push(ret);
@@ -305,7 +305,7 @@ pub fn ethernet_transform_mode(
                 Err(e) => {
                     if e.to_string().contains("Entry not found") {
                         trace!("No Phone interfaces found, setting one now");
-                        let ret = KI.set_uci_var("network.pbs.ifname", &ifname);
+                        let ret = KI.set_uci_var("network.pbs.ifname", ifname);
                         return_codes.push(ret);
                     } else {
                         warn!("Trying to read Phone ifname returned {:?}", e);
@@ -345,7 +345,7 @@ pub fn ethernet_transform_mode(
     rita_client.network = network;
     settings::set_rita_client(rita_client);
 
-    KI.uci_commit(&"network")?;
+    KI.uci_commit("network")?;
     KI.openwrt_reset_network()?;
 
     temp_copy.write(&settings::get_flag_config())?;
@@ -458,7 +458,7 @@ fn wlan_toggle_set(uci_spec: &str, enabled: bool) -> Result<(), Error> {
         );
     }
 
-    KI.uci_commit(&"wireless")?;
+    KI.uci_commit("wireless")?;
     KI.openwrt_reset_wireless()?;
 
     // We edited disk contents, force global sync

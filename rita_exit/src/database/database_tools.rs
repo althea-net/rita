@@ -334,8 +334,8 @@ pub fn create_or_update_user_record(
     user_country: String,
 ) -> Result<models::Client, Error> {
     use self::schema::clients::dsl::clients;
-    if let Some(val) = get_client(&client, conn)? {
-        update_client(&client, &val, conn)?;
+    if let Some(val) = get_client(client, conn)? {
+        update_client(client, &val, conn)?;
         Ok(val)
     } else {
         info!(
@@ -345,7 +345,7 @@ pub fn create_or_update_user_record(
 
         let new_ip = get_next_client_ip(conn)?;
 
-        let c = client_to_new_db_client(&client, new_ip, user_country);
+        let c = client_to_new_db_client(client, new_ip, user_country);
 
         info!("Inserting new client {}", client.global.wg_public_key);
         diesel::insert_into(clients).values(&c).execute(conn)?;

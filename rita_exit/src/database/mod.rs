@@ -184,7 +184,7 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
 pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<ExitState, Error> {
     trace!("Checking if record exists for {:?}", client.global.mesh_ip);
 
-    if let Some(their_record) = get_client(&client, &conn)? {
+    if let Some(their_record) = get_client(&client, conn)? {
         trace!("record exists, updating");
 
         if !verif_done(&their_record) {
@@ -209,7 +209,7 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
             });
         }
 
-        update_client(&client, &their_record, &conn)?;
+        update_client(&client, &their_record, conn)?;
 
         Ok(ExitState::Registered {
             our_details: ExitClientDetails {
@@ -270,7 +270,7 @@ pub fn validate_clients_region(
                 // get_gateway_ip_bulk can't add new entires to the list
                 // therefore client_map is strictly a superset of ip_bulk results
                 let client_to_deauth = &client_map[&item.mesh_ip];
-                if verify_db_client(client_to_deauth, false, &conn).is_err() {
+                if verify_db_client(client_to_deauth, false, conn).is_err() {
                     error!("Failed to deauth client {:?}", client_to_deauth);
                 }
             }

@@ -290,7 +290,7 @@ fn manage_gateway() {
             Ok(s) => {
                 for ip in s.iter() {
                     trace!("Resolv route {:?}", ip);
-                    KI.manual_peers_route(&ip, &mut common.network.last_default_route)
+                    KI.manual_peers_route(ip, &mut common.network.last_default_route)
                         .unwrap();
                 }
                 settings::set_rita_common(common);

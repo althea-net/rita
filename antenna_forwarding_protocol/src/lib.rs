@@ -131,7 +131,7 @@ fn write_all_spinlock_internal(
             if e.kind() == WouldBlock {
                 // wait for the operating system to clear up some buffer space
                 thread::sleep(SPINLOCK_TIME);
-                write_all_spinlock_internal(stream, &buffer, depth + 1)
+                write_all_spinlock_internal(stream, buffer, depth + 1)
             } else {
                 error!("Socket write error is {:?}", e);
                 Err(e)
@@ -420,7 +420,7 @@ impl ForwardingProtocolMessage {
         let ciphertext = &payload[nonce_end..end_bytes];
         let sk = client_secretkey.into();
         let pk = server_publickey.into();
-        match box_::open(&ciphertext, &nonce, &pk, &sk) {
+        match box_::open(ciphertext, &nonce, &pk, &sk) {
             Ok(plaintext) => match serde_json::from_slice(&plaintext) {
                 Ok(forward_message) => Ok((end_bytes, forward_message)),
                 Err(e) => Err(ForwardingProtocolError::SerdeError {
@@ -474,7 +474,7 @@ impl ForwardingProtocolMessage {
                 // copy in stream id
                 message.extend_from_slice(&stream_id.to_be_bytes());
                 // copy in byte format payload
-                message.extend_from_slice(&payload);
+                message.extend_from_slice(payload);
 
                 message
             }

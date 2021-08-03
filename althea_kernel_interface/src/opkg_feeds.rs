@@ -72,7 +72,7 @@ fn get_feed(line: &str) -> Result<ReleaseStatus, Error> {
         static ref RE: Regex = Regex::new(r"/(([A-Za-z0-9\-_]+)/packages/)")
             .expect("Unable to compile regular expression");
     }
-    if let Some(feed) = RE.captures(&line) {
+    if let Some(feed) = RE.captures(line) {
         if let Some(val) = feed.get(0) {
             let a: Vec<&str> = val.as_str().split('/').collect();
             let feed = a[1];

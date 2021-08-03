@@ -63,7 +63,7 @@ impl Handler<TriggerGc> for TunnelManager {
         // checker issues, we should consider a method that does modify in place
         for (_identity, tunnels) in self.tunnels.iter() {
             for tunnel in tunnels.iter() {
-                if tunnel_should_be_kept(&tunnel, &msg, &interfaces) {
+                if tunnel_should_be_kept(tunnel, &msg, &interfaces) {
                     insert_into_tunnel_list(tunnel, &mut good);
                 } else {
                     insert_into_tunnel_list(tunnel, &mut to_delete)
@@ -157,7 +157,7 @@ fn tunnel_should_be_kept(
         let handshake_timeout =
             !check_handshake_time(msg.tunnel_handshake_timeout, &tunnel.iface_name);
         let created_recently = since_created < msg.tunnel_timeout;
-        let tunnel_up = tunnel_up(&interfaces, &tunnel.iface_name);
+        let tunnel_up = tunnel_up(interfaces, &tunnel.iface_name);
         let contact_timeout = since_last_contact > msg.tunnel_timeout;
 
         match (

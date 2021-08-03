@@ -379,7 +379,7 @@ pub fn monitor(stream: &mut TcpStream, iface: &str) -> Result<(), Error> {
         iface
     );
     let iface = iface.to_string();
-    let result = run_command(stream, &command);
+    let result = run_command(stream, command);
 
     if let Err(e) = result {
         return Err(e);
