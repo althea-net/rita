@@ -287,7 +287,7 @@ async fn xdai_bridge() {
             }
         };
         let amount = withdraw_details.amount.clone();
-        let address = withdraw_details.to;
+        let address = withdraw_details.to.clone();
         match withdraw(withdraw_details).await {
             Ok(_) => {
                 info!(
