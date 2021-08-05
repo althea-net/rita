@@ -1,6 +1,6 @@
 use crate::blockchain_oracle::zero_window_start;
 use crate::rita_loop::get_web3_server;
-use crate::token_bridge::withdraw as bridge_withdraw;
+use crate::token_bridge::setup_withdraw as bridge_withdraw;
 use crate::token_bridge::Withdraw as WithdrawMsg;
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
@@ -27,7 +27,6 @@ fn withdraw_handler(
     let withdraw_chain = payment_settings.withdraw_chain;
     let mut gas_price = payment_settings.gas_price.clone();
     let balance = payment_settings.balance;
-    let mut withdraw_all = false;
 
     // if no amount is specified we are withdrawing our entire balance
     let mut amount = if let Some(amount) = amount {
@@ -50,16 +49,13 @@ fn withdraw_handler(
     if amount.clone() + tx_cost.clone() >= balance {
         zero_window_start();
         amount = balance - tx_cost;
-        withdraw_all = true
     }
 
     match (system_chain, withdraw_chain) {
         (SystemChain::Ethereum, SystemChain::Ethereum) => eth_compatable_withdraw(address, amount),
         (SystemChain::Rinkeby, SystemChain::Rinkeby) => eth_compatable_withdraw(address, amount),
         (SystemChain::Xdai, SystemChain::Xdai) => eth_compatable_withdraw(address, amount),
-        (SystemChain::Xdai, SystemChain::Ethereum) => {
-            xdai_to_eth_withdraw(address, amount, withdraw_all)
-        }
+        (SystemChain::Xdai, SystemChain::Ethereum) => xdai_withdraw(address, amount),
         (_, _) => Box::new(future::ok(
             HttpResponse::new(StatusCode::from_u16(500u16).unwrap())
                 .into_builder()
@@ -156,16 +152,22 @@ fn eth_compatable_withdraw(
 }
 
 /// Cross chain bridge withdraw from Xdai -> ETH
-fn xdai_to_eth_withdraw(
+/// This handler invokes a withdraw function that sets a bool (as a lock) and withdraw information
+/// as a lazy static. This is done in a sync context since our handler uses the older version of
+/// futures. From there our xdai_loop ticks, looks at the lazy static for updated information and
+/// sends out a transaction to the contract 'relayTokens' on xdai blockchain, that sends the funds
+/// directly to an external address without eth conversion. This can be done in the async context
+/// using new futures. From there we constantly check the blockchain for any withdrawal events.
+/// We send these events as a contract call to simulate them, and those that do succeed, we execute
+/// to unlock the funds on eth side.
+fn xdai_withdraw(
     address: Address,
     amount: Uint256,
-    withdraw_all: bool,
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     Box::new(
         match bridge_withdraw(WithdrawMsg {
             to: address,
             amount,
-            withdraw_all,
         }) {
             Ok(_) => Box::new(future::ok(
                 HttpResponse::Ok().json("View endpoints for progress"),

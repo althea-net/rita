@@ -18,11 +18,14 @@ use web30::types::SendTxOption;
 mod error;
 pub use error::TokenBridgeError;
 
-// the estimate gas call is wildly inaccurate so we need to hardcode the expected gas
-// consumption of the following operations.
+// The estimate gas call is wildly inaccurate so we need to hardcode the expected gas
+// consumption of the following operations. These hardcoded values are obtained
+// by looking at the values on Etherscan and observing gas values in practice, along with slight padding
+// to ensure correct operation
 pub static UNISWAP_GAS_LIMIT: u128 = 80_000;
 pub static ERC20_GAS_LIMIT: u128 = 40_000;
 pub static ETH_TRANSACTION_GAS_LIMIT: u128 = 21_000;
+pub static XDAI_FUNDS_UNLOCK_GAS: u128 = 180_000;
 
 fn default_helper_on_xdai_address() -> Address {
     default_bridge_addresses().helper_on_xdai
@@ -65,17 +68,18 @@ pub struct TokenBridgeAddresses {
 /// side of the xDai bridge mixed up.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct HelperWithdrawInfo {
-    msg: Vec<u8>,
-    sigs: Vec<u8>,
+    pub msg: Vec<u8>,
+    pub sigs: Vec<u8>,
 }
 
 /// This represents the xdai withdraw event, including the address that is executing the withdraw
 /// and the destination address of the withdraw on ethereum
 #[derive(Clone, Debug)]
 pub struct WithdrawEvent {
-    sender: Address,
-    receiver: Address,
-    ammount: Uint256,
+    pub sender: Address,
+    pub receiver: Address,
+    pub amount: Uint256,
+    pub txid: Uint256,
 }
 
 #[derive(Clone)]
@@ -88,14 +92,14 @@ pub struct TokenBridge {
     pub xdai_bridge_on_xdai: Address,
     pub dai_erc20_contract_on_eth: Address,
     pub own_address: Address,
-    pub secret: PrivateKey,
+    pub eth_privatekey: PrivateKey,
 }
 
 impl TokenBridge {
     pub fn new(
         addresses: TokenBridgeAddresses,
         own_address: Address,
-        secret: PrivateKey,
+        eth_privatekey: PrivateKey,
         eth_full_node_url: String,
         xdai_full_node_url: String,
         timeout: Duration,
@@ -107,7 +111,7 @@ impl TokenBridge {
             xdai_bridge_on_eth: addresses.xdai_bridge_on_eth,
             dai_erc20_contract_on_eth: addresses.dai_erc20_contract_on_eth,
             own_address,
-            secret,
+            eth_privatekey,
             xdai_web3: Web3::new(&xdai_full_node_url, timeout),
             eth_web3: Web3::new(&eth_full_node_url, timeout),
         }
@@ -123,7 +127,7 @@ impl TokenBridge {
     ) -> Result<(), TokenBridgeError> {
         let web3 = self.eth_web3.clone();
         let own_address = self.own_address;
-        let secret = self.secret;
+        let secret = self.eth_privatekey;
 
         let tx_hash = web3
             .send_transaction(to, Vec::new(), amount, own_address, secret, options)
@@ -199,7 +203,7 @@ impl TokenBridge {
     ) -> Result<Uint256, TokenBridgeError> {
         let uniswap_address = self.uniswap_on_eth_address;
         let own_address = self.own_address;
-        let secret = self.secret;
+        let secret = self.eth_privatekey;
         let web3 = self.eth_web3.clone();
 
         let block = web3.eth_get_latest_block().await?;
@@ -283,7 +287,7 @@ impl TokenBridge {
         let dai_address = self.dai_erc20_contract_on_eth;
         let own_address = self.own_address;
         let uniswap_address = self.uniswap_on_eth_address;
-        let secret = self.secret;
+        let secret = self.eth_privatekey;
         let web3 = self.eth_web3.clone();
 
         let payload = encode_call(
@@ -331,7 +335,7 @@ impl TokenBridge {
     ) -> Result<Uint256, TokenBridgeError> {
         let uniswap_address = self.uniswap_on_eth_address;
         let own_address = self.own_address;
-        let secret = self.secret;
+        let secret = self.eth_privatekey;
         let web3 = self.eth_web3.clone();
 
         let is_approved = self.check_if_uniswap_dai_approved().await?;
@@ -391,7 +395,7 @@ impl TokenBridge {
     ) -> Result<Uint256, TokenBridgeError> {
         let eth_web3 = self.eth_web3.clone();
         let own_address = self.own_address;
-        let secret = self.secret;
+        let secret = self.eth_privatekey;
 
         // You basically just send it some dai to the bridge address and they show
         // up in the same address on the xdai side we have no idea when this has succeeded
@@ -431,7 +435,7 @@ impl TokenBridge {
         let xdai_web3 = self.xdai_web3.clone();
 
         let own_address = self.own_address;
-        let secret = self.secret;
+        let secret = self.eth_privatekey;
 
         // You basically just send it some coins to the contract address on the Xdai side
         // and it will show up on the Eth side in the same address
@@ -561,8 +565,8 @@ impl TokenBridge {
                 payload,
                 0u32.into(),
                 own_address,
-                self.secret,
-                vec![SendTxOption::GasLimit(200_000u64.into())],
+                self.eth_privatekey,
+                vec![SendTxOption::GasLimit(XDAI_FUNDS_UNLOCK_GAS.into())],
             )
             .await?;
 
@@ -607,6 +611,37 @@ pub fn default_bridge_addresses() -> TokenBridgeAddresses {
     }
 }
 
+/// This function calls the contract relayTokens(address) on the xdai blockchain by sending a function call
+/// transaction. It sends the withdraw amount directly to the destination address specified by the withdrawal.
+/// The transaction sends real money that the user requested to the destination address from user's wallet.
+pub async fn encode_relaytokens(
+    bridge: TokenBridge,
+    dest_address: Address,
+    timeout: Duration,
+) -> Result<(), TokenBridgeError> {
+    let payload = encode_call("relayTokens(address)", &[dest_address.into()]).unwrap();
+    let options = Vec::new();
+
+    let tx_hash = bridge
+        .xdai_web3
+        .send_transaction(
+            bridge.xdai_bridge_on_xdai,
+            payload,
+            0u32.into(),
+            bridge.own_address,
+            bridge.eth_privatekey,
+            options,
+        )
+        .await?;
+
+    bridge
+        .xdai_web3
+        .wait_for_transaction(tx_hash, timeout, None)
+        .await?;
+
+    Ok(())
+}
+
 /// Helper function that returns the start and end block number when searching for events
 fn compute_start_end(
     iter: u64,
@@ -639,16 +674,15 @@ async fn parse_withdraw_event(log_data: &Log, client: &Web3) -> Result<WithdrawE
     let sender_data = &*sender_data;
 
     // first receive receiver and ammount
-    let (receiver, ammount) = parse_receiver_data(receiver_data)?;
+    let (receiver, amount) = parse_receiver_data(receiver_data)?;
 
-    println!("Ammount is {:?}", ammount);
-
-    let sender = parse_sender_data(sender_data, client).await?;
+    let (sender, tx_hash) = parse_sender_data(sender_data, client).await?;
 
     Ok(WithdrawEvent {
         sender,
         receiver,
-        ammount,
+        amount,
+        txid: tx_hash,
     })
 }
 
@@ -726,7 +760,7 @@ fn parse_receiver_data(data: &[u8]) -> Result<(Address, Uint256), Web3Error> {
 
 /// This helper function parses the transaction_hash field in the Logs returned when checking for the event signature "UserRequestForSignature(address,uint256)"
 /// This parses and returns the senders Address
-async fn parse_sender_data(data: &[u8], client: &Web3) -> Result<Address, Web3Error> {
+async fn parse_sender_data(data: &[u8], client: &Web3) -> Result<(Address, Uint256), Web3Error> {
     // Transaction hash should be one word
     if data.len() < 32 {
         return Err(Web3Error::BadInput(
@@ -735,7 +769,7 @@ async fn parse_sender_data(data: &[u8], client: &Web3) -> Result<Address, Web3Er
     }
 
     let tx_hash = Uint256::from_bytes_be(data);
-    let response = client.eth_get_transaction_by_hash(tx_hash).await?;
+    let response = client.eth_get_transaction_by_hash(tx_hash.clone()).await?;
 
     let tx_res = match response {
         Some(a) => a,
@@ -747,7 +781,7 @@ async fn parse_sender_data(data: &[u8], client: &Web3) -> Result<Address, Web3Er
     };
 
     let sender = tx_res.from;
-    Ok(sender)
+    Ok((sender, tx_hash))
 }
 
 #[cfg(test)]
