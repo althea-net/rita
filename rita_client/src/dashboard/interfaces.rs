@@ -335,22 +335,22 @@ pub fn ethernet_transform_mode(
         }
     }
     let mut rita_client = settings::get_rita_client();
-    let temp_copy = rita_client.clone();
     if error_occured {
         let res = KI.uci_revert("network");
         rita_client.network = old_network_settings;
         settings::set_rita_client(rita_client);
         bail!("Error running UCI commands! Revert attempted: {:?}", res);
     }
-    rita_client.network = network;
-    settings::set_rita_client(rita_client);
 
     KI.uci_commit("network")?;
     KI.openwrt_reset_network()?;
 
-    temp_copy.write(&settings::get_flag_config())?;
+    rita_client.network = network;
+    settings::set_rita_client(rita_client);
 
-    if let Err(_e) = temp_copy.write(&settings::get_flag_config()) {
+    // try and save the config and fail if we can't
+    let rita_client = settings::get_rita_client();
+    if let Err(_e) = rita_client.write(&settings::get_flag_config()) {
         return Err(_e);
     }
 
