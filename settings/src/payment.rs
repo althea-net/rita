@@ -227,7 +227,7 @@ impl Default for PaymentSettings {
             nonce: 0u64.into(),
             gas_price: 0u64.into(), // 10 gwei
             net_version: None,
-            node_list: Vec::new(),
+            node_list: default_node_list(),
             system_chain: default_system_chain(),
             withdraw_chain: default_system_chain(),
             debts_file: default_debts_file(),
