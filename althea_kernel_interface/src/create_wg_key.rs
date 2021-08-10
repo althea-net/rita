@@ -26,14 +26,14 @@ impl dyn KernelInterface {
             .args(&["genkey"])
             .stdout(Stdio::piped())
             .output()
-            .unwrap();
+            .expect("Are you sure wireguard is installed on this device?");
 
         let mut pubkey = Command::new("wg")
             .args(&["pubkey"])
             .stdout(Stdio::piped())
             .stdin(Stdio::piped())
             .spawn()
-            .unwrap();
+            .expect("Are you sure wireguard is installed on this device?");
 
         pubkey
             .stdin
