@@ -143,7 +143,7 @@ impl Default for NetworkSettings {
             bounty_port: 8888,
             rita_tick_interval: 5,
             wg_private_key: None,
-            wg_private_key_path: String::new(),
+            wg_private_key_path: "/tmp/priv".to_string(),
             wg_public_key: None,
             wg_start_port: 60000,
             peer_interfaces: HashSet::new(),
