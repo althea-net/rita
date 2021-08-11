@@ -31,10 +31,14 @@ impl Supervised for TrafficWatcher {}
 
 impl SystemService for TrafficWatcher {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        KI.init_counter(&FilterTarget::Input).unwrap();
-        KI.init_counter(&FilterTarget::Output).unwrap();
-        KI.init_counter(&FilterTarget::ForwardInput).unwrap();
-        KI.init_counter(&FilterTarget::ForwardOutput).unwrap();
+        KI.init_counter(&FilterTarget::Input)
+            .expect("Is ipset installed?");
+        KI.init_counter(&FilterTarget::Output)
+            .expect("Is ipset installed?");
+        KI.init_counter(&FilterTarget::ForwardInput)
+            .expect("Is ipset installed?");
+        KI.init_counter(&FilterTarget::ForwardOutput)
+            .expect("Is ipset installed?");
 
         info!("Traffic Watcher started");
     }
