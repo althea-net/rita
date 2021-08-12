@@ -1,9 +1,0 @@
-[target.x86_64-unknown-linux-gnu]
-image = "cross-rita"
-
-[build.env]
-passthrough = [
-    "RUST_BACKTRACE",
-    "RUST_LOG",
-    "RUSTFLAGS",
-]
