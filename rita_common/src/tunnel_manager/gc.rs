@@ -93,7 +93,11 @@ impl Handler<TriggerGc> for TunnelManager {
                     None => {
                         // In the same spirit, we return the port to the free port pool only after tunnel
                         // deletion goes well.
-                        tunnel.unmonitor(0);
+                        let res = tunnel.unmonitor();
+                        error!(
+                            "Tunnel unmonitor failed during gc, garbage idle tunnel! {:?}",
+                            res
+                        );
                     }
                     Some(_) => {
                         tunnel.close_light_client_tunnel();

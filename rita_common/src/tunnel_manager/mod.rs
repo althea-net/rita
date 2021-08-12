@@ -14,6 +14,7 @@ use crate::peer_listener::Hello as NewHello;
 use crate::peer_listener::PEER_LISTENER;
 use crate::peer_listener::{send_hello, Peer};
 use crate::rita_loop::is_gateway;
+use crate::FAST_LOOP_TIMEOUT;
 use crate::KI;
 #[cfg(test)]
 use actix::actors::mocker::Mocker;
@@ -22,10 +23,9 @@ use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService
 use althea_kernel_interface::open_tunnel::TunnelOpenArgs;
 use althea_types::Identity;
 use althea_types::LocalIdentity;
-use babel_monitor_legacy::monitor_legacy;
-use babel_monitor_legacy::open_babel_stream_legacy;
-use babel_monitor_legacy::start_connection_legacy;
-use babel_monitor_legacy::unmonitor_legacy;
+use babel_monitor::monitor;
+use babel_monitor::open_babel_stream;
+use babel_monitor::unmonitor;
 use failure::Error;
 use futures01::Future;
 use std::collections::HashMap;
@@ -35,7 +35,6 @@ use std::fmt::Display;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 use std::path::Path;
 use std::time::{Duration, Instant};
-use tokio::timer::Delay;
 
 #[cfg(test)]
 type HelloHandler = Mocker<crate::hello_handler::HelloHandler>;
@@ -180,8 +179,8 @@ impl Tunnel {
 
         match light_client_details {
             None => {
-                // attach babel, the argument indicates that this is attempt zero
-                t.monitor(0);
+                // attach to babel
+                t.monitor()?;
             }
             Some(_) => {}
         }
@@ -194,94 +193,34 @@ impl Tunnel {
     }
 
     /// Register this tunnel into Babel monitor
-    pub fn monitor(&self, retry_count: u8) {
+    pub fn monitor(&self) -> Result<(), Error> {
         info!("Monitoring tunnel {}", self.iface_name);
         let iface_name = self.iface_name.clone();
         let babel_port = settings::get_rita_common().network.babel_port;
-        let tunnel = self.clone();
 
-        Arbiter::spawn(
-            open_babel_stream_legacy(babel_port)
-                .from_err()
-                .and_then(move |stream| {
-                    start_connection_legacy(stream)
-                        .and_then(move |stream| monitor_legacy(stream, &iface_name))
-                })
-                .then(move |res| {
-                    // Errors here seem very very rare, I've only ever seen it happen
-                    // twice myself and I couldn't reproduce it, nonetheless it's a pretty
-                    // bad situation so we will retry
-                    if let Err(e) = res {
-                        warn!("Tunnel monitor failed with {:?}, retrying in 1 second", e);
-                        let when = Instant::now() + Duration::from_secs(1);
-                        let fut = Delay::new(when)
-                            .map_err(move |e| panic!("timer failed; err={:?}", e))
-                            .and_then(move |_| {
-                                TunnelManager::from_registry().do_send(TunnelMonitorFailure {
-                                    tunnel_to_retry: tunnel,
-                                    retry_count,
-                                });
-                                Ok(())
-                            });
-                        Arbiter::spawn(fut);
-                    }
-                    Ok(())
-                }),
-        )
+        // this operation blocks while opening and using a tcp stream
+        let mut stream = open_babel_stream(babel_port, FAST_LOOP_TIMEOUT)?;
+        monitor(&mut stream, &iface_name)
     }
 
-    pub fn unmonitor(&self, retry_count: u8) {
+    pub fn unmonitor(&self) -> Result<(), Error> {
         warn!("Unmonitoring tunnel {}", self.iface_name);
         let iface_name = self.iface_name.clone();
         let babel_port = settings::get_rita_common().network.babel_port;
         let tunnel = self.clone();
 
-        Arbiter::spawn(
-            open_babel_stream_legacy(babel_port)
-                .from_err()
-                .and_then(move |stream| {
-                    start_connection_legacy(stream)
-                        .and_then(move |stream| unmonitor_legacy(stream, &iface_name))
-                })
-                .then(move |res| {
-                    // Errors here seem very very rare, I've only ever seen it happen
-                    // twice myself and I couldn't reproduce it, nontheless it's a pretty
-                    // bad situation so we will retry
-                    if let Err(e) = res {
-                        warn!("Tunnel unmonitor failed with {:?}, retrying in 1 second", e);
-                        let when = Instant::now() + Duration::from_secs(1);
-                        let fut = Delay::new(when)
-                            .map_err(move |e| panic!("timer failed; err={:?}", e))
-                            .and_then(move |_| {
-                                TunnelManager::from_registry().do_send(TunnelUnMonitorFailure {
-                                    tunnel_to_retry: tunnel,
-                                    retry_count,
-                                });
-                                Ok(())
-                            });
-                        Arbiter::spawn(fut);
-                    } else {
-                        // We must wait until we have flushed the interface before deleting it
-                        // otherwise we will experience this error
-                        // https://github.com/sudomesh/bugs/issues/24
-                        // if you see interfaces in babel dump with 'up false' check the stderror
-                        // FD on the prod device /proc/<pid>/fd/1 and you'll find this exact error
-                        // this can be reduced by waiting here (which is what we do now) or a proper
-                        // fix to kernel_setup_interface in bableld
-                        let when = Instant::now() + Duration::from_secs(60);
-                        let fut = Delay::new(when)
-                            .map_err(move |e| panic!("timer failed; err={:?}", e))
-                            .and_then(move |_| {
-                                if let Err(e) = KI.del_interface(&tunnel.iface_name) {
-                                    error!("Failed to delete wg interface! {:?}", e);
-                                }
-                                Ok(())
-                            });
-                        Arbiter::spawn(fut);
-                    }
-                    Ok(())
-                }),
-        )
+        // this operation blocks while opening and using a tcp stream
+        let mut stream = open_babel_stream(babel_port, FAST_LOOP_TIMEOUT)?;
+        unmonitor(&mut stream, &iface_name)?;
+
+        // We must wait until we have flushed the interface before deleting it
+        // otherwise we will experience this error
+        // https://github.com/sudomesh/bugs/issues/24
+        if let Err(e) = KI.del_interface(&tunnel.iface_name) {
+            error!("Failed to delete wg interface! {:?}", e);
+            return Err(e.into());
+        }
+        Ok(())
     }
 
     pub fn close_light_client_tunnel(&self) {
@@ -329,63 +268,6 @@ impl SystemService for TunnelManager {
 impl Default for TunnelManager {
     fn default() -> TunnelManager {
         TunnelManager::new()
-    }
-}
-
-/// When listening on a tunnel fails we need to try again
-pub struct TunnelMonitorFailure {
-    pub tunnel_to_retry: Tunnel,
-    pub retry_count: u8,
-}
-
-impl Message for TunnelMonitorFailure {
-    type Result = ();
-}
-
-impl Handler<TunnelMonitorFailure> for TunnelManager {
-    type Result = ();
-
-    fn handle(&mut self, msg: TunnelMonitorFailure, _: &mut Context<Self>) -> Self::Result {
-        let tunnel_to_retry = msg.tunnel_to_retry;
-        let retry_count = msg.retry_count;
-
-        if retry_count < 10 {
-            tunnel_to_retry.monitor(retry_count + 1);
-        } else {
-            // this could result in networking not working, it's better to panic if we can't
-            // do anything over the span of 10 retries and 10 seconds
-            let message =
-                "ERROR: Monitoring tunnel has failed! The tunnels cache is an incorrect state";
-            error!("{}", message);
-            panic!("{}", message);
-        }
-    }
-}
-
-/// When listening on a tunnel fails we need to try again
-pub struct TunnelUnMonitorFailure {
-    pub tunnel_to_retry: Tunnel,
-    pub retry_count: u8,
-}
-
-impl Message for TunnelUnMonitorFailure {
-    type Result = ();
-}
-
-impl Handler<TunnelUnMonitorFailure> for TunnelManager {
-    type Result = ();
-
-    fn handle(&mut self, msg: TunnelUnMonitorFailure, _: &mut Context<Self>) -> Self::Result {
-        let tunnel_to_retry = msg.tunnel_to_retry;
-        let retry_count = msg.retry_count;
-
-        if retry_count < 10 {
-            tunnel_to_retry.unmonitor(retry_count + 1);
-        } else {
-            error!(
-                "Unmonitoring tunnel has failed! Babel will now listen on a non-existent tunnel"
-            );
-        }
     }
 }
 
@@ -820,10 +702,10 @@ impl TunnelManager {
                     self.tunnels.remove(&key);
                 }
 
-                // Remove interface
-                let res = KI.del_interface(&tunnel.iface_name);
+                // tell Babel to flush the interface and then delete it
+                let res = tunnel.unmonitor();
                 if res.is_err() {
-                    warn!(
+                    error!(
                         "We failed to delete the interface {:?} with {:?} it's now orphaned",
                         tunnel.iface_name, res
                     );
