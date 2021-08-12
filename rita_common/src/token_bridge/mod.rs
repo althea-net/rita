@@ -21,13 +21,15 @@
 use crate::rita_loop::slow_loop::SLOW_LOOP_TIMEOUT;
 use althea_types::SystemChain;
 use async_web30::jsonrpc::error::Web3Error;
+use auto_bridge::check_relayed_message;
+use auto_bridge::get_payload_for_funds_unlock;
 use auto_bridge::HelperWithdrawInfo;
 use auto_bridge::ERC20_GAS_LIMIT;
 use auto_bridge::UNISWAP_GAS_LIMIT;
 use auto_bridge::XDAI_FUNDS_UNLOCK_GAS;
-use auto_bridge::{check_withdrawals, encode_relaytokens};
+use auto_bridge::{check_withdrawals, encode_relaytokens, get_relay_message_hash};
 use auto_bridge::{TokenBridge as TokenBridgeCore, TokenBridgeError};
-use clarity::abi::Token;
+use clarity::utils::display_uint256_as_address;
 use clarity::Address;
 use failure::{bail, Error};
 use num256::Uint256;
@@ -287,7 +289,7 @@ async fn xdai_bridge() {
             }
         };
         let amount = withdraw_details.amount.clone();
-        let address = withdraw_details.to.clone();
+        let address = withdraw_details.to;
         match withdraw(withdraw_details).await {
             Ok(_) => {
                 info!(
@@ -383,23 +385,56 @@ async fn simulated_withdrawal_on_eth(
         let amount = event.amount.clone();
         let w_p_dollar = wei_per_dollar.clone();
 
-        let withdraw_info = bridge.get_relay_message_hash(txid, amount.clone()).await?;
-        match simulate_signature_submission(bridge, &withdraw_info).await {
-            Ok(_) => {
-                let _res = bridge
-                    .submit_signatures_to_unlock_funds(withdraw_info, SIGNATURES_TIMEOUT)
-                    .await?;
-                detailed_state_change(DetailedBridgeState::DaiToDest {
-                    amount_of_dai: amount,
-                    wei_per_dollar: w_p_dollar,
-                    dest_address: event.receiver,
-                });
-            }
-            //simulation has failed, continue to next event
+        let withdraw_info = get_relay_message_hash(
+            bridge.own_address,
+            bridge.xdai_web3.clone(),
+            bridge.helper_on_xdai,
+            event.receiver,
+            txid.clone(),
+            amount.clone(),
+        )
+        .await?;
+
+        // check if the event has already unlocked the funds or not
+        let res = match check_relayed_message(
+            event.txid.clone(),
+            bridge.eth_web3.clone(),
+            bridge.own_address,
+            bridge.xdai_bridge_on_eth,
+        )
+        .await
+        {
+            Ok(a) => a,
             Err(e) => {
-                error!("Simulation failed: {}", e);
+                error!(
+                    "Received Error when checking for signature 'relayedMessages': {}, skipping",
+                    e
+                );
                 continue;
             }
+        };
+
+        if res {
+            trace!(
+                "Transaction with Id: {} has already been unlocked, skipping",
+                display_uint256_as_address(txid.clone())
+            );
+            continue;
+        } else {
+            //unlock this transaction
+            trace!(
+                "Tx Hash is {} with the amount of {} for a withdraw event",
+                display_uint256_as_address(txid.clone()),
+                amount
+            );
+            let _res = bridge
+                .submit_signatures_to_unlock_funds(withdraw_info, SIGNATURES_TIMEOUT)
+                .await?;
+            detailed_state_change(DetailedBridgeState::DaiToDest {
+                amount_of_dai: amount,
+                wei_per_dollar: w_p_dollar,
+                dest_address: event.receiver,
+            });
         }
     }
 
@@ -407,28 +442,24 @@ async fn simulated_withdrawal_on_eth(
 }
 
 /// This function simulates the withdraw event given to it. Based on this information, we can decide if we want to
-/// process this transaction by using real money. This allows us to unlock the funds on the 'eth' side.
+/// process this transaction by using real money. This allows us to unlock the funds on the 'eth' side. This function is currently not in use
+/// and we use check_relayed_message() instead for simplicity.
+#[allow(dead_code)]
 async fn simulate_signature_submission(
     bridge: &TokenBridgeCore,
     data: &HelperWithdrawInfo,
 ) -> Result<Vec<u8>, Web3Error> {
-    match bridge
-        .xdai_web3
-        .contract_call(
+    let payload = get_payload_for_funds_unlock(data);
+    bridge
+        .eth_web3
+        .simulate_transaction(
             bridge.xdai_bridge_on_eth,
-            "executeSignatures(bytes,bytes)",
-            &[
-                Token::UnboundedBytes(data.msg.clone()),
-                Token::UnboundedBytes(data.sigs.clone()),
-            ],
+            0_u32.into(),
+            payload,
             bridge.own_address,
             None,
         )
         .await
-    {
-        Ok(a) => Ok(a),
-        Err(e) => Err(e),
-    }
 }
 
 /// Withdraw state struct for the bridge, if withdraw_all is true, the eth will be
@@ -481,7 +512,9 @@ pub async fn withdraw(msg: Withdraw) -> Result<(), Error> {
         if !writer.withdraw_in_progress {
             writer.withdraw_in_progress = true;
             let token_bridge = get_core();
-            let _res = encode_relaytokens(token_bridge, to, Duration::from_secs(600)).await;
+            let _res =
+                encode_relaytokens(token_bridge, to, amount.clone(), Duration::from_secs(600))
+                    .await;
 
             detailed_state_change(DetailedBridgeState::XdaiToDai { amount });
             // Reset the lock
@@ -590,5 +623,207 @@ fn lossy_u32(input: Uint256) -> u32 {
         // the only possible error the number being too large, both are unsigned. String formatting
         // won't change etc.
         Err(_e) => u32::MAX,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use auto_bridge::default_bridge_addresses;
+    use auto_bridge::TokenBridge;
+    use clarity::PrivateKey;
+    use std::str::FromStr;
+
+    const TIMEOUT: Duration = Duration::from_secs(600);
+
+    /// This simply test that the lazy static lock is being updated correctly. Uncomment the code in the test to check it it is initialed correctly.
+    #[test]
+    fn test_xdai_setup_withdraw() {
+        let pk = PrivateKey::from_str(&format!(
+            "983aa7cb3e22b5aa8425facb9703a{}e04bd829e675b{}e5df",
+            "632c1e54099", "51b0281"
+        ))
+        .unwrap();
+
+        let _bridge = TokenBridge::new(
+            default_bridge_addresses(),
+            pk.to_public_key().unwrap(),
+            pk,
+            "https://eth.altheamesh.com".into(),
+            "https://dai.altheamesh.com".into(),
+            TIMEOUT,
+        );
+
+        //uncommenting this will result in a deadlock, this is only to check if initial values
+        //are properly set
+
+        //let reader = BRIDGE.read().unwrap();
+        //assert!(!reader.withdraw_in_progress);
+        //assert_eq!(reader.withdraw_details, None);
+
+        let address = "0x9CAFD25b8b5982F1edA0691DEF8997C55a4d8188";
+        let address = Address::parse_and_validate(address);
+        if address.is_err() {
+            panic!("withdraw address is wrong");
+        }
+        let withdraw = Withdraw {
+            to: address.unwrap(),
+            //5 dollars in wei
+            amount: 11646660293665450_u64.into(),
+        };
+
+        println!("ready for setup");
+        let res = setup_withdraw(withdraw.clone());
+        if res.is_err() {
+            panic!("Error with setup withdrawal");
+        }
+
+        println!("setup done");
+
+        let reader = BRIDGE.read().unwrap();
+        let withdraw_setup = match &reader.withdraw_details {
+            Some(a) => a.clone(),
+            None => panic!("No value set in withdraw setup"),
+        };
+
+        //check lazy static
+        assert!(reader.withdraw_in_progress);
+        assert_eq!(withdraw_setup, withdraw);
+    }
+
+    /// Calls the encode_relaytokens and initiates the withdrawal process from xdai chain to an external address. Does not however unlock the funds on the eth side.
+    /// Refer to test_xdai_unlock_withdraw() to check unlocking funds
+    #[test]
+    #[ignore]
+    fn test_xdai_transfer_withdraw() {
+        let pk = PrivateKey::from_str(&format!(
+            "983aa7cb3e22b5aa8425facb9703a{}e04bd829e675b{}e5df",
+            "632c1e54099", "51b0281"
+        ))
+        .unwrap();
+
+        let bridge = TokenBridge::new(
+            default_bridge_addresses(),
+            pk.to_public_key().unwrap(),
+            pk,
+            "https://eth.altheamesh.com".into(),
+            "https://dai.altheamesh.com".into(),
+            TIMEOUT,
+        );
+
+        let address = "0x9CAFD25b8b5982F1edA0691DEF8997C55a4d8188";
+        let address = Address::parse_and_validate(address);
+        if address.is_err() {
+            panic!("withdraw address is wrong");
+        }
+        let to = address.unwrap();
+        //10 xdai
+        let amount = 10000000000000000000_u128;
+
+        //Run the withdrawal process
+        let runner = actix_async::System::new();
+        runner.block_on(async move {
+            //do encode relay token call with our token bridge
+            let res = encode_relaytokens(bridge, to, amount.into(), Duration::from_secs(600)).await;
+            match res {
+                Ok(_) => println!("withdraw successful to address {}", to),
+                Err(e) => panic!("Error during withdraw: {}", e),
+            }
+        })
+    }
+
+    /// This tests the the funds that were initially transfered by test_xdai_transfer_withdraw can we unlocked, Note that the event you are trying to unlock
+    /// needs to be within 40k blocks of the current xdai chain block height, or the withdraw event will not be found.
+    #[test]
+    #[ignore]
+    fn test_xdai_unlock_withdraw() {
+        let pk = PrivateKey::from_str(&format!(
+            "983aa7cb3e22b5aa8425facb9703a{}e04bd829e675b{}e5df",
+            "632c1e54099", "51b0281"
+        ))
+        .unwrap();
+
+        let bridge = TokenBridge::new(
+            default_bridge_addresses(),
+            pk.to_public_key().unwrap(),
+            pk,
+            "https://eth.altheamesh.com".into(),
+            "https://dai.altheamesh.com".into(),
+            TIMEOUT,
+        );
+
+        let runner = actix_async::System::new();
+
+        runner.block_on(async move {
+            let wei_per_dollar = match bridge.dai_to_eth_price(eth_to_wei(1u8.into())).await {
+                Ok(val) => val,
+                Err(e) => {
+                    warn!("Failed to get eth price with {}", e);
+                    return;
+                }
+            };
+
+            match simulated_withdrawal_on_eth(&bridge, wei_per_dollar.clone()).await {
+                Ok(()) => {
+                    println!(
+                        "Checking for withdraw events related to us (address: {})",
+                        bridge.own_address
+                    );
+                }
+                Err(e) => {
+                    println!("Received error when trying to unlock funds: {}", e);
+                }
+            }
+        })
+    }
+
+    /// This tests the function simulate_signature_submission(), which is used to tests if a transaction needs to be unlocked on eth side or not.
+    /// This function not currently in use and we instead use check_relayed_message because of simplicity, but simulate_signature_submission() is also functional and
+    /// checks the same thing as check_relayed_message() does.
+    #[test]
+    fn test_simulate_unlock_funds() {
+        let pk = PrivateKey::from_str(&format!(
+            "983aa7cb3e22b5aa8425facb9703a{}e04bd829e675b{}e5df",
+            "632c1e54099", "51b0281"
+        ))
+        .unwrap();
+
+        let bridge = TokenBridge::new(
+            default_bridge_addresses(),
+            pk.to_public_key().unwrap(),
+            pk,
+            "https://eth.altheamesh.com".into(),
+            "https://dai.altheamesh.com".into(),
+            TIMEOUT,
+        );
+
+        let address = "0x9CAFD25b8b5982F1edA0691DEF8997C55a4d8188";
+        let address = Address::parse_and_validate(address).unwrap();
+
+        let tx_hash = "0xf75cd74e3643bb0d17780589e0f18840c89ff77532f5ac38fbff885468091620";
+        let tx_hash = Uint256::from_str(tx_hash).unwrap();
+
+        let amount = 10000000000000000000_u128;
+
+        let runner = actix_async::System::new();
+
+        runner.block_on(async move {
+            let withdraw_info = get_relay_message_hash(
+                bridge.own_address,
+                bridge.xdai_web3.clone(),
+                bridge.helper_on_xdai,
+                address,
+                tx_hash,
+                amount.into(),
+            )
+            .await
+            .unwrap();
+
+            match simulate_signature_submission(&bridge, &withdraw_info).await {
+                Ok(_) => println!("Successful simulation"),
+                Err(e) => println!("Simulation failed {}", e),
+            }
+        })
     }
 }

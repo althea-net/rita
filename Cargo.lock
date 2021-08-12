@@ -544,7 +544,7 @@ dependencies = [
  "serde 1.0.126",
  "serde_derive",
  "tokio 1.8.2",
- "web30 0.14.7",
+ "web30 0.15.0",
 ]
 
 [[package]]
@@ -3206,7 +3206,7 @@ dependencies = [
 name = "rita_common"
 version = "0.18.0"
 dependencies = [
- "actix 0.11.1",
+ "actix 0.12.0",
  "actix 0.7.11",
  "actix-web 0.7.19",
  "actix-web-httpauth",
@@ -3239,7 +3239,7 @@ dependencies = [
  "serde_json",
  "settings",
  "tokio 0.1.22",
- "web30 0.14.7",
+ "web30 0.15.0",
  "web30 0.4.3",
 ]
 
@@ -4547,9 +4547,9 @@ dependencies = [
 
 [[package]]
 name = "web30"
-version = "0.14.7"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e89586d38d1983eb22e6d0b48448dfdb0448ef4c313f40e747699bddc0454f13"
+checksum = "e7a9fb83f885149c4a79b8c379bb1d27b8417bce231388c8b79ba8b76b1fd9f7"
 dependencies = [
  "awc",
  "clarity",
