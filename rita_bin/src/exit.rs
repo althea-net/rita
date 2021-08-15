@@ -20,22 +20,9 @@ use jemallocator::Jemalloc;
 static GLOBAL: Jemalloc = Jemalloc;
 
 #[macro_use]
-extern crate failure;
-#[macro_use]
-extern crate lazy_static;
-#[macro_use]
 extern crate log;
-#[macro_use]
-extern crate serde_derive;
-extern crate phonenumber;
 
-use actix_web::http::Method;
-use actix_web::{http, server, App};
 use docopt::Docopt;
-
-use settings::exit::RitaExitSettingsStruct;
-
-use rita_common::dashboard::own_info::READABLE_VERSION;
 use rita_common::rita_loop::check_rita_common_actors;
 use rita_common::rita_loop::start_core_rita_endpoints;
 use rita_common::utils::env_vars_contains;
@@ -44,41 +31,9 @@ use rita_exit::logging::enable_remote_logging;
 use rita_exit::rita_loop::check_rita_exit_actors;
 use rita_exit::rita_loop::start_rita_exit_endpoints;
 use rita_exit::rita_loop::start_rita_exit_loop;
-
-use rita_common::dashboard::babel::*;
-use rita_common::dashboard::debts::*;
-use rita_common::dashboard::development::*;
-use rita_common::dashboard::nickname::*;
-use rita_common::dashboard::own_info::*;
-use rita_common::dashboard::settings::*;
-use rita_common::dashboard::token_bridge::*;
-use rita_common::dashboard::usage::*;
-use rita_common::dashboard::wallet::*;
-use rita_common::dashboard::wg_key::*;
-use rita_common::network_endpoints::*;
-use rita_exit::network_endpoints::*;
-pub mod middleware;
-
-#[derive(Debug, Deserialize, Default)]
-pub struct Args {
-    flag_config: String,
-    flag_future: bool,
-}
-
-lazy_static! {
-    static ref USAGE: String = format!(
-        "Usage: rita_exit --config=<settings>
-Options:
-    -c, --config=<settings>   Name of config file
-    --future                    Enable B side of A/B releases
-About:
-    Version {} - {}
-    git hash {}",
-        READABLE_VERSION,
-        env!("CARGO_PKG_VERSION"),
-        env!("GIT_HASH")
-    );
-}
+use rita_exit::start_rita_exit_dashboard;
+use rita_exit::{get_exit_usage, Args};
+use settings::exit::RitaExitSettingsStruct;
 
 /// used to crash the exit on first startup if config does not make sense
 /// as is usually desirable for cloud infrastruture
@@ -92,7 +47,7 @@ fn sanity_check_config() {
 }
 
 fn main() {
-    let args: Args = Docopt::new((*USAGE).as_str())
+    let args: Args = Docopt::new(get_exit_usage(env!("CARGO_PKG_VERSION"), env!("GIT_HASH")))
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
 
@@ -154,40 +109,4 @@ fn main() {
     start_rita_exit_dashboard();
 
     system.run();
-}
-
-fn start_rita_exit_dashboard() {
-    // Dashboard
-    server::new(|| {
-        App::new()
-            .middleware(middleware::Headers)
-            .route("/info", Method::GET, get_own_info)
-            .route("/local_fee", Method::GET, get_local_fee)
-            .route("/local_fee/{fee}", Method::POST, set_local_fee)
-            .route("/metric_factor", Method::GET, get_metric_factor)
-            .route("/metric_factor/{factor}", Method::POST, set_metric_factor)
-            .route("/settings", Method::GET, get_settings)
-            .route("/settings", Method::POST, set_settings)
-            .route("/version", Method::GET, version)
-            .route("/wg_public_key", Method::GET, get_wg_public_key)
-            .route("/wipe", Method::POST, wipe)
-            .route("/database", Method::DELETE, nuke_db)
-            .route("/debts", Method::GET, get_debts)
-            .route("/debts/reset", Method::POST, reset_debt)
-            .route("/withdraw/{address}/{amount}", Method::POST, withdraw)
-            .route("/withdraw_all/{address}", Method::POST, withdraw_all)
-            .route("/nickname/get/", Method::GET, get_nickname)
-            .route("/nickname/set/", Method::POST, set_nickname)
-            .route("/crash_actors", Method::POST, crash_actors)
-            .route("/usage/payments", Method::GET, get_payments)
-            .route("/token_bridge/status", Method::GET, get_bridge_status)
-    })
-    .bind(format!(
-        "[::0]:{}",
-        settings::get_rita_exit().network.rita_dashboard_port
-    ))
-    .unwrap()
-    .workers(1)
-    .shutdown_timeout(0)
-    .start();
 }

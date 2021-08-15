@@ -23,6 +23,7 @@ pub mod blockchain_oracle;
 pub mod dashboard;
 pub mod debt_keeper;
 pub mod hello_handler;
+pub mod middleware;
 pub mod network_endpoints;
 pub mod network_monitor;
 pub mod payment_controller;

@@ -1,7 +1,7 @@
 //! This is the Actix-web middleware that attaches the content headers we need for
 //! the client dashboard
 
-use crate::http::{header, HttpTryFrom, Method, StatusCode};
+use actix_web::http::{header, HttpTryFrom, Method, StatusCode};
 use actix_web::middleware::{Middleware, Response, Started};
 use actix_web::{FromRequest, HttpRequest, HttpResponse, Result};
 use actix_web_httpauth::extractors::basic::{BasicAuth, Config};

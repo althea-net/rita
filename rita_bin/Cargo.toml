@@ -15,7 +15,6 @@ path = "src/client.rs"
 
 [dependencies]
 althea_kernel_interface = { path = "../althea_kernel_interface" }
-antenna_forwarding_client = {path = "../antenna_forwarding_client"}
 althea_types = { path = "../althea_types", features = ["actix"]}
 clu = { path = "../clu" }
 actix-web-httpauth = {git = "https://github.com/althea-net/actix-web-httpauth"}
@@ -30,14 +29,12 @@ settings = { path = "../settings" }
 diesel = { version = "1.4", features = ["postgres", "r2d2"] }
 log = { version = "0.4", features = ["release_max_level_info"] }
 serde = "1.0"
-serde_derive = "1.0"
 serde_json = "1.0"
 arrayvec = {version= "0.7", features = ["serde"]}
 hex-literal = "0.3"
 openssl-probe = "0.1"
 env_logger = "0.8"
 lazy_static = "1.4"
-failure = "0.1"
 phonenumber = "0.3"
 r2d2 = "0.8"
 rita_common = { path = "../rita_common"}
@@ -52,11 +49,6 @@ jemallocator = {version = "0.3", optional = true}
 # an openssl implementation from the crate and not from the system. This adds about
 # 3mb to the build so it's tagged into the server feature and it's own feature
 openssl = {version = "0.10", features = ["vendored"], optional = true}
-
-[dependencies.regex]
-version = "1.4"
-default-features = false
-features = ["std"]
 
 [features]
 jemalloc = ["jemallocator"]
