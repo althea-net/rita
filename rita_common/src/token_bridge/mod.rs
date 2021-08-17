@@ -363,7 +363,8 @@ async fn xdai_bridge() {
     }
 }
 
-/// This function is called inside the bridge loop. It retrieves the 'n' most recent blocks that
+/// This function is called inside the bridge loop. It retrieves the 'n' most recent blocks
+/// (where 'n' is the const 'BLOCKS' that is currently set to 40,032, which represents 1 week of blocks on xdai chain) that
 /// have withdraw events related to our address. It then simulates these events and submits
 /// the signatures needed to unlock the funds.
 async fn simulated_withdrawal_on_eth(
@@ -637,7 +638,9 @@ mod tests {
 
     const TIMEOUT: Duration = Duration::from_secs(600);
 
-    /// This simply test that the lazy static lock is being updated correctly. Uncomment the code in the test to check it it is initialed correctly.
+    /// This simply test that the lazy static lock is being updated correctly after calling the function setup_withdrawal.
+    /// We call the function with the 'Withdraw' struct and check if the information is being updated correctly. This is necessary
+    /// that the correct information about the withdrawal is being processed.
     #[test]
     fn test_xdai_setup_withdraw() {
         let pk = PrivateKey::from_str(&format!(
@@ -655,13 +658,6 @@ mod tests {
             TIMEOUT,
         );
 
-        //uncommenting this will result in a deadlock, this is only to check if initial values
-        //are properly set
-
-        //let reader = BRIDGE.read().unwrap();
-        //assert!(!reader.withdraw_in_progress);
-        //assert_eq!(reader.withdraw_details, None);
-
         let address = "0x9CAFD25b8b5982F1edA0691DEF8997C55a4d8188";
         let address = Address::parse_and_validate(address);
         if address.is_err() {
@@ -669,7 +665,6 @@ mod tests {
         }
         let withdraw = Withdraw {
             to: address.unwrap(),
-            //5 dollars in wei
             amount: 11646660293665450_u64.into(),
         };
 
