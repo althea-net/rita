@@ -3131,7 +3131,7 @@ dependencies = [
 
 [[package]]
 name = "rita_bin"
-version = "0.18.0"
+version = "0.18.1"
 dependencies = [
  "actix 0.11.1",
  "actix 0.7.11",
@@ -3167,7 +3167,7 @@ dependencies = [
 
 [[package]]
 name = "rita_client"
-version = "0.18.0"
+version = "0.18.1"
 dependencies = [
  "actix 0.7.11",
  "actix-web 0.7.19",
@@ -3245,7 +3245,7 @@ dependencies = [
 
 [[package]]
 name = "rita_exit"
-version = "0.18.0"
+version = "0.18.1"
 dependencies = [
  "actix 0.7.11",
  "actix-web 0.7.19",
