@@ -93,7 +93,7 @@ pub async fn tick_token_bridge() {
 
     match system_chain {
         SystemChain::Xdai => xdai_bridge().await,
-        SystemChain::Ethereum => eth_bridge().await,
+        SystemChain::Ethereum => {}
         SystemChain::Rinkeby => {}
     }
 }
@@ -156,82 +156,6 @@ async fn rescue_dai(
     } else {
         // we don't have a lot of dai, we shouldn't do anything
         Ok(())
-    }
-}
-
-/// simplified logic for bringing xdai back over to Eth if the user has xdai and then
-/// selects Eth as their blockchain it will bring the full balance back into Eth
-async fn eth_bridge() {
-    let bridge = get_core();
-
-    let our_dai_balance = match bridge.get_dai_balance(bridge.own_address).await {
-        Ok(val) => val,
-        Err(e) => {
-            error!("Failed to get DAI balance with {:?}", e);
-            return;
-        }
-    };
-    let our_eth_balance = match bridge.eth_web3.eth_get_balance(bridge.own_address).await {
-        Ok(val) => val,
-        Err(e) => {
-            error!("Failed to get ETH balance with {:?}", e);
-            return;
-        }
-    };
-    let wei_per_dollar = match bridge.dai_to_eth_price(eth_to_wei(1u8.into())).await {
-        Ok(val) => val,
-        Err(e) => {
-            error!("Failed to get DAI price with {:?}", e);
-            return;
-        }
-    };
-    let our_xdai_balance = match bridge.xdai_web3.eth_get_balance(bridge.own_address).await {
-        Ok(val) => val,
-        Err(e) => {
-            error!("Failed to get xDai balance with {:?}", e);
-            return;
-        }
-    };
-
-    info!(
-        "xdai rescue state is {} dai {} eth {} xdai {} wei per dollar",
-        our_dai_balance, our_eth_balance, our_xdai_balance, wei_per_dollar
-    );
-    let tx_gas: Uint256 = 21000u32.into();
-    // if you actually ask for the gas price you'll get an incorrect value
-    let xdai_gas_price: Uint256 = 60_000_000_000u128.into();
-    let xdai_tx_cost = xdai_gas_price * tx_gas;
-    // Money has come over the bridge
-    if our_xdai_balance > xdai_tx_cost {
-        let amount = our_xdai_balance - xdai_tx_cost;
-        let res = bridge
-            .xdai_to_dai_bridge(
-                amount.clone(),
-                settings::get_rita_common().payment.gas_price.clone(),
-            )
-            .await;
-        if res.is_err() {
-            warn!("Xdai to xdai failed with {:?}", res);
-        }
-        detailed_state_change(DetailedBridgeState::XdaiToDai { amount });
-    } else if our_dai_balance > 0u32.into() {
-        // Then it converts to eth
-        detailed_state_change(DetailedBridgeState::DaiToEth {
-            amount_of_dai: our_dai_balance.clone(),
-            wei_per_dollar,
-        });
-        let res = bridge
-            .dai_to_eth_swap(our_dai_balance, UNISWAP_TIMEOUT)
-            .await;
-        if res.is_err() {
-            warn!("Dai to Eth swap failed! {:?}", res);
-        }
-    // all other steps are done and the eth is sitting and waiting
-    } else {
-        detailed_state_change(DetailedBridgeState::NoOp {
-            eth_balance: our_eth_balance,
-            wei_per_dollar,
-        });
     }
 }
 
