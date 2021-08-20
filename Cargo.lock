@@ -544,7 +544,7 @@ dependencies = [
  "serde 1.0.126",
  "serde_derive",
  "tokio 1.8.2",
- "web30 0.15.0",
+ "web30 0.15.1",
 ]
 
 [[package]]
@@ -3239,7 +3239,7 @@ dependencies = [
  "serde_json",
  "settings",
  "tokio 0.1.22",
- "web30 0.15.0",
+ "web30 0.15.1",
  "web30 0.4.3",
 ]
 
@@ -4547,9 +4547,9 @@ dependencies = [
 
 [[package]]
 name = "web30"
-version = "0.15.0"
+version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7a9fb83f885149c4a79b8c379bb1d27b8417bce231388c8b79ba8b76b1fd9f7"
+checksum = "c6650f5f21e5e7a5960f1aedf75c9795af99b41a5a90daa258a7c710b5604d55"
 dependencies = [
  "awc",
  "clarity",

@@ -19,9 +19,8 @@ pub use error::TokenBridgeError;
 /// These hardcoded values are obtained
 // by looking at the values on Etherscan and observing gas values in practice, along with slight padding
 // to ensure correct operation. These hardcoded gas values are only being used to estimate the reserve amount
-pub static UNISWAP_GAS_LIMIT: u128 = 80_000;
+pub static UNISWAP_GAS_LIMIT: u128 = 150_000;
 pub static ERC20_GAS_LIMIT: u128 = 40_000;
-pub static ETH_TRANSACTION_GAS_LIMIT: u128 = 21_000;
 pub static XDAI_FUNDS_UNLOCK_GAS: u128 = 180_000;
 
 fn default_helper_on_xdai_address() -> Address {

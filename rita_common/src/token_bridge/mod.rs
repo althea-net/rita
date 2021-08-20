@@ -123,10 +123,9 @@ impl Default for TokenBridgeState {
     }
 }
 
-/// If some part of the depositing chain is disrupted due to a failure we may end up
-/// with a stranded dai balance, this function detects that balance and 'rescues' stranded
-/// dai
-async fn rescue_dai(
+/// Transfers dai present in eth address from previous xdai_bridge iterations to the xdai chain.
+/// This also assists in rescuing any stranded dai balance because of failures in depositing flow.
+async fn transfer_dai(
     bridge: TokenBridgeCore,
     our_address: Address,
     minimum_stranded_dai_transfer: Uint256,
@@ -242,17 +241,17 @@ async fn xdai_bridge() {
         }
     }
 
-    //rescue any stranded dai
-    let res = rescue_dai(
+    // transfer dai exchanged from eth during previous iterations
+    let res = transfer_dai(
         bridge.clone(),
         bridge.own_address,
         minimum_stranded_dai_transfer,
     )
     .await;
     if res.is_err() {
-        warn!("Failed to rescue dai with {:?}", res);
+        warn!("Failed to transfer dai with {:?}", res);
     }
-    trace!("rescued dai");
+    trace!("Transfered dai");
 
     // run the conveyor belt eth -> xdai
     if our_eth_balance >= minimum_to_exchange {
@@ -265,20 +264,13 @@ async fn xdai_bridge() {
         });
 
         info!("Converting to Dai");
-        let dai_bought = match bridge.eth_to_dai_swap(swap_amount, UNISWAP_TIMEOUT).await {
+        let _dai_bought = match bridge.eth_to_dai_swap(swap_amount, UNISWAP_TIMEOUT).await {
             Ok(val) => val,
             Err(e) => {
                 warn!("Failed to swap dai with {:?}", e);
                 return;
             }
         };
-        detailed_state_change(DetailedBridgeState::DaiToXdai {
-            amount: dai_bought.clone(),
-        });
-        // And over the bridge into xDai
-        let _res = bridge
-            .dai_to_xdai_bridge(dai_bought, ETH_TRANSFER_TIMEOUT)
-            .await;
     } else {
         detailed_state_change(DetailedBridgeState::NoOp {
             eth_balance: our_eth_balance,
@@ -742,6 +734,112 @@ mod tests {
             match simulate_signature_submission(&bridge, &withdraw_info).await {
                 Ok(_) => println!("Successful simulation"),
                 Err(e) => println!("Simulation failed {}", e),
+            }
+        })
+    }
+
+    /// Tests the deposit flow of funds from eth to dai on xdai chain. First converts eth to dai, reserving an amount
+    /// to pay for withdrawal. Then transfer this amount over to the xdai chain.
+    #[test]
+    #[ignore]
+    fn test_deposit_flow() {
+        let pk = PrivateKey::from_str(&format!(
+            "983aa7cb3e22b5aa8425facb9703a{}e04bd829e675b{}e5df",
+            "632c1e54099", "51b0281"
+        ))
+        .unwrap();
+
+        let bridge = TokenBridge::new(
+            default_bridge_addresses(),
+            pk.to_public_key().unwrap(),
+            pk,
+            "https://eth.altheamesh.com".into(),
+            "https://dai.altheamesh.com".into(),
+            TIMEOUT,
+        );
+
+        let runner = actix_async::System::new();
+        runner.block_on(async move {
+            let eth_gas_price = match bridge.eth_web3.eth_gas_price().await {
+                Ok(val) => val,
+                Err(e) => {
+                    panic!("Failed to get eth gas price with {}", e);
+                }
+            };
+
+            let reserve_amount = get_reserve_amount(eth_gas_price.clone());
+            println!("reserve amount is {}", reserve_amount);
+            let minimum_to_exchange = reserve_amount.clone()
+                + (eth_gas_price.clone() * (UNISWAP_GAS_LIMIT + ERC20_GAS_LIMIT).into());
+            println!("Mnimum to exchnage is {}", minimum_to_exchange);
+
+            let our_eth_balance = match bridge.eth_web3.eth_get_balance(bridge.own_address).await {
+                Ok(val) => val,
+                Err(e) => {
+                    panic!("Failed to get eth balance {}", e);
+                }
+            };
+            println!("Our eth balance is {}", our_eth_balance);
+
+            // run the conveyor belt eth -> xdai
+            if our_eth_balance >= minimum_to_exchange {
+                // Leave a reserve in the account to use for gas in the future
+                let swap_amount = our_eth_balance - reserve_amount;
+
+                let dai_bought = match bridge.eth_to_dai_swap(swap_amount, UNISWAP_TIMEOUT).await {
+                    Ok(val) => val,
+                    Err(e) => {
+                        panic!("Failed to swap dai with {:?}", e);
+                    }
+                };
+                println!("received dai: {}", dai_bought);
+
+                // And over the bridge into xDai
+                let _res = bridge
+                    .dai_to_xdai_bridge(dai_bought, ETH_TRANSFER_TIMEOUT)
+                    .await;
+            } else {
+                println!("ETH BALANCE IS NOT GREATER THAN MIN");
+            }
+        })
+    }
+
+    /// Tests that funds in dai are being transfered over to the xdai blockchain as long as dai funds are greater than
+    /// minimum amount to exchange (cost of a withdrawal + cost of swap to dai + cost of transfer)
+    #[test]
+    #[ignore]
+    fn test_transfer_dai() {
+        let pk = PrivateKey::from_str(&format!(
+            "983aa7cb3e22b5aa8425facb9703a{}e04bd829e675b{}e5df",
+            "632c1e54099", "51b0281"
+        ))
+        .unwrap();
+
+        let bridge = TokenBridge::new(
+            default_bridge_addresses(),
+            pk.to_public_key().unwrap(),
+            pk,
+            "https://eth.altheamesh.com".into(),
+            "https://dai.altheamesh.com".into(),
+            TIMEOUT,
+        );
+
+        let runner = actix_async::System::new();
+        runner.block_on(async move {
+            let eth_gas_price = match bridge.eth_web3.eth_gas_price().await {
+                Ok(val) => val,
+                Err(e) => {
+                    panic!("Failed to get eth gas price with {}", e);
+                }
+            };
+            let reserve_amount = get_reserve_amount(eth_gas_price.clone());
+
+            let minimum_to_exchange = reserve_amount.clone()
+                + (eth_gas_price.clone() * (UNISWAP_GAS_LIMIT + ERC20_GAS_LIMIT).into());
+
+            let res = transfer_dai(bridge.clone(), bridge.own_address, minimum_to_exchange).await;
+            if res.is_err() {
+                panic!("Failed to rescue dai with {:?}", res);
             }
         })
     }
