@@ -37,6 +37,9 @@ use num_traits::identities::Zero;
 use rand::{thread_rng, Rng};
 use settings::payment::PaymentSettings;
 
+use std::cmp::Ordering;
+use std::collections::VecDeque;
+use std::iter::FromIterator;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
@@ -45,6 +48,9 @@ lazy_static! {
     static ref BRIDGE: Arc<RwLock<TokenBridgeState>> =
         Arc::new(RwLock::new(TokenBridgeState::default()));
     static ref AMOUNTS: Arc<RwLock<LastAmounts>> = Arc::new(RwLock::new(LastAmounts::default()));
+    /// This variable pushes gas prices every minute over the last 24 hours. New entries are pushed to the front
+    /// and older entries are popped from the back. The number of entries here is limited by the constant GAS_PRICE_ENTRIES
+    static ref GAS_PRICES: Arc<RwLock<VecDeque<Uint256>>> = Arc::new(RwLock::new(VecDeque::with_capacity(GAS_PRICE_ENTRIES)));
 }
 
 pub const ETH_TRANSFER_TIMEOUT: Duration = Duration::from_secs(600);
@@ -53,6 +59,9 @@ const UNISWAP_TIMEOUT: Duration = ETH_TRANSFER_TIMEOUT;
 const WEI_PER_ETH: u128 = 1_000_000_000_000_000_000_u128;
 const SIGNATURES_TIMEOUT: Duration = ETH_TRANSFER_TIMEOUT;
 const BLOCKS: u64 = 40_032;
+/// This is the number of minutes in a day. We use this since we run the xdai_bridge every minute, therefore
+/// entering an entry every minute
+const GAS_PRICE_ENTRIES: usize = 1440;
 
 pub fn eth_to_wei(eth: u64) -> Uint256 {
     let wei = eth as u128 * WEI_PER_ETH;
@@ -188,6 +197,19 @@ async fn xdai_bridge() {
         }
     };
 
+    // Add gas price entry to lazy static
+    let writer = &mut *GAS_PRICES.write().unwrap();
+    update_gas_price_store(eth_gas_price.clone(), writer);
+
+    // Get max acceptable gas price (within 20%)
+    let max_gas_price = match get_acceptable_gas_price(eth_gas_price.clone(), writer) {
+        Ok(a) => a,
+        Err(_) => {
+            error!("Not enough entries in gas price datastore, or error in datastore entry logic");
+            return;
+        }
+    };
+
     // the amount of Eth to retain in WEI. This is the cost of our transfer from the
     // xdai chain to the destination address.
     let reserve_amount = get_reserve_amount(eth_gas_price.clone());
@@ -241,6 +263,12 @@ async fn xdai_bridge() {
         }
     }
 
+    //run these deposit steps only if gas price is low
+    if max_gas_price < eth_gas_price {
+        warn!("Gas prices too high this iteration");
+        return;
+    }
+
     // transfer dai exchanged from eth during previous iterations
     let res = transfer_dai(
         bridge.clone(),
@@ -277,6 +305,49 @@ async fn xdai_bridge() {
             wei_per_dollar,
         });
     }
+}
+
+/// This helper function adds a gas price entry to the GAS_PRICES data store.
+fn update_gas_price_store(gp: Uint256, datastore: &mut VecDeque<Uint256>) {
+    match datastore.len().cmp(&GAS_PRICE_ENTRIES) {
+        Ordering::Less => datastore.push_front(gp),
+        Ordering::Equal => {
+            //vec is full, remove oldest entry
+            datastore.pop_back();
+            datastore.push_front(gp);
+        }
+        Ordering::Greater => {
+            panic!("Vec size greater than max size, error in GAS_PRICES vecDeque logic")
+        }
+    }
+}
+
+/// Look thorugh all the gas prices in the last 24 hours and determine the highest
+/// acceptabe price to pay (bottom 20% of gas prices in last 24 hours)
+fn get_acceptable_gas_price(
+    eth_gas_price: Uint256,
+    datastore: &VecDeque<Uint256>,
+) -> Result<Uint256, Error> {
+    // if there are no entries, return current gas price as acceptable
+    // We should not reach this condition since we alway call update_gas_price_store
+    // before calling this function
+    if datastore.is_empty() {
+        return Ok(eth_gas_price);
+    }
+
+    let vector = datastore.clone();
+    let mut vector: Vec<Uint256> = Vec::from_iter(vector);
+    vector.sort();
+
+    //find gas price in lowest 20%
+    let lowest_20: usize = (0.2_f32 * vector.len() as f32).ceil() as usize;
+    let value = match vector.get(lowest_20 - 1) {
+        Some(a) => a.clone(),
+        None => {
+            bail!("There is no entry at index {}, should not reach this condition, error with GAS_PRICES vecDeque logic", lowest_20 - 1);
+        }
+    };
+    Ok(value)
 }
 
 /// This function is called inside the bridge loop. It retrieves the 'n' most recent blocks
@@ -388,7 +459,7 @@ pub struct Withdraw {
 }
 
 /// Since our withdraw function is async and cannot be called from the previous sync context
-/// we use this function to setup information about the withdrawal in the sync context. We setup
+/// we use this function to setup information about the withdrawal in the sync cUint256::from_bytes_be(&[12_u8])ontext. We setup
 /// a bool and Withdraw struct inside a lazy static variable that we can read from later when
 /// we initiate the withdrawal from an async context.
 pub fn setup_withdraw(msg: Withdraw) -> Result<(), Error> {
@@ -842,5 +913,101 @@ mod tests {
                 panic!("Failed to rescue dai with {:?}", res);
             }
         })
+    }
+
+    /// This test the function update_gas_price_store to check if the lazy static would be updated
+    /// correctly, both for when the queue size is less that max capacity and for when it is at max
+    /// capacity
+    #[test]
+    fn test_update_gas_price_store() {
+        let mut vec: VecDeque<Uint256> = VecDeque::with_capacity(GAS_PRICE_ENTRIES);
+        assert_eq!(vec.len(), 0);
+
+        update_gas_price_store(12_u32.into(), &mut vec);
+
+        assert_eq!(vec.len(), 1);
+        assert_eq!(
+            vec.get(0).unwrap().clone(),
+            Uint256::from_bytes_be(&[12_u8])
+        );
+
+        let append_vec = vec![Uint256::from_bytes_be(&[12_u8]); 1439];
+
+        vec.append(&mut VecDeque::from(append_vec));
+
+        assert_eq!(vec.len(), GAS_PRICE_ENTRIES);
+
+        update_gas_price_store(11_u32.into(), &mut vec);
+
+        // Vec size should not exceed GAS_PRICE_ENTRIES and eariliest elemtn should match what we just added.
+        assert_eq!(vec.len(), GAS_PRICE_ENTRIES);
+        assert_eq!(
+            vec.get(0).unwrap().clone(),
+            Uint256::from_bytes_be(&[11_u8])
+        );
+    }
+
+    /// Test the function get_acceptable_gas_price, which contains logic for getting the max threshold
+    /// for the bottom 20% of prices in datastore. Tests various scenarios such as empty queue and odd
+    /// number of elements in datastore
+    #[test]
+    fn test_get_acceptable_gas_price() {
+        let mut vec: VecDeque<Uint256> = VecDeque::with_capacity(GAS_PRICE_ENTRIES);
+        let eth_gas_price = Uint256::from_bytes_be(&[12_u8]);
+
+        // when datastore is empty, return current gas price
+        let res = get_acceptable_gas_price(eth_gas_price.clone(), &vec).unwrap();
+        assert_eq!(eth_gas_price, res);
+
+        // when datastore has one element, return it
+        vec.push_front(12_u32.into());
+        let res = get_acceptable_gas_price(eth_gas_price.clone(), &vec).unwrap();
+        assert_eq!(res, eth_gas_price);
+        vec.pop_front();
+
+        // when datastore has multiple elements, calculate bottom 20% and return threshold value
+        let append_vec: Vec<Uint256> = vec![
+            1_u32.into(),
+            2_u32.into(),
+            3_u32.into(),
+            4_u32.into(),
+            5_u32.into(),
+            6_u32.into(),
+            7_u32.into(),
+            8_u32.into(),
+            9_u32.into(),
+            10_u32.into(),
+        ];
+        assert_eq!(vec.len(), 0);
+        vec.append(&mut VecDeque::from(append_vec));
+        assert_eq!(vec.len(), 10);
+        let res = get_acceptable_gas_price(eth_gas_price.clone(), &vec).unwrap();
+        assert_eq!(res, Uint256::from_bytes_be(&[2_u8]));
+
+        //test for random order in datastore
+        vec.clear();
+        assert_eq!(vec.len(), 0);
+        let append_vec: Vec<Uint256> = vec![
+            10_u32.into(),
+            5_u32.into(),
+            3_u32.into(),
+            7_u32.into(),
+            8_u32.into(),
+            6_u32.into(),
+            2_u32.into(),
+            1_u32.into(),
+            9_u32.into(),
+            4_u32.into(),
+        ];
+        vec.append(&mut VecDeque::from(append_vec));
+        assert_eq!(vec.len(), 10);
+        let res = get_acceptable_gas_price(eth_gas_price.clone(), &vec).unwrap();
+        assert_eq!(res, Uint256::from_bytes_be(&[2_u8]));
+
+        //test for odd nubmer of elements in datastore
+        vec.push_front(0_u32.into());
+        assert_eq!(vec.len(), 11);
+        let res = get_acceptable_gas_price(eth_gas_price, &vec).unwrap();
+        assert_eq!(res, Uint256::from_bytes_be(&[2_u8]));
     }
 }
