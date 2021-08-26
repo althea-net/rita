@@ -185,7 +185,10 @@ pub async fn query_exit_debts(msg: QueryExitDebts) {
             }
         }
         Err(e) => {
-            error!("Failed deserializing exit debts update with {:?}", e);
+            error!(
+                "Failed to open stream to exit for debts update! with {:?}",
+                e
+            );
             if let Some(val) = local_debt {
                 traffic_update(vec![Traffic {
                     from: exit_id,

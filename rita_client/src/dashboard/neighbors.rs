@@ -128,39 +128,41 @@ fn generate_neighbors_list(
 
         let tup = (current_exit, stats.get(&neigh_route.iface));
         if let (Some(current_exit), Some(stats_entry)) = tup {
-            let exit_ip = current_exit.id.mesh_ip;
-            let maybe_exit_route =
-                get_route_via_neigh(identity.mesh_ip, exit_ip, &route_table_sample);
+            if current_exit.selected_exit.selected_id.is_some() {
+                let exit_ip = current_exit.selected_exit.selected_id.unwrap();
+                let maybe_exit_route =
+                    get_route_via_neigh(identity.mesh_ip, exit_ip, &route_table_sample);
 
-            // We have a peer that is an exit, so we can't find a route
-            // from them to our selected exit. Other errors can also get
-            // caught here
-            if maybe_exit_route.is_err() {
-                output.push(nonviable_node_info(
-                    nickname,
-                    neigh_route.metric,
-                    identity.mesh_ip.to_string(),
-                    *identity,
-                    neigh.speed_limit,
-                ));
-                continue;
+                // We have a peer that is an exit, so we can't find a route
+                // from them to our selected exit. Other errors can also get
+                // caught here
+                if maybe_exit_route.is_err() {
+                    output.push(nonviable_node_info(
+                        nickname,
+                        neigh_route.metric,
+                        identity.mesh_ip.to_string(),
+                        *identity,
+                        neigh.speed_limit,
+                    ));
+                    continue;
+                }
+                // we check that this is safe above
+                let exit_route = maybe_exit_route.unwrap();
+
+                output.push(NodeInfo {
+                    nickname: nickname.to_string(),
+                    ip: identity.mesh_ip.to_string(),
+                    id: *identity,
+                    route_metric_to_exit: exit_route.metric,
+                    route_metric: neigh_route.metric,
+                    speed_limit: neigh.speed_limit,
+                    total_payments: debt_info.total_payment_received.clone(),
+                    debt: debt_info.debt.clone(),
+                    link_cost: exit_route.refmetric,
+                    price_to_exit: exit_route.price,
+                    stats: *stats_entry,
+                })
             }
-            // we check that this is safe above
-            let exit_route = maybe_exit_route.unwrap();
-
-            output.push(NodeInfo {
-                nickname: nickname.to_string(),
-                ip: identity.mesh_ip.to_string(),
-                id: *identity,
-                route_metric_to_exit: exit_route.metric,
-                route_metric: neigh_route.metric,
-                speed_limit: neigh.speed_limit,
-                total_payments: debt_info.total_payment_received.clone(),
-                debt: debt_info.debt.clone(),
-                link_cost: exit_route.refmetric,
-                price_to_exit: exit_route.price,
-                stats: *stats_entry,
-            })
         } else {
             output.push(nonviable_node_info(
                 nickname,

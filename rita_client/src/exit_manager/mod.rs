@@ -16,6 +16,8 @@
 //!
 //! Signup is complete and the user may use the connection
 
+mod exit_switcher;
+
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use actix_web::client::Connection;
@@ -26,10 +28,11 @@ use althea_kernel_interface::{
 };
 use althea_types::ExitClientDetails;
 use althea_types::ExitDetails;
+use althea_types::Identity;
 use althea_types::WgKey;
 use althea_types::{EncryptedExitClientIdentity, EncryptedExitState};
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState, ExitVerifMode};
-use babel_monitor::{open_babel_stream, parse_routes};
+use exit_switcher::{get_babel_routes, set_best_exit};
 use failure::Error;
 use futures01::future;
 use futures01::Future;
@@ -65,8 +68,11 @@ fn linux_setup_exit_tunnel(
     }
 
     let args = ClientExitTunnelConfig {
-        endpoint: SocketAddr::new(current_exit.id.mesh_ip, general_details.wg_exit_port),
-        pubkey: current_exit.id.wg_public_key,
+        endpoint: SocketAddr::new(
+            current_exit.selected_exit.selected_id.unwrap(),
+            general_details.wg_exit_port,
+        ),
+        pubkey: current_exit.wg_public_key,
         private_key_path: network.wg_private_key_path.clone(),
         listen_port: rita_client.exit_client.wg_listen_port,
         local_ip: our_details.client_internal_ip,
@@ -219,7 +225,6 @@ async fn send_exit_status_request(
         Ok(a) => a,
         Err(e) => bail!("Error with post request for exit status: {}", e),
     };
-
     let value = response.json().await?;
 
     decrypt_exit_state(value, exit_pubkey.into())
@@ -233,7 +238,12 @@ async fn exit_general_details_request(exit: String) -> Result<(), Error> {
         }
     };
 
-    let endpoint = SocketAddr::new(current_exit.id.mesh_ip, current_exit.registration_port);
+    let current_exit_ip = match current_exit.selected_exit.selected_id {
+        Some(a) => a,
+        None => return Err(format_err!("No valid exit for {}", exit)),
+    };
+
+    let endpoint = SocketAddr::new(current_exit_ip, current_exit.registration_port);
 
     trace!("sending exit general details request to {}", exit);
     let exit_details = get_exit_info(&endpoint).await?;
@@ -256,8 +266,20 @@ pub fn exit_setup_request(
         Some(exit_struct) => exit_struct.clone(),
         None => return Box::new(future::err(format_err!("Could not find exit {:?}", exit))),
     };
-    let exit_server = current_exit.id.mesh_ip;
-    let exit_pubkey = current_exit.id.wg_public_key;
+
+    let current_exit_ip = match current_exit.selected_exit.selected_id {
+        Some(a) => a,
+        None => {
+            return Box::new(future::err(format_err!(
+                "Found exitServer: {:?}, but no exit ip",
+                exit
+            )))
+        }
+    };
+
+    let exit_server = current_exit_ip;
+    let exit_pubkey = current_exit.wg_public_key;
+
     let exit_auth_type = match current_exit.info.general_details() {
         Some(details) => details.verif_mode,
         None => return Box::new(future::err(format_err!("Exit is not ready to be setup!"))),
@@ -343,8 +365,13 @@ async fn exit_status_request(exit: String) -> Result<(), Error> {
         None => return Err(format_err!("No valid details")),
     };
 
-    let exit_server = current_exit.id.mesh_ip;
-    let exit_pubkey = current_exit.id.wg_public_key;
+    let current_exit_ip = match current_exit.selected_exit.selected_id {
+        Some(a) => a,
+        None => return Err(format_err!("No valid exit for {}", exit)),
+    };
+
+    let exit_server = current_exit_ip;
+    let exit_pubkey = current_exit.wg_public_key;
     let ident = ExitClientIdentity {
         global: match settings::get_rita_client().get_identity() {
             Some(id) => id,
@@ -392,30 +419,73 @@ fn correct_default_route(input: Option<DefaultRoute>) -> bool {
 }
 
 pub async fn exit_manager_tick() {
-    // scopes our access to SETTING and prevent
-    // holding a readlock while exit tunnel setup requires a write lock
-    // roughly the same as a drop(); inline
+    info!("Exit_Switcher: exit manager tick");
     let client_can_use_free_tier = { settings::get_rita_client().payment.client_can_use_free_tier };
-    let exit_server = {
-        settings::get_rita_client()
-            .exit_client
-            .get_current_exit()
-            .cloned()
+
+    //  Get mut rita client server to setup exits
+    let mut rita_client = settings::get_rita_client();
+    let current_exit = match rita_client.clone().exit_client.current_exit {
+        Some(a) => a,
+        None => "".to_string(),
     };
+    let mut exits = rita_client.exit_client.exits;
+
+    let exit_ser_ref = exits.get_mut(&current_exit);
 
     // code that connects to the current exit server
     info!("About to setup exit tunnel!");
-    if let Some(exit) = exit_server {
-        trace!("We have selected an exit!");
-        if let Some(general_details) = exit.info.general_details() {
-            trace!("We have details for the selected exit!");
+    if let Some(exit) = exit_ser_ref {
+        info!("We have selected an exit!");
+        if let Some(general_details) = exit.clone().info.general_details() {
+            info!("We have details for the selected exit!");
 
-            let signed_up_for_exit = exit.info.our_details().is_some();
+            // Logic to determnine what the best exit is and if we should switch
+            let babel_port = settings::get_rita_client().network.babel_port;
+            let exit_subnet = exit.subnet;
 
+            let routes = match get_babel_routes(babel_port) {
+                Ok(a) => a,
+                Err(_) => {
+                    warn!("No babel routes present to setup an exit");
+                    return;
+                }
+            };
+
+            info!("Exit_Switcher: Calling set best exit");
+            let selected_exit = match set_best_exit(exit_subnet, routes, exit) {
+                Ok(a) => Some(a),
+                Err(e) => {
+                    warn!("Found no exit yet : {}", e);
+                    return;
+                }
+            };
+
+            //set in rita client
+            let exit = exit.clone();
+            rita_client.exit_client.exits = exits;
+            settings::set_rita_client(rita_client);
+
+            info!("Exit_Switcher: After selecting best exit this tick, we have selected_id: {:?}, selected_metric: {:?}, tracking_ip: {:?}", exit.clone().selected_exit.selected_id, exit.clone().selected_exit.selected_id_metric, exit.clone().selected_exit.tracking_exit);
+
+            // Determine states to setup tunnels
             let mut writer = &mut *EXIT_MANAGER.write().unwrap();
-
-            let exit_has_changed =
-                !(writer.last_exit.is_some() && writer.last_exit.clone().unwrap() == exit);
+            let signed_up_for_exit = exit.info.our_details().is_some();
+            let exit_has_changed = !(writer.last_exit.is_some()
+                && writer
+                    .last_exit
+                    .clone()
+                    .unwrap()
+                    .selected_exit
+                    .selected_id
+                    .is_some()
+                && writer
+                    .last_exit
+                    .clone()
+                    .unwrap()
+                    .selected_exit
+                    .selected_id
+                    .unwrap()
+                    == selected_exit.unwrap());
             let correct_default_route = correct_default_route(KI.get_default_route());
 
             match (signed_up_for_exit, exit_has_changed, correct_default_route) {
@@ -480,24 +550,22 @@ pub async fn exit_manager_tick() {
 
             // run billing at all times when an exit is setup
             if signed_up_for_exit {
-                let exit_price = general_details.exit_price;
-                let exit_internal_addr = general_details.server_internal_ip;
+                let exit_price = general_details.clone().exit_price;
+                let exit_internal_addr = general_details.clone().server_internal_ip;
                 let exit_port = exit.registration_port;
-                let exit_id = exit.id;
+                let exit_id = Identity::new(
+                    exit.selected_exit.selected_id.unwrap(),
+                    exit.eth_address,
+                    exit.wg_public_key,
+                    None,
+                );
                 let babel_port = settings::get_rita_client().network.babel_port;
                 info!("We are signed up for the selected exit!");
 
-                let mut stream = match open_babel_stream(babel_port, CLIENT_LOOP_TIMEOUT) {
+                let routes = match get_babel_routes(babel_port) {
                     Ok(a) => a,
                     Err(_) => {
-                        error!("open babel stream error in exit manager tick");
-                        return;
-                    }
-                };
-                let routes = match parse_routes(&mut stream) {
-                    Ok(a) => a,
-                    Err(_) => {
-                        error!("Parse routes error in exit manager tick");
+                        error!("No babel routes present to query exit debts");
                         return;
                     }
                 };

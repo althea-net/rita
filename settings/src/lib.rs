@@ -17,12 +17,15 @@ extern crate serde_derive;
 extern crate log;
 extern crate arrayvec;
 
+use crate::client::{ExitClientSettings, ExitServer, OldRitaClientSettings, SelectedExit};
 use althea_types::Identity;
 use failure::Error;
+use ipnetwork::IpNetwork;
 use network::NetworkSettings;
 use payment::PaymentSettings;
 use serde::Serialize;
 use serde_json::Value;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::sync::{Arc, RwLock};
@@ -40,6 +43,8 @@ pub mod payment;
 
 use crate::client::RitaClientSettings;
 use crate::exit::RitaExitSettingsStruct;
+
+pub const SUBNET: u8 = 128;
 
 lazy_static! {
     static ref EXIT_SETTING: Arc<RwLock<Option<RitaExitSettingsStruct>>> =
@@ -290,10 +295,62 @@ where
     }
 }
 
+///Takes a file config and updates the config to use the new ExitServer struct
+pub fn update_config(
+    old_settings: OldRitaClientSettings,
+    subnet: u8,
+) -> Result<RitaClientSettings, Error> {
+    let mut new_settings = RitaClientSettings {
+        payment: old_settings.payment,
+        log: old_settings.log,
+        operator: old_settings.operator,
+        localization: old_settings.localization,
+        network: old_settings.network,
+        exit_client: ExitClientSettings {
+            exits: HashMap::new(),
+            current_exit: old_settings.exit_client.current_exit,
+            wg_listen_port: old_settings.exit_client.wg_listen_port,
+            contact_info: old_settings.exit_client.contact_info,
+            lan_nics: old_settings.exit_client.lan_nics,
+            low_balance_notification: old_settings.exit_client.low_balance_notification,
+        },
+        future: old_settings.future,
+    };
+
+    // Set hashset with new exit info
+    let mut new_exits: HashMap<String, ExitServer> = HashMap::new();
+    for (k, v) in old_settings.exit_client.exits {
+        let s_len = if v.subnet_len.is_some() {
+            v.subnet_len.unwrap()
+        } else {
+            subnet
+        };
+        let mut new_exit: ExitServer = ExitServer {
+            subnet: IpNetwork::new(v.id.mesh_ip, s_len)?,
+            id: Some(v.id),
+            subnet_len: s_len,
+            selected_exit: SelectedExit::default(),
+            eth_address: v.id.eth_address,
+            wg_public_key: v.id.wg_public_key,
+            registration_port: v.registration_port,
+            description: v.description,
+            info: v.info,
+        };
+
+        new_exit.selected_exit.selected_id = Some(v.id.mesh_ip);
+        new_exits.insert(k, new_exit);
+    }
+
+    new_settings.exit_client.exits = new_exits.clone();
+
+    Ok(new_settings)
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::client::RitaClientSettings;
+    use crate::client::{OldRitaClientSettings, RitaClientSettings};
     use crate::exit::RitaExitSettingsStruct;
+    use crate::update_config;
 
     #[test]
     fn test_settings_test() {
@@ -302,7 +359,11 @@ mod tests {
 
     #[test]
     fn test_settings_example() {
-        RitaClientSettings::new("example.toml").unwrap();
+        let settings = update_config(
+            OldRitaClientSettings::new("old_example.toml").unwrap(),
+            120_u8,
+        );
+        println!("{:?}", settings.unwrap().exit_client);
     }
 
     #[test]

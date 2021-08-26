@@ -164,7 +164,8 @@ fn read_babel(
 ) -> Result<String, Error> {
     trace!(
         "starting read babel with {} and {}",
-        previous_contents, depth
+        previous_contents,
+        depth
     );
     // 500kbytes / 0.5mbyte
     const BUFFER_SIZE: usize = 500_000;
@@ -193,7 +194,8 @@ fn read_babel(
     let output = output.trim_matches(char::from(0));
     trace!(
         "Babel monitor got {} bytes with the message {}",
-        bytes, output
+        bytes,
+        output
     );
 
     // It's possible we caught babel in the middle of writing to the socket

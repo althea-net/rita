@@ -35,7 +35,7 @@ use rita_client::Args;
 use rita_common::rita_loop::check_rita_common_actors;
 use rita_common::rita_loop::start_core_rita_endpoints;
 use rita_common::utils::env_vars_contains;
-use settings::client::RitaClientSettings;
+use settings::client::{OldRitaClientSettings, RitaClientSettings};
 use settings::FileWrite;
 use std::env;
 
@@ -44,6 +44,8 @@ lazy_static! {
 }
 
 fn main() {
+    info!("Started this main function");
+
     let args: Args = Docopt::new(get_client_usage(
         env!("CARGO_PKG_VERSION"),
         env!("GIT_HASH"),
@@ -59,7 +61,8 @@ fn main() {
     let settings: RitaClientSettings = {
         let platform = &args.flag_platform;
 
-        let mut s = RitaClientSettings::new_watched(&settings_file).unwrap();
+        OldRitaClientSettings::new_watched(&settings_file).unwrap();
+        let mut s = settings::get_rita_client();
 
         settings::set_flag_config(settings_file.to_string());
 

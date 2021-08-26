@@ -81,13 +81,26 @@ impl Handler<GetExitInfo> for Dashboard {
 
                             for exit in exit_client.exits.clone().into_iter() {
                                 let selected = is_selected(&exit.1, current_exit);
-                                let have_route =
-                                    do_we_have_route(&exit.1.id.mesh_ip, &route_table_sample)?;
+                                let have_route = do_we_have_route(
+                                    &exit
+                                        .1
+                                        .selected_exit
+                                        .selected_id
+                                        .expect("Expected exit ip here, but none present"),
+                                    &route_table_sample,
+                                )?;
 
                                 // failed pings block for one second, so we should be sure it's at least reasonable
                                 // to expect the pings to work before issuing them.
                                 let reachable = if have_route {
-                                    KI.ping_check(&exit.1.id.mesh_ip, EXIT_PING_TIMEOUT)?
+                                    KI.ping_check(
+                                        &exit
+                                            .1
+                                            .selected_exit
+                                            .selected_id
+                                            .expect("Expected exit ip here, but none present"),
+                                        EXIT_PING_TIMEOUT,
+                                    )?
                                 } else {
                                     false
                                 };

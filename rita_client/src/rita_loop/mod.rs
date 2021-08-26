@@ -230,8 +230,12 @@ fn check_for_gateway_client_billing_corner_case() -> impl Future<Item = (), Erro
                     for neigh in neighbors {
                         // we have a neighbor who is also our selected exit!
                         // wg_key excluded due to multihomed exits having a different one
-                        if neigh.identity.global.mesh_ip == exit.id.mesh_ip
-                            && neigh.identity.global.eth_address == exit.id.eth_address
+                        if neigh.identity.global.mesh_ip
+                            == exit
+                                .selected_exit
+                                .selected_id
+                                .expect("Expected exit ip, none present")
+                            && neigh.identity.global.eth_address == exit.eth_address
                         {
                             info!("We are a gateway client");
                             set_gateway_client(true);

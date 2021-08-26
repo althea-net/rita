@@ -33,10 +33,6 @@ message = "Registration OK"
 registration_port = 4875
 state = "Registered"
 description = "ExitA"
-eth_address = "0x0101010101010101010101010101010101010101"
-wg_public_key = "twSLk4SyWO7rlW6OqJPxFzx6tXUFcVD07tpd0AUCPgE="
-subnet = "fd00::5/120"
-
 
 [exit_client.exits.exit_a.general_details]
 description = "just a normal althea exit"
@@ -59,12 +55,6 @@ registration_port = 4875
 auto_register = false
 state = "GotInfo"
 description = "ExitB"
-eth_address = "0x0101010101010101010101010101010101010101"
-wg_public_key = "twSLk4SyWO7rlW6OqJPxFzx6tXUFcVD07tpd0AUCPgE="
-subnet = "fd00::6/120"
-
-[exit_client.exits.exit_b.selected_exit]
-selected_id = "fd00::6"
 
 [exit_client.exits.exit_b.general_details]
 description = "just a normal althea exit"
@@ -83,12 +73,6 @@ message = "Pending"
 registration_port = 4875
 state = "Pending"
 description = "ExitC"
-eth_address = "0x0101010101010101010101010101010101010101"
-wg_public_key = "twSLk4SyWO7rlW6OqJPxFzx6tXUFcVD07tpd0AUCPgE="
-subnet = "fd00::7/120"
-
-[exit_client.exits.exit_c.selected_exit]
-selected_id = "fd00::7"
 
 [exit_client.exits.exit_c.general_details]
 description = "just a normal althea exit"
@@ -106,12 +90,6 @@ wg_public_key = "twSLk4SyWO7rlW6OqJPxFzx6tXUFcVD07tpd0AUCPgE="
 state = "New"
 registration_port = 4875
 description = "ExitD"
-eth_address = "0x0101010101010101010101010101010101010101"
-wg_public_key = "twSLk4SyWO7rlW6OqJPxFzx6tXUFcVD07tpd0AUCPgE="
-subnet = "fd00::8/120"
-
-[exit_client.exits.exit_d.selected_exit]
-selected_id = "fd00::8"
 
 [exit_client.exits.exit_d.id]
 eth_address = "0x0101010101010101010101010101010101010101"
@@ -127,8 +105,3 @@ dao_addresses = []
 
 [log]
 enabled = false
-
-
-
-[exit_client.exits.exit_a.selected_exit]
-selected_id = "fd00::5"

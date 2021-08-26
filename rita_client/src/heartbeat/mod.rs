@@ -175,7 +175,9 @@ fn get_selected_exit_route(route_dump: &[RouteLegacy]) -> Result<RouteLegacy, Er
     let rita_client = settings::get_rita_client();
     let exit_client = rita_client.exit_client;
     let exit_mesh_ip = if let Some(e) = exit_client.get_current_exit() {
-        e.id.mesh_ip
+        e.selected_exit
+            .selected_id
+            .expect("Expected Exit ip, none present")
     } else {
         return Err(format_err!("No Exit"));
     };
