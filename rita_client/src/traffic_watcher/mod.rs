@@ -27,25 +27,26 @@ use rita_common::debt_keeper::{
     traffic_replace, traffic_update, wgkey_insensitive_traffic_update, Traffic,
 };
 
-use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
-use actix_web::client;
-use actix_web::client::Connection;
-use actix_web::HttpMessage;
+use actix::{Actor, Context, Handler, Message, Supervised, SystemService};
 use althea_types::Identity;
 use babel_monitor::Route as RouteLegacy;
 use failure::Error;
-use futures01::future::ok as future_ok;
-use futures01::future::Future;
 use num256::Int256;
 use num_traits::identities::Zero;
 use rita_common::usage_tracker::update_usage_data;
 use rita_common::usage_tracker::UpdateUsage;
 use rita_common::usage_tracker::UsageType;
 use rita_common::KI;
-use std::net::{IpAddr, SocketAddr};
+use std::net::IpAddr;
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::Duration;
 use std::time::Instant;
-use tokio::net::TcpStream as TokioTcpStream;
+
+lazy_static! {
+    pub static ref TRAFFIC_WATCHER: Arc<RwLock<TrafficWatcher>> =
+        Arc::new(RwLock::new(TrafficWatcher::default()));
+}
 
 pub struct TrafficWatcher {
     // last read download
@@ -56,18 +57,21 @@ pub struct TrafficWatcher {
     last_exit_dest_price: u128,
 }
 
-impl Actor for TrafficWatcher {
+/// Dummy Traffic Watcher struct for Actor, used to ensure we dont accidently read out of the
+/// original TrafficWatcher struct.
+pub struct TrafficWatcherActor {}
+
+impl Actor for TrafficWatcherActor {
     type Context = Context<Self>;
 }
-impl Supervised for TrafficWatcher {}
-impl SystemService for TrafficWatcher {
-    fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        info!("Client traffic watcher started");
-        self.last_read_input = 0;
-        self.last_read_output = 0;
-        self.last_exit_dest_price = 0;
+impl Supervised for TrafficWatcherActor {}
+impl SystemService for TrafficWatcherActor {}
+impl Default for TrafficWatcherActor {
+    fn default() -> TrafficWatcherActor {
+        TrafficWatcherActor {}
     }
 }
+
 impl Default for TrafficWatcher {
     fn default() -> TrafficWatcher {
         TrafficWatcher {
@@ -104,134 +108,91 @@ impl Message for QueryExitDebts {
     type Result = Result<(), Error>;
 }
 
-impl Handler<QueryExitDebts> for TrafficWatcher {
-    type Result = Result<(), Error>;
+pub async fn query_exit_debts(msg: QueryExitDebts) {
+    trace!("About to query the exit for client debts");
 
-    fn handle(&mut self, msg: QueryExitDebts, _: &mut Context<Self>) -> Self::Result {
-        trace!("About to query the exit for client debts");
+    let writer = &mut *TRAFFIC_WATCHER.write().unwrap();
 
-        // we could exit the function if this fails, but doing so would remove the chance
-        // that we can get debts from the exit and continue anyways
-        let local_debt =
-            match local_traffic_calculation(self, &msg.exit_id, msg.exit_price, msg.routes) {
-                Ok(val) => Some(Int256::from(val)),
-                Err(_e) => None,
-            };
+    // we could exit the function if this fails, but doing so would remove the chance
+    // that we can get debts from the exit and continue anyways
+    let local_debt =
+        match local_traffic_calculation(writer, &msg.exit_id, msg.exit_price, msg.routes) {
+            Ok(val) => Some(Int256::from(val)),
+            Err(_e) => None,
+        };
+    let gateway_exit_client = is_gateway_client();
+    let start = Instant::now();
+    let exit_addr = msg.exit_internal_addr;
+    let exit_id = msg.exit_id;
+    let exit_port = msg.exit_port;
+    // actix client behaves badly if you build a request the default way but don't give it
+    // a domain name, so in order to do peer to peer requests we use with_connection and our own
+    // socket specification
+    let our_id = settings::get_rita_client().get_identity();
+    let request = format!("http://{}:{}/client_debt", exit_addr, exit_port);
+    // it's an ipaddr appended to a u16, there's no real way for this to fail
+    // unless of course it's an ipv6 address and you don't do the []
 
-        let gateway_exit_client = is_gateway_client();
-        let start = Instant::now();
-        let exit_addr = msg.exit_internal_addr;
-        let exit_id = msg.exit_id;
-        let exit_port = msg.exit_port;
-        // actix client behaves badly if you build a request the default way but don't give it
-        // a domain name, so in order to do peer to peer requests we use with_connection and our own
-        // socket specification
-        let our_id = settings::get_rita_client().get_identity();
-        let request = format!("http://{}:{}/client_debt", exit_addr, exit_port);
-        // it's an ipaddr appended to a u16, there's no real way for this to fail
-        // unless of course it's an ipv6 address and you don't do the []
-        let socket: SocketAddr = format!("{}:{}", exit_addr, exit_port).parse().unwrap();
-
-        let stream_future = TokioTcpStream::connect(&socket);
-
-        let s = stream_future.then(move |active_stream| match active_stream {
-            Ok(stream) => Box::new(
-                client::post(request.clone())
-                    .with_connection(Connection::from_stream(stream))
-                    .json(our_id)
-                    .unwrap()
-                    .send()
-                    .timeout(Duration::from_secs(5))
-                    .then(move |response| match response {
-                        Ok(response) => Box::new(response.json().then(move |debt_value| {
-                            match debt_value {
-                                Ok(debt) => {
-                                    info!(
-                                        "Successfully got debt from the exit {:?} Rita Client TrafficWatcher completed in {}s {}ms",
-                                        debt,
-                                        start.elapsed().as_secs(),
-                                        start.elapsed().subsec_millis()
-                                    );
-                                    let we_are_not_a_gateway = !gateway_exit_client;
-                                    let we_owe_exit = debt >= Int256::zero();
-                                    match (we_are_not_a_gateway, we_owe_exit) {
-                                        (true, true) => {
-                                        traffic_replace(
-                                   Traffic {
-                                                from: exit_id,
-                                                amount: debt,
-                                            }
-                                        )
-                                        },
-                                        // the exit should never tell us it owes us, that doesn't make sense outside of the gateway
-                                        // client corner case
-                                        (true, false) => warn!("We're probably a gateway but haven't detected it yet"),
-                                        (false, _) => {
-                                            info!("We are a gateway!, Acting accordingly");
-                                            if let Some(val) = local_debt {
-                                                wgkey_insensitive_traffic_update(
-                                       Traffic {
-                                                    from: exit_id,
-                                                    amount: val,
-                                                    }
-
-                                                )
-                                            }
-                                        },
-                                    }
-                                }
-                                Err(e) => {
-                                    error!("Failed deserializing exit debts update with {:?}", e);
-                                    if let Some(val) = local_debt {
-                                        traffic_update(
-                                   vec![Traffic {
-                                            from: exit_id,
-                                            amount: val,
-                                            }]
-
-                                        )
-                                    }
-                                }
-                            }
-                            Ok(()) as Result<(), ()>
-                        })),
-                        Err(e) => {
-                            error!("Exit debts request to {} failed with {:?}", request, e);
-                            if let Some(val) = local_debt {
-                                traffic_update(
-                                   vec![Traffic {
-                                            from: exit_id,
-                                            amount: val,
-                                            }]
-
-                                        )
-                            }
-                            Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = ()>>
-                        }
-                    }),
-            ),
-
-            Err(e) => {
-                error!(
-                    "Failed to open stream to exit for debts update! with {:?}",
-                    e
-                );
-                if let Some(val) = local_debt {
-                                traffic_update(
-                                   vec![Traffic {
-                                            from: exit_id,
-                                            amount: val,
-                                            }]
-
-                                        )
-
-
-                }
-                Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = ()>>
+    let client = awc::Client::default();
+    let response = client
+        .post(request.clone())
+        .timeout(Duration::from_secs(5))
+        .send_json(&our_id)
+        .await;
+    let mut response = match response {
+        Ok(a) => a,
+        Err(e) => {
+            error!("Exit debts request to {} failed with {:?}", request, e);
+            if let Some(val) = local_debt {
+                traffic_update(vec![Traffic {
+                    from: exit_id,
+                    amount: val,
+                }])
             }
-        });
-        Arbiter::spawn(s);
-        Ok(())
+            return;
+        }
+    };
+    let response = response.json().await;
+    match response {
+        Ok(debt) => {
+            info!(
+                "Successfully got debt from the exit {:?} Rita Client TrafficWatcher completed in {}s {}ms",
+                debt,
+                start.elapsed().as_secs(),
+                start.elapsed().subsec_millis()
+            );
+            let we_are_not_a_gateway = !gateway_exit_client;
+            let we_owe_exit = debt >= Int256::zero();
+            match (we_are_not_a_gateway, we_owe_exit) {
+                (true, true) => traffic_replace(Traffic {
+                    from: exit_id,
+                    amount: debt,
+                }),
+                // the exit should never tell us it owes us, that doesn't make sense outside of the gateway
+                // client corner case
+                (true, false) => {
+                    warn!("We're probably a gateway but haven't detected it yet")
+                }
+                (false, _) => {
+                    info!("We are a gateway!, Acting accordingly");
+                    if let Some(val) = local_debt {
+                        wgkey_insensitive_traffic_update(Traffic {
+                            from: exit_id,
+                            amount: val,
+                        })
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            error!("Failed deserializing exit debts update with {:?}", e);
+            if let Some(val) = local_debt {
+                traffic_update(vec![Traffic {
+                    from: exit_id,
+                    amount: val,
+                }])
+            }
+        }
     }
 }
 
@@ -368,10 +329,10 @@ impl Message for GetExitDestPrice {
     type Result = Result<u128, Error>;
 }
 
-impl Handler<GetExitDestPrice> for TrafficWatcher {
+impl Handler<GetExitDestPrice> for TrafficWatcherActor {
     type Result = Result<u128, Error>;
 
     fn handle(&mut self, _msg: GetExitDestPrice, _: &mut Context<Self>) -> Self::Result {
-        Ok(self.last_exit_dest_price)
+        Ok(TRAFFIC_WATCHER.read().unwrap().last_exit_dest_price)
     }
 }

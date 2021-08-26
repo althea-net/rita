@@ -1,5 +1,5 @@
 use crate::traffic_watcher::GetExitDestPrice;
-use crate::traffic_watcher::TrafficWatcher;
+use crate::traffic_watcher::TrafficWatcherActor;
 
 use actix::SystemService;
 use actix_web::Path;
@@ -47,7 +47,7 @@ pub fn get_prices(_req: HttpRequest) -> Box<dyn Future<Item = Json<Prices>, Erro
     debug!("/prices GET hit");
 
     let payment = settings::get_rita_client().payment;
-    let f = TrafficWatcher::from_registry().send(GetExitDestPrice);
+    let f = TrafficWatcherActor::from_registry().send(GetExitDestPrice);
     let b = f.from_err().and_then(move |exit_dest_price| {
         let exit_dest_price = exit_dest_price.unwrap();
         let simulated_tx_fee = payment.simulated_transaction_fee;

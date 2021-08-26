@@ -5,7 +5,7 @@
 //! far as I can tell due to the restrictive nature of how and when Android allows ipv6 routing.
 
 use crate::traffic_watcher::GetExitDestPrice;
-use crate::traffic_watcher::TrafficWatcher;
+use crate::traffic_watcher::TrafficWatcherActor;
 use rita_common::debt_keeper::traffic_update;
 use rita_common::debt_keeper::Traffic;
 use rita_common::peer_listener::Peer;
@@ -75,7 +75,7 @@ pub fn light_client_hello_response(
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let their_id = *req.0;
     let a = LightClientManager::from_registry().send(GetAddress(their_id));
-    let b = TrafficWatcher::from_registry().send(GetExitDestPrice);
+    let b = TrafficWatcherActor::from_registry().send(GetExitDestPrice);
 
     Box::new(
         a.join(b)

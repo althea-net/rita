@@ -4,7 +4,7 @@
 //! This loop manages exit signup based on the settings configuration state and deploys an exit vpn
 //! tunnel if the signup was successful on the selected exit.
 
-use crate::exit_manager::ExitManager;
+use crate::exit_manager::exit_manager_tick;
 use crate::heartbeat::send_udp_heartbeat;
 use crate::light_client_manager::light_client_hello_response;
 use crate::light_client_manager::LightClientManager;
@@ -13,22 +13,26 @@ use crate::operator_fee_manager::OperatorFeeManager;
 use crate::operator_fee_manager::Tick as OperatorTick;
 use crate::operator_update::{OperatorUpdate, Update};
 use crate::traffic_watcher::GetExitDestPrice;
-use crate::traffic_watcher::TrafficWatcher;
+use crate::traffic_watcher::TrafficWatcherActor;
 use rita_common::tunnel_manager::GetNeighbors;
 use rita_common::tunnel_manager::GetTunnels;
 use rita_common::tunnel_manager::TunnelManager;
 
 use actix::{
     Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
-    SystemService,
+    System, SystemService,
 };
 use actix_web::http::Method;
 use actix_web::{server, App};
+
+use actix_async::System as AsyncSystem;
+use std::thread;
+use std::time::{Duration, Instant};
+
 use althea_types::ExitState;
 use failure::Error;
 use futures01::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
 
 lazy_static! {
     /// see the comment on check_for_gateway_client_billing_corner_case()
@@ -116,11 +120,9 @@ impl Handler<Tick> for RitaLoop {
         let start = Instant::now();
         trace!("Client Tick!");
 
-        ExitManager::from_registry().do_send(Tick {});
-
         Arbiter::spawn(check_for_gateway_client_billing_corner_case());
 
-        let dest_price = TrafficWatcher::from_registry().send(GetExitDestPrice);
+        let dest_price = TrafficWatcherActor::from_registry().send(GetExitDestPrice);
         let tunnels = TunnelManager::from_registry().send(GetTunnels);
         Arbiter::spawn(dest_price.join(tunnels).then(move |res| {
             // unwrap top level actix error, ok to crash if this fails
@@ -155,9 +157,51 @@ impl Handler<Tick> for RitaLoop {
     }
 }
 
+/// Rita loop thread spawning function, there are currently two rita loops, one that
+/// runs as a thread with async/await support and one that runs as a actor using old futures
+/// slowly things will be migrated into this new sync loop as we move to async/await
+pub fn start_rita_loop() {
+    let mut last_restart = Instant::now();
+    // this is a reference to the non-async actix system since this can bring down the whole process
+    let system = System::current();
+
+    // outer thread is a watchdog inner thread is the runner
+    thread::spawn(move || {
+        // this will always be an error, so it's really just a loop statement
+        // with some fancy destructuring
+
+        while let Err(e) = {
+            thread::spawn(move || loop {
+                let start = Instant::now();
+                trace!("Client tick!");
+
+                let runner = AsyncSystem::new();
+                runner.block_on(async move {
+                    exit_manager_tick().await;
+                });
+
+                // sleep until it has been CLIENT_LOOP_SPEED seconds from start, whenever that may be
+                // if it has been more than CLIENT_LOOP_SPEED seconds from start, go right ahead
+                let client_loop_speed = Duration::from_secs(CLIENT_LOOP_SPEED);
+                if start.elapsed() < client_loop_speed {
+                    thread::sleep(client_loop_speed - start.elapsed());
+                }
+            })
+            .join()
+        } {
+            error!("Rita client loop thread paniced! Respawning {:?}", e);
+            if Instant::now() - last_restart < Duration::from_secs(60) {
+                error!("Restarting too quickly, leaving it to auto rescue!");
+                system.stop_with_code(121)
+            }
+            last_restart = Instant::now();
+        }
+    });
+}
+
 pub fn check_rita_client_actors() {
     assert!(crate::rita_loop::RitaLoop::from_registry().connected());
-    assert!(crate::exit_manager::ExitManager::from_registry().connected());
+    crate::rita_loop::start_rita_loop();
 }
 
 /// There is a complicated corner case where the gateway is a client and a relay to

@@ -16,12 +16,10 @@
 //!
 //! Signup is complete and the user may use the connection
 
-use crate::rita_loop::Tick;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
-use crate::traffic_watcher::{QueryExitDebts, TrafficWatcher};
-use actix::registry::SystemService;
-use actix::{Actor, Arbiter, Context, Handler, ResponseFuture, Supervised};
+use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use actix_web::client::Connection;
+
 use actix_web::{client, HttpMessage, Result};
 use althea_kernel_interface::{
     exit_client_tunnel::ClientExitTunnelConfig, DefaultRoute, KernelInterfaceError,
@@ -31,12 +29,9 @@ use althea_types::ExitDetails;
 use althea_types::WgKey;
 use althea_types::{EncryptedExitClientIdentity, EncryptedExitState};
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState, ExitVerifMode};
-use babel_monitor_legacy::open_babel_stream_legacy;
-use babel_monitor_legacy::parse_routes_legacy;
-use babel_monitor_legacy::start_connection_legacy;
+use babel_monitor::{open_babel_stream, parse_routes};
 use failure::Error;
 use futures01::future;
-use futures01::future::join_all;
 use futures01::Future;
 use rita_common::blockchain_oracle::low_balance;
 use rita_common::KI;
@@ -45,9 +40,15 @@ use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
 use std::net::SocketAddr;
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::Duration;
 use tokio::net::TcpStream as TokioTcpStream;
-use tokio::util::FutureExt;
+
+lazy_static! {
+    pub static ref EXIT_MANAGER: Arc<RwLock<ExitManager>> =
+        Arc::new(RwLock::new(ExitManager::default()));
+}
 
 fn linux_setup_exit_tunnel(
     current_exit: &ExitServer,
@@ -97,20 +98,19 @@ fn remove_nat() {
     }
 }
 
-pub fn get_exit_info(to: &SocketAddr) -> impl Future<Item = ExitState, Error = Error> {
+pub async fn get_exit_info(to: &SocketAddr) -> Result<ExitState, Error> {
     let endpoint = format!("http://[{}]:{}/exit_info", to.ip(), to.port());
 
-    let stream = TokioTcpStream::connect(to);
+    let client = awc::Client::default();
+    let mut response = match client.get(&endpoint).send().await {
+        Ok(a) => a,
+        Err(e) => {
+            bail!("Error with get request for exit info: {}", e);
+        }
+    };
+    let response_json = response.json().await?;
 
-    stream.from_err().and_then(move |stream| {
-        client::get(&endpoint)
-            .with_connection(Connection::from_stream(stream))
-            .finish()
-            .unwrap()
-            .send()
-            .from_err()
-            .and_then(|response| response.json().from_err().and_then(Ok))
-    })
+    Ok(response_json)
 }
 
 fn encrypt_exit_client_id(
@@ -200,60 +200,51 @@ fn send_exit_setup_request(
     })
 }
 
-fn send_exit_status_request(
+async fn send_exit_status_request(
     exit_pubkey: WgKey,
     to: &SocketAddr,
     ident: ExitClientIdentity,
-) -> impl Future<Item = ExitState, Error = Error> {
+) -> Result<ExitState, Error> {
     let endpoint = format!("http://[{}]:{}/secure_status", to.ip(), to.port());
     let ident = encrypt_exit_client_id(&exit_pubkey.into(), ident);
 
-    let stream = TokioTcpStream::connect(to);
+    let client = awc::Client::default();
+    let response = client
+        .post(&endpoint)
+        .timeout(CLIENT_LOOP_TIMEOUT)
+        .send_json(&ident)
+        .await;
 
-    stream.from_err().and_then(move |stream| {
-        client::post(&endpoint)
-            .timeout(CLIENT_LOOP_TIMEOUT)
-            .with_connection(Connection::from_stream(stream))
-            .json(ident)
-            .unwrap()
-            .send()
-            .from_err()
-            .and_then(move |response| {
-                response
-                    .json()
-                    .from_err()
-                    .and_then(move |value: EncryptedExitState| {
-                        decrypt_exit_state(value, exit_pubkey.into())
-                    })
-            })
-    })
+    let mut response = match response {
+        Ok(a) => a,
+        Err(e) => bail!("Error with post request for exit status: {}", e),
+    };
+
+    let value = response.json().await?;
+
+    decrypt_exit_state(value, exit_pubkey.into())
 }
 
-fn exit_general_details_request(exit: String) -> impl Future<Item = (), Error = Error> {
+async fn exit_general_details_request(exit: String) -> Result<(), Error> {
     let current_exit = match settings::get_rita_client().exit_client.exits.get(&exit) {
         Some(current_exit) => current_exit.clone(),
         None => {
-            return Box::new(future::err(format_err!("No valid exit for {}", exit)))
-                as Box<dyn Future<Item = (), Error = Error>>;
+            return Err(format_err!("No valid exit for {}", exit));
         }
     };
 
     let endpoint = SocketAddr::new(current_exit.id.mesh_ip, current_exit.registration_port);
 
     trace!("sending exit general details request to {}", exit);
-    let r = get_exit_info(&endpoint).and_then(move |exit_details| {
-        let mut rita_client = settings::get_rita_client();
-        let current_exit = match rita_client.exit_client.exits.get_mut(&exit) {
-            Some(exit) => exit,
-            None => bail!("Could not find exit {}", exit),
-        };
-        current_exit.info = exit_details;
-
-        settings::set_rita_client(rita_client);
-        Ok(())
-    });
-
-    Box::new(r)
+    let exit_details = get_exit_info(&endpoint).await?;
+    let mut rita_client = settings::get_rita_client();
+    let current_exit = match rita_client.exit_client.exits.get_mut(&exit) {
+        Some(exit) => exit,
+        None => bail!("Could not find exit {}", exit),
+    };
+    current_exit.info = exit_details;
+    settings::set_rita_client(rita_client);
+    Ok(())
 }
 
 pub fn exit_setup_request(
@@ -340,17 +331,16 @@ pub fn exit_setup_request(
     )
 }
 
-fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
+async fn exit_status_request(exit: String) -> Result<(), Error> {
     let current_exit = match settings::get_rita_client().exit_client.exits.get(&exit) {
         Some(current_exit) => current_exit.clone(),
         None => {
-            return Box::new(future::err(format_err!("No valid exit for {}", exit)))
-                as Box<dyn Future<Item = (), Error = Error>>;
+            return Err(format_err!("No valid exit for {}", exit));
         }
     };
     let reg_details = match settings::get_rita_client().exit_client.contact_info {
         Some(val) => val.into(),
-        None => return Box::new(future::err(format_err!("No valid details"))),
+        None => return Err(format_err!("No valid details")),
     };
 
     let exit_server = current_exit.id.mesh_ip;
@@ -359,9 +349,7 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
         global: match settings::get_rita_client().get_identity() {
             Some(id) => id,
             None => {
-                return Box::new(future::err(format_err!(
-                    "Identity has no mesh IP ready yet"
-                )));
+                return Err(format_err!("Identity has no mesh IP ready yet"));
             }
         },
         wg_port: settings::get_rita_client().exit_client.wg_listen_port,
@@ -376,44 +364,24 @@ fn exit_status_request(exit: String) -> impl Future<Item = (), Error = Error> {
         endpoint
     );
 
-    let r =
-        send_exit_status_request(exit_pubkey, &endpoint, ident).and_then(move |exit_response| {
-            let mut rita_client = settings::get_rita_client();
-
-            let current_exit = match rita_client.exit_client.exits.get_mut(&exit) {
-                Some(exit_struct) => exit_struct,
-                None => bail!("Could not find exit {:?}", exit),
-            };
-
-            current_exit.info = exit_response.clone();
-            settings::set_rita_client(rita_client);
-
-            trace!("Got exit status response {:?}", exit_response);
-
-            Ok(())
-        });
-
-    Box::new(r)
+    let exit_response = send_exit_status_request(exit_pubkey, &endpoint, ident).await?;
+    let mut rita_client = settings::get_rita_client();
+    let current_exit = match rita_client.exit_client.exits.get_mut(&exit) {
+        Some(exit_struct) => exit_struct,
+        None => bail!("Could not find exit {:?}", exit),
+    };
+    current_exit.info = exit_response.clone();
+    settings::set_rita_client(rita_client);
+    trace!("Got exit status response {:?}", exit_response);
+    Ok(())
 }
 
 /// An actor which pays the exit
 #[derive(Default)]
 pub struct ExitManager {
     // used to determine if we've changed exits
-    last_exit: Option<ExitServer>,
-    nat_setup: bool,
-}
-
-impl Actor for ExitManager {
-    type Context = Context<Self>;
-}
-
-impl Supervised for ExitManager {}
-impl SystemService for ExitManager {
-    fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        info!("Exit Manager started");
-        self.last_exit = None;
-    }
+    pub last_exit: Option<ExitServer>,
+    pub nat_setup: bool,
 }
 
 fn correct_default_route(input: Option<DefaultRoute>) -> bool {
@@ -423,174 +391,161 @@ fn correct_default_route(input: Option<DefaultRoute>) -> bool {
     }
 }
 
-impl Handler<Tick> for ExitManager {
-    type Result = ResponseFuture<(), Error>;
+pub async fn exit_manager_tick() {
+    // scopes our access to SETTING and prevent
+    // holding a readlock while exit tunnel setup requires a write lock
+    // roughly the same as a drop(); inline
+    let client_can_use_free_tier = { settings::get_rita_client().payment.client_can_use_free_tier };
+    let exit_server = {
+        settings::get_rita_client()
+            .exit_client
+            .get_current_exit()
+            .cloned()
+    };
 
-    fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
-        // scopes our access to SETTING and prevent
-        // holding a readlock while exit tunnel setup requires a write lock
-        // roughly the same as a drop(); inline
-        let client_can_use_free_tier =
-            { settings::get_rita_client().payment.client_can_use_free_tier };
-        let exit_server = {
-            settings::get_rita_client()
-                .exit_client
-                .get_current_exit()
-                .cloned()
-        };
+    // code that connects to the current exit server
+    info!("About to setup exit tunnel!");
+    if let Some(exit) = exit_server {
+        trace!("We have selected an exit!");
+        if let Some(general_details) = exit.info.general_details() {
+            trace!("We have details for the selected exit!");
 
-        // code that connects to the current exit server
-        trace!("About to setup exit tunnel!");
-        if let Some(exit) = exit_server {
-            trace!("We have selected an exit!");
-            if let Some(general_details) = exit.info.general_details() {
-                trace!("We have details for the selected exit!");
+            let signed_up_for_exit = exit.info.our_details().is_some();
 
-                let signed_up_for_exit = exit.info.our_details().is_some();
-                let exit_has_changed =
-                    !(self.last_exit.is_some() && self.last_exit.clone().unwrap() == exit);
-                let correct_default_route = correct_default_route(KI.get_default_route());
+            let mut writer = &mut *EXIT_MANAGER.write().unwrap();
 
-                match (signed_up_for_exit, exit_has_changed, correct_default_route) {
-                    (true, true, _) => {
-                        info!("Exit change, setting up exit tunnel");
-                        linux_setup_exit_tunnel(
-                            &exit,
-                            &general_details.clone(),
-                            exit.info.our_details().unwrap(),
-                        )
-                        .expect("failure setting up exit tunnel");
-                        self.nat_setup = true;
-                        self.last_exit = Some(exit.clone());
-                    }
-                    (true, false, false) => {
-                        info!("DHCP overwrite setup exit tunnel again");
-                        linux_setup_exit_tunnel(
-                            &exit,
-                            &general_details.clone(),
-                            exit.info.our_details().unwrap(),
-                        )
-                        .expect("failure setting up exit tunnel");
-                        self.nat_setup = true;
-                    }
-                    _ => {}
+            let exit_has_changed =
+                !(writer.last_exit.is_some() && writer.last_exit.clone().unwrap() == exit);
+            let correct_default_route = correct_default_route(KI.get_default_route());
+
+            match (signed_up_for_exit, exit_has_changed, correct_default_route) {
+                (true, true, _) => {
+                    trace!("Exit change, setting up exit tunnel");
+                    linux_setup_exit_tunnel(
+                        &exit,
+                        &general_details.clone(),
+                        exit.info.our_details().unwrap(),
+                    )
+                    .expect("failure setting up exit tunnel");
+                    writer.nat_setup = true;
+                    writer.last_exit = Some(exit.clone());
                 }
-
-                // Adds and removes the nat rules in low balance situations
-                // this prevents the free tier from being confusing (partially working)
-                // when deployments are not interested in having a sufficiently fast one
-                let low_balance = low_balance();
-                let nat_setup = self.nat_setup;
-                trace!(
-                    "client can use free tier {} low balance {}",
-                    client_can_use_free_tier,
-                    low_balance
-                );
-                match (low_balance, client_can_use_free_tier, nat_setup) {
-                    // remove when we have a low balance, do not have a free tier
-                    // and have a nat setup.
-                    (true, false, true) => {
-                        trace!("removing exit tunnel!");
-                        remove_nat();
-                        self.nat_setup = false;
-                    }
-                    // restore when our balance is not low and our nat is not setup
-                    // regardless of the free tier value
-                    (false, _, false) => {
-                        trace!("restoring exit tunnel!");
-                        restore_nat();
-                        self.nat_setup = true;
-                    }
-                    // restore if the nat is not setup and the free tier is enabled
-                    // this only happens when settings change under the hood
-                    (true, true, false) => {
-                        trace!("restoring exit tunnel!");
-                        restore_nat();
-                        self.nat_setup = true;
-                    }
-                    _ => {}
+                (true, false, false) => {
+                    trace!("DHCP overwrite setup exit tunnel again");
+                    linux_setup_exit_tunnel(
+                        &exit,
+                        &general_details.clone(),
+                        exit.info.our_details().unwrap(),
+                    )
+                    .expect("failure setting up exit tunnel");
+                    writer.nat_setup = true;
                 }
+                _ => {}
+            }
 
-                // run billing at all times when an exit is setup
-                if signed_up_for_exit {
-                    let exit_price = general_details.exit_price;
-                    let exit_internal_addr = general_details.server_internal_ip;
-                    let exit_port = exit.registration_port;
-                    let exit_id = exit.id;
-                    let babel_port = settings::get_rita_client().network.babel_port;
-                    trace!("We are signed up for the selected exit!");
-
-                    Arbiter::spawn(
-                        open_babel_stream_legacy(babel_port)
-                            .from_err()
-                            .and_then(move |stream| {
-                                start_connection_legacy(stream).and_then(move |stream| {
-                                    parse_routes_legacy(stream).and_then(move |routes| {
-                                        TrafficWatcher::from_registry().do_send(QueryExitDebts {
-                                            exit_id,
-                                            exit_price,
-                                            routes: routes.1,
-                                            exit_internal_addr,
-                                            exit_port,
-                                        });
-                                        Ok(())
-                                    })
-                                })
-                            })
-                            .timeout(CLIENT_LOOP_TIMEOUT)
-                            .then(|ret| {
-                                if let Err(e) = ret {
-                                    error!("Failed to watch client traffic with {:?}", e)
-                                }
-                                Ok(())
-                            }),
-                    );
+            // Adds and removes the nat rules in low balance situations
+            // this prevents the free tier from being confusing (partially working)
+            // when deployments are not interested in having a sufficiently fast one
+            let low_balance = low_balance();
+            let nat_setup = writer.nat_setup;
+            trace!(
+                "client can use free tier {} low balance {}",
+                client_can_use_free_tier,
+                low_balance
+            );
+            match (low_balance, client_can_use_free_tier, nat_setup) {
+                // remove when we have a low balance, do not have a free tier
+                // and have a nat setup.
+                (true, false, true) => {
+                    trace!("removing exit tunnel!");
+                    remove_nat();
+                    writer.nat_setup = false;
                 }
+                // restore when our balance is not low and our nat is not setup
+                // regardless of the free tier value
+                (false, _, false) => {
+                    trace!("restoring exit tunnel!");
+                    restore_nat();
+                    writer.nat_setup = true;
+                }
+                // restore if the nat is not setup and the free tier is enabled
+                // this only happens when settings change under the hood
+                (true, true, false) => {
+                    trace!("restoring exit tunnel!");
+                    restore_nat();
+                    writer.nat_setup = true;
+                }
+                _ => {}
+            }
+
+            // run billing at all times when an exit is setup
+            if signed_up_for_exit {
+                let exit_price = general_details.exit_price;
+                let exit_internal_addr = general_details.server_internal_ip;
+                let exit_port = exit.registration_port;
+                let exit_id = exit.id;
+                let babel_port = settings::get_rita_client().network.babel_port;
+                info!("We are signed up for the selected exit!");
+
+                let mut stream = match open_babel_stream(babel_port, CLIENT_LOOP_TIMEOUT) {
+                    Ok(a) => a,
+                    Err(_) => {
+                        error!("open babel stream error in exit manager tick");
+                        return;
+                    }
+                };
+                let routes = match parse_routes(&mut stream) {
+                    Ok(a) => a,
+                    Err(_) => {
+                        error!("Parse routes error in exit manager tick");
+                        return;
+                    }
+                };
+
+                query_exit_debts(QueryExitDebts {
+                    exit_id,
+                    exit_price,
+                    routes,
+                    exit_internal_addr,
+                    exit_port,
+                })
+                .await;
             }
         }
+    }
 
-        // code that manages requesting details to exits
-        let servers = { settings::get_rita_client().exit_client.exits };
+    // code that manages requesting details to exits
+    let servers = { settings::get_rita_client().exit_client.exits };
 
-        let mut futs: Vec<Box<dyn Future<Item = (), Error = Error>>> = Vec::new();
+    for (k, s) in servers {
+        match s.info {
+            ExitState::Denied { .. } | ExitState::Disabled | ExitState::GotInfo { .. } => {}
 
-        for (k, s) in servers {
-            match s.info {
-                ExitState::Denied { .. } | ExitState::Disabled | ExitState::GotInfo { .. } => {}
-                ExitState::New { .. } => {
-                    futs.push(Box::new(exit_general_details_request(k.clone()).then(
-                        move |res| {
-                            match res {
-                                Ok(_) => {
-                                    trace!("exit details request to {} was successful", k);
-                                }
-                                Err(e) => {
-                                    trace!("exit details request to {} failed with {:?}", k, e);
-                                }
-                            };
-                            Ok(())
-                        },
-                    )));
-                }
-                ExitState::Registered { .. } => {
-                    futs.push(Box::new(exit_status_request(k.clone()).then(move |res| {
-                        match res {
-                            Ok(_) => {
-                                trace!("exit status request to {} was successful", k);
-                            }
-                            Err(e) => {
-                                trace!("exit status request to {} failed with {:?}", k, e);
-                            }
-                        };
-                        Ok(())
-                    })));
-                }
-                state => {
-                    trace!("Waiting on exit state {:?} for {}", state, k);
-                }
+            ExitState::New { .. } => {
+                match exit_general_details_request(k.clone()).await {
+                    Ok(_) => {
+                        trace!("exit details request to {} was successful", k);
+                    }
+                    Err(e) => {
+                        trace!("exit details request to {} failed with {:?}", k, e);
+                    }
+                };
+            }
+
+            ExitState::Registered { .. } => {
+                match exit_status_request(k.clone()).await {
+                    Ok(_) => {
+                        trace!("exit status request to {} was successful", k);
+                    }
+                    Err(e) => {
+                        trace!("exit status request to {} failed with {:?}", k, e);
+                    }
+                };
+            }
+
+            state => {
+                trace!("Waiting on exit state {:?} for {}", state, k);
             }
         }
-
-        Box::new(join_all(futs).and_then(|_| Ok(()))) as ResponseFuture<(), Error>
     }
 }
