@@ -481,6 +481,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "antenna_forwarding_client"
+version = "0.1.0"
+dependencies = [
+ "althea_kernel_interface",
+ "althea_types",
+ "antenna_forwarding_protocol",
+ "env_logger",
+ "failure",
+ "get_if_addrs",
+ "lazy_static",
+ "log",
+ "oping",
+ "rand 0.8.4",
+ "serde 1.0.126",
+ "serde_json",
+ "sodiumoxide",
+]
+
+[[package]]
+name = "antenna_forwarding_protocol"
+version = "0.1.0"
+dependencies = [
+ "althea_types",
+ "clarity",
+ "failure",
+ "lazy_static",
+ "log",
+ "rand 0.8.4",
+ "serde 1.0.126",
+ "serde_derive",
+ "serde_json",
+ "sodiumoxide",
+]
+
+[[package]]
 name = "arrayvec"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -783,6 +818,12 @@ checksum = "90706ba19e97b90786e19dc0d5e2abd80008d99d4c0c5d1ad0b5e72cec7c494d"
 dependencies = [
  "bytes 1.0.1",
 ]
+
+[[package]]
+name = "c_linked_list"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4964518bd3b4a8190e832886cdc0da9794f12e8e6c1613a9e90ff331c4c8724b"
 
 [[package]]
 name = "cc"
@@ -1528,6 +1569,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "gcc"
+version = "0.3.55"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f5f3913fa0bfe7ee1fd8248b6b9f42a5af4b9d65ec2dd2c3c26132b950ecfc2"
+
+[[package]]
 name = "generic-array"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1544,6 +1591,28 @@ checksum = "501466ecc8a30d1d3b7fc9229b122b2ce8ed6e9d9223f1138d4babb253e51817"
 dependencies = [
  "typenum",
  "version_check 0.9.3",
+]
+
+[[package]]
+name = "get_if_addrs"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "abddb55a898d32925f3148bd281174a68eeb68bbfd9a5938a57b18f506ee4ef7"
+dependencies = [
+ "c_linked_list",
+ "get_if_addrs-sys",
+ "libc",
+ "winapi 0.2.8",
+]
+
+[[package]]
+name = "get_if_addrs-sys"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d04f9fb746cf36b191c00f3ede8bde9c8e64f9f4b05ae2694a9ccf5e3f5ab48"
+dependencies = [
+ "gcc",
+ "libc",
 ]
 
 [[package]]
