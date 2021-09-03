@@ -7,6 +7,7 @@ use clarity::abi::{encode_call, Token};
 use clarity::utils::bytes_to_hex_str;
 use clarity::{Address, PrivateKey};
 use num256::Uint256;
+use std::collections::HashSet;
 use std::time::Duration;
 use web30::amm::{DAI_CONTRACT_ADDRESS as DAI_CONTRACT_ON_ETH, WETH_CONTRACT_ADDRESS};
 use web30::client::Web3;
@@ -497,7 +498,7 @@ pub async fn check_withdrawals(
     blocks_to_check: u64,
     contract: Address,
     xdai_web3: Web3,
-    search_addresses: Vec<Address>,
+    search_addresses: HashSet<Address>,
 ) -> Result<Vec<WithdrawEvent>, Web3Error> {
     /// Total number of blocks on the xdai blockchain we retrieve at once. If the blocks to check is greater than this we loop.
     const MAX_ITER: u64 = 10_000;
@@ -797,12 +798,14 @@ mod tests {
 
         let blocks_to_check = 10000;
         runner.block_on(async move {
+            let mut h = HashSet::new();
+            h.insert(token_bridge.own_address);
             // res is empty since we use a dummy address
             let res = check_withdrawals(
                 blocks_to_check,
                 token_bridge.xdai_bridge_on_xdai,
                 token_bridge.xdai_web3,
-                vec![token_bridge.own_address],
+                h,
             )
             .await
             .unwrap();

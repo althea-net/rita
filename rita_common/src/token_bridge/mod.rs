@@ -38,6 +38,7 @@ use rand::{thread_rng, Rng};
 use settings::payment::PaymentSettings;
 
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::iter::FromIterator;
 use std::sync::Arc;
@@ -359,14 +360,10 @@ async fn simulated_withdrawal_on_eth(
     wei_per_dollar: Uint256,
 ) -> Result<(), TokenBridgeError> {
     let client = bridge.xdai_web3.clone();
+    let mut h = HashSet::new();
+    h.insert(bridge.own_address);
 
-    let events = check_withdrawals(
-        BLOCKS,
-        bridge.xdai_bridge_on_xdai,
-        client,
-        vec![bridge.own_address],
-    )
-    .await?;
+    let events = check_withdrawals(BLOCKS, bridge.xdai_bridge_on_xdai, client, h).await?;
 
     for event in events.iter() {
         let txid = event.txid.clone();
