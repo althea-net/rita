@@ -1,4 +1,4 @@
-name: Rust
+name: Rust tests
 
 on:
   push:
@@ -10,26 +10,90 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  check:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v2
-      - name: Install cross
-        run: cargo install cross
-      - name: Test Rita and Rita Exit x86
-        run: cargo build --all && RUST_TEST_THREADS=1 cargo test --verbose --all
-      - name: Cross test x86_64
-        run: cross test --target x86_64-unknown-linux-musl --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1
+      - name: Check Rita and Rita Exit x86
+        run: cargo check --all
+  test:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run Rita and Rita Exit tests
+        run: RUST_TEST_THREADS=1 cargo test --verbose --all
+  rustfmt:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Check code formatting
+        run: rustup component add rustfmt && cargo fmt --all -- --check
+  clippy:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Check for Clippy lints
+        run: rustup component add clippy && cargo clippy --all --all-targets --all-features -- -D warnings
+  cross-mips:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
       - name: Cross test mips
-        run: cross test --target mips-unknown-linux-musl --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1
+        run: cargo install cross && cross test --target mips-unknown-linux-musl --verbose -p rita_bin --bin rita --features bundle_openssl -- --test-threads=1
+  cross-mipsel:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
       - name: Cross test mipsel
-        run: cross test --target mipsel-unknown-linux-musl --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1
+        run: cargo install cross && cross test --target mipsel-unknown-linux-musl --verbose -p rita_bin --bin rita --features bundle_openssl -- --test-threads=1
+  cross-mips64:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
       - name: Cross test mips64
-        run: cross test --target mips64-unknown-linux-gnuabi64 --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1
+        run: cargo install cross && cross test --target mips64-unknown-linux-gnuabi64 --verbose -p rita_bin --bin rita --features bundle_openssl -- --test-threads=1
+  cross-mips64el:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
       - name: Cross test mips64el
-        run: cross test --target mips64el-unknown-linux-gnuabi64 --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1
+        run: cargo install cross && cross test --target mips64el-unknown-linux-gnuabi64 --verbose -p rita_bin --bin rita --features bundle_openssl -- --test-threads=1
+  cross-aarch64:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
       - name: Cross test aarch64
-        run: cross test --target aarch64-unknown-linux-musl --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1
+        run: cargo install cross && cross test --target aarch64-unknown-linux-musl --verbose -p rita_bin --bin rita --features bundle_openssl -- --test-threads=1
+  cross-armv7:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
       - name: Cross test armv7
-        run: cross test --target armv7-unknown-linux-musleabihf --verbose -p rita --bin rita --features bundle_openssl -- --test-threads=1
+        run: cargo install cross && cross test --target armv7-unknown-linux-musleabihf --verbose -p rita_bin --bin rita --features bundle_openssl -- --test-threads=1
+  integration-test-with-backcompat:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Wireguard
+        run: sudo apt-get update && sudo apt install -y wireguard linux-source linux-headers-$(uname -r) build-essential && sudo modprobe wireguard
+      - name: Run integration test
+        run: bash scripts/test-ci-backcompat.sh
+  integration-test:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Wireguard
+        run: sudo apt-get update && sudo apt install -y wireguard linux-source linux-headers-$(uname -r) build-essential && sudo modprobe wireguard
+      - name: Run integration test
+        run: bash scripts/test-ci.sh
