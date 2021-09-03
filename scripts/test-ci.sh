@@ -2,8 +2,6 @@
 set -eux
 NODES=${NODES:='None'}
 
-RUST_TEST_THREADS=1 cargo test --all
-
 if ! modprobe wireguard ; then
 	echo "The container can't load modules into the host kernel"
 	echo "Please install WireGuard https://www.wireguard.com/ and load the kernel module using 'sudo modprobe wireguard'"
