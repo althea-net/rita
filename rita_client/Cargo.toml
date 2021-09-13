@@ -43,3 +43,9 @@ clarity = "0.4"
 [lib]
 name = "rita_client"
 path = "src/lib.rs"
+
+[features]
+# disables cors for dash debugging
+dash_debug = []
+# changes operator urls
+operator_debug = []

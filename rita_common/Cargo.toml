@@ -44,3 +44,8 @@ babel_monitor_legacy = {path = "../babel_monitor_legacy"}
 version = "1.4"
 default-features = false
 features = ["std"]
+[features]
+# disables cors for dash debugging
+dash_debug = []
+# changes operator urls
+operator_debug = []

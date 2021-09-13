@@ -37,9 +37,9 @@ env_logger = "0.8"
 lazy_static = "1.4"
 phonenumber = "0.3"
 r2d2 = "0.8"
-rita_common = { path = "../rita_common"}
-rita_client = { path = "../rita_client"}
-rita_exit = { path = "../rita_exit"}
+rita_common = { path = "../rita_common", default-features = false }
+rita_client = { path = "../rita_client",  default-features = false }
+rita_exit = { path = "../rita_exit", default-features = false }
 flate2 = { version = "1.0", features = ["rust_backend"], default-features = false }
 reqwest = { version = "0.11", features = ["blocking", "json"] }
 jemallocator = {version = "0.3", optional = true}
@@ -59,4 +59,4 @@ server = ["jemalloc", "openssl"]
 dash_debug = []
 # changes operator urls
 operator_debug = []
-development = ["dash_debug", "operator_debug"]
+development = ["rita_client/dash_debug","rita_common/dash_debug","rita_exit/dash_debug","rita_client/operator_debug","rita_common/operator_debug","rita_exit/operator_debug"]
