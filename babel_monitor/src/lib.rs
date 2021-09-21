@@ -162,7 +162,7 @@ fn read_babel(
     previous_contents: String,
     depth: usize,
 ) -> Result<String, Error> {
-    info!(
+    trace!(
         "starting read babel with {} and {}",
         previous_contents, depth
     );
@@ -191,7 +191,7 @@ fn read_babel(
     }
     let output = output.unwrap();
     let output = output.trim_matches(char::from(0));
-    info!(
+    trace!(
         "Babel monitor got {} bytes with the message {}",
         bytes, output
     );
@@ -494,7 +494,7 @@ pub fn parse_routes(stream: &mut TcpStream) -> Result<Vec<Route>, Error> {
 pub fn parse_routes_sync(babel_out: String) -> Result<Vec<Route>, Error> {
     let mut vector: Vec<Route> = Vec::with_capacity(20);
     let mut found_route = false;
-    info!("Got from babel dump: {}", babel_out);
+    trace!("Got from babel dump: {}", babel_out);
 
     for entry in babel_out.split('\n') {
         if entry.contains("add route") {
