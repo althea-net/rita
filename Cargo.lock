@@ -931,11 +931,11 @@ dependencies = [
 
 [[package]]
 name = "compressed_log"
-version = "0.3.8"
+version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b282eec1026cb8d3210fce1c52d2348c63ec43a3015e3ed037cf5d1d807f61c3"
+checksum = "b9ad903597ea665b1e9d9dd59477f9f8b7cc4c83ab661d486a1a2bc2d6526d7b"
 dependencies = [
- "actix 0.11.1",
+ "actix 0.12.0",
  "awc",
  "backoff",
  "chrono",
