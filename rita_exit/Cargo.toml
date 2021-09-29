@@ -37,7 +37,3 @@ actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
 diesel = { version = "1.4", features = ["postgres", "r2d2"] }
 futures01 = { package = "futures", version = "0.1"}
 [features]
-# disables cors for dash debugging
-dash_debug = []
-# changes operator urls
-operator_debug = []

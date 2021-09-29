@@ -47,5 +47,3 @@ features = ["std"]
 [features]
 # disables cors for dash debugging
 dash_debug = []
-# changes operator urls
-operator_debug = []

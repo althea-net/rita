@@ -59,4 +59,4 @@ server = ["jemalloc", "openssl"]
 dash_debug = []
 # changes operator urls
 operator_debug = []
-development = ["rita_client/dash_debug","rita_common/dash_debug","rita_exit/dash_debug","rita_client/operator_debug","rita_common/operator_debug","rita_exit/operator_debug"]
+development = ["rita_common/dash_debug","rita_client/operator_debug"]
