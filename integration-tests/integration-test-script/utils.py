@@ -321,14 +321,14 @@ def ip_to_num(ip):
 
 
 def num_to_ip(num):
-    if num is 0:
+    if num == 0:
         return "fd00::aabb"
     else:
         return "fd00::{}".format(num)
 
 
 def num_to_linklocal_ip(num):
-    if num is 0:
+    if num == 0:
         return "fe80::"
     else:
         return "fe80::{}".format(num)

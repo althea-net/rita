@@ -353,9 +353,9 @@ class World:
             output = status.stdout.read().decode("utf-8")
             # not zero is a hack to deal with the fact that the 7 node format is
             # one indexed and the arbitrary node one is zero indexed
-            if output is "" and n is not 0:
+            if output == "" and n != 0:
                 break
-            elif output is "" and n is 0:
+            elif output == "" and n == 0:
                 n += 1
                 continue
             status = json.loads(output)

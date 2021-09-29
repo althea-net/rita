@@ -137,7 +137,7 @@ def setup_arbitrary_node_config(nodes):
     for graph_node, rita_node in zip(ws.nodes, world.nodes):
         print("Associating {} with {}".format(graph_node, rita_node))
         neighbors = get_neighbors(graph_node, ws.edges)
-        if len(neighbors) is 0:
+        if len(neighbors) == 0:
             print("Disconnected node!")
             exit(1)
 
@@ -199,7 +199,7 @@ def next_hop_and_cost(graph, start, finish, world):
             continue
         print(world.nodes)
         cost += world.nodes[node].local_fee
-    if len(path) is 1:
+    if len(path) == 1:
         return (path[0], 0)
     if len(path) >= 2:
         print(path)
