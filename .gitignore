@@ -15,6 +15,7 @@ test.db-journal
 *.orig
 
 /scripts/staging_dir/
+/scripts/staging/
 integration-tests/private-key*
 integration-tests/deps*
 integration-tests/rita-settings*
