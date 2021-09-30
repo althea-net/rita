@@ -565,7 +565,7 @@ impl TunnelManager {
                             let iface_name =
                                 match reader.interface_map.get(&man_peer.contact_socket) {
                                     Some(a) => a,
-                                    None => panic!("No interface in the hashmap to send a message"),
+                                    None => return Ok(()),
                                 };
                             let udp_socket = match reader.interfaces.get(iface_name) {
                                 Some(a) => &a.linklocal_socket,
@@ -608,7 +608,7 @@ impl TunnelManager {
 
         let iface_name = match reader.interface_map.get(&peer.contact_socket) {
             Some(a) => a,
-            None => panic!("No interface in the hashmap to send a message"),
+            None => return Ok(()),
         };
         let udp_socket = match reader.interfaces.get(iface_name) {
             Some(a) => &a.linklocal_socket,
