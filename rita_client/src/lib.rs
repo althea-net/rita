@@ -20,9 +20,6 @@ pub mod rita_loop;
 pub mod traffic_watcher;
 
 use rita_common::READABLE_VERSION;
-use settings::client::OldRitaClientSettings;
-use settings::update_config;
-use settings::SUBNET;
 
 pub use crate::dashboard::auth::*;
 pub use crate::dashboard::backup_created::*;
@@ -80,25 +77,15 @@ About:
 pub fn wait_for_settings(settings_file: &str) -> RitaClientSettings {
     let start = Instant::now();
     let timeout = Duration::from_secs(120);
-    let mut res = OldRitaClientSettings::new(settings_file);
+    let mut res = RitaClientSettings::new(settings_file);
     while (Instant::now() - start) < timeout {
         if let Ok(val) = res {
-            match update_config(val, SUBNET) {
-                Ok(a) => {
-                    return a;
-                }
-                Err(e) => {
-                    panic!("Settings parse failure {:?}", e);
-                }
-            }
+            return val;
         }
-        res = OldRitaClientSettings::new(settings_file);
+        res = RitaClientSettings::new(settings_file);
     }
     match res {
-        Ok(val) => match update_config(val, SUBNET) {
-            Ok(a) => a,
-            Err(e) => panic!("Settings parse failure {:?}", e),
-        },
+        Ok(val) => val,
         Err(e) => panic!("Settings parse failure {:?}", e),
     }
 }

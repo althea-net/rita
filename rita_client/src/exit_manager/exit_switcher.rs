@@ -490,8 +490,6 @@ pub fn get_babel_routes(babel_port: u16) -> Result<Vec<Route>, Error> {
 #[cfg(test)]
 mod tests {
 
-    use settings::SUBNET;
-
     use super::*;
     use std::net::{IpAddr, Ipv4Addr};
 
@@ -820,22 +818,33 @@ mod tests {
 
     #[test]
     fn test_config_update() {
-        use settings::client::OldRitaClientSettings;
-        use settings::update_config;
+        use settings::client::RitaClientSettings;
 
         let path = "./src/exit_manager/config_in_use.toml".to_string();
-        let old_settings = OldRitaClientSettings::new(&path).unwrap();
-        let subnet = SUBNET;
-        let new_settings = update_config(old_settings.clone(), subnet).unwrap();
+        let settings = RitaClientSettings::new(&path).unwrap();
 
-        assert_eq!(old_settings.payment, new_settings.payment);
-        assert_eq!(old_settings.log, new_settings.log);
-        assert_eq!(old_settings.operator, new_settings.operator);
-        assert_eq!(old_settings.localization, new_settings.localization);
-        assert_eq!(old_settings.network, new_settings.network);
-        assert_eq!(old_settings.future, new_settings.future);
+        assert_eq!(
+            settings.exit_client.current_exit,
+            settings.old_exit_client.current_exit
+        );
+        assert_eq!(
+            settings.exit_client.wg_listen_port,
+            settings.old_exit_client.wg_listen_port
+        );
+        assert_eq!(
+            settings.exit_client.contact_info,
+            settings.old_exit_client.contact_info
+        );
+        assert_eq!(
+            settings.exit_client.lan_nics,
+            settings.old_exit_client.lan_nics
+        );
+        assert_eq!(
+            settings.exit_client.low_balance_notification,
+            settings.old_exit_client.low_balance_notification
+        );
 
-        println!("Old Settings: {:?}", old_settings.exit_client.exits);
-        println!("\n\n\n\nNew Settings: {:?}", new_settings.exit_client);
+        println!("Old Settings: {:?}", settings.old_exit_client.exits);
+        println!("\n\n\n\nNew Settings: {:?}", settings.exit_client.exits);
     }
 }

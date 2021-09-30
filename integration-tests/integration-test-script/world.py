@@ -148,9 +148,12 @@ class World:
 
         EXIT_SETTINGS["exits"]["exit_a"]["wg_public_key"] = get_rita_settings(
             self.exit_id)["exit_network"]["wg_public_key"]
+        EXIT_SETTINGS["exits"]["exit_a"]["id"]["wg_public_key"] = get_rita_settings(
+            self.exit_id)["exit_network"]["wg_public_key"]
         EXIT_SETTINGS["exits"]["exit_a"]["payment"] = {}
         EXIT_SETTINGS["exits"]["exit_a"]["payment"]["eth_address"] = get_rita_settings(
             self.exit_id)["payment"]["eth_address"]
+            
 
         print("starting rita")
         log = "TRACE"

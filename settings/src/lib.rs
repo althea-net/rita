@@ -17,7 +17,7 @@ extern crate serde_derive;
 extern crate log;
 extern crate arrayvec;
 
-use crate::client::{ExitClientSettings, ExitServer, OldRitaClientSettings, SelectedExit};
+use crate::client::{ExitClientSettings, ExitServer, SelectedExit};
 use althea_types::Identity;
 use failure::Error;
 use ipnetwork::IpNetwork;
@@ -297,7 +297,7 @@ where
 
 ///Takes a file config and updates the config to use the new ExitServer struct
 pub fn update_config(
-    old_settings: OldRitaClientSettings,
+    old_settings: RitaClientSettings,
     subnet: u8,
 ) -> Result<RitaClientSettings, Error> {
     let mut new_settings = RitaClientSettings {
@@ -306,20 +306,13 @@ pub fn update_config(
         operator: old_settings.operator,
         localization: old_settings.localization,
         network: old_settings.network,
-        exit_client: ExitClientSettings {
-            exits: HashMap::new(),
-            current_exit: old_settings.exit_client.current_exit,
-            wg_listen_port: old_settings.exit_client.wg_listen_port,
-            contact_info: old_settings.exit_client.contact_info,
-            lan_nics: old_settings.exit_client.lan_nics,
-            low_balance_notification: old_settings.exit_client.low_balance_notification,
-        },
+        old_exit_client: old_settings.old_exit_client.clone(),
+        exit_client: ExitClientSettings::default(),
         future: old_settings.future,
     };
 
-    // Set hashset with new exit info
     let mut new_exits: HashMap<String, ExitServer> = HashMap::new();
-    for (k, v) in old_settings.exit_client.exits {
+    for (k, v) in old_settings.old_exit_client.clone().exits {
         let s_len = if v.subnet_len.is_some() {
             v.subnet_len.unwrap()
         } else {
@@ -341,6 +334,15 @@ pub fn update_config(
         new_exits.insert(k, new_exit);
     }
 
+    let old_exit_client = old_settings.old_exit_client;
+    new_settings.exit_client = ExitClientSettings {
+        exits: HashMap::new(),
+        current_exit: old_exit_client.clone().current_exit,
+        wg_listen_port: old_exit_client.wg_listen_port,
+        contact_info: old_exit_client.clone().contact_info,
+        lan_nics: old_exit_client.clone().lan_nics,
+        low_balance_notification: old_exit_client.low_balance_notification,
+    };
     new_settings.exit_client.exits = new_exits.clone();
 
     Ok(new_settings)
@@ -348,9 +350,8 @@ pub fn update_config(
 
 #[cfg(test)]
 mod tests {
-    use crate::client::{OldRitaClientSettings, RitaClientSettings};
+    use crate::client::RitaClientSettings;
     use crate::exit::RitaExitSettingsStruct;
-    use crate::update_config;
 
     #[test]
     fn test_settings_test() {
@@ -359,11 +360,8 @@ mod tests {
 
     #[test]
     fn test_settings_example() {
-        let settings = update_config(
-            OldRitaClientSettings::new("old_example.toml").unwrap(),
-            120_u8,
-        );
-        println!("{:?}", settings.unwrap().exit_client);
+        let settings = RitaClientSettings::new("old_example.toml").unwrap();
+        assert!(!settings.exit_client.exits.is_empty())
     }
 
     #[test]

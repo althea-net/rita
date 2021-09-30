@@ -89,14 +89,19 @@ EXIT_SETTINGS = {
     "exits": {
         "exit_a": {
             "subnet": "fd00::5/128",
+            "id": {
+                "mesh_ip": "fd00::5",
+                "eth_address": "0xbe398dc24de37c73cec974d688018e58f94d6e0a",
+                "wg_public_key": "fd00::5",
+            },
             "subnet_len": 128,
             "selected_exit": {
                 "selected_id": "fd00::5"
             },
-            "registration_port": 4875,
-            "state": "New",
             "eth_address": "0xbe398dc24de37c73cec974d688018e58f94d6e0a",
             "wg_public_key": "fd00::5",
+            "registration_port": 4875,
+            "state": "New",
         }
     },
     "current_exit": "exit_a",

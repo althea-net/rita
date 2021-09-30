@@ -200,15 +200,14 @@ impl RitaClientSettings {
         let mut s = Config::new();
         assert!(Path::new(file_name).exists());
         s.merge(config::File::with_name(file_name).required(false))?;
-        let settings: Self = s.try_into()?;
-
+        let settings: Self = update_config(s.try_into()?, SUBNET)?;
         Ok(settings)
     }
 
     pub fn new_watched(file_name: &str) -> Result<Self, Error> {
         let mut s = Config::new();
         s.merge(config::File::with_name(file_name).required(false))?;
-        let settings: Self = s.try_into()?;
+        let settings: Self = update_config(s.try_into()?, SUBNET)?;
 
         set_rita_client(settings.clone());
 
@@ -226,33 +225,6 @@ impl RitaClientSettings {
     }
 }
 
-impl OldRitaClientSettings {
-    pub fn new(file_name: &str) -> Result<Self, Error> {
-        let mut s = Config::new();
-        assert!(Path::new(file_name).exists());
-        s.merge(config::File::with_name(file_name).required(false))?;
-        let settings: Self = s.try_into()?;
-
-        Ok(settings)
-    }
-
-    pub fn new_watched(file_name: &str) -> Result<Self, Error> {
-        let mut s = Config::new();
-        s.merge(config::File::with_name(file_name).required(false))?;
-        let settings: Self = s.try_into()?;
-
-        let subnet = SUBNET;
-        let new_settings = update_config(settings.clone(), subnet);
-        let new_settings = new_settings?;
-
-        set_rita_client(new_settings.clone());
-
-        spawn_watch_thread_client(new_settings, file_name);
-
-        Ok(settings)
-    }
-}
-
 /// This is the main struct for rita
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
 pub struct RitaClientSettings {
@@ -264,23 +236,10 @@ pub struct RitaClientSettings {
     #[serde(default)]
     pub localization: LocalizationSettings,
     pub network: NetworkSettings,
+    #[serde(rename = "exit_client")]
+    pub old_exit_client: OldExitClientSettings,
+    #[serde(rename = "new_exit_client", default)]
     pub exit_client: ExitClientSettings,
-    #[serde(skip)]
-    pub future: bool,
-}
-
-/// This is the main struct for rita
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Default)]
-pub struct OldRitaClientSettings {
-    pub payment: PaymentSettings,
-    #[serde(default)]
-    pub log: LoggingSettings,
-    #[serde(default)]
-    pub operator: OperatorSettings,
-    #[serde(default)]
-    pub localization: LocalizationSettings,
-    pub network: NetworkSettings,
-    pub exit_client: OldExitClientSettings,
     #[serde(skip)]
     pub future: bool,
 }
@@ -289,11 +248,13 @@ impl RitaClientSettings {
     pub fn merge(&mut self, changed_settings: serde_json::Value) -> Result<(), Error> {
         let mut settings_value = serde_json::to_value(self.clone())?;
 
+        info!("Merge is being called, maybe error here");
+
         json_merge(&mut settings_value, &changed_settings);
 
         match serde_json::from_value(settings_value) {
             Ok(new_settings) => {
-                *self = new_settings;
+                *self = update_config(new_settings, SUBNET)?;
                 Ok(())
             }
             Err(e) => Err(e.into()),
