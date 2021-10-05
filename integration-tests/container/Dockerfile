@@ -12,7 +12,6 @@ ARG NODES
 ENV SPEEDTEST_THROUGHPUT=$SPEEDTEST_THROUGHPUT
 ENV SPEEDTEST_DURATION=$SPEEDTEST_DURATION
 ENV VERBOSE=$VERBOSE
-RUN PATH=$PATH:$HOME/.cargo/bin cargo install diesel_cli --force
 ENV NODES=$NODES
 # we pull in the git tar instead of the local folder becuase the raw code is much much smaller
 # note that changes have to be checked in to be pulled in and tested! we pull this in near
