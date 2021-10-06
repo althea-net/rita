@@ -365,7 +365,7 @@ impl Handler<PeersToContact> for TunnelManager {
 
         trace!("TunnelManager contacting peers");
         for (_, peer) in msg.peers.iter() {
-            let res = self.neighbor_inquiry(peer);
+            let res = self.neighbor_inquiry(peer, false);
             if res.is_err() {
                 warn!("Neighbor inqury for {:?} failed! with {:?}", peer, res);
             }
@@ -380,7 +380,7 @@ impl Handler<PeersToContact> for TunnelManager {
                         ifidx: 0,
                         contact_socket: socket,
                     };
-                    let res = self.neighbor_inquiry(&man_peer);
+                    let res = self.neighbor_inquiry(&man_peer, true);
                     if res.is_err() {
                         warn!(
                             "Neighbor inqury for {:?} failed with: {:?}",
@@ -449,6 +449,34 @@ fn contact_neighbor(
 
     //new send_hello call using udp socket
     send_hello(&new_msg, socket, send_addr, our_port);
+
+    //old hello manager over http
+    HelloHandler::from_registry().do_send(msg);
+
+    Ok(())
+}
+
+/// Uses Hello Handler to send a Hello over http. Takes a speculative port (only assigned
+/// if neighbor responds successfully)
+fn contact_manual_peer(peer: &Peer, our_port: u16) -> Result<(), Error> {
+    let mut settings = settings::get_rita_common();
+    KI.manual_peers_route(
+        &peer.contact_socket.ip(),
+        &mut settings.network.last_default_route,
+    )?;
+
+    let msg = Hello {
+        my_id: LocalIdentity {
+            global: settings
+                .get_identity()
+                .ok_or_else(|| format_err!("Identity has no mesh IP ready yet"))?,
+            wg_port: our_port,
+            have_tunnel: None,
+        },
+        to: *peer,
+    };
+
+    settings::set_rita_common(settings);
 
     //old hello manager over http
     HelloHandler::from_registry().do_send(msg);
@@ -561,17 +589,7 @@ impl TunnelManager {
                                 contact_socket: socket,
                             };
 
-                            let reader = PEER_LISTENER.read().unwrap();
-                            let iface_name =
-                                match reader.interface_map.get(&man_peer.contact_socket) {
-                                    Some(a) => a,
-                                    None => panic!("No interface in the hashmap to send a message"),
-                                };
-                            let udp_socket = match reader.interfaces.get(iface_name) {
-                                Some(a) => &a.linklocal_socket,
-                                None => panic!("No udp socket present for given interface"),
-                            };
-                            let res = contact_neighbor(&man_peer, our_port, udp_socket, socket);
+                            let res = contact_manual_peer(&man_peer, our_port);
                             if res.is_err() {
                                 warn!("Contact neighbor failed with {:?}", res);
                             }
@@ -599,22 +617,26 @@ impl TunnelManager {
     }
 
     /// Contacts one neighbor with our LocalIdentity to get their LocalIdentity and wireguard tunnel
-    /// interface name.
-    pub fn neighbor_inquiry(&mut self, peer: &Peer) -> Result<(), Error> {
+    /// interface name. Sends a Hello over udp, or http if its a manual peer
+    pub fn neighbor_inquiry(&mut self, peer: &Peer, is_manual_peer: bool) -> Result<(), Error> {
         trace!("TunnelManager neigh inquiry for {:?}", peer);
         let our_port = self.get_port();
 
-        let reader = PEER_LISTENER.read().unwrap();
+        if is_manual_peer {
+            contact_manual_peer(peer, our_port)
+        } else {
+            let reader = PEER_LISTENER.read().unwrap();
 
-        let iface_name = match reader.interface_map.get(&peer.contact_socket) {
-            Some(a) => a,
-            None => panic!("No interface in the hashmap to send a message"),
-        };
-        let udp_socket = match reader.interfaces.get(iface_name) {
-            Some(a) => &a.linklocal_socket,
-            None => panic!("No udp socket present for given interface"),
-        };
-        contact_neighbor(peer, our_port, udp_socket, peer.contact_socket)
+            let iface_name = match reader.interface_map.get(&peer.contact_socket) {
+                Some(a) => a,
+                None => panic!("No interface in the hashmap to send a message"),
+            };
+            let udp_socket = match reader.interfaces.get(iface_name) {
+                Some(a) => &a.linklocal_socket,
+                None => panic!("No udp socket present for given interface"),
+            };
+            contact_neighbor(peer, our_port, udp_socket, peer.contact_socket)
+        }
     }
 
     /// Given a LocalIdentity, connect to the neighbor over wireguard
