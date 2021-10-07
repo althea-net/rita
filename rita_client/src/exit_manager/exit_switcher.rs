@@ -207,6 +207,12 @@ pub fn set_best_exit(
         exit_map,
     );
 
+    // When best exit is not set, we are still in initial setup, and no routes are present in the routing table.
+    // We simply end the tick and continue the next tick when we have an exit.
+    if exit_metrics.best_exit.is_none() {
+        bail!("No exit routes found, likely because routing table is empty");
+    }
+
     info!(
         "Exit_Switcher: This tick, we have these metrics: {:?}",
         exit_metrics
@@ -545,8 +551,9 @@ fn update_metric_value(
         return ExitSwitchingCode::InitialExitSetup;
     }
 
+    // if best exit is none, routing table is empty, and thus we still are initial setup
     if best_exit.is_none() {
-        panic!("No exit found while trying to update metric values");
+        panic!("Best exit should not be set to none. If it is it should not be reaching this statement");
     }
 
     let tracking_exit = match tracking_exit {
