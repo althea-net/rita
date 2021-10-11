@@ -309,9 +309,14 @@ pub fn update_config(
         operator: old_settings.operator,
         localization: old_settings.localization,
         network: old_settings.network,
-        exit_client: ExitClientSettings::default(),
+        exit_client: old_settings.exit_client.clone(),
         future: old_settings.future,
     };
+
+    // we have already updated to reading the new settings
+    if old_settings.exit_client.old_exits.is_empty() {
+        return Ok(new_settings);
+    }
 
     let mut new_exits: HashMap<String, ExitServer> = HashMap::new();
     for (k, v) in old_settings.exit_client.clone().old_exits {
@@ -346,7 +351,7 @@ pub fn update_config(
     let exit_client = old_settings.exit_client;
     new_settings.exit_client = ExitClientSettings {
         old_exits: exit_client.clone().old_exits,
-        exits: HashMap::new(),
+        exits: exit_client.clone().exits,
         current_exit: exit_client.clone().current_exit,
         wg_listen_port: exit_client.wg_listen_port,
         contact_info: exit_client.clone().contact_info,
@@ -354,7 +359,8 @@ pub fn update_config(
         low_balance_notification: exit_client.low_balance_notification,
     };
     new_settings.exit_client.exits = new_exits.clone();
-
+    //remove old info after migrating over
+    new_settings.exit_client.old_exits = HashMap::new();
     Ok(new_settings)
 }
 
@@ -363,7 +369,8 @@ pub fn update_config(
 fn set_us_west(exit: ExitServer) -> ExitServer {
     let mut new_exit = exit;
     new_exit.subnet = IpNetwork::new(US_WEST_IP, US_WEST_SUBNET).unwrap();
-    new_exit.id.unwrap().mesh_ip = US_WEST_IP;
+    let mut id = new_exit.id.as_mut().unwrap();
+    id.mesh_ip = US_WEST_IP;
     new_exit.subnet_len = US_WEST_SUBNET;
     new_exit.selected_exit.selected_id = Some(US_WEST_IP);
     new_exit
