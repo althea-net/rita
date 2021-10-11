@@ -1,5 +1,5 @@
 [exit_client]
-current_exit = "test"
+current_exit = "us_west"
 lan_nics = ["lan"]
 low_balance_notification = true
 wg_listen_port = 59999
@@ -12,13 +12,9 @@ value = 5304703796
 zeros = 0
 [exit_client.exits.africa]
 description = "Althea Africa exit"
-eth_address = "0xEba3aF4E87663b3Bb57FC89976502b960e3906ff"
 message = "Got info successfully"
 registration_port = 4875
 state = "GotInfo"
-subnet = "fd00::1337:e7f/128"
-subnet_len = 128
-wg_public_key = "V0tgdQ2Ljx5xyw4UMQ6a7ZztQmyvqrUp/4jrFcCeG1w="
 
 [exit_client.exits.africa.general_details]
 description = "Althea Africa exit"
@@ -34,69 +30,41 @@ eth_address = "0xEba3aF4E87663b3Bb57FC89976502b960e3906ff"
 mesh_ip = "fd00::1337:e7f"
 wg_public_key = "V0tgdQ2Ljx5xyw4UMQ6a7ZztQmyvqrUp/4jrFcCeG1w="
 
-[exit_client.exits.africa.selected_exit]
-selected_id = "fd00::1337:e7f"
-
 [exit_client.exits.apac]
 description = "In Singapore"
-eth_address = "0xE4AD1F9aA23957D294D869B70fC8F28774dF896E"
 registration_port = 4875
 state = "New"
-subnet = "fd00::1337:e4f/128"
-subnet_len = 128
-wg_public_key = "1kKSpzdhI4kfqeMqch9I1bXqOUXeKN7EQBecVzW60ys="
 
 [exit_client.exits.apac.id]
 eth_address = "0xE4AD1F9aA23957D294D869B70fC8F28774dF896E"
 mesh_ip = "fd00::1337:e4f"
 wg_public_key = "1kKSpzdhI4kfqeMqch9I1bXqOUXeKN7EQBecVzW60ys="
 
-[exit_client.exits.apac.selected_exit]
-selected_id = "fd00::1337:e4f"
-
 [exit_client.exits.ca]
 description = "Canada Althea Exit"
-eth_address = "0x90b82ED41dCD867Df7d2aedAB62280E82FCd64F3"
 registration_port = 4875
 state = "New"
-subnet = "fd00::1337:3e9f/128"
-subnet_len = 128
-wg_public_key = "D0z23bOTn5RQgM87nuxx6zgmFMMAKBHXSOXopHtZhTc="
 
 [exit_client.exits.ca.id]
 eth_address = "0x90b82ED41dCD867Df7d2aedAB62280E82FCd64F3"
 mesh_ip = "fd00::1337:3e9f"
 wg_public_key = "D0z23bOTn5RQgM87nuxx6zgmFMMAKBHXSOXopHtZhTc="
 
-[exit_client.exits.ca.selected_exit]
-selected_id = "fd00::1337:3e9f"
-
 [exit_client.exits.south_america_eth]
 description = "Nodo de salida de America del Sur"
-eth_address = "0x81B6c9F8cfD8f135743A9D39b3b0386024eA4Cc8"
 registration_port = 4875
 state = "New"
-subnet = "fd00::1337:e8f/128"
-subnet_len = 128
-wg_public_key = "AlsMwUkJmiA+EQ45p+n+RAtXq1rCA51k58HRwlzoETs="
 
 [exit_client.exits.south_america_eth.id]
 eth_address = "0x81B6c9F8cfD8f135743A9D39b3b0386024eA4Cc8"
 mesh_ip = "fd00::1337:e8f"
 wg_public_key = "AlsMwUkJmiA+EQ45p+n+RAtXq1rCA51k58HRwlzoETs="
 
-[exit_client.exits.south_america_eth.selected_exit]
-selected_id = "fd00::1337:e8f"
-
 [exit_client.exits.test]
 description = "The Althea testing exit cluster. Unstable!"
-eth_address = "0x5AeE3Dff733F56cFe7E5390B9cC3A46a90cA1CfA"
 message = "Got info successfully"
 registration_port = 4875
 state = "GotInfo"
-subnet = "fd00::1337:1e0f/120"
-subnet_len = 120
-wg_public_key = "zgAlhyOQy8crB0ewrsWt3ES9SvFguwx5mq9i2KiknmA="
 
 [exit_client.exits.test.general_details]
 description = "Test cluster: A!"
@@ -112,18 +80,11 @@ eth_address = "0x5AeE3Dff733F56cFe7E5390B9cC3A46a90cA1CfA"
 mesh_ip = "fd00::1337:1e0f"
 wg_public_key = "zgAlhyOQy8crB0ewrsWt3ES9SvFguwx5mq9i2KiknmA="
 
-[exit_client.exits.test.selected_exit]
-selected_id = "fd00::1337:1e0f"
-
 [exit_client.exits.us_west]
 description = "The Althea Production US exit"
-eth_address = "0x72d9E579f691D62aA7e0703840db6dd2fa9fAE21"
 message = "Registration OK"
 registration_port = 4875
 state = "Registered"
-subnet = "fd00::1337:e2f/128"
-subnet_len = 128
-wg_public_key = "jkIodvXKgij/rAEQXFEPJpls6ooxXJEC5XlWA1uUPUg="
 
 [exit_client.exits.us_west.general_details]
 description = "Althea San Francisco Exit Equinix"
@@ -141,9 +102,140 @@ wg_public_key = "jkIodvXKgij/rAEQXFEPJpls6ooxXJEC5XlWA1uUPUg="
 
 [exit_client.exits.us_west.our_details]
 client_internal_ip = "172.168.2.146"
+[exit_client.new_exits.africa]
+description = "Althea Africa exit"
+eth_address = "0xEba3aF4E87663b3Bb57FC89976502b960e3906ff"
+message = "Got info successfully"
+registration_port = 4875
+state = "GotInfo"
+subnet = "fd00::1337:e7f/128"
+subnet_len = 128
+wg_public_key = "V0tgdQ2Ljx5xyw4UMQ6a7ZztQmyvqrUp/4jrFcCeG1w="
 
-[exit_client.exits.us_west.selected_exit]
-selected_id = "fd00::1337:e2f"
+[exit_client.new_exits.africa.general_details]
+description = "Althea Africa exit"
+exit_currency = "Xdai"
+exit_price = 10000000
+netmask = 16
+server_internal_ip = "172.168.0.254"
+verif_mode = "Phone"
+wg_exit_port = 59999
+
+[exit_client.new_exits.africa.id]
+eth_address = "0xEba3aF4E87663b3Bb57FC89976502b960e3906ff"
+mesh_ip = "fd00::1337:e7f"
+wg_public_key = "V0tgdQ2Ljx5xyw4UMQ6a7ZztQmyvqrUp/4jrFcCeG1w="
+
+[exit_client.new_exits.africa.selected_exit]
+selected_id = "fd00::1337:e7f"
+
+[exit_client.new_exits.apac]
+description = "In Singapore"
+eth_address = "0xE4AD1F9aA23957D294D869B70fC8F28774dF896E"
+registration_port = 4875
+state = "New"
+subnet = "fd00::1337:e4f/128"
+subnet_len = 128
+wg_public_key = "1kKSpzdhI4kfqeMqch9I1bXqOUXeKN7EQBecVzW60ys="
+
+[exit_client.new_exits.apac.id]
+eth_address = "0xE4AD1F9aA23957D294D869B70fC8F28774dF896E"
+mesh_ip = "fd00::1337:e4f"
+wg_public_key = "1kKSpzdhI4kfqeMqch9I1bXqOUXeKN7EQBecVzW60ys="
+
+[exit_client.new_exits.apac.selected_exit]
+selected_id = "fd00::1337:e4f"
+
+[exit_client.new_exits.ca]
+description = "Canada Althea Exit"
+eth_address = "0x90b82ED41dCD867Df7d2aedAB62280E82FCd64F3"
+registration_port = 4875
+state = "New"
+subnet = "fd00::1337:3e9f/128"
+subnet_len = 128
+wg_public_key = "D0z23bOTn5RQgM87nuxx6zgmFMMAKBHXSOXopHtZhTc="
+
+[exit_client.new_exits.ca.id]
+eth_address = "0x90b82ED41dCD867Df7d2aedAB62280E82FCd64F3"
+mesh_ip = "fd00::1337:3e9f"
+wg_public_key = "D0z23bOTn5RQgM87nuxx6zgmFMMAKBHXSOXopHtZhTc="
+
+[exit_client.new_exits.ca.selected_exit]
+selected_id = "fd00::1337:3e9f"
+
+[exit_client.new_exits.south_america_eth]
+description = "Nodo de salida de America del Sur"
+eth_address = "0x81B6c9F8cfD8f135743A9D39b3b0386024eA4Cc8"
+registration_port = 4875
+state = "New"
+subnet = "fd00::1337:e8f/128"
+subnet_len = 128
+wg_public_key = "AlsMwUkJmiA+EQ45p+n+RAtXq1rCA51k58HRwlzoETs="
+
+[exit_client.new_exits.south_america_eth.id]
+eth_address = "0x81B6c9F8cfD8f135743A9D39b3b0386024eA4Cc8"
+mesh_ip = "fd00::1337:e8f"
+wg_public_key = "AlsMwUkJmiA+EQ45p+n+RAtXq1rCA51k58HRwlzoETs="
+
+[exit_client.new_exits.south_america_eth.selected_exit]
+selected_id = "fd00::1337:e8f"
+
+[exit_client.new_exits.test]
+description = "The Althea testing exit cluster. Unstable!"
+eth_address = "0x5AeE3Dff733F56cFe7E5390B9cC3A46a90cA1CfA"
+message = "Got info successfully"
+registration_port = 4875
+state = "GotInfo"
+subnet = "fd00::1337:1e0f/128"
+subnet_len = 128
+wg_public_key = "zgAlhyOQy8crB0ewrsWt3ES9SvFguwx5mq9i2KiknmA="
+
+[exit_client.new_exits.test.general_details]
+description = "Test cluster: A!"
+exit_currency = "Rinkeby"
+exit_price = 714000
+netmask = 16
+server_internal_ip = "172.168.0.254"
+verif_mode = "Phone"
+wg_exit_port = 59999
+
+[exit_client.new_exits.test.id]
+eth_address = "0x5AeE3Dff733F56cFe7E5390B9cC3A46a90cA1CfA"
+mesh_ip = "fd00::1337:1e0f"
+wg_public_key = "zgAlhyOQy8crB0ewrsWt3ES9SvFguwx5mq9i2KiknmA="
+
+[exit_client.new_exits.test.selected_exit]
+selected_id = "fd00::1337:1e0f"
+
+[exit_client.new_exits.us_west]
+description = "The Althea Production US exit"
+eth_address = "0x72d9E579f691D62aA7e0703840db6dd2fa9fAE21"
+message = "Registration OK"
+registration_port = 4875
+state = "Registered"
+subnet = "fd00::1000:e2f/116"
+subnet_len = 116
+wg_public_key = "jkIodvXKgij/rAEQXFEPJpls6ooxXJEC5XlWA1uUPUg="
+
+[exit_client.new_exits.us_west.general_details]
+description = "Althea San Francisco Exit Equinix"
+exit_currency = "Xdai"
+exit_price = 10000000
+netmask = 16
+server_internal_ip = "172.168.0.254"
+verif_mode = "Phone"
+wg_exit_port = 59999
+
+[exit_client.new_exits.us_west.id]
+eth_address = "0x72d9E579f691D62aA7e0703840db6dd2fa9fAE21"
+mesh_ip = "fd00::1337:e2f"
+wg_public_key = "jkIodvXKgij/rAEQXFEPJpls6ooxXJEC5XlWA1uUPUg="
+
+[exit_client.new_exits.us_west.our_details]
+client_internal_ip = "172.168.2.146"
+
+[exit_client.new_exits.us_west.selected_exit]
+selected_id = "fd00::1000:e2f"
 
 [localization]
 display_currency_symbol = true
@@ -173,7 +265,7 @@ manual_peers = ["africa.althea.net", "ca.althea.net", "sa-eth.althea.org", "apac
 mesh_ip = "fd22:99f8:27fb:133:151c:21f5:c6d:2684"
 metric_factor = 1900
 nickname = "dev er-x"
-peer_interfaces = ["eth2", "mesh", "eth3", "eth4"]
+peer_interfaces = ["eth2", "mesh", "eth4", "eth3"]
 rita_contact_port = 4874
 rita_dashboard_port = 4877
 rita_hello_port = 4876

@@ -28,6 +28,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
+use std::net::{IpAddr, Ipv6Addr};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
@@ -45,6 +46,8 @@ use crate::client::RitaClientSettings;
 use crate::exit::RitaExitSettingsStruct;
 
 pub const SUBNET: u8 = 128;
+pub const US_WEST_IP: IpAddr = IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0x1000, 0x0e2f));
+pub const US_WEST_SUBNET: u8 = 116;
 
 lazy_static! {
     static ref EXIT_SETTING: Arc<RwLock<Option<RitaExitSettingsStruct>>> =
@@ -306,13 +309,12 @@ pub fn update_config(
         operator: old_settings.operator,
         localization: old_settings.localization,
         network: old_settings.network,
-        old_exit_client: old_settings.old_exit_client.clone(),
         exit_client: ExitClientSettings::default(),
         future: old_settings.future,
     };
 
     let mut new_exits: HashMap<String, ExitServer> = HashMap::new();
-    for (k, v) in old_settings.old_exit_client.clone().exits {
+    for (k, v) in old_settings.exit_client.clone().old_exits {
         let s_len = if v.subnet_len.is_some() {
             v.subnet_len.unwrap()
         } else {
@@ -330,22 +332,41 @@ pub fn update_config(
             info: v.info,
         };
 
+        // we set the selected exit (starting exit) to be the one provided in config. This is required for registration
         new_exit.selected_exit.selected_id = Some(v.id.mesh_ip);
+
+        // Special case for us_west.
+        if v.id.mesh_ip == IpAddr::V6("fd00::1337:e2f".parse().unwrap()) {
+            new_exit = set_us_west(new_exit);
+        }
+
         new_exits.insert(k, new_exit);
     }
 
-    let old_exit_client = old_settings.old_exit_client;
+    let exit_client = old_settings.exit_client;
     new_settings.exit_client = ExitClientSettings {
+        old_exits: exit_client.clone().old_exits,
         exits: HashMap::new(),
-        current_exit: old_exit_client.clone().current_exit,
-        wg_listen_port: old_exit_client.wg_listen_port,
-        contact_info: old_exit_client.clone().contact_info,
-        lan_nics: old_exit_client.clone().lan_nics,
-        low_balance_notification: old_exit_client.low_balance_notification,
+        current_exit: exit_client.clone().current_exit,
+        wg_listen_port: exit_client.wg_listen_port,
+        contact_info: exit_client.clone().contact_info,
+        lan_nics: exit_client.clone().lan_nics,
+        low_balance_notification: exit_client.low_balance_notification,
     };
     new_settings.exit_client.exits = new_exits.clone();
 
     Ok(new_settings)
+}
+
+/// This function updates RitaClient struct with hardcoded values for us_west. To update this, we change the ip and add a subnet 116. When
+/// router update to this version of rita, this automatically sets us west as a subnet to take advantage of the exit switching code
+fn set_us_west(exit: ExitServer) -> ExitServer {
+    let mut new_exit = exit;
+    new_exit.subnet = IpNetwork::new(US_WEST_IP, US_WEST_SUBNET).unwrap();
+    new_exit.id.unwrap().mesh_ip = US_WEST_IP;
+    new_exit.subnet_len = US_WEST_SUBNET;
+    new_exit.selected_exit.selected_id = Some(US_WEST_IP);
+    new_exit
 }
 
 #[cfg(test)]

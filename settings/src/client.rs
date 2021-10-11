@@ -123,30 +123,11 @@ fn default_balance_notification() -> bool {
 /// to a exit and to setup the exit tunnel
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitClientSettings {
+    #[serde(rename = "exits", default)]
+    pub old_exits: HashMap<String, OldExitServer>,
     /// This stores a mapping between an identifier (any string) to exits
-    #[serde(default)]
+    #[serde(rename = "new_exits", default)]
     pub exits: HashMap<String, ExitServer>,
-    /// This stores the current exit identifier
-    pub current_exit: Option<String>,
-    /// This is the port which the exit wireguard tunnel will listen on
-    /// NOTE: must be under `wg_start_port` in `NetworkSettings`
-    pub wg_listen_port: u16,
-    /// ContactStorage is a TOML serialized representation of ContactType, use the .into()
-    /// traits to get ContactType for actual operations. This struct represents a full range
-    /// of possibilities for contact info.
-    pub contact_info: Option<ContactStorage>,
-    /// This controls which interfaces will be proxied over the exit tunnel
-    pub lan_nics: HashSet<String>,
-    /// Specifies if the user would like to receive low balance messages from the exit
-    #[serde(default = "default_balance_notification")]
-    pub low_balance_notification: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
-pub struct OldExitClientSettings {
-    /// This stores a mapping between an identifier (any string) to exits
-    #[serde(default)]
-    pub exits: HashMap<String, OldExitServer>,
     /// This stores the current exit identifier
     pub current_exit: Option<String>,
     /// This is the port which the exit wireguard tunnel will listen on
@@ -166,19 +147,7 @@ pub struct OldExitClientSettings {
 impl Default for ExitClientSettings {
     fn default() -> Self {
         ExitClientSettings {
-            exits: HashMap::new(),
-            current_exit: None,
-            wg_listen_port: 59999,
-            contact_info: None,
-            lan_nics: HashSet::new(),
-            low_balance_notification: true,
-        }
-    }
-}
-
-impl Default for OldExitClientSettings {
-    fn default() -> Self {
-        OldExitClientSettings {
+            old_exits: HashMap::new(),
             exits: HashMap::new(),
             current_exit: None,
             wg_listen_port: 59999,
@@ -236,9 +205,6 @@ pub struct RitaClientSettings {
     #[serde(default)]
     pub localization: LocalizationSettings,
     pub network: NetworkSettings,
-    #[serde(rename = "exit_client")]
-    pub old_exit_client: OldExitClientSettings,
-    #[serde(rename = "new_exit_client", default)]
     pub exit_client: ExitClientSettings,
     #[serde(skip)]
     pub future: bool,

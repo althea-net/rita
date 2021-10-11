@@ -85,6 +85,7 @@ description = "The Althea Production US exit"
 message = "Registration OK"
 registration_port = 4875
 state = "Registered"
+subnet = "fd00::1337:e2f"
 
 [exit_client.exits.us_west.general_details]
 description = "Althea San Francisco Exit Equinix"
