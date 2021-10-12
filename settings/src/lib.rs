@@ -46,8 +46,10 @@ use crate::client::RitaClientSettings;
 use crate::exit::RitaExitSettingsStruct;
 
 pub const SUBNET: u8 = 128;
-pub const US_WEST_IP: IpAddr = IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0x1000, 0x0e2f));
 pub const US_WEST_SUBNET: u8 = 116;
+pub const AFRICA_IP: IpAddr = IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0x1337, 0x2e2f));
+pub const APAC_IP: IpAddr = IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0x1337, 0x4e2f));
+pub const SA_IP: IpAddr = IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0x1337, 0x6e2f));
 
 lazy_static! {
     static ref EXIT_SETTING: Arc<RwLock<Option<RitaExitSettingsStruct>>> =
@@ -340,9 +342,22 @@ pub fn update_config(
         // we set the selected exit (starting exit) to be the one provided in config. This is required for registration
         new_exit.selected_exit.selected_id = Some(v.id.mesh_ip);
 
-        // Special case for us_west.
+        // Special case for us_west, making it subnet 116. For africa, apac and sa, migrate ip such that they dont collide with uswest subnet
         if v.id.mesh_ip == IpAddr::V6("fd00::1337:e2f".parse().unwrap()) {
-            new_exit = set_us_west(new_exit);
+            new_exit = migrate_exit_ip(
+                new_exit.clone(),
+                new_exit.id.unwrap().mesh_ip,
+                US_WEST_SUBNET,
+            );
+        } else if v.id.mesh_ip == IpAddr::V6("fd00::1337:e7f".parse().unwrap()) {
+            //africa
+            new_exit = migrate_exit_ip(new_exit, AFRICA_IP, SUBNET);
+        } else if v.id.mesh_ip == IpAddr::V6("fd00::1337:e4f".parse().unwrap()) {
+            //apac
+            new_exit = migrate_exit_ip(new_exit, APAC_IP, SUBNET);
+        } else if v.id.mesh_ip == IpAddr::V6("fd00::1337:e8f".parse().unwrap()) {
+            //South Africa
+            new_exit = migrate_exit_ip(new_exit, SA_IP, SUBNET);
         }
 
         new_exits.insert(k, new_exit);
@@ -364,15 +379,15 @@ pub fn update_config(
     Ok(new_settings)
 }
 
-/// This function updates RitaClient struct with hardcoded values for us_west. To update this, we change the ip and add a subnet 116. When
-/// router update to this version of rita, this automatically sets us west as a subnet to take advantage of the exit switching code
-fn set_us_west(exit: ExitServer) -> ExitServer {
+/// This function updates RitaClient struct with hardcoded values for exit. For US West the subnet is expanded to 116 and for those
+/// exits colliding within this subnet, they're ip gets mapped to a dummy ip
+fn migrate_exit_ip(exit: ExitServer, exit_ip: IpAddr, subnet: u8) -> ExitServer {
     let mut new_exit = exit;
-    new_exit.subnet = IpNetwork::new(US_WEST_IP, US_WEST_SUBNET).unwrap();
+    new_exit.subnet = IpNetwork::new(exit_ip, subnet).unwrap();
+    new_exit.subnet_len = subnet;
     let mut id = new_exit.id.as_mut().unwrap();
-    id.mesh_ip = US_WEST_IP;
-    new_exit.subnet_len = US_WEST_SUBNET;
-    new_exit.selected_exit.selected_id = Some(US_WEST_IP);
+    id.mesh_ip = exit_ip;
+    new_exit.selected_exit.selected_id = Some(exit_ip);
     new_exit
 }
 
