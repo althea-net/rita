@@ -1,4 +1,3 @@
-use crate::error::AltheaTypesError as Error;
 use crate::{contact_info::ContactType, wg_key::WgKey, BillingDetails, InstallationDetails};
 use arrayvec::ArrayString;
 use babel_monitor::Neighbor as NeighborLegacy;
@@ -331,46 +330,42 @@ pub struct PaymentTx {
     pub txid: Option<Uint256>,
 }
 
+///This enum contains information about what type of update we need to perform on a router initiated from op tools.
+/// This can either be a sysupgrade with a url to a firmware image, or an opkg update with a url to a opkg feed
+#[derive(Serialize, Deserialize, Hash, Clone, Debug, Eq, PartialEq)]
+pub enum UpdateType {
+    Sysupgrade(String),
+    Opkg(OpkgCommandList),
+}
+
+#[derive(Serialize, Deserialize, Hash, Clone, Debug, Eq, PartialEq)]
+/// This struct contains the feed and a vector of opkg commands to run on an update
+pub struct OpkgCommandList {
+    pub feed: String,
+    pub command_list: Vec<OpkgCommand>,
+}
+
+/// This struct contains alls the information need to perfom an opkg command, i.e, install/update, list of arguments, and flags
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct OpkgCommand {
+    pub opkg_command: OpkgCommandType,
+    pub packages: Option<Vec<String>>,
+    pub arguments: Option<Vec<String>>,
+}
+
+/// This enum defines which opkg command we are performing during a router update
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub enum OpkgCommandType {
+    Install,
+    Update,
+}
+
 #[derive(Serialize, Deserialize, Hash, Clone, Debug, Eq, PartialEq)]
 pub enum ReleaseStatus {
     Custom(String),
     ReleaseCandidate,
     PreRelease,
     GeneralAvailability,
-}
-
-impl FromStr for ReleaseStatus {
-    type Err = Error;
-    fn from_str(s: &str) -> Result<ReleaseStatus, Error> {
-        match s {
-            "rc" => Ok(ReleaseStatus::ReleaseCandidate),
-            "pr" => Ok(ReleaseStatus::PreRelease),
-            "ga" => Ok(ReleaseStatus::GeneralAvailability),
-            "ReleaseCandidate" => Ok(ReleaseStatus::ReleaseCandidate),
-            "PreRelease" => Ok(ReleaseStatus::PreRelease),
-            "GeneralAvailability" => Ok(ReleaseStatus::GeneralAvailability),
-            _ => {
-                if !s.is_empty() {
-                    Ok(ReleaseStatus::Custom(s.to_string()))
-                } else {
-                    Err(Error::ReleaseFeedParseError(
-                        "Empty string can't possibly be a valid release!".to_string(),
-                    ))
-                }
-            }
-        }
-    }
-}
-
-impl Display for ReleaseStatus {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ReleaseStatus::ReleaseCandidate => write!(f, "ReleaseCandidate"),
-            ReleaseStatus::PreRelease => write!(f, "PreRelease"),
-            ReleaseStatus::GeneralAvailability => write!(f, "GeneralAvailability"),
-            ReleaseStatus::Custom(s) => write!(f, "{}", s),
-        }
-    }
 }
 
 /// Something the operator may want to do to a router under their control
@@ -394,8 +389,9 @@ pub enum OperatorAction {
     /// routing processes. For x86 machines this action comes with some risk as devices may
     /// get stuck in the BIOS if not configured properly.
     Reboot,
-    /// Runs the update script now instead of waiting for the cron job to run on the hour mark
-    UpdateNow,
+    /// Sends instructions from op tools about the type of update to perform, either a sysupgrade
+    /// or an opkg update
+    Update { instruction: UpdateType },
     /// Changes the release feed to the specified value and runs the update script immediately after
     /// instead of waiting for the cron job to complete. This allows for a simple, single operation
     /// update of a specific router.
@@ -404,63 +400,6 @@ pub enum OperatorAction {
     /// this has it's own logic in the operator tools that will later be removed for the logic
     /// you see in Althea_rs
     ChangeOperatorAddress { new_address: Option<Address> },
-}
-
-impl OperatorAction {
-    /// is this a list of actions on the whitelist for normal operator tools users
-    pub fn is_user_action(&self) -> bool {
-        matches!(
-            self,
-            OperatorAction::ResetRouterPassword
-                | OperatorAction::ResetWiFiPassword
-                | OperatorAction::ResetShaper
-                | OperatorAction::Reboot
-                | OperatorAction::UpdateNow
-        )
-    }
-}
-
-impl FromStr for OperatorAction {
-    type Err = Error;
-    fn from_str(s: &str) -> Result<OperatorAction, Error> {
-        match s {
-            // todo this is kinda verbose, maybe use to_lower_case()?
-            "ResetRouterPassword" => Ok(OperatorAction::ResetRouterPassword),
-            "ResetWiFiPassword" => Ok(OperatorAction::ResetWiFiPassword),
-            "ResetShaper" => Ok(OperatorAction::ResetShaper),
-            "Reboot" => Ok(OperatorAction::Reboot),
-            "UpdateNow" => Ok(OperatorAction::UpdateNow),
-            "resetrouterpassword" => Ok(OperatorAction::ResetRouterPassword),
-            "resetwifipassword" => Ok(OperatorAction::ResetWiFiPassword),
-            "resetshaper" => Ok(OperatorAction::ResetShaper),
-            "reboot" => Ok(OperatorAction::Reboot),
-            "updatenow" => Ok(OperatorAction::UpdateNow),
-            s => {
-                if s.to_lowercase().contains("changeoperatoraddress") {
-                    let address = s.split('_').last();
-                    if let Some(address) = address {
-                        if let Ok(address) = address.parse() {
-                            return Ok(OperatorAction::ChangeOperatorAddress {
-                                new_address: Some(address),
-                            });
-                        }
-                    }
-                } else if s.to_lowercase().contains("changereleasefeedandupdate") {
-                    let feed = s.split('_').last();
-                    if let Some(feed) = feed {
-                        if let Ok(feed) = feed.parse() {
-                            return Ok(OperatorAction::ChangeReleaseFeedAndUpdate { feed });
-                        }
-                    }
-                }
-                let val: Result<OperatorAction, _> = serde_json::from_str(s);
-                match val {
-                    Ok(v) => Ok(v),
-                    Err(e) => Err(Error::OperatorActionParseError(e.to_string())),
-                }
-            }
-        }
-    }
 }
 
 /// Operator update that we get from the operator server during our checkin
@@ -506,11 +445,6 @@ pub struct OperatorUpdateMessage {
     /// The withdraw blockchain that is currently being used, if it is 'none' here it is
     /// interpreted as "don't change anything"
     pub withdraw_chain: Option<SystemChain>,
-    /// To be removed in beta 16, moving to use the ReleaseStatus enum on 'firmware_release'
-    pub release_feed: Option<String>,
-    /// A release feed to be applied to the /etc/opkg/customfeeds.config, None means do not
-    /// change the currently configured release feed
-    pub firmware_feed: Option<ReleaseStatus>,
     /// A json payload to be merged into the existing settings, this payload is checked
     /// not to include a variety of things that might break the router but is still not
     /// risk free for example the url fields require http:// or https:// or the router will
@@ -519,6 +453,9 @@ pub struct OperatorUpdateMessage {
     /// An action the operator wants to take to affect this router, examples may include reset
     /// password or change the wifi ssid
     pub operator_action: Option<OperatorAction>,
+    /// String that holds the download link to the latest (or prefered) firmware release
+    /// When a user hits 'update router', it updates to this version
+    pub local_update_instruction: Option<UpdateType>,
     /// settings for the device bandwidth shaper
     #[serde(default = "default_shaper_settings")]
     pub shaper_settings: ShaperSettings,

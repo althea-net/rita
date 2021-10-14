@@ -1,12 +1,17 @@
 //! This module is responsible for checking in with the operator server and getting updated local settings
+pub mod updater;
+
 use crate::dashboard::system_chain::set_system_blockchain;
 use crate::dashboard::wifi::reset_wifi_pass;
 use crate::rita_loop::is_gateway_client;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
+use crate::set_router_update_instruction;
+use althea_kernel_interface::opkg_feeds::CUSTOMFEEDS;
 use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use rita_common::tunnel_manager::shaping::flag_reset_shaper;
 use rita_common::utils::option_convert;
+use updater::update_rita;
 
 use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
 use actix_web::Error;
@@ -17,7 +22,7 @@ use althea_kernel_interface::opkg_feeds::set_release_feed;
 
 use althea_types::OperatorAction;
 use althea_types::OperatorCheckinMessage;
-use althea_types::{OperatorUpdateMessage, ReleaseStatus};
+use althea_types::OperatorUpdateMessage;
 use futures01::Future;
 use num256::Uint256;
 use rita_common::KI;
@@ -146,7 +151,6 @@ fn checkin() {
     let install_details = operator_settings.installation_details.clone();
     let billing_details = operator_settings.billing_details;
     let user_bandwidth_limit = rita_client.network.user_bandwidth_limit;
-    let user_set_release_feed = rita_client.network.user_set_release_feed;
 
     // if the user has disabled logging and has no operator configured we don't check in
     // if the user configures an operator but has disabled logging then we assume they still
@@ -243,16 +247,9 @@ fn checkin() {
 
                     merge_settings_safely(new_settings.merge_json);
 
-                    // update the release feed to the provided release
-                    // gated on "None" to prevent reading a file if there is
-                    // no update. Maybe someday match will be smart enough to
-                    // avoid that on it's own
-                    // Also disabled if the user has set their own release feed
-                    // so that they can do that without the operator tools just
-                    // setting it back every time.
-                    if new_settings.firmware_feed.is_some() && !user_set_release_feed {
-                        handle_release_feed_update(new_settings.firmware_feed);
-                    }
+                    //Every tick, update the local router update instructions
+                    set_router_update_instruction(new_settings.local_update_instruction);
+
                     match new_settings.operator_action {
                         Some(OperatorAction::ResetShaper) => flag_reset_shaper(),
                         Some(OperatorAction::Reboot) => {
@@ -264,27 +261,14 @@ fn checkin() {
                         Some(OperatorAction::ResetWiFiPassword) => {
                             let _res = reset_wifi_pass();
                         }
-                        Some(OperatorAction::UpdateNow) => {
-                            // this runs the update shell script, if an update is found a reboot will occur
-                            // it is possible that the script fails to grab the package index or a package
-                            // due to network conditions this will cause the operation to do nothing.
-                            let _res = KI.run_command("ash", &["/etc/update.ash"]);
-                        }
                         Some(OperatorAction::ChangeOperatorAddress { new_address }) => {
                             rita_client.operator.operator_address = new_address;
                         }
-                        Some(OperatorAction::ChangeReleaseFeedAndUpdate { feed }) => {
-                            handle_release_feed_update(Some(feed));
-                            // this is the escape hatch for the user setting their own release feed. Once an operator manually
-                            // updates them they are back in the 'normal' group
-
-                            network.user_set_release_feed = false;
-                            // this runs the update shell script, if an update is found a reboot will occur
-                            // it is possible that the script fails to grab the package index or a package
-                            // due to network conditions this will cause the update to be delayed until the
-                            // next hour when the cron job runs or until an UpdateNow is sent
-                            let _res = KI.run_command("ash", &["/etc/update.ash"]);
+                        Some(OperatorAction::Update { instruction }) => {
+                            let _res = update_rita(instruction);
                         }
+                        #[allow(unused_variables)]
+                        Some(OperatorAction::ChangeReleaseFeedAndUpdate { feed }) => {}
                         None => {}
                     }
 
@@ -308,15 +292,17 @@ fn checkin() {
 
 /// Allows for online updating of the release feed, note that this not run
 /// on every device startup meaning just editing it the config is not sufficient
-fn handle_release_feed_update(val: Option<ReleaseStatus>) {
-    match (val, get_release_feed()) {
+fn handle_release_feed_update(val: Option<String>) {
+    match (val, get_release_feed(CUSTOMFEEDS)) {
         (None, _) => {}
-        (Some(_new_feed), Err(e)) => {
-            error!("Failed to read current release feed! {:?}", e);
+        (Some(new_feed), Err(_)) => {
+            if let Err(e) = set_release_feed(&new_feed, CUSTOMFEEDS) {
+                error!("Failed to set new release feed! {:?}", e);
+            }
         }
         (Some(new_feed), Ok(old_feed)) => {
-            if new_feed != old_feed {
-                if let Err(e) = set_release_feed(new_feed) {
+            if !old_feed.contains(&new_feed) {
+                if let Err(e) = set_release_feed(&new_feed, CUSTOMFEEDS) {
                     error!("Failed to set new release feed! {:?}", e);
                 }
             }

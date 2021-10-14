@@ -1,6 +1,13 @@
+use crate::operator_update::updater::update_rita;
 use actix_web::{HttpRequest, HttpResponse};
+use althea_types::UpdateType;
 use failure::Error;
 use rita_common::KI;
+use std::sync::{Arc, RwLock};
+lazy_static! {
+    pub static ref UPDATE_INSTRUCTION: Arc<RwLock<Option<UpdateType>>> =
+        Arc::new(RwLock::new(None));
+}
 
 pub fn reboot_router(_req: HttpRequest) -> Result<HttpResponse, Error> {
     if KI.is_openwrt() {
@@ -11,11 +18,37 @@ pub fn reboot_router(_req: HttpRequest) -> Result<HttpResponse, Error> {
     }
 }
 
+/// This function is triggered by the user from the router dashboard. Retrive the firmware image from
+/// the lazy static variable and use this to perform a sysupgrade. If device is not openwrt or no image
+/// link is available, do nothing
 pub fn update_router(_req: HttpRequest) -> Result<HttpResponse, Error> {
     if KI.is_openwrt() {
-        KI.run_command("ash", &["/etc/update.ash"])?;
+        let reader = &*UPDATE_INSTRUCTION.read().unwrap();
+        if reader.is_none() {
+            return Ok(HttpResponse::Ok().json("No update instructions set, doing nothing"));
+        }
+        if let Err(e) = update_rita(reader.as_ref().unwrap().clone()) {
+            return Ok(
+                HttpResponse::Ok().json(format!("Retrieved Error while performing update {}", e))
+            );
+        }
         Ok(HttpResponse::Ok().json(()))
     } else {
         Ok(HttpResponse::Ok().json("This isn't an OpenWRT device, doing nothing"))
     }
+}
+
+/// Every tick, retrieve the most stable (or latest/prefered) fimaware image to store it locally. When the user chooses to update router from the
+/// local dashboard, use this download link to perform the sysupgrade
+pub fn set_router_update_instruction(instruction: Option<UpdateType>) {
+    let writer = &mut *UPDATE_INSTRUCTION.write().unwrap();
+    *writer = instruction;
+}
+
+#[test]
+fn test_set_router_update_instruction() {
+    let test = UpdateType::Sysupgrade("dummyurl.com".to_string());
+    set_router_update_instruction(Some(test.clone()));
+    let str = &*UPDATE_INSTRUCTION.read().unwrap();
+    assert_eq!(Some(test), *str);
 }

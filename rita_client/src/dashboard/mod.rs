@@ -19,7 +19,6 @@ pub mod neighbors;
 pub mod notifications;
 pub mod operator;
 pub mod prices;
-pub mod release_feed;
 pub mod remote_access;
 pub mod router;
 pub mod system_chain;
@@ -41,7 +40,6 @@ use crate::dashboard::neighbors::*;
 use crate::dashboard::notifications::*;
 use crate::dashboard::operator::*;
 use crate::dashboard::prices::*;
-use crate::dashboard::release_feed::*;
 use crate::dashboard::remote_access::*;
 use crate::dashboard::router::*;
 use crate::dashboard::system_chain::*;
@@ -176,12 +174,6 @@ pub fn start_client_dashboard(rita_dashboard_password: u16) {
             .route("/router/reboot", Method::POST, reboot_router)
             .route("/router/update", Method::POST, update_router)
             .route("/router/password", Method::POST, set_pass)
-            .route("/release_feed/get", Method::GET, get_release_feed_http)
-            .route(
-                "/release_feed/set/{feed}",
-                Method::POST,
-                set_release_feed_http,
-            )
             .route("/remote_access", Method::GET, get_remote_access_status)
             .route(
                 "/remote_access/{status}",

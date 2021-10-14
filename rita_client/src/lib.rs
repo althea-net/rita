@@ -37,7 +37,6 @@ pub use crate::dashboard::neighbors::*;
 pub use crate::dashboard::notifications::*;
 pub use crate::dashboard::operator::*;
 pub use crate::dashboard::prices::*;
-pub use crate::dashboard::release_feed::*;
 pub use crate::dashboard::remote_access::*;
 pub use crate::dashboard::router::*;
 pub use crate::dashboard::system_chain::*;

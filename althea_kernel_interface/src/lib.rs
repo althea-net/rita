@@ -49,6 +49,7 @@ mod set_system_password;
 mod setup_wg_if;
 mod traffic_control;
 mod udp_socket_table;
+pub mod upgrade;
 pub mod wg_iface_counter;
 
 use althea_types::error::AltheaTypesError;
