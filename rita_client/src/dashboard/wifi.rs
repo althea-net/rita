@@ -26,7 +26,7 @@ pub const ALLOWED_FIVE_80: [u16; 6] = [36, 52, 100, 116, 132, 149];
 /// list of nonoverlapping 80mhz channels for the GLB1300/EA6350v3
 pub const ALLOWED_FIVE_80_IPQ40XX: [u16; 2] = [36, 149];
 /// list of nonoverlapping 80mhz channels for the TPLink-a6v3/wr-2100
-pub const ALLOWED_FIVE_80_TPLINK_A6V3: [u16; 2] = [36];
+pub const ALLOWED_FIVE_80_TPLINK_A6V3: [u16; 1] = [36];
 /// list of nonoverlapping 160mhz channels generally legal in NA, SA, EU, AU
 pub const ALLOWED_FIVE_160: [u16; 2] = [36, 100];
 
@@ -330,15 +330,15 @@ pub fn get_allowed_wifi_channels(radio: Path<String>) -> Result<HttpResponse, Er
 
     // model specific values start here
     } else if model.is_some()
-        && (model.clone().unwrap().contains("gl-b1300")
-            || model.unwrap().contains("linksys_ea6350v3"))
+    && (model.clone().unwrap().contains("gl-b1300")
+        || model.clone().unwrap().contains("linksys_ea6350v3"))
         && five_channel_width.contains("80")
     {
         Ok(HttpResponse::Ok().json(ALLOWED_FIVE_80_IPQ40XX))
     } else if model.is_some()
     && (model.clone().unwrap().contains("tplink_archer-a6-v3")
-        || model.unwrap().contains("cudy_wr2100"))
-    && five_channel_width.contains("80")
+        || model.clone().unwrap().contains("cudy_wr2100"))
+        && five_channel_width.contains("80")
     {
         Ok(HttpResponse::Ok().json(ALLOWED_FIVE_80_TPLINK_A6V3))
     // model specific values end here
