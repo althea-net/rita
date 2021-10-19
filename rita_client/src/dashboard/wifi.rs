@@ -283,7 +283,7 @@ fn validate_channel(
         ))
     // model specific restrictions below this point
     } else if model.is_some() {
-        let mdl = model.clone().unwrap();
+        let mdl = model.unwrap();
         if (mdl.contains("gl-b1300")
         || mdl.contains("linksys_ea6350v3"))
         && new_is_five
@@ -337,7 +337,7 @@ pub fn get_allowed_wifi_channels(radio: Path<String>) -> Result<HttpResponse, Er
         Ok(HttpResponse::Ok().json(ALLOWED_FIVE_80_IPQ40XX))
     } else if model.is_some()
     && (model.clone().unwrap().contains("tplink_archer-a6-v3")
-        || model.clone().unwrap().contains("cudy_wr2100"))
+        || model.unwrap().contains("cudy_wr2100"))
         && five_channel_width.contains("80")
     {
         Ok(HttpResponse::Ok().json(ALLOWED_FIVE_80_TPLINK_A6V3))
