@@ -282,8 +282,7 @@ fn validate_channel(
             format!("{:?}", ALLOWED_FIVE_160),
         ))
     // model specific restrictions below this point
-    } else if model.is_some() {
-        let mdl = model.unwrap();
+    } else if let Some(mdl) = model {
         if (mdl.contains("gl-b1300")
         || mdl.contains("linksys_ea6350v3"))
         && new_is_five
