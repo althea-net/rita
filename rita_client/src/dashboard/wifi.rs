@@ -25,6 +25,8 @@ pub const ALLOWED_FIVE_40: [u16; 12] = [36, 44, 52, 60, 100, 108, 116, 124, 132,
 pub const ALLOWED_FIVE_80: [u16; 6] = [36, 52, 100, 116, 132, 149];
 /// list of nonoverlapping 80mhz channels for the GLB1300/EA6350v3
 pub const ALLOWED_FIVE_80_IPQ40XX: [u16; 2] = [36, 149];
+/// list of nonoverlapping 80mhz channels for the TPLink-a6v3/wr-2100
+pub const ALLOWED_FIVE_80_TPLINK_A6V3: [u16; 2] = [36];
 /// list of nonoverlapping 160mhz channels generally legal in NA, SA, EU, AU
 pub const ALLOWED_FIVE_160: [u16; 2] = [36, 100];
 
@@ -280,17 +282,33 @@ fn validate_channel(
             format!("{:?}", ALLOWED_FIVE_160),
         ))
     // model specific restrictions below this point
-    } else if model.is_some()
-        && (model.clone().unwrap().contains("gl-b1300")
-            || model.unwrap().contains("linksys_ea6350v3"))
+    } else if model.is_some() {
+        let mdl = model.clone().unwrap();
+        if (mdl.contains("gl-b1300")
+        || mdl.contains("linksys_ea6350v3"))
         && new_is_five
         && channel_width_is_80
         && !ALLOWED_FIVE_80_IPQ40XX.contains(&new_val)
-    {
-        Err(ValidationError::BadChannel(
-            "80".to_string(),
-            format!("{:?}", ALLOWED_FIVE_80_IPQ40XX),
-        ))
+        {
+            Err(ValidationError::BadChannel(
+                "80".to_string(),
+                format!("{:?}", ALLOWED_FIVE_80_IPQ40XX),
+            ))
+        }
+        else if (mdl.contains("tplink_archer-a6-v3")
+        || mdl.contains("cudy_wr2100"))
+        && new_is_five
+        && channel_width_is_80
+        && !ALLOWED_FIVE_80_TPLINK_A6V3.contains(&new_val)
+        {
+            Err(ValidationError::BadChannel(
+                "80".to_string(),
+                format!("{:?}", ALLOWED_FIVE_80_TPLINK_A6V3),
+            ))
+        }        
+        else {
+            Ok(())
+        } 
     } else {
         Ok(())
     }
@@ -317,6 +335,12 @@ pub fn get_allowed_wifi_channels(radio: Path<String>) -> Result<HttpResponse, Er
         && five_channel_width.contains("80")
     {
         Ok(HttpResponse::Ok().json(ALLOWED_FIVE_80_IPQ40XX))
+    } else if model.is_some()
+    && (model.clone().unwrap().contains("tplink_archer-a6-v3")
+        || model.unwrap().contains("cudy_wr2100"))
+    && five_channel_width.contains("80")
+    {
+        Ok(HttpResponse::Ok().json(ALLOWED_FIVE_80_TPLINK_A6V3))
     // model specific values end here
     } else if five_channel_width.contains("20") {
         Ok(HttpResponse::Ok().json(ALLOWED_FIVE_20))
