@@ -267,8 +267,7 @@ fn checkin() {
                         Some(OperatorAction::Update { instruction }) => {
                             let _res = update_rita(instruction);
                         }
-                        #[allow(unused_variables)]
-                        Some(OperatorAction::ChangeReleaseFeedAndUpdate { feed }) => {}
+                        Some(OperatorAction::ChangeReleaseFeedAndUpdate { feed: _ }) => {}
                         None => {}
                     }
 

@@ -1,11 +1,26 @@
 use super::KernelInterface;
 use crate::KernelInterfaceError as Error;
-use althea_types::{OpkgCommand, OpkgCommandType};
+use althea_types::{OpkgCommand, OpkgCommandType, SysupgradeCommand};
 use std::process::Output;
 
 impl dyn KernelInterface {
-    pub fn perform_sysupgrade(&self, path: &str) -> Result<Output, Error> {
-        self.run_command("/sbin/sysupgrade", &[path])
+    pub fn perform_sysupgrade(&self, command: SysupgradeCommand) -> Result<Output, Error> {
+        //If empty url, return error
+        if command.url.is_empty() {
+            return Err(Error::RuntimeError(
+                "Empty url given to sysupgrade".to_string(),
+            ));
+        }
+
+        // append path to end of flags
+        let mut args = if command.flags.is_some() {
+            command.flags.unwrap()
+        } else {
+            Vec::new()
+        };
+        args.push(command.url);
+        let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
+        self.run_command("/sbin/sysupgrade", &args_ref)
     }
 
     /// This function checks if the function provided is update or install. In case of install, for each of the packages

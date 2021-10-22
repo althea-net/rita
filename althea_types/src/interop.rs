@@ -334,8 +334,15 @@ pub struct PaymentTx {
 /// This can either be a sysupgrade with a url to a firmware image, or an opkg update with a url to a opkg feed
 #[derive(Serialize, Deserialize, Hash, Clone, Debug, Eq, PartialEq)]
 pub enum UpdateType {
-    Sysupgrade(String),
+    Sysupgrade(SysupgradeCommand),
     Opkg(OpkgCommandList),
+}
+
+#[derive(Serialize, Deserialize, Hash, Clone, Debug, Eq, PartialEq)]
+///This struct contains info required for a sysupgrade command
+pub struct SysupgradeCommand {
+    pub url: String,
+    pub flags: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize, Hash, Clone, Debug, Eq, PartialEq)]

@@ -47,7 +47,11 @@ pub fn set_router_update_instruction(instruction: Option<UpdateType>) {
 
 #[test]
 fn test_set_router_update_instruction() {
-    let test = UpdateType::Sysupgrade("dummyurl.com".to_string());
+    use althea_types::SysupgradeCommand;
+    let test = UpdateType::Sysupgrade(SysupgradeCommand {
+        url: "dummyurl.com".to_string(),
+        flags: None,
+    });
     set_router_update_instruction(Some(test.clone()));
     let str = &*UPDATE_INSTRUCTION.read().unwrap();
     assert_eq!(Some(test), *str);

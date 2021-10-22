@@ -8,7 +8,7 @@ use std::process::Output;
 pub fn update_rita(instruction: UpdateType) -> Result<Output, KernelInterfaceError> {
     if KI.is_openwrt() {
         match instruction {
-            UpdateType::Sysupgrade(path) => KI.perform_sysupgrade(&path),
+            UpdateType::Sysupgrade(command) => KI.perform_sysupgrade(command),
             UpdateType::Opkg(commands) => {
                 //update the feed
                 handle_release_feed_update(Some(commands.feed));
