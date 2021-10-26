@@ -1,12 +1,11 @@
 //! These endpoints are used to modify mundane wireless settings
 
-use rita_common::dashboard::nickname::maybe_set_nickname;
-use rita_common::KI;
-
 use ::actix_web::http::StatusCode;
 use ::actix_web::Path;
 use ::actix_web::{HttpRequest, HttpResponse, Json};
 use failure::Error;
+use rita_common::dashboard::nickname::maybe_set_nickname;
+use rita_common::KI;
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -60,31 +59,6 @@ pub struct WifiDevice {
     pub radio_type: String,
 }
 
-#[derive(Serialize, Deserialize, Default, Clone, Debug)]
-pub struct WifiSsid {
-    pub radio: String,
-    pub ssid: String,
-}
-
-#[derive(Serialize, Deserialize, Default, Clone, Debug)]
-pub struct WifiPass {
-    pub radio: String,
-    pub pass: String,
-}
-
-#[derive(Serialize, Deserialize, Default, Clone, Debug)]
-pub struct WifiChannel {
-    pub radio: String,
-    pub channel: u16,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub enum WifiToken {
-    WifiChannel(WifiChannel),
-    WifiSsid(WifiSsid),
-    WifiPass(WifiPass),
-}
-
 /// A string of characters which we don't let users use because of corrupted UCI configs
 static FORBIDDEN_CHARS: &str = "'/\"\\";
 
@@ -106,17 +80,24 @@ pub enum ValidationError {
     WrongRadio,
     #[fail(display = "Value too short ({} required)", _0)]
     TooShort(usize),
+    #[fail(display = "Invalid Choice")]
+    InvalidChoice,
 }
 
-fn set_ssid(wifi_ssid: &WifiSsid) -> Result<HttpResponse, Error> {
-    let mut ret: HashMap<String, String> = HashMap::new();
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+pub struct WifiSsid {
+    pub radio: String,
+    pub ssid: String,
+}
 
+fn set_ssid(wifi_ssid: &WifiSsid) -> Result<(), Error> {
     if let Err(e) = validate_config_value(&wifi_ssid.ssid) {
         info!("Setting of invalid SSID was requested: {}", e);
-        ret.insert("error".to_owned(), format!("{}", e));
-        return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
-            .into_builder()
-            .json(ret));
+        return Err(e.into());
+        // ret.insert("error".to_owned(), format!("{}", e));
+        // return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
+        //     .into_builder()
+        //     .json(ret));
     }
 
     // think radio0, radio1
@@ -126,18 +107,21 @@ fn set_ssid(wifi_ssid: &WifiSsid) -> Result<HttpResponse, Error> {
     KI.set_uci_var(&format!("wireless.{}.ssid", section_name), &ssid)?;
 
     KI.uci_commit("wireless")?;
-    KI.openwrt_reset_wireless()?;
 
     // We edited disk contents, force global sync
     KI.fs_sync()?;
+
     // set the nickname with the first SSID change may fail
     // if the ssid is too long but don't block on that
     let _ = maybe_set_nickname(wifi_ssid.ssid.clone());
 
-    // we have invalidated the old nat rules, update them
-    KI.create_client_nat_rules()?;
+    Ok(())
+}
 
-    Ok(HttpResponse::Ok().json(ret))
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+pub struct WifiPass {
+    pub radio: String,
+    pub pass: String,
 }
 
 /// Resets the wifi password to the stock value for all radios
@@ -150,29 +134,28 @@ pub fn reset_wifi_pass() -> Result<(), Error> {
         };
         set_pass(&pass)?;
     }
+
+    KI.uci_commit("wireless")?;
+    KI.openwrt_reset_wireless()?;
+
+    // We edited disk contents, force global sync
+    KI.fs_sync()?;
+
+    // we have invalidated the old nat rules, update them
+    KI.create_client_nat_rules()?;
+
     Ok(())
 }
 
-fn set_pass(wifi_pass: &WifiPass) -> Result<HttpResponse, Error> {
-    let mut ret = HashMap::new();
-
+fn set_pass(wifi_pass: &WifiPass) -> Result<(), Error> {
     let wifi_pass_len = wifi_pass.pass.len();
     if wifi_pass_len < MINIMUM_PASS_CHARS {
-        ret.insert(
-            "error".to_owned(),
-            format!("{}", ValidationError::TooShort(MINIMUM_PASS_CHARS)),
-        );
-        return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
-            .into_builder()
-            .json(ret));
+        return Err(ValidationError::TooShort(MINIMUM_PASS_CHARS).into());
     }
 
     if let Err(e) = validate_config_value(&wifi_pass.pass) {
         info!("Setting of invalid SSID was requested: {}", e);
-        ret.insert("error".to_owned(), format!("{}", e));
-        return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
-            .into_builder()
-            .json(ret));
+        return Err(e.into());
     }
 
     // think radio0, radio1
@@ -181,19 +164,16 @@ fn set_pass(wifi_pass: &WifiPass) -> Result<HttpResponse, Error> {
     let section_name = format!("default_{}", iface_name);
     KI.set_uci_var(&format!("wireless.{}.key", section_name), &pass)?;
 
-    KI.uci_commit("wireless")?;
-    KI.openwrt_reset_wireless()?;
-
-    // We edited disk contents, force global sync
-    KI.fs_sync()?;
-
-    // we have invalidated the old nat rules, update them
-    KI.create_client_nat_rules()?;
-
-    Ok(HttpResponse::Ok().json(()))
+    Ok(())
 }
 
-fn set_channel(wifi_channel: &WifiChannel) -> Result<HttpResponse, Error> {
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+pub struct WifiChannel {
+    pub radio: String,
+    pub channel: u16,
+}
+
+fn set_channel(wifi_channel: &WifiChannel) -> Result<(), Error> {
     let current_channel: u16 = KI
         .get_uci_var(&format!("wireless.{}.channel", wifi_channel.radio))?
         .parse()?;
@@ -201,15 +181,113 @@ fn set_channel(wifi_channel: &WifiChannel) -> Result<HttpResponse, Error> {
 
     if let Err(e) = validate_channel(current_channel, wifi_channel.channel, &channel_width) {
         info!("Setting of invalid SSID was requested: {}", e);
-        return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
-            .into_builder()
-            .json("Invalid SSID!"));
+        return Err(e.into());
+        // return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
+        //     .into_builder()
+        //     .json("Invalid SSID!"));
     }
 
     KI.set_uci_var(
         &format!("wireless.{}.channel", wifi_channel.radio),
         &wifi_channel.channel.to_string(),
     )?;
+
+    Ok(())
+}
+
+#[derive(Clone, Debug)]
+pub struct WifiDisabledReturn {
+    pub needs_reboot: bool,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+pub struct WifiDisabled {
+    pub radio: String,
+    pub disabled: bool,
+}
+
+/// Disables the wifi on the specified radio
+fn set_disabled(wifi_disabled: &WifiDisabled) -> Result<WifiDisabledReturn, Error> {
+    let current_disabled: bool =
+        KI.get_uci_var(&format!("wireless.{}.disabled", wifi_disabled.radio))? == "1";
+
+    if current_disabled == wifi_disabled.disabled {
+        return Ok(WifiDisabledReturn {
+            needs_reboot: false,
+        });
+    }
+
+    KI.set_uci_var(
+        &format!("wireless.{}.disabled", wifi_disabled.radio),
+        if wifi_disabled.disabled { "1" } else { "0" },
+    )?;
+
+    Ok(WifiDisabledReturn { needs_reboot: true })
+}
+
+#[derive(Serialize, Deserialize)]
+struct RebootJsonResponse {
+    needs_reboot: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+struct ErrorJsonResponse {
+    error: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum WifiToken {
+    WifiChannel(WifiChannel),
+    WifiSsid(WifiSsid),
+    WifiPass(WifiPass),
+    WifiDisabled(WifiDisabled),
+}
+
+/// an endpoint that takes a series of wifi tokens in json format and applies them all at once
+/// the reason for this is that changing any setting while on wifi will disconnect the caller
+/// so in order to have all the changes 'take' we need to have a single endpoint for all changes
+pub fn set_wifi_multi(wifi_changes: Json<Vec<WifiToken>>) -> Result<HttpResponse, Error> {
+    trace!("Got multi wifi change!");
+    let mut needs_reboot = false;
+
+    for token in wifi_changes.into_inner().iter() {
+        match token {
+            WifiToken::WifiChannel(val) => {
+                if let Err(e) = set_channel(val) {
+                    return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
+                        .into_builder()
+                        .json(ErrorJsonResponse {
+                            error: format!("Failed to set channel: {}", e),
+                        }));
+                }
+            }
+            WifiToken::WifiPass(val) => {
+                if let Err(e) = set_pass(val) {
+                    return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
+                        .into_builder()
+                        .json(ErrorJsonResponse {
+                            error: format!("Failed to set password: {}", e),
+                        }));
+                }
+            }
+            WifiToken::WifiSsid(val) => {
+                if let Err(e) = set_ssid(val) {
+                    return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
+                        .into_builder()
+                        .json(ErrorJsonResponse {
+                            error: format!("Failed to set SSID: {}", e),
+                        }));
+                }
+            }
+            WifiToken::WifiDisabled(val) => {
+                let result = set_disabled(val)?;
+                if result.needs_reboot {
+                    needs_reboot = true;
+                }
+            }
+        };
+    }
+
     KI.uci_commit("wireless")?;
     KI.openwrt_reset_wireless()?;
 
@@ -218,21 +296,12 @@ fn set_channel(wifi_channel: &WifiChannel) -> Result<HttpResponse, Error> {
     // we have invalidated the old nat rules, update them
     KI.create_client_nat_rules()?;
 
-    Ok(HttpResponse::Ok().json(()))
-}
-
-/// an endpoint that takes a series of wifi tokens in json format and applies them all at once
-/// the reason for this is that changing any setting while on wifi will disconnect the caller
-/// so in order to have all the changes 'take' we need to have a single endpoint for all changes
-pub fn set_wifi_multi(wifi_changes: Json<Vec<WifiToken>>) -> Result<HttpResponse, Error> {
-    trace!("Got multi wifi change!");
-    for token in wifi_changes.into_inner().iter() {
-        match token {
-            WifiToken::WifiChannel(val) => set_channel(val)?,
-            WifiToken::WifiPass(val) => set_pass(val)?,
-            WifiToken::WifiSsid(val) => set_ssid(val)?,
-        };
+    if needs_reboot {
+        info!("Changed a radio's active state, rebooting");
+        KI.run_command("reboot", &[])?;
+        return Ok(HttpResponse::Ok().json(RebootJsonResponse { needs_reboot: true }));
     }
+
     Ok(HttpResponse::Ok().json(()))
 }
 
