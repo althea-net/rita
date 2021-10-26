@@ -516,7 +516,7 @@ application/json" -d '\{"url": "https://somewhere.safe"\}'
 - Sample Call:
 
 `curl -XPOST 127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '{"exit_client": {"current_exit": "SELECTEDEXIT"}}'`
-}
+
 
 ---
 
@@ -534,12 +534,12 @@ they need to be tagged WifiChannel, WifiPass, and WifiSSID as shown below
   - Contents:
 
 ```
-{}
+null
 ```
 
 - Error Response: `500 Server Error`
 - Sample Call:
-  `curl -XPOST 127.0.0.1:<rita_dashboard_port>/settings -H 'Content-Type: application/json' -i -d '[{"WifiChannel": {"radio":"radio0", "ssid": "this is a freeform ssid"}}, {"WifiChannel":{"radio":"radio1", "channel": 34}}]'`
+  `curl -XPOST 127.0.0.1:4877/wifi_settings -H 'Content-Type: application/json' -i -d '[{"WifiChannel":{"radio":"radio1","channel":11}},{"WifiSsid":{"radio":"radio1","ssid":"this is a freeform ssid"}},{"WifiPass":{"radio":"radio1","pass":"ChangeMe"}},{"WifiDisabled":{"radio":"radio1","disabled":"0"}}]'`
 
 ---
 
