@@ -583,6 +583,8 @@ pub struct HardwareInfo {
     /// information. It may be useful for debugging purposes.
     #[serde(default = "default_kernel_version")]
     pub entire_system_kernel_version: String,
+    /// Vector of eth data i.e. whether a link is up and if so what the link speed is
+    pub ethernet_stats: Option<Vec<EthernetStats>>,
 }
 
 fn default_kernel_version() -> String {
@@ -606,6 +608,35 @@ pub struct SensorReading {
     pub max: Option<u64>,
     /// A provided temp at which this device starts to risk failure in centi-celsius
     pub crit: Option<u64>,
+}
+
+/// Struct that hold information about the ethernet interfaces, i.e. whether a link is
+/// up and the speed of the link\
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EthernetStats {
+    pub is_up: bool,
+    pub mode_of_operation: EthOperationMode,
+    pub tx_packet_count: u64,
+    pub tx_errors: u64,
+    pub rx_packet_count: u64,
+    pub rx_errors: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Enum that encompases base speed and duplex: full or half. TODO need to add physical medium, twisted pair or fiber.
+/// It is possible to get this information since ethtool shows this
+pub enum EthOperationMode {
+    FullDup40GBase,
+    FullDup25GBase,
+    FullDup10GBase,
+    FullDup5GBase,
+    FullDup1000MBBase,
+    HalfDup1000MBBase,
+    FullDup100MBBase,
+    HalfDup100MBBase,
+    FullDup10MBBase,
+    HalfDup10MBBase,
+    Unknown,
 }
 
 /// Struct for storing peer status data for reporting to the operator tools server

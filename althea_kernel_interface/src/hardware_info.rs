@@ -1,5 +1,7 @@
 use crate::file_io::get_lines;
 use crate::KernelInterfaceError as Error;
+use althea_types::EthOperationMode;
+use althea_types::EthernetStats;
 use althea_types::HardwareInfo;
 use althea_types::SensorReading;
 use std::fs;
@@ -35,6 +37,8 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
     let (entire_system_kernel_version, system_kernel_version) =
         parse_kernel_version(system_kernel_version)?;
 
+    let ethernet_stats = get_ethernet_stats();
+
     Ok(HardwareInfo {
         logical_processors: num_cpus,
         load_avg_one_minute: one_minute_load_avg,
@@ -47,6 +51,7 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
         system_uptime,
         system_kernel_version,
         entire_system_kernel_version,
+        ethernet_stats,
     })
 }
 
@@ -263,6 +268,68 @@ fn get_sensor_readings() -> Option<Vec<SensorReading>> {
         Some(ret)
     }
 }
+
+fn get_ethernet_stats() -> Option<Vec<EthernetStats>> {
+    let mut eth = 0;
+    let mut ret = Vec::new();
+    let mut path = format!("/sys/class/net/eth{}", eth);
+    while fs::metadata(path.clone()).is_ok() {
+        if let Some(is_up) = maybe_get_single_line_string(&format!("{}/operstate", path)) {
+            let is_up = is_up.contains("up");
+            if let (Some(speed), Some(duplex)) = (
+                maybe_get_single_line_u64(&format!("{}/speed", path)),
+                maybe_get_single_line_string(&format!("{}/duplex", path)),
+            ) {
+                if let (
+                    Some(tx_errors),
+                    Some(rx_errors),
+                    Some(tx_packet_count),
+                    Some(rx_packet_count),
+                ) = (
+                    maybe_get_single_line_u64(&format!("{}/statistics/tx_errors", path)),
+                    maybe_get_single_line_u64(&format!("{}/statistics/rx_errors", path)),
+                    maybe_get_single_line_u64(&format!("{}/statistics/tx_packets", path)),
+                    maybe_get_single_line_u64(&format!("{}/statistics/rx_packets", path)),
+                ) {
+                    ret.push(EthernetStats {
+                        is_up,
+                        mode_of_operation: get_ethernet_operation_mode(speed, duplex),
+                        tx_packet_count,
+                        tx_errors,
+                        rx_packet_count,
+                        rx_errors,
+                    })
+                }
+            }
+        }
+        eth += 1;
+        path = format!("/sys/class/net/eth{}", eth);
+    }
+
+    if ret.is_empty() {
+        None
+    } else {
+        Some(ret)
+    }
+}
+
+/// Take eth speed and duplex mode and create an enum
+fn get_ethernet_operation_mode(speed: u64, duplex: String) -> EthOperationMode {
+    match (speed, duplex.contains("full")) {
+        (40000, _) => EthOperationMode::FullDup40GBase,
+        (25000, _) => EthOperationMode::FullDup25GBase,
+        (10000, _) => EthOperationMode::FullDup10GBase,
+        (5000, _) => EthOperationMode::FullDup5GBase,
+        (1000, true) => EthOperationMode::FullDup1000MBBase,
+        (1000, false) => EthOperationMode::HalfDup1000MBBase,
+        (100, true) => EthOperationMode::FullDup100MBBase,
+        (100, false) => EthOperationMode::HalfDup100MBBase,
+        (10, true) => EthOperationMode::FullDup10GBase,
+        (10, false) => EthOperationMode::HalfDup10MBBase,
+        _ => EthOperationMode::Unknown,
+    }
+}
+
 // Test for kernel version
 #[cfg(test)]
 mod test {
@@ -286,6 +353,12 @@ mod test {
     #[test]
     fn test_sensors() {
         let res = get_sensor_readings();
+        println!("{:?}", res);
+    }
+
+    #[test]
+    fn test_ethernet_stats() {
+        let res = get_ethernet_stats();
         println!("{:?}", res);
     }
 
