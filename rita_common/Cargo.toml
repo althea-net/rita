@@ -36,7 +36,7 @@ lazy_static = "1.4"
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 actix-web-httpauth = {git = "https://github.com/althea-net/actix-web-httpauth"}
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
-async-web30 = {package="web30", version = "0.15"}
+async-web30 = {package="web30", version = "0.17"}
 althea_types = { path = "../althea_types" }
 babel_monitor_legacy = {path = "../babel_monitor_legacy"} 
 

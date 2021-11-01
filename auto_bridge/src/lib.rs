@@ -178,6 +178,7 @@ impl TokenBridge {
                 None,
                 None,
                 None,
+                Some(timeout),
             )
             .await
         {
