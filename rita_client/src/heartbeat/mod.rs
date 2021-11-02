@@ -14,8 +14,13 @@
 //! WgKey, Nonce, Ciphertext for the HeartBeatMessage. This consumes 32 bytes, 24 bytes, and to the end of the message
 
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
+use althea_types::ExitDetails;
+
 use babel_monitor::get_installed_route;
 use babel_monitor::get_neigh_given_route;
+
+use dummy::dummy_selected_exit_details;
+
 use rita_common::network_monitor::GetNetworkInfo;
 use rita_common::network_monitor::NetworkMonitor;
 use rita_common::tunnel_manager::Neighbor as RitaNeighbor;
@@ -32,6 +37,15 @@ use futures01::future::Future;
 use settings::client::ExitServer;
 use sodiumoxide::crypto::box_;
 use std::collections::VecDeque;
+
+#[allow(unused_imports)]
+use dummy::dummy_neigh_babel;
+#[allow(unused_imports)]
+use dummy::dummy_neigh_tunnel;
+///These are used during development
+#[allow(unused_imports)]
+use dummy::dummy_route;
+
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -39,6 +53,7 @@ use std::time::Duration;
 
 type Resolver = resolver::Resolver;
 
+mod dummy;
 pub struct HeartbeatCache {
     dns: VecDeque<SocketAddr>,
     exit_route: RouteLegacy,
@@ -76,19 +91,36 @@ pub fn send_udp_heartbeat() {
     let network_info = NetworkMonitor::from_registry()
         .send(GetNetworkInfo {})
         .timeout(CLIENT_LOOP_TIMEOUT);
+
     // Check for the basics first, before doing any of the hard futures work
-    let (our_id, selected_exit_details) = if let (Some(id), Some(exit)) = (
-        settings::get_rita_client().get_identity(),
-        get_selected_exit(),
-    ) {
-        let exit_info = exit.info;
-        match exit_info.general_details() {
-            Some(details) => (id, details.clone()),
-            None => return,
-        }
+    #[allow(unused_assignments, unused_mut)]
+    let mut our_id: Identity = if settings::get_rita_client().get_identity().is_some() {
+        settings::get_rita_client().get_identity().unwrap()
     } else {
         return;
     };
+    #[allow(unused_assignments, unused_mut)]
+    let mut selected_exit_details: ExitDetails = dummy_selected_exit_details();
+
+    #[cfg(not(feature = "operator_debug"))]
+    {
+        if let (Some(id), Some(exit)) = (
+            settings::get_rita_client().get_identity(),
+            get_selected_exit(),
+        ) {
+            let exit_info = exit.info;
+            match exit_info.general_details() {
+                Some(details) => {
+                    our_id = id;
+                    selected_exit_details = details.clone();
+                }
+                None => return,
+            }
+        } else {
+            return;
+        };
+    }
+
     trace!("we have heartbeat basic info");
 
     let res = dns_request.join(network_info).then(move |res| {
@@ -97,12 +129,23 @@ pub fn send_udp_heartbeat() {
         // if for some reason the cache update fails, we can still progress with the heartbeat
         match res {
             Ok((Ok(dnsresult), Ok(network_info))) => {
-                match get_selected_exit_route(&network_info.babel_routes) {
+                #[cfg(not(feature = "operator_debug"))]
+                let selected_exit_route = get_selected_exit_route(&network_info.babel_routes);
+                #[cfg(feature = "operator_debug")]
+                let selected_exit_route: Result<RouteLegacy, Error> = Ok(dummy_route());
+
+                match selected_exit_route {
                     Ok(route) => {
+                        #[allow(unused_variables)]
                         let neigh_option =
                             get_neigh_given_route(&route, &network_info.babel_neighbors);
+
+                        #[cfg(not(feature = "operator_debug"))]
                         let neigh_option =
                             get_rita_neigh_option(neigh_option, &network_info.rita_neighbors);
+                        #[cfg(feature = "operator_debug")]
+                        let neigh_option = Some((dummy_neigh_babel(), dummy_neigh_tunnel()));
+
                         if let Some((neigh, rita_neigh)) = neigh_option {
                             // Now that we have all the info we can stop and try to update the
                             // heartbeat cache
@@ -171,6 +214,7 @@ pub fn send_udp_heartbeat() {
     Arbiter::spawn(res);
 }
 
+#[allow(dead_code)]
 fn get_selected_exit_route(route_dump: &[RouteLegacy]) -> Result<RouteLegacy, Error> {
     let rita_client = settings::get_rita_client();
     let exit_client = rita_client.exit_client;
@@ -184,6 +228,7 @@ fn get_selected_exit_route(route_dump: &[RouteLegacy]) -> Result<RouteLegacy, Er
     get_installed_route(&exit_mesh_ip, route_dump)
 }
 
+#[allow(dead_code)]
 fn get_selected_exit() -> Option<ExitServer> {
     let rita_client = settings::get_rita_client();
     let exit_client = rita_client.exit_client;
@@ -191,6 +236,7 @@ fn get_selected_exit() -> Option<ExitServer> {
     Some(exit.clone())
 }
 
+#[allow(dead_code)]
 fn get_rita_neigh_option(
     neigh: Option<NeighborLegacy>,
     rita_neighbors: &[RitaNeighbor],
@@ -203,6 +249,7 @@ fn get_rita_neigh_option(
     }
 }
 
+#[allow(dead_code)]
 fn get_rita_neighbor(
     neigh: &NeighborLegacy,
     rita_neighbors: &[RitaNeighbor],

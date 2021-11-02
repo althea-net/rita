@@ -265,6 +265,10 @@ fn checkin() {
                             rita_client.operator.operator_address = new_address;
                         }
                         Some(OperatorAction::Update { instruction }) => {
+                            info!(
+                                "Received an update command from op tools! The instruction is {:?}",
+                                instruction
+                            );
                             let _res = update_rita(instruction);
                         }
                         Some(OperatorAction::ChangeReleaseFeedAndUpdate { feed: _ }) => {}
