@@ -6,21 +6,28 @@ use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
 use actix_web::Path;
 use althea_types::SystemChain;
-use clarity::{Address, Transaction};
-use failure::Error;
-use futures01::{future, Future};
+use async_web30::client::Web3;
+use async_web30::types::SendTxOption;
+use clarity::Address;
 use num256::Uint256;
-
-use std::boxed::Box;
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::Duration;
-use web30::client::Web3;
+
+// this is required until we migrate our endpoints to async actix
+// this way we can queue a withdraw from the old futures endpoint
+// and then process it in a async/await compatible environment and use
+// the newer web30 now required by eip1550
+// only one withdraw can be queued at a time, this is only for direct withdraws
+// bridge operations go over to the auto_bridge module
+lazy_static! {
+    static ref WITHDRAW_QUEUE: Arc<RwLock<Option<(Address, Uint256)>>> =
+        Arc::new(RwLock::new(None));
+}
 
 pub const WITHDRAW_TIMEOUT: Duration = Duration::from_secs(10);
 
-fn withdraw_handler(
-    address: Address,
-    amount: Option<Uint256>,
-) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+fn withdraw_handler(address: Address, amount: Option<Uint256>) -> HttpResponse {
     debug!("/withdraw/{:#x}/{:?} hit", address, amount);
     let payment_settings = settings::get_rita_common().payment;
     let system_chain = payment_settings.system_chain;
@@ -52,106 +59,72 @@ fn withdraw_handler(
     }
 
     match (system_chain, withdraw_chain) {
-        (SystemChain::Ethereum, SystemChain::Ethereum) => eth_compatable_withdraw(address, amount),
-        (SystemChain::Rinkeby, SystemChain::Rinkeby) => eth_compatable_withdraw(address, amount),
-        (SystemChain::Xdai, SystemChain::Xdai) => eth_compatable_withdraw(address, amount),
-        (SystemChain::Xdai, SystemChain::Ethereum) => xdai_withdraw(address, amount),
-        (_, _) => Box::new(future::ok(
-            HttpResponse::new(StatusCode::from_u16(500u16).unwrap())
-                .into_builder()
-                .json(format!(
-                    "System chain is {} but withdraw chain is {}, withdraw impossible!",
-                    system_chain, withdraw_chain
-                )),
-        )),
+        (SystemChain::Ethereum, SystemChain::Ethereum) => {
+            queue_eth_compatible_withdraw(address, amount)
+        }
+        (SystemChain::Rinkeby, SystemChain::Rinkeby) => {
+            queue_eth_compatible_withdraw(address, amount)
+        }
+        (SystemChain::Xdai, SystemChain::Xdai) => queue_eth_compatible_withdraw(address, amount),
+        (SystemChain::Xdai, SystemChain::Ethereum) => xdai_to_eth_withdraw(address, amount),
+        (_, _) => HttpResponse::new(StatusCode::from_u16(500u16).unwrap())
+            .into_builder()
+            .json(format!(
+                "System chain is {} but withdraw chain is {}, withdraw impossible!",
+                system_chain, withdraw_chain
+            )),
     }
 }
 
-pub fn withdraw(
-    path: Path<(Address, Uint256)>,
-) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+pub fn withdraw(path: Path<(Address, Uint256)>) -> HttpResponse {
     withdraw_handler(path.0, Some(path.1.clone()))
 }
 
-pub fn withdraw_all(path: Path<Address>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+pub fn withdraw_all(path: Path<Address>) -> HttpResponse {
     let address = path.into_inner();
     debug!("/withdraw_all/{} hit", address);
     withdraw_handler(address, None)
 }
 
-/// Withdraw for eth compatible chains
-fn eth_compatable_withdraw(
-    address: Address,
-    amount: Uint256,
-) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+fn queue_eth_compatible_withdraw(address: Address, amount: Uint256) -> HttpResponse {
+    let mut writer = WITHDRAW_QUEUE.write().unwrap();
+    *writer = Some((address, amount));
+    HttpResponse::new(StatusCode::OK)
+        .into_builder()
+        .json("Withdraw queued")
+}
+
+/// Withdraw for eth compatible chains, pulls from the queued withdraw
+/// and executes it
+pub async fn eth_compatible_withdraw() {
     let full_node = get_web3_server();
     let web3 = Web3::new(&full_node, WITHDRAW_TIMEOUT);
     let payment_settings = settings::get_rita_common().payment;
-    if payment_settings.eth_address.is_none() {
-        return Box::new(future::ok(
-            HttpResponse::new(StatusCode::from_u16(504u16).unwrap())
-                .into_builder()
-                .json("No Address configured, withdraw impossible!"),
-        ));
-    };
+    let mut writer = WITHDRAW_QUEUE.write().unwrap();
 
-    let tx = Transaction {
-        nonce: payment_settings.nonce.clone(),
-        gas_price: payment_settings.gas_price.clone(),
-        gas_limit: 21_000u32.into(),
-        to: address,
-        value: amount,
-        data: Vec::new(),
-        signature: None,
-    };
-    let transaction_signed = tx.sign(
-        &payment_settings
-            .eth_private_key
-            .expect("No private key configured!"),
-        payment_settings.net_version,
-    );
-
-    let transaction_bytes = match transaction_signed.to_bytes() {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            return Box::new(future::ok(
-                HttpResponse::new(StatusCode::from_u16(500u16).unwrap())
-                    .into_builder()
-                    .json(format!("Transaction to bytes failed! {:?}", e)),
-            ));
+    if let Some((dest, amount)) = &*writer {
+        let transaction_status = web3
+            .send_transaction(
+                *dest,
+                Vec::new(),
+                amount.clone(),
+                payment_settings.eth_address.unwrap(),
+                payment_settings.eth_private_key.unwrap(),
+                vec![
+                    SendTxOption::Nonce(payment_settings.nonce),
+                    SendTxOption::GasPrice(payment_settings.gas_price),
+                ],
+            )
+            .await;
+        if let Err(e) = transaction_status {
+            error!("Withdraw failed with {:?} retrying later!", e);
+        } else {
+            info!("Successful withdraw of {} to {}", amount, dest);
+            *writer = None;
         }
-    };
-
-    let transaction_status = web3.eth_send_raw_transaction(transaction_bytes);
-
-    Box::new(transaction_status.then(move |result| match result {
-        Ok(tx_id) => Box::new(future::ok({
-            let mut common = settings::get_rita_common();
-
-            common.payment.nonce += 1u64.into();
-
-            settings::set_rita_common(common);
-            HttpResponse::Ok().json(format!("txid:{:#066x}", tx_id))
-        })),
-        Err(e) => {
-            if e.to_string().contains("nonce") {
-                Box::new(future::ok(
-                    HttpResponse::new(StatusCode::from_u16(500u16).unwrap())
-                        .into_builder()
-                        .json(format!("The nonce was not updated, try again {:?}", e)),
-                ))
-            } else {
-                Box::new(future::ok(
-                    HttpResponse::new(StatusCode::from_u16(500u16).unwrap())
-                        .into_builder()
-                        .json(format!("Full node failed to send transaction! {:?}", e)),
-                ))
-            }
-        }
-    }))
+    }
 }
 
-/// Cross chain bridge withdraw from Xdai -> ETH
 /// This handler invokes a withdraw function that sets a bool (as a lock) and withdraw information
 /// as a lazy static. This is done in a sync context since our handler uses the older version of
 /// futures. From there our xdai_loop ticks, looks at the lazy static for updated information and
@@ -160,23 +133,14 @@ fn eth_compatable_withdraw(
 /// using new futures. From there we constantly check the blockchain for any withdrawal events.
 /// We send these events as a contract call to simulate them, and those that do succeed, we execute
 /// to unlock the funds on eth side.
-fn xdai_withdraw(
-    address: Address,
-    amount: Uint256,
-) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
-    Box::new(
-        match bridge_withdraw(WithdrawMsg {
-            to: address,
-            amount,
-        }) {
-            Ok(_) => Box::new(future::ok(
-                HttpResponse::Ok().json("View endpoints for progress"),
-            )),
-            Err(e) => Box::new(future::ok(
-                HttpResponse::new(StatusCode::from_u16(500u16).unwrap())
-                    .into_builder()
-                    .json(format!("{:?}", e)),
-            )),
-        },
-    )
+fn xdai_to_eth_withdraw(address: Address, amount: Uint256) -> HttpResponse {
+    match bridge_withdraw(WithdrawMsg {
+        to: address,
+        amount,
+    }) {
+        Ok(_) => HttpResponse::Ok().json("View endpoints for progress"),
+        Err(e) => HttpResponse::new(StatusCode::from_u16(500u16).unwrap())
+            .into_builder()
+            .json(format!("{:?}", e)),
+    }
 }

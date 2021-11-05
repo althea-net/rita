@@ -1,5 +1,6 @@
 use crate::blockchain_oracle::update as BlockchainOracleUpdate;
 use crate::debt_keeper::send_debt_update;
+use crate::eth_compatible_withdraw;
 use crate::network_monitor::NetworkInfo as NetworkMonitorTick;
 use crate::network_monitor::NetworkMonitor;
 use crate::payment_controller::tick_payment_controller;
@@ -253,6 +254,9 @@ pub fn start_rita_fast_loop() {
                     // the same reason as the validate code, during high throughput periods
                     // payments must be sent quickly to avoid enforcement
                     tick_payment_controller().await;
+                    // processes user withdraw requests from the dashboard, only needed until we
+                    // migrate our endpoints to async/await
+                    eth_compatible_withdraw().await;
                 });
 
                 // sleep until it has been FAST_LOOP_SPEED seconds from start, whenever that may be
