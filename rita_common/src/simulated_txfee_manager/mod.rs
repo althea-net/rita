@@ -5,12 +5,12 @@ use crate::rita_loop::get_web3_server;
 use crate::usage_tracker::update_payments;
 use althea_types::Identity;
 use althea_types::PaymentTx;
-use async_web30::client::Web3;
-use async_web30::types::SendTxOption;
 use num256::Uint256;
 use num_traits::{Signed, Zero};
 use std::sync::Arc;
 use std::sync::RwLock;
+use web30::client::Web3;
+use web30::types::SendTxOption;
 
 lazy_static! {
     static ref AMOUNT_OWED: Arc<RwLock<Uint256>> = Arc::new(RwLock::new(Uint256::zero()));

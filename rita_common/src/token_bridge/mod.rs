@@ -20,7 +20,6 @@
 
 use crate::rita_loop::slow_loop::SLOW_LOOP_TIMEOUT;
 use althea_types::SystemChain;
-use async_web30::jsonrpc::error::Web3Error;
 use auto_bridge::check_relayed_message;
 use auto_bridge::get_payload_for_funds_unlock;
 use auto_bridge::HelperWithdrawInfo;
@@ -36,6 +35,7 @@ use num256::Uint256;
 use num_traits::identities::Zero;
 use rand::{thread_rng, Rng};
 use settings::payment::PaymentSettings;
+use web30::jsonrpc::error::Web3Error;
 
 use std::cmp::Ordering;
 use std::collections::HashSet;

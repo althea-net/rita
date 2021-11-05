@@ -15,9 +15,9 @@ use crate::usage_tracker::update_payments;
 
 use actix::System;
 use althea_types::PaymentTx;
-use async_web30::client::Web3;
-use async_web30::types::TransactionResponse;
 use num256::Uint256;
+use web30::client::Web3;
+use web30::types::TransactionResponse;
 
 use std::collections::HashSet;
 use std::fmt;
