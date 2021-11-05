@@ -5,8 +5,8 @@
 
 use althea_types::PaymentTx;
 use async_web30::client::Web3;
+use async_web30::types::SendTxOption;
 use awc;
-use clarity::Transaction;
 use futures::future::join_all;
 use num256::Uint256;
 use std::error::Error;
@@ -78,7 +78,6 @@ pub enum PaymentControllerError {
     },
     ZeroPayment,
     FailedToSendPayment,
-    FailedToGenerateTransaction(clarity::Error),
 }
 
 impl Display for PaymentControllerError {
@@ -89,9 +88,6 @@ impl Display for PaymentControllerError {
                 write!(f, "Can not send amount {} with balance {}", amount, balance)
             }
             Self::ZeroPayment => write!(f, "Attempted to send zero value payment!"),
-            Self::FailedToGenerateTransaction(e) => {
-                write!(f, "Failed to generate transaction! {:?}", e)
-            }
             Self::FailedToSendPayment => write!(f, "Failed to send payment!"),
         }
     }
@@ -186,28 +182,20 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
     let full_node = get_web3_server();
     let web3 = Web3::new(&full_node, TRANSACTION_SUBMISSION_TIMEOUT);
 
-    let tx = Transaction {
-        nonce: nonce.clone(),
-        gas_price,
-        gas_limit: "21000".parse().unwrap(),
-        to: pmt.to.eth_address,
-        value: pmt.amount.clone(),
-        data: Vec::new(),
-        signature: None,
-    };
-    let transaction_signed = tx.sign(
-        &payment_settings
-            .eth_private_key
-            .expect("No private key configured!"),
-        payment_settings.net_version,
-    );
+    let transaction_status = web3
+        .send_transaction(
+            pmt.to.eth_address,
+            Vec::new(),
+            pmt.amount.clone(),
+            our_address,
+            *our_private_key,
+            vec![
+                SendTxOption::Nonce(nonce.clone()),
+                SendTxOption::GasPrice(gas_price),
+            ],
+        )
+        .await;
 
-    let transaction_bytes = match transaction_signed.to_bytes() {
-        Ok(bytes) => bytes,
-        Err(e) => return Err(PaymentControllerError::FailedToGenerateTransaction(e)),
-    };
-
-    let transaction_status = web3.eth_send_raw_transaction(transaction_bytes).await;
     if transaction_status.is_err() {
         error!(
             "Failed to send payment {:?} to {:?} with {:?}",
@@ -254,15 +242,14 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
                 info!(
                 "Payment with txid: {:#066x} is sent to our neighbor with {:?}, using full node {} and amount {:?}",
                 tx_id,
-                val,
+                val.status(),
                 full_node,
                 pmt.amount
             );
             } else {
                 error!(
             "We published txid: {:#066x} but our neighbor responded with an error {:?}, will retry",
-            tx_id, val
-        );
+            tx_id, val);
                 queue_resend(resend_info);
             }
         }
