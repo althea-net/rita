@@ -9,8 +9,7 @@ use crate::heartbeat::send_udp_heartbeat;
 use crate::light_client_manager::light_client_hello_response;
 use crate::light_client_manager::LightClientManager;
 use crate::light_client_manager::Watch;
-use crate::operator_fee_manager::OperatorFeeManager;
-use crate::operator_fee_manager::Tick as OperatorTick;
+use crate::operator_fee_manager::tick_operator_payments;
 use crate::operator_update::{OperatorUpdate, Update};
 use crate::traffic_watcher::GetExitDestPrice;
 use crate::traffic_watcher::TrafficWatcherActor;
@@ -22,17 +21,15 @@ use actix::{
     Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
     System, SystemService,
 };
+use actix_async::System as AsyncSystem;
 use actix_web::http::Method;
 use actix_web::{server, App};
-
-use actix_async::System as AsyncSystem;
-use std::thread;
-use std::time::{Duration, Instant};
-
 use althea_types::ExitState;
 use failure::Error;
 use futures01::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
+use std::time::{Duration, Instant};
 
 lazy_static! {
     /// see the comment on check_for_gateway_client_billing_corner_case()
@@ -143,8 +140,6 @@ impl Handler<Tick> for RitaLoop {
             send_udp_heartbeat();
         }
 
-        // Check Operator payments
-        OperatorFeeManager::from_registry().do_send(OperatorTick);
         // Check in with Operator
         OperatorUpdate::from_registry().do_send(Update);
 
@@ -177,7 +172,12 @@ pub fn start_rita_loop() {
 
                 let runner = AsyncSystem::new();
                 runner.block_on(async move {
+                    // update the client exit manager, which handles exit registrations
+                    // and manages the exit state machine in general. This includes
+                    // updates to the local ip and description from the exit side
                     exit_manager_tick().await;
+                    // sends an operator payment if enough time has elapsed
+                    tick_operator_payments().await
                 });
 
                 // sleep until it has been CLIENT_LOOP_SPEED seconds from start, whenever that may be
