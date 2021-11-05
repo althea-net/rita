@@ -8,7 +8,7 @@
 //! increase the amount we owe Bob? That's probably a vulnerability rabbit hole at the very least.
 //! Hence we need an incoming payments parameter to take money out of. This of course implies half
 //! of the excess complexity you see, managing an incoming payments pool versus a incoming debts pool
-use crate::payment_controller::{self, PaymentController};
+use crate::payment_controller::queue_payment;
 use crate::payment_validator::PAYMENT_SEND_TIMEOUT;
 use crate::simulated_txfee_manager::add_tx_to_total;
 use crate::tunnel_manager::TunnelAction;
@@ -257,19 +257,15 @@ pub fn send_debt_update() -> Result<(), Error> {
                     action: TunnelAction::PaidOnTime,
                 });
             }
-            // this should always be called from within an actix context, when it comes time to move this out of the
-            // old rita fast loop these calls will need to be updated
-            DebtAction::MakePayment { to, amount } => PaymentController::from_registry().do_send(
-                payment_controller::MakePayment(PaymentTx {
-                    to,
-                    from: match settings::get_rita_common().get_identity() {
-                        Some(id) => id,
-                        None => bail!("Identity has no mesh IP ready yet"),
-                    },
-                    amount,
-                    txid: None, // not yet published
-                }),
-            ),
+            DebtAction::MakePayment { to, amount } => queue_payment(PaymentTx {
+                to,
+                from: match settings::get_rita_common().get_identity() {
+                    Some(id) => id,
+                    None => bail!("Identity has no mesh IP ready yet"),
+                },
+                amount,
+                txid: None, // not yet published
+            }),
         }
     }
 
