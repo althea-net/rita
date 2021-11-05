@@ -197,14 +197,12 @@ fn update_gas_price(
     value = value.clone() + (value / 20u32.into());
 
     // enforce minimum and maximum gas price rules
+    // TODO This can be removed post xdai EIP1559 as it resolves the issues that
+    // require this
     let min_gas: Uint256 = payment_settings.min_gas.into();
-    let max_gas: Uint256 = payment_settings.max_gas.into();
     payment_settings.gas_price = if value < min_gas {
         info!("gas price is low setting to! {}", min_gas);
         min_gas
-    } else if value > max_gas {
-        trace!("gas price is high setting to! {}", max_gas);
-        max_gas
     } else {
         value
     };

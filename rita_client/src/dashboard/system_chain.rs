@@ -5,10 +5,8 @@ use althea_types::SystemChain;
 use failure::Error;
 use settings::payment::PaymentSettings;
 use settings::payment::ETH_FEE_MULTIPLIER;
-use settings::payment::ETH_MAX_GAS;
 use settings::payment::ETH_MIN_GAS;
 use settings::payment::XDAI_FEE_MULTIPLIER;
-use settings::payment::XDAI_MAX_GAS;
 use settings::payment::XDAI_MIN_GAS;
 use settings::FileWrite;
 
@@ -58,7 +56,6 @@ pub fn set_system_blockchain(id: SystemChain, payment: &mut PaymentSettings) {
             // reset balance so that things take effect immediatley in the UI
             payment.balance = 0u32.into();
             payment.dynamic_fee_multiplier = ETH_FEE_MULTIPLIER;
-            payment.max_gas = ETH_MAX_GAS;
             payment.min_gas = ETH_MIN_GAS;
         }
         SystemChain::Xdai => {
@@ -69,7 +66,6 @@ pub fn set_system_blockchain(id: SystemChain, payment: &mut PaymentSettings) {
             // reset balance so that things take effect immediatley in the UI
             payment.balance = 0u32.into();
             payment.dynamic_fee_multiplier = XDAI_FEE_MULTIPLIER;
-            payment.max_gas = XDAI_MAX_GAS;
             payment.min_gas = XDAI_MIN_GAS;
         }
         SystemChain::Rinkeby => {
@@ -81,7 +77,6 @@ pub fn set_system_blockchain(id: SystemChain, payment: &mut PaymentSettings) {
             // reset balance so that things take effect immediatley in the UI
             payment.balance = 0u32.into();
             payment.dynamic_fee_multiplier = ETH_FEE_MULTIPLIER;
-            payment.max_gas = ETH_MAX_GAS;
             payment.min_gas = ETH_MIN_GAS;
         }
     }
