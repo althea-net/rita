@@ -532,17 +532,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71938f30533e4d95a6d17aa530939da3842c2ab6f4f84b9dae68447e4129f74a"
 
 [[package]]
-name = "assert-json-diff"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4259cbe96513d2f1073027a259fc2ca917feb3026a5a8d984e3628e490255cc0"
-dependencies = [
- "extend",
- "serde 1.0.130",
- "serde_json",
-]
-
-[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -568,7 +557,7 @@ dependencies = [
  "serde 1.0.130",
  "serde_derive",
  "tokio 1.13.0",
- "web30 0.17.1",
+ "web30",
 ]
 
 [[package]]
@@ -1362,18 +1351,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "extend"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f47da3a72ec598d9c8937a7ebca8962a5c7a1f28444e38c2b33c771ba3f55f05"
-dependencies = [
- "proc-macro-error",
- "proc-macro2 1.0.32",
- "quote 1.0.10",
- "syn 1.0.81",
-]
-
-[[package]]
 name = "failure"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1576,15 +1553,6 @@ name = "futures-task"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d3d00f4eddb73e498a54394f228cd55853bdf059259e8e7bc6e69d408892e99"
-
-[[package]]
-name = "futures-timer"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5cedfe9b6dc756220782cc1ba5bcb1fa091cdcba155e40d3556159c3db58043"
-dependencies = [
- "futures 0.1.31",
-]
 
 [[package]]
 name = "futures-util"
@@ -2856,30 +2824,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "proc-macro-error"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
-dependencies = [
- "proc-macro-error-attr",
- "proc-macro2 1.0.32",
- "quote 1.0.10",
- "syn 1.0.81",
- "version_check 0.9.3",
-]
-
-[[package]]
-name = "proc-macro-error-attr"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1be40180e52ecc98ad80b184934baf3d0d29f979574e439af5a55274b35f869"
-dependencies = [
- "proc-macro2 1.0.32",
- "quote 1.0.10",
- "version_check 0.9.3",
-]
-
-[[package]]
 name = "proc-macro-hack"
 version = "0.5.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3311,7 +3255,7 @@ dependencies = [
  "tokio 0.1.22",
  "tokio-codec",
  "tokio-io",
- "web30 0.17.1",
+ "web30",
 ]
 
 [[package]]
@@ -3352,8 +3296,7 @@ dependencies = [
  "serde_json",
  "settings",
  "tokio 0.1.22",
- "web30 0.17.1",
- "web30 0.4.3",
+ "web30",
 ]
 
 [[package]]
@@ -4641,27 +4584,6 @@ checksum = "38eb105f1c59d9eaa6b5cdc92b859d85b926e82cb2e0945cd0c9259faa6fe9fb"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "web30"
-version = "0.4.3"
-source = "git+https://github.com/althea-net/web30?rev=a600b8b8ebf2c49badee6b65ac90a56bbdad4ab9#a600b8b8ebf2c49badee6b65ac90a56bbdad4ab9"
-dependencies = [
- "actix 0.7.11",
- "actix-web 0.7.19",
- "assert-json-diff",
- "bytes 1.1.0",
- "clarity",
- "failure",
- "futures 0.1.31",
- "futures-timer",
- "log",
- "num256",
- "serde 1.0.130",
- "serde_derive",
- "serde_json",
- "tokio 0.1.22",
 ]
 
 [[package]]

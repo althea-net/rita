@@ -4,8 +4,6 @@
 //! the blockchain it's up to the reciever to validate that it's correct
 
 use althea_types::PaymentTx;
-use async_web30::client::Web3;
-use async_web30::types::SendTxOption;
 use awc;
 use futures::future::join_all;
 use num256::Uint256;
@@ -15,6 +13,8 @@ use std::fmt::{Display, Formatter};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use std::time::Instant;
+use web30::client::Web3;
+use web30::types::SendTxOption;
 
 use crate::debt_keeper::payment_failed;
 use crate::payment_validator::{validate_later, ToValidate};

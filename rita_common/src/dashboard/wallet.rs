@@ -6,13 +6,13 @@ use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
 use actix_web::Path;
 use althea_types::SystemChain;
-use async_web30::client::Web3;
-use async_web30::types::SendTxOption;
 use clarity::Address;
 use num256::Uint256;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
+use web30::client::Web3;
+use web30::types::SendTxOption;
 
 // this is required until we migrate our endpoints to async actix
 // this way we can queue a withdraw from the old futures endpoint

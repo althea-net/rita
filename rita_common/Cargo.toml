@@ -25,7 +25,6 @@ settings = { path = "../settings" }
 clarity = "0.4"
 futures = { version = "0.3", features = ["compat"] }
 num256 = "0.3"
-web30 = {git = "https://github.com/althea-net/web30", rev = "a600b8b8ebf2c49badee6b65ac90a56bbdad4ab9"}
 num-traits="0.2"
 failure = "0.1"
 futures01 = { package = "futures", version = "0.1"}
@@ -37,7 +36,7 @@ althea_kernel_interface = { path = "../althea_kernel_interface" }
 actix-web-httpauth = {git = "https://github.com/althea-net/actix-web-httpauth"}
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
 awc = {version = "3.0.0-beta.8", default-features = false, features=["openssl", "compress-gzip", "compress-zstd"]}
-async-web30 = {package="web30", version = "0.17"}
+web30 = "0.17"
 althea_types = { path = "../althea_types" }
 babel_monitor_legacy = {path = "../babel_monitor_legacy"} 
 

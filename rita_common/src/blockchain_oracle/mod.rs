@@ -5,13 +5,13 @@
 
 use crate::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
 use crate::rita_loop::get_web3_server;
-use async_web30::client::Web3;
 use clarity::Address;
 use futures::future::join4;
 use num256::Int256;
 use num256::Uint256;
 use num_traits::identities::Zero;
 use settings::payment::PaymentSettings;
+use web30::client::Web3;
 
 use std::sync::Arc;
 use std::sync::RwLock;
