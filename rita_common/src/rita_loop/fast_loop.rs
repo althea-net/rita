@@ -2,6 +2,7 @@ use crate::blockchain_oracle::update as BlockchainOracleUpdate;
 use crate::debt_keeper::send_debt_update;
 use crate::network_monitor::NetworkInfo as NetworkMonitorTick;
 use crate::network_monitor::NetworkMonitor;
+use crate::payment_controller::tick_payment_controller;
 use crate::payment_validator::validate;
 use crate::peer_listener::get_peers;
 use crate::peer_listener::tick;
@@ -248,6 +249,10 @@ pub fn start_rita_fast_loop() {
                     // on large nodes where very high variation in throughput can result
                     // in blowing through the entire grace in less than a minute
                     validate().await;
+                    // Process payments queued for sending, needs to be run often for
+                    // the same reason as the validate code, during high throughput periods
+                    // payments must be sent quickly to avoid enforcement
+                    tick_payment_controller().await;
                 });
 
                 // sleep until it has been FAST_LOOP_SPEED seconds from start, whenever that may be

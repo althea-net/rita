@@ -3326,6 +3326,7 @@ dependencies = [
  "althea_types",
  "arrayvec 0.7.2",
  "auto-bridge",
+ "awc",
  "babel_monitor",
  "babel_monitor_legacy",
  "bincode",
