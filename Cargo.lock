@@ -3311,7 +3311,7 @@ dependencies = [
  "tokio 0.1.22",
  "tokio-codec",
  "tokio-io",
- "web30 0.4.3",
+ "web30 0.17.1",
 ]
 
 [[package]]

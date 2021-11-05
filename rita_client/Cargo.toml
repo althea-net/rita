@@ -33,7 +33,7 @@ tokio-io = "0.1"
 tokio-codec = "0.1"
 sodiumoxide = "0.2"
 clu = { path = "../clu" }
-web30 = {git = "https://github.com/althea-net/web30", rev = "a600b8b8ebf2c49badee6b65ac90a56bbdad4ab9"}
+web30 = "0.17"
 actix = "0.7"
 awc = "3.0.0-beta.8"
 ipnetwork = "0.14"
