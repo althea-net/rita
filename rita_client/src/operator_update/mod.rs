@@ -271,7 +271,10 @@ fn checkin() {
                             );
                             let _res = update_rita(instruction);
                         }
+                        // both of these actions have been removed, but need to be kept
+                        // for backwards compatibility for a while
                         Some(OperatorAction::ChangeReleaseFeedAndUpdate { feed: _ }) => {}
+                        Some(OperatorAction::UpdateNow) => {}
                         None => {}
                     }
 

@@ -396,6 +396,8 @@ pub enum OperatorAction {
     /// routing processes. For x86 machines this action comes with some risk as devices may
     /// get stuck in the BIOS if not configured properly.
     Reboot,
+    /// Legacy action, remaining here for database backwards compatibility
+    UpdateNow,
     /// Sends instructions from op tools about the type of update to perform, either a sysupgrade
     /// or an opkg update
     Update { instruction: UpdateType },
