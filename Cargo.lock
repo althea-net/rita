@@ -428,7 +428,6 @@ dependencies = [
 name = "althea_types"
 version = "0.1.0"
 dependencies = [
- "actix 0.7.11",
  "arrayvec 0.7.2",
  "babel_monitor",
  "babel_monitor_legacy",
@@ -3160,7 +3159,7 @@ dependencies = [
 
 [[package]]
 name = "rita_bin"
-version = "0.18.5"
+version = "0.18.6"
 dependencies = [
  "actix 0.12.0",
  "actix 0.7.11",
@@ -3196,7 +3195,7 @@ dependencies = [
 
 [[package]]
 name = "rita_client"
-version = "0.18.5"
+version = "0.18.6"
 dependencies = [
  "actix 0.12.0",
  "actix 0.7.11",
@@ -3236,7 +3235,7 @@ dependencies = [
 
 [[package]]
 name = "rita_common"
-version = "0.18.5"
+version = "0.18.6"
 dependencies = [
  "actix 0.12.0",
  "actix 0.7.11",
@@ -3277,7 +3276,7 @@ dependencies = [
 
 [[package]]
 name = "rita_exit"
-version = "0.18.5"
+version = "0.18.6"
 dependencies = [
  "actix 0.7.11",
  "actix-web 0.7.19",
