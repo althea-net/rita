@@ -1,19 +1,10 @@
 use crate::simulated_txfee_manager::tick_simulated_tx;
 use crate::token_bridge::tick_token_bridge;
-use crate::utils::wait_timeout::wait_timeout;
-use crate::utils::wait_timeout::WaitResult;
 use actix::System;
 use actix_async::System as AsyncSystem;
-// use babel_monitor::open_babel_stream;
-// use babel_monitor::set_local_fee;
-// use babel_monitor::set_metric_factor;
-// use babel_monitor::start_connection;
-use babel_monitor_legacy::open_babel_stream_legacy;
-use babel_monitor_legacy::set_local_fee_legacy;
-use babel_monitor_legacy::set_metric_factor_legacy;
-use babel_monitor_legacy::start_connection_legacy;
-use futures01::future::Future;
-
+use babel_monitor::open_babel_stream;
+use babel_monitor::set_local_fee;
+use babel_monitor::set_metric_factor;
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
@@ -35,7 +26,9 @@ pub fn start_rita_slow_loop() {
 
                 let runner = AsyncSystem::new();
                 runner.block_on(async move {
+                    info!("Ticking token bridge");
                     tick_token_bridge().await;
+                    info!("Ticking simulated tx!");
                     tick_simulated_tx().await;
                     info!("Common Slow tick async completed!");
                     AsyncSystem::current().stop();
@@ -70,29 +63,29 @@ fn set_babel_price() {
     let babel_port = common.network.babel_port;
     let local_fee = common.payment.local_fee;
     let metric_factor = common.network.metric_factor;
-    let res = wait_timeout(
-        open_babel_stream_legacy(babel_port)
-            .from_err()
-            .and_then(move |stream| {
-                start_connection_legacy(stream).and_then(move |stream| {
-                    set_local_fee_legacy(stream, local_fee)
-                        .and_then(move |stream| Ok(set_metric_factor_legacy(stream, metric_factor)))
-                })
-            }),
-        SLOW_LOOP_TIMEOUT,
-    );
-    match res {
-        WaitResult::Err(e) => warn!(
-            "Failed to set babel price with {:?} {}ms since start",
+    let stream = open_babel_stream(babel_port, SLOW_LOOP_TIMEOUT);
+    match stream {
+        Ok(mut stream) => {
+            let result = set_local_fee(&mut stream, local_fee);
+            if let Err(e) = result {
+                warn!(
+                    "Failed to set local fee with {} in {} ms",
+                    e,
+                    start.elapsed().as_millis()
+                )
+            }
+            let result = set_metric_factor(&mut stream, metric_factor);
+            if let Err(e) = result {
+                warn!(
+                    "Failed to set metric factor with {} in {} ms",
+                    e,
+                    start.elapsed().as_millis()
+                )
+            }
+        }
+        Err(e) => warn!(
+            "Failed to open babel stream to set price with {:?} in {}ms",
             e,
-            start.elapsed().as_millis()
-        ),
-        WaitResult::Ok(_) => info!(
-            "Set babel price successfully {}ms since start",
-            start.elapsed().as_millis()
-        ),
-        WaitResult::TimedOut(_) => error!(
-            "Set babel price timed out! {}ms since start",
             start.elapsed().as_millis()
         ),
     }
