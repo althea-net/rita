@@ -83,12 +83,14 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
                         last_val
                     } else {
                         error!("Could not perform DNS lookup for {}!", checkin_address);
+                        thread::sleep(SLEEP_TIME);
                         continue;
                     }
                 }
             },
             Err(_) => {
                 error!("Could not parse {}!", checkin_address);
+                thread::sleep(SLEEP_TIME);
                 continue;
             }
         };
