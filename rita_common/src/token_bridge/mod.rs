@@ -35,8 +35,6 @@ use num256::Uint256;
 use num_traits::identities::Zero;
 use rand::{thread_rng, Rng};
 use settings::payment::PaymentSettings;
-use web30::jsonrpc::error::Web3Error;
-
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -44,6 +42,7 @@ use std::iter::FromIterator;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
+use web30::jsonrpc::error::Web3Error;
 
 lazy_static! {
     static ref BRIDGE: Arc<RwLock<TokenBridgeState>> =
@@ -93,16 +92,17 @@ pub struct LastAmounts {
 }
 
 pub async fn tick_token_bridge() {
+    info!("Token bridge tick");
     let payment_settings = settings::get_rita_common().payment;
     let system_chain = payment_settings.system_chain;
 
     if !payment_settings.bridge_enabled {
         return;
     }
-    drop(payment_settings);
+    let core = token_bridge_core_from_settings(&payment_settings);
 
     match system_chain {
-        SystemChain::Xdai => xdai_bridge().await,
+        SystemChain::Xdai => xdai_bridge(core).await,
         SystemChain::Ethereum => {}
         SystemChain::Rinkeby => {}
     }
@@ -173,8 +173,7 @@ async fn transfer_dai(
 /// If we find one, we initiate this withdrawal and reset the lock. Next we loop through events
 /// on the xdai blockchain to find any withdrawals related to us, and if so we unlock these funds.
 /// We then rescue any stuck dai and send any eth that we have over to the xdai chain.
-async fn xdai_bridge() {
-    let bridge = get_core();
+async fn xdai_bridge(bridge: TokenBridgeCore) {
     let eth_gas_price = match bridge.eth_web3.eth_gas_price().await {
         Ok(val) => val,
         Err(e) => {
@@ -223,32 +222,34 @@ async fn xdai_bridge() {
     // the minimum amount to transfer, this is in DAI wei,
     let minimum_stranded_dai_transfer = minimum_to_exchange.clone();
 
-    // initiate withdrawals if any
-    let mut writer = BRIDGE.write().unwrap();
-    if writer.withdraw_in_progress {
-        let withdraw_details = match &writer.withdraw_details {
-            Some(a) => a.clone(),
-            None => {
-                error!("No withdraw information present");
-                writer.withdraw_in_progress = false;
-                return;
-            }
-        };
-        let amount = withdraw_details.amount.clone();
-        let address = withdraw_details.to;
-        match withdraw(withdraw_details).await {
-            Ok(_) => {
-                info!(
-                    "Initiating withdrawal of amount {} to address {}",
-                    amount, address
-                );
-            }
-            Err(e) => error!("Received an error when initiating a withdrawal: {}", e),
-        };
+    // initiate withdrawals if any, scope bridge write
+    {
+        let mut writer = BRIDGE.write().unwrap();
+        if writer.withdraw_in_progress {
+            let withdraw_details = match &writer.withdraw_details {
+                Some(a) => a.clone(),
+                None => {
+                    error!("No withdraw information present");
+                    writer.withdraw_in_progress = false;
+                    return;
+                }
+            };
+            let amount = withdraw_details.amount.clone();
+            let address = withdraw_details.to;
+            match withdraw(withdraw_details).await {
+                Ok(_) => {
+                    info!(
+                        "Initiating withdrawal of amount {} to address {}",
+                        amount, address
+                    );
+                }
+                Err(e) => error!("Received an error when initiating a withdrawal: {}", e),
+            };
 
-        //reset the withdraw lock
-        writer.withdraw_in_progress = false;
-        writer.withdraw_details = None;
+            //reset the withdraw lock
+            writer.withdraw_in_progress = false;
+            writer.withdraw_details = None;
+        }
     }
 
     // check for withdrawal events and execute them
@@ -484,7 +485,7 @@ pub fn setup_withdraw(msg: Withdraw) -> Result<(), Error> {
 pub async fn withdraw(msg: Withdraw) -> Result<(), Error> {
     let payment_settings = settings::get_rita_common().payment;
     let system_chain = payment_settings.system_chain;
-    drop(payment_settings);
+    let token_bridge = token_bridge_core_from_settings(&payment_settings);
 
     let to = msg.to;
     let amount = msg.amount.clone();
@@ -496,7 +497,6 @@ pub async fn withdraw(msg: Withdraw) -> Result<(), Error> {
         let mut writer = BRIDGE.write().unwrap();
         if !writer.withdraw_in_progress {
             writer.withdraw_in_progress = true;
-            let token_bridge = get_core();
             let _res =
                 encode_relaytokens(token_bridge, to, amount.clone(), Duration::from_secs(600))
                     .await;
@@ -516,6 +516,7 @@ pub async fn withdraw(msg: Withdraw) -> Result<(), Error> {
 fn detailed_state_change(msg: DetailedBridgeState) {
     trace!("Changing detailed state to {:?}", msg);
     let mut bridge = BRIDGE.write().unwrap();
+    trace!("Finished changing detailed state {:?}", msg);
     let new_state = msg;
     bridge.detailed_state = new_state;
 }
@@ -584,12 +585,6 @@ pub fn get_bridge_status() -> BridgeStatus {
         withdraw_chain,
         state: bridge.detailed_state,
     }
-}
-
-/// Grab state parameters from settings
-fn get_core() -> TokenBridgeCore {
-    let payment_settings = settings::get_rita_common().payment;
-    token_bridge_core_from_settings(&payment_settings)
 }
 
 /// the amount of Eth to retain in WEI. This is the cost of our Uniswap exchange an ERC20 transfer
