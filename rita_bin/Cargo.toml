@@ -15,7 +15,7 @@ path = "src/client.rs"
 
 [dependencies]
 althea_kernel_interface = { path = "../althea_kernel_interface" }
-althea_types = { path = "../althea_types", features = ["actix"]}
+althea_types = { path = "../althea_types"}
 clu = { path = "../clu" }
 actix-web-httpauth = {git = "https://github.com/althea-net/actix-web-httpauth"}
 actix-async = {package="actix", version = "0.12"}
