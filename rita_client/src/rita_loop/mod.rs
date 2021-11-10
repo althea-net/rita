@@ -11,8 +11,7 @@ use crate::light_client_manager::LightClientManager;
 use crate::light_client_manager::Watch;
 use crate::operator_fee_manager::tick_operator_payments;
 use crate::operator_update::{OperatorUpdate, Update};
-use crate::traffic_watcher::GetExitDestPrice;
-use crate::traffic_watcher::TrafficWatcherActor;
+use crate::traffic_watcher::get_exit_dest_price;
 use rita_common::tunnel_manager::GetNeighbors;
 use rita_common::tunnel_manager::GetTunnels;
 use rita_common::tunnel_manager::TunnelManager;
@@ -119,15 +118,14 @@ impl Handler<Tick> for RitaLoop {
 
         Arbiter::spawn(check_for_gateway_client_billing_corner_case());
 
-        let dest_price = TrafficWatcherActor::from_registry().send(GetExitDestPrice);
+        let exit_dest_price = get_exit_dest_price();
         let tunnels = TunnelManager::from_registry().send(GetTunnels);
-        Arbiter::spawn(dest_price.join(tunnels).then(move |res| {
+        Arbiter::spawn(tunnels.then(move |res| {
             // unwrap top level actix error, ok to crash if this fails
-            let (exit_dest_price, tunnels) = res.unwrap();
+            let tunnels = res.unwrap();
             // these can't ever happen as the function only returns a Result for Actix
             // type checking
             let tunnels = tunnels.unwrap();
-            let exit_dest_price = exit_dest_price.unwrap();
             LightClientManager::from_registry()
                 .send(Watch {
                     tunnels,

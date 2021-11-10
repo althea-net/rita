@@ -1,13 +1,10 @@
-use crate::traffic_watcher::GetExitDestPrice;
-use crate::traffic_watcher::TrafficWatcherActor;
-
-use actix::SystemService;
 use actix_web::Path;
 use actix_web::{HttpRequest, HttpResponse, Json, Result};
 use failure::Error;
-use futures01::Future;
 use num256::Uint256;
 use settings::FileWrite;
+
+use crate::traffic_watcher::get_exit_dest_price;
 pub fn auto_pricing_status(_req: HttpRequest) -> Result<Json<bool>, Error> {
     debug!("Get Auto pricing enabled hit!");
     Ok(Json(
@@ -43,22 +40,17 @@ pub struct Prices {
     simulated_tx_fee: u8,
 }
 
-pub fn get_prices(_req: HttpRequest) -> Box<dyn Future<Item = Json<Prices>, Error = Error>> {
+pub fn get_prices(_req: HttpRequest) -> Result<Json<Prices>, Error> {
     debug!("/prices GET hit");
 
     let payment = settings::get_rita_client().payment;
-    let f = TrafficWatcherActor::from_registry().send(GetExitDestPrice);
-    let b = f.from_err().and_then(move |exit_dest_price| {
-        let exit_dest_price = exit_dest_price.unwrap();
-        let simulated_tx_fee = payment.simulated_transaction_fee;
-        let operator_fee = settings::get_rita_client().operator.operator_fee;
-        let p = Prices {
-            exit_dest_price,
-            dao_fee: operator_fee,
-            simulated_tx_fee,
-        };
-        Ok(Json(p))
-    });
-
-    Box::new(b)
+    let exit_dest_price = get_exit_dest_price();
+    let simulated_tx_fee = payment.simulated_transaction_fee;
+    let operator_fee = settings::get_rita_client().operator.operator_fee;
+    let p = Prices {
+        exit_dest_price,
+        dao_fee: operator_fee,
+        simulated_tx_fee,
+    };
+    Ok(Json(p))
 }

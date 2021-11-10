@@ -4,17 +4,6 @@
 //! especially since the client traffic exits unencrypted at one point on the participating Rita Client router. Sadly this is unavoidable as
 //! far as I can tell due to the restrictive nature of how and when Android allows ipv6 routing.
 
-use crate::traffic_watcher::GetExitDestPrice;
-use crate::traffic_watcher::TrafficWatcherActor;
-use rita_common::debt_keeper::traffic_update;
-use rita_common::debt_keeper::Traffic;
-use rita_common::peer_listener::Peer;
-use rita_common::tunnel_manager::id_callback::IdentityCallback;
-use rita_common::tunnel_manager::Tunnel;
-use rita_common::tunnel_manager::TunnelManager;
-use rita_common::utils::ip_increment::incrementv4;
-use rita_common::KI;
-
 use actix::{Actor, Context, Handler, Message, Supervised, SystemService};
 use actix_web::http::StatusCode;
 use actix_web::{HttpRequest, HttpResponse, Json};
@@ -24,11 +13,21 @@ use althea_types::{Identity, LightClientLocalIdentity, LocalIdentity, WgKey};
 use failure::Error;
 use futures01::future::Either;
 use futures01::{future, Future};
+use rita_common::debt_keeper::traffic_update;
+use rita_common::debt_keeper::Traffic;
+use rita_common::peer_listener::Peer;
+use rita_common::tunnel_manager::id_callback::IdentityCallback;
+use rita_common::tunnel_manager::Tunnel;
+use rita_common::tunnel_manager::TunnelManager;
+use rita_common::utils::ip_increment::incrementv4;
+use rita_common::KI;
 use std::boxed::Box;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::Ipv4Addr;
 use std::net::SocketAddr;
+
+use crate::traffic_watcher::get_exit_dest_price;
 
 /// Sets up a variant of the exit tunnel nat rules, assumes that the exit
 /// tunnel is already created and doesn't change the system routing table
@@ -75,125 +74,111 @@ pub fn light_client_hello_response(
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let their_id = *req.0;
     let a = LightClientManager::from_registry().send(GetAddress(their_id));
-    let b = TrafficWatcherActor::from_registry().send(GetExitDestPrice);
+    let exit_dest_price = get_exit_dest_price();
 
-    Box::new(
-        a.join(b)
-            .from_err()
-            .and_then(move |(light_client_address, exit_dest_price)| {
-                let err_mesg = "Malformed light client hello tcp packet!";
-                let socket = match req.1.connection_info().remote() {
-                    Some(val) => match val.parse::<SocketAddr>() {
-                        Ok(val) => val,
-                        Err(e) => {
-                            error!("{}", e);
-                            return Either::A(future::ok(
-                                HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
-                                    .into_builder()
-                                    .json(err_mesg),
-                            ));
+    Box::new(a.from_err().and_then(move |light_client_address| {
+        let err_mesg = "Malformed light client hello tcp packet!";
+        let socket = match req.1.connection_info().remote() {
+            Some(val) => match val.parse::<SocketAddr>() {
+                Ok(val) => val,
+                Err(e) => {
+                    error!("{}", e);
+                    return Either::A(future::ok(
+                        HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+                            .into_builder()
+                            .json(err_mesg),
+                    ));
+                }
+            },
+            None => {
+                error!("{}", err_mesg);
+                return Either::A(future::ok(
+                    HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+                        .into_builder()
+                        .json(err_mesg),
+                ));
+            }
+        };
+
+        let (light_client_address_option, light_client_address) = match light_client_address {
+            Ok(addr) => (Some(addr), addr),
+            Err(e) => {
+                let err_mesg = "Could not allocate address!";
+                error!("{} {}", err_mesg, e);
+                return Either::A(future::ok(
+                    HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+                        .into_builder()
+                        .json(err_mesg),
+                ));
+            }
+        };
+
+        trace!(
+            "Got light client Hello from {:?}",
+            req.1.connection_info().remote()
+        );
+        trace!(
+            "opening tunnel in light_client_hello_response for {:?}",
+            their_id
+        );
+
+        let peer = Peer {
+            contact_socket: socket,
+            ifidx: 0, // only works because we lookup ifname in kernel interface
+        };
+
+        // We send the callback, which can safely allocate a port because it already successfully
+        // contacted a neighbor. The exception to this is when the TCP session fails at exactly
+        // the wrong time.
+        Either::B(
+            TunnelManager::from_registry()
+                .send(IdentityCallback::new(
+                    their_id,
+                    peer,
+                    None,
+                    light_client_address_option,
+                ))
+                .from_err()
+                .and_then(move |tunnel| {
+                    let (tunnel, have_tunnel) = match tunnel {
+                        Some(val) => val,
+                        None => return Err(format_err!("tunnel open failure!")),
+                    };
+
+                    let lci = LightClientLocalIdentity {
+                        global: match settings::get_rita_client().get_identity() {
+                            Some(id) => id,
+                            None => return Err(format_err!("Identity has no mesh IP ready yet")),
+                        },
+                        wg_port: tunnel.listen_port,
+                        have_tunnel: Some(have_tunnel),
+                        tunnel_address: light_client_address,
+                        price: settings::get_rita_client().payment.light_client_fee as u128
+                            + exit_dest_price,
+                    };
+                    // Two bools -> 4 state truth table, in 3 of
+                    // those states we need to re-add these rules
+                    // router phone
+                    // false false  we need to add rules to new tunnel
+                    // true  false  tunnel will be re-created so new rules
+                    // false true   new tunnel on our side new rules
+                    // true  true   only case where we don't need to run this
+                    if let Some(they_have_tunnel) = their_id.have_tunnel {
+                        if !(have_tunnel && they_have_tunnel) {
+                            setup_light_client_forwarding(
+                                light_client_address,
+                                &tunnel.iface_name,
+                            )?;
                         }
-                    },
-                    None => {
-                        error!("{}", err_mesg);
-                        return Either::A(future::ok(
-                            HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
-                                .into_builder()
-                                .json(err_mesg),
-                        ));
+                    } else {
+                        error!("Light clients should never send the none tunnel option!");
                     }
-                };
 
-                let (light_client_address_option, light_client_address) = match light_client_address
-                {
-                    Ok(addr) => (Some(addr), addr),
-                    Err(e) => {
-                        let err_mesg = "Could not allocate address!";
-                        error!("{} {}", err_mesg, e);
-                        return Either::A(future::ok(
-                            HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
-                                .into_builder()
-                                .json(err_mesg),
-                        ));
-                    }
-                };
-
-                let exit_dest_price = match exit_dest_price {
-                    Ok(val) => val,
-                    Err(_e) => 0,
-                };
-
-                trace!(
-                    "Got light client Hello from {:?}",
-                    req.1.connection_info().remote()
-                );
-                trace!(
-                    "opening tunnel in light_client_hello_response for {:?}",
-                    their_id
-                );
-
-                let peer = Peer {
-                    contact_socket: socket,
-                    ifidx: 0, // only works because we lookup ifname in kernel interface
-                };
-
-                // We send the callback, which can safely allocate a port because it already successfully
-                // contacted a neighbor. The exception to this is when the TCP session fails at exactly
-                // the wrong time.
-                Either::B(
-                    TunnelManager::from_registry()
-                        .send(IdentityCallback::new(
-                            their_id,
-                            peer,
-                            None,
-                            light_client_address_option,
-                        ))
-                        .from_err()
-                        .and_then(move |tunnel| {
-                            let (tunnel, have_tunnel) = match tunnel {
-                                Some(val) => val,
-                                None => return Err(format_err!("tunnel open failure!")),
-                            };
-
-                            let lci = LightClientLocalIdentity {
-                                global: match settings::get_rita_client().get_identity() {
-                                    Some(id) => id,
-                                    None => {
-                                        return Err(format_err!(
-                                            "Identity has no mesh IP ready yet"
-                                        ))
-                                    }
-                                },
-                                wg_port: tunnel.listen_port,
-                                have_tunnel: Some(have_tunnel),
-                                tunnel_address: light_client_address,
-                                price: settings::get_rita_client().payment.light_client_fee as u128
-                                    + exit_dest_price,
-                            };
-                            // Two bools -> 4 state truth table, in 3 of
-                            // those states we need to re-add these rules
-                            // router phone
-                            // false false  we need to add rules to new tunnel
-                            // true  false  tunnel will be re-created so new rules
-                            // false true   new tunnel on our side new rules
-                            // true  true   only case where we don't need to run this
-                            if let Some(they_have_tunnel) = their_id.have_tunnel {
-                                if !(have_tunnel && they_have_tunnel) {
-                                    setup_light_client_forwarding(
-                                        light_client_address,
-                                        &tunnel.iface_name,
-                                    )?;
-                                }
-                            } else {
-                                error!("Light clients should never send the none tunnel option!");
-                            }
-
-                            let response = HttpResponse::Ok().json(lci);
-                            Ok(response)
-                        }),
-                )
-            }),
-    )
+                    let response = HttpResponse::Ok().json(lci);
+                    Ok(response)
+                }),
+        )
+    }))
 }
 
 pub struct LightClientManager {

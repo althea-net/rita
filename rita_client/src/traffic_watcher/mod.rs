@@ -22,17 +22,15 @@
 //! back to local debt computation rather than running blind.
 
 use crate::rita_loop::is_gateway_client;
-use babel_monitor::get_installed_route;
-use rita_common::debt_keeper::{
-    traffic_replace, traffic_update, wgkey_insensitive_traffic_update, Traffic,
-};
-
-use actix::{Actor, Context, Handler, Message, Supervised, SystemService};
 use althea_types::Identity;
+use babel_monitor::get_installed_route;
 use babel_monitor::Route as RouteLegacy;
 use failure::Error;
 use num256::Int256;
 use num_traits::identities::Zero;
+use rita_common::debt_keeper::{
+    traffic_replace, traffic_update, wgkey_insensitive_traffic_update, Traffic,
+};
 use rita_common::usage_tracker::update_usage_data;
 use rita_common::usage_tracker::UpdateUsage;
 use rita_common::usage_tracker::UsageType;
@@ -55,21 +53,6 @@ pub struct TrafficWatcher {
     last_read_output: u64,
     /// cached exit destination price value
     last_exit_dest_price: u128,
-}
-
-/// Dummy Traffic Watcher struct for Actor, used to ensure we dont accidently read out of the
-/// original TrafficWatcher struct.
-pub struct TrafficWatcherActor {}
-
-impl Actor for TrafficWatcherActor {
-    type Context = Context<Self>;
-}
-impl Supervised for TrafficWatcherActor {}
-impl SystemService for TrafficWatcherActor {}
-impl Default for TrafficWatcherActor {
-    fn default() -> TrafficWatcherActor {
-        TrafficWatcherActor {}
-    }
 }
 
 impl Default for TrafficWatcher {
@@ -102,10 +85,6 @@ pub struct QueryExitDebts {
     pub exit_id: Identity,
     pub exit_price: u64,
     pub routes: Vec<RouteLegacy>,
-}
-
-impl Message for QueryExitDebts {
-    type Result = Result<(), Error>;
 }
 
 pub async fn query_exit_debts(msg: QueryExitDebts) {
@@ -326,16 +305,6 @@ pub fn local_traffic_calculation(
 /// Grabs the exit destination price cached in the TrafficWatcher object
 /// this allows users to avoid the rather complicated procedure of computing it
 /// themselves
-pub struct GetExitDestPrice;
-
-impl Message for GetExitDestPrice {
-    type Result = Result<u128, Error>;
-}
-
-impl Handler<GetExitDestPrice> for TrafficWatcherActor {
-    type Result = Result<u128, Error>;
-
-    fn handle(&mut self, _msg: GetExitDestPrice, _: &mut Context<Self>) -> Self::Result {
-        Ok(TRAFFIC_WATCHER.read().unwrap().last_exit_dest_price)
-    }
+pub fn get_exit_dest_price() -> u128 {
+    TRAFFIC_WATCHER.read().unwrap().last_exit_dest_price
 }
