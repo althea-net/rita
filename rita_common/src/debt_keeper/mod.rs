@@ -549,13 +549,10 @@ impl DebtKeeper {
 
                 debt_data.action = DebtAction::MakePayment {
                     to: *ident,
-                    amount: to_pay.clone(),
+                    amount: to_pay,
                 };
 
-                Ok(DebtAction::MakePayment {
-                    to: *ident,
-                    amount: to_pay,
-                })
+                Ok(debt_data.action.clone())
             }
             (false, false, _) => {
                 // Check if there is any unapplied credit
