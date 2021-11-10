@@ -6,16 +6,13 @@
 
 use crate::exit_manager::exit_manager_tick;
 use crate::heartbeat::send_udp_heartbeat;
+use crate::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::light_client_manager::light_client_hello_response;
 use crate::light_client_manager::LightClientManager;
 use crate::light_client_manager::Watch;
 use crate::operator_fee_manager::tick_operator_payments;
 use crate::operator_update::{OperatorUpdate, Update};
 use crate::traffic_watcher::get_exit_dest_price;
-use rita_common::tunnel_manager::GetNeighbors;
-use rita_common::tunnel_manager::GetTunnels;
-use rita_common::tunnel_manager::TunnelManager;
-
 use actix::{
     Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
     System, SystemService,
@@ -24,8 +21,13 @@ use actix_async::System as AsyncSystem;
 use actix_web::http::Method;
 use actix_web::{server, App};
 use althea_types::ExitState;
+use antenna_forwarding_client::start_antenna_forwarding_proxy;
 use failure::Error;
 use futures01::future::Future;
+use rita_common::tunnel_manager::GetNeighbors;
+use rita_common::tunnel_manager::GetTunnels;
+use rita_common::tunnel_manager::TunnelManager;
+use settings::client::RitaClientSettings;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -267,5 +269,27 @@ pub fn start_rita_client_endpoints(workers: usize) {
         } else {
             trace!("Failed to bind to light client ip, probably toggled off!")
         }
+    }
+}
+
+pub fn start_antenna_forwarder(settings: RitaClientSettings) {
+    if metrics_permitted() {
+        #[cfg(not(feature = "operator_debug"))]
+        let url = "operator.althea.net:33334";
+        #[cfg(feature = "operator_debug")]
+        let url = "192.168.10.2:33334";
+
+        let our_id = settings.get_identity().unwrap();
+        let network = settings.network;
+        let mut interfaces = network.peer_interfaces.clone();
+        interfaces.insert("br-pbs".to_string());
+        start_antenna_forwarding_proxy(
+            url.to_string(),
+            our_id,
+            *HEARTBEAT_SERVER_KEY,
+            network.wg_public_key.unwrap(),
+            network.wg_private_key.unwrap(),
+            interfaces,
+        );
     }
 }

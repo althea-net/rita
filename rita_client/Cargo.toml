@@ -20,6 +20,7 @@ futures01 = { package = "futures", version = "0.1"}
 log = { version = "0.4", features = ["release_max_level_info"] }
 althea_types = { path = "../althea_types" }
 althea_kernel_interface = { path = "../althea_kernel_interface" }
+antenna_forwarding_client = { path = "../antenna_forwarding_client" }
 settings = { path = "../settings" }
 sha3 = "0.9"
 lettre = "0.9"

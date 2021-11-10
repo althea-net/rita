@@ -3203,6 +3203,7 @@ dependencies = [
  "actix-web 0.7.19",
  "althea_kernel_interface",
  "althea_types",
+ "antenna_forwarding_client",
  "arrayvec 0.7.2",
  "awc",
  "babel_monitor",

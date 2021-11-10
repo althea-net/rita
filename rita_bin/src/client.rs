@@ -29,6 +29,7 @@ use rita_client::dashboard::start_client_dashboard;
 use rita_client::get_client_usage;
 use rita_client::logging::enable_remote_logging;
 use rita_client::rita_loop::check_rita_client_actors;
+use rita_client::rita_loop::start_antenna_forwarder;
 use rita_client::rita_loop::start_rita_client_endpoints;
 use rita_client::wait_for_settings;
 use rita_client::Args;
@@ -117,6 +118,7 @@ fn main() {
     start_core_rita_endpoints(4);
     start_rita_client_endpoints(1);
     start_client_dashboard(settings.network.rita_dashboard_port);
+    start_antenna_forwarder(settings);
 
     system.run();
     info!("Started Rita Client!");
