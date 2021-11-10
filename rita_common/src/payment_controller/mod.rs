@@ -231,25 +231,27 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
 
     let resend_info = ResendInfo {
         txid: tx_id.clone(),
-        neigh_url: neighbor_url,
+        neigh_url: neighbor_url.clone(),
         pmt: pmt.clone(),
         attempt: 0u8,
     };
 
     match neigh_ack {
-        Ok(val) => {
+        Ok(mut val) => {
             if val.status().is_success() {
                 info!(
-                "Payment with txid: {:#066x} is sent to our neighbor with {:?}, using full node {} and amount {:?}",
-                tx_id,
-                val.status(),
-                full_node,
-                pmt.amount
-            );
+                    "Payment pmt with txid: {:#066x} is sent to our neighbor with status {:?} and body {:?} via url {}, using full node {} and amount {:?}",
+                    tx_id,
+                    val.status(),
+                    val.body().await,
+                    neighbor_url,
+                    full_node,
+                    pmt.amount
+                );
             } else {
                 error!(
-            "We published txid: {:#066x} but our neighbor responded with an error {:?}, will retry",
-            tx_id, val);
+            "We published txid: {:#066x} but our neighbor responded with status {:?} and body {:?}, will retry",
+            tx_id, val.status(), val.body().await);
                 queue_resend(resend_info);
             }
         }

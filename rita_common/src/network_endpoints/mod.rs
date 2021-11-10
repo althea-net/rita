@@ -34,20 +34,24 @@ impl JsonStatusResponse {
 }
 
 /// The recieve side of the make payments call
-pub fn make_payments(
-    pmt: (Json<PaymentTx>, HttpRequest),
-) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+pub fn make_payments(pmt: (Json<PaymentTx>, HttpRequest)) -> HttpResponse {
     let txid = pmt.0.txid.clone();
+    let our_address = settings::get_rita_common().payment.eth_address.unwrap();
 
     // we didn't get a txid, probably an old client.
     // why don't we need an Either up here? Because the types ultimately match?
     if txid.is_none() {
         error!("Did not find txid, payment failed!");
-        return Box::new(future::ok(
-            HttpResponse::new(StatusCode::from_u16(400u16).unwrap())
-                .into_builder()
-                .json("txid not provided! Invalid payment!"),
-        ));
+        return HttpResponse::new(StatusCode::from_u16(400u16).unwrap())
+            .into_builder()
+            .json("txid not provided! Invalid payment!");
+    } else if pmt.0.to.eth_address != our_address {
+        return HttpResponse::new(StatusCode::from_u16(400u16).unwrap())
+            .into_builder()
+            .json(format!(
+                "We are not {} our address is {}! Invalid payment",
+                pmt.0.to.eth_address, our_address
+            ));
     }
     let txid = txid.unwrap();
     info!(
@@ -61,7 +65,7 @@ pub fn make_payments(
     };
     validate_later(ts);
 
-    Box::new(future::ok(HttpResponse::Ok().json("Payment Received!")))
+    HttpResponse::Ok().json("Payment Received!")
 }
 
 pub fn hello_response(
