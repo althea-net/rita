@@ -8,7 +8,7 @@ use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Hash, Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Hash, Copy, Clone, Eq, PartialEq)]
 pub struct WgKey([u8; 32]);
 
 impl AsRef<[u8]> for WgKey {
@@ -45,6 +45,12 @@ impl From<[u8; 32]> for WgKey {
 }
 
 impl fmt::Display for WgKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", base64::encode(&self))
+    }
+}
+
+impl fmt::Debug for WgKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", base64::encode(&self))
     }
