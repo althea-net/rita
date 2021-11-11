@@ -1,3 +1,17 @@
+//! This module contains data structures and methods used for the exit switching within a given subnet. Every time we change exits,
+//! we renegotiate tunnel, which can take 60 seconds, push the user offline for a period of time. This can be bad for babel metric fluctuations, causing
+//! route flapping where are never stablily connected to an exit. To mitigate this, we use a tracking system to track metric averages over time and
+//! use these values to determine which exit to switch to. This takes a conservative approach by switching only when we are certain that another exit is better
+//! than our current exit for a extended period of time, and has been stable during this time. The minimum time we take to switch to an exit is 15 mins.
+//!
+//! High level workflow is as follows:
+//! 1.) Look at all routes advertised by babel. Find what routes are in our exit subnet and only consider those route metrics
+//! 2.) Track all these exit metrics over a period of time. Keep track of which exit has the best metrics.
+//! 3.) At the end of 15 minutes consider options, should we switch or stay with our current exit
+//! 4.) Switch only if another exit has been considered better than our current exit for an extended period of time.
+//!
+//! See doc comment for 'set_best_exit' for a more detailed description of workflow
+use crate::exit_manager::{reset_exit_blacklist, EXIT_MANAGER};
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use babel_monitor::{open_babel_stream, parse_routes, Route};
 use failure::Error;
@@ -397,11 +411,26 @@ fn get_exit_metrics(
     let mut current_exit_metric = u16::MAX;
     let mut tracking_metric = u16::MAX;
 
+    // When all exits are blacklisted, reset the blacklist. Normally all exits in the subnet should not be blacklisted, however a false
+    // positive is possible when a working exit is unresponsive for a period of time and we blacklist it. When it comes back up, we are unable to
+    // connect to it thereby breaking the exit switching mechanism. When we detect this to be the case, we simply clear the entire black list and allow
+    // the rogue ip addrs to be added back into the blacklist
+    let mut all_exits_blacklisted = true;
+    let blacklisted = EXIT_MANAGER
+        .read()
+        .unwrap()
+        .exit_blacklist
+        .blacklisted_exits
+        .clone();
+
     for route in routes {
         // All babel routes are advertised as /128, so we check if each 'single' ip is part of exit subnet
         let ip = route.prefix.ip();
 
-        if check_ip_in_subnet(ip, exits) {
+        if check_ip_in_subnet(ip, exits) && !blacklisted.contains(&ip) {
+            // Not all exits in subnet are blacklisted, so set bool
+            all_exits_blacklisted = false;
+
             //Check to see if our current exit is down
             //current route is down if:
             // 1.) There is not selected_id in rita_exit server(we have not chosen an exit yet)
@@ -442,6 +471,13 @@ fn get_exit_metrics(
                 best_exit = Some(ip);
             }
         }
+    }
+
+    //If all exits blacklist, reset blacklist
+    if all_exits_blacklisted {
+        error!("All exits in subnet have been blacklisted, clearing blacklist");
+        drop(blacklisted);
+        reset_exit_blacklist();
     }
 
     //If current exit is still up, we reset best exit with current exit, using our advertised metric values given that our current exit better
@@ -687,6 +723,7 @@ pub fn get_babel_routes(babel_port: u16) -> Result<Vec<Route>, Error> {
 mod tests {
 
     use super::*;
+    use crate::exit_manager::{reset_blacklist_warnings, ExitBlacklist, MAX_BLACKLIST_STRIKES};
     use std::net::{IpAddr, Ipv4Addr};
 
     #[test]
@@ -1064,5 +1101,106 @@ mod tests {
 
         println!("Old Settings: {:#?}", settings.exit_client.old_exits);
         println!("\n\n\n\nNew Settings: {:#?}", settings.exit_client.exits);
+    }
+
+    #[test]
+    fn test_blacklist_ip() {
+        use crate::exit_manager::blacklist_strike_ip;
+        use crate::exit_manager::WarningType;
+
+        let dummy = IpAddr::V4(Ipv4Addr::new(10, 1, 1, 1));
+        let list = get_exit_blacklist();
+        assert!(list.blacklisted_exits.is_empty());
+
+        blacklist_strike_ip(dummy, WarningType::HardWarning);
+        let list = get_exit_blacklist();
+        assert_eq!(list.blacklisted_exits.len(), 1);
+        assert!(list.potential_blacklists.is_empty());
+
+        let dummy = IpAddr::V4(Ipv4Addr::new(10, 2, 1, 1));
+        blacklist_strike_ip(dummy, WarningType::HardWarning);
+        let list = get_exit_blacklist();
+        assert_eq!(list.blacklisted_exits.len(), 2);
+        assert!(list.potential_blacklists.is_empty());
+
+        let dummy = IpAddr::V4(Ipv4Addr::new(10, 2, 4, 1));
+        blacklist_strike_ip(dummy, WarningType::SoftWarning);
+        let list = get_exit_blacklist();
+        assert_eq!(list.blacklisted_exits.len(), 2);
+        assert_eq!(list.potential_blacklists.len(), 1);
+        assert_eq!(list.potential_blacklists.get(&dummy).cloned().unwrap(), 1);
+
+        for _ in 1..MAX_BLACKLIST_STRIKES {
+            blacklist_strike_ip(dummy, WarningType::SoftWarning);
+        }
+
+        let list = get_exit_blacklist();
+        assert_eq!(list.blacklisted_exits.len(), 2);
+        assert_eq!(list.potential_blacklists.len(), 1);
+        assert_eq!(
+            list.potential_blacklists.get(&dummy).cloned().unwrap(),
+            MAX_BLACKLIST_STRIKES
+        );
+
+        blacklist_strike_ip(dummy, WarningType::SoftWarning);
+        let list = get_exit_blacklist();
+        assert_eq!(list.blacklisted_exits.len(), 3);
+        assert!(list.potential_blacklists.is_empty());
+
+        // Test reset blacklist warning
+        let dummy = IpAddr::V4(Ipv4Addr::new(10, 2, 2, 10));
+        blacklist_strike_ip(dummy, WarningType::SoftWarning);
+        blacklist_strike_ip(dummy, WarningType::SoftWarning);
+        let list = get_exit_blacklist();
+        assert_eq!(list.blacklisted_exits.len(), 3);
+        assert_eq!(list.potential_blacklists.len(), 1);
+        assert_eq!(list.potential_blacklists.get(&dummy).cloned().unwrap(), 2);
+
+        reset_blacklist_warnings(dummy);
+        let list = get_exit_blacklist();
+        assert_eq!(list.blacklisted_exits.len(), 3);
+        assert!(list.potential_blacklists.is_empty());
+
+        blacklist_strike_ip(dummy, WarningType::HardWarning);
+        let list = get_exit_blacklist();
+        assert_eq!(list.blacklisted_exits.len(), 4);
+
+        reset_blacklist_warnings(dummy);
+        let list = get_exit_blacklist();
+        assert_eq!(list.blacklisted_exits.len(), 3);
+        assert!(list.potential_blacklists.is_empty());
+
+        // Test reset complete blacklist
+        blacklist_strike_ip(dummy, WarningType::SoftWarning);
+        blacklist_strike_ip(dummy, WarningType::SoftWarning);
+        let list = get_exit_blacklist();
+        assert_eq!(list.blacklisted_exits.len(), 3);
+        assert_eq!(list.potential_blacklists.len(), 1);
+
+        reset_exit_blacklist();
+        let list = get_exit_blacklist();
+        assert!(list.blacklisted_exits.is_empty());
+        assert!(list.potential_blacklists.is_empty());
+    }
+
+    /// This is set as separate function to avoid deadlocks
+    fn get_exit_blacklist() -> ExitBlacklist {
+        let reader = (*EXIT_MANAGER.read().unwrap()).exit_blacklist.clone();
+        reader
+    }
+
+    // This test just makes sure that we dont deadlock
+    #[test]
+    fn test_drop() {
+        let writer = EXIT_MANAGER
+            .read()
+            .unwrap()
+            .exit_blacklist
+            .blacklisted_exits
+            .clone();
+
+        drop(writer);
+
+        reset_exit_blacklist();
     }
 }

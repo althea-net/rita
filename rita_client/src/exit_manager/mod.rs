@@ -42,15 +42,52 @@ use settings::client::ExitServer;
 use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
-use std::net::SocketAddr;
+use std::collections::{HashMap, HashSet};
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
 use tokio::net::TcpStream as TokioTcpStream;
 
+/// The number of times ExitSwitcher will try to connect to an unresponsive exit before blacklisting its ip
+const MAX_BLACKLIST_STRIKES: u16 = 100;
+
 lazy_static! {
     pub static ref EXIT_MANAGER: Arc<RwLock<ExitManager>> =
         Arc::new(RwLock::new(ExitManager::default()));
+}
+
+/// This enum has two types of warnings for misbehaving exits, a hard warning which blacklists this ip immediatly, and a
+/// soft warning. When an exit receives MAX_BLACKLIST_STIKES soft warnings, this exit is blacklisted.
+pub enum WarningType {
+    HardWarning,
+    SoftWarning,
+}
+
+/// This struct holds all the blacklisted ip that are considered when exit switching as well as keeps track
+/// of non reponsive exits with a penalty system. After 'n' strikes this ip is added to a the blacklist
+#[derive(Debug, Clone)]
+pub struct ExitBlacklist {
+    blacklisted_exits: HashSet<IpAddr>,
+    potential_blacklists: HashMap<IpAddr, u16>,
+}
+
+/// An actor which pays the exit
+#[derive(Default)]
+pub struct ExitManager {
+    // used to determine if we've changed exits
+    pub last_exit: Option<ExitServer>,
+    pub nat_setup: bool,
+    pub exit_blacklist: ExitBlacklist,
+}
+
+impl Default for ExitBlacklist {
+    fn default() -> Self {
+        Self {
+            blacklisted_exits: HashSet::new(),
+            potential_blacklists: HashMap::new(),
+        }
+    }
 }
 
 fn linux_setup_exit_tunnel(
@@ -143,6 +180,56 @@ fn encrypt_exit_client_id(
     }
 }
 
+/// Blacklist an exit ip from being selected. This prevents rogue ip within the selected subnet to cause
+/// blackhole attacks. Exits that cant be decrypted are immediately blacklisted and those exits that fail to respond after
+/// MAX_BLACKLIST_STRIKES warning strikes are blacklisted
+fn blacklist_strike_ip(ip: IpAddr, warning: WarningType) {
+    let writer = &mut (*EXIT_MANAGER.write().unwrap()).exit_blacklist;
+
+    match warning {
+        WarningType::SoftWarning => {
+            if let Some(warning_count) = writer.potential_blacklists.get(&ip).cloned() {
+                if warning_count >= MAX_BLACKLIST_STRIKES {
+                    writer.blacklisted_exits.insert(ip);
+                    writer.potential_blacklists.remove(&ip);
+                } else {
+                    writer.potential_blacklists.insert(ip, warning_count + 1);
+                }
+            } else {
+                writer.potential_blacklists.insert(ip, 1);
+            }
+        }
+        WarningType::HardWarning => {
+            writer.blacklisted_exits.insert(ip);
+        }
+    }
+}
+
+/// Resets the the warnings from this ip in this blacklist. This function is called whenever we
+fn reset_blacklist_warnings(ip: IpAddr) {
+    let writer = &mut (*EXIT_MANAGER.write().unwrap()).exit_blacklist;
+
+    // This condition should not be reached since if an exit is blacklisted, we should never sucessfully connect to it
+    if writer.blacklisted_exits.contains(&ip) {
+        error!("Was able to successfully connect to a blacklisted exit, error in blacklist logic");
+        writer.blacklisted_exits.remove(&ip);
+    }
+
+    if writer.potential_blacklists.contains_key(&ip) {
+        writer.potential_blacklists.remove(&ip);
+    }
+}
+
+/// This function clears all blacklist information from the datastore. This function is only called in the situation
+/// of false positives where exits that are not supposed to be blacklist have been blacklisted, perhaps for being unresposive for
+/// long periods of time
+fn reset_exit_blacklist() {
+    let writer = &mut (*EXIT_MANAGER.write().unwrap()).exit_blacklist;
+
+    writer.blacklisted_exits.clear();
+    writer.potential_blacklists.clear();
+}
+
 fn decrypt_exit_state(
     exit_state: EncryptedExitState,
     exit_pubkey: PublicKey,
@@ -179,14 +266,16 @@ fn decrypt_exit_state(
 
 fn send_exit_setup_request(
     exit_pubkey: WgKey,
-    to: &SocketAddr,
+    to: SocketAddr,
     ident: ExitClientIdentity,
 ) -> impl Future<Item = ExitState, Error = Error> {
     let endpoint = format!("http://[{}]:{}/secure_setup", to.ip(), to.port());
     let ident = encrypt_exit_client_id(&exit_pubkey.into(), ident);
 
-    let stream = TokioTcpStream::connect(to);
+    let stream = TokioTcpStream::connect(&to);
 
+    // TODO: Add a timeout check here when this is migrate to async await. We check if request is timed out,
+    // and after a few attempts, blacklist the ip with bad repsonses.
     stream.from_err().and_then(move |stream| {
         client::post(&endpoint)
             .timeout(Duration::from_secs(600))
@@ -200,7 +289,17 @@ fn send_exit_setup_request(
                     .json()
                     .from_err()
                     .and_then(move |value: EncryptedExitState| {
-                        decrypt_exit_state(value, exit_pubkey.into())
+                        // If we are unable to decrypt this exit state, it is likely a rogue ip, we black list this
+                        match decrypt_exit_state(value, exit_pubkey.into()) {
+                            Err(e) => {
+                                blacklist_strike_ip(to.ip(), WarningType::HardWarning);
+                                Err(e)
+                            }
+                            a => {
+                                reset_blacklist_warnings(to.ip());
+                                a
+                            }
+                        }
                     })
             })
     })
@@ -222,12 +321,32 @@ async fn send_exit_status_request(
         .await;
 
     let mut response = match response {
-        Ok(a) => a,
+        Ok(a) => {
+            reset_blacklist_warnings(to.ip());
+            a
+        }
+        Err(awc::error::SendRequestError::Timeout) => {
+            // Did not get a response, is it a rogue exit or some netork error?
+            blacklist_strike_ip(to.ip(), WarningType::SoftWarning);
+            bail!(
+                "Error with post request for exit status: {}",
+                awc::error::SendRequestError::Timeout
+            );
+        }
         Err(e) => bail!("Error with post request for exit status: {}", e),
     };
     let value = response.json().await?;
 
-    decrypt_exit_state(value, exit_pubkey.into())
+    match decrypt_exit_state(value, exit_pubkey.into()) {
+        Err(e) => {
+            blacklist_strike_ip(to.ip(), WarningType::HardWarning);
+            Err(e)
+        }
+        Ok(a) => {
+            reset_blacklist_warnings(to.ip());
+            Ok(a)
+        }
+    }
 }
 
 async fn exit_general_details_request(exit: String) -> Result<(), Error> {
@@ -335,7 +454,7 @@ pub fn exit_setup_request(
     );
 
     Box::new(
-        send_exit_setup_request(exit_pubkey, &endpoint, ident)
+        send_exit_setup_request(exit_pubkey, endpoint, ident)
             .from_err()
             .and_then(move |exit_response| {
                 let mut rita_client = settings::get_rita_client();
@@ -401,14 +520,6 @@ async fn exit_status_request(exit: String) -> Result<(), Error> {
     settings::set_rita_client(rita_client);
     trace!("Got exit status response {:?}", exit_response);
     Ok(())
-}
-
-/// An actor which pays the exit
-#[derive(Default)]
-pub struct ExitManager {
-    // used to determine if we've changed exits
-    pub last_exit: Option<ExitServer>,
-    pub nat_setup: bool,
 }
 
 fn correct_default_route(input: Option<DefaultRoute>) -> bool {
