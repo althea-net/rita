@@ -69,10 +69,16 @@ pub fn get_wyre_reservation(
     rita_client.exit_client = exit_client;
     rita_client.operator = operator;
     settings::set_rita_client(rita_client);
-    #[cfg(not(feature = "operator_debug"))]
-    let api_url = "https://operator.althea.net:8080/wyre_reservation";
-    #[cfg(feature = "operator_debug")]
-    let api_url = "http://192.168.10.2:8080/wyre_reservation";
+
+    let api_url: &str;
+    if cfg!(feature = "dev_env") {
+        api_url = "0.0.0.0:8080/wyre_reservation";
+    } else if cfg!(feature = "operator_debug") {
+        api_url = "http://192.168.10.2:8080/wyre_reservation";
+    } else {
+        api_url = "https://operator.althea.net:8080/wyre_reservation";
+    }
+
     Box::new(
         client::post(&api_url)
             .timeout(Duration::from_secs(10))

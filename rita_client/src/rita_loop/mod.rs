@@ -274,10 +274,14 @@ pub fn start_rita_client_endpoints(workers: usize) {
 
 pub fn start_antenna_forwarder(settings: RitaClientSettings) {
     if metrics_permitted() {
-        #[cfg(not(feature = "operator_debug"))]
-        let url = "operator.althea.net:33334";
-        #[cfg(feature = "operator_debug")]
-        let url = "192.168.10.2:33334";
+        let url: &str;
+        if cfg!(feature = "dev_env") {
+            url = "0.0.0.0:33300";
+        } else if cfg!(feature = "operator_debug") {
+            url = "192.168.10.2:33334";
+        } else {
+            url = "operator.althea.net:33334";
+        }
 
         let our_id = settings.get_identity().unwrap();
         let network = settings.network;

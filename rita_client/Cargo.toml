@@ -49,3 +49,4 @@ path = "src/lib.rs"
 [features]
 # changes operator urls
 operator_debug = []
+dev_env = []

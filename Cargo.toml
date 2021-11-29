@@ -10,6 +10,7 @@ dash_debug = ["rita_bin/dash_debug"]
 server = ["rita_bin/server"]
 bundle_openssl = ["rita_bin/bundle_openssl"]
 jemalloc = ["rita_bin/jemalloc"]
+optools_dev_env = ["rita_bin/optools_dev_env"]
 
 [dependencies]
 rita_bin = { path = "./rita_bin" }
