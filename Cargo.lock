@@ -3254,6 +3254,7 @@ dependencies = [
  "byteorder",
  "bytes 1.1.0",
  "clarity",
+ "compressed_log",
  "docopt",
  "failure",
  "flate2",

@@ -27,12 +27,12 @@ use althea_kernel_interface::LinuxCommandRunner;
 use docopt::Docopt;
 use rita_client::dashboard::start_client_dashboard;
 use rita_client::get_client_usage;
-use rita_client::logging::enable_remote_logging;
 use rita_client::rita_loop::check_rita_client_actors;
 use rita_client::rita_loop::start_antenna_forwarder;
 use rita_client::rita_loop::start_rita_client_endpoints;
 use rita_client::wait_for_settings;
 use rita_client::Args;
+use rita_common::logging::enable_remote_logging;
 use rita_common::rita_loop::check_rita_common_actors;
 use rita_common::rita_loop::start_core_rita_endpoints;
 use rita_common::utils::env_vars_contains;
@@ -89,7 +89,15 @@ fn main() {
     if !should_remote_log || env_vars_contains("NO_REMOTE_LOG") {
         env_logger::init();
     } else {
-        let res = enable_remote_logging();
+        let log = settings.log.clone();
+        let key = settings
+            .network
+            .wg_public_key
+            .expect("Tried to init remote logging without WgKey!");
+
+        let res =
+            enable_remote_logging("rita".to_string(), log.dest_url, log.level, key.to_string());
+
         println!("logging status {:?}", res);
     }
 

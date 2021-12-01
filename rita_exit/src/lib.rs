@@ -11,7 +11,6 @@ extern crate failure;
 extern crate serde_derive;
 
 pub mod database;
-pub mod logging;
 pub mod network_endpoints;
 pub mod rita_loop;
 pub mod traffic_watcher;
@@ -22,7 +21,6 @@ pub use crate::database::db_client::*;
 pub use crate::database::email::*;
 pub use crate::database::geoip::*;
 pub use crate::database::sms::*;
-pub use crate::logging::*;
 use crate::network_endpoints::nuke_db;
 use actix_web::http::Method;
 use actix_web::{server, App};

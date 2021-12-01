@@ -5,16 +5,17 @@ use log::LevelFilter;
 use log::Record;
 
 /// enables remote logging if the user has configured it
-pub fn enable_remote_logging() -> Result<(), Error> {
+pub fn enable_remote_logging(
+    log_label: String,
+    log_url: String,
+    log_level: String,
+    wg_public_key: String,
+) -> Result<(), Error> {
     trace!("About to enable remote logging");
-
-    let logging_url = "https://stats.altheamesh.com:9999/compressed_sink";
-    let level = LevelFilter::Info;
-
-    let key = settings::get_rita_exit()
-        .network
-        .wg_public_key
-        .expect("Tried to init remote logging without WgKey!");
+    let level: LevelFilter = match log_level.parse() {
+        Ok(level) => level,
+        Err(_) => LevelFilter::Error,
+    };
 
     let logger = LoggerBuilder::default()
         .set_level(
@@ -23,13 +24,14 @@ pub fn enable_remote_logging() -> Result<(), Error> {
                 .ok_or_else(|| format_err!("Unable to convert level filter to a level"))?,
         )
         .set_compression_level(Compression::Fast)
-        .set_sink_url(logging_url)
-        .set_threshold(1_000)
+        .set_sink_url(log_url.as_str())
+        .set_threshold(1000)
         .set_format(Box::new(move |record: &Record| {
             format!(
-                "{} {} rita_exit: {}\n",
-                key,
+                "{} {} {}: {}\n",
+                wg_public_key,
                 env!("CARGO_PKG_VERSION"),
+                log_label,
                 record.args()
             )
         }))
@@ -44,9 +46,6 @@ pub fn enable_remote_logging() -> Result<(), Error> {
     }
     log::set_max_level(level);
 
-    println!(
-        "Remote compressed logging enabled with target {}",
-        logging_url
-    );
+    println!("Remote compressed logging enabled with target {}", log_url);
     Ok(())
 }

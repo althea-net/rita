@@ -23,11 +23,11 @@ static GLOBAL: Jemalloc = Jemalloc;
 extern crate log;
 
 use docopt::Docopt;
+use rita_common::logging::enable_remote_logging;
 use rita_common::rita_loop::check_rita_common_actors;
 use rita_common::rita_loop::start_core_rita_endpoints;
 use rita_common::utils::env_vars_contains;
 use rita_exit::database::sms::send_admin_notification_sms;
-use rita_exit::logging::enable_remote_logging;
 use rita_exit::rita_loop::check_rita_exit_actors;
 use rita_exit::rita_loop::start_rita_exit_endpoints;
 use rita_exit::rita_loop::start_rita_exit_loop;
@@ -78,7 +78,16 @@ fn main() {
     if !should_remote_log || env_vars_contains("NO_REMOTE_LOG") {
         env_logger::init();
     } else {
-        let res = enable_remote_logging();
+        let logging_url: String = "https://stats.altheamesh.com:9999/compressed_sink".into();
+        let level: String = "INFO".to_string();
+
+        let key = settings
+            .network
+            .wg_public_key
+            .expect("Tried to init remote logging without WgKey!");
+
+        let res =
+            enable_remote_logging("rita_exit".to_string(), logging_url, level, key.to_string());
         println!("logging status {:?}", res);
     }
 
