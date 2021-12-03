@@ -79,10 +79,17 @@ lazy_static! {
 }
 
 pub fn send_udp_heartbeat() {
-    #[cfg(not(feature = "operator_debug"))]
-    let heartbeat_url = "operator.althea.net:33333";
-    #[cfg(feature = "operator_debug")]
-    let heartbeat_url = "192.168.10.2:33333";
+    let heartbeat_url: &str;
+    if cfg!(feature = "dev_env") {
+        heartbeat_url = "0.0.0.0:33333";
+        info!("We are using localhost heartbeart url");
+    } else if cfg!(feature = "operator_debug") {
+        heartbeat_url = "192.168.10.2:33333";
+        info!("We are setting operator debug heartbeart url");
+    } else {
+        heartbeat_url = "operator.althea.net:33333";
+        info!("We are setting regular heartbeart url");
+    }
 
     trace!("attempting to send heartbeat");
     let dns_request = Resolver::from_registry()
@@ -195,7 +202,6 @@ pub fn send_udp_heartbeat() {
             // this is intentional behavior, if we have multiple DNS records we should
             // send heartbeats to all of them
             for dns_socket in hb_cache.dns.iter() {
-                trace!("sending heartbeat");
                 send_udp_heartbeat_packet(
                     dns_socket,
                     our_id,
@@ -285,20 +291,27 @@ fn send_udp_heartbeat_packet(
     let their_publickey = their_publickey.into();
     drop(network_settings);
 
-    let remote_ip = dns_socket.ip();
     let remote_port = dns_socket.port();
     let remote = dns_socket;
 
-    let local_socketaddr = SocketAddr::from(([0, 0, 0, 0], remote_port));
+    // Senders address is dummy
+    let local_socketaddr = SocketAddr::from(([0, 0, 0, 0], remote_port + 2));
+
     let local_socket = match UdpSocket::bind(&local_socketaddr) {
         Ok(s) => s,
         Err(e) => {
-            error!("Couldn't bind to UDP heartbeat socket {:?}", e);
+            error!(
+                "Couldn't bind to UDP heartbeat socket of addr {:?} with error {:?}",
+                local_socketaddr, e
+            );
             return;
         }
     };
 
-    trace!("Sending heartbeat to {:?}", remote_ip);
+    info!(
+        "Sending heartbeat to {:?} from {:?}",
+        remote, local_socketaddr
+    );
     let mut rita_client = settings::get_rita_client();
     let payment = rita_client.payment;
     let message = HeartbeatMessage {

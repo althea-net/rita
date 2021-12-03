@@ -129,10 +129,14 @@ impl Handler<Update> for OperatorUpdate {
 
 /// Checks in with the operator server
 fn checkin() {
-    #[cfg(not(feature = "operator_debug"))]
-    let url = "https://operator.althea.net:8080/checkin";
-    #[cfg(feature = "operator_debug")]
-    let url = "http://192.168.10.2:8080/checkin";
+    let url: &str;
+    if cfg!(feature = "dev_env") {
+        url = "http://0.0.0.0:8080/checkin";
+    } else if cfg!(feature = "operator_debug") {
+        url = "http://192.168.10.2:8080/checkin";
+    } else {
+        url = "https://operator.althea.net:8080/checkin";
+    }
 
     let rita_client = settings::get_rita_client();
     let id = rita_client.get_identity().unwrap();
