@@ -21,6 +21,7 @@ use ipnetwork::IpNetwork;
 use std::collections::HashMap;
 use std::net::IpAddr;
 
+#[derive(Default)]
 pub struct TrafficWatcher;
 
 impl Actor for TrafficWatcher {
@@ -41,12 +42,6 @@ impl SystemService for TrafficWatcher {
             .expect("Is ipset installed?");
 
         info!("Traffic Watcher started");
-    }
-}
-
-impl Default for TrafficWatcher {
-    fn default() -> TrafficWatcher {
-        TrafficWatcher {}
     }
 }
 

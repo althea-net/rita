@@ -26,6 +26,8 @@ use failure::Error;
 use ipnetwork::IpNetwork;
 use std::collections::HashMap;
 use std::net::IpAddr;
+
+#[derive(Default)]
 pub struct TrafficWatcher {
     last_seen_bytes: HashMap<WgKey, WgUsage>,
 }
@@ -38,13 +40,6 @@ impl Supervised for TrafficWatcher {}
 impl SystemService for TrafficWatcher {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("Traffic Watcher started");
-    }
-}
-impl Default for TrafficWatcher {
-    fn default() -> TrafficWatcher {
-        TrafficWatcher {
-            last_seen_bytes: HashMap::new(),
-        }
     }
 }
 

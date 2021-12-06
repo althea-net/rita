@@ -46,6 +46,7 @@ lazy_static! {
         Arc::new(RwLock::new(TrafficWatcher::default()));
 }
 
+#[derive(Default)]
 pub struct TrafficWatcher {
     // last read download
     last_read_input: u64,
@@ -53,16 +54,6 @@ pub struct TrafficWatcher {
     last_read_output: u64,
     /// cached exit destination price value
     last_exit_dest_price: u128,
-}
-
-impl Default for TrafficWatcher {
-    fn default() -> TrafficWatcher {
-        TrafficWatcher {
-            last_read_input: 0,
-            last_read_output: 0,
-            last_exit_dest_price: 0,
-        }
-    }
 }
 
 /// Used to request what the exits thinks this clients debts are. We will compare

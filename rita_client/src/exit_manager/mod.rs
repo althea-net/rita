@@ -66,7 +66,7 @@ pub enum WarningType {
 
 /// This struct holds all the blacklisted ip that are considered when exit switching as well as keeps track
 /// of non reponsive exits with a penalty system. After 'n' strikes this ip is added to a the blacklist
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct ExitBlacklist {
     blacklisted_exits: HashSet<IpAddr>,
     potential_blacklists: HashMap<IpAddr, u16>,
@@ -79,15 +79,6 @@ pub struct ExitManager {
     pub last_exit: Option<ExitServer>,
     pub nat_setup: bool,
     pub exit_blacklist: ExitBlacklist,
-}
-
-impl Default for ExitBlacklist {
-    fn default() -> Self {
-        Self {
-            blacklisted_exits: HashSet::new(),
-            potential_blacklists: HashMap::new(),
-        }
-    }
 }
 
 fn linux_setup_exit_tunnel(

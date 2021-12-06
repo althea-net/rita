@@ -16,6 +16,7 @@ pub mod usage;
 pub mod wallet;
 pub mod wg_key;
 
+#[derive(Default)]
 pub struct Dashboard;
 
 impl Actor for Dashboard {
@@ -26,11 +27,5 @@ impl Supervised for Dashboard {}
 impl SystemService for Dashboard {
     fn service_started(&mut self, _ctx: &mut Context<Self>) {
         info!("Dashboard started");
-    }
-}
-
-impl Default for Dashboard {
-    fn default() -> Dashboard {
-        Dashboard {}
     }
 }

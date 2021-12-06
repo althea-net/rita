@@ -61,13 +61,8 @@ pub fn metrics_permitted() -> bool {
             .is_some()
 }
 
+#[derive(Default)]
 pub struct RitaLoop {}
-
-impl Default for RitaLoop {
-    fn default() -> Self {
-        RitaLoop {}
-    }
-}
 
 // the speed in seconds for the client loop
 pub const CLIENT_LOOP_SPEED: u64 = 5;
