@@ -48,7 +48,7 @@ impl dyn KernelInterface {
 
         let ports: Vec<u16> = lines
             .take_while(|line| !line.is_empty()) // until end of the table is reached,
-            .map(|line| parse_local_port(line)) // parse each udp port,
+            .map(parse_local_port) // parse each udp port,
             .filter_map(Result::ok) // only taking those which parsed successfully
             .collect();
 

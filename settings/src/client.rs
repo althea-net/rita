@@ -63,7 +63,7 @@ pub struct OldExitServer {
 }
 
 /// Simple struct that keeps track of details related to the exit we are currently connected to, as well as the next potential exit to switch to
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+#[derive(Default, Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct SelectedExit {
     // Exit we currently forward to
     pub selected_id: Option<IpAddr>,
@@ -77,17 +77,6 @@ pub struct SelectedExit {
     // This could be different from selected_id, we dont switch immediately to avoid route flapping
     // This is what we keep track of in lazy static metric vector
     pub tracking_exit: Option<IpAddr>,
-}
-
-impl Default for SelectedExit {
-    fn default() -> Self {
-        SelectedExit {
-            selected_id: None,
-            selected_id_metric: None,
-            selected_id_degradation: None,
-            tracking_exit: None,
-        }
-    }
 }
 
 /// This is the state machine for exit switching logic. Given there are three exits we track: current, best, and tracking, there are several situations we can be in

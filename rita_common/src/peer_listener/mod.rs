@@ -152,7 +152,6 @@ pub struct ListenInterface {
     ifname: String,
     ifidx: u32,
     multicast_socketaddr: SocketAddrV6,
-    linklocal_socketaddr: SocketAddrV6,
     pub multicast_socket: UdpSocket,
     pub linklocal_socket: UdpSocket,
     linklocal_ip: Ipv6Addr,
@@ -198,7 +197,6 @@ impl ListenInterface {
             multicast_socket,
             linklocal_socket,
             multicast_socketaddr,
-            linklocal_socketaddr,
             linklocal_ip: link_ip,
         })
     }

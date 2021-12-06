@@ -40,13 +40,8 @@ pub const FAST_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
 pub const TUNNEL_TIMEOUT: Duration = Duration::from_secs(900);
 pub const TUNNEL_HANDSHAKE_TIMEOUT: Duration = TUNNEL_TIMEOUT;
 
+#[derive(Default)]
 pub struct RitaFastLoop {}
-
-impl Default for RitaFastLoop {
-    fn default() -> RitaFastLoop {
-        RitaFastLoop {}
-    }
-}
 
 impl Actor for RitaFastLoop {
     type Context = Context<Self>;
