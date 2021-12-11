@@ -3,7 +3,6 @@ use actix_web::{HttpRequest, Json, Path};
 use althea_types::ContactType;
 use althea_types::InstallationDetails;
 use althea_types::{BillingDetails, MailingAddress};
-use settings::FileWrite;
 
 /// This is a utility type that is used by the front end when sending us
 /// installation details. This lets us do the validation and parsing here
@@ -121,12 +120,8 @@ pub fn set_installation_details(req: Json<InstallationDetailsPost>) -> HttpRespo
     rita_client.operator = operator;
     settings::set_rita_client(rita_client);
 
-    // try and save the config and fail if we can't
-    let rita_client = settings::get_rita_client();
-    if let Err(_e) = rita_client.write(&settings::get_flag_config()) {
+    if let Err(_e) = settings::write_config() {
         return HttpResponse::InternalServerError().finish();
-    } else {
-        settings::set_rita_client(rita_client);
     }
     HttpResponse::Ok().finish()
 }
@@ -153,12 +148,10 @@ pub fn set_display_operator_setup(val: Path<bool>) -> HttpResponse {
     }
 
     // try and save the config and fail if we can't
-    let rita_client = settings::get_rita_client();
-    if let Err(_e) = rita_client.write(&settings::get_flag_config()) {
+    if let Err(_e) = settings::write_config() {
         return HttpResponse::InternalServerError().finish();
-    } else {
-        settings::set_rita_client(rita_client);
     }
+
     HttpResponse::Ok().finish()
 }
 

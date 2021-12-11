@@ -5,7 +5,6 @@ use failure::bail;
 use failure::Error;
 use rita_common::peer_listener::unlisten_interface;
 use rita_common::KI;
-use settings::FileWrite;
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 
@@ -349,8 +348,7 @@ pub fn ethernet_transform_mode(
     settings::set_rita_client(rita_client);
 
     // try and save the config and fail if we can't
-    let rita_client = settings::get_rita_client();
-    if let Err(_e) = rita_client.write(&settings::get_flag_config()) {
+    if let Err(_e) = settings::write_config() {
         return Err(_e);
     }
 

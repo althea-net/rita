@@ -8,7 +8,6 @@ use settings::payment::ETH_FEE_MULTIPLIER;
 use settings::payment::ETH_MIN_GAS;
 use settings::payment::XDAI_FEE_MULTIPLIER;
 use settings::payment::XDAI_MIN_GAS;
-use settings::FileWrite;
 
 /// Changes the full node configuration value between test/prod and other networks
 pub fn set_system_blockchain_endpoint(path: Path<String>) -> Result<HttpResponse, Error> {
@@ -20,19 +19,14 @@ pub fn set_system_blockchain_endpoint(path: Path<String>) -> Result<HttpResponse
             .json(format!("Could not parse {:?} into a SystemChain enum!", id)));
     }
     let id = id.unwrap();
+
     let mut rita_client = settings::get_rita_client();
     let mut payment = rita_client.payment;
     set_system_blockchain(id, &mut payment);
     rita_client.payment = payment;
     settings::set_rita_client(rita_client);
 
-    // try and save the config and fail if we can't
-    let rita_client = settings::get_rita_client();
-    if let Err(_e) = rita_client.write(&settings::get_flag_config()) {
-        return Err(_e);
-    } else {
-        settings::set_rita_client(rita_client);
-    }
+    settings::write_config()?;
 
     Ok(HttpResponse::Ok().json(()))
 }

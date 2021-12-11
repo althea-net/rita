@@ -2,7 +2,6 @@ use actix_web::Path;
 use actix_web::{HttpRequest, HttpResponse, Json, Result};
 use failure::Error;
 use num256::Uint256;
-use settings::FileWrite;
 
 use crate::traffic_watcher::get_exit_dest_price;
 pub fn auto_pricing_status(_req: HttpRequest) -> Result<Json<bool>, Error> {
@@ -24,12 +23,8 @@ pub fn set_auto_pricing(path: Path<bool>) -> Result<HttpResponse, Error> {
     settings::set_rita_client(rita_client);
 
     // try and save the config and fail if we can't
-    let rita_client = settings::get_rita_client();
-    if let Err(_e) = rita_client.write(&settings::get_flag_config()) {
-        return Err(_e);
-    } else {
-        settings::set_rita_client(rita_client);
-    }
+    settings::write_config()?;
+
     Ok(HttpResponse::Ok().json(()))
 }
 

@@ -3,7 +3,6 @@ use rita_common::KI;
 use actix_web::{HttpResponse, Json};
 use clarity::utils::bytes_to_hex_str;
 use failure::Error;
-use settings::FileWrite;
 use sha3::{Digest, Sha3_512};
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -20,14 +19,12 @@ pub fn set_pass(router_pass: Json<RouterPassword>) -> Result<HttpResponse, Error
     let mut hasher = Sha3_512::new();
     hasher.update(input_string.as_bytes());
     let hashed_pass = bytes_to_hex_str(&hasher.finalize().to_vec());
-    let mut network = settings::get_rita_client().network;
-    network.rita_dashboard_password = Some(hashed_pass);
-    // try and save the config and fail if we can't
-    let rita_client = settings::get_rita_client();
-    if let Err(e) = rita_client.write(&settings::get_flag_config()) {
+
+    let mut rita_client = settings::get_rita_client();
+    rita_client.network.rita_dashboard_password = Some(hashed_pass);
+
+    if let Err(e) = settings::write_config() {
         return Err(e);
-    } else {
-        settings::set_rita_client(rita_client);
     }
 
     if KI.is_openwrt() {
@@ -36,9 +33,6 @@ pub fn set_pass(router_pass: Json<RouterPassword>) -> Result<HttpResponse, Error
         // We edited disk contents, force global sync
         KI.fs_sync()?;
     }
-    let mut rita_client = settings::get_rita_client();
-    rita_client.network = network;
-    settings::set_rita_client(rita_client);
 
     Ok(HttpResponse::Ok().json(()))
 }

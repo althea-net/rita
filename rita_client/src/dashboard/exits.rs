@@ -16,7 +16,6 @@ use futures01::{future, Future};
 use rita_common::dashboard::Dashboard;
 use rita_common::KI;
 use settings::client::ExitServer;
-use settings::FileWrite;
 use std::boxed::Box;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -204,13 +203,9 @@ pub fn select_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Er
         rita_client.exit_client = exit_client;
         settings::set_rita_client(rita_client);
 
-        // try and save the config and fail if we can't, this way we can run the save
-        // loop less often and not lose exit configs
-        let temp_client = settings::get_rita_client();
-        if let Err(e) = temp_client.write(&settings::get_flag_config()) {
+        // try and save the config and fail if we can't
+        if let Err(e) = settings::write_config() {
             return Box::new(future::err(e));
-        } else {
-            settings::set_rita_client(temp_client);
         }
 
         Box::new(future::ok(HttpResponse::Ok().json(ret)))
