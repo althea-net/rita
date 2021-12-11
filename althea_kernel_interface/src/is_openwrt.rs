@@ -4,8 +4,8 @@ use std::process::{Command, Stdio};
 impl dyn KernelInterface {
     /// Checks if the local system is openwrt
     pub fn is_openwrt(&self) -> bool {
-        let uname = Command::new("uname")
-            .args(&["-a"])
+        let uname = Command::new("cat")
+            .args(&["/etc/openwrt_release"])
             .stdout(Stdio::piped())
             .output()
             .unwrap();
