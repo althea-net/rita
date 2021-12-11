@@ -430,6 +430,7 @@ pub fn update_config(
         network: old_settings.network,
         exit_client: old_settings.exit_client.clone(),
         future: old_settings.future,
+        app_name: old_settings.app_name,
     };
 
     // we have already updated to reading the new settings

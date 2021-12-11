@@ -42,23 +42,33 @@ pub use crate::dashboard::router::*;
 pub use crate::dashboard::system_chain::*;
 pub use crate::dashboard::usage;
 pub use crate::dashboard::wifi::*;
-use settings::client::RitaClientSettings;
+use settings::client::{default_config_path, RitaClientSettings, APP_NAME};
 use std::time::{Duration, Instant};
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize)]
 pub struct Args {
+    #[serde(default = "default_config_path")]
     pub flag_config: String,
     pub flag_platform: String,
     pub flag_future: bool,
 }
 
-// TODO we should remove --platform as it's not used, but that requires
-// changing how rita is invoked everywhere, because that's difficult
-// with in the field routers this is waiting on another more pressing
-// upgrade to the init file for Rita on the routers
+impl Default for Args {
+    fn default() -> Self {
+        Args {
+            flag_config: default_config_path(),
+            flag_platform: "linux".to_string(),
+            flag_future: false,
+        }
+    }
+}
+
+/// TODO platform is in the process of being removed as a support argument
+/// as it's not even used. Config can still be used but has a sane default
+/// and does not need to be specified.
 pub fn get_client_usage(version: &str, git_hash: &str) -> String {
     format!(
-        "Usage: rita --config=<settings> --platform=<platform> [--future]
+        "Usage: {} [--config=<settings>] [--platform=<platform>] [--future]
 Options:
     -c, --config=<settings>     Name of config file
     -p, --platform=<platform>   Platform (linux or OpenWrt)
@@ -66,7 +76,7 @@ Options:
 About:
     Version {} - {}
     git hash {}",
-        READABLE_VERSION, version, git_hash
+        APP_NAME, READABLE_VERSION, version, git_hash
     )
 }
 

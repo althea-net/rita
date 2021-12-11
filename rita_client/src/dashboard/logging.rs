@@ -16,15 +16,21 @@ pub fn remote_logging(path: Path<bool>) -> Result<HttpResponse, Error> {
     let mut rita_client = settings::get_rita_client();
 
     rita_client.log.enabled = enabled;
+
+    let service_path: String = format!("/etc/init.d/{}", rita_client.app_name);
+
     settings::set_rita_client(rita_client);
 
     if let Err(e) = settings::write_config() {
-        return Err(e);
+        return Ok(HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+            .into_builder()
+            .json(format!("Failed to write config {:?}", e)));
     }
 
-    // FIXME get binary name from somewhere
-    if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
-        return Err(e.into());
+    if let Err(e) = KI.run_command(service_path.as_str(), &["restart"]) {
+        return Ok(HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+            .into_builder()
+            .json(format!("Failed to restart service {:?}", e)));
     }
 
     Ok(HttpResponse::Ok().json(()))
@@ -52,15 +58,21 @@ pub fn remote_logging_level(path: Path<String>) -> Result<HttpResponse, Error> {
     let mut rita_client = settings::get_rita_client();
 
     rita_client.log.level = log_level.to_string();
+
+    let service_path: String = format!("/etc/init.d/{}", rita_client.app_name);
+
     settings::set_rita_client(rita_client);
 
     if let Err(e) = settings::write_config() {
-        return Err(e);
+        return Ok(HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+            .into_builder()
+            .json(format!("Failed to write config {:?}", e)));
     }
 
-    // FIXME get binary name from somewhere
-    if let Err(e) = KI.run_command("/etc/init.d/rita", &["restart"]) {
-        return Err(e.into());
+    if let Err(e) = KI.run_command(service_path.as_str(), &["restart"]) {
+        return Ok(HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+            .into_builder()
+            .json(format!("Failed to restart service {:?}", e)));
     }
 
     Ok(HttpResponse::Ok().json(()))

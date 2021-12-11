@@ -14,6 +14,16 @@ use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 use std::path::Path;
 
+pub const APP_NAME: &str = "rita";
+
+pub fn default_app_name() -> String {
+    APP_NAME.to_string()
+}
+
+pub fn default_config_path() -> String {
+    format!("/etc/{}.toml", APP_NAME)
+}
+
 /// This struct is used by rita to store exit specific information
 /// There is one instance per exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -197,6 +207,8 @@ pub struct RitaClientSettings {
     pub exit_client: ExitClientSettings,
     #[serde(skip)]
     pub future: bool,
+    #[serde(default = "default_app_name")]
+    pub app_name: String,
 }
 
 impl RitaClientSettings {
