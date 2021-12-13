@@ -24,7 +24,7 @@ pub struct RunningLatencyStats {
     /// the lowest value we have ever seen on this link used to determine roughly what
     /// we should be expecting
     lowest: Option<f32>,
-    last_value: Option<f32>,
+    pub last_value: Option<f32>,
     /// the last time this counters interface was invalidated by a change
     #[serde(skip_serializing, skip_deserializing)]
     last_changed: Option<Instant>,
