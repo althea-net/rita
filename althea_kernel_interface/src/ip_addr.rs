@@ -43,6 +43,36 @@ impl dyn KernelInterface {
             ))),
         }
     }
+
+    /// Adds an ipv4 address to a given interface, true is returned when
+    /// the ip is added, false if it is already there and Error if the interface
+    /// does not exist or some other error has occured
+    pub fn add_ipv4_mask(&self, ip: Ipv4Addr, mask: u32, dev: &str) -> Result<bool, Error> {
+        // upwrap here because it's ok if we panic when the system does not have 'ip' installed
+        let output = self
+            .run_command(
+                "ip",
+                &["addr", "add", &format!("{}/{}", ip, mask), "dev", dev],
+            )
+            .unwrap();
+        // Get the first line, check if it has "file exists"
+        match String::from_utf8(output.stderr) {
+            Ok(stdout) => match stdout.lines().next() {
+                Some(line) => {
+                    if line.contains("File exists") {
+                        Ok(false)
+                    } else {
+                        Err(Error::RuntimeError(format!("Error setting ip {}", line)))
+                    }
+                }
+                None => Ok(true),
+            },
+            Err(e) => Err(Error::RuntimeError(format!(
+                "Could not decode stderr from ip with {:?}",
+                e
+            ))),
+        }
+    }
 }
 
 #[test]

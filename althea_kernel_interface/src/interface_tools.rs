@@ -111,6 +111,19 @@ impl dyn KernelInterface {
 
         Ok(ret)
     }
+
+    /// calls iproute2 to set an interface up or down
+    pub fn set_if_up_down(&self, if_name: &str, up_down: &str) -> Result<(), Error> {
+        let output = self.run_command("ip", &["link", "set", "dev", if_name, up_down])?;
+        if !output.stderr.is_empty() {
+            return Err(Error::RuntimeError(format!(
+                "received error setting wg interface up: {}",
+                String::from_utf8(output.stderr)?
+            )));
+        } else {
+            Ok(())
+        }
+    }
 }
 
 #[test]
