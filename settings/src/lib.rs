@@ -95,8 +95,6 @@ pub trait WrappedSettingsAdaptor {
     fn write_config(&self) -> Result<(), Error>;
     fn merge_client_json(&self, changed_settings: serde_json::Value) -> Result<(), Error>;
     fn get_config_json(&self) -> Result<serde_json::Value, Error>;
-    // fn read_client(&self) -> Result<RitaClientSettings, Error>;
-    // fn test(&self, arg: i32);
 }
 
 // This function can be called from a higher layer to set a reference to its adaptor
