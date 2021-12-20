@@ -25,7 +25,6 @@ pub fn enable_remote_logging(
         )
         .set_compression_level(Compression::Fast)
         .set_sink_url(log_url.as_str())
-        .set_threshold(1000)
         .set_format(Box::new(move |record: &Record| {
             format!(
                 "{} {} {}: {}\n",

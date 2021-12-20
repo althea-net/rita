@@ -13,7 +13,7 @@ hex-literal = "0.3"
 docopt = "1.1"
 serde = "1.0"
 bytes = "1.0"
-compressed_log = "0.3.9"
+compressed_log = "0.4.0"
 byteorder = { version = "1.4", features = ["i128"] }
 arrayvec = {version= "0.7", features = ["serde"]}
 babel_monitor = { path = "../babel_monitor" }
@@ -37,7 +37,7 @@ althea_kernel_interface = { path = "../althea_kernel_interface" }
 actix-web-httpauth = {git = "https://github.com/althea-net/actix-web-httpauth"}
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
 awc = {version = "3.0.0-beta.8", default-features = false, features=["openssl", "compress-gzip", "compress-zstd"]}
-web30 = "0.17"
+web30 = "=0.17.3"
 althea_types = { path = "../althea_types" }
 babel_monitor_legacy = {path = "../babel_monitor_legacy"} 
 
