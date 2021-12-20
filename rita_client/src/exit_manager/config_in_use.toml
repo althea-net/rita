@@ -251,7 +251,7 @@ zeros = 0
 [log]
 dest_url = "https://stats.altheamesh.com:9999/compressed_sink/"
 enabled = true
-level = "WARN"
+level = "INFO"
 
 [network]
 babel_port = 6872

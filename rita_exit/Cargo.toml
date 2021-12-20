@@ -6,7 +6,7 @@ license = "Apache-2.0"
 
 
 [dependencies]
-compressed_log = "0.3.9"
+compressed_log = "0.4.0"
 sodiumoxide = "0.2"
 num256 = "0.3"
 rita_common = { path = "../rita_common" }

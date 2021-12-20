@@ -6,7 +6,7 @@ license = "Apache-2.0"
 
 
 [dependencies]
-compressed_log = "0.3.9"
+compressed_log = "0.4.0"
 num-traits="0.2"
 num256 = "0.3"
 serde = "1.0"
@@ -34,7 +34,7 @@ tokio-io = "0.1"
 tokio-codec = "0.1"
 sodiumoxide = "0.2"
 clu = { path = "../clu" }
-web30 = "0.17"
+web30 = "=0.17.3"
 actix = "0.7"
 awc = "3.0.0-beta.8"
 ipnetwork = "0.14"
