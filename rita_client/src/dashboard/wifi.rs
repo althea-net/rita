@@ -26,6 +26,14 @@ pub const ALLOWED_FIVE_80: [u16; 6] = [36, 52, 100, 116, 132, 149];
 pub const ALLOWED_FIVE_80_IPQ40XX: [u16; 2] = [36, 149];
 /// list of nonoverlapping 80mhz channels for the TPLink-a6v3/wr-2100/e5600
 pub const ALLOWED_FIVE_80_MT7621: [u16; 1] = [36];
+/// NOTE: linksys_mr8300: The first 5 GHz radio (IPQ4019) is limited to ch. 64 and below. The second 5 GHz radio (QCA9888), is limited to ch. 100 and above.
+pub const ALLOWED_FIVE_80_LOW: [u16; 2] = [36, 52];
+pub const ALLOWED_FIVE_80_HIGH: [u16; 4] = [100, 116, 132, 149];
+pub const ALLOWED_FIVE_40_LOW: [u16; 4] = [36, 44, 52, 60];
+pub const ALLOWED_FIVE_40_HIGH: [u16; 8] = [100, 108, 116, 124, 132, 140, 149, 157];
+
+pub const ALLOWED_NONE: [u16; 0] = [];
+
 /// list of nonoverlapping 160mhz channels generally legal in NA, SA, EU, AU
 pub const ALLOWED_FIVE_160: [u16; 2] = [36, 100];
 
@@ -179,7 +187,12 @@ fn set_channel(wifi_channel: &WifiChannel) -> Result<(), Error> {
         .parse()?;
     let channel_width = KI.get_uci_var(&format!("wireless.{}.htmode", wifi_channel.radio))?;
 
-    if let Err(e) = validate_channel(current_channel, wifi_channel.channel, &channel_width) {
+    if let Err(e) = validate_channel(
+        current_channel,
+        wifi_channel.channel,
+        &channel_width,
+        wifi_channel,
+    ) {
         info!("Setting of invalid SSID was requested: {}", e);
         return Err(e.into());
         // return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
@@ -311,6 +324,7 @@ fn validate_channel(
     old_val: u16,
     new_val: u16,
     channel_width: &str,
+    wifi_channel: &WifiChannel,
 ) -> Result<(), ValidationError> {
     let old_is_two = old_val < 20;
     let old_is_five = !old_is_two;
@@ -372,6 +386,14 @@ fn validate_channel(
                 "80".to_string(),
                 format!("{:?}", ALLOWED_FIVE_80_MT7621),
             ))
+        }
+        // NOTE: linksys_mr8300: The first 5 GHz radio (IPQ4019) is limited to ch. 64 and below. The second 5 GHz radio (QCA9888), is limited to ch. 100 and above.
+        else if mdl.contains("linksys_mr8300")
+            && new_is_five
+            && ((wifi_channel.radio == "radio0" && new_val > 64)
+                || (wifi_channel.radio == "radio2" && new_val < 100))
+        {
+            Err(ValidationError::InvalidChoice)
         } else {
             Ok(())
         }
@@ -395,6 +417,18 @@ pub fn get_allowed_wifi_channels(radio: Path<String>) -> Result<HttpResponse, Er
         Ok(HttpResponse::Ok().json(ALLOWED_TWO))
 
     // model specific values start here
+    } else if model.is_some() && (model.clone().unwrap().contains("linksys_mr8300")) {
+        if five_channel_width.contains("80") && radio == "radio0" {
+            Ok(HttpResponse::Ok().json(ALLOWED_FIVE_80_LOW))
+        } else if five_channel_width.contains("80") && radio == "radio2" {
+            Ok(HttpResponse::Ok().json(ALLOWED_FIVE_80_HIGH))
+        } else if five_channel_width.contains("40") && radio == "radio0" {
+            Ok(HttpResponse::Ok().json(ALLOWED_FIVE_40_LOW))
+        } else if five_channel_width.contains("40") && radio == "radio2" {
+            Ok(HttpResponse::Ok().json(ALLOWED_FIVE_40_HIGH))
+        } else {
+            Ok(HttpResponse::Ok().json(ALLOWED_NONE))
+        }
     } else if model.is_some()
         && (model.clone().unwrap().contains("gl-b1300")
             || model.clone().unwrap().contains("linksys_ea6350v3"))
