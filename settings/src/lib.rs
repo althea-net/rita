@@ -26,6 +26,7 @@ use payment::PaymentSettings;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::fs::File;
 use std::io::Write;
 use std::net::{IpAddr, Ipv6Addr};
@@ -52,16 +53,6 @@ pub const APAC_IP: IpAddr = IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0x13
 pub const SA_IP: IpAddr = IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0x1337, 0x6e2f));
 
 lazy_static! {
-    static ref EXIT_SETTING: Arc<RwLock<Option<RitaExitSettingsStruct>>> =
-        Arc::new(RwLock::new(None));
-}
-
-lazy_static! {
-    static ref CLIENT_SETTING: Arc<RwLock<Option<RitaClientSettings>>> =
-        Arc::new(RwLock::new(None));
-}
-
-lazy_static! {
     static ref GIT_HASH: Arc<RwLock<String>> = Arc::new(RwLock::new(String::new()));
 }
 
@@ -70,12 +61,25 @@ lazy_static! {
 }
 
 lazy_static! {
-    static ref SETTINGS_TYPE: Arc<RwLock<SettingsType>> = Arc::new(RwLock::new(SettingsType::None));
+    static ref SETTINGS: Arc<RwLock<Option<Settings>>> = Arc::new(RwLock::new(None));
 }
 
-lazy_static! {
-    static ref ADAPTOR: Arc<RwLock<Option<Box<dyn WrappedSettingsAdaptor + Send + Sync + 'static>>>> =
-        Arc::new(RwLock::new(None));
+#[derive()]
+pub struct AdaptorSettings {
+    pub adaptor: Box<dyn WrappedSettingsAdaptor + Send + Sync + 'static>,
+}
+impl Debug for AdaptorSettings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "AdaptorSettings")
+    }
+}
+
+#[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
+pub enum Settings {
+    Client(RitaClientSettings),
+    Exit(RitaExitSettingsStruct),
+    Adaptor(AdaptorSettings),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -97,22 +101,21 @@ pub trait WrappedSettingsAdaptor {
     fn get_config_json(&self) -> Result<serde_json::Value, Error>;
 }
 
-// This function can be called from a higher layer to set a reference to its adaptor
+// This function can be called from a higher layer (wrapping binary) to set a reference to its adaptor
 // Doing so will disable local reads/writes and instead call the adaptor's relevant fns
+// Can only be called once if no other settings exist in the SETTINGS global
 pub fn set_adaptor<T: 'static + WrappedSettingsAdaptor + Send + Sync>(adaptor: T) {
-    // set the type to adaptor which disables local processing
-    set_settings_type(SettingsType::Adaptor);
-    // set the ref
-    *ADAPTOR.write().unwrap() = Some(Box::new(adaptor))
-}
-
-pub fn get_settings_type() -> SettingsType {
-    let temp = &*SETTINGS_TYPE.read().unwrap();
-    temp.clone()
-}
-
-pub fn set_settings_type(typ: SettingsType) {
-    *SETTINGS_TYPE.write().unwrap() = typ
+    let settings_ref: &mut Option<Settings> = &mut *SETTINGS.write().unwrap();
+    match settings_ref {
+        // make sure this only gets called once on start
+        Some(_) => panic!("Attempted to set settings adapter to a non-empty SETTINGS global"),
+        // if there are no settings, then save as Adaptor
+        None => {
+            *settings_ref = Some(Settings::Adaptor(AdaptorSettings {
+                adaptor: Box::new(adaptor),
+            }))
+        }
+    }
 }
 
 /// A generic version of the more specific Rita settings struts use for Rita common
@@ -130,144 +133,98 @@ impl RitaSettings {
     }
 }
 
+/// write the current SETTINGS from memory to file
 pub fn write_config() -> Result<(), Error> {
-    if get_settings_type() == SettingsType::Adaptor {
-        match &*ADAPTOR.read().unwrap() {
-            Some(adaptor) => adaptor.write_config(),
-            None => panic!("Settings are wrapped but found no adaptor!"),
+    match &*SETTINGS.read().unwrap() {
+        Some(Settings::Adaptor(adapt)) => adapt.adaptor.write_config(),
+        Some(Settings::Client(settings)) => {
+            let filename = FLAG_CONFIG.read().unwrap();
+            settings.write(&filename)
         }
-    } else {
-        let client_settings = &mut *CLIENT_SETTING.write().unwrap();
-        let exit_settings = &mut *EXIT_SETTING.write().unwrap();
-        // let wrap_settings = WRAP_ADAPTOR
-        let filename = FLAG_CONFIG.read().unwrap();
-        match (client_settings, exit_settings) {
-            (Some(client), None) => client.write(&filename),
-            (None, Some(exit)) => exit.write(&filename),
-            (Some(_), Some(_)) => {
-                panic!("Both types of config are loaded, this is impossible in production!")
-            }
-            (None, None) => panic!("No config has been loaded, check init"),
+        Some(Settings::Exit(settings)) => {
+            let filename = FLAG_CONFIG.read().unwrap();
+            settings.write(&filename)
         }
+        None => panic!("expected settings but got none"),
     }
 }
 
+/// get a JSON value of all settings
 pub fn get_config_json() -> Result<serde_json::Value, Error> {
-    if get_settings_type() == SettingsType::Adaptor {
-        match &*ADAPTOR.read().unwrap() {
-            Some(adaptor) => adaptor
-                .get_client()
-                .expect("Adaptor failed to get_client")
-                .get_all(),
-            None => panic!("settings are wrapped but found no adaptor!"),
-        }
-    } else {
-        let client_settings = &mut *CLIENT_SETTING.write().unwrap();
-        let exit_settings = &mut *EXIT_SETTING.write().unwrap();
-        match (client_settings, exit_settings) {
-            (Some(client), None) => client.get_all(),
-            (None, Some(exit)) => exit.get_all(),
-            (Some(_), Some(_)) => {
-                panic!("Both types of config are loaded, this is impossible in production!")
-            }
-            (None, None) => panic!("No config has been loaded, check init"),
-        }
+    match &*SETTINGS.read().unwrap() {
+        Some(Settings::Adaptor(adapt)) => adapt.adaptor.get_config_json(),
+        Some(Settings::Client(settings)) => settings.get_all(),
+        Some(Settings::Exit(settings)) => settings.get_all(),
+        None => panic!("expected settings but got none"),
     }
 }
 
+/// merge a json of a subset of settings into global settings
 pub fn merge_config_json(changed_settings: serde_json::Value) -> Result<(), Error> {
-    if get_settings_type() == SettingsType::Adaptor {
-        match &*ADAPTOR.read().unwrap() {
-            Some(adaptor) => adaptor.merge_client_json(changed_settings),
-            None => panic!("settings are wrapped but found no adaptor!"),
-        }
-    } else {
-        let client_settings = &mut *CLIENT_SETTING.write().unwrap();
-        let exit_settings = &mut *EXIT_SETTING.write().unwrap();
-        match (client_settings, exit_settings) {
-            (Some(client), None) => client.merge(changed_settings),
-            (None, Some(exit)) => exit.merge(changed_settings),
-            (Some(_), Some(_)) => {
-                panic!("Both types of config are loaded, this is impossible in production!")
-            }
-            (None, None) => panic!("No config has been loaded, check init"),
-        }
+    let settings_ref: &mut Option<Settings> = &mut *SETTINGS.write().unwrap();
+    match settings_ref {
+        Some(Settings::Adaptor(adapt)) => adapt.adaptor.merge_client_json(changed_settings),
+        Some(Settings::Client(client_settings)) => client_settings.merge(changed_settings),
+        Some(Settings::Exit(exit_settings)) => exit_settings.merge(changed_settings),
+        None => panic!("attempted to merge config to a missing Settings"),
     }
 }
 
-/// Set the RitaClientSettings Struct or RitaExitSettingsStruct
-/// depending on which one is called from the argument parameter
-/// does not currently save the identity paramater, as we don't
+/// Save generic settings into memory.
+/// Does not currently save the identity paramater, as we don't
 /// need to modify that in a generic context.
 pub fn set_rita_common(input: RitaSettings) {
-    if get_settings_type() == SettingsType::Adaptor {
-        match &*ADAPTOR.read().unwrap() {
-            Some(adaptor) => {
-                let mut client_settings =
-                    adaptor.get_client().expect("Adaptor failed to get_client");
-                client_settings.network = input.network;
-                client_settings.payment = input.payment;
-                adaptor
-                    .set_client(client_settings)
-                    .expect("Adaptor failed to set_client");
-            }
-            None => panic!("settings are wrapped but found no adaptor!"),
+    let settings_ref: &mut Option<Settings> = &mut *SETTINGS.write().unwrap();
+    match settings_ref {
+        Some(Settings::Adaptor(adapt)) => {
+            let mut client_settings = adapt
+                .adaptor
+                .get_client()
+                .expect("Adaptor failed to get_client");
+            client_settings.network = input.network;
+            client_settings.payment = input.payment;
+            adapt
+                .adaptor
+                .set_client(client_settings)
+                .expect("Adaptor failed to set_client");
         }
-    } else {
-        let client_settings = &mut *CLIENT_SETTING.write().unwrap();
-        let exit_settings = &mut *EXIT_SETTING.write().unwrap();
-        match (client_settings, exit_settings) {
-            (Some(client), None) => {
-                client.network = input.network;
-                client.payment = input.payment;
-            }
-            // do the other way around for rita exit, panic if both are Some()
-            // if both are none also panic becuase rita_client or rita_exit must first
-            // initialize
-            (None, Some(exit)) => {
-                exit.network = input.network;
-                exit.payment = input.payment;
-            }
-            (Some(_), Some(_)) => {
-                panic!("Both types of config are loaded, this is impossible in production!")
-            }
-            (None, None) => panic!("No config has been loaded, check init"),
+        // if there's a client setting, then save over it
+        Some(Settings::Client(client_settings)) => {
+            client_settings.network = input.network;
+            client_settings.payment = input.payment;
         }
+        // error if there's an exit here
+        Some(Settings::Exit(exit_settings)) => {
+            exit_settings.network = input.network;
+            exit_settings.payment = input.payment;
+        }
+        // if there are no settings, then save as Client
+        None => panic!("attempted to save rita settings to an empty Settings var"),
     }
 }
 
-/// Get the RitaClientSettingsStruct or RitaExitSettingsStruct
-/// depending on which one is set
+/// get the current settings and extract generic RitaSettings from it
 pub fn get_rita_common() -> RitaSettings {
-    if get_settings_type() == SettingsType::Adaptor {
-        match &*ADAPTOR.read().unwrap() {
-            Some(adaptor) => {
-                let client_settings = adaptor.get_client().expect("Adaptor failed to get_client");
-                RitaSettings {
-                    network: client_settings.network.clone(),
-                    payment: client_settings.payment.clone(),
-                    identity: client_settings.get_identity(),
-                }
+    match &*SETTINGS.read().unwrap() {
+        Some(Settings::Adaptor(adapt)) => {
+            let settings = adapt.adaptor.get_client().unwrap();
+            RitaSettings {
+                network: settings.network.clone(),
+                payment: settings.payment.clone(),
+                identity: settings.get_identity(),
             }
-            None => panic!("settings are wrapped but found no adaptor!"),
         }
-    } else {
-        let client_settings = &*CLIENT_SETTING.read().unwrap();
-        let exit_settings = &*EXIT_SETTING.read().unwrap();
-        match (client_settings, exit_settings) {
-            (Some(client), None) => RitaSettings {
-                network: client.network.clone(),
-                payment: client.payment.clone(),
-                identity: client.get_identity(),
-            },
-            (None, Some(exit)) => RitaSettings {
-                network: exit.network.clone(),
-                payment: exit.payment.clone(),
-                identity: exit.get_identity(),
-            },
-            (Some(_), Some(_)) => panic!("Rita_common cannot be both exit and client"),
-            (None, None) => panic!("Both types are none. One needs to be initalized!"),
-        }
+        Some(Settings::Client(settings)) => RitaSettings {
+            network: settings.network.clone(),
+            payment: settings.payment.clone(),
+            identity: settings.get_identity(),
+        },
+        Some(Settings::Exit(settings)) => RitaSettings {
+            network: settings.network.clone(),
+            payment: settings.payment.clone(),
+            identity: settings.get_identity(),
+        },
+        None => panic!("expected settings but got none"),
     }
 }
 
@@ -289,47 +246,46 @@ pub fn get_flag_config() -> String {
     ret.clone()
 }
 
+/// set client settings into local or adaptor memory
+/// panics if called on exit settings
 pub fn set_rita_client(client_setting: RitaClientSettings) {
-    if get_settings_type() == SettingsType::Adaptor {
-        match &*ADAPTOR.read().unwrap() {
-            Some(adaptor) => adaptor
-                .set_client(client_setting)
-                .expect("Adaptor failed to set_client"),
-            None => panic!("Settings are wrapped but found no adaptor!"),
-        }
-    } else {
-        *CLIENT_SETTING.write().unwrap() = Some(client_setting);
+    let settings_ref = &mut *SETTINGS.write().unwrap();
+    match settings_ref {
+        // if there's an adaptor already saved, then use it to set there
+        Some(Settings::Adaptor(adapt)) => adapt.adaptor.set_client(client_setting).unwrap(),
+        // if there's a client setting, then save over it
+        Some(Settings::Client(_)) => *settings_ref = Some(Settings::Client(client_setting)),
+        // error if there's an exit here
+        Some(Settings::Exit(_)) => panic!("attempted to save client settings over exit settings"),
+        // if there are no settings, then save as Client
+        None => *settings_ref = Some(Settings::Client(client_setting)),
     }
 }
 
+/// get client settings from local or adaptor memory
+/// panics if called on exit settings
 pub fn get_rita_client() -> RitaClientSettings {
-    if get_settings_type() == SettingsType::Adaptor {
-        match &*ADAPTOR.read().unwrap() {
-            Some(adaptor) => adaptor.get_client().expect("Adaptor failed to get_client"),
-            None => panic!("Settings are wrapped but found no adaptor!"),
-        }
-    } else {
-        let temp = &*CLIENT_SETTING.read().unwrap();
-        let ret = match temp {
-            Some(val) => val,
-            None => panic!("Attempted to get_rita_client() before initialization"),
-        };
-        ret.clone()
+    match &*SETTINGS.read().unwrap() {
+        Some(Settings::Adaptor(adapt)) => adapt.adaptor.get_client().unwrap(),
+        Some(Settings::Client(settings)) => settings.clone(),
+        Some(Settings::Exit(_)) => panic!("expected client settings, but got exit setttings"),
+        None => panic!("expected settings but got none"),
     }
 }
 
+/// Set exit settings into memory
 pub fn set_rita_exit(exit_setting: RitaExitSettingsStruct) {
-    *EXIT_SETTING.write().unwrap() = Some(exit_setting);
+    *SETTINGS.write().unwrap() = Some(Settings::Exit(exit_setting));
 }
 
-/// This function retrieves the rita exit binary settings.
+/// Retrieve exit settings from memory
 pub fn get_rita_exit() -> RitaExitSettingsStruct {
-    let temp = &*EXIT_SETTING.read().unwrap();
-    let ret = match temp {
-        Some(val) => val,
-        None => panic!("Attempted to get_rita_exit() before initialization"),
-    };
-    ret.clone()
+    let temp = &*SETTINGS.read().unwrap();
+    if let Some(Settings::Exit(val)) = temp {
+        val.clone()
+    } else {
+        panic!("Failed to get RitaExitSettings from storage");
+    }
 }
 
 /// This merges 2 json objects, overwriting conflicting values in `a`
@@ -344,10 +300,6 @@ pub fn json_merge(a: &mut Value, b: &Value) {
             *a = b.clone();
         }
     }
-}
-
-pub trait FileWrite {
-    fn write(&self, file_name: &str) -> Result<(), Error>;
 }
 
 /// Spawns a thread that will grab a copy of the updated RitaSettings
@@ -397,6 +349,13 @@ fn spawn_watch_thread_exit(settings: RitaExitSettingsStruct, file_path: &str) {
             }
         }
     });
+}
+
+/// FileWrite does the actual write of settings to disk.
+/// Must be called from the context that holds the settings var in memory.
+/// In the case of adaptor settings, must be called in the wrapping binary.  
+pub trait FileWrite {
+    fn write(&self, file_name: &str) -> Result<(), Error>;
 }
 
 impl<T> FileWrite for T
