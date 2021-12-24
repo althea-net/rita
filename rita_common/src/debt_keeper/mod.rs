@@ -487,9 +487,11 @@ impl DebtKeeper {
         // the debt we started this round with
 
         if debt_data.debt != Int256::zero() {
-            info!(
+            trace!(
                 "debt update for {}: debt: {}, payment balance: {}",
-                ident.wg_public_key, debt_data.debt, debt_data.incoming_payments,
+                ident.wg_public_key,
+                debt_data.debt,
+                debt_data.incoming_payments,
             );
         }
 
