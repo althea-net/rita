@@ -188,17 +188,17 @@ pub fn set_rita_common(input: RitaSettings) {
                 .set_client(client_settings)
                 .expect("Adaptor failed to set_client");
         }
-        // if there's a client setting, then save over it
+        // if there's a client setting, update it
         Some(Settings::Client(client_settings)) => {
             client_settings.network = input.network;
             client_settings.payment = input.payment;
         }
-        // error if there's an exit here
+        // if there's an exit settings, update it
         Some(Settings::Exit(exit_settings)) => {
             exit_settings.network = input.network;
             exit_settings.payment = input.payment;
         }
-        // if there are no settings, then save as Client
+        // if there are no settings, panic
         None => panic!("attempted to save rita settings to an empty Settings var"),
     }
 }
