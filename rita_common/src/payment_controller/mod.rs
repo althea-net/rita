@@ -146,7 +146,7 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
     let our_private_key = &payment_settings
         .eth_private_key
         .expect("No private key configured!");
-    let our_address = our_private_key.to_public_key().unwrap();
+    let our_address = our_private_key.to_address();
 
     info!(
         "current balance: {:?}, payment of {:?}, from address {} to address {} with nonce {}",

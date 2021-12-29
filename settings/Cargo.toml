@@ -18,7 +18,7 @@ log = "0.4"
 failure = "0.1"
 owning_ref = "0.4"
 lazy_static = "1.4"
-clarity = "0.4"
+clarity = "0.5"
 arrayvec = {version= "0.7", features = ["serde"]}
 phonenumber = "0.3"
 ipnetwork = "0.14"

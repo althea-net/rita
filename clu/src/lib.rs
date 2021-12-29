@@ -170,10 +170,10 @@ fn linux_init(settings: RitaClientSettings) -> Result<RitaClientSettings, Error>
         Some(existing_eth_private_key) => {
             info!(
                 "Starting with Eth address {:?}",
-                existing_eth_private_key.to_public_key()?
+                existing_eth_private_key.to_address()
             );
 
-            payment_settings.eth_address = Some(existing_eth_private_key.to_public_key()?);
+            payment_settings.eth_address = Some(existing_eth_private_key.to_address());
         }
         None => {
             info!("Eth key details not configured, generating");
@@ -181,7 +181,7 @@ fn linux_init(settings: RitaClientSettings) -> Result<RitaClientSettings, Error>
             let new_private_key = PrivateKey::from_slice(&key_buf)?;
             payment_settings.eth_private_key = Some(new_private_key);
 
-            payment_settings.eth_address = Some(new_private_key.to_public_key()?)
+            payment_settings.eth_address = Some(new_private_key.to_address())
         }
     }
 
@@ -250,10 +250,10 @@ fn linux_exit_init(settings: RitaExitSettingsStruct) -> Result<RitaExitSettingsS
         Some(existing_eth_private_key) => {
             info!(
                 "Starting with Eth address {:?}",
-                existing_eth_private_key.to_public_key()?
+                existing_eth_private_key.to_address()
             );
 
-            payment_settings.eth_address = Some(existing_eth_private_key.to_public_key()?);
+            payment_settings.eth_address = Some(existing_eth_private_key.to_address());
         }
         None => {
             info!("Eth key details not configured, generating");
@@ -261,7 +261,7 @@ fn linux_exit_init(settings: RitaExitSettingsStruct) -> Result<RitaExitSettingsS
             let new_private_key = PrivateKey::from_slice(&key_buf)?;
             payment_settings.eth_private_key = Some(new_private_key);
 
-            payment_settings.eth_address = Some(new_private_key.to_public_key()?)
+            payment_settings.eth_address = Some(new_private_key.to_address())
         }
     }
     settings.payment = payment_settings;

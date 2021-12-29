@@ -17,7 +17,7 @@ rand = "0.8"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
-clarity = "0.4"
+clarity = "0.5"
 sodiumoxide = "0.2"
 
 [dependencies.regex]
