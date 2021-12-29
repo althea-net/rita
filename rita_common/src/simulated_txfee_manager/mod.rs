@@ -34,7 +34,7 @@ pub fn add_tx_to_total(amount: Uint256) {
 pub async fn tick_simulated_tx() {
     let payment_settings = settings::get_rita_common().payment;
     let eth_private_key = payment_settings.eth_private_key.unwrap();
-    let eth_address = eth_private_key.to_public_key().unwrap();
+    let eth_address = eth_private_key.to_address();
     let our_id = match settings::get_rita_common().get_identity() {
         Some(id) => id,
         None => return,

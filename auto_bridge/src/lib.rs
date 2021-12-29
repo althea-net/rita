@@ -607,7 +607,7 @@ mod tests {
 
         TokenBridge::new(
             default_bridge_addresses(),
-            pk.to_public_key().unwrap(),
+            pk.to_address(),
             pk,
             "https://eth.altheamesh.com".into(),
             "https://dai.altheamesh.com".into(),
