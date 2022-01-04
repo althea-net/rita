@@ -34,6 +34,7 @@ use failure::Error;
 use futures01::future;
 use futures01::Future;
 use ipnetwork::IpNetwork;
+use rita_common::blockchain_oracle::get_oracle_close_thresh;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::debt_keeper::DebtAction;
 use rita_common::utils::wait_timeout::wait_timeout;
@@ -418,7 +419,7 @@ pub fn enforce_exit_clients(
     let start = Instant::now();
     let mut clients_by_id = HashMap::new();
     let free_tier_limit = settings::get_rita_exit().payment.free_tier_throughput;
-    let close_threshold = settings::get_rita_exit().payment.close_threshold;
+    let close_threshold = get_oracle_close_thresh();
     for client in clients_list.iter() {
         if let Ok(id) = to_identity(client) {
             clients_by_id.insert(id, client);

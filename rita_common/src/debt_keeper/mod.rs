@@ -8,6 +8,8 @@
 //! increase the amount we owe Bob? That's probably a vulnerability rabbit hole at the very least.
 //! Hence we need an incoming payments parameter to take money out of. This of course implies half
 //! of the excess complexity you see, managing an incoming payments pool versus a incoming debts pool
+use crate::blockchain_oracle::get_oracle_close_thresh;
+use crate::blockchain_oracle::get_oracle_pay_thresh;
 use crate::payment_controller::queue_payment;
 use crate::payment_validator::PAYMENT_SEND_TIMEOUT;
 use crate::simulated_txfee_manager::add_tx_to_total;
@@ -280,8 +282,8 @@ pub fn send_debt_update() -> Result<(), Error> {
 impl Default for DebtKeeper {
     fn default() -> DebtKeeper {
         let common = settings::get_rita_common();
-        assert!(common.payment.pay_threshold >= Int256::zero());
-        assert!(common.payment.close_threshold <= Int256::zero());
+        assert!(get_oracle_pay_thresh() >= Int256::zero());
+        assert!(get_oracle_close_thresh() <= Int256::zero());
         let file = File::open(common.payment.debts_file);
         // if the loading process goes wrong for any reason, we just start again
         let blank_debt_keeper = DebtKeeper {
@@ -325,9 +327,8 @@ impl Default for DebtKeeper {
 impl DebtKeeper {
     #[cfg(test)]
     pub fn new() -> Self {
-        let common = settings::get_rita_common();
-        assert!(common.payment.pay_threshold >= Int256::zero());
-        assert!(common.payment.close_threshold <= Int256::zero());
+        assert!(get_oracle_pay_thresh() >= Int256::zero());
+        assert!(get_oracle_close_thresh() <= Int256::zero());
 
         DebtKeeper {
             last_save: None,
@@ -496,8 +497,8 @@ impl DebtKeeper {
         }
 
         let payment_settings = settings::get_rita_common().payment;
-        let close_threshold = payment_settings.close_threshold.clone();
-        let pay_threshold = payment_settings.pay_threshold.clone();
+        let close_threshold = get_oracle_close_thresh();
+        let pay_threshold = get_oracle_pay_thresh();
         let fudge_factor = payment_settings.fudge_factor;
         let debt_limit_enabled = payment_settings.debt_limit_enabled;
         let apply_incoming_credit_immediately = payment_settings.apply_incoming_credit_immediately;
@@ -636,6 +637,8 @@ mod tests {
     use rand::Rng;
     use settings::client::RitaClientSettings;
 
+    use crate::blockchain_oracle::{set_oracle_gas_info, GasInfo};
+
     use super::*;
 
     fn get_test_identity() -> Identity {
@@ -673,10 +676,11 @@ mod tests {
     #[test]
     fn test_single_suspend() {
         settings::set_rita_client(RitaClientSettings::default());
-        let mut common = settings::get_rita_common();
-        common.payment.pay_threshold = Int256::from(5);
-        common.payment.close_threshold = Int256::from(-10);
-        settings::set_rita_common(common);
+        set_oracle_gas_info(GasInfo {
+            gas_price: 0u32.into(),
+            payment_threshold: Int256::from(5),
+            close_threshold: Int256::from(-10),
+        });
 
         let mut d = DebtKeeper::new();
 
@@ -690,10 +694,11 @@ mod tests {
     #[test]
     fn test_single_overpay() {
         settings::set_rita_client(RitaClientSettings::default());
-        let mut common = settings::get_rita_common();
-        common.payment.pay_threshold = Int256::from(5);
-        common.payment.close_threshold = Int256::from(-10);
-        settings::set_rita_common(common);
+        set_oracle_gas_info(GasInfo {
+            gas_price: 0u32.into(),
+            payment_threshold: Int256::from(5),
+            close_threshold: Int256::from(-10),
+        });
 
         let mut d = DebtKeeper::new();
 
@@ -709,8 +714,11 @@ mod tests {
     fn test_single_pay() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
-        common.payment.pay_threshold = Int256::from(5);
-        common.payment.close_threshold = Int256::from(-10);
+        set_oracle_gas_info(GasInfo {
+            gas_price: 0u32.into(),
+            payment_threshold: Int256::from(5),
+            close_threshold: Int256::from(-10),
+        });
         common.payment.debt_limit_enabled = false;
         settings::set_rita_common(common);
 
@@ -732,8 +740,11 @@ mod tests {
     fn test_single_pay_limited() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
-        common.payment.pay_threshold = Int256::from(5);
-        common.payment.close_threshold = Int256::from(-10);
+        set_oracle_gas_info(GasInfo {
+            gas_price: 0u32.into(),
+            payment_threshold: Int256::from(5),
+            close_threshold: Int256::from(-10),
+        });
         common.payment.debt_limit_enabled = true;
         settings::set_rita_common(common);
 
@@ -754,10 +765,11 @@ mod tests {
     #[test]
     fn test_single_reopen() {
         settings::set_rita_client(RitaClientSettings::default());
-        let mut common = settings::get_rita_common();
-        common.payment.pay_threshold = Int256::from(5);
-        common.payment.close_threshold = Int256::from(-10);
-        settings::set_rita_common(common);
+        set_oracle_gas_info(GasInfo {
+            gas_price: 0u32.into(),
+            payment_threshold: Int256::from(5),
+            close_threshold: Int256::from(-10),
+        });
 
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
@@ -775,8 +787,11 @@ mod tests {
     fn test_multi_pay() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
-        common.payment.pay_threshold = Int256::from(5);
-        common.payment.close_threshold = Int256::from(-10);
+        set_oracle_gas_info(GasInfo {
+            gas_price: 0u32.into(),
+            payment_threshold: Int256::from(5),
+            close_threshold: Int256::from(-10),
+        });
         common.payment.debt_limit_enabled = false;
         settings::set_rita_common(common);
 
@@ -800,8 +815,11 @@ mod tests {
     fn test_multi_pay_lmited() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
-        common.payment.pay_threshold = Int256::from(5);
-        common.payment.close_threshold = Int256::from(-10);
+        set_oracle_gas_info(GasInfo {
+            gas_price: 0u32.into(),
+            payment_threshold: Int256::from(5),
+            close_threshold: Int256::from(-10),
+        });
         common.payment.debt_limit_enabled = true;
         settings::set_rita_common(common);
 
@@ -824,10 +842,11 @@ mod tests {
     #[test]
     fn test_multi_fail() {
         settings::set_rita_client(RitaClientSettings::default());
-        let mut common = settings::get_rita_common();
-        common.payment.pay_threshold = Int256::from(5);
-        common.payment.close_threshold = Int256::from(-10);
-        settings::set_rita_common(common);
+        set_oracle_gas_info(GasInfo {
+            gas_price: 0u32.into(),
+            payment_threshold: Int256::from(5),
+            close_threshold: Int256::from(-10),
+        });
 
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
@@ -845,10 +864,11 @@ mod tests {
     #[test]
     fn test_multi_reopen() {
         settings::set_rita_client(RitaClientSettings::default());
-        let mut common = settings::get_rita_common();
-        common.payment.pay_threshold = Int256::from(5);
-        common.payment.close_threshold = Int256::from(-10);
-        settings::set_rita_common(common);
+        set_oracle_gas_info(GasInfo {
+            gas_price: 0u32.into(),
+            payment_threshold: Int256::from(5),
+            close_threshold: Int256::from(-10),
+        });
 
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
@@ -870,8 +890,11 @@ mod tests {
     fn test_credit_reopen() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
-        common.payment.pay_threshold = Int256::from(5);
-        common.payment.close_threshold = Int256::from(-10);
+        set_oracle_gas_info(GasInfo {
+            gas_price: 0u32.into(),
+            payment_threshold: Int256::from(5),
+            close_threshold: Int256::from(-10),
+        });
         common.payment.debt_limit_enabled = false;
         settings::set_rita_common(common);
 
@@ -898,8 +921,11 @@ mod tests {
     #[test]
     fn test_credit_reopen_limited() {
         let mut common = settings::get_rita_common();
-        common.payment.pay_threshold = Int256::from(10);
-        common.payment.close_threshold = Int256::from(-100);
+        set_oracle_gas_info(GasInfo {
+            gas_price: 0u32.into(),
+            payment_threshold: Int256::from(10),
+            close_threshold: Int256::from(-100),
+        });
         common.payment.debt_limit_enabled = true;
         settings::set_rita_common(common);
 
@@ -930,8 +956,11 @@ mod tests {
     fn test_payment_fail() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
-        common.payment.pay_threshold = Int256::from(5);
-        common.payment.close_threshold = Int256::from(-10);
+        set_oracle_gas_info(GasInfo {
+            gas_price: 0u32.into(),
+            payment_threshold: Int256::from(5),
+            close_threshold: Int256::from(-10),
+        });
         common.payment.debt_limit_enabled = false;
         settings::set_rita_common(common);
 
@@ -1010,8 +1039,11 @@ mod tests {
         settings::set_rita_client(RitaClientSettings::default());
 
         let mut common = settings::get_rita_common();
-        common.payment.pay_threshold = Int256::from(5);
-        common.payment.close_threshold = Int256::from(-10);
+        set_oracle_gas_info(GasInfo {
+            gas_price: 0u32.into(),
+            payment_threshold: Int256::from(5),
+            close_threshold: Int256::from(-10),
+        });
         common.payment.debt_limit_enabled = true;
         settings::set_rita_common(common);
 

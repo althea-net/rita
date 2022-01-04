@@ -16,6 +16,7 @@ use std::time::Instant;
 use web30::client::Web3;
 use web30::types::SendTxOption;
 
+use crate::blockchain_oracle::{get_oracle_latest_gas_price, get_oracle_nonce, set_oracle_nonce};
 use crate::debt_keeper::payment_failed;
 use crate::payment_validator::{validate_later, ToValidate};
 use crate::rita_loop::get_web3_server;
@@ -141,8 +142,8 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
     let network_settings = common.network;
     let payment_settings = common.payment;
     let balance = payment_settings.balance.clone();
-    let nonce = payment_settings.nonce.clone();
-    let gas_price = payment_settings.gas_price.clone();
+    let nonce = get_oracle_nonce();
+    let gas_price = get_oracle_latest_gas_price();
     let our_private_key = &payment_settings
         .eth_private_key
         .expect("No private key configured!");
@@ -211,9 +212,7 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
     // increment our nonce, this allows us to send another transaction
     // right away before this one that we just sent out gets into the chain
     {
-        let mut common = settings::get_rita_common();
-        common.payment.nonce += 1u64.into();
-        settings::set_rita_common(common);
+        set_oracle_nonce(get_oracle_nonce() + 1u64.into());
     }
 
     info!("Sending bw payment with txid {:#066x} current balance: {:?}, payment of {:?}, from address {} to address {} with nonce {}",
