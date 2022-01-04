@@ -1,4 +1,4 @@
-use crate::blockchain_oracle::low_balance;
+use crate::blockchain_oracle::{get_oracle_close_thresh, get_oracle_pay_thresh, low_balance};
 use crate::rita_loop::is_gateway;
 use actix_web::{HttpRequest, Json};
 use clarity::Address;
@@ -28,8 +28,8 @@ pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
     let payment_settings = settings::get_rita_common().payment;
     let eth_address = payment_settings.eth_address.unwrap();
     let balance = payment_settings.balance.clone();
-    let pay_threshold = payment_settings.pay_threshold.clone();
-    let close_threshold = payment_settings.close_threshold.clone();
+    let pay_threshold = get_oracle_pay_thresh();
+    let close_threshold = get_oracle_close_thresh();
     let local_fee = payment_settings.local_fee;
     let client_can_use_free_tier = payment_settings.client_can_use_free_tier;
 

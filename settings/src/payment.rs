@@ -2,11 +2,9 @@ use althea_types::SystemChain;
 use auto_bridge::default_bridge_addresses;
 use auto_bridge::TokenBridgeAddresses;
 use clarity::{Address, PrivateKey};
-use num256::{Int256, Uint256};
+use num256::Uint256;
 
 pub const XDAI_FEE_MULTIPLIER: u32 = 6000;
-pub const XDAI_MIN_GAS: u64 = 1_000_000_000;
-pub const ETH_MIN_GAS: u64 = 1;
 pub const ETH_FEE_MULTIPLIER: u32 = 20;
 
 fn default_local_fee() -> u32 {
@@ -14,14 +12,6 @@ fn default_local_fee() -> u32 {
 }
 fn default_max_fee() -> u32 {
     200_000_000u32 // updated by oracle denominated in wei
-}
-
-fn default_close_threshold() -> Int256 {
-    (-8_400_000_000_000_000i64).into()
-}
-
-fn default_pay_threshold() -> Int256 {
-    840_000_000_000_000i64.into()
 }
 
 fn default_dynamic_fee_multiplier() -> u32 {
@@ -80,13 +70,6 @@ fn default_simulated_transaction_fee() -> u8 {
     10
 }
 
-/// this isn't needed on ETH but on xdai if the network
-/// is inactive min gas will be zero, but you can't actually send
-/// transactions with that
-fn default_min_gas() -> u64 {
-    XDAI_MIN_GAS
-}
-
 /// By default we forgive nodes of their debts on reboot
 fn default_forgive_on_reboot() -> bool {
     true
@@ -117,12 +100,6 @@ pub struct PaymentSettings {
     /// false the NAT rule will be removed while the router is in the low balance state
     #[serde(default = "default_client_can_use_free_tier")]
     pub client_can_use_free_tier: bool,
-    /// The threshold above which we will kick off a payment
-    #[serde(default = "default_pay_threshold")]
-    pub pay_threshold: Int256,
-    /// The threshold below which we will kick another node off (not implemented yet)
-    #[serde(default = "default_close_threshold")]
-    pub close_threshold: Int256,
     /// The level of balance which will trigger a warning
     #[serde(default = "default_balance_warning_level")]
     pub balance_warning_level: Uint256,
@@ -132,12 +109,6 @@ pub struct PaymentSettings {
     pub eth_address: Option<Address>,
     #[serde(default)]
     pub balance: Uint256,
-    #[serde(default)]
-    pub nonce: Uint256,
-    #[serde(default)]
-    pub gas_price: Uint256,
-    #[serde(default)]
-    pub net_version: Option<u64>,
     /// A list of nodes to query for blockchain data
     /// this is kept seperate from the version for DAO settings node
     /// list in order to allow for the DAO and payments to exist on different
@@ -187,9 +158,6 @@ pub struct PaymentSettings {
     pub simulated_transaction_fee_address: Address,
     #[serde(default = "default_simulated_transaction_fee")]
     pub simulated_transaction_fee: u8,
-    /// the minimum we will pay for gas on our current blockchain
-    #[serde(default = "default_min_gas")]
-    pub min_gas: u64,
     /// if we forgive all debts on reboot
     #[serde(default = "default_forgive_on_reboot")]
     pub forgive_on_reboot: bool,
@@ -204,19 +172,10 @@ impl Default for PaymentSettings {
             dynamic_fee_multiplier: default_dynamic_fee_multiplier(),
             free_tier_throughput: default_free_tier_throughput(),
             client_can_use_free_tier: default_client_can_use_free_tier(),
-            // computed as 10x the standard transaction cost on 12/2/18
-            // updated in a dynamic fashion using the fee multiplyer, so default
-            // doesn't matter as much as you might think
-            pay_threshold: default_pay_threshold(),
-            // computed as 10x the pay threshold
-            close_threshold: default_close_threshold(),
             balance_warning_level: default_balance_warning_level(),
             eth_private_key: None,
             eth_address: None,
             balance: 0u64.into(),
-            nonce: 0u64.into(),
-            gas_price: 0u64.into(), // 10 gwei
-            net_version: None,
             node_list: default_node_list(),
             system_chain: default_system_chain(),
             withdraw_chain: default_system_chain(),
@@ -228,7 +187,6 @@ impl Default for PaymentSettings {
             bridge_addresses: default_bridge_addresses(),
             simulated_transaction_fee_address: default_simulated_transaction_fee_address(),
             simulated_transaction_fee: default_simulated_transaction_fee(),
-            min_gas: default_min_gas(),
             forgive_on_reboot: default_forgive_on_reboot(),
         }
     }

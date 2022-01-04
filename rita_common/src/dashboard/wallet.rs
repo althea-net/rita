@@ -1,3 +1,5 @@
+use crate::blockchain_oracle::get_oracle_latest_gas_price;
+use crate::blockchain_oracle::get_oracle_nonce;
 use crate::rita_loop::get_web3_server;
 use crate::token_bridge::setup_withdraw as bridge_withdraw;
 use crate::token_bridge::Withdraw as WithdrawMsg;
@@ -31,7 +33,7 @@ fn withdraw_handler(address: Address, amount: Option<Uint256>) -> HttpResponse {
     let payment_settings = settings::get_rita_common().payment;
     let system_chain = payment_settings.system_chain;
     let withdraw_chain = payment_settings.withdraw_chain;
-    let mut gas_price = payment_settings.gas_price.clone();
+    let mut gas_price = get_oracle_latest_gas_price();
     let balance = payment_settings.balance;
 
     // if no amount is specified we are withdrawing our entire balance
@@ -109,8 +111,8 @@ pub async fn eth_compatible_withdraw() {
                 payment_settings.eth_address.unwrap(),
                 payment_settings.eth_private_key.unwrap(),
                 vec![
-                    SendTxOption::Nonce(payment_settings.nonce),
-                    SendTxOption::GasPrice(payment_settings.gas_price),
+                    SendTxOption::Nonce(get_oracle_nonce()),
+                    SendTxOption::GasPrice(get_oracle_latest_gas_price()),
                 ],
             )
             .await;

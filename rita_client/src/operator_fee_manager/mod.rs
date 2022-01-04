@@ -18,6 +18,9 @@ use althea_types::Identity;
 use althea_types::PaymentTx;
 use num256::Int256;
 use num256::Uint256;
+use rita_common::blockchain_oracle::get_oracle_latest_gas_price;
+use rita_common::blockchain_oracle::get_oracle_nonce;
+use rita_common::blockchain_oracle::get_oracle_pay_thresh;
 use rita_common::payment_controller::TRANSACTION_SUBMISSION_TIMEOUT;
 use rita_common::rita_loop::get_web3_server;
 use rita_common::simulated_txfee_manager::add_tx_to_total;
@@ -71,9 +74,9 @@ pub async fn tick_operator_payments() {
     let eth_private_key = payment_settings.eth_private_key.unwrap();
     let eth_address = payment_settings.eth_address.unwrap();
     let our_balance = payment_settings.balance.clone();
-    let gas_price = payment_settings.gas_price.clone();
-    let nonce = payment_settings.nonce.clone();
-    let pay_threshold = payment_settings.pay_threshold.clone();
+    let gas_price = get_oracle_latest_gas_price();
+    let nonce = get_oracle_nonce();
+    let pay_threshold = get_oracle_pay_thresh();
     let operator_address = match operator_settings.operator_address {
         Some(val) => val,
         None => return,

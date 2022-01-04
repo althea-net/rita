@@ -3,11 +3,10 @@ use actix_web::Path;
 use actix_web::{HttpRequest, HttpResponse};
 use althea_types::SystemChain;
 use failure::Error;
+use rita_common::blockchain_oracle::set_oracle_net_version;
 use settings::payment::PaymentSettings;
 use settings::payment::ETH_FEE_MULTIPLIER;
-use settings::payment::ETH_MIN_GAS;
 use settings::payment::XDAI_FEE_MULTIPLIER;
-use settings::payment::XDAI_MIN_GAS;
 
 /// Changes the full node configuration value between test/prod and other networks
 pub fn set_system_blockchain_endpoint(path: Path<String>) -> Result<HttpResponse, Error> {
@@ -44,34 +43,31 @@ pub fn set_system_blockchain(id: SystemChain, payment: &mut PaymentSettings) {
                 "https://eth.althea.org:443".to_string(),
                 "https://mainnet.infura.io/v3/6b080f02d7004a8394444cdf232a7081".to_string(),
             ];
-            payment.net_version = Some(1);
+            set_oracle_net_version(1);
             payment.system_chain = SystemChain::Ethereum;
             payment.withdraw_chain = SystemChain::Ethereum;
             // reset balance so that things take effect immediatley in the UI
             payment.balance = 0u32.into();
             payment.dynamic_fee_multiplier = ETH_FEE_MULTIPLIER;
-            payment.min_gas = ETH_MIN_GAS;
         }
         SystemChain::Xdai => {
             payment.node_list = vec!["https://dai.althea.org/".to_string()];
-            payment.net_version = Some(100);
+            set_oracle_net_version(100);
             payment.system_chain = SystemChain::Xdai;
             payment.withdraw_chain = SystemChain::Xdai;
             // reset balance so that things take effect immediatley in the UI
             payment.balance = 0u32.into();
             payment.dynamic_fee_multiplier = XDAI_FEE_MULTIPLIER;
-            payment.min_gas = XDAI_MIN_GAS;
         }
         SystemChain::Rinkeby => {
             payment.node_list =
                 vec!["https://rinkeby.infura.io/v3/174d2ebf288a452fab8a8f90eab57be7".to_string()];
-            payment.net_version = Some(4);
+            set_oracle_net_version(4);
             payment.system_chain = SystemChain::Rinkeby;
             payment.withdraw_chain = SystemChain::Rinkeby;
             // reset balance so that things take effect immediatley in the UI
             payment.balance = 0u32.into();
             payment.dynamic_fee_multiplier = ETH_FEE_MULTIPLIER;
-            payment.min_gas = ETH_MIN_GAS;
         }
     }
 }
