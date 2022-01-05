@@ -14,7 +14,6 @@ althea_kernel_interface = { path = "../althea_kernel_interface"}
 antenna_forwarding_protocol = {path = "../antenna_forwarding_protocol"}
 serde_json = "1.0"
 serde = "1.0"
-failure = "0.1"
 get_if_addrs = "0.5"
 lazy_static = "1.4"
 rand = "0.8"

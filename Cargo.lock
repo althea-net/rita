@@ -185,7 +185,7 @@ dependencies = [
  "log",
  "mio 0.8.0",
  "num_cpus",
- "socket2 0.4.2",
+ "socket2 0.4.3",
  "tokio 1.15.0",
 ]
 
@@ -317,7 +317,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded 0.7.1",
  "smallvec 1.8.0",
- "socket2 0.4.2",
+ "socket2 0.4.3",
  "time 0.3.5",
  "url 2.2.2",
 ]
@@ -447,7 +447,6 @@ dependencies = [
  "althea_types",
  "antenna_forwarding_protocol",
  "env_logger",
- "failure",
  "get_if_addrs",
  "lazy_static",
  "log",
@@ -1786,7 +1785,7 @@ dependencies = [
  "httpdate",
  "itoa 0.4.8",
  "pin-project-lite",
- "socket2 0.4.2",
+ "socket2 0.4.3",
  "tokio 1.15.0",
  "tower-service 0.3.1",
  "tracing",
@@ -3689,9 +3688,9 @@ dependencies = [
 
 [[package]]
 name = "socket2"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5dc90fe6c7be1a323296982db1836d1ea9e47b6839496dde9a541bc496df3516"
+checksum = "0f82496b90c36d70af5fcd482edaa2e0bd16fade569de1330405fecbbdac736b"
 dependencies = [
  "libc",
  "winapi 0.3.9",

@@ -4,8 +4,8 @@
 
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate failure;
+//#[macro_use]
+//extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 
@@ -19,7 +19,7 @@ use antenna_forwarding_protocol::ExternalStream;
 use antenna_forwarding_protocol::ForwardingProtocolMessage;
 use antenna_forwarding_protocol::NET_TIMEOUT;
 use antenna_forwarding_protocol::SPINLOCK_TIME;
-use failure::Error;
+//use failure::Error;
 use oping::Ping;
 use rand::Rng;
 use std::collections::HashMap;
@@ -33,6 +33,9 @@ use std::net::ToSocketAddrs;
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
+
+mod error;
+pub use error::AntennaForwardingError;
 
 lazy_static! {
     pub static ref KI: Box<dyn KernelInterface> = Box::new(LinuxCommandRunner {});
@@ -287,7 +290,7 @@ fn setup_networking<S: ::std::hash::BuildHasher>(
     antenna_ip: IpAddr,
     antenna_port: u16,
     interfaces: &HashSet<String, S>,
-) -> Result<SocketAddr, Error> {
+) -> Result<SocketAddr, AntennaForwardingError> {
     match find_antenna(antenna_ip, interfaces) {
         Ok(_iface) => {}
         Err(e) => {
@@ -305,7 +308,7 @@ fn setup_networking<S: ::std::hash::BuildHasher>(
 fn find_antenna<S: ::std::hash::BuildHasher>(
     target_ip: IpAddr,
     interfaces: &HashSet<String, S>,
-) -> Result<String, Error> {
+) -> Result<String, AntennaForwardingError> {
     check_blacklist(target_ip)?;
     let our_ip = get_local_ip(target_ip)?;
     for iface in interfaces {
@@ -353,7 +356,7 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
                 if let Some(code) = r.status.code() {
                     if code == 512 {
                         error!("Failed to add route");
-                        bail!("IP setup failed");
+                        return Err(AntennaForwardingError::IPSetupError);
                     }
                 }
                 trace!("added route with {:?}", r);
@@ -380,12 +383,13 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
             }
         }
     }
-    Err(format_err!("Failed to find Antenna!"))
+    //Err(format_err!("Failed to find Antenna!"))
+    Err(AntennaForwardingError::AntennaNotFound)
 }
 
 /// Generates a random non overlapping ip within a /24 subnet of the provided
 /// target antenna ip.
-fn get_local_ip(target_ip: IpAddr) -> Result<IpAddr, Error> {
+fn get_local_ip(target_ip: IpAddr) -> Result<IpAddr, AntennaForwardingError> {
     match target_ip {
         IpAddr::V4(address) => {
             let mut rng = rand::thread_rng();
@@ -400,7 +404,8 @@ fn get_local_ip(target_ip: IpAddr) -> Result<IpAddr, Error> {
             bytes[3] = new_ip;
             Ok(Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3]).into())
         }
-        IpAddr::V6(_address) => Err(format_err!("Not supported!")),
+        //IpAddr::V6(_address) => Err(format_err!("Not supported!")),
+        IpAddr::V6(_address) => Err(AntennaForwardingError::IPNotSupported),
     }
 }
 
@@ -408,12 +413,12 @@ const IP_BLACKLIST: [Ipv4Addr; 2] = [Ipv4Addr::new(192, 168, 10, 0), Ipv4Addr::n
 
 /// Checks the forwarding ip blacklist, these are ip's that we don't
 /// want the forwarding client working on
-fn check_blacklist(ip: IpAddr) -> Result<(), Error> {
+fn check_blacklist(ip: IpAddr) -> Result<(), AntennaForwardingError> {
     match ip {
         IpAddr::V4(address) => {
             for ip in IP_BLACKLIST.iter() {
                 if compare_ipv4_octets(*ip, address) {
-                    return Err(format_err!("Blacklisted address!"));
+                    return Err(AntennaForwardingError::BlacklistedAddress);
                 }
             }
             Ok(())
@@ -435,7 +440,7 @@ fn send_error_message(server_stream: &mut TcpStream, message: String) {
     let _res = server_stream.shutdown(Shutdown::Both);
 }
 
-fn cleanup_interface(iface: &str) -> Result<(), Error> {
+fn cleanup_interface(iface: &str) -> Result<(), AntennaForwardingError> {
     let values = KI.get_ip_from_iface(iface)?;
     for (ip, netmask) in values {
         // we only clean up very specific routes, this doesn't prevent us from causing problems
