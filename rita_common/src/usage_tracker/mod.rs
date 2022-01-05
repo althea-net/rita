@@ -16,29 +16,27 @@ use serde::{Deserialize, Serialize};
 use serde_json::Error as SerdeError;
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io;
 use std::io::Error as IOError;
 use std::io::Read;
-use std::io::Seek;
-use std::io::SeekFrom;
 use std::io::Write;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
-/// On year worth of usage storage
-const MAX_ENTRIES: usize = 8760;
+/// one year worth of usage storage
+const MAX_USAGE_ENTRIES: usize = 8_760;
+/// The number of tx's we store in our history to show
+/// prices, this data is larger than usage by a large margin
+/// so we can store less, it's also less predictable for what values
+/// map to how much time in history, 2000 is hopefully enough
+const MAX_TX_ENTRIES: usize = 2_000;
 /// Save every 4 hours
 const SAVE_FREQENCY: u64 = 4;
 
 lazy_static! {
-/// This is used to allow non-actix workers to add payments to the queue. An alternative to this would be
-/// to move all storage for this actor into this locked ref format and this should be done in Beta 16 or
-/// later, for now (Beta 15) we want to reduce the amount of changes. So instead these values will be
-/// read off any time this actor is triggered by another payment message
-    static ref PAYMENT_UPDATE_QUEUE: Arc<RwLock<Vec<PaymentTx>>> = Arc::new(RwLock::new(Vec::new()));
-    static ref USAGE_TRACKER: Arc<RwLock<UsageTracker>> = Arc::new(RwLock::new(UsageTracker::default()));
+    static ref USAGE_TRACKER: Arc<RwLock<UsageTracker>> =
+        Arc::new(RwLock::new(UsageTracker::load_from_disk()));
 }
 
 /// In an effort to converge this module between the three possible bw tracking
@@ -112,33 +110,18 @@ pub struct UsageTracker {
     payments: VecDeque<PaymentHour>,
 }
 
-/// A legacy struct required to parse the old member names
-/// and convert into the new version
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct UsageTrackerMisspelled {
-    last_save_hour: u64,
-    // at least one of these will be left unused
-    client_bandwith: VecDeque<UsageHour>,
-    relay_bandwith: VecDeque<UsageHour>,
-    exit_bandwith: VecDeque<UsageHour>,
-    /// A history of payments
-    payments: VecDeque<PaymentHour>,
-}
-
-impl UsageTrackerMisspelled {
-    pub fn upgrade(self) -> UsageTracker {
-        UsageTracker {
-            last_save_hour: self.last_save_hour,
-            client_bandwidth: self.client_bandwith,
-            relay_bandwidth: self.relay_bandwith,
-            exit_bandwidth: self.exit_bandwith,
-            payments: self.payments,
-        }
+impl UsageTracker {
+    fn save(&mut self) -> Result<(), IOError> {
+        let serialized = serde_json::to_vec(self)?;
+        let mut file = File::create(settings::get_rita_common().network.usage_tracker_file)?;
+        let buffer: Vec<u8> = Vec::new();
+        let mut encoder = ZlibEncoder::new(buffer, Compression::default());
+        encoder.write_all(&serialized)?;
+        let compressed_bytes = encoder.finish()?;
+        file.write_all(&compressed_bytes)
     }
-}
 
-impl Default for UsageTracker {
-    fn default() -> UsageTracker {
+    fn load_from_disk() -> UsageTracker {
         let file = File::open(settings::get_rita_common().network.usage_tracker_file);
         // if the loading process goes wrong for any reason, we just start again
         let blank_usage_tracker = UsageTracker {
@@ -155,64 +138,21 @@ impl Default for UsageTracker {
                 // try compressed
                 match file.read_to_end(&mut byte_contents) {
                     Ok(_bytes_read) => {
-                        let mut decoder = ZlibDecoder::new(&byte_contents[..]);
-                        let mut contents = Vec::new();
-                        let mut contents_str = String::new();
-                        // Extract data from decoder
+                        let decoder = ZlibDecoder::new(&byte_contents[..]);
+                        // Extract data from decoder, note this is streaming decoding, so we're
+                        // decompressing the data as we take it out of the zlib compressed object
                         trace!("attempting to unzip or read bw history");
-                        match io::copy(&mut decoder, &mut contents) {
-                            Ok(_bytes) => {
-                                trace!("found a compressed json stream");
-                                let deserialized: Result<UsageTracker, SerdeError> =
-                                    serde_json::from_slice(&contents);
+                        let deserialized: Result<UsageTracker, SerdeError> =
+                            serde_json::from_reader(decoder);
 
-                                let legacy_deserialized: Result<
-                                    UsageTrackerMisspelled,
-                                    SerdeError,
-                                > = serde_json::from_slice(&contents);
-
-                                match (deserialized, legacy_deserialized) {
-                                    (Ok(value), _) => value,
-                                    (Err(_e), Ok(value)) => value.upgrade(),
-                                    (Err(e), Err(_e)) => {
-                                        error!("Failed to deserialize bytes in compressed bw history {:?}", e);
-                                        blank_usage_tracker
-                                    }
-                                }
-                            }
+                        match deserialized {
+                            Ok(value) => value,
                             Err(e) => {
-                                // no active devices are using the flatfile, this should be safe to remove
-                                info!("Failed to decompress with, trying flatfile {:?}", e);
-                                file.seek(SeekFrom::Start(0))
-                                    .expect("Failed to return to start of file!");
-                                match file.read_to_string(&mut contents_str) {
-                                    Ok(_bytes_read) => {
-                                        trace!("failed to inflate, trying raw string");
-                                        let deserialized: Result<UsageTracker, SerdeError> =
-                                            serde_json::from_str(&contents_str);
-
-                                        let legacy_deserialized: Result<
-                                            UsageTrackerMisspelled,
-                                            SerdeError,
-                                        > = serde_json::from_slice(&contents);
-
-                                        match (deserialized, legacy_deserialized) {
-                                            (Ok(value), _) => value,
-                                            (Err(_e), Ok(value)) => value.upgrade(),
-                                            (Err(e), Err(_e)) => {
-                                                error!("Failed to deserialize bytes in compressed bw history {:?}", e);
-                                                blank_usage_tracker
-                                            }
-                                        }
-                                    }
-                                    Err(e) => {
-                                        error!(
-                                            "Failed to read usage tracker file to string! {:?}",
-                                            e
-                                        );
-                                        blank_usage_tracker
-                                    }
-                                }
+                                error!(
+                                    "Failed to deserialize bytes in compressed bw history {:?}",
+                                    e
+                                );
+                                blank_usage_tracker
                             }
                         }
                     }
@@ -227,18 +167,6 @@ impl Default for UsageTracker {
                 blank_usage_tracker
             }
         }
-    }
-}
-
-impl UsageTracker {
-    fn save(&mut self) -> Result<(), IOError> {
-        let serialized = serde_json::to_vec(self)?;
-        let mut file = File::create(settings::get_rita_common().network.usage_tracker_file)?;
-        let buffer: Vec<u8> = Vec::new();
-        let mut encoder = ZlibEncoder::new(buffer, Compression::fast());
-        encoder.write_all(&serialized)?;
-        let compressed_bytes = encoder.finish()?;
-        file.write_all(&compressed_bytes)
     }
 }
 
@@ -305,7 +233,7 @@ fn process_usage_update(current_hour: u64, msg: UpdateUsage, data: &mut UsageTra
             }
         }
     }
-    while history.len() > MAX_ENTRIES {
+    while history.len() > MAX_USAGE_ENTRIES {
         let _discarded_entry = history.pop_back();
     }
     if (current_hour - SAVE_FREQENCY) > data.last_save_hour {
@@ -316,28 +244,11 @@ fn process_usage_update(current_hour: u64, msg: UpdateUsage, data: &mut UsageTra
 }
 
 pub fn update_payments(payment: PaymentTx) {
-    let mut payments = PAYMENT_UPDATE_QUEUE.write().unwrap();
-    payments.push(payment);
+    handle_payments(&mut *(USAGE_TRACKER.write().unwrap()), &payment);
 }
 
-pub struct UpdatePayments {
-    pub payment: PaymentTx,
-}
-
-impl Message for UpdatePayments {
-    type Result = Result<(), Error>;
-}
-
-#[allow(dead_code)]
-pub fn handle_payment_data(msg: UpdatePayments) {
-    let mut queue = PAYMENT_UPDATE_QUEUE.write().unwrap();
-    for item in (*queue).iter() {
-        let _res = handle_payments(&mut *(USAGE_TRACKER.write().unwrap()), item);
-    }
-    *queue = Vec::new();
-    handle_payments(&mut *(USAGE_TRACKER.write().unwrap()), &msg.payment);
-}
-
+/// Internal handler function that deals with adding a payment to the list
+/// and saving if required
 fn handle_payments(history: &mut UsageTracker, payment: &PaymentTx) {
     let current_hour = match get_current_hour() {
         Ok(hour) => hour,
@@ -363,7 +274,7 @@ fn handle_payments(history: &mut UsageTracker, payment: &PaymentTx) {
             }
         }
     }
-    while history.payments.len() > MAX_ENTRIES {
+    while history.payments.len() > MAX_TX_ENTRIES {
         let _discarded_entry = history.payments.pop_back();
     }
     if (current_hour - SAVE_FREQENCY) > history.last_save_hour {
@@ -373,31 +284,18 @@ fn handle_payments(history: &mut UsageTracker, payment: &PaymentTx) {
     }
 }
 
-pub struct GetUsage {
-    pub kind: UsageType,
-}
-
-impl Message for GetUsage {
-    type Result = Result<VecDeque<UsageHour>, Error>;
-}
-
-#[allow(dead_code)]
-pub fn handle_usage_data(msg: GetUsage) -> VecDeque<UsageHour> {
+/// Gets usage data for this router, stored on the local disk at periodic intervals
+pub fn get_usage_data(kind: UsageType) -> VecDeque<UsageHour> {
     let usage_tracker_var = &*(USAGE_TRACKER.write().unwrap());
-    match msg.kind {
+    match kind {
         UsageType::Client => usage_tracker_var.client_bandwidth.clone(),
         UsageType::Relay => usage_tracker_var.relay_bandwidth.clone(),
         UsageType::Exit => usage_tracker_var.exit_bandwidth.clone(),
     }
 }
 
-pub struct GetPayments;
-
-impl Message for GetPayments {
-    type Result = Result<VecDeque<PaymentHour>, Error>;
-}
-
-pub fn handle_get_payments_data(_msg: GetPayments) -> VecDeque<PaymentHour> {
-    let usage_tracker_var = &*(USAGE_TRACKER.write().unwrap());
+/// Gets payment data for this router, stored on the local disk at periodic intervals
+pub fn get_payments_data() -> VecDeque<PaymentHour> {
+    let usage_tracker_var = &*(USAGE_TRACKER.read().unwrap());
     usage_tracker_var.payments.clone()
 }
