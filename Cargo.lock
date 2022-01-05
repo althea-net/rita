@@ -418,9 +418,6 @@ dependencies = [
 [[package]]
 name = "althea_rs"
 version = "0.1.11"
-dependencies = [
- "rita_bin",
-]
 
 [[package]]
 name = "althea_types"
