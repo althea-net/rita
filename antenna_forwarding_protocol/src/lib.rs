@@ -9,8 +9,6 @@
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
-extern crate failure;
-#[macro_use]
 extern crate log;
 #[cfg(test)]
 #[macro_use]
@@ -18,7 +16,6 @@ extern crate lazy_static;
 
 use althea_types::Identity;
 use althea_types::WgKey;
-use failure::Error as FailureError;
 use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::box_::Nonce;
 use sodiumoxide::crypto::box_::NONCEBYTES;
@@ -37,6 +34,9 @@ use std::net::TcpStream;
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
+
+mod error;
+pub use error::AntennaForwardingError;
 
 /// The amount of time to sleep a thread that's spinlocking on somthing
 pub const SPINLOCK_TIME: Duration = Duration::from_millis(100);
@@ -101,7 +101,7 @@ fn write_all_spinlock_internal(
     if depth > 100 {
         return Err(IoError::new(
             std::io::ErrorKind::WriteZero,
-            format_err!("Operating system won't allocate buffer space"),
+            AntennaForwardingError::SpaceAllocationError,
         ));
     }
 
@@ -115,7 +115,7 @@ fn write_all_spinlock_internal(
             } else if bytes == 0 {
                 Err(IoError::new(
                     std::io::ErrorKind::WriteZero,
-                    format_err!("Probably a dead connection"),
+                    AntennaForwardingError::ConnectionDownError, 
                 ))
             } else {
                 trace!("Did not write all, recursing",);
@@ -623,7 +623,7 @@ impl ForwardingProtocolMessage {
         input: &mut TcpStream,
         server_publickey: WgKey,
         client_secretkey: WgKey,
-    ) -> Result<Vec<ForwardingProtocolMessage>, FailureError> {
+    ) -> Result<Vec<ForwardingProtocolMessage>, AntennaForwardingError> {
         trace!("read messages start");
         ForwardingProtocolMessage::read_messages_start_internal(
             input,
@@ -640,7 +640,7 @@ impl ForwardingProtocolMessage {
         client_secretkey: WgKey,
         bytes: Vec<u8>,
         depth: u8,
-    ) -> Result<Vec<ForwardingProtocolMessage>, FailureError> {
+    ) -> Result<Vec<ForwardingProtocolMessage>, AntennaForwardingError> {
         // don't wait the first time in order to speed up execution
         // if we are recursing we want to wait for the message to finish
         // being written as the only reason we recuse is becuase we found
@@ -650,7 +650,7 @@ impl ForwardingProtocolMessage {
             thread::sleep(SPINLOCK_TIME);
         } else if depth > WAIT_TIME {
             error!("Never found the end of the message");
-            bail!("Never found the end of the message");
+            return Err(AntennaForwardingError::EndNotFoundError);
         }
 
         let mut bytes = bytes;
@@ -703,11 +703,11 @@ impl ForwardingProtocolMessage {
             }
             (Err(a), Err(b)) => {
                 trace!("Double read failure {:?} {:?}", a, b);
-                Err(format_err!("{:?} {:?}", a, b))
+                Err(AntennaForwardingError::DoubleReadFailure{a: a, b: b})
             }
             (_, _) => {
                 trace!("Impossible error");
-                Err(format_err!("Impossible"))
+                Err(AntennaForwardingError::ImpossibleError)
             }
         }
     }
@@ -716,7 +716,7 @@ impl ForwardingProtocolMessage {
     /// also block until a currently in flight message is delivered
     pub fn read_messages(
         input: &mut TcpStream,
-    ) -> Result<Vec<ForwardingProtocolMessage>, FailureError> {
+    ) -> Result<Vec<ForwardingProtocolMessage>, AntennaForwardingError> {
         ForwardingProtocolMessage::read_messages_internal(input, Vec::new(), Vec::new(), 0, None)
     }
 
@@ -731,7 +731,7 @@ impl ForwardingProtocolMessage {
         messages: Vec<ForwardingProtocolMessage>,
         depth: u16,
         last_read_bytes: Option<u32>,
-    ) -> Result<Vec<ForwardingProtocolMessage>, FailureError> {
+    ) -> Result<Vec<ForwardingProtocolMessage>, AntennaForwardingError> {
         // don't wait the first time in order to speed up execution
         // if we are recursing we want to wait for the message to finish
         // being written as the only reason we recuse is becuase we found
@@ -744,7 +744,7 @@ impl ForwardingProtocolMessage {
             thread::sleep(SPINLOCK_TIME);
         } else if depth > WAIT_TIME {
             error!("Never found the end of the message");
-            bail!("Never found the end of the message");
+            return Err(AntennaForwardingError::EndNotFoundError);
         }
         // these should match the full list of message types defined above
         let mut messages = messages;
@@ -799,12 +799,7 @@ impl ForwardingProtocolMessage {
                 }
                 _ => {
                     if !remaining_bytes.is_empty() {
-                        error!("Unparsed bytes! {} {:?}", remaining_bytes.len(), e);
-                        error!(
-                            "Messages {:#X?} Remaining bytes {:#X?}",
-                            messages, remaining_bytes
-                        );
-                        bail!("Unparsed bytes!");
+                        return Err(AntennaForwardingError::UnparsedBytesError{messages: messages, remaining_bytes: remaining_bytes})
                     } else {
                         Ok(messages)
                     }

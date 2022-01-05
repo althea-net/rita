@@ -8,10 +8,10 @@ use oping::PingError;
 
 #[derive(Debug)]
 pub enum AntennaForwardingError {
-    IPSetupError, //("IP setup failed")
-    AntennaNotFound, //    //Err(format_err!("Failed to find Antenna!"))
-    IPNotSupported, //        //IpAddr::V6(_address) => Err(format_err!("Not supported!")),
-    BlacklistedAddress, ////return Err(format_err!("Blacklisted address!"));
+    IPSetupError, 
+    AntennaNotFound, 
+    IPNotSupported, 
+    BlacklistedAddress, 
     KernelInterfaceError(KernelInterfaceError),
     PingError(PingError),
 

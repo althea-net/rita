@@ -4,8 +4,6 @@
 
 #[macro_use]
 extern crate log;
-//#[macro_use]
-//extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 
@@ -19,7 +17,6 @@ use antenna_forwarding_protocol::ExternalStream;
 use antenna_forwarding_protocol::ForwardingProtocolMessage;
 use antenna_forwarding_protocol::NET_TIMEOUT;
 use antenna_forwarding_protocol::SPINLOCK_TIME;
-//use failure::Error;
 use oping::Ping;
 use rand::Rng;
 use std::collections::HashMap;
@@ -383,7 +380,6 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
             }
         }
     }
-    //Err(format_err!("Failed to find Antenna!"))
     Err(AntennaForwardingError::AntennaNotFound)
 }
 
