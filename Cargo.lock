@@ -593,7 +593,6 @@ dependencies = [
  "ascii",
  "babel_monitor",
  "env_logger",
- "failure",
  "futures 0.1.31",
  "ipnetwork 0.18.0",
  "log",
