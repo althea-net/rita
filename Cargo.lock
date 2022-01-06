@@ -580,7 +580,6 @@ version = "0.1.0"
 dependencies = [
  "ascii",
  "env_logger",
- "failure",
  "ipnetwork 0.18.0",
  "log",
  "serde 1.0.133",
