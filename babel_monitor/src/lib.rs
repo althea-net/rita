@@ -149,7 +149,7 @@ pub fn find_babel_val(val: &str, line: &str) -> Result<String, BabelMonitorError
         }
     }
     trace!("find_babel_val warn! Can not find {} in {}", val, line);
-    Err(VariableNotFound(String::from(val), String::from(line)).into())
+    Err(VariableNotFound(String::from(val), String::from(line)))
 }
 
 pub fn find_and_parse_babel_val<T: FromStr>(val: &str, line: &str) -> Result<T, BabelMonitorError>
@@ -263,7 +263,7 @@ fn read_babel(
 
     let output = String::from_utf8(buffer.to_vec());
     if let Err(e) = output {
-        return Err(TcpError(format!("{:?}", e)).into());
+        return Err(TcpError(format!("{:?}", e)));
     }
     let output = output.unwrap();
     let output = output.trim_matches(char::from(0));
@@ -284,7 +284,7 @@ fn read_babel(
     if depth > 50 {
         // prevent infinite recursion in error cases
         warn!("Babel read timed out! {}", output);
-        return Err(ReadFailed("Babel read timed out!".to_string()).into());
+        return Err(ReadFailed("Babel read timed out!".to_string()));
     } else if full_buffer {
         // our buffer is full, we should recurse right away
         warn!("Babel read larger than buffer! Consider increasing it's size");
@@ -299,7 +299,7 @@ fn read_babel(
     } else if let Err(e) = babel_data {
         // some other error
         warn!("Babel read failed! {} {:?}", output, e);
-        return Err(ReadFailed(format!("{:?}", e)).into());
+        return Err(ReadFailed(format!("{:?}", e)));
     }
     let babel_data = babel_data.unwrap();
 
@@ -343,7 +343,7 @@ pub fn run_command(stream: &mut TcpStream, cmd: &str) -> Result<String, BabelMon
     let out = stream.write_all(&bytes);
 
     if out.is_err() {
-        return Err(CommandFailed(cmd, format!("{:?}", out)).into());
+        return Err(CommandFailed(cmd, format!("{:?}", out)));
     }
 
     let _res = out.unwrap();
@@ -357,7 +357,7 @@ pub fn validate_preamble(preamble: String) -> Result<(), BabelMonitorError> {
         trace!("Attached OK to Babel with preamble: {}", preamble);
         Ok(())
     } else {
-        Err(InvalidPreamble(preamble).into())
+        Err(InvalidPreamble(preamble))
     }
 }
 
@@ -418,7 +418,7 @@ pub fn get_local_fee_sync(babel_output: String) -> Result<u32, BabelMonitorError
     let fee_entry = match babel_output.split('\n').next() {
         Some(entry) => entry,
         // Even an empty string wouldn't yield None
-        None => return Err(LocalFeeNotFound(String::from("<Babel output is None>")).into()),
+        None => return Err(LocalFeeNotFound(String::from("<Babel output is None>"))),
     };
 
     if fee_entry.contains("local fee") {
@@ -427,7 +427,7 @@ pub fn get_local_fee_sync(babel_output: String) -> Result<u32, BabelMonitorError
         return Ok(fee);
     }
 
-    Err(LocalFeeNotFound(String::from(fee_entry)).into())
+    Err(LocalFeeNotFound(String::from(fee_entry)))
 }
 
 pub fn set_local_fee(stream: &mut TcpStream, new_fee: u32) -> Result<(), BabelMonitorError> {
@@ -656,7 +656,7 @@ pub fn get_route_via_neigh(
             }
         }
     }
-    Err(NoNeighbor(neigh_mesh_ip.to_string()).into())
+    Err(NoNeighbor(neigh_mesh_ip.to_string()))
 }
 
 /// Very simple utility function to get a neighbor given a route that traverses that neighbor

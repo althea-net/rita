@@ -703,7 +703,7 @@ impl ForwardingProtocolMessage {
             }
             (Err(a), Err(b)) => {
                 trace!("Double read failure {:?} {:?}", a, b);
-                Err(AntennaForwardingError::DoubleReadFailure{a: a, b: b})
+                Err(AntennaForwardingError::DoubleReadFailure{a, b})
             }
             (_, _) => {
                 trace!("Impossible error");
@@ -799,7 +799,7 @@ impl ForwardingProtocolMessage {
                 }
                 _ => {
                     if !remaining_bytes.is_empty() {
-                        return Err(AntennaForwardingError::UnparsedBytesError{messages: messages, remaining_bytes: remaining_bytes})
+                        Err(AntennaForwardingError::UnparsedBytesError{messages, remaining_bytes})
                     } else {
                         Ok(messages)
                     }

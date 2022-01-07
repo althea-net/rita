@@ -133,7 +133,7 @@ fn read_babel(
 
             let output = String::from_utf8(buffer);
             if let Err(e) = output {
-                return Box::new(future::err(TokioError(format!("{:?}", e)).into()))
+                return Box::new(future::err(TokioError(format!("{:?}", e))))
                     as Box<dyn Future<Item = (TcpStream, String), Error = BabelMonitorError>>;
             }
             let output = output.unwrap();
@@ -156,7 +156,7 @@ fn read_babel(
                 // prevent infinite recursion in error cases
                 warn!("Babel read timed out! {}", output);
                 return Box::new(future::err(
-                    ReadFailed("Babel read timed out!".to_string()).into(),
+                    ReadFailed("Babel read timed out!".to_string()),
                 ))
                     as Box<dyn Future<Item = (TcpStream, String), Error = BabelMonitorError>>;
             } else if full_buffer {
@@ -173,7 +173,7 @@ fn read_babel(
             } else if let Err(e) = babel_data {
                 // some other error
                 warn!("Babel read failed! {} {:?}", output, e);
-                return Box::new(future::err(ReadFailed(format!("{:?}", e)).into()));
+                return Box::new(future::err(ReadFailed(format!("{:?}", e))));
             }
             let babel_data = babel_data.unwrap();
 
@@ -223,8 +223,7 @@ pub fn run_command(
             return Box::new(Either::A(future_result(Err(CommandFailed(
                 cmd,
                 format!("{:?}", out),
-            )
-            .into()))));
+            )))));
         }
         let (stream, _res) = out.unwrap();
         trace!("Command write succeeded, returning output");
