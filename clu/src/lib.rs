@@ -1,15 +1,10 @@
-//! Clu is used to handle init tasks, mostly genreating eth and wireguard keys
-
 #[macro_use]
 extern crate log;
 #[macro_use]
-extern crate failure;
-#[macro_use]
 extern crate lazy_static;
 
-use althea_kernel_interface::KI;
+use althea_kernel_interface::{KI};
 use clarity::PrivateKey;
-use failure::Error;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use regex::Regex;
@@ -20,19 +15,33 @@ use std::io::Read;
 use std::net::IpAddr;
 use std::path::Path;
 use std::str;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 
-#[derive(Debug, Fail)]
+mod error;
+pub use error::NewCluError;
+
+#[derive(Debug)]
 pub enum CluError {
-    #[fail(display = "Runtime Error: {:?}", _0)]
     RuntimeError(String),
 }
 
-pub fn generate_mesh_ip() -> Result<IpAddr, Error> {
+impl Display for CluError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match self {
+            CluError::RuntimeError(a) => write!(
+                f, "Runtime Error:\n{:?}", a,
+            ),
+
+        }
+    }
+}
+
+pub fn generate_mesh_ip() -> Result<IpAddr, NewCluError> {
     let seed: String =
         String::from_utf8(thread_rng().sample_iter(&Alphanumeric).take(50).collect()).unwrap();
     let mesh_ip = match ipgen::ip(&seed, "fd00::/8".parse().unwrap()) {
         Ok(ip) => ip,
-        Err(msg) => bail!(msg), // For some reason, ipgen devs decided to use Strings for all errors
+        Err(msg) => return Err(NewCluError::MeshError(msg)) // For some reason, ipgen devs decided to use Strings for all errors
     };
 
     info!("Generated a new mesh IP address: {}", mesh_ip);
@@ -45,7 +54,7 @@ pub fn validate_mesh_ip(ip: &IpAddr) -> bool {
 }
 
 /// Called before anything is started to delete existing wireguard per hop tunnels
-pub fn cleanup() -> Result<(), Error> {
+pub fn cleanup() -> Result<(), NewCluError> {
     debug!("Cleaning up WireGuard tunnels");
 
     lazy_static! {
@@ -67,7 +76,7 @@ pub fn cleanup() -> Result<(), Error> {
     Ok(())
 }
 
-fn linux_init(settings: RitaClientSettings) -> Result<RitaClientSettings, Error> {
+fn linux_init(settings: RitaClientSettings) -> Result<RitaClientSettings, NewCluError> {
     cleanup()?;
     let mut settings = settings;
     let mut network_settings = settings.network;
@@ -122,7 +131,8 @@ fn linux_init(settings: RitaClientSettings) -> Result<RitaClientSettings, Error>
             for line in contents.lines() {
                 if line.starts_with("device:") {
                     let device = line.split(' ').nth(1).ok_or_else(|| {
-                        format_err!("Could not obtain device name from line {:?}", line)
+                        // format_err!("Could not obtain device name from line {:?}", line)
+                        NewCluError::NoDeviceName(line.to_string())
                     })?;
 
                     network_settings.device = Some(device.to_string());
@@ -192,7 +202,7 @@ fn linux_init(settings: RitaClientSettings) -> Result<RitaClientSettings, Error>
     Ok(settings)
 }
 
-fn linux_exit_init(settings: RitaExitSettingsStruct) -> Result<RitaExitSettingsStruct, Error> {
+fn linux_exit_init(settings: RitaExitSettingsStruct) -> Result<RitaExitSettingsStruct, NewCluError> {
     cleanup()?;
     let mut settings = settings;
 

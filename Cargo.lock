@@ -852,7 +852,6 @@ dependencies = [
  "althea_types",
  "clarity",
  "env_logger",
- "failure",
  "ipgen",
  "lazy_static",
  "log",
