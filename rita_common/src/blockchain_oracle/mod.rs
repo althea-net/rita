@@ -9,35 +9,23 @@ use clarity::Address;
 use futures::future::join4;
 use num256::Int256;
 use num256::Uint256;
-use num_traits::identities::Zero;
 use settings::payment::PaymentSettings;
 use web30::client::Web3;
 
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
-use std::time::Instant;
-
-const ZERO_WINDOW_TIME: Duration = Duration::from_secs(300);
 
 lazy_static! {
     static ref ORACLE: Arc<RwLock<BlockchainOracle>> =
         Arc::new(RwLock::new(BlockchainOracle::new()));
 }
 
-pub struct BlockchainOracle {
-    /// An instant representing the start of a short period where the balance can
-    /// actually go to zero. This is because full nodes (including Infura) have an infuriating
-    /// chance of returning a zero balance if they are not fully synced, causing all sorts of
-    /// disruption. So instead when we manually zero the balance (send a withdraw_all) we open
-    /// up a short five minute window during which we will actually trust the full node if it
-    /// hands us a zero balance
-    zero_window: Option<Instant>,
-}
+pub struct BlockchainOracle {}
 
 impl BlockchainOracle {
     pub fn new() -> Self {
-        BlockchainOracle { zero_window: None }
+        BlockchainOracle {}
     }
 }
 
@@ -45,11 +33,6 @@ impl Default for BlockchainOracle {
     fn default() -> BlockchainOracle {
         BlockchainOracle::new()
     }
-}
-
-pub fn zero_window_start() {
-    let mut res = ORACLE.write().unwrap();
-    res.zero_window = Some(Instant::now());
 }
 
 /// How long we wait for a response from the full node
@@ -65,15 +48,10 @@ pub async fn update() {
     let web3 = Web3::new(&full_node, ORACLE_TIMEOUT);
 
     info!("About to make web3 requests to {}", full_node);
-    update_blockchain_info(our_address, web3, full_node, Some(Instant::now())).await;
+    update_blockchain_info(our_address, web3, full_node).await;
 }
 
-async fn update_blockchain_info(
-    our_address: Address,
-    web3: Web3,
-    full_node: String,
-    zero_window: Option<Instant>,
-) {
+async fn update_blockchain_info(our_address: Address, web3: Web3, full_node: String) {
     let balance = web3.eth_get_balance(our_address);
     let nonce = web3.eth_get_transaction_count(our_address);
     let net_version = web3.net_version();
@@ -82,12 +60,7 @@ async fn update_blockchain_info(
         join4(balance, nonce, net_version, gas_price).await;
     let mut settings = settings::get_rita_common();
     match balance {
-        Ok(balance) => update_balance(
-            &full_node,
-            zero_window,
-            &mut settings.payment.balance,
-            balance,
-        ),
+        Ok(balance) => update_balance(&full_node, &mut settings.payment.balance, balance),
         Err(e) => warn!("Failed to update balance with {:?}", e),
     }
     match gas_price {
@@ -110,30 +83,14 @@ async fn update_blockchain_info(
 /// Gets the balance for the provided eth address and updates it
 /// in the global SETTING variable, do not use this function as a generic
 /// balance getter.
-fn update_balance(
-    full_node: &str,
-    zero_window: Option<Instant>,
-    our_balance: &mut Uint256,
-    new_balance: Uint256,
-) {
+fn update_balance(full_node: &str, our_balance: &mut Uint256, new_balance: Uint256) {
     let value = new_balance;
     info!(
         "Got response from {} balance request {:?}",
         full_node, value
     );
-    // our balance was not previously zero and we now have a zero
-    let zeroed = *our_balance != Uint256::zero() && value == Uint256::zero();
-    match (zeroed, zero_window) {
-        (false, _) => {
-            *our_balance = value;
-        }
-        (true, Some(time)) => {
-            if Instant::now() - time <= ZERO_WINDOW_TIME {
-                *our_balance = value;
-            }
-        }
-        (true, None) => {}
-    }
+
+    *our_balance = value;
 }
 
 /// Updates the net_version in our global setting variable, this function

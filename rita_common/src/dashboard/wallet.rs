@@ -1,4 +1,3 @@
-use crate::blockchain_oracle::zero_window_start;
 use crate::rita_loop::get_web3_server;
 use crate::token_bridge::setup_withdraw as bridge_withdraw;
 use crate::token_bridge::Withdraw as WithdrawMsg;
@@ -54,7 +53,6 @@ fn withdraw_handler(address: Address, amount: Option<Uint256>) -> HttpResponse {
 
     let tx_cost = gas_price * tx_gas;
     if amount.clone() + tx_cost.clone() >= balance {
-        zero_window_start();
         amount = balance - tx_cost;
     }
 
