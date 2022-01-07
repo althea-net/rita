@@ -11,4 +11,3 @@ althea_types = { path = "../althea_types"}
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
-failure = "0.1"

@@ -1309,7 +1309,6 @@ dependencies = [
  "althea_types",
  "diesel",
  "dotenv",
- "failure",
  "serde 1.0.133",
  "serde_derive",
  "serde_json",
