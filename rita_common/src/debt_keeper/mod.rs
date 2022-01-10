@@ -606,6 +606,17 @@ impl DebtKeeper {
     }
 }
 
+/// On an interupt (SIGTERM), saving debtkeeper before exiting
+pub fn save_debt_on_shutdown() {
+    let mut dk = DEBT_DATA.write().unwrap();
+
+    if let Err(e) = dk.save() {
+        error!("Failed to save debts {:?}", e);
+    } else {
+        info!("Shutdown: Saving debt data");
+    }
+}
+
 #[derive(Serialize)]
 pub struct GetDebtsResult {
     pub identity: Identity,

@@ -23,9 +23,11 @@ static GLOBAL: Jemalloc = Jemalloc;
 extern crate log;
 
 use docopt::Docopt;
+use rita_common::debt_keeper::save_debt_on_shutdown;
 use rita_common::logging::enable_remote_logging;
 use rita_common::rita_loop::check_rita_common_actors;
 use rita_common::rita_loop::start_core_rita_endpoints;
+use rita_common::usage_tracker::save_usage_on_shutdown;
 use rita_common::utils::env_vars_contains;
 use rita_exit::database::sms::send_admin_notification_sms;
 use rita_exit::rita_loop::check_rita_exit_actors;
@@ -34,6 +36,7 @@ use rita_exit::rita_loop::start_rita_exit_loop;
 use rita_exit::start_rita_exit_dashboard;
 use rita_exit::{get_exit_usage, Args};
 use settings::exit::RitaExitSettingsStruct;
+use settings::save_settings_on_shutdown;
 
 /// used to crash the exit on first startup if config does not make sense
 /// as is usually desirable for cloud infrastruture
@@ -47,6 +50,17 @@ fn sanity_check_config() {
 }
 
 fn main() {
+    //Setup a SIGTERM hadler
+    ctrlc::set_handler(move || {
+        info!("received Ctrl+C!");
+        save_debt_on_shutdown();
+        save_usage_on_shutdown();
+        save_settings_on_shutdown();
+
+        std::process::exit(0);
+    })
+    .expect("Error setting Ctrl-C handler");
+
     let args: Args = Docopt::new(get_exit_usage(env!("CARGO_PKG_VERSION"), env!("GIT_HASH")))
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());

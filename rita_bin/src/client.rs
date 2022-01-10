@@ -32,11 +32,14 @@ use rita_client::rita_loop::start_antenna_forwarder;
 use rita_client::rita_loop::start_rita_client_endpoints;
 use rita_client::wait_for_settings;
 use rita_client::Args;
+use rita_common::debt_keeper::save_debt_on_shutdown;
 use rita_common::logging::enable_remote_logging;
 use rita_common::rita_loop::check_rita_common_actors;
 use rita_common::rita_loop::start_core_rita_endpoints;
+use rita_common::usage_tracker::save_usage_on_shutdown;
 use rita_common::utils::env_vars_contains;
 use settings::client::RitaClientSettings;
+use settings::save_settings_on_shutdown;
 use settings::FileWrite;
 use std::env;
 
@@ -45,6 +48,17 @@ lazy_static! {
 }
 
 fn main() {
+    //Setup a SIGTERM hadler
+    ctrlc::set_handler(move || {
+        info!("received Ctrl+C!");
+        save_debt_on_shutdown();
+        save_usage_on_shutdown();
+        save_settings_on_shutdown();
+
+        std::process::exit(0);
+    })
+    .expect("Error setting Ctrl-C handler");
+
     let args: Args = Docopt::new(get_client_usage(
         env!("CARGO_PKG_VERSION"),
         env!("GIT_HASH"),
