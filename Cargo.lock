@@ -3573,7 +3573,6 @@ dependencies = [
  "auto-bridge",
  "clarity",
  "config",
- "failure",
  "ipnetwork 0.18.0",
  "lazy_static",
  "log",

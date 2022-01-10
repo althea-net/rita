@@ -1,11 +1,10 @@
 use crate::localization::LocalizationSettings;
 use crate::network::NetworkSettings;
 use crate::payment::PaymentSettings;
-use crate::{json_merge, set_rita_exit, spawn_watch_thread_exit};
+use crate::{json_merge, set_rita_exit, spawn_watch_thread_exit, SettingsError};
 use althea_types::{Identity, WgKey};
 use config::Config;
 use core::str::FromStr;
-use failure::Error;
 use phonenumber::PhoneNumber;
 use std::collections::HashSet;
 use std::net::Ipv4Addr;
@@ -212,11 +211,11 @@ impl RitaExitSettingsStruct {
         ))
     }
 
-    pub fn get_all(&self) -> Result<serde_json::Value, Error> {
+    pub fn get_all(&self) -> Result<serde_json::Value, SettingsError> {
         Ok(serde_json::to_value(self.clone())?)
     }
 
-    pub fn merge(&mut self, changed_settings: serde_json::Value) -> Result<(), Error> {
+    pub fn merge(&mut self, changed_settings: serde_json::Value) -> Result<(), SettingsError> {
         let mut settings_value = serde_json::to_value(self.clone())?;
 
         json_merge(&mut settings_value, &changed_settings);
@@ -230,14 +229,14 @@ impl RitaExitSettingsStruct {
         }
     }
 
-    pub fn new(file_name: &str) -> Result<Self, Error> {
+    pub fn new(file_name: &str) -> Result<Self, SettingsError> {
         let mut s = Config::new();
         s.merge(config::File::with_name(file_name).required(false))?;
         let settings: Self = s.try_into()?;
         Ok(settings)
     }
 
-    pub fn new_watched(file_name: &str) -> Result<Self, Error> {
+    pub fn new_watched(file_name: &str) -> Result<Self, SettingsError> {
         let mut s = Config::new();
         s.merge(config::File::with_name(file_name).required(false))?;
         let settings: Self = s.try_into()?;

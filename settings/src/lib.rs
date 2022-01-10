@@ -19,7 +19,6 @@ extern crate arrayvec;
 
 use crate::client::{ExitClientSettings, ExitServer, SelectedExit};
 use althea_types::Identity;
-use failure::Error;
 use ipnetwork::IpNetwork;
 use network::NetworkSettings;
 use payment::PaymentSettings;
@@ -42,6 +41,9 @@ pub mod network;
 pub mod operator;
 pub mod payment;
 // pub mod tower;
+
+mod error;
+pub use error::SettingsError;
 
 use crate::client::RitaClientSettings;
 use crate::exit::RitaExitSettingsStruct;
@@ -94,11 +96,11 @@ pub enum SettingsType {
 // The higher layer is responsible for the actual read/write of settings to disk.
 // This adaptor must be thread safe (Send + Sync)
 pub trait WrappedSettingsAdaptor {
-    fn get_client(&self) -> Result<RitaClientSettings, Error>;
-    fn set_client(&self, client_settings: RitaClientSettings) -> Result<(), Error>;
-    fn write_config(&self) -> Result<(), Error>;
-    fn merge_client_json(&self, changed_settings: serde_json::Value) -> Result<(), Error>;
-    fn get_config_json(&self) -> Result<serde_json::Value, Error>;
+    fn get_client(&self) -> Result<RitaClientSettings, SettingsError>;
+    fn set_client(&self, client_settings: RitaClientSettings) -> Result<(), SettingsError>;
+    fn write_config(&self) -> Result<(), SettingsError>;
+    fn merge_client_json(&self, changed_settings: serde_json::Value) -> Result<(), SettingsError>;
+    fn get_config_json(&self) -> Result<serde_json::Value, SettingsError>;
 }
 
 // This function can be called from a higher layer (wrapping binary) to set a reference to its adaptor
@@ -134,7 +136,7 @@ impl RitaSettings {
 }
 
 /// write the current SETTINGS from memory to file
-pub fn write_config() -> Result<(), Error> {
+pub fn write_config() -> Result<(), SettingsError> {
     match &*SETTINGS.read().unwrap() {
         Some(Settings::Adaptor(adapt)) => adapt.adaptor.write_config(),
         Some(Settings::Client(settings)) => {
@@ -160,7 +162,7 @@ pub fn save_settings_on_shutdown() {
 }
 
 /// get a JSON value of all settings
-pub fn get_config_json() -> Result<serde_json::Value, Error> {
+pub fn get_config_json() -> Result<serde_json::Value, SettingsError> {
     match &*SETTINGS.read().unwrap() {
         Some(Settings::Adaptor(adapt)) => adapt.adaptor.get_config_json(),
         Some(Settings::Client(settings)) => settings.get_all(),
@@ -170,7 +172,7 @@ pub fn get_config_json() -> Result<serde_json::Value, Error> {
 }
 
 /// merge a json of a subset of settings into global settings
-pub fn merge_config_json(changed_settings: serde_json::Value) -> Result<(), Error> {
+pub fn merge_config_json(changed_settings: serde_json::Value) -> Result<(), SettingsError> {
     let settings_ref: &mut Option<Settings> = &mut *SETTINGS.write().unwrap();
     match settings_ref {
         Some(Settings::Adaptor(adapt)) => adapt.adaptor.merge_client_json(changed_settings),
@@ -365,14 +367,14 @@ fn spawn_watch_thread_exit(settings: RitaExitSettingsStruct, file_path: &str) {
 /// Must be called from the context that holds the settings var in memory.
 /// In the case of adaptor settings, must be called in the wrapping binary.  
 pub trait FileWrite {
-    fn write(&self, file_name: &str) -> Result<(), Error>;
+    fn write(&self, file_name: &str) -> Result<(), SettingsError>;
 }
 
 impl<T> FileWrite for T
 where
     T: Serialize,
 {
-    fn write(&self, file_name: &str) -> Result<(), Error> {
+    fn write(&self, file_name: &str) -> Result<(), SettingsError> {
         let ser = toml::Value::try_from(self)?;
         let ser = toml::to_string(&ser)?;
         let mut file = File::create(file_name)?;
@@ -388,7 +390,7 @@ where
 pub fn update_config(
     old_settings: RitaClientSettings,
     subnet: u8,
-) -> Result<RitaClientSettings, Error> {
+) -> Result<RitaClientSettings, SettingsError> {
     let mut new_settings = RitaClientSettings {
         payment: old_settings.payment,
         log: old_settings.log,

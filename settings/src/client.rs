@@ -3,12 +3,11 @@ use crate::logging::LoggingSettings;
 use crate::network::NetworkSettings;
 use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
-use crate::{json_merge, set_rita_client, spawn_watch_thread_client, update_config, SUBNET};
+use crate::{json_merge, set_rita_client, spawn_watch_thread_client, update_config, SUBNET, SettingsError};
 use althea_types::wg_key::WgKey;
 use althea_types::{ContactStorage, ExitState, Identity};
 use clarity::Address;
 use config::Config;
-use failure::Error;
 use ipnetwork::IpNetwork;
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
@@ -164,7 +163,7 @@ impl ExitClientSettings {
 }
 
 impl RitaClientSettings {
-    pub fn new(file_name: &str) -> Result<Self, Error> {
+    pub fn new(file_name: &str) -> Result<Self, SettingsError> {
         let mut s = Config::new();
         assert!(Path::new(file_name).exists());
         s.merge(config::File::with_name(file_name).required(false))?;
@@ -172,7 +171,7 @@ impl RitaClientSettings {
         Ok(settings)
     }
 
-    pub fn new_watched(file_name: &str) -> Result<Self, Error> {
+    pub fn new_watched(file_name: &str) -> Result<Self, SettingsError> {
         let mut s = Config::new();
         s.merge(config::File::with_name(file_name).required(false))?;
         let settings: Self = update_config(s.try_into()?, SUBNET)?;
@@ -212,7 +211,7 @@ pub struct RitaClientSettings {
 }
 
 impl RitaClientSettings {
-    pub fn merge(&mut self, changed_settings: serde_json::Value) -> Result<(), Error> {
+    pub fn merge(&mut self, changed_settings: serde_json::Value) -> Result<(), SettingsError> {
         let mut settings_value = serde_json::to_value(self.clone())?;
 
         info!("Merge is being called, maybe error here");
@@ -228,7 +227,7 @@ impl RitaClientSettings {
         }
     }
 
-    pub fn get_all(&self) -> Result<serde_json::Value, Error> {
+    pub fn get_all(&self) -> Result<serde_json::Value, SettingsError> {
         Ok(serde_json::to_value(self.clone())?)
     }
 
