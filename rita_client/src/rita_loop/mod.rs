@@ -4,6 +4,7 @@
 //! This loop manages exit signup based on the settings configuration state and deploys an exit vpn
 //! tunnel if the signup was successful on the selected exit.
 
+use crate::RitaClientError;
 use crate::exit_manager::exit_manager_tick;
 use crate::heartbeat::send_udp_heartbeat;
 use crate::heartbeat::HEARTBEAT_SERVER_KEY;
@@ -22,7 +23,6 @@ use actix_web::http::Method;
 use actix_web::{server, App};
 use althea_types::ExitState;
 use antenna_forwarding_client::start_antenna_forwarding_proxy;
-use failure::Error;
 use futures01::future::Future;
 use rita_common::tunnel_manager::GetNeighbors;
 use rita_common::tunnel_manager::GetTunnels;
@@ -90,11 +90,11 @@ impl Supervised for RitaLoop {
 pub struct Crash;
 
 impl Message for Crash {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaClientError>;
 }
 
 impl Handler<Crash> for RitaLoop {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaClientError>;
     fn handle(&mut self, _: Crash, ctx: &mut Context<Self>) -> Self::Result {
         ctx.stop();
         Ok(())
@@ -104,11 +104,11 @@ impl Handler<Crash> for RitaLoop {
 pub struct Tick;
 
 impl Message for Tick {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaClientError>;
 }
 
 impl Handler<Tick> for RitaLoop {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaClientError>;
     fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
         let start = Instant::now();
         trace!("Client Tick!");

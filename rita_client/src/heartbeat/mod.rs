@@ -18,6 +18,7 @@ use althea_types::ExitDetails;
 
 use babel_monitor::get_installed_route;
 use babel_monitor::get_neigh_given_route;
+use babel_monitor::BabelMonitorError;
 
 use dummy::dummy_selected_exit_details;
 
@@ -32,7 +33,6 @@ use althea_types::Identity;
 use althea_types::WgKey;
 use babel_monitor::Neighbor as NeighborLegacy;
 use babel_monitor::Route as RouteLegacy;
-use failure::Error;
 use futures01::future::Future;
 use settings::client::ExitServer;
 use sodiumoxide::crypto::box_;
@@ -139,7 +139,7 @@ pub fn send_udp_heartbeat() {
                 #[cfg(not(feature = "operator_debug"))]
                 let selected_exit_route = get_selected_exit_route(&network_info.babel_routes);
                 #[cfg(feature = "operator_debug")]
-                let selected_exit_route: Result<RouteLegacy, Error> = Ok(dummy_route());
+                let selected_exit_route: Result<RouteLegacy, BabelMonitorError> = Ok(dummy_route());
 
                 match selected_exit_route {
                     Ok(route) => {
@@ -221,7 +221,7 @@ pub fn send_udp_heartbeat() {
 }
 
 #[allow(dead_code)]
-fn get_selected_exit_route(route_dump: &[RouteLegacy]) -> Result<RouteLegacy, Error> {
+fn get_selected_exit_route(route_dump: &[RouteLegacy]) -> Result<RouteLegacy, BabelMonitorError> {
     let rita_client = settings::get_rita_client();
     let exit_client = rita_client.exit_client;
     let exit_mesh_ip = if let Some(e) = exit_client.get_current_exit() {
@@ -229,7 +229,7 @@ fn get_selected_exit_route(route_dump: &[RouteLegacy]) -> Result<RouteLegacy, Er
             .selected_id
             .expect("Expected Exit ip, none present")
     } else {
-        return Err(format_err!("No Exit"));
+        return Err(BabelMonitorError::MiscStringError("No Exit".to_string()));
     };
     get_installed_route(&exit_mesh_ip, route_dump)
 }

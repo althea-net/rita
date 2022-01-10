@@ -1,13 +1,14 @@
 use actix_web::{HttpRequest, HttpResponse};
-use failure::Error;
 use std::collections::HashMap;
+
+use crate::RitaClientError;
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct EthPrivateKey {
     pub eth_private_key: String,
 }
 
-pub fn get_eth_private_key(_req: HttpRequest) -> Result<HttpResponse, Error> {
+pub fn get_eth_private_key(_req: HttpRequest) -> Result<HttpResponse, RitaClientError> {
     debug!("/eth_private_key GET hit");
 
     let mut ret = HashMap::new();

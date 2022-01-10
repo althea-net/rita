@@ -1,13 +1,13 @@
+use crate::RitaClientError;
 use crate::operator_fee_manager::get_operator_fee_debt;
 use actix_web::Path;
 use actix_web::{HttpRequest, HttpResponse, Json, Result};
 use clarity::Address;
-use failure::Error;
 use num256::Uint256;
 use std::collections::HashMap;
 
 /// TODO remove after beta 12, provided for backwards compat
-pub fn get_dao_list(_req: HttpRequest) -> Result<Json<Vec<Address>>, Error> {
+pub fn get_dao_list(_req: HttpRequest) -> Result<Json<Vec<Address>>, RitaClientError> {
     trace!("get dao list: Hit");
     let rita_client = settings::get_rita_client();
     match rita_client.operator.operator_address {

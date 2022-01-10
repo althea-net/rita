@@ -1,17 +1,17 @@
 use actix_web::Path;
 use actix_web::{HttpRequest, HttpResponse, Json, Result};
-use failure::Error;
 use num256::Uint256;
 
+use crate::RitaClientError;
 use crate::traffic_watcher::get_exit_dest_price;
-pub fn auto_pricing_status(_req: HttpRequest) -> Result<Json<bool>, Error> {
+pub fn auto_pricing_status(_req: HttpRequest) -> Result<Json<bool>, RitaClientError> {
     debug!("Get Auto pricing enabled hit!");
     Ok(Json(
         settings::get_rita_client().operator.use_operator_price,
     ))
 }
 
-pub fn set_auto_pricing(path: Path<bool>) -> Result<HttpResponse, Error> {
+pub fn set_auto_pricing(path: Path<bool>) -> Result<HttpResponse, RitaClientError> {
     let value = path.into_inner();
     debug!("Set Auto pricing enabled hit!");
     let mut rita_client = settings::get_rita_client();
@@ -35,7 +35,7 @@ pub struct Prices {
     simulated_tx_fee: u8,
 }
 
-pub fn get_prices(_req: HttpRequest) -> Result<Json<Prices>, Error> {
+pub fn get_prices(_req: HttpRequest) -> Result<Json<Prices>, RitaClientError> {
     debug!("/prices GET hit");
 
     let payment = settings::get_rita_client().payment;

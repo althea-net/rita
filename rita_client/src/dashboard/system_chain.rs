@@ -2,14 +2,14 @@ use actix_web::http::StatusCode;
 use actix_web::Path;
 use actix_web::{HttpRequest, HttpResponse};
 use althea_types::SystemChain;
-use failure::Error;
-use rita_common::blockchain_oracle::set_oracle_net_version;
 use settings::payment::PaymentSettings;
 use settings::payment::ETH_FEE_MULTIPLIER;
 use settings::payment::XDAI_FEE_MULTIPLIER;
 
+use crate::RitaClientError;
+
 /// Changes the full node configuration value between test/prod and other networks
-pub fn set_system_blockchain_endpoint(path: Path<String>) -> Result<HttpResponse, Error> {
+pub fn set_system_blockchain_endpoint(path: Path<String>) -> Result<HttpResponse, RitaClientError> {
     info!("Blockchain change endpoint hit!");
     let id: Result<SystemChain, ()> = path.into_inner().parse();
     if id.is_err() {
@@ -30,7 +30,7 @@ pub fn set_system_blockchain_endpoint(path: Path<String>) -> Result<HttpResponse
     Ok(HttpResponse::Ok().json(()))
 }
 
-pub fn get_system_blockchain(_req: HttpRequest) -> Result<HttpResponse, Error> {
+pub fn get_system_blockchain(_req: HttpRequest) -> Result<HttpResponse, RitaClientError> {
     debug!("/blockchain/ GET hit");
 
     Ok(HttpResponse::Ok().json(settings::get_rita_client().payment.system_chain))

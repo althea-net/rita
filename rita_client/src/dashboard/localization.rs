@@ -2,7 +2,6 @@ use actix_web::error::JsonPayloadError;
 use actix_web::{client, HttpMessage, HttpRequest, HttpResponse, Json};
 use althea_types::WyreReservationRequestCarrier;
 use althea_types::WyreReservationResponse;
-use failure::Error;
 use futures01::future;
 use futures01::future::Either;
 use futures01::Future;
@@ -10,6 +9,8 @@ use phonenumber::Mode;
 use settings::localization::LocalizationSettings;
 
 use std::time::Duration;
+
+use crate::RitaClientError;
 
 /// A version of the localization struct that serializes into a more easily
 /// consumable form
@@ -52,7 +53,7 @@ pub struct AmountRequest {
 /// TODO generalize naming of this endpoint
 pub fn get_wyre_reservation(
     amount: Json<AmountRequest>,
-) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+) -> Box<dyn Future<Item = HttpResponse, Error = RitaClientError>> {
     info!("Getting wyre reservation");
 
     let mut rita_client = settings::get_rita_client();

@@ -6,8 +6,6 @@ extern crate lazy_static;
 
 #[macro_use]
 extern crate serde_derive;
-#[macro_use]
-extern crate failure;
 
 pub mod dashboard;
 pub mod exit_manager;
@@ -18,6 +16,9 @@ pub mod operator_fee_manager;
 pub mod operator_update;
 pub mod rita_loop;
 pub mod traffic_watcher;
+
+mod error;
+pub use error::RitaClientError;
 
 use rita_common::READABLE_VERSION;
 

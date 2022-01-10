@@ -1,11 +1,12 @@
 use compressed_log::builder::LoggerBuilder;
 use compressed_log::compression::Compression;
-use failure::{bail, format_err, Error};
 use log::LevelFilter;
 use log::Record;
 
+use crate::RitaClientError;
+
 /// enables remote logging if the user has configured it
-pub fn enable_remote_logging() -> Result<(), Error> {
+pub fn enable_remote_logging() -> Result<(), RitaClientError> {
     trace!("About to enable remote logging");
     let rita_client = settings::get_rita_client();
     let log = rita_client.log;
@@ -23,7 +24,7 @@ pub fn enable_remote_logging() -> Result<(), Error> {
         .set_level(
             level
                 .to_level()
-                .ok_or_else(|| format_err!("Unable to convert level filter to a level"))?,
+                .ok_or_else(|| RitaClientError::ConversionError("Unable to convert level filter to a level".to_string()))?,
         )
         .set_compression_level(Compression::Suggested)
         .set_sink_url(logging_url)
@@ -37,12 +38,12 @@ pub fn enable_remote_logging() -> Result<(), Error> {
         }))
         .build();
     if let Err(e) = logger {
-        bail!(format_err!("{}", e))
+        return Err(RitaClientError::LoggerError(e))
     }
     let logger = logger.unwrap();
 
     if let Err(e) = log::set_boxed_logger(Box::new(logger)) {
-        bail!(format_err!("{}", e))
+        return Err(RitaClientError::SetLoggerError(e))
     }
     log::set_max_level(level);
 

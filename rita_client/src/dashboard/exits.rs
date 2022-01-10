@@ -1,5 +1,6 @@
 //! The Exit info endpoint gathers infromation about exit status and presents it to the dashbaord.
 
+use crate::RitaClientError;
 use crate::exit_manager::exit_setup_request;
 use actix::{Handler, Message, ResponseFuture, SystemService};
 use actix_web::http::StatusCode;
@@ -11,7 +12,6 @@ use babel_monitor::do_we_have_route;
 use babel_monitor_legacy::open_babel_stream_legacy;
 use babel_monitor_legacy::parse_routes_legacy;
 use babel_monitor_legacy::start_connection_legacy;
-use failure::Error;
 use futures01::{future, Future};
 use rita_common::dashboard::Dashboard;
 use rita_common::KI;
@@ -33,7 +33,7 @@ pub struct ExitInfo {
 pub struct GetExitInfo;
 
 impl Message for GetExitInfo {
-    type Result = Result<Vec<ExitInfo>, Error>;
+    type Result = Result<Vec<ExitInfo>, RitaClientError>;
 }
 
 const EXIT_PING_TIMEOUT: Duration = Duration::from_millis(200);
@@ -61,7 +61,7 @@ fn is_tunnel_working(exit: &ExitServer, current_exit: Option<&ExitServer>) -> bo
 }
 
 impl Handler<GetExitInfo> for Dashboard {
-    type Result = ResponseFuture<Vec<ExitInfo>, Error>;
+    type Result = ResponseFuture<Vec<ExitInfo>, RitaClientError>;
 
     fn handle(&mut self, _msg: GetExitInfo, _ctx: &mut Self::Context) -> Self::Result {
         let babel_port = settings::get_rita_client().network.babel_port;
@@ -128,7 +128,7 @@ impl Handler<GetExitInfo> for Dashboard {
 
 pub fn add_exits(
     new_exits: Json<HashMap<String, ExitServer>>,
-) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+) -> Box<dyn Future<Item = HttpResponse, Error = RitaClientError>> {
     debug!("/exits POST hit with {:?}", new_exits);
     let mut rita_client = settings::get_rita_client();
     let mut exits = rita_client.exit_client.exits;
@@ -144,7 +144,7 @@ pub fn add_exits(
 
 pub fn get_exit_info(
     _req: HttpRequest,
-) -> Box<dyn Future<Item = Json<Vec<ExitInfo>>, Error = Error>> {
+) -> Box<dyn Future<Item = Json<Vec<ExitInfo>>, Error = RitaClientError>> {
     debug!("Exit endpoint hit!");
     Dashboard::from_registry()
         .send(GetExitInfo {})
@@ -153,7 +153,7 @@ pub fn get_exit_info(
         .responder()
 }
 
-pub fn reset_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+pub fn reset_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Error = RitaClientError>> {
     let exit_name = path.into_inner();
     debug!("/exits/{}/reset hit", exit_name);
     let mut rita_client = settings::get_rita_client();
@@ -189,7 +189,7 @@ pub fn reset_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Err
     }
 }
 
-pub fn select_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+pub fn select_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Error = RitaClientError>> {
     let exit_name = path.into_inner();
     debug!("/exits/{}/select hit", exit_name);
 
@@ -205,7 +205,7 @@ pub fn select_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Er
 
         // try and save the config and fail if we can't
         if let Err(e) = settings::write_config() {
-            return Box::new(future::err(e));
+            return Box::new(future::err(RitaClientError::SettingsError(e)));
         }
 
         Box::new(future::ok(HttpResponse::Ok().json(ret)))
@@ -223,7 +223,7 @@ pub fn select_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Er
     }
 }
 
-pub fn register_to_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+pub fn register_to_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Error = RitaClientError>> {
     let exit_name = path.into_inner();
     debug!("/exits/{}/register hit", exit_name);
 
@@ -249,7 +249,7 @@ pub fn register_to_exit(path: Path<String>) -> Box<dyn Future<Item = HttpRespons
 
 pub fn verify_on_exit_with_code(
     path: Path<(String, String)>,
-) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+) -> Box<dyn Future<Item = HttpResponse, Error = RitaClientError>> {
     let (exit_name, code) = path.into_inner();
     debug!("/exits/{}/verify/{} hit", exit_name, code);
 

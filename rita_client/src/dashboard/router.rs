@@ -1,7 +1,6 @@
-use crate::operator_update::updater::update_rita;
+use crate::{operator_update::updater::update_rita, RitaClientError};
 use actix_web::{HttpRequest, HttpResponse};
 use althea_types::UpdateType;
-use failure::Error;
 use rita_common::KI;
 use std::sync::{Arc, RwLock};
 lazy_static! {
@@ -9,7 +8,7 @@ lazy_static! {
         Arc::new(RwLock::new(None));
 }
 
-pub fn reboot_router(_req: HttpRequest) -> Result<HttpResponse, Error> {
+pub fn reboot_router(_req: HttpRequest) -> Result<HttpResponse, RitaClientError> {
     if KI.is_openwrt() {
         KI.run_command("reboot", &[])?;
         Ok(HttpResponse::Ok().json(()))
@@ -21,7 +20,7 @@ pub fn reboot_router(_req: HttpRequest) -> Result<HttpResponse, Error> {
 /// This function is triggered by the user from the router dashboard. Retrive the firmware image from
 /// the lazy static variable and use this to perform a sysupgrade. If device is not openwrt or no image
 /// link is available, do nothing
-pub fn update_router(_req: HttpRequest) -> Result<HttpResponse, Error> {
+pub fn update_router(_req: HttpRequest) -> Result<HttpResponse, RitaClientError> {
     if KI.is_openwrt() {
         let reader = &*UPDATE_INSTRUCTION.read().unwrap();
         if reader.is_none() {

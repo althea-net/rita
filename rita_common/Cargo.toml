@@ -27,7 +27,6 @@ clarity = "0.5"
 futures = { version = "0.3", features = ["compat"] }
 num256 = "0.3"
 num-traits="0.2"
-failure = "0.1"
 futures01 = { package = "futures", version = "0.1"}
 tokio = "0.1"
 bincode = "1.3"

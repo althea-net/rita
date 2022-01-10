@@ -56,6 +56,7 @@ pub enum BabelMonitorError {
     NetworkError(IpNetworkError),
     TokioError(String),
     NoRoute(String),
+    MiscStringError(String),
 }
 
 use crate::BabelMonitorError::{
@@ -128,6 +129,8 @@ impl Display for BabelMonitorError {
                 "Tokio had a failure while it was talking to babel:\n{}",
                 a,
             ),
+            BabelMonitorError::MiscStringError(a) => write!(f, "{}", a,),
+
         }
     }
 }

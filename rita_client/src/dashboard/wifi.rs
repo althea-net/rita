@@ -3,11 +3,13 @@
 use ::actix_web::http::StatusCode;
 use ::actix_web::Path;
 use ::actix_web::{HttpRequest, HttpResponse, Json};
-use failure::Error;
 use rita_common::dashboard::nickname::maybe_set_nickname;
 use rita_common::KI;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter, Result as FmtResult};
+
+use crate::RitaClientError;
 
 /// legal in the US and around the world, don't allow odd channels
 pub const ALLOWED_TWO: [u16; 3] = [1, 6, 11];
@@ -73,23 +75,33 @@ static FORBIDDEN_CHARS: &str = "'/\"\\";
 static MINIMUM_PASS_CHARS: usize = 8;
 
 /// A helper error type for displaying UCI config value validation problems human-readably.
-#[derive(Debug, Fail, Serialize)]
+#[derive(Debug, Serialize)]
 pub enum ValidationError {
-    #[fail(display = "Illegal character {} at position {}", c, pos)]
     IllegalCharacter { pos: usize, c: char },
-    #[fail(display = "Empty value")]
     Empty,
-    #[fail(
-        display = "Incorrect channel! Your radio has a channel width of {} please select one of {}",
-        _0, _1
-    )]
     BadChannel(String, String),
-    #[fail(display = "Trying to set a 5ghz channel on a 2.4ghz radio or vice versa!")]
     WrongRadio,
-    #[fail(display = "Value too short ({} required)", _0)]
     TooShort(usize),
-    #[fail(display = "Invalid Choice")]
     InvalidChoice,
+}
+
+impl Display for ValidationError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match self {
+            ValidationError::IllegalCharacter { pos, c } => write!(
+                f, "Illegal character {} at position {}", pos, c
+            ),
+            ValidationError::Empty => write!(f, "Empty value"),
+            ValidationError::BadChannel(a, b) => write!(
+                f, "Incorrect channel! Your radio has a channel width of {} please select one of {}", a, b
+            ),
+            ValidationError::WrongRadio => write!(f, "Trying to set a 5ghz channel on a 2.4ghz radio or vice versa!"),
+            ValidationError::TooShort(a) => write!(
+                f, "Value too short ({} required)", a
+            ),
+            ValidationError::InvalidChoice => write!(f, "Invalid Choice"),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -98,7 +110,7 @@ pub struct WifiSsid {
     pub ssid: String,
 }
 
-fn set_ssid(wifi_ssid: &WifiSsid) -> Result<(), Error> {
+fn set_ssid(wifi_ssid: &WifiSsid) -> Result<(), RitaClientError> {
     if let Err(e) = validate_config_value(&wifi_ssid.ssid) {
         info!("Setting of invalid SSID was requested: {}", e);
         return Err(e.into());
@@ -133,7 +145,7 @@ pub struct WifiPass {
 }
 
 /// Resets the wifi password to the stock value for all radios
-pub fn reset_wifi_pass() -> Result<(), Error> {
+pub fn reset_wifi_pass() -> Result<(), RitaClientError> {
     let config = get_wifi_config_internal()?;
     for interface in config {
         let pass = WifiPass {
@@ -155,7 +167,7 @@ pub fn reset_wifi_pass() -> Result<(), Error> {
     Ok(())
 }
 
-fn set_pass(wifi_pass: &WifiPass) -> Result<(), Error> {
+fn set_pass(wifi_pass: &WifiPass) -> Result<(), RitaClientError> {
     let wifi_pass_len = wifi_pass.pass.len();
     if wifi_pass_len < MINIMUM_PASS_CHARS {
         return Err(ValidationError::TooShort(MINIMUM_PASS_CHARS).into());
@@ -181,7 +193,7 @@ pub struct WifiChannel {
     pub channel: u16,
 }
 
-fn set_channel(wifi_channel: &WifiChannel) -> Result<(), Error> {
+fn set_channel(wifi_channel: &WifiChannel) -> Result<(), RitaClientError> {
     let current_channel: u16 = KI
         .get_uci_var(&format!("wireless.{}.channel", wifi_channel.radio))?
         .parse()?;
@@ -220,7 +232,7 @@ pub struct WifiDisabled {
 }
 
 /// Disables the wifi on the specified radio
-fn set_disabled(wifi_disabled: &WifiDisabled) -> Result<WifiDisabledReturn, Error> {
+fn set_disabled(wifi_disabled: &WifiDisabled) -> Result<WifiDisabledReturn, RitaClientError> {
     let current_disabled: bool =
         KI.get_uci_var(&format!("wireless.{}.disabled", wifi_disabled.radio))? == "1";
 
@@ -259,7 +271,7 @@ pub enum WifiToken {
 /// an endpoint that takes a series of wifi tokens in json format and applies them all at once
 /// the reason for this is that changing any setting while on wifi will disconnect the caller
 /// so in order to have all the changes 'take' we need to have a single endpoint for all changes
-pub fn set_wifi_multi(wifi_changes: Json<Vec<WifiToken>>) -> Result<HttpResponse, Error> {
+pub fn set_wifi_multi(wifi_changes: Json<Vec<WifiToken>>) -> Result<HttpResponse, RitaClientError> {
     trace!("Got multi wifi change!");
     let mut needs_reboot = false;
 
@@ -403,7 +415,7 @@ fn validate_channel(
 }
 
 // returns what channels are allowed for the provided radio value
-pub fn get_allowed_wifi_channels(radio: Path<String>) -> Result<HttpResponse, Error> {
+pub fn get_allowed_wifi_channels(radio: Path<String>) -> Result<HttpResponse, RitaClientError> {
     debug!("/wifi_settings/get_channels hit with {:?}", radio);
     let radio = radio.into_inner();
 
@@ -480,13 +492,13 @@ fn validate_config_value(s: &str) -> Result<(), ValidationError> {
     }
 }
 
-pub fn get_wifi_config(_req: HttpRequest) -> Result<Json<Vec<WifiInterface>>, Error> {
+pub fn get_wifi_config(_req: HttpRequest) -> Result<Json<Vec<WifiInterface>>, RitaClientError> {
     debug!("Get wificonfig hit!");
     let config = get_wifi_config_internal()?;
     Ok(Json(config))
 }
 
-fn get_wifi_config_internal() -> Result<Vec<WifiInterface>, Error> {
+fn get_wifi_config_internal() -> Result<Vec<WifiInterface>, RitaClientError> {
     let mut interfaces = Vec::new();
     let mut devices = HashMap::new();
     let config = KI.ubus_call("uci", "get", "{ \"config\": \"wireless\"}")?;
@@ -495,7 +507,7 @@ fn get_wifi_config_internal() -> Result<Vec<WifiInterface>, Error> {
         Some(i) => i,
         None => {
             error!("No \"values\" key in parsed wifi config!");
-            return Err(format_err!("No \"values\" key parsed wifi config"));
+            return Err(RitaClientError::ConversionError("No \"values\" key in parsed wifi config!".to_string()));
         }
     };
     for (k, v) in items {

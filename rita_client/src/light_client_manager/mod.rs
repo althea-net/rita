@@ -10,7 +10,6 @@ use actix_web::{HttpRequest, HttpResponse, Json};
 use althea_kernel_interface::wg_iface_counter::prepare_usage_history;
 use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_types::{Identity, LightClientLocalIdentity, LocalIdentity, WgKey};
-use failure::Error;
 use futures01::future::Either;
 use futures01::{future, Future};
 use rita_common::debt_keeper::traffic_update;
@@ -27,11 +26,12 @@ use std::collections::HashSet;
 use std::net::Ipv4Addr;
 use std::net::SocketAddr;
 
+use crate::RitaClientError;
 use crate::traffic_watcher::get_exit_dest_price;
 
 /// Sets up a variant of the exit tunnel nat rules, assumes that the exit
 /// tunnel is already created and doesn't change the system routing table
-fn setup_light_client_forwarding(client_addr: Ipv4Addr, nic: &str) -> Result<(), Error> {
+fn setup_light_client_forwarding(client_addr: Ipv4Addr, nic: &str) -> Result<(), RitaClientError> {
     // the way this works is pretty heavy on the routes and iptables rules
     // it wouldn't be feasible if we expected more than a few dozen phone
     // clients on a single device. Instead of having an aggregating network
@@ -71,7 +71,7 @@ fn setup_light_client_forwarding(client_addr: Ipv4Addr, nic: &str) -> Result<(),
 /// phone network bridge into a natted ipv4 network rather than into a Babel network.
 pub fn light_client_hello_response(
     req: (Json<LocalIdentity>, HttpRequest),
-) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+) -> Box<dyn Future<Item = HttpResponse, Error = RitaClientError>> {
     let their_id = *req.0;
     let a = LightClientManager::from_registry().send(GetAddress(their_id));
     let exit_dest_price = get_exit_dest_price();
@@ -142,13 +142,13 @@ pub fn light_client_hello_response(
                 .and_then(move |tunnel| {
                     let (tunnel, have_tunnel) = match tunnel {
                         Some(val) => val,
-                        None => return Err(format_err!("tunnel open failure!")),
+                        None => return Err(RitaClientError::MiscStringError("tunnel open failure!".to_string())), 
                     };
 
                     let lci = LightClientLocalIdentity {
                         global: match settings::get_rita_client().get_identity() {
                             Some(id) => id,
-                            None => return Err(format_err!("Identity has no mesh IP ready yet")),
+                            None => return Err(RitaClientError::MiscStringError("Identity has no mesh IP ready yet".to_string())),
                         },
                         wg_port: tunnel.listen_port,
                         have_tunnel: Some(have_tunnel),
@@ -215,11 +215,11 @@ impl SystemService for LightClientManager {
 pub struct GetAddress(LocalIdentity);
 
 impl Message for GetAddress {
-    type Result = Result<Ipv4Addr, Error>;
+    type Result = Result<Ipv4Addr, RitaClientError>;
 }
 
 impl Handler<GetAddress> for LightClientManager {
-    type Result = Result<Ipv4Addr, Error>;
+    type Result = Result<Ipv4Addr, RitaClientError>;
 
     fn handle(&mut self, msg: GetAddress, _: &mut Context<Self>) -> Self::Result {
         let requester_id = msg.0;
@@ -237,7 +237,7 @@ fn assign_client_address(
     requester_id: Identity,
     start_address: Ipv4Addr,
     prefix: u8,
-) -> Result<Ipv4Addr, Error> {
+) -> Result<Ipv4Addr, RitaClientError> {
     trace!("Assigning light client address");
     // we already have an ip for this id on record, send the same one out
     if let Some(ip) = assigned_addresses.get(&requester_id) {

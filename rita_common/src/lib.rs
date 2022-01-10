@@ -5,9 +5,6 @@ extern crate log;
 extern crate lazy_static;
 
 #[macro_use]
-extern crate failure;
-
-#[macro_use]
 extern crate serde_derive;
 extern crate arrayvec;
 
@@ -37,6 +34,9 @@ pub mod traffic_watcher;
 pub mod tunnel_manager;
 pub mod usage_tracker;
 pub mod utils;
+
+mod error;
+pub use error::RitaCommonError;
 
 pub use crate::dashboard::babel::*;
 pub use crate::dashboard::debts::*;

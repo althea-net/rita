@@ -4,14 +4,14 @@ use actix_web::HttpResponse;
 use actix_web::Path;
 use althea_kernel_interface::file_io::get_lines;
 use althea_kernel_interface::file_io::write_out;
-use failure::format_err;
-use failure::Error;
 use rita_common::KI;
+
+use crate::RitaClientError;
 
 static DROPBEAR_CONFIG: &str = "/etc/config/dropbear";
 static FIREWALL_CONFIG: &str = "/etc/config/firewall";
 
-pub fn get_remote_access_status(_req: HttpRequest) -> Result<HttpResponse, Error> {
+pub fn get_remote_access_status(_req: HttpRequest) -> Result<HttpResponse, RitaClientError> {
     if !KI.is_openwrt() {
         return Ok(HttpResponse::new(StatusCode::BAD_REQUEST));
     }
@@ -21,14 +21,14 @@ pub fn get_remote_access_status(_req: HttpRequest) -> Result<HttpResponse, Error
 // todo try and combine the above function with this one and maintain
 // the http responses at some point
 #[allow(dead_code)]
-pub fn get_remote_access_internal() -> Result<bool, Error> {
+pub fn get_remote_access_internal() -> Result<bool, RitaClientError> {
     if !KI.is_openwrt() {
-        return Err(format_err!("Not Openwrt!"));
+        return Err(RitaClientError::ConversionError("Not Openwrt!".to_string()))
     }
     check_dropbear_config()
 }
 
-fn check_dropbear_config() -> Result<bool, Error> {
+fn check_dropbear_config() -> Result<bool, RitaClientError> {
     let lines = get_lines(DROPBEAR_CONFIG)?;
     // the old style config has one server, the new style config has two
     // the old style has 'option interface' which indicates LAN only listening
@@ -54,13 +54,13 @@ fn check_dropbear_config() -> Result<bool, Error> {
     Ok(true)
 }
 
-pub fn set_remote_access_status(path: Path<bool>) -> Result<HttpResponse, Error> {
+pub fn set_remote_access_status(path: Path<bool>) -> Result<HttpResponse, RitaClientError> {
     let remote_access = path.into_inner();
     set_remote_access_internal(remote_access)?;
     Ok(HttpResponse::Ok().json(()))
 }
 
-pub fn set_remote_access_internal(remote_access: bool) -> Result<(), Error> {
+pub fn set_remote_access_internal(remote_access: bool) -> Result<(), RitaClientError> {
     let mut lines: Vec<String> = Vec::new();
     // the wonky spacing is actually important, keep it around.
     // dropbear server one is ours for remote access, it never allows password

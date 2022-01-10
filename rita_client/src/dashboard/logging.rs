@@ -1,14 +1,15 @@
 use actix_web::http::StatusCode;
 use actix_web::{HttpRequest, HttpResponse, Path};
-use failure::Error;
 use log::LevelFilter;
 use rita_common::KI;
 
-pub fn get_remote_logging(_req: HttpRequest) -> Result<HttpResponse, Error> {
+use crate::RitaClientError;
+
+pub fn get_remote_logging(_req: HttpRequest) -> Result<HttpResponse, RitaClientError> {
     Ok(HttpResponse::Ok().json(settings::get_rita_client().log.enabled))
 }
 
-pub fn remote_logging(path: Path<bool>) -> Result<HttpResponse, Error> {
+pub fn remote_logging(path: Path<bool>) -> Result<HttpResponse, RitaClientError> {
     let enabled = path.into_inner();
     debug!("/remote_logging/enable/{} hit", enabled);
 
@@ -36,13 +37,13 @@ pub fn remote_logging(path: Path<bool>) -> Result<HttpResponse, Error> {
     Ok(HttpResponse::Ok().json(()))
 }
 
-pub fn get_remote_logging_level(_req: HttpRequest) -> Result<HttpResponse, Error> {
+pub fn get_remote_logging_level(_req: HttpRequest) -> Result<HttpResponse, RitaClientError> {
     let rita_client = settings::get_rita_client();
     let level = &rita_client.log.level;
     Ok(HttpResponse::Ok().json(level))
 }
 
-pub fn remote_logging_level(path: Path<String>) -> Result<HttpResponse, Error> {
+pub fn remote_logging_level(path: Path<String>) -> Result<HttpResponse, RitaClientError> {
     let level = path.into_inner();
     debug!("/remote_logging/level/{}", level);
 

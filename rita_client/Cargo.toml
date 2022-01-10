@@ -14,7 +14,6 @@ serde_derive = "1.0"
 serde_json = "1.0"
 lazy_static = "1.4"
 hex-literal = "0.3"
-failure = "0.1"
 rita_common = { path = "../rita_common" }
 futures01 = { package = "futures", version = "0.1"}
 log = { version = "0.4", features = ["release_max_level_info"] }

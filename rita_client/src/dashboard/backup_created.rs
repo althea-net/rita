@@ -1,9 +1,10 @@
 use actix_web::Path;
 use actix_web::{HttpRequest, HttpResponse, Result};
-use failure::Error;
 use std::collections::HashMap;
 
-pub fn get_backup_created(_req: HttpRequest) -> Result<HttpResponse, Error> {
+use crate::RitaClientError;
+
+pub fn get_backup_created(_req: HttpRequest) -> Result<HttpResponse, RitaClientError> {
     debug!("/backup_created GET hit");
     let mut ret = HashMap::new();
     ret.insert(
@@ -17,7 +18,7 @@ pub fn get_backup_created(_req: HttpRequest) -> Result<HttpResponse, Error> {
     Ok(HttpResponse::Ok().json(ret))
 }
 
-pub fn set_backup_created(path: Path<bool>) -> Result<HttpResponse, Error> {
+pub fn set_backup_created(path: Path<bool>) -> Result<HttpResponse, RitaClientError> {
     debug!("Setting backup created");
     let value = path.into_inner();
 
@@ -26,7 +27,7 @@ pub fn set_backup_created(path: Path<bool>) -> Result<HttpResponse, Error> {
     settings::set_rita_client(rita_client);
 
     if let Err(e) = settings::write_config() {
-        return Err(e);
+        return Err(RitaClientError::SettingsError(e));
     }
 
     Ok(HttpResponse::Ok().json(()))

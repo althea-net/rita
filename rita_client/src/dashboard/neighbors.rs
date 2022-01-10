@@ -7,13 +7,14 @@ use babel_monitor::{get_installed_route, get_route_via_neigh, Route as RouteLega
 use babel_monitor_legacy::open_babel_stream_legacy;
 use babel_monitor_legacy::parse_routes_legacy;
 use babel_monitor_legacy::start_connection_legacy;
-use failure::Error;
 use futures01::Future;
 use num256::{Int256, Uint256};
 use rita_common::debt_keeper::{dump, NodeDebtData};
 use rita_common::network_monitor::{GetStats, IfaceStats, NetworkMonitor, Stats};
 use rita_common::tunnel_manager::{GetNeighbors, Neighbor, TunnelManager};
 use std::collections::HashMap;
+
+use crate::RitaClientError;
 
 #[derive(Serialize)]
 pub struct NodeInfo {
@@ -33,7 +34,7 @@ pub struct NodeInfo {
 
 pub fn get_routes(
     _req: HttpRequest,
-) -> Box<dyn Future<Item = Json<Vec<RouteLegacy>>, Error = Error>> {
+) -> Box<dyn Future<Item = Json<Vec<RouteLegacy>>, Error = RitaClientError>> {
     let babel_port = settings::get_rita_client().network.babel_port;
     Box::new(
         open_babel_stream_legacy(babel_port)
@@ -55,7 +56,7 @@ pub fn get_routes(
 /// The routes info might also belong in /exits or a dedicated /routes endpoint
 pub fn get_neighbor_info(
     _req: HttpRequest,
-) -> Box<dyn Future<Item = Json<Vec<NodeInfo>>, Error = Error>> {
+) -> Box<dyn Future<Item = Json<Vec<NodeInfo>>, Error = RitaClientError>> {
     let debts = dump();
     Box::new(
         TunnelManager::from_registry()
