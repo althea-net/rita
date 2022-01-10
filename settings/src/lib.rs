@@ -149,6 +149,16 @@ pub fn write_config() -> Result<(), Error> {
     }
 }
 
+/// On an interupt (SIGTERM), saving settings before exiting
+pub fn save_settings_on_shutdown() {
+    if let Err(e) = write_config() {
+        error!("Unable to save settings with error: {}", e);
+        return;
+    }
+
+    info!("Shutdown: saving settings");
+}
+
 /// get a JSON value of all settings
 pub fn get_config_json() -> Result<serde_json::Value, Error> {
     match &*SETTINGS.read().unwrap() {

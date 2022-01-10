@@ -299,3 +299,19 @@ pub fn get_payments_data() -> VecDeque<PaymentHour> {
     let usage_tracker_var = &*(USAGE_TRACKER.read().unwrap());
     usage_tracker_var.payments.clone()
 }
+
+/// On an interupt (SIGTERM), saving USAGE_TRACKER before exiting
+pub fn save_usage_on_shutdown() {
+    let current_hour = match get_current_hour() {
+        Ok(hour) => hour,
+        Err(e) => {
+            error!("System time is set earlier than unix epoch! {:?}", e);
+            return;
+        }
+    };
+
+    let history = &mut USAGE_TRACKER.write().unwrap();
+    history.last_save_hour = current_hour;
+    let res = history.save();
+    info!("Shutdown: saving usage data: {:?}", res);
+}
