@@ -1,6 +1,6 @@
 [package]
 name = "rita_client"
-version = "0.18.9"
+version = "0.18.10"
 edition = "2018"
 license = "Apache-2.0"
 
@@ -22,7 +22,7 @@ althea_types = { path = "../althea_types" }
 althea_kernel_interface = { path = "../althea_kernel_interface" }
 antenna_forwarding_client = { path = "../antenna_forwarding_client" }
 settings = { path = "../settings" }
-sha3 = "0.9"
+sha3 = "0.10"
 lettre = "0.9"
 lettre_email = "0.9"
 phonenumber = "0.3"
