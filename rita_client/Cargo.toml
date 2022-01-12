@@ -6,7 +6,7 @@ license = "Apache-2.0"
 
 
 [dependencies]
-compressed_log = "0.4.0"
+compressed_log = "0.4"
 num-traits="0.2"
 num256 = "0.3"
 serde = "1.0"
@@ -36,7 +36,7 @@ sodiumoxide = "0.2"
 clu = { path = "../clu" }
 web30 = "0.18"
 actix = "0.7"
-awc = "3.0.0-beta.8"
+awc = "3.0.0-beta.18"
 ipnetwork = "0.14"
 actix-async = {package="actix", version = "0.12"}
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }

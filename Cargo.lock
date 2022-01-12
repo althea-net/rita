@@ -872,9 +872,9 @@ dependencies = [
 
 [[package]]
 name = "compressed_log"
-version = "0.4.0"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f936beec549faf33698ad2bc54eaa0ea5c62e2f36b870f99c05ba18f268a4a6a"
+checksum = "0d643fdb22b65931d0d2b156aa5347fb8e3fa947b3c6bc764173fc6f087b64a6"
 dependencies = [
  "actix 0.12.0",
  "awc",
@@ -4469,9 +4469,9 @@ dependencies = [
 
 [[package]]
 name = "web30"
-version = "0.18.1"
+version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72b74b36774b3d736d0d7c897daa35eaa2f16b7b835464b44a31c5605436a788"
+checksum = "973cde915297484145f02586f7522eaf35d1b02a1c40b64d5756d22e1d45670f"
 dependencies = [
  "awc",
  "clarity",

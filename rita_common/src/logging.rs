@@ -23,7 +23,7 @@ pub fn enable_remote_logging(
                 .to_level()
                 .ok_or_else(|| format_err!("Unable to convert level filter to a level"))?,
         )
-        .set_compression_level(Compression::Fast)
+        .set_compression_level(Compression::Slow)
         .set_sink_url(log_url.as_str())
         .set_format(Box::new(move |record: &Record| {
             format!(
