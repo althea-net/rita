@@ -5,15 +5,15 @@ extern crate log;
 extern crate lazy_static;
 
 #[macro_use]
-extern crate failure;
-
-#[macro_use]
 extern crate serde_derive;
 
 pub mod database;
 pub mod network_endpoints;
 pub mod rita_loop;
 pub mod traffic_watcher;
+
+mod error;
+pub use error::RitaExitError;
 
 pub use crate::database::database_tools::*;
 pub use crate::database::database_tools::*;

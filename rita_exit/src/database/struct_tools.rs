@@ -4,12 +4,13 @@ use althea_types::Identity;
 use arrayvec::ArrayString;
 use exit_db::models;
 use exit_db::models::Client;
-use failure::Error;
 use rand::Rng;
 use std::collections::HashSet;
 use std::net::IpAddr;
 
-pub fn to_identity(client: &Client) -> Result<Identity, Error> {
+use crate::RitaExitError;
+
+pub fn to_identity(client: &Client) -> Result<Identity, RitaExitError> {
     trace!("Converting client {:?}", client);
     Ok(Identity {
         mesh_ip: client.mesh_ip.clone().parse()?,
@@ -19,7 +20,7 @@ pub fn to_identity(client: &Client) -> Result<Identity, Error> {
     })
 }
 
-pub fn to_exit_client(client: Client) -> Result<ExitClient, Error> {
+pub fn to_exit_client(client: Client) -> Result<ExitClient, RitaExitError> {
     Ok(ExitClient {
         mesh_ip: client.mesh_ip.parse()?,
         internal_ip: client.internal_ip.parse()?,

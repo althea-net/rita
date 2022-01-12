@@ -2,6 +2,7 @@
 //! for the exit, which is most exit logic in general. Keep in mind database connections are remote
 //! and therefore synchronous database requests are quite expensive (on the order of tens of milliseconds)
 
+use crate::RitaExitError;
 use crate::create_or_update_user_record;
 use crate::database::database_tools::client_conflict;
 use crate::database::database_tools::delete_client;
@@ -28,9 +29,6 @@ use althea_kernel_interface::ExitClient;
 use althea_types::Identity;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 use diesel::prelude::PgConnection;
-use failure::bail;
-use failure::format_err;
-use failure::Error;
 use futures01::future;
 use futures01::Future;
 use ipnetwork::IpNetwork;
@@ -108,7 +106,7 @@ pub fn secs_since_unix_epoch() -> i64 {
 /// Handles a new client registration api call. Performs a geoip lookup
 /// on their registration ip to make sure that they are coming from a valid gateway
 /// ip and then sends out an email of phone message
-pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState, Error = Error> {
+pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState, Error = RitaExitError> {
     info!("got setup request {:?}", client);
     get_gateway_ip_single(client.global.mesh_ip).and_then(move |gateway_ip| {
         info!("got gateway ip {:?}", client);
@@ -127,7 +125,7 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
                                     display_hashset(&*EXIT_ALLOWED_COUNTRIES),
                                 ),
                             }))
-                                as Box<dyn Future<Item = ExitState, Error = Error>>
+                                as Box<dyn Future<Item = ExitState, Error = RitaExitError>>
                         }
                         Ok(false) => {}
                         Err(e) => return Box::new(future::err(e)),
@@ -159,7 +157,7 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
                             }
                             let client_internal_ip = match their_record.internal_ip.parse() {
                                 Ok(ip) => ip,
-                                Err(e) => return Box::new(future::err(format_err!("{:?}", e))),
+                                Err(e) => return Box::new(future::err(RitaExitError::AddrParseError(e))), 
                             };
 
                             Box::new(future::ok(ExitState::Registered {
@@ -182,7 +180,7 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
 }
 
 /// Gets the status of a client and updates it in the database
-pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<ExitState, Error> {
+pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<ExitState, RitaExitError> {
     trace!("Checking if record exists for {:?}", client.global.mesh_ip);
 
     if let Some(their_record) = get_client(&client, conn)? {
@@ -221,7 +219,7 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
         })
     } else {
         error!("De-registering client! {:?}", client);
-        bail!("Refusing to de-register clients right now!");
+        return Err(RitaExitError::MiscStringError("Refusing to de-register clients right now!".to_string()))
         // TODO restore this functionality once it's confirmed to be safe
         // Ok(ExitState::New)
     }
@@ -233,7 +231,7 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
 pub fn validate_clients_region(
     clients_list: Vec<exit_db::models::Client>,
     conn: &PgConnection,
-) -> Result<(), Error> {
+) -> Result<(), RitaExitError> {
     info!("Starting exit region validation");
     let start = Instant::now();
 
@@ -257,7 +255,7 @@ pub fn validate_clients_region(
     let list = match wait_timeout(get_gateway_ip_bulk(ip_vec), EXIT_LOOP_TIMEOUT) {
         WaitResult::Err(e) => return Err(e),
         WaitResult::Ok(val) => val,
-        WaitResult::TimedOut(_) => return Err(format_err!("Timed out!")),
+        WaitResult::TimedOut(_) => return Err(RitaExitError::MiscStringError("Timed out!".to_string())), 
     };
     for item in list.iter() {
         let res = verify_ip_sync(item.gateway_ip);
@@ -293,7 +291,7 @@ pub fn validate_clients_region(
 pub fn cleanup_exit_clients(
     clients_list: &[exit_db::models::Client],
     conn: &PgConnection,
-) -> Result<(), Error> {
+) -> Result<(), RitaExitError> {
     trace!("Running exit client cleanup");
     let start = Instant::now();
 
@@ -352,7 +350,7 @@ pub fn cleanup_exit_clients(
 pub fn setup_clients(
     clients_list: &[exit_db::models::Client],
     old_clients: &HashSet<ExitClient>,
-) -> Result<HashSet<ExitClient>, Error> {
+) -> Result<HashSet<ExitClient>, RitaExitError> {
     let start = Instant::now();
 
     // use hashset to ensure uniqueness and check for duplicate db entries
@@ -415,7 +413,7 @@ pub fn setup_clients(
 pub fn enforce_exit_clients(
     clients_list: Vec<exit_db::models::Client>,
     old_debt_actions: &HashSet<(Identity, DebtAction)>,
-) -> Result<HashSet<(Identity, DebtAction)>, Error> {
+) -> Result<HashSet<(Identity, DebtAction)>, RitaExitError> {
     let start = Instant::now();
     let mut clients_by_id = HashMap::new();
     let free_tier_limit = settings::get_rita_exit().payment.free_tier_throughput;

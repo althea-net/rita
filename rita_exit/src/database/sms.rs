@@ -1,3 +1,4 @@
+use crate::RitaExitError;
 use crate::database::database_tools::text_sent;
 use crate::database::database_tools::verify_client;
 use crate::database::get_database_connection;
@@ -7,7 +8,6 @@ use crate::database::struct_tools::texts_sent;
 use actix_web::client as actix_client;
 use actix_web::client::ClientResponse;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState};
-use failure::Error;
 use futures01::future;
 use futures01::future::Either;
 use futures01::future::Future;
@@ -29,7 +29,7 @@ fn check_text(
     number: String,
     code: String,
     api_key: String,
-) -> impl Future<Item = bool, Error = Error> {
+) -> impl Future<Item = bool, Error = RitaExitError> {
     trace!("About to check text message status for {}", number);
     let number: PhoneNumber = match number.parse() {
         Ok(number) => number,
@@ -63,7 +63,7 @@ pub struct SmsRequest {
 }
 
 /// Sends the authy verification text by hitting the api endpoint
-fn send_text(number: String, api_key: String) -> impl Future<Item = ClientResponse, Error = Error> {
+fn send_text(number: String, api_key: String) -> impl Future<Item = ClientResponse, Error = RitaExitError> {
     info!("Sending message for {}", number);
     let url = "https://api.authy.com/protected/json/phones/verification/start";
     let number: PhoneNumber = match number.parse() {
@@ -89,7 +89,7 @@ pub fn handle_sms_registration(
     client: ExitClientIdentity,
     their_record: exit_db::models::Client,
     api_key: String,
-) -> impl Future<Item = ExitState, Error = Error> {
+) -> impl Future<Item = ExitState, Error = RitaExitError> {
     info!(
         "Handling phone registration for {}",
         client.global.wg_public_key
@@ -128,7 +128,7 @@ pub fn handle_sms_registration(
                         })
                     }
                 })
-            })) as Box<dyn Future<Item = ExitState, Error = Error>>
+            })) as Box<dyn Future<Item = ExitState, Error = RitaExitError>>
         }
         // user has exhausted attempts but is still not submitting code
         (Some(_number), None, true) => Box::new(future::ok(ExitState::Pending {
@@ -149,7 +149,7 @@ pub fn handle_sms_registration(
                         phone_code: None,
                     })
                 })
-            })) as Box<dyn Future<Item = ExitState, Error = Error>>
+            })) as Box<dyn Future<Item = ExitState, Error = RitaExitError>>
         }
         // user has attempts remaining and is submitting a code
         (Some(number), Some(code), false) => {
@@ -179,12 +179,12 @@ pub fn handle_sms_registration(
                         })
                     }
                 })
-            })) as Box<dyn Future<Item = ExitState, Error = Error>>
+            })) as Box<dyn Future<Item = ExitState, Error = RitaExitError>>
         }
         // user did not submit a phonenumber
         (None, _, _) => Box::new(future::ok(ExitState::Denied {
             message: "This exit requires a phone number to register!".to_string(),
-        })) as Box<dyn Future<Item = ExitState, Error = Error>>,
+        })) as Box<dyn Future<Item = ExitState, Error = RitaExitError>>,
     }
 }
 

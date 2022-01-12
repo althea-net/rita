@@ -18,7 +18,6 @@ use althea_types::WgKey;
 use althea_types::{
     EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState,
 };
-use failure::{format_err, Error};
 use futures01::future;
 use futures01::Future;
 use num256::Int256;
@@ -29,7 +28,7 @@ use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
 use std::net::SocketAddr;
 
-use crate::EXIT_WG_PRIVATE_KEY;
+use crate::{EXIT_WG_PRIVATE_KEY, RitaExitError};
 
 /// helper function for returning from secure_setup_request()
 fn secure_setup_return(
@@ -50,7 +49,7 @@ fn secure_setup_return(
 
 enum DecryptResult {
     Success(ExitClientIdentity),
-    Failure(Box<dyn Future<Item = Json<EncryptedExitState>, Error = Error>>),
+    Failure(Box<dyn Future<Item = Json<EncryptedExitState>, Error = RitaExitError>>),
 }
 
 fn decrypt_exit_client_id(
@@ -122,7 +121,7 @@ fn decrypt_exit_client_id(
 
 pub fn secure_setup_request(
     request: (Json<EncryptedExitClientIdentity>, HttpRequest),
-) -> Box<dyn Future<Item = Json<EncryptedExitState>, Error = Error>> {
+) -> Box<dyn Future<Item = Json<EncryptedExitState>, Error = RitaExitError>> {
     let our_secretkey: WgKey = *EXIT_WG_PRIVATE_KEY;
     let our_secretkey = our_secretkey.into();
 
@@ -146,7 +145,7 @@ pub fn secure_setup_request(
                     "Error in exit setup for {} malformed packet header {:?}!",
                     their_wg_pubkey, e
                 );
-                return Box::new(future::err(format_err!("Invalid packet!")));
+                return Box::new(future::err(RitaExitError::MiscStringError("Invalid packet!".to_string()))); 
             }
         },
         None => {
@@ -154,7 +153,7 @@ pub fn secure_setup_request(
                 "Error in exit setup for {} invalid remote_mesh_sender!",
                 their_wg_pubkey
             );
-            return Box::new(future::err(format_err!("Invalid packet!")));
+            return Box::new(future::err(RitaExitError::MiscStringError("Invalid packet!".to_string()))); 
         }
     };
 
@@ -171,7 +170,7 @@ pub fn secure_setup_request(
             )),
             Err(e) => {
                 error!("Signup client failed with {:?}", e);
-                Err(format_err!("There was an internal server error!"))
+                Err(RitaExitError::MiscStringError("There was an internal server error!".to_string()))
             }
         }))
     } else {
@@ -188,7 +187,7 @@ pub fn secure_setup_request(
 
 pub fn secure_status_request(
     request: Json<EncryptedExitClientIdentity>,
-) -> Box<dyn Future<Item = Json<EncryptedExitState>, Error = Error>> {
+) -> Box<dyn Future<Item = Json<EncryptedExitState>, Error = RitaExitError>> {
     let our_secretkey: WgKey = *EXIT_WG_PRIVATE_KEY;
     let our_secretkey = our_secretkey.into();
 
@@ -210,7 +209,7 @@ pub fn secure_status_request(
                     "Internal error in client status for {} with {:?}",
                     their_wg_pubkey, e
                 );
-                return Err(format_err!("There was an internal error!"));
+                return Err(RitaExitError::MiscStringError("There was an internal error!".to_string())); 
             }
         };
         Ok(secure_setup_return(
@@ -221,7 +220,7 @@ pub fn secure_status_request(
     }))
 }
 
-pub fn get_exit_info_http(_req: HttpRequest) -> Result<Json<ExitState>, Error> {
+pub fn get_exit_info_http(_req: HttpRequest) -> Result<Json<ExitState>, RitaExitError> {
     Ok(Json(ExitState::GotInfo {
         general_details: get_exit_info(),
         message: "Got info successfully".to_string(),
@@ -246,7 +245,7 @@ pub fn get_client_debt(client: Json<Identity>) -> HttpResponse {
 }
 
 #[cfg(not(feature = "development"))]
-pub fn nuke_db(_req: HttpRequest) -> Result<HttpResponse, Error> {
+pub fn nuke_db(_req: HttpRequest) -> Result<HttpResponse, RitaExitError> {
     // This is returned on production builds.
     Ok(HttpResponse::NotFound().finish())
 }

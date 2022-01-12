@@ -9,9 +9,9 @@ use actix_web::Result;
 use diesel::dsl::delete;
 use diesel::*;
 use exit_db::schema;
-use failure::Error;
 use futures01::future::Future;
 
+use crate::RitaExitError;
 use crate::database::database_tools::get_database_connection;
 
 #[derive(Default)]
@@ -30,11 +30,11 @@ impl SystemService for DbClient {
 
 pub struct TruncateTables;
 impl Message for TruncateTables {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaExitError>;
 }
 
 impl Handler<TruncateTables> for DbClient {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaExitError>;
 
     fn handle(&mut self, _: TruncateTables, _: &mut Self::Context) -> Self::Result {
         use self::schema::clients::dsl::*;

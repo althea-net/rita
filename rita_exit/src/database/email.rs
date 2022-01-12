@@ -1,3 +1,4 @@
+use crate::RitaExitError;
 use crate::database::database_tools::update_mail_sent_time;
 use crate::database::database_tools::verify_client;
 use crate::database::get_exit_info;
@@ -7,9 +8,6 @@ use crate::database::struct_tools::verif_done;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState};
 use diesel::prelude::PgConnection;
 use exit_db::models;
-use failure::bail;
-use failure::format_err;
-use failure::Error;
 use futures01::future;
 use futures01::future::Future;
 use handlebars::Handlebars;
@@ -22,11 +20,11 @@ use lettre_email::EmailBuilder;
 use serde_json::json;
 use settings::exit::ExitVerifSettings;
 
-pub fn send_mail(client: &models::Client) -> Result<(), Error> {
+pub fn send_mail(client: &models::Client) -> Result<(), RitaExitError> {
     let mailer = match settings::get_rita_exit().verif_settings {
         Some(ExitVerifSettings::Email(mailer)) => mailer,
-        Some(_) => bail!("Verification mode is not email!"),
-        None => bail!("No verification mode configured!"),
+        Some(_) => return Err(RitaExitError::MiscStringError("Verification mode is not email!".to_string())),
+        None => return Err(RitaExitError::MiscStringError("No verification mode configured!".to_string()))
     };
 
     info!("Sending exit signup email for client");
@@ -68,7 +66,7 @@ pub fn handle_email_registration(
     their_record: &exit_db::models::Client,
     conn: &PgConnection,
     cooldown: i64,
-) -> impl Future<Item = ExitState, Error = Error> {
+) -> impl Future<Item = ExitState, Error = RitaExitError> {
     let mut their_record = their_record.clone();
     if client.reg_details.email_code == Some(their_record.email_code.clone()) {
         info!("email verification complete for {:?}", client);
@@ -85,7 +83,7 @@ pub fn handle_email_registration(
 
         let client_internal_ip = match their_record.internal_ip.parse() {
             Ok(ip) => ip,
-            Err(e) => return future::err(format_err!("{:?}", e)),
+            Err(e) => return future::err(RitaExitError::AddrParseError(e)), 
         };
         future::ok(ExitState::Registered {
             our_details: ExitClientDetails { client_internal_ip },

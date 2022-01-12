@@ -1,11 +1,9 @@
 use crate::database::secs_since_unix_epoch;
 use crate::database::struct_tools::client_to_new_db_client;
 use crate::database::ONE_DAY;
-use failure::bail;
-use failure::format_err;
 use rita_common::utils::ip_increment::increment;
 
-use crate::DB_POOL;
+use crate::{DB_POOL, RitaExitError};
 use actix_web::Result;
 use althea_kernel_interface::ExitClient;
 use althea_types::ExitClientIdentity;
@@ -15,7 +13,6 @@ use diesel::r2d2::ConnectionManager;
 use diesel::r2d2::PooledConnection;
 use diesel::select;
 use exit_db::{models, schema};
-use failure::Error;
 use futures01::future;
 use futures01::future::Future;
 use std::net::IpAddr;
@@ -39,7 +36,7 @@ fn get_internal_ips(clients: &[exit_db::models::Client]) -> Vec<Ipv4Addr> {
 
 /// Gets the next available client ip, takes about O(n) time, we could make it faster by
 /// sorting on the database side but I've left that optimization on the vine for now
-pub fn get_next_client_ip(conn: &PgConnection) -> Result<IpAddr, Error> {
+pub fn get_next_client_ip(conn: &PgConnection) -> Result<IpAddr, RitaExitError> {
     use self::schema::clients::dsl::clients;
     let rita_exit = settings::get_rita_exit();
     let exit_settings = rita_exit.exit_network;
@@ -74,7 +71,7 @@ pub fn update_client(
     client: &ExitClientIdentity,
     their_record: &models::Client,
     conn: &PgConnection,
-) -> Result<(), Error> {
+) -> Result<(), RitaExitError> {
     use self::schema::clients::dsl::{
         clients, email, eth_address, last_seen, mesh_ip, phone, wg_pubkey,
     };
@@ -126,7 +123,7 @@ pub fn update_client(
 pub fn get_client(
     client: &ExitClientIdentity,
     conn: &PgConnection,
-) -> Result<Option<models::Client>, Error> {
+) -> Result<Option<models::Client>, RitaExitError> {
     use self::schema::clients::dsl::{clients, eth_address, mesh_ip, wg_pubkey};
     let ip = client.global.mesh_ip;
     let wg = client.global.wg_public_key;
@@ -155,7 +152,7 @@ pub fn get_client(
         }
         Err(e) => {
             error!("We failed to lookup the client {:?} with{:?}", mesh_ip, e);
-            bail!("We failed to lookup the client!")
+            return Err(RitaExitError::MiscStringError("We failed to lookup the client!".to_string()))
         }
     }
 }
@@ -165,7 +162,7 @@ pub fn verify_client(
     client: &ExitClientIdentity,
     client_verified: bool,
     conn: &PgConnection,
-) -> Result<(), Error> {
+) -> Result<(), RitaExitError> {
     use self::schema::clients::dsl::*;
     let ip = client.global.mesh_ip;
     let wg = client.global.wg_public_key;
@@ -187,7 +184,7 @@ pub fn verify_db_client(
     client: &models::Client,
     client_verified: bool,
     conn: &PgConnection,
-) -> Result<(), Error> {
+) -> Result<(), RitaExitError> {
     use self::schema::clients::dsl::*;
     let ip = &client.mesh_ip;
     let wg = &client.wg_pubkey;
@@ -205,7 +202,7 @@ pub fn verify_db_client(
 }
 
 /// Increments the text message sent count in the database
-pub fn text_sent(client: &ExitClientIdentity, conn: &PgConnection, val: i32) -> Result<(), Error> {
+pub fn text_sent(client: &ExitClientIdentity, conn: &PgConnection, val: i32) -> Result<(), RitaExitError> {
     use self::schema::clients::dsl::*;
     let ip = client.global.mesh_ip;
     let wg = client.global.wg_public_key;
@@ -222,7 +219,7 @@ pub fn text_sent(client: &ExitClientIdentity, conn: &PgConnection, val: i32) -> 
     Ok(())
 }
 
-fn client_exists(client: &ExitClientIdentity, conn: &PgConnection) -> Result<bool, Error> {
+fn client_exists(client: &ExitClientIdentity, conn: &PgConnection) -> Result<bool, RitaExitError> {
     use self::schema::clients::dsl::*;
     trace!("Checking if client exists");
     let ip = client.global.mesh_ip;
@@ -236,7 +233,7 @@ fn client_exists(client: &ExitClientIdentity, conn: &PgConnection) -> Result<boo
 }
 
 /// True if there is any client with the same eth address, wg key, or ip address already registered
-pub fn client_conflict(client: &ExitClientIdentity, conn: &PgConnection) -> Result<bool, Error> {
+pub fn client_conflict(client: &ExitClientIdentity, conn: &PgConnection) -> Result<bool, RitaExitError> {
     use self::schema::clients::dsl::*;
     // we can't possibly have a conflict if we have exactly this client already
     // since client exists checks all major details this is safe and will return false
@@ -261,7 +258,7 @@ pub fn client_conflict(client: &ExitClientIdentity, conn: &PgConnection) -> Resu
     Ok(ip_exists || eth_exists || wg_exists)
 }
 
-pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<(), Error> {
+pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<(), RitaExitError> {
     use self::schema::clients::dsl::*;
     info!("Deleting clients {:?} in database", client);
 
@@ -273,7 +270,7 @@ pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<()
 
 // for backwards compatibility with entires that do not have a timestamp
 // new entires will be initialized and updated as part of the normal flow
-pub fn set_client_timestamp(client: ExitClient, connection: &PgConnection) -> Result<(), Error> {
+pub fn set_client_timestamp(client: ExitClient, connection: &PgConnection) -> Result<(), RitaExitError> {
     use self::schema::clients::dsl::*;
     info!("Setting timestamp for client {:?}", client);
 
@@ -288,11 +285,11 @@ pub fn set_client_timestamp(client: ExitClient, connection: &PgConnection) -> Re
 pub fn update_mail_sent_time(
     client: &ExitClientIdentity,
     conn: &PgConnection,
-) -> Result<(), Error> {
+) -> Result<(), RitaExitError> {
     use self::schema::clients::dsl::{clients, email, email_sent_time};
     let mail_addr = match client.clone().reg_details.email {
         Some(mail) => mail,
-        None => bail!("Cloud not find email for {:?}", client.clone()),
+        None => return Err(RitaExitError::EmailNotFound(client.clone()))
     };
 
     diesel::update(clients.filter(email.eq(mail_addr)))
@@ -305,26 +302,24 @@ pub fn update_mail_sent_time(
 /// Gets the Postgres database connection from the threadpool, since there are dedicated
 /// connections for each threadpool member error if non is available right away
 pub fn get_database_connection(
-) -> impl Future<Item = PooledConnection<ConnectionManager<PgConnection>>, Error = Error> {
+) -> impl Future<Item = PooledConnection<ConnectionManager<PgConnection>>, Error = RitaExitError> {
     match DB_POOL.read().unwrap().try_get() {
         Some(connection) => Box::new(future::ok(connection))
             as Box<
-                dyn Future<Item = PooledConnection<ConnectionManager<PgConnection>>, Error = Error>,
+                dyn Future<Item = PooledConnection<ConnectionManager<PgConnection>>, Error = RitaExitError>,
             >,
         None => {
             error!("No available db connection!");
-            Box::new(future::err(format_err!(
-                "No Database connection available!"
-            )))
+            Box::new(future::err(RitaExitError::MiscStringError("No Database connection available!".to_string())))
         }
     }
 }
 
 pub fn get_database_connection_sync(
-) -> Result<PooledConnection<ConnectionManager<PgConnection>>, Error> {
+) -> Result<PooledConnection<ConnectionManager<PgConnection>>, RitaExitError> {
     match DB_POOL.read().unwrap().try_get() {
         Some(connection) => Ok(connection),
-        None => bail!("No connection!"),
+        None => return Err(RitaExitError::MiscStringError("No connection!".to_string()))
     }
 }
 
@@ -332,7 +327,7 @@ pub fn create_or_update_user_record(
     conn: &PgConnection,
     client: &ExitClientIdentity,
     user_country: String,
-) -> Result<models::Client, Error> {
+) -> Result<models::Client, RitaExitError> {
     use self::schema::clients::dsl::clients;
     if let Some(val) = get_client(client, conn)? {
         update_client(client, &val, conn)?;

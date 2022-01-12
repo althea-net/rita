@@ -8,7 +8,6 @@
 //!
 //! Also handles enforcement of nonpayment, since there's no need for a complicated TunnelManager for exits
 
-use failure::bail;
 use rita_common::debt_keeper::traffic_update;
 use rita_common::debt_keeper::Traffic;
 use rita_common::usage_tracker::update_usage_data;
@@ -22,10 +21,11 @@ use althea_kernel_interface::KI;
 use althea_types::Identity;
 use althea_types::WgKey;
 use babel_monitor::Route as RouteLegacy;
-use failure::Error;
 use ipnetwork::IpNetwork;
 use std::collections::HashMap;
 use std::net::IpAddr;
+
+use crate::RitaExitError;
 
 #[derive(Default)]
 pub struct TrafficWatcher {
@@ -49,11 +49,11 @@ pub struct Watch {
 }
 
 impl Message for Watch {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaExitError>;
 }
 
 impl Handler<Watch> for TrafficWatcher {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaExitError>;
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
         watch(&mut self.last_seen_bytes, &msg.routes, &msg.users)
@@ -182,13 +182,13 @@ pub fn watch(
     usage_history: &mut HashMap<WgKey, WgUsage>,
     routes: &[RouteLegacy],
     clients: &[Identity],
-) -> Result<(), Error> {
+) -> Result<(), RitaExitError> {
     let our_price = settings::get_rita_exit().exit_network.exit_price;
     let our_id = match settings::get_rita_exit().get_identity() {
         Some(id) => id,
         None => {
             warn!("Our identity is not ready!");
-            bail!("Identity is not ready");
+            return Err(RitaExitError::MiscStringError("Identity is not ready".to_string()))
         }
     };
 

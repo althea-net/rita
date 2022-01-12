@@ -1,8 +1,6 @@
 use babel_monitor_legacy::open_babel_stream_legacy;
 use babel_monitor_legacy::parse_routes_legacy;
 use babel_monitor_legacy::start_connection_legacy;
-use failure::bail;
-use failure::Error;
 use futures01::future;
 use futures01::future::Future;
 use ipnetwork::IpNetwork;
@@ -13,13 +11,15 @@ use std::net::IpAddr;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use crate::RitaExitError;
+
 lazy_static! {
     static ref GEOIP_CACHE: Arc<RwLock<HashMap<IpAddr, String>>> =
         Arc::new(RwLock::new(HashMap::new()));
 }
 
 /// gets the gateway ip for a given mesh IP
-pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Box<dyn Future<Item = IpAddr, Error = Error>> {
+pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Box<dyn Future<Item = IpAddr, Error = RitaExitError>> {
     let babel_port = settings::get_rita_exit().network.babel_port;
 
     Box::new(
@@ -44,7 +44,7 @@ pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Box<dyn Future<Item = IpAddr, E
 
                         match route_to_des {
                             Some(route) => Ok(KI.get_wg_remote_ip(&route.iface)?),
-                            None => bail!("No route found for mesh ip: {:?}", mesh_ip),
+                            None => return Err(RitaExitError::IpAddrError(mesh_ip))
                         }
                     })
                 })
@@ -62,7 +62,7 @@ pub struct IpPair {
 /// not appear in the result vec
 pub fn get_gateway_ip_bulk(
     mesh_ip_list: Vec<IpAddr>,
-) -> Box<dyn Future<Item = Vec<IpPair>, Error = Error>> {
+) -> Box<dyn Future<Item = Vec<IpPair>, Error = RitaExitError>> {
     let babel_port = settings::get_rita_exit().network.babel_port;
     trace!("getting gateway ip bulk");
 
@@ -128,7 +128,7 @@ struct CountryDetails {
     iso_code: String,
 }
 
-pub fn get_country_async(ip: IpAddr) -> impl Future<Item = String, Error = Error> {
+pub fn get_country_async(ip: IpAddr) -> impl Future<Item = String, Error = RitaExitError> {
     match get_country(ip) {
         Ok(res) => future::ok(res),
         Err(e) => future::err(e),
@@ -136,7 +136,7 @@ pub fn get_country_async(ip: IpAddr) -> impl Future<Item = String, Error = Error
 }
 
 /// get ISO country code from ip, consults a in memory cache
-pub fn get_country(ip: IpAddr) -> Result<String, Error> {
+pub fn get_country(ip: IpAddr) -> Result<String, RitaExitError> {
     trace!("get GeoIP country for {}", ip.to_string());
 
     // if allowed countries is not configured we don't care and will insert
@@ -207,10 +207,10 @@ pub fn get_country(ip: IpAddr) -> Result<String, Error> {
                     trace!("Added to cache, returning");
                     Ok(code)
                 } else {
-                    Err(format_err!("Failed to deserialize geoip response"))
+                    Err(RitaExitError::MiscStringError("Failed to deserialize geoip response".to_string())) 
                 }
             } else {
-                Err(format_err!("request failed"))
+                Err(RitaExitError::MiscStringError("Request failed".to_string()))
             }
         }
     }
@@ -218,7 +218,7 @@ pub fn get_country(ip: IpAddr) -> Result<String, Error> {
 
 /// Returns true or false if an ip is confirmed to be inside or outside the region and error
 /// if an api error is encountered trying to figure that out.
-pub fn verify_ip(request_ip: IpAddr) -> impl Future<Item = bool, Error = Error> {
+pub fn verify_ip(request_ip: IpAddr) -> impl Future<Item = bool, Error = RitaExitError> {
     match verify_ip_sync(request_ip) {
         Ok(item) => future::ok(item),
         Err(e) => future::err(e),
@@ -227,7 +227,7 @@ pub fn verify_ip(request_ip: IpAddr) -> impl Future<Item = bool, Error = Error> 
 
 /// Returns true or false if an ip is confirmed to be inside or outside the region and error
 /// if an api error is encountered trying to figure that out.
-pub fn verify_ip_sync(request_ip: IpAddr) -> Result<bool, Error> {
+pub fn verify_ip_sync(request_ip: IpAddr) -> Result<bool, RitaExitError> {
     // in this case we have a gateway directly attached to the exit, so our
     // peer address for them will be an fe80 linklocal ip address. When we
     // detect this we know that they are in the allowed countries list because
