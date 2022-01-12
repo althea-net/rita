@@ -67,6 +67,10 @@ const CLOSE_THRESH_MULT: i32 = 10;
 /// in the rita_common fast loop
 pub const ORACLE_TIMEOUT: Duration = FAST_LOOP_TIMEOUT;
 
+/// Minimum gas price. When gas is below this, we set gasprice to this value, which is then used to
+/// calculate pay and close thresh
+pub const MIN_GAS: u32 = 1_000_000_000;
+
 lazy_static! {
     /// This lazy static hold info about gas, thresholds and payment info for the router
     static ref ORACLE: Arc<RwLock<BlockchainOracle>> =
@@ -286,6 +290,14 @@ fn update_gas_price(
     // taking the latest gas value for pay_thres and close_thres calculation does better
     // in the worst case compared to averaging
     oracle_gas_price = value;
+
+    let min_gas: Uint256 = MIN_GAS.into();
+    let oracle_gas_price = if oracle_gas_price < min_gas {
+        info!("gas price is low setting to! {}", min_gas);
+        min_gas
+    } else {
+        oracle_gas_price
+    };
 
     let dynamic_fee_factor: Int256 = payment_settings.dynamic_fee_multiplier.into();
     let transaction_gas: Int256 = 21000.into();

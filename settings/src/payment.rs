@@ -4,7 +4,7 @@ use auto_bridge::TokenBridgeAddresses;
 use clarity::{Address, PrivateKey};
 use num256::Uint256;
 
-pub const XDAI_FEE_MULTIPLIER: u32 = 3000;
+pub const XDAI_FEE_MULTIPLIER: u32 = 6000;
 pub const ETH_FEE_MULTIPLIER: u32 = 20;
 
 fn default_local_fee() -> u32 {
