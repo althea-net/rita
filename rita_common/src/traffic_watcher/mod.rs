@@ -2,6 +2,7 @@
 //! iptables and ipset counters on each per hop tunnel (the WireGuard tunnel between two devices). These counts
 //! are then stored and used to compute amounts for bills.
 
+use crate::RitaCommonError;
 use crate::debt_keeper::traffic_update;
 use crate::debt_keeper::Traffic;
 use crate::tunnel_manager::Neighbor;
@@ -14,8 +15,6 @@ use althea_kernel_interface::open_tunnel::is_link_local;
 use althea_kernel_interface::FilterTarget;
 use althea_types::Identity;
 use babel_monitor::Route as RouteLegacy;
-use failure::bail;
-use failure::Error;
 use ipnetwork::IpNetwork;
 
 use std::collections::HashMap;
@@ -58,11 +57,11 @@ impl Watch {
 }
 
 impl Message for Watch {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaCommonError>;
 }
 
 impl Handler<Watch> for TrafficWatcher {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaCommonError>;
 
     fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
         watch(msg.routes, &msg.neighbors)
@@ -84,7 +83,7 @@ pub fn prepare_helper_maps(
     (identities, if_to_id)
 }
 
-pub fn get_babel_info(routes: Vec<RouteLegacy>) -> Result<(HashMap<IpAddr, i128>, u32), Error> {
+pub fn get_babel_info(routes: Vec<RouteLegacy>) -> Result<(HashMap<IpAddr, i128>, u32), RitaCommonError> {
     trace!("Got {} routes: {:?}", routes.len(), routes);
     let mut destinations = HashMap::new();
     let common = settings::get_rita_common();
@@ -115,7 +114,7 @@ pub fn get_babel_info(routes: Vec<RouteLegacy>) -> Result<(HashMap<IpAddr, i128>
     destinations.insert(
         match common.network.mesh_ip {
             Some(ip) => ip,
-            None => bail!("No mesh IP configured yet"),
+            None => return Err(RitaCommonError::MiscStringError("No mesh IP configured yet".to_string()))
         },
         i128::from(0),
     );
@@ -125,7 +124,7 @@ pub fn get_babel_info(routes: Vec<RouteLegacy>) -> Result<(HashMap<IpAddr, i128>
     Ok((destinations, local_fee))
 }
 
-pub fn get_input_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
+pub fn get_input_counters() -> Result<HashMap<(IpAddr, String), u64>, RitaCommonError> {
     let mut total_input_counters = HashMap::new();
     trace!("Getting input counters");
     let input_counters = match KI.read_counters(&FilterTarget::Input) {
@@ -179,7 +178,7 @@ pub fn get_input_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
     Ok(total_input_counters)
 }
 
-pub fn get_output_counters() -> Result<HashMap<(IpAddr, String), u64>, Error> {
+pub fn get_output_counters() -> Result<HashMap<(IpAddr, String), u64>, RitaCommonError> {
     let mut total_output_counters = HashMap::new();
     trace!("Getting ouput counters");
     let output_counters = match KI.read_counters(&FilterTarget::Output) {
@@ -269,7 +268,7 @@ fn update_usage(
 ///
 /// This first time this is run, it will create the rules and then immediately read and zero them.
 /// (should return 0)
-pub fn watch(routes: Vec<RouteLegacy>, neighbors: &[Neighbor]) -> Result<(), Error> {
+pub fn watch(routes: Vec<RouteLegacy>, neighbors: &[Neighbor]) -> Result<(), RitaCommonError> {
     let (identities, if_to_id) = prepare_helper_maps(neighbors);
 
     let (destinations, local_fee) = get_babel_info(routes)?;

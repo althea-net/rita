@@ -5,6 +5,7 @@
 //! peer listener gets udp ImHere -> TunnelManager tries to contact peer with hello
 //! -> hello manager actually manages that request -> hello manager calls back to tunnel manager
 
+use crate::RitaCommonError;
 use crate::peer_listener::Peer;
 use crate::tunnel_manager::id_callback::IdentityCallback;
 use crate::tunnel_manager::TunnelManager;
@@ -12,7 +13,6 @@ use actix::{Actor, Context, Handler, Message, ResponseFuture, Supervised, System
 use actix_web::client::Connection;
 use actix_web::{client, HttpMessage, Result};
 use althea_types::LocalIdentity;
-use failure::Error;
 use futures01::future::ok as future_ok;
 use futures01::Future;
 use tokio::net::TcpStream as TokioTcpStream;
@@ -38,14 +38,14 @@ pub struct Hello {
 }
 
 impl Message for Hello {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaCommonError>;
 }
 
 /// Handler for sending hello messages, it's important that any path by which this handler
 /// may crash is handled such that ports are returned to tunnel manager, otherwise we end
 /// up with a port leak which will eventually crash the program
 impl Handler<Hello> for HelloHandler {
-    type Result = ResponseFuture<(), Error>;
+    type Result = ResponseFuture<(), RitaCommonError>;
     fn handle(&mut self, msg: Hello, _: &mut Self::Context) -> Self::Result {
         trace!("Sending Hello {:?}", msg);
 
@@ -67,7 +67,7 @@ impl Handler<Hello> for HelloHandler {
                 Ok(s) => s,
                 Err(e) => {
                     trace!("Error getting stream from hello {:?}", e);
-                    return Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = Error>>;
+                    return Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = RitaCommonError>>;
                 }
             };
 
@@ -79,7 +79,7 @@ impl Handler<Hello> for HelloHandler {
                 Ok(n) => n,
                 Err(e) => {
                     trace!("Error serializing our request {:?}", e);
-                    return Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = Error>>;
+                    return Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = RitaCommonError>>;
                 }
             };
 
@@ -103,15 +103,15 @@ impl Handler<Hello> for HelloHandler {
                             Ok(())
                         }
                     }))
-                        as Box<dyn Future<Item = (), Error = Error>>,
+                        as Box<dyn Future<Item = (), Error = RitaCommonError>>,
                     Err(e) => {
                         trace!("Got error getting Hello response {:?}", e);
-                        Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = Error>>
+                        Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = RitaCommonError>>
                     }
                 }
             });
 
-            Box::new(http_result) as Box<dyn Future<Item = (), Error = Error>>
+            Box::new(http_result) as Box<dyn Future<Item = (), Error = RitaCommonError>>
         }))
     }
 }

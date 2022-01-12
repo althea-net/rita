@@ -15,6 +15,7 @@ use crate::peer_listener::PeerListener;
 use crate::peer_listener::PEER_LISTENER;
 use crate::peer_listener::{send_hello, Peer};
 use crate::rita_loop::is_gateway;
+use crate::RitaCommonError;
 use crate::FAST_LOOP_TIMEOUT;
 use crate::KI;
 #[cfg(test)]
@@ -27,12 +28,13 @@ use althea_types::LocalIdentity;
 use babel_monitor::monitor;
 use babel_monitor::open_babel_stream;
 use babel_monitor::unmonitor;
-use failure::Error;
+use babel_monitor::BabelMonitorError;
 use futures01::Future;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::Display;
+use std::fmt::{Formatter, Result as FmtResult};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -46,10 +48,16 @@ type Resolver = Mocker<resolver::Resolver>;
 #[cfg(not(test))]
 type Resolver = resolver::Resolver;
 
-#[derive(Debug, Fail)]
+#[derive(Debug)]
 pub enum TunnelManagerError {
-    #[fail(display = "Invalid state")]
     _InvalidStateError,
+}
+impl Display for TunnelManagerError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match self {
+            TunnelManagerError::_InvalidStateError => write!(f, "Invalid state"),
+        }
+    }
 }
 
 /// Used to trigger the enforcement handler
@@ -141,7 +149,7 @@ impl Tunnel {
         ifidx: u32,
         neigh_id: LocalIdentity,
         light_client_details: Option<Ipv4Addr>,
-    ) -> Result<Tunnel, Error> {
+    ) -> Result<Tunnel, RitaCommonError> {
         let speed_limit = None;
         let iface_name = KI.setup_wg_if()?;
         let mut network = settings::get_rita_common().network;
@@ -153,7 +161,11 @@ impl Tunnel {
             private_key_path: Path::new(&network.wg_private_key_path),
             own_ip: match network.mesh_ip {
                 Some(ip) => ip,
-                None => bail!("No mesh IP configured yet"),
+                None => {
+                    return Err(RitaCommonError::MiscStringError(
+                        "No mesh IP configured yet".to_string(),
+                    ))
+                }
             },
             external_nic: network.external_nic.clone(),
             settings_default_route: &mut network.last_default_route,
@@ -194,7 +206,7 @@ impl Tunnel {
     }
 
     /// Register this tunnel into Babel monitor
-    pub fn monitor(&self) -> Result<(), Error> {
+    pub fn monitor(&self) -> Result<(), BabelMonitorError> {
         info!("Monitoring tunnel {}", self.iface_name);
         let iface_name = self.iface_name.clone();
         let babel_port = settings::get_rita_common().network.babel_port;
@@ -204,7 +216,7 @@ impl Tunnel {
         monitor(&mut stream, &iface_name)
     }
 
-    pub fn unmonitor(&self) -> Result<(), Error> {
+    pub fn unmonitor(&self) -> Result<(), RitaCommonError> {
         warn!("Unmonitoring tunnel {}", self.iface_name);
         let iface_name = self.iface_name.clone();
         let babel_port = settings::get_rita_common().network.babel_port;
@@ -299,10 +311,10 @@ impl Neighbor {
 }
 
 impl Message for GetNeighbors {
-    type Result = Result<Vec<Neighbor>, Error>;
+    type Result = Result<Vec<Neighbor>, RitaCommonError>;
 }
 impl Handler<GetNeighbors> for TunnelManager {
-    type Result = Result<Vec<Neighbor>, Error>;
+    type Result = Result<Vec<Neighbor>, RitaCommonError>;
 
     fn handle(&mut self, _: GetNeighbors, _: &mut Context<Self>) -> Self::Result {
         let mut res = Vec::new();
@@ -323,10 +335,10 @@ impl Handler<GetNeighbors> for TunnelManager {
 pub struct GetTunnels;
 
 impl Message for GetTunnels {
-    type Result = Result<Vec<Tunnel>, Error>;
+    type Result = Result<Vec<Tunnel>, RitaCommonError>;
 }
 impl Handler<GetTunnels> for TunnelManager {
-    type Result = Result<Vec<Tunnel>, Error>;
+    type Result = Result<Vec<Tunnel>, RitaCommonError>;
 
     fn handle(&mut self, _: GetTunnels, _: &mut Context<Self>) -> Self::Result {
         let mut res = Vec::new();
@@ -420,7 +432,7 @@ fn contact_neighbor(
     our_port: u16,
     socket: &UdpSocket,
     send_addr: SocketAddr,
-) -> Result<(), Error> {
+) -> Result<(), RitaCommonError> {
     let mut settings = settings::get_rita_common();
     KI.manual_peers_route(
         &peer.contact_socket.ip(),
@@ -429,9 +441,9 @@ fn contact_neighbor(
 
     let msg = Hello {
         my_id: LocalIdentity {
-            global: settings
-                .get_identity()
-                .ok_or_else(|| format_err!("Identity has no mesh IP ready yet"))?,
+            global: settings.get_identity().ok_or_else(|| {
+                RitaCommonError::MiscStringError("Identity has no mesh IP ready yet".to_string())
+            })?,
             wg_port: our_port,
             have_tunnel: None,
         },
@@ -442,9 +454,9 @@ fn contact_neighbor(
 
     let new_msg = NewHello {
         my_id: LocalIdentity {
-            global: settings::get_rita_common()
-                .get_identity()
-                .ok_or_else(|| format_err!("Identity has no mesh IP ready yet"))?,
+            global: settings::get_rita_common().get_identity().ok_or_else(|| {
+                RitaCommonError::MiscStringError("Identity has no mesh IP ready yet".to_string())
+            })?,
             wg_port: our_port,
             have_tunnel: None,
         },
@@ -463,7 +475,7 @@ fn contact_neighbor(
 
 /// Uses Hello Handler to send a Hello over http. Takes a speculative port (only assigned
 /// if neighbor responds successfully)
-fn contact_manual_peer(peer: &Peer, our_port: u16) -> Result<(), Error> {
+fn contact_manual_peer(peer: &Peer, our_port: u16) -> Result<(), RitaCommonError> {
     let mut settings = settings::get_rita_common();
     KI.manual_peers_route(
         &peer.contact_socket.ip(),
@@ -472,9 +484,9 @@ fn contact_manual_peer(peer: &Peer, our_port: u16) -> Result<(), Error> {
 
     let msg = Hello {
         my_id: LocalIdentity {
-            global: settings
-                .get_identity()
-                .ok_or_else(|| format_err!("Identity has no mesh IP ready yet"))?,
+            global: settings.get_identity().ok_or_else(|| {
+                RitaCommonError::MiscStringError("Identity has no mesh IP ready yet".to_string())
+            })?,
             wg_port: our_port,
             have_tunnel: None,
         },
@@ -568,7 +580,10 @@ impl TunnelManager {
     /// This function generates a future and hands it off to the Actix arbiter to actually resolve
     /// in the case that the DNS request is successful the hello handler and eventually the Identity
     /// callback continue execution flow. But this function itself returns syncronously
-    pub fn neighbor_inquiry_hostname(&mut self, their_hostname: String) -> Result<(), Error> {
+    pub fn neighbor_inquiry_hostname(
+        &mut self,
+        their_hostname: String,
+    ) -> Result<(), RitaCommonError> {
         trace!("Getting tunnel, inq");
         let network_settings = settings::get_rita_common().network;
         let is_gateway = is_gateway();
@@ -628,7 +643,7 @@ impl TunnelManager {
         peer: &Peer,
         is_manual_peer: bool,
         peer_listener: &mut PeerListener,
-    ) -> Result<(), Error> {
+    ) -> Result<(), RitaCommonError> {
         trace!("TunnelManager neigh inquiry for {:?}", peer);
         let our_port = self.get_port();
 
@@ -637,11 +652,19 @@ impl TunnelManager {
         } else {
             let iface_name = match peer_listener.interface_map.get(&peer.contact_socket) {
                 Some(a) => a,
-                None => bail!("No interface in the hashmap to send a message"),
+                None => {
+                    return Err(RitaCommonError::MiscStringError(
+                        "No interface in the hashmap to send a message".to_string(),
+                    ))
+                }
             };
             let udp_socket = match peer_listener.interfaces.get(iface_name) {
                 Some(a) => &a.linklocal_socket,
-                None => bail!("No udp socket present for given interface"),
+                None => {
+                    return Err(RitaCommonError::MiscStringError(
+                        "No udp socket present for given interface".to_string(),
+                    ))
+                }
             };
             contact_neighbor(peer, our_port, udp_socket, peer.contact_socket)
         }
@@ -655,7 +678,7 @@ impl TunnelManager {
         peer: Peer,
         our_port: u16,
         light_client_details: Option<Ipv4Addr>,
-    ) -> Result<(Tunnel, bool), Error> {
+    ) -> Result<(Tunnel, bool), RitaCommonError> {
         trace!("getting existing tunnel or opening a new one");
         // ifidx must be a part of the key so that we can open multiple tunnels
         // if we have more than one physical connection to the same peer
@@ -772,7 +795,7 @@ fn create_new_tunnel(
     ifidx: u32,
     their_localid: LocalIdentity,
     light_client_details: Option<Ipv4Addr>,
-) -> Result<(Identity, Tunnel), Error> {
+) -> Result<(Identity, Tunnel), RitaCommonError> {
     // Create new tunnel
     let tunnel = Tunnel::new(
         peer_ip,
@@ -806,12 +829,12 @@ pub struct TunnelStateChange {
 }
 
 impl Message for TunnelStateChange {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaCommonError>;
 }
 
 // Called by DebtKeeper with the updated billing status of every tunnel every round
 impl Handler<TunnelStateChange> for TunnelManager {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaCommonError>;
 
     fn handle(&mut self, msg: TunnelStateChange, _: &mut Context<Self>) -> Self::Result {
         for tunnel in msg.tunnels {
@@ -897,7 +920,7 @@ fn tunnel_state_change(msg: TunnelChange, tunnels: &mut HashMap<Identity, Vec<Tu
 /// Takes the tunnels list and iterates over it to update all of the traffic control settings
 /// since we can't figure out how to combine interfaces bandwidth budgets we're subdividing it
 /// here with manual terminal commands whenever there is a change
-fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, Vec<Tunnel>>) -> Result<(), Error> {
+fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, Vec<Tunnel>>) -> Result<(), RitaCommonError> {
     info!("Running tunnel bw limit update!");
     // number of interfaces over which we will have to divide free tier BW
     let mut limited_interfaces = 0u16;

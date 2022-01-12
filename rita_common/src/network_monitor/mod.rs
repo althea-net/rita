@@ -8,6 +8,7 @@
 //! as a bird flying through the connection rather than actual bloat. The solution here would be to also collect stats
 //! on traffic over every interface and base our action off of spikes in throughput as well as spikes in latency.
 
+use crate::RitaCommonError;
 use crate::rita_loop::fast_loop::FAST_LOOP_SPEED;
 use crate::tunnel_manager::shaping::ShapeMany;
 use crate::tunnel_manager::shaping::ShapingAdjust;
@@ -27,7 +28,6 @@ use althea_types::RunningPacketLossStats;
 use althea_types::WgKey;
 use babel_monitor::Neighbor as BabelNeighborLegacy;
 use babel_monitor::Route as BabelRouteLegacy;
-use failure::Error;
 use std::collections::HashMap;
 use std::time::Duration;
 use std::time::Instant;
@@ -103,13 +103,13 @@ pub struct IfaceStats {
 }
 
 impl Message for GetStats {
-    type Result = Result<Stats, Error>;
+    type Result = Result<Stats, RitaCommonError>;
 }
 
 pub type Stats = HashMap<String, IfaceStats>;
 
 impl Handler<GetStats> for NetworkMonitor {
-    type Result = Result<Stats, Error>;
+    type Result = Result<Stats, RitaCommonError>;
 
     fn handle(&mut self, _msg: GetStats, _ctx: &mut Context<Self>) -> Self::Result {
         let mut stats = Stats::new();
@@ -141,16 +141,16 @@ impl Handler<GetStats> for NetworkMonitor {
 pub struct GetNetworkInfo;
 
 impl Message for GetNetworkInfo {
-    type Result = Result<NetworkInfo, Error>;
+    type Result = Result<NetworkInfo, RitaCommonError>;
 }
 
 impl Handler<GetNetworkInfo> for NetworkMonitor {
-    type Result = Result<NetworkInfo, Error>;
+    type Result = Result<NetworkInfo, RitaCommonError>;
 
     fn handle(&mut self, _msg: GetNetworkInfo, _ctx: &mut Context<Self>) -> Self::Result {
         match self.last_babel_dump.clone() {
             Some(dump) => Ok(dump),
-            None => Err(format_err!("No babel info ready!")),
+            None => Err(RitaCommonError::MiscStringError("No babel info ready!".to_string()))
         }
     }
 }

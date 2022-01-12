@@ -9,13 +9,13 @@
 pub mod message;
 
 use self::message::PeerMessage;
+use crate::RitaCommonError;
 use crate::tunnel_manager::TunnelManager;
 use crate::IdentityCallback;
 use crate::KI;
 use actix::Arbiter;
 use actix::SystemService;
 use althea_types::LocalIdentity;
-use failure::Error;
 use futures01::Future;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
@@ -83,7 +83,7 @@ impl Default for PeerListener {
 }
 
 impl PeerListener {
-    pub fn new() -> Result<PeerListener, Error> {
+    pub fn new() -> Result<PeerListener, RitaCommonError> {
         Ok(PeerListener {
             interfaces: HashMap::new(),
             peers: HashMap::new(),
@@ -158,7 +158,7 @@ pub struct ListenInterface {
 }
 
 impl ListenInterface {
-    pub fn new(ifname: &str) -> Result<ListenInterface, Error> {
+    pub fn new(ifname: &str) -> Result<ListenInterface, RitaCommonError> {
         let network = settings::get_rita_common().network;
         let port = network.rita_hello_port;
         let disc_ip = network.discovery_ip;
@@ -368,16 +368,14 @@ pub fn receive_hello(writer: &mut PeerListener) {
                             .and_then(move |tunnel| {
                                 let tunnel = match tunnel {
                                     Some(val) => val,
-                                    None => return Err(format_err!("tunnel open failure!")),
+                                    None => return Err(RitaCommonError::MiscStringError("tunnel open failure!".to_string()))
                                 };
 
                                 let our_id = LocalIdentity {
                                     global: match settings::get_rita_common().get_identity() {
                                         Some(id) => id,
                                         None => {
-                                            return Err(format_err!(
-                                                "Identity has no mesh IP ready yet"
-                                            ))
+                                            return Err(RitaCommonError::MiscStringError("Identity has no mesh IP ready yet".to_string()))
                                         }
                                     },
                                     wg_port: tunnel.0.listen_port,

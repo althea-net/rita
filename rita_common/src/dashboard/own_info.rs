@@ -1,8 +1,7 @@
-use crate::blockchain_oracle::{get_oracle_close_thresh, get_oracle_pay_thresh, low_balance};
 use crate::rita_loop::is_gateway;
+use crate::{blockchain_oracle::low_balance, RitaCommonError};
 use actix_web::{HttpRequest, Json};
 use clarity::Address;
-use failure::Error;
 use num256::{Int256, Uint256};
 
 pub static READABLE_VERSION: &str = "Beta 18 RC11";
@@ -23,7 +22,7 @@ pub struct OwnInfo {
     pub client_can_use_free_tier: bool,
 }
 
-pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, Error> {
+pub fn get_own_info(_req: HttpRequest) -> Result<Json<OwnInfo>, RitaCommonError> {
     debug!("Get own info endpoint hit!");
     let payment_settings = settings::get_rita_common().payment;
     let eth_address = payment_settings.eth_address.unwrap();

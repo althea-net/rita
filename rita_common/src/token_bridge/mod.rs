@@ -18,6 +18,7 @@
 // initiate a withdrawal. From there, we loop to check for events related to the withdraws,
 // simulate these, and those that pass are unlocked on the eth side.
 
+use crate::RitaCommonError;
 use crate::rita_loop::slow_loop::SLOW_LOOP_TIMEOUT;
 use althea_types::SystemChain;
 use auto_bridge::check_relayed_message;
@@ -30,7 +31,6 @@ use auto_bridge::{check_withdrawals, encode_relaytokens, get_relay_message_hash}
 use auto_bridge::{TokenBridge as TokenBridgeCore, TokenBridgeError};
 use clarity::utils::display_uint256_as_address;
 use clarity::Address;
-use failure::{bail, Error};
 use num256::Uint256;
 use num_traits::identities::Zero;
 use rand::{thread_rng, Rng};
@@ -329,7 +329,7 @@ fn update_gas_price_store(gp: Uint256, datastore: &mut VecDeque<Uint256>) {
 fn get_acceptable_gas_price(
     eth_gas_price: Uint256,
     datastore: &VecDeque<Uint256>,
-) -> Result<Uint256, Error> {
+) -> Result<Uint256, RitaCommonError> {
     // if there are no entries, return current gas price as acceptable
     // We should not reach this condition since we alway call update_gas_price_store
     // before calling this function
@@ -346,7 +346,7 @@ fn get_acceptable_gas_price(
     let value = match vector.get(lowest_20 - 1) {
         Some(a) => a.clone(),
         None => {
-            bail!("There is no entry at index {}, should not reach this condition, error with GAS_PRICES vecDeque logic", lowest_20 - 1);
+            return Err(RitaCommonError::Lowest20Error(lowest_20 - 1))
         }
     };
     Ok(value)
@@ -460,12 +460,12 @@ pub struct Withdraw {
 /// we use this function to setup information about the withdrawal in the sync cUint256::from_bytes_be(&[12_u8])ontext. We setup
 /// a bool and Withdraw struct inside a lazy static variable that we can read from later when
 /// we initiate the withdrawal from an async context.
-pub fn setup_withdraw(msg: Withdraw) -> Result<(), Error> {
+pub fn setup_withdraw(msg: Withdraw) -> Result<(), RitaCommonError> {
     let mut writer = BRIDGE.write().unwrap();
 
     // If there is already a withdrawal that needs to be executed, return
     if writer.withdraw_in_progress {
-        bail!("There is currently a withdraw in progress!");
+        return Err(RitaCommonError::MiscStringError("There is currently a withdraw in progress!".to_string()))
     }
 
     // Setup withdraw information so we can execute it during next tick
@@ -482,7 +482,7 @@ pub fn setup_withdraw(msg: Withdraw) -> Result<(), Error> {
 /// other withdrawal currently in progress. It receives the information from the lazy static varaible,
 /// which was setup by the function setup_withdrawal, and runs every loop to see if this lazy static has
 /// been populated with new information to initialize a withdrawal.
-pub async fn withdraw(msg: Withdraw) -> Result<(), Error> {
+pub async fn withdraw(msg: Withdraw) -> Result<(), RitaCommonError> {
     let payment_settings = settings::get_rita_common().payment;
     let system_chain = payment_settings.system_chain;
     let token_bridge = token_bridge_core_from_settings(&payment_settings);
@@ -506,10 +506,10 @@ pub async fn withdraw(msg: Withdraw) -> Result<(), Error> {
             writer.withdraw_in_progress = false;
             Ok(())
         } else {
-            bail!("There is currently a withdraw in progress!");
+            Err(RitaCommonError::MiscStringError("There is currently a withdraw in progress!".to_string()))
         }
     } else {
-        bail!("Not on Xdai chain!");
+        Err(RitaCommonError::MiscStringError("Not on Xdai chain!".to_string()))
     }
 }
 

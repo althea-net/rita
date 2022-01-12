@@ -1,3 +1,4 @@
+use crate::RitaCommonError;
 use crate::blockchain_oracle::update as BlockchainOracleUpdate;
 use crate::debt_keeper::send_debt_update;
 use crate::eth_compatible_withdraw;
@@ -23,7 +24,6 @@ use babel_monitor_legacy::parse_interfaces_legacy;
 use babel_monitor_legacy::parse_neighs_legacy;
 use babel_monitor_legacy::parse_routes_legacy;
 use babel_monitor_legacy::start_connection_legacy;
-use failure::Error;
 use futures01::Future;
 
 use std::thread;
@@ -67,11 +67,11 @@ impl Supervised for RitaFastLoop {
 pub struct Crash;
 
 impl Message for Crash {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaCommonError>;
 }
 
 impl Handler<Crash> for RitaFastLoop {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaCommonError>;
     fn handle(&mut self, _: Crash, ctx: &mut Context<Self>) -> Self::Result {
         ctx.stop();
         Ok(())
@@ -81,11 +81,11 @@ impl Handler<Crash> for RitaFastLoop {
 pub struct Tick;
 
 impl Message for Tick {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaCommonError>;
 }
 
 impl Handler<Tick> for RitaFastLoop {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaCommonError>;
     fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
         let babel_port = settings::get_rita_common().network.babel_port;
         trace!("Common tick!");

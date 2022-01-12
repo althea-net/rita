@@ -7,7 +7,6 @@
 use actix::Message;
 use althea_types::Identity;
 use althea_types::PaymentTx;
-use failure::Error;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
@@ -171,7 +170,7 @@ impl UsageTracker {
 }
 
 /// Gets the current hour since the unix epoch
-fn get_current_hour() -> Result<u64, Error> {
+fn get_current_hour() -> Result<u64, RitaCommonError> {
     let seconds = SystemTime::now().duration_since(UNIX_EPOCH)?;
     Ok(seconds.as_secs() / (60 * 60))
 }
@@ -187,7 +186,7 @@ pub struct UpdateUsage {
 }
 
 impl Message for UpdateUsage {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaCommonError>;
 }
 
 pub fn update_usage_data(msg: UpdateUsage) {

@@ -1,10 +1,10 @@
 use super::Tunnel;
 use super::TunnelManager;
 use crate::KI;
+use crate::RitaCommonError;
 use actix::{Context, Handler, Message};
 use althea_types::Identity;
 use babel_monitor::Interface as InterfaceLegacy;
-use failure::Error;
 use std::{collections::HashMap, time::Instant};
 use std::{sync::Arc, sync::RwLock, time::Duration};
 
@@ -35,11 +35,11 @@ pub struct TriggerGc {
 }
 
 impl Message for TriggerGc {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaCommonError>;
 }
 
 impl Handler<TriggerGc> for TunnelManager {
-    type Result = Result<(), Error>;
+    type Result = Result<(), RitaCommonError>;
     fn handle(&mut self, msg: TriggerGc, _ctx: &mut Context<Self>) -> Self::Result {
         let mut last_gc = LAST_GC.write().unwrap();
         let time_since = Instant::now().checked_duration_since(*last_gc);

@@ -1,10 +1,11 @@
-use failure::Error;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
 
+use crate::RitaCommonError;
+
 #[allow(dead_code)]
-pub fn incrementv4(address: Ipv4Addr, netmask: u8) -> Result<Ipv4Addr, Error> {
+pub fn incrementv4(address: Ipv4Addr, netmask: u8) -> Result<Ipv4Addr, RitaCommonError> {
     let byte_vec = u32::from_be_bytes(address.octets());
     let mut mask = 0;
     for i in 0..netmask {
@@ -12,7 +13,7 @@ pub fn incrementv4(address: Ipv4Addr, netmask: u8) -> Result<Ipv4Addr, Error> {
     }
     let new_ip = byte_vec + 1;
     if new_ip & !mask == 0 {
-        bail!("Address space exhausted!");
+        return Err(RitaCommonError::MiscStringError("Address space exhausted!".to_string()))
     }
 
     let new_ip: Ipv4Addr = new_ip.to_be_bytes().into();
@@ -20,7 +21,7 @@ pub fn incrementv4(address: Ipv4Addr, netmask: u8) -> Result<Ipv4Addr, Error> {
 }
 
 #[allow(dead_code)]
-pub fn incrementv6(address: Ipv6Addr, netmask: u8) -> Result<Ipv6Addr, Error> {
+pub fn incrementv6(address: Ipv6Addr, netmask: u8) -> Result<Ipv6Addr, RitaCommonError> {
     let byte_vec = u128::from_be_bytes(address.octets());
     let mut mask = 0;
     for i in 0..netmask {
@@ -28,7 +29,7 @@ pub fn incrementv6(address: Ipv6Addr, netmask: u8) -> Result<Ipv6Addr, Error> {
     }
     let new_ip = byte_vec + 1;
     if new_ip & !mask == 0 {
-        bail!("Address space exhausted!");
+        return Err(RitaCommonError::MiscStringError("Address space exhausted!".to_string()))
     }
 
     let new_ip: Ipv6Addr = new_ip.to_be_bytes().into();
@@ -53,7 +54,7 @@ fn flip_bit_at_index_u128(input: u128, bit: u8) -> u128 {
 
 /// adds one to whole netmask ip addresses
 #[allow(dead_code)]
-pub fn increment(address: IpAddr, netmask: u8) -> Result<IpAddr, Error> {
+pub fn increment(address: IpAddr, netmask: u8) -> Result<IpAddr, RitaCommonError> {
     assert_eq!(netmask % 8, 0);
     match address {
         IpAddr::V4(address) => match incrementv4(address, netmask) {

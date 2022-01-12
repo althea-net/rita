@@ -8,8 +8,6 @@
 //! increase the amount we owe Bob? That's probably a vulnerability rabbit hole at the very least.
 //! Hence we need an incoming payments parameter to take money out of. This of course implies half
 //! of the excess complexity you see, managing an incoming payments pool versus a incoming debts pool
-use crate::blockchain_oracle::get_oracle_close_thresh;
-use crate::blockchain_oracle::get_oracle_pay_thresh;
 use crate::payment_controller::queue_payment;
 use crate::payment_validator::PAYMENT_SEND_TIMEOUT;
 use crate::simulated_txfee_manager::add_tx_to_total;
@@ -17,10 +15,10 @@ use crate::tunnel_manager::TunnelAction;
 use crate::tunnel_manager::TunnelChange;
 use crate::tunnel_manager::TunnelManager;
 use crate::tunnel_manager::TunnelStateChange;
+use crate::RitaCommonError;
 
 use actix::SystemService;
 use althea_types::{Identity, PaymentTx};
-use failure::Error;
 use num256::{Int256, Uint256};
 use num_traits::identities::Zero;
 use num_traits::Signed;
@@ -174,7 +172,7 @@ pub fn dump() -> DebtData {
     dk.get_debts()
 }
 
-pub fn payment_received(from: Identity, amount: Uint256) -> Result<(), Error> {
+pub fn payment_received(from: Identity, amount: Uint256) -> Result<(), RitaCommonError> {
     let mut dk = DEBT_DATA.write().unwrap();
     dk.payment_received(&from, amount)
 }
@@ -184,7 +182,7 @@ pub fn payment_failed(to: Identity) {
     dk.payment_failed(&to)
 }
 
-pub fn payment_succeeded(to: Identity, amount: Uint256) -> Result<(), Error> {
+pub fn payment_succeeded(to: Identity, amount: Uint256) -> Result<(), RitaCommonError> {
     let mut dk = DEBT_DATA.write().unwrap();
     add_tx_to_total(amount.clone());
     dk.payment_succeeded(&to, amount)
@@ -236,7 +234,7 @@ pub enum DebtAction {
     MakePayment { to: Identity, amount: Uint256 },
 }
 
-pub fn send_debt_update() -> Result<(), Error> {
+pub fn send_debt_update() -> Result<(), RitaCommonError> {
     let mut dk = DEBT_DATA.write().unwrap();
     trace!("sending debt keeper update");
     dk.save_if_needed();
@@ -263,7 +261,11 @@ pub fn send_debt_update() -> Result<(), Error> {
                 to,
                 from: match settings::get_rita_common().get_identity() {
                     Some(id) => id,
-                    None => bail!("Identity has no mesh IP ready yet"),
+                    None => {
+                        return Err(RitaCommonError::MiscStringError(
+                            "Identity has no mesh IP ready yet".to_string(),
+                        ))
+                    }
                 },
                 amount,
                 txid: None, // not yet published
@@ -380,7 +382,7 @@ impl DebtKeeper {
         peer.payment_in_flight_start = None;
     }
 
-    fn payment_succeeded(&mut self, to: &Identity, amount: Uint256) -> Result<(), Error> {
+    fn payment_succeeded(&mut self, to: &Identity, amount: Uint256) -> Result<(), RitaCommonError> {
         let peer = self.get_debt_data_mut(to);
         peer.payment_in_flight = false;
         peer.payment_in_flight_start = None;
@@ -389,12 +391,20 @@ impl DebtKeeper {
         peer.last_successful_payment = Some(Instant::now());
         peer.debt -= match amount.to_int256() {
             Some(val) => val,
-            None => bail!("Failed to convert amount paid to Int256!"),
+            None => {
+                return Err(RitaCommonError::ConversionError(
+                    "Failed to convert amount paid to Int256!".to_string(),
+                ))
+            }
         };
         Ok(())
     }
 
-    fn payment_received(&mut self, ident: &Identity, amount: Uint256) -> Result<(), Error> {
+    fn payment_received(
+        &mut self,
+        ident: &Identity,
+        amount: Uint256,
+    ) -> Result<(), RitaCommonError> {
         let signed_zero = Int256::zero();
         let unsigned_zero = Uint256::zero();
 
@@ -427,7 +437,11 @@ impl DebtKeeper {
                 // gets into a block this could overflow
                 let signed_incoming = match debt_data.incoming_payments.to_int256() {
                     Some(val) => val,
-                    None => bail!("Unsigned payment int too big! You're super rich now"),
+                    None => {
+                        return Err(RitaCommonError::MiscStringError(
+                            "Unsigned payment int too big! You're super rich now".to_string(),
+                        ))
+                    }
                 };
                 debt_data.debt += signed_incoming;
                 debt_data.incoming_payments = unsigned_zero;
@@ -482,7 +496,7 @@ impl DebtKeeper {
     }
 
     /// This updates a neighbor's debt and outputs a DebtAction if one is necessary.
-    fn send_update(&mut self, ident: &Identity) -> Result<DebtAction, Error> {
+    fn send_update(&mut self, ident: &Identity) -> Result<DebtAction, RitaCommonError> {
         trace!("debt data: {:?}", self.debt_data);
         let debt_data = self.get_debt_data_mut(ident);
         // the debt we started this round with
@@ -539,7 +553,9 @@ impl DebtKeeper {
             }
             (false, true, false) => {
                 let mut to_pay: Uint256 = debt_data.debt.to_uint256().ok_or_else(|| {
-                    format_err!("Unable to convert debt data into unsigned 256 bit integer")
+                    RitaCommonError::ConversionError(
+                        "Unable to convert debt data into unsigned 256 bit integer".to_string(),
+                    )
                 })?;
                 // overpay by the fudge_factor to encourage convergence, this is currently set
                 // to zero in all production networks, so maybe it can be removed

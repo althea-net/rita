@@ -11,14 +11,15 @@ use actix::SystemService;
 use actix_web::{HttpRequest, HttpResponse, Result};
 #[cfg(feature = "development")]
 use clu::{cleanup, generate_mesh_ip};
-use failure::Error;
 #[cfg(feature = "development")]
 use settings::RitaCommonSettings;
 #[cfg(feature = "development")]
 use std::path::Path;
 
 #[cfg(not(feature = "development"))]
-pub fn crash_actors(_req: HttpRequest) -> Result<HttpResponse, Error> {
+use crate::RitaCommonError;
+pub fn crash_actors(_req: HttpRequest) -> Result<HttpResponse, RitaCommonError> {
+
     // This is returned on production builds.
     Ok(HttpResponse::NotFound().finish())
 }
@@ -30,7 +31,7 @@ pub fn crash_actors(_req: HttpRequest) -> Result<HttpResponse, Error> {
 }
 
 #[cfg(not(feature = "development"))]
-pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {
+pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, RitaCommonError> {
     // This is returned on production builds.
     Ok(HttpResponse::NotFound().finish())
 }
