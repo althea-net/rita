@@ -15,6 +15,7 @@ use babel_monitor::parse_interfaces_sync;
 use babel_monitor::parse_neighs_sync;
 use babel_monitor::parse_routes_sync;
 use babel_monitor::validate_preamble;
+use babel_monitor::BabelMonitorError;
 use babel_monitor::Interface;
 use babel_monitor::Neighbor;
 use babel_monitor::Route;
@@ -22,8 +23,6 @@ use futures::future;
 use futures::future::result as future_result;
 use futures::future::Either;
 use futures::future::Future;
-use std::fmt::Debug;
-use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::str;
@@ -42,68 +41,7 @@ use tokio::net::TcpStream;
 /// job
 const SLEEP_TIME: Duration = Duration::from_millis(10);
 
-#[derive(Debug)]
-pub enum BabelMonitorError {
-    VariableNotFound(String, String),
-    InvalidPreamble(String),
-    LocalFeeNotFound(String),
-    CommandFailed(String, String),
-    ReadFailed(String),
-    NoTerminator(String),
-    NoNeighbor(String),
-    TokioError(String),
-    ReadFunctionError(std::io::Error),
-    NewBabelMonitorError(babel_monitor::BabelMonitorError),
-
-}
-
-use crate::BabelMonitorError::{CommandFailed, NoTerminator, ReadFailed, TokioError};
-
-impl From<std::io::Error> for BabelMonitorError {
-    fn from(error: std::io::Error) -> Self {
-        BabelMonitorError::ReadFunctionError(error)
-    }
-}
-impl From<babel_monitor::BabelMonitorError> for BabelMonitorError {
-    fn from(error: babel_monitor::BabelMonitorError) -> Self {
-        BabelMonitorError::NewBabelMonitorError(error)
-    }
-}
-
-impl Display for BabelMonitorError {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        match self {
-            BabelMonitorError::VariableNotFound(a, b) => write!(
-                f, "variable '{}' not found in '{}'", a, b,
-            ),
-            BabelMonitorError::InvalidPreamble(a) => write!(
-                f, "Invalid preamble: {}", a,
-            ),
-            BabelMonitorError::LocalFeeNotFound(a) => write!(
-                f, "Could not find local fee in '{}'", a,
-            ),
-            BabelMonitorError::CommandFailed(a, b) => write!(
-                f, "Command '{}' failed. {}", a, b,
-            ),
-            BabelMonitorError::ReadFailed(a) => write!(
-                f, "Erroneous Babel output:\n{}", a,
-            ),
-            BabelMonitorError::NoTerminator(a) => write!(
-                f, "No terminator after Babel output:\n{}", a,
-            ),
-            BabelMonitorError::NoNeighbor(a) => write!(
-                f, "No Neighbor was found matching address:\n{}", a,
-            ),
-            BabelMonitorError::TokioError(a) => write!(
-                f, "Tokio had a failure while it was talking to babel:\n{}", a,
-            ),
-            BabelMonitorError::ReadFunctionError(e) => write!(f, "{}", e),
-            BabelMonitorError::NewBabelMonitorError(e) => write!(f, "{}", e),
-
-
-        }
-    }
-}
+use babel_monitor::BabelMonitorError::{CommandFailed, NoTerminator, ReadFailed, TokioError};
 
 /// Opens a tcpstream to the babel management socket using a standard timeout
 /// for both the open and read operations
@@ -155,9 +93,7 @@ fn read_babel(
             if depth > 50 {
                 // prevent infinite recursion in error cases
                 warn!("Babel read timed out! {}", output);
-                return Box::new(future::err(
-                    ReadFailed("Babel read timed out!".to_string()),
-                ))
+                return Box::new(future::err(ReadFailed("Babel read timed out!".to_string())))
                     as Box<dyn Future<Item = (TcpStream, String), Error = BabelMonitorError>>;
             } else if full_buffer {
                 // our buffer is full, we should recurse right away
@@ -232,7 +168,9 @@ pub fn run_command(
 }
 
 // Consumes the automated Preamble and validates configuration api version
-pub fn start_connection_legacy(stream: TcpStream) -> impl Future<Item = TcpStream, Error = BabelMonitorError> {
+pub fn start_connection_legacy(
+    stream: TcpStream,
+) -> impl Future<Item = TcpStream, Error = BabelMonitorError> {
     trace!("Starting babel connection");
     read_babel(stream, String::new(), 0).then(|result| {
         if let Err(e) = result {
@@ -256,7 +194,9 @@ pub fn parse_interfaces_legacy(
     })
 }
 
-pub fn get_local_fee(stream: TcpStream) -> impl Future<Item = (TcpStream, u32), Error = BabelMonitorError> {
+pub fn get_local_fee(
+    stream: TcpStream,
+) -> impl Future<Item = (TcpStream, u32), Error = BabelMonitorError> {
     run_command(stream, "dump").then(|output| {
         if let Err(e) = output {
             return Err(e);

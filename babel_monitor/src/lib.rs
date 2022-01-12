@@ -20,12 +20,12 @@ use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Write;
 use std::iter::Iterator;
-use std::net::{IpAddr, AddrParseError};
 use std::net::SocketAddr;
 use std::net::TcpStream;
-use std::num::{ParseIntError, ParseFloatError};
-use std::str::{self, ParseBoolError};
+use std::net::{AddrParseError, IpAddr};
+use std::num::{ParseFloatError, ParseIntError};
 use std::str::FromStr;
+use std::str::{self, ParseBoolError};
 use std::thread;
 use std::time::Duration;
 
@@ -47,13 +47,14 @@ pub enum BabelMonitorError {
     NoTerminator(String),
     NoNeighbor(String),
     TcpError(String),
-    BabelParseError(String), 
+    BabelParseError(String),
     ReadFunctionError(std::io::Error),
     BoolParseError(ParseBoolError),
     ParseAddrError(AddrParseError),
     IntParseError(ParseIntError),
     FloatParseError(ParseFloatError),
     NetworkError(IpNetworkError),
+    TokioError(String),
     NoRoute(String),
 }
 
@@ -96,47 +97,42 @@ impl From<IpNetworkError> for BabelMonitorError {
 impl Display for BabelMonitorError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            BabelMonitorError::VariableNotFound(a, b) => write!(
-                f, "variable '{}' not found in '{}'", a, b,
-            ),
-            BabelMonitorError::InvalidPreamble(a) => write!(
-                f, "Invalid preamble: {}", a,
-            ),
-            BabelMonitorError::LocalFeeNotFound(a) => write!(
-                f, "Could not find local fee in '{}'", a,
-            ),
-            BabelMonitorError::CommandFailed(a, b) => write!(
-                f, "Command '{}' failed. {}", a, b,
-            ),
-            BabelMonitorError::ReadFailed(a) => write!(
-                f, "Erroneous Babel output:\n{}", a,
-            ),
-            BabelMonitorError::NoTerminator(a) => write!(
-                f, "No terminator after Babel output:\n{}", a,
-            ),
-            BabelMonitorError::NoNeighbor(a) => write!(
-                f, "No Neighbor was found matching address:\n{}", a,
-            ),
-            BabelMonitorError::TcpError(a) => write!(
-                f, "Tcp connection failure while talking to babel:\n{}", a,
-            ),
-            BabelMonitorError::BabelParseError(a) => write!(
-                f, "Babel parsing failed:\n{}", a,
-            ),
+            BabelMonitorError::VariableNotFound(a, b) => {
+                write!(f, "variable '{}' not found in '{}'", a, b,)
+            }
+            BabelMonitorError::InvalidPreamble(a) => write!(f, "Invalid preamble: {}", a,),
+            BabelMonitorError::LocalFeeNotFound(a) => {
+                write!(f, "Could not find local fee in '{}'", a,)
+            }
+            BabelMonitorError::CommandFailed(a, b) => write!(f, "Command '{}' failed. {}", a, b,),
+            BabelMonitorError::ReadFailed(a) => write!(f, "Erroneous Babel output:\n{}", a,),
+            BabelMonitorError::NoTerminator(a) => {
+                write!(f, "No terminator after Babel output:\n{}", a,)
+            }
+            BabelMonitorError::NoNeighbor(a) => {
+                write!(f, "No Neighbor was found matching address:\n{}", a,)
+            }
+            BabelMonitorError::TcpError(a) => {
+                write!(f, "Tcp connection failure while talking to babel:\n{}", a,)
+            }
+            BabelMonitorError::BabelParseError(a) => write!(f, "Babel parsing failed:\n{}", a,),
             BabelMonitorError::ReadFunctionError(e) => write!(f, "{}", e),
             BabelMonitorError::BoolParseError(e) => write!(f, "{}", e),
             BabelMonitorError::ParseAddrError(e) => write!(f, "{}", e),
             BabelMonitorError::IntParseError(e) => write!(f, "{}", e),
             BabelMonitorError::FloatParseError(e) => write!(f, "{}", e),
             BabelMonitorError::NetworkError(e) => write!(f, "{}", e),
-            BabelMonitorError::NoRoute(a) => write!(
-                f, "Route not found:\n{}", a,
+            BabelMonitorError::NoRoute(a) => write!(f, "Route not found:\n{}", a,),
+            BabelMonitorError::TokioError(a) => write!(
+                f,
+                "Tokio had a failure while it was talking to babel:\n{}",
+                a,
             ),
-
         }
     }
 }
 
+impl std::error::Error for BabelMonitorError {}
 
 pub fn find_babel_val(val: &str, line: &str) -> Result<String, BabelMonitorError> {
     let mut iter = line.split(' ');
@@ -154,7 +150,8 @@ pub fn find_babel_val(val: &str, line: &str) -> Result<String, BabelMonitorError
 
 pub fn find_and_parse_babel_val<T: FromStr>(val: &str, line: &str) -> Result<T, BabelMonitorError>
 where
-    <T as FromStr>::Err: Debug + ErrorTrait + Sync + Send + 'static, BabelMonitorError: From<<T as FromStr>::Err>
+    <T as FromStr>::Err: Debug + ErrorTrait + Sync + Send + 'static,
+    BabelMonitorError: From<<T as FromStr>::Err>,
 {
     match find_babel_val(val, line) {
         Ok(string_val) => match string_val.parse() {
@@ -206,7 +203,10 @@ pub struct Neighbor {
 
 /// Opens a tcpstream to the babel management socket using a standard timeout
 /// for both the open and read operations
-pub fn open_babel_stream(babel_port: u16, timeout: Duration) -> Result<TcpStream, BabelMonitorError> {
+pub fn open_babel_stream(
+    babel_port: u16,
+    timeout: Duration,
+) -> Result<TcpStream, BabelMonitorError> {
     let socket_string = format!("[::1]:{}", babel_port);
     trace!("About to open Babel socket using {}", socket_string);
     let socket: SocketAddr = socket_string.parse().unwrap();
@@ -399,7 +399,9 @@ pub fn parse_interfaces_sync(output: String) -> Result<Vec<Interface>, BabelMoni
         }
     }
     if vector.is_empty() && found_interface {
-        return Err(BabelMonitorError::BabelParseError("All Babel Interface parsing failed!".to_string()))
+        return Err(BabelMonitorError::BabelParseError(
+            "All Babel Interface parsing failed!".to_string(),
+        ));
     }
     Ok(vector)
 }
@@ -466,7 +468,11 @@ pub fn monitor(stream: &mut TcpStream, iface: &str) -> Result<(), BabelMonitorEr
     Ok(())
 }
 
-pub fn redistribute_ip(stream: &mut TcpStream, ip: &IpAddr, allow: bool) -> Result<String, BabelMonitorError> {
+pub fn redistribute_ip(
+    stream: &mut TcpStream,
+    ip: &IpAddr,
+    allow: bool,
+) -> Result<String, BabelMonitorError> {
     let command = format!(
         "redistribute ip {}/128 {}",
         ip,
@@ -553,7 +559,9 @@ pub fn parse_neighs_sync(output: String) -> Result<Vec<Neighbor>, BabelMonitorEr
         }
     }
     if vector.is_empty() && found_neigh {
-        return Err(BabelMonitorError::BabelParseError("All Babel neigh parsing failed!".to_string()))
+        return Err(BabelMonitorError::BabelParseError(
+            "All Babel neigh parsing failed!".to_string(),
+        ));
     }
     Ok(vector)
 }
@@ -625,7 +633,9 @@ pub fn parse_routes_sync(babel_out: String) -> Result<Vec<Route>, BabelMonitorEr
         }
     }
     if vector.is_empty() && found_route {
-        return Err(BabelMonitorError::BabelParseError("All Babel route parsing failed!".to_string()))
+        return Err(BabelMonitorError::BabelParseError(
+            "All Babel route parsing failed!".to_string(),
+        ));
     }
     Ok(vector)
 }
@@ -694,8 +704,9 @@ pub fn get_installed_route(mesh_ip: &IpAddr, routes: &[Route]) -> Result<Route, 
         }
     }
     if exit_route.is_none() {
-        return Err(BabelMonitorError::NoRoute("No installed route to that destination!".to_string()))
-
+        return Err(BabelMonitorError::NoRoute(
+            "No installed route to that destination!".to_string(),
+        ));
     }
     Ok(exit_route.unwrap().clone())
 }

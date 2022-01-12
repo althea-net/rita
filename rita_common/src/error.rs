@@ -1,9 +1,11 @@
 use std::{
     error::Error,
-    fmt::{Display, Formatter, Result as FmtResult}, time::SystemTimeError,
+    fmt::{Display, Formatter, Result as FmtResult},
+    time::SystemTimeError,
 };
 
 use actix::MailboxError;
+use actix_web::ResponseError;
 use althea_kernel_interface::KernelInterfaceError;
 use babel_monitor::BabelMonitorError;
 use compressed_log::builder::LoggerError;
@@ -12,7 +14,6 @@ use settings::SettingsError;
 
 #[derive(Debug)]
 pub enum RitaCommonError {
-    //format_err!("Unable to convert level filter to a level")
     ConversionError(String),
     LoggerError(LoggerError),
     SetLoggerError(SetLoggerError),
@@ -28,7 +29,6 @@ pub enum RitaCommonError {
     Lowest20Error(usize),
     BabelMonitorError(BabelMonitorError),
     SysTimeError(SystemTimeError),
-
 }
 
 impl From<LoggerError> for RitaCommonError {
@@ -71,6 +71,8 @@ impl From<SystemTimeError> for RitaCommonError {
         RitaCommonError::SysTimeError(error)
     }
 }
+
+impl ResponseError for RitaCommonError {}
 
 impl Display for RitaCommonError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {

@@ -1,14 +1,15 @@
 //! Network endptoints for common Rita functionality (such as exchanging hello messages)
 
-use crate::RitaCommonError;
 use crate::payment_validator::{validate_later, ToValidate};
 use crate::peer_listener::Peer;
 use crate::tunnel_manager::id_callback::IdentityCallback;
 use crate::tunnel_manager::TunnelManager;
+use crate::RitaCommonError;
 
 use actix::registry::SystemService;
 use actix_web::http::StatusCode;
-use actix_web::{AsyncResponder, HttpRequest, HttpResponse, Json, Result};
+use actix_web::AsyncResponder;
+use actix_web::{HttpRequest, HttpResponse, Json, Result};
 use althea_types::{LocalIdentity, PaymentTx};
 use futures01::{future, Future};
 use std::boxed::Box;
@@ -21,7 +22,9 @@ pub struct JsonStatusResponse {
 }
 
 impl JsonStatusResponse {
-    pub fn new(ret_val: Result<String, RitaCommonError>) -> Result<Json<JsonStatusResponse>, RitaCommonError> {
+    pub fn new(
+        ret_val: Result<String, RitaCommonError>,
+    ) -> Result<Json<JsonStatusResponse>, RitaCommonError> {
         let res_string = match ret_val {
             Ok(msg) => msg,
             Err(e) => format!("{}", e),
@@ -77,9 +80,17 @@ pub fn hello_response(
     let socket = match req.1.connection_info().remote() {
         Some(val) => match val.parse::<SocketAddr>() {
             Ok(val) => val,
-            Err(_e) => return Box::new(future::err(RitaCommonError::MiscStringError(err_mesg.to_string())))
+            Err(_e) => {
+                return Box::new(future::err(RitaCommonError::MiscStringError(
+                    err_mesg.to_string(),
+                )))
+            }
         },
-        None => return Box::new(future::err(RitaCommonError::MiscStringError(err_mesg.to_string())))
+        None => {
+            return Box::new(future::err(RitaCommonError::MiscStringError(
+                err_mesg.to_string(),
+            )))
+        }
     };
 
     trace!("Got Hello from {:?}", req.1.connection_info().remote());
@@ -100,18 +111,27 @@ pub fn hello_response(
             .and_then(|tunnel| {
                 let tunnel = match tunnel {
                     Some(val) => val,
-                    None => return Err(RitaCommonError::MiscStringError("tunnel open failure!".to_string()))
+                    None => {
+                        return Err(RitaCommonError::MiscStringError(
+                            "tunnel open failure!".to_string(),
+                        ))
+                    }
                 };
 
                 Ok(Json(LocalIdentity {
                     global: match settings::get_rita_common().get_identity() {
                         Some(id) => id,
-                        None => return Err(RitaCommonError::MiscStringError("Identity has no mesh IP ready yet".to_string()))
+                        None => {
+                            return Err(RitaCommonError::MiscStringError(
+                                "Identity has no mesh IP ready yet".to_string(),
+                            ))
+                        }
                     },
                     wg_port: tunnel.0.listen_port,
                     have_tunnel: Some(tunnel.1),
                 }))
             })
+            .from_err()
             .responder(),
     )
 }
