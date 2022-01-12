@@ -872,9 +872,9 @@ dependencies = [
 
 [[package]]
 name = "compressed_log"
-version = "0.4.4"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d643fdb22b65931d0d2b156aa5347fb8e3fa947b3c6bc764173fc6f087b64a6"
+checksum = "0e8d927ae6eec4ece3a1b6cd1a148c29c8000cc2e973b30c37f2c13f695b2a33"
 dependencies = [
  "actix 0.12.0",
  "awc",
@@ -3168,7 +3168,7 @@ dependencies = [
 
 [[package]]
 name = "rita_bin"
-version = "0.18.10"
+version = "0.18.11"
 dependencies = [
  "actix 0.12.0",
  "actix 0.7.11",
@@ -3205,7 +3205,7 @@ dependencies = [
 
 [[package]]
 name = "rita_client"
-version = "0.18.10"
+version = "0.18.11"
 dependencies = [
  "actix 0.12.0",
  "actix 0.7.11",
@@ -3246,7 +3246,7 @@ dependencies = [
 
 [[package]]
 name = "rita_common"
-version = "0.18.10"
+version = "0.18.11"
 dependencies = [
  "actix 0.12.0",
  "actix 0.7.11",
@@ -3288,7 +3288,7 @@ dependencies = [
 
 [[package]]
 name = "rita_exit"
-version = "0.18.10"
+version = "0.18.11"
 dependencies = [
  "actix 0.7.11",
  "actix-web 0.7.19",

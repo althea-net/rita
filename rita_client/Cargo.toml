@@ -1,12 +1,12 @@
 [package]
 name = "rita_client"
-version = "0.18.10"
+version = "0.18.11"
 edition = "2018"
 license = "Apache-2.0"
 
 
 [dependencies]
-compressed_log = "0.4"
+compressed_log = "0.5"
 num-traits="0.2"
 num256 = "0.3"
 serde = "1.0"
