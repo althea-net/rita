@@ -273,12 +273,15 @@ fn checkin() {
                                 "Received an update command from op tools! The instruction is {:?}",
                                 instruction
                             );
-                            let _res = update_rita(instruction);
+                            let res = update_rita(instruction);
+                            info!("Update command result is {:?}", res);
                         }
                         // both of these actions have been removed, but need to be kept
                         // for backwards compatibility for a while
-                        Some(OperatorAction::ChangeReleaseFeedAndUpdate { feed: _ }) => {}
-                        Some(OperatorAction::UpdateNow) => {}
+                        Some(OperatorAction::ChangeReleaseFeedAndUpdate { feed: _ }) => {
+                            info!("Got outdated command ChangeReleaseFeedAndUpdate")
+                        }
+                        Some(OperatorAction::UpdateNow) => info!("Got outdated command UpdateNow"),
                         None => {}
                     }
 
