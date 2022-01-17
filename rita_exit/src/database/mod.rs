@@ -219,7 +219,7 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
         })
     } else {
         error!("De-registering client! {:?}", client);
-        return Err(RitaExitError::MiscStringError("Refusing to de-register clients right now!".to_string()))
+        Err(RitaExitError::MiscStringError("Refusing to de-register clients right now!".to_string()))
         // TODO restore this functionality once it's confirmed to be safe
         // Ok(ExitState::New)
     }

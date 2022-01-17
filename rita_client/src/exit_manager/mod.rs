@@ -18,9 +18,9 @@
 
 mod exit_switcher;
 
-use crate::RitaClientError;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
+use crate::RitaClientError;
 use actix_web::client::Connection;
 
 use actix_web::{client, HttpMessage, Result};
@@ -92,7 +92,7 @@ fn linux_setup_exit_tunnel(
     KI.update_settings_route(&mut network.last_default_route);
 
     if let Err(KernelInterfaceError::RuntimeError(v)) = KI.setup_wg_if_named("wg_exit") {
-        return Err(RitaClientError::MiscStringError(v)); 
+        return Err(RitaClientError::MiscStringError(v));
     }
 
     let args = ClientExitTunnelConfig {
@@ -138,9 +138,7 @@ pub async fn get_exit_info(to: &SocketAddr) -> Result<ExitState, RitaClientError
     let client = awc::Client::default();
     let mut response = match client.get(&endpoint).send().await {
         Ok(a) => a,
-        Err(e) => {
-            return Err(RitaClientError::SendRequestError(e))
-        }
+        Err(e) => return Err(RitaClientError::SendRequestError(e.to_string())),
     };
     let response_json = response.json().await?;
 
@@ -249,7 +247,9 @@ fn decrypt_exit_state(
             },
             Err(_) => {
                 error!("Could not decrypt exit state");
-                return Err(RitaClientError::MiscStringError("Could not decrypt exit state".to_string())); 
+                return Err(RitaClientError::MiscStringError(
+                    "Could not decrypt exit state".to_string(),
+                ));
             }
         };
     Ok(decrypted_exit_state)
@@ -292,6 +292,7 @@ fn send_exit_setup_request(
                             }
                         }
                     })
+                    .from_err()
             })
     })
 }
@@ -319,9 +320,11 @@ async fn send_exit_status_request(
         Err(awc::error::SendRequestError::Timeout) => {
             // Did not get a response, is it a rogue exit or some netork error?
             blacklist_strike_ip(to.ip(), WarningType::SoftWarning);
-            return Err(RitaClientError::SendRequestError(awc::error::SendRequestError::Timeout))
+            return Err(RitaClientError::SendRequestError(
+                awc::error::SendRequestError::Timeout.to_string(),
+            ));
         }
-        Err(e) => return Err(RitaClientError::SendRequestError(e))
+        Err(e) => return Err(RitaClientError::SendRequestError(e.to_string())),
     };
     let value = response.json().await?;
 
@@ -341,7 +344,7 @@ async fn exit_general_details_request(exit: String) -> Result<(), RitaClientErro
     let current_exit = match settings::get_rita_client().exit_client.exits.get(&exit) {
         Some(current_exit) => current_exit.clone(),
         None => {
-            return Err(RitaClientError::NoExitError(exit)); 
+            return Err(RitaClientError::NoExitError(exit));
         }
     };
 
@@ -357,7 +360,7 @@ async fn exit_general_details_request(exit: String) -> Result<(), RitaClientErro
     let mut rita_client = settings::get_rita_client();
     let current_exit = match rita_client.exit_client.exits.get_mut(&exit) {
         Some(exit) => exit,
-        None => return Err(RitaClientError::ExitNotFound(exit))
+        None => return Err(RitaClientError::ExitNotFound(exit)),
     };
     current_exit.info = exit_details;
     settings::set_rita_client(rita_client);
@@ -376,9 +379,7 @@ pub fn exit_setup_request(
 
     let current_exit_ip = match current_exit.selected_exit.selected_id {
         Some(a) => a,
-        None => {
-            return Box::new(future::err(RitaClientError::NoExitIPError(exit)))
-        }
+        None => return Box::new(future::err(RitaClientError::NoExitIPError(exit))),
     };
 
     let exit_server = current_exit_ip;
@@ -386,7 +387,11 @@ pub fn exit_setup_request(
 
     let exit_auth_type = match current_exit.info.general_details() {
         Some(details) => details.verif_mode,
-        None => return Box::new(future::err(RitaClientError::MiscStringError("Exit is not ready to be setup!".to_string()))), 
+        None => {
+            return Box::new(future::err(RitaClientError::MiscStringError(
+                "Exit is not ready to be setup!".to_string(),
+            )))
+        }
     };
 
     let mut reg_details: ExitRegistrationDetails =
@@ -401,7 +406,9 @@ pub fn exit_setup_request(
                         phone_code: None,
                     }
                 } else {
-                    return Box::new(future::err(RitaClientError::MiscStringError("No registration info set!".to_string()))); 
+                    return Box::new(future::err(RitaClientError::MiscStringError(
+                        "No registration info set!".to_string(),
+                    )));
                 }
             }
         };
@@ -420,7 +427,9 @@ pub fn exit_setup_request(
         global: match settings::get_rita_client().get_identity() {
             Some(id) => id,
             None => {
-                return Box::new(future::err(RitaClientError::MiscStringError("Identity has no mesh IP ready yet".to_string())));
+                return Box::new(future::err(RitaClientError::MiscStringError(
+                    "Identity has no mesh IP ready yet".to_string(),
+                )));
             }
         },
         wg_port: exit_client.wg_listen_port,
@@ -444,7 +453,7 @@ pub fn exit_setup_request(
 
                 let current_exit = match rita_client.exit_client.exits.get_mut(&exit) {
                     Some(exit_struct) => exit_struct,
-                    None => return Err(RitaClientError::ExitNotFound(exit))
+                    None => return Err(RitaClientError::ExitNotFound(exit)),
                 };
 
                 current_exit.info = exit_response;
@@ -459,17 +468,21 @@ async fn exit_status_request(exit: String) -> Result<(), RitaClientError> {
     let current_exit = match settings::get_rita_client().exit_client.exits.get(&exit) {
         Some(current_exit) => current_exit.clone(),
         None => {
-            return Err(RitaClientError::NoExitError(exit)); 
+            return Err(RitaClientError::NoExitError(exit));
         }
     };
     let reg_details = match settings::get_rita_client().exit_client.contact_info {
         Some(val) => val.into(),
-        None => return Err(RitaClientError::MiscStringError("No valid details".to_string())), 
+        None => {
+            return Err(RitaClientError::MiscStringError(
+                "No valid details".to_string(),
+            ))
+        }
     };
 
     let current_exit_ip = match current_exit.selected_exit.selected_id {
         Some(a) => a,
-        None => return Err(RitaClientError::NoExitError(exit)), 
+        None => return Err(RitaClientError::NoExitError(exit)),
     };
 
     let exit_server = current_exit_ip;
@@ -478,7 +491,9 @@ async fn exit_status_request(exit: String) -> Result<(), RitaClientError> {
         global: match settings::get_rita_client().get_identity() {
             Some(id) => id,
             None => {
-                return Err(RitaClientError::MiscStringError("Identity has no mesh IP ready yet".to_string())); 
+                return Err(RitaClientError::MiscStringError(
+                    "Identity has no mesh IP ready yet".to_string(),
+                ));
             }
         },
         wg_port: settings::get_rita_client().exit_client.wg_listen_port,
@@ -497,7 +512,7 @@ async fn exit_status_request(exit: String) -> Result<(), RitaClientError> {
     let mut rita_client = settings::get_rita_client();
     let current_exit = match rita_client.exit_client.exits.get_mut(&exit) {
         Some(exit_struct) => exit_struct,
-        None => return Err(RitaClientError::ExitNotFound(exit)), 
+        None => return Err(RitaClientError::ExitNotFound(exit)),
     };
     current_exit.info = exit_response.clone();
     settings::set_rita_client(rita_client);

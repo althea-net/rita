@@ -28,7 +28,7 @@ use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
 use std::net::SocketAddr;
 
-use crate::{EXIT_WG_PRIVATE_KEY, RitaExitError};
+use crate::{RitaExitError, EXIT_WG_PRIVATE_KEY};
 
 /// helper function for returning from secure_setup_request()
 fn secure_setup_return(
@@ -145,7 +145,9 @@ pub fn secure_setup_request(
                     "Error in exit setup for {} malformed packet header {:?}!",
                     their_wg_pubkey, e
                 );
-                return Box::new(future::err(RitaExitError::MiscStringError("Invalid packet!".to_string()))); 
+                return Box::new(future::err(RitaExitError::MiscStringError(
+                    "Invalid packet!".to_string(),
+                )));
             }
         },
         None => {
@@ -153,7 +155,9 @@ pub fn secure_setup_request(
                 "Error in exit setup for {} invalid remote_mesh_sender!",
                 their_wg_pubkey
             );
-            return Box::new(future::err(RitaExitError::MiscStringError("Invalid packet!".to_string()))); 
+            return Box::new(future::err(RitaExitError::MiscStringError(
+                "Invalid packet!".to_string(),
+            )));
         }
     };
 
@@ -170,7 +174,9 @@ pub fn secure_setup_request(
             )),
             Err(e) => {
                 error!("Signup client failed with {:?}", e);
-                Err(RitaExitError::MiscStringError("There was an internal server error!".to_string()))
+                Err(RitaExitError::MiscStringError(
+                    "There was an internal server error!".to_string(),
+                ))
             }
         }))
     } else {
@@ -209,7 +215,9 @@ pub fn secure_status_request(
                     "Internal error in client status for {} with {:?}",
                     their_wg_pubkey, e
                 );
-                return Err(RitaExitError::MiscStringError("There was an internal error!".to_string())); 
+                return Err(RitaExitError::MiscStringError(
+                    "There was an internal error!".to_string(),
+                ));
             }
         };
         Ok(secure_setup_return(
@@ -220,11 +228,11 @@ pub fn secure_status_request(
     }))
 }
 
-pub fn get_exit_info_http(_req: HttpRequest) -> Result<Json<ExitState>, RitaExitError> {
-    Ok(Json(ExitState::GotInfo {
+pub fn get_exit_info_http(_req: HttpRequest) -> Json<ExitState> {
+    Json(ExitState::GotInfo {
         general_details: get_exit_info(),
         message: "Got info successfully".to_string(),
-    }))
+    })
 }
 
 /// Used by clients to get their debt from the exits. While it is in theory possible for the

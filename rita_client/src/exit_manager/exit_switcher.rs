@@ -11,9 +11,9 @@
 //! 4.) Switch only if another exit has been considered better than our current exit for an extended period of time.
 //!
 //! See doc comment for 'set_best_exit' for a more detailed description of workflow
-use crate::RitaClientError;
 use crate::exit_manager::{reset_exit_blacklist, EXIT_MANAGER};
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
+use crate::RitaClientError;
 use babel_monitor::{open_babel_stream, parse_routes, Route};
 use ipnetwork::IpNetwork;
 use rita_common::FAST_LOOP_SPEED;
@@ -194,7 +194,9 @@ pub fn set_best_exit(
     rita_client_exit_ser_ref: &mut ExitServer,
 ) -> Result<IpAddr, RitaClientError> {
     if routes.is_empty() {
-        return Err(RitaClientError::MiscStringError("No routes are found".to_string()))
+        return Err(RitaClientError::MiscStringError(
+            "No routes are found".to_string(),
+        ));
     }
 
     // Metric that we advertise which is differnt from babel's advertised metric. Babel_metric - SomeConstant that measures how much our connection degrades the route
@@ -224,7 +226,9 @@ pub fn set_best_exit(
     // When best exit is not set, we are still in initial setup, and no routes are present in the routing table.
     // We simply end the tick and continue the next tick when we have an exit.
     if exit_metrics.best_exit.is_none() {
-        return Err(RitaClientError::MiscStringError("No exit routes found, likely because routing table is empty".to_string()))
+        return Err(RitaClientError::MiscStringError(
+            "No exit routes found, likely because routing table is empty".to_string(),
+        ));
     }
 
     info!(
@@ -268,7 +272,9 @@ pub fn set_best_exit(
                 reset_exit_tracking(exit_map);
                 Ok(a)
             }
-            None => return Err(RitaClientError::MiscStringError("Error with finding best exit logic, no exit found".to_string()))
+            None => Err(RitaClientError::MiscStringError(
+                "Error with finding best exit logic, no exit found".to_string(),
+            )),
         }
     } else {
         //logic to determine wheter we should switch or not.
@@ -706,14 +712,17 @@ pub fn get_babel_routes(babel_port: u16) -> Result<Vec<Route>, RitaClientError> 
     let mut stream = match open_babel_stream(babel_port, CLIENT_LOOP_TIMEOUT) {
         Ok(a) => a,
         Err(_) => {
-            return Err(RitaClientError::MiscStringError("open babel stream error in exit manager tick".to_string()))
+            return Err(RitaClientError::MiscStringError(
+                "open babel stream error in exit manager tick".to_string(),
+            ))
         }
     };
     let routes = match parse_routes(&mut stream) {
         Ok(a) => a,
         Err(_) => {
-            return Err(RitaClientError::MiscStringError("Parse routes error in exit manager tick".to_string()))
-
+            return Err(RitaClientError::MiscStringError(
+                "Parse routes error in exit manager tick".to_string(),
+            ))
         }
     };
 

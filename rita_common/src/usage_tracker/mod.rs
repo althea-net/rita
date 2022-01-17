@@ -23,6 +23,8 @@ use std::sync::RwLock;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
+use crate::RitaCommonError;
+
 /// one year worth of usage storage
 const MAX_USAGE_ENTRIES: usize = 8_760;
 /// The number of tx's we store in our history to show

@@ -3,7 +3,7 @@
 
 use actix_web::HttpResponse;
 use actix_web::{HttpRequest, Path};
-use rita_common::KI;
+use rita_common::{RitaCommonError, KI};
 
 use crate::RitaClientError;
 
@@ -30,7 +30,7 @@ pub fn set_bandwidth_limit(path: Path<String>) -> Result<HttpResponse, RitaClien
     settings::set_rita_client(rita_client);
 
     if let Err(e) = settings::write_config() {
-        return Err(RitaClientError::SettingsError(e));
+        return Err(RitaCommonError::SettingsError(e).into());
     }
     Ok(HttpResponse::Ok().json(()))
 }

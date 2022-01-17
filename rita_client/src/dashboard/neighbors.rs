@@ -40,11 +40,14 @@ pub fn get_routes(
         open_babel_stream_legacy(babel_port)
             .from_err()
             .and_then(move |stream| {
-                start_connection_legacy(stream).and_then(move |stream| {
-                    parse_routes_legacy(stream)
-                        .and_then(|(_stream, routes)| Ok(Json(routes)))
-                        .responder()
-                })
+                start_connection_legacy(stream)
+                    .from_err()
+                    .and_then(move |stream| {
+                        parse_routes_legacy(stream)
+                            .from_err()
+                            .and_then(|(_stream, routes)| Ok(Json(routes)))
+                            .responder()
+                    })
             }),
     )
 }
@@ -72,27 +75,30 @@ pub fn get_neighbor_info(
                 open_babel_stream_legacy(babel_port)
                     .from_err()
                     .and_then(move |stream| {
-                        start_connection_legacy(stream).and_then(move |stream| {
-                            parse_routes_legacy(stream)
-                                .and_then(|(_stream, routes)| {
-                                    let route_table_sample = routes;
+                        start_connection_legacy(stream)
+                            .from_err()
+                            .and_then(move |stream| {
+                                parse_routes_legacy(stream)
+                                    .from_err()
+                                    .and_then(|(_stream, routes)| {
+                                        let route_table_sample = routes;
 
-                                    NetworkMonitor::from_registry()
-                                        .send(GetStats {})
-                                        .from_err()
-                                        .and_then(|stats| {
-                                            let stats = stats.unwrap();
-                                            let output = generate_neighbors_list(
-                                                stats,
-                                                route_table_sample,
-                                                combined_list,
-                                            );
+                                        NetworkMonitor::from_registry()
+                                            .send(GetStats {})
+                                            .from_err()
+                                            .and_then(|stats| {
+                                                let stats = stats.unwrap();
+                                                let output = generate_neighbors_list(
+                                                    stats,
+                                                    route_table_sample,
+                                                    combined_list,
+                                                );
 
-                                            Ok(Json(output))
-                                        })
-                                })
-                                .responder()
-                        })
+                                                Ok(Json(output))
+                                            })
+                                    })
+                                    .responder()
+                            })
                     })
             }),
     )

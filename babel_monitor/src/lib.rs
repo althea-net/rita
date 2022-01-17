@@ -130,7 +130,6 @@ impl Display for BabelMonitorError {
                 a,
             ),
             BabelMonitorError::MiscStringError(a) => write!(f, "{}", a,),
-
         }
     }
 }

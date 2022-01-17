@@ -30,7 +30,6 @@ use std::thread;
 use std::time::Duration;
 use tokio::io::read;
 use tokio::io::write_all;
-use tokio::net::tcp::ConnectFuture;
 use tokio::net::TcpStream;
 
 /// we want to ceed the cpu just long enough for Babel
@@ -45,11 +44,16 @@ use babel_monitor::BabelMonitorError::{CommandFailed, NoTerminator, ReadFailed, 
 
 /// Opens a tcpstream to the babel management socket using a standard timeout
 /// for both the open and read operations
-pub fn open_babel_stream_legacy(babel_port: u16) -> ConnectFuture {
+pub fn open_babel_stream_legacy(
+    babel_port: u16,
+) -> impl Future<Item = TcpStream, Error = BabelMonitorError> {
     let socket_string = format!("[::1]:{}", babel_port);
     trace!("About to open Babel socket using {}", socket_string);
     let socket: SocketAddr = socket_string.parse().unwrap();
-    TcpStream::connect(&socket)
+    TcpStream::connect(&socket).then(|res| match res {
+        Ok(t) => Ok(t),
+        Err(e) => Err(e.into()),
+    })
 }
 
 /// Read function, you should always pass an empty string to the previous contents field

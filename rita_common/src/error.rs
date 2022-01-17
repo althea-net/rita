@@ -29,6 +29,7 @@ pub enum RitaCommonError {
     Lowest20Error(usize),
     BabelMonitorError(BabelMonitorError),
     SysTimeError(SystemTimeError),
+    OldSendRequestError(String),
 }
 
 impl From<LoggerError> for RitaCommonError {
@@ -102,6 +103,7 @@ impl Display for RitaCommonError {
             ),
             RitaCommonError::BabelMonitorError(a) => write!(f, "{}", a,),
             RitaCommonError::SysTimeError(a) => write!(f, "{}", a,),
+            RitaCommonError::OldSendRequestError(e) => write!(f, "{}", e),
 
         }
     }

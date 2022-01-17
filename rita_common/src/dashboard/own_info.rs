@@ -1,5 +1,6 @@
+use crate::blockchain_oracle::low_balance;
+use crate::blockchain_oracle::{get_oracle_close_thresh, get_oracle_pay_thresh};
 use crate::rita_loop::is_gateway;
-use crate::{blockchain_oracle::low_balance, RitaCommonError};
 use actix_web::{HttpRequest, Json};
 use clarity::Address;
 use num256::{Int256, Uint256};

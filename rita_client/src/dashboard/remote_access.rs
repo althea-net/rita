@@ -4,6 +4,7 @@ use actix_web::HttpResponse;
 use actix_web::Path;
 use althea_kernel_interface::file_io::get_lines;
 use althea_kernel_interface::file_io::write_out;
+use rita_common::RitaCommonError;
 use rita_common::KI;
 
 use crate::RitaClientError;
@@ -23,7 +24,7 @@ pub fn get_remote_access_status(_req: HttpRequest) -> Result<HttpResponse, RitaC
 #[allow(dead_code)]
 pub fn get_remote_access_internal() -> Result<bool, RitaClientError> {
     if !KI.is_openwrt() {
-        return Err(RitaClientError::ConversionError("Not Openwrt!".to_string()))
+        return Err(RitaCommonError::ConversionError("Not Openwrt!".to_string()).into());
     }
     check_dropbear_config()
 }

@@ -19,35 +19,41 @@ lazy_static! {
 }
 
 /// gets the gateway ip for a given mesh IP
-pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Box<dyn Future<Item = IpAddr, Error = RitaExitError>> {
+pub fn get_gateway_ip_single(
+    mesh_ip: IpAddr,
+) -> Box<dyn Future<Item = IpAddr, Error = RitaExitError>> {
     let babel_port = settings::get_rita_exit().network.babel_port;
 
     Box::new(
         open_babel_stream_legacy(babel_port)
             .from_err()
             .and_then(move |stream| {
-                start_connection_legacy(stream).and_then(move |stream| {
-                    parse_routes_legacy(stream).and_then(move |routes| {
-                        let mut route_to_des = None;
-                        for route in routes.1.iter() {
-                            // Only ip6
-                            if let IpNetwork::V6(ref ip) = route.prefix {
-                                // Only host addresses and installed routes
-                                if ip.prefix() == 128
-                                    && route.installed
-                                    && IpAddr::V6(ip.ip()) == mesh_ip
-                                {
-                                    route_to_des = Some(route.clone());
+                start_connection_legacy(stream)
+                    .from_err()
+                    .and_then(move |stream| {
+                        parse_routes_legacy(stream)
+                            .from_err()
+                            .and_then(move |routes| {
+                                let mut route_to_des = None;
+                                for route in routes.1.iter() {
+                                    // Only ip6
+                                    if let IpNetwork::V6(ref ip) = route.prefix {
+                                        // Only host addresses and installed routes
+                                        if ip.prefix() == 128
+                                            && route.installed
+                                            && IpAddr::V6(ip.ip()) == mesh_ip
+                                        {
+                                            route_to_des = Some(route.clone());
+                                        }
+                                    }
                                 }
-                            }
-                        }
 
-                        match route_to_des {
-                            Some(route) => Ok(KI.get_wg_remote_ip(&route.iface)?),
-                            None => return Err(RitaExitError::IpAddrError(mesh_ip))
-                        }
+                                match route_to_des {
+                                    Some(route) => Ok(KI.get_wg_remote_ip(&route.iface)?),
+                                    None => Err(RitaExitError::IpAddrError(mesh_ip)),
+                                }
+                            })
                     })
-                })
             }),
     )
 }
@@ -70,50 +76,57 @@ pub fn get_gateway_ip_bulk(
         open_babel_stream_legacy(babel_port)
             .from_err()
             .and_then(|stream| {
-                start_connection_legacy(stream).and_then(|stream| {
-                    parse_routes_legacy(stream).and_then(|routes| {
-                        trace!("done talking to babel for gateway ip bulk");
-                        let mut remote_ip_cache: HashMap<String, IpAddr> = HashMap::new();
-                        let mut results = Vec::new();
-                        for mesh_ip in mesh_ip_list {
-                            for route in routes.1.iter() {
-                                // Only ip6
-                                if let IpNetwork::V6(ref ip) = route.prefix {
-                                    // Only host addresses and installed routes
-                                    if ip.prefix() == 128
-                                        && route.installed
-                                        && IpAddr::V6(ip.ip()) == mesh_ip
-                                    {
-                                        // check if we've already looked up this interface this round, since gateways
-                                        // have many clients this will often be the case
-                                        if let Some(remote_ip) = remote_ip_cache.get(&route.iface) {
-                                            results.push(IpPair {
-                                                mesh_ip,
-                                                gateway_ip: *remote_ip,
-                                            });
-                                        } else {
-                                            match KI.get_wg_remote_ip(&route.iface) {
-                                                Ok(remote_ip) => {
-                                                    remote_ip_cache
-                                                        .insert(route.iface.clone(), remote_ip);
-                                                    results.push(IpPair {
-                                                        mesh_ip,
-                                                        gateway_ip: remote_ip,
-                                                    })
-                                                }
-                                                Err(e) => {
-                                                    error!("Failure looking up remote ip {:?}", e)
+                start_connection_legacy(stream)
+                    .from_err()
+                    .and_then(|stream| {
+                        parse_routes_legacy(stream).from_err().and_then(|routes| {
+                            trace!("done talking to babel for gateway ip bulk");
+                            let mut remote_ip_cache: HashMap<String, IpAddr> = HashMap::new();
+                            let mut results = Vec::new();
+                            for mesh_ip in mesh_ip_list {
+                                for route in routes.1.iter() {
+                                    // Only ip6
+                                    if let IpNetwork::V6(ref ip) = route.prefix {
+                                        // Only host addresses and installed routes
+                                        if ip.prefix() == 128
+                                            && route.installed
+                                            && IpAddr::V6(ip.ip()) == mesh_ip
+                                        {
+                                            // check if we've already looked up this interface this round, since gateways
+                                            // have many clients this will often be the case
+                                            if let Some(remote_ip) =
+                                                remote_ip_cache.get(&route.iface)
+                                            {
+                                                results.push(IpPair {
+                                                    mesh_ip,
+                                                    gateway_ip: *remote_ip,
+                                                });
+                                            } else {
+                                                match KI.get_wg_remote_ip(&route.iface) {
+                                                    Ok(remote_ip) => {
+                                                        remote_ip_cache
+                                                            .insert(route.iface.clone(), remote_ip);
+                                                        results.push(IpPair {
+                                                            mesh_ip,
+                                                            gateway_ip: remote_ip,
+                                                        })
+                                                    }
+                                                    Err(e) => {
+                                                        error!(
+                                                            "Failure looking up remote ip {:?}",
+                                                            e
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
 
-                        Ok(results)
+                            Ok(results)
+                        })
                     })
-                })
             }),
     )
 }
@@ -207,7 +220,9 @@ pub fn get_country(ip: IpAddr) -> Result<String, RitaExitError> {
                     trace!("Added to cache, returning");
                     Ok(code)
                 } else {
-                    Err(RitaExitError::MiscStringError("Failed to deserialize geoip response".to_string())) 
+                    Err(RitaExitError::MiscStringError(
+                        "Failed to deserialize geoip response".to_string(),
+                    ))
                 }
             } else {
                 Err(RitaExitError::MiscStringError("Request failed".to_string()))

@@ -1,7 +1,7 @@
 //! The Exit info endpoint gathers infromation about exit status and presents it to the dashbaord.
 
-use crate::RitaClientError;
 use crate::exit_manager::exit_setup_request;
+use crate::RitaClientError;
 use actix::{Handler, Message, ResponseFuture, SystemService};
 use actix_web::http::StatusCode;
 use actix_web::AsyncResponder;
@@ -14,6 +14,7 @@ use babel_monitor_legacy::parse_routes_legacy;
 use babel_monitor_legacy::start_connection_legacy;
 use futures01::{future, Future};
 use rita_common::dashboard::Dashboard;
+use rita_common::RitaCommonError;
 use rita_common::KI;
 use settings::client::ExitServer;
 use std::boxed::Box;
@@ -70,57 +71,60 @@ impl Handler<GetExitInfo> for Dashboard {
             open_babel_stream_legacy(babel_port)
                 .from_err()
                 .and_then(move |stream| {
-                    start_connection_legacy(stream).and_then(move |stream| {
-                        parse_routes_legacy(stream).and_then(move |routes| {
-                            let route_table_sample = routes.1;
-                            let mut output = Vec::new();
-                            let rita_client = settings::get_rita_client();
-                            let exit_client = rita_client.exit_client;
-                            let current_exit = exit_client.get_current_exit();
+                    start_connection_legacy(stream)
+                        .from_err()
+                        .and_then(move |stream| {
+                            parse_routes_legacy(stream)
+                                .from_err()
+                                .and_then(move |routes| {
+                                    let route_table_sample = routes.1;
+                                    let mut output = Vec::new();
+                                    let rita_client = settings::get_rita_client();
+                                    let exit_client = rita_client.exit_client;
+                                    let current_exit = exit_client.get_current_exit();
 
-                            for exit in exit_client.exits.clone().into_iter() {
-                                let selected = is_selected(&exit.1, current_exit);
-                                let have_route = do_we_have_route(
-                                    &exit
-                                        .1
-                                        .selected_exit
-                                        .selected_id
-                                        .expect("Expected exit ip here, but none present"),
-                                    &route_table_sample,
-                                )?;
+                                    for exit in exit_client.exits.clone().into_iter() {
+                                        let selected = is_selected(&exit.1, current_exit);
+                                        let have_route =
+                                            do_we_have_route(
+                                                &exit.1.selected_exit.selected_id.expect(
+                                                    "Expected exit ip here, but none present",
+                                                ),
+                                                &route_table_sample,
+                                            )?;
 
-                                // failed pings block for one second, so we should be sure it's at least reasonable
-                                // to expect the pings to work before issuing them.
-                                let reachable = if have_route {
-                                    KI.ping_check(
-                                        &exit
-                                            .1
-                                            .selected_exit
-                                            .selected_id
-                                            .expect("Expected exit ip here, but none present"),
-                                        EXIT_PING_TIMEOUT,
-                                    )?
-                                } else {
-                                    false
-                                };
-                                let tunnel_working = match (have_route, selected) {
-                                    (true, true) => is_tunnel_working(&exit.1, current_exit),
-                                    _ => false,
-                                };
+                                        // failed pings block for one second, so we should be sure it's at least reasonable
+                                        // to expect the pings to work before issuing them.
+                                        let reachable = if have_route {
+                                            KI.ping_check(
+                                                &exit.1.selected_exit.selected_id.expect(
+                                                    "Expected exit ip here, but none present",
+                                                ),
+                                                EXIT_PING_TIMEOUT,
+                                            )?
+                                        } else {
+                                            false
+                                        };
+                                        let tunnel_working = match (have_route, selected) {
+                                            (true, true) => {
+                                                is_tunnel_working(&exit.1, current_exit)
+                                            }
+                                            _ => false,
+                                        };
 
-                                output.push(ExitInfo {
-                                    nickname: exit.0,
-                                    exit_settings: exit.1.clone(),
-                                    is_selected: selected,
-                                    have_route,
-                                    is_reachable: reachable,
-                                    is_tunnel_working: tunnel_working,
+                                        output.push(ExitInfo {
+                                            nickname: exit.0,
+                                            exit_settings: exit.1.clone(),
+                                            is_selected: selected,
+                                            have_route,
+                                            is_reachable: reachable,
+                                            is_tunnel_working: tunnel_working,
+                                        })
+                                    }
+
+                                    Ok(output)
                                 })
-                            }
-
-                            Ok(output)
                         })
-                    })
                 }),
         )
     }
@@ -153,7 +157,9 @@ pub fn get_exit_info(
         .responder()
 }
 
-pub fn reset_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Error = RitaClientError>> {
+pub fn reset_exit(
+    path: Path<String>,
+) -> Box<dyn Future<Item = HttpResponse, Error = RitaClientError>> {
     let exit_name = path.into_inner();
     debug!("/exits/{}/reset hit", exit_name);
     let mut rita_client = settings::get_rita_client();
@@ -189,7 +195,9 @@ pub fn reset_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Err
     }
 }
 
-pub fn select_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Error = RitaClientError>> {
+pub fn select_exit(
+    path: Path<String>,
+) -> Box<dyn Future<Item = HttpResponse, Error = RitaClientError>> {
     let exit_name = path.into_inner();
     debug!("/exits/{}/select hit", exit_name);
 
@@ -205,7 +213,7 @@ pub fn select_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Er
 
         // try and save the config and fail if we can't
         if let Err(e) = settings::write_config() {
-            return Box::new(future::err(RitaClientError::SettingsError(e)));
+            return Box::new(future::err(RitaCommonError::SettingsError(e).into()));
         }
 
         Box::new(future::ok(HttpResponse::Ok().json(ret)))
@@ -223,7 +231,9 @@ pub fn select_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Er
     }
 }
 
-pub fn register_to_exit(path: Path<String>) -> Box<dyn Future<Item = HttpResponse, Error = RitaClientError>> {
+pub fn register_to_exit(
+    path: Path<String>,
+) -> Box<dyn Future<Item = HttpResponse, Error = RitaClientError>> {
     let exit_name = path.into_inner();
     debug!("/exits/{}/register hit", exit_name);
 

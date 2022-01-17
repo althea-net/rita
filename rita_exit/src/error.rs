@@ -1,12 +1,15 @@
-use std::{
-    error::Error,
-    fmt::{Display, Formatter, Result as FmtResult}, net::{AddrParseError, IpAddr},
-};
+use actix_web::client::SendRequestError as OldSendRequestError;
 use althea_kernel_interface::KernelInterfaceError;
-use althea_types::{ExitClientIdentity, error::AltheaTypesError};
+use althea_types::{error::AltheaTypesError, ExitClientIdentity};
+use babel_monitor::BabelMonitorError;
 use handlebars::RenderError;
 use ipnetwork::IpNetworkError;
 use rita_common::RitaCommonError;
+use std::{
+    error::Error,
+    fmt::{Display, Formatter, Result as FmtResult},
+    net::{AddrParseError, IpAddr},
+};
 
 #[derive(Debug)]
 pub enum RitaExitError {
@@ -25,7 +28,6 @@ pub enum RitaExitError {
     ClarityError(clarity::error::Error),
     AltheaTypesError(AltheaTypesError),
     KernelInterfaceError(KernelInterfaceError),
-
 }
 
 impl From<diesel::result::Error> for RitaExitError {
@@ -88,6 +90,16 @@ impl From<KernelInterfaceError> for RitaExitError {
         RitaExitError::KernelInterfaceError(error)
     }
 }
+impl From<BabelMonitorError> for RitaExitError {
+    fn from(error: BabelMonitorError) -> Self {
+        RitaExitError::RitaCommonError(RitaCommonError::BabelMonitorError(error))
+    }
+}
+impl From<OldSendRequestError> for RitaExitError {
+    fn from(error: OldSendRequestError) -> Self {
+        RitaExitError::RitaCommonError(RitaCommonError::OldSendRequestError(error.to_string()))
+    }
+}
 
 impl Display for RitaExitError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
@@ -107,9 +119,10 @@ impl Display for RitaExitError {
             RitaExitError::ClarityError(a) => write!(f, "{}", a,),
             RitaExitError::AltheaTypesError(a) => write!(f, "{}", a,),
             RitaExitError::KernelInterfaceError(a) => write!(f, "{}", a,),
-
         }
     }
 }
 
 impl Error for RitaExitError {}
+
+impl actix_web::ResponseError for RitaExitError {}

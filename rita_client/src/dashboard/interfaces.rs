@@ -2,7 +2,7 @@
 use actix_web::Path;
 use actix_web::{HttpRequest, HttpResponse, Json};
 use rita_common::peer_listener::unlisten_interface;
-use rita_common::KI;
+use rita_common::{RitaCommonError, KI};
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 
@@ -112,7 +112,9 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
             let proto = if let Some(val) = backhaul.get(&format!("{}.proto", prefix)) {
                 val
             } else {
-                return Err(RitaClientError::InterfaceModeError("WAN network with no proto?".to_string()))
+                return Err(RitaClientError::InterfaceModeError(
+                    "WAN network with no proto?".to_string(),
+                ));
             };
 
             if proto.contains("dhcp") {
@@ -130,10 +132,14 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
                         gateway: gateway.parse()?,
                     });
                 } else {
-                    return Err(RitaClientError::InterfaceModeError("Failed to parse static wan!".to_string()))
+                    return Err(RitaClientError::InterfaceModeError(
+                        "Failed to parse static wan!".to_string(),
+                    ));
                 }
             }
-            return Err(RitaClientError::InterfaceModeError("Failed to parse backhaul entry!".to_string()))
+            return Err(RitaClientError::InterfaceModeError(
+                "Failed to parse backhaul entry!".to_string(),
+            ));
         }
         other => {
             warn!(
@@ -152,7 +158,9 @@ fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), RitaC
     let interfaces = get_interfaces()?;
     let current_mode = get_current_interface_mode(&interfaces, iface_name);
     if !interfaces.contains_key(iface_name) {
-        return Err(RitaClientError::InterfaceModeError("Attempted to configure non-existant or unavailable interface!".to_string()))
+        return Err(RitaClientError::InterfaceModeError(
+            "Attempted to configure non-existant or unavailable interface!".to_string(),
+        ));
     } else if target_mode == InterfaceMode::Wan {
         // we can only have one WAN interface, check for others
         // StaticWAN entires are not identified seperately but if they ever are
@@ -160,7 +168,9 @@ fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), RitaC
         for entry in interfaces {
             let mode = entry.1;
             if mode == InterfaceMode::Wan {
-                return Err(RitaClientError::InterfaceModeError("There can only be one WAN interface!".to_string()))
+                return Err(RitaClientError::InterfaceModeError(
+                    "There can only be one WAN interface!".to_string(),
+                ));
             }
         }
     }
@@ -185,7 +195,9 @@ pub fn ethernet_transform_mode(
         // noop that was easy!
         return Ok(());
     } else if a == InterfaceMode::Unknown || b == InterfaceMode::Unknown {
-        return Err(RitaClientError::InterfaceModeError("We can't change Unknown interfaces!".to_string()))
+        return Err(RitaClientError::InterfaceModeError(
+            "We can't change Unknown interfaces!".to_string(),
+        ));
     }
     let rita_client = settings::get_rita_client();
     let mut network = rita_client.network;
@@ -339,18 +351,16 @@ pub fn ethernet_transform_mode(
         rita_client.network = old_network_settings;
         settings::set_rita_client(rita_client);
         //bail!("Error running UCI commands! Revert attempted: {:?}", res);
-        if let Err(re) = res { 
-        return Err(RitaClientError::InterfaceToggleError {
-            main_error: error_occured,
-            revert_status: Some(re)
-        })
-        }
-        else { 
-        return Err(RitaClientError::InterfaceToggleError {
-            main_error: error_occured,
-            revert_status: None
-        })
-
+        if let Err(re) = res {
+            return Err(RitaClientError::InterfaceToggleError {
+                main_error: error_occured,
+                revert_status: Some(re),
+            });
+        } else {
+            return Err(RitaClientError::InterfaceToggleError {
+                main_error: error_occured,
+                revert_status: None,
+            });
         }
     }
 
@@ -362,7 +372,7 @@ pub fn ethernet_transform_mode(
 
     // try and save the config and fail if we can't
     if let Err(_e) = settings::write_config() {
-        return Err(RitaClientError::SettingsError(_e));
+        return Err(RitaCommonError::SettingsError(_e).into());
     }
 
     // We edited disk contents, force global sync
@@ -382,20 +392,22 @@ pub fn ethernet_transform_mode(
 
 fn wlan_toggle_get(uci_spec: &str) -> Result<bool, RitaClientError> {
     if !KI.is_openwrt() {
-        return Err(RitaClientError::MiscStringError("Not an OpenWRT device!".to_string()))
+        return Err(RitaClientError::MiscStringError(
+            "Not an OpenWRT device!".to_string(),
+        ));
     }
     let bad_wireless = "Wireless config not correct";
     let current_state = KI.uci_show(Some(uci_spec))?;
     let current_state = match current_state.get(uci_spec) {
         Some(val) => val,
-        None => return Err(RitaClientError::MiscStringError(bad_wireless.to_string()))
+        None => return Err(RitaClientError::MiscStringError(bad_wireless.to_string())),
     };
     let current_state = if current_state.contains('0') {
         true
     } else if current_state.contains('1') {
         false
     } else {
-        return Err(RitaClientError::MiscStringError(bad_wireless.to_string()))
+        return Err(RitaClientError::MiscStringError(bad_wireless.to_string()));
     };
 
     trace!(
@@ -431,7 +443,9 @@ pub fn wlan_lightclient_get(_: HttpRequest) -> HttpResponse {
 
 fn wlan_toggle_set(uci_spec: &str, enabled: bool) -> Result<(), RitaClientError> {
     if !KI.is_openwrt() {
-        return Err(RitaClientError::MiscStringError("Not an OpenWRT device!".to_string()))        
+        return Err(RitaClientError::MiscStringError(
+            "Not an OpenWRT device!".to_string(),
+        ));
     }
     let bad_wireless = "Wireless config not correct";
     trace!("wlan toggle: uci_spec {}, enabled: {}", uci_spec, enabled,);
@@ -439,14 +453,14 @@ fn wlan_toggle_set(uci_spec: &str, enabled: bool) -> Result<(), RitaClientError>
     let current_state = KI.uci_show(Some(uci_spec))?;
     let current_state = match current_state.get(uci_spec) {
         Some(val) => val,
-        None => return Err(RitaClientError::MiscStringError(bad_wireless.to_string()))
+        None => return Err(RitaClientError::MiscStringError(bad_wireless.to_string())),
     };
     let current_state = if current_state.contains('0') {
         true
     } else if current_state.contains('1') {
         false
     } else {
-        return Err(RitaClientError::MiscStringError(bad_wireless.to_string()))
+        return Err(RitaClientError::MiscStringError(bad_wireless.to_string()));
     };
 
     if enabled == current_state {
@@ -462,19 +476,17 @@ fn wlan_toggle_set(uci_spec: &str, enabled: bool) -> Result<(), RitaClientError>
 
     if let Err(e) = res {
         let res_b = KI.uci_revert("wireless");
-        if let Err(re) = res_b { 
-        return Err(RitaClientError::InterfaceToggleError {
-            main_error: vec![e],
-            revert_status: Some(re)
-        })
-    }
-    else {
-        return Err(RitaClientError::InterfaceToggleError {
-            main_error: vec![e],
-            revert_status: None
-        })
-
-    }
+        if let Err(re) = res_b {
+            return Err(RitaClientError::InterfaceToggleError {
+                main_error: vec![e],
+                revert_status: Some(re),
+            });
+        } else {
+            return Err(RitaClientError::InterfaceToggleError {
+                main_error: vec![e],
+                revert_status: None,
+            });
+        }
     }
 
     KI.uci_commit("wireless")?;

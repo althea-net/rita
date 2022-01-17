@@ -8,6 +8,8 @@
 //! increase the amount we owe Bob? That's probably a vulnerability rabbit hole at the very least.
 //! Hence we need an incoming payments parameter to take money out of. This of course implies half
 //! of the excess complexity you see, managing an incoming payments pool versus a incoming debts pool
+use crate::blockchain_oracle::get_oracle_close_thresh;
+use crate::blockchain_oracle::get_oracle_pay_thresh;
 use crate::payment_controller::queue_payment;
 use crate::payment_validator::PAYMENT_SEND_TIMEOUT;
 use crate::simulated_txfee_manager::add_tx_to_total;

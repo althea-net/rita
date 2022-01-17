@@ -3,7 +3,7 @@ use crate::database::struct_tools::client_to_new_db_client;
 use crate::database::ONE_DAY;
 use rita_common::utils::ip_increment::increment;
 
-use crate::{DB_POOL, RitaExitError};
+use crate::{RitaExitError, DB_POOL};
 use actix_web::Result;
 use althea_kernel_interface::ExitClient;
 use althea_types::ExitClientIdentity;
@@ -152,7 +152,9 @@ pub fn get_client(
         }
         Err(e) => {
             error!("We failed to lookup the client {:?} with{:?}", mesh_ip, e);
-            return Err(RitaExitError::MiscStringError("We failed to lookup the client!".to_string()))
+            Err(RitaExitError::MiscStringError(
+                "We failed to lookup the client!".to_string(),
+            ))
         }
     }
 }
@@ -202,7 +204,11 @@ pub fn verify_db_client(
 }
 
 /// Increments the text message sent count in the database
-pub fn text_sent(client: &ExitClientIdentity, conn: &PgConnection, val: i32) -> Result<(), RitaExitError> {
+pub fn text_sent(
+    client: &ExitClientIdentity,
+    conn: &PgConnection,
+    val: i32,
+) -> Result<(), RitaExitError> {
     use self::schema::clients::dsl::*;
     let ip = client.global.mesh_ip;
     let wg = client.global.wg_public_key;
@@ -233,7 +239,10 @@ fn client_exists(client: &ExitClientIdentity, conn: &PgConnection) -> Result<boo
 }
 
 /// True if there is any client with the same eth address, wg key, or ip address already registered
-pub fn client_conflict(client: &ExitClientIdentity, conn: &PgConnection) -> Result<bool, RitaExitError> {
+pub fn client_conflict(
+    client: &ExitClientIdentity,
+    conn: &PgConnection,
+) -> Result<bool, RitaExitError> {
     use self::schema::clients::dsl::*;
     // we can't possibly have a conflict if we have exactly this client already
     // since client exists checks all major details this is safe and will return false
@@ -270,7 +279,10 @@ pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<()
 
 // for backwards compatibility with entires that do not have a timestamp
 // new entires will be initialized and updated as part of the normal flow
-pub fn set_client_timestamp(client: ExitClient, connection: &PgConnection) -> Result<(), RitaExitError> {
+pub fn set_client_timestamp(
+    client: ExitClient,
+    connection: &PgConnection,
+) -> Result<(), RitaExitError> {
     use self::schema::clients::dsl::*;
     info!("Setting timestamp for client {:?}", client);
 
@@ -289,7 +301,7 @@ pub fn update_mail_sent_time(
     use self::schema::clients::dsl::{clients, email, email_sent_time};
     let mail_addr = match client.clone().reg_details.email {
         Some(mail) => mail,
-        None => return Err(RitaExitError::EmailNotFound(client.clone()))
+        None => return Err(RitaExitError::EmailNotFound(client.clone())),
     };
 
     diesel::update(clients.filter(email.eq(mail_addr)))
@@ -306,11 +318,16 @@ pub fn get_database_connection(
     match DB_POOL.read().unwrap().try_get() {
         Some(connection) => Box::new(future::ok(connection))
             as Box<
-                dyn Future<Item = PooledConnection<ConnectionManager<PgConnection>>, Error = RitaExitError>,
+                dyn Future<
+                    Item = PooledConnection<ConnectionManager<PgConnection>>,
+                    Error = RitaExitError,
+                >,
             >,
         None => {
             error!("No available db connection!");
-            Box::new(future::err(RitaExitError::MiscStringError("No Database connection available!".to_string())))
+            Box::new(future::err(RitaExitError::MiscStringError(
+                "No Database connection available!".to_string(),
+            )))
         }
     }
 }
@@ -319,7 +336,7 @@ pub fn get_database_connection_sync(
 ) -> Result<PooledConnection<ConnectionManager<PgConnection>>, RitaExitError> {
     match DB_POOL.read().unwrap().try_get() {
         Some(connection) => Ok(connection),
-        None => return Err(RitaExitError::MiscStringError("No connection!".to_string()))
+        None => Err(RitaExitError::MiscStringError("No connection!".to_string())),
     }
 }
 

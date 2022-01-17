@@ -1,5 +1,6 @@
 use actix_web::Path;
 use actix_web::{HttpRequest, HttpResponse, Result};
+use rita_common::RitaCommonError;
 use std::collections::HashMap;
 
 use crate::RitaClientError;
@@ -27,7 +28,7 @@ pub fn set_backup_created(path: Path<bool>) -> Result<HttpResponse, RitaClientEr
     settings::set_rita_client(rita_client);
 
     if let Err(e) = settings::write_config() {
-        return Err(RitaClientError::SettingsError(e));
+        return Err(RitaCommonError::SettingsError(e).into());
     }
 
     Ok(HttpResponse::Ok().json(()))

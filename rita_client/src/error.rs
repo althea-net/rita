@@ -1,11 +1,16 @@
 use std::{
     error::Error,
-    fmt::{Display, Formatter, Result as FmtResult}, 
-    net::AddrParseError, string::FromUtf8Error,
+    fmt::{Display, Formatter, Result as FmtResult},
+    net::AddrParseError,
+    num::ParseIntError,
+    string::FromUtf8Error,
 };
 
+use actix::MailboxError;
+use actix_web::client::SendRequestError as OldSendRequestError;
+use actix_web::error::JsonPayloadError as OldJsonPayloadError;
 use althea_kernel_interface::KernelInterfaceError;
-use awc::error::{SendRequestError, JsonPayloadError};
+use awc::error::{JsonPayloadError, SendRequestError};
 use babel_monitor::BabelMonitorError;
 use compressed_log::builder::LoggerError;
 use log::SetLoggerError;
@@ -15,50 +20,45 @@ use crate::dashboard;
 
 #[derive(Debug)]
 pub enum RitaClientError {
-    ConversionError(String), 
-    LoggerError(LoggerError),
-    SetLoggerError(SetLoggerError),
     InterfaceModeError(String),
     InterfaceToggleError {
         main_error: Vec<KernelInterfaceError>,
-        revert_status: Option<KernelInterfaceError>
+        revert_status: Option<KernelInterfaceError>,
     },
-    KernelInterfaceError(KernelInterfaceError),
-    SettingsError(settings::SettingsError),
     AddrParseError(AddrParseError),
     MiscStringError(String),
     ValidationError(dashboard::wifi::ValidationError),
-    SendRequestError(SendRequestError),
-    JsonPayloadError(JsonPayloadError),
+    SendRequestError(String),
+    JsonPayloadError(String),
+    OldJsonPayloadError(String),
     SerdeJsonError(serde_json::Error),
     FromUtf8Error(FromUtf8Error),
-    TimeoutError(SendRequestError),
+    TimeoutError(String),
     NoExitError(String),
     ExitNotFound(String),
     NoExitIPError(String),
     RitaCommonError(RitaCommonError),
-    BabelMonitorError(BabelMonitorError),
-
+    ParseIntError(ParseIntError),
 }
 
 impl From<LoggerError> for RitaClientError {
     fn from(error: LoggerError) -> Self {
-        RitaClientError::LoggerError(error)
+        RitaClientError::RitaCommonError(RitaCommonError::LoggerError(error))
     }
 }
 impl From<SetLoggerError> for RitaClientError {
     fn from(error: SetLoggerError) -> Self {
-        RitaClientError::SetLoggerError(error)
+        RitaClientError::RitaCommonError(RitaCommonError::SetLoggerError(error))
     }
 }
 impl From<KernelInterfaceError> for RitaClientError {
     fn from(error: KernelInterfaceError) -> Self {
-        RitaClientError::KernelInterfaceError(error)
+        RitaClientError::RitaCommonError(RitaCommonError::KernelInterfaceError(error))
     }
 }
 impl From<settings::SettingsError> for RitaClientError {
     fn from(error: settings::SettingsError) -> Self {
-        RitaClientError::SettingsError(error)
+        RitaClientError::RitaCommonError(RitaCommonError::SettingsError(error))
     }
 }
 impl From<AddrParseError> for RitaClientError {
@@ -73,13 +73,22 @@ impl From<dashboard::wifi::ValidationError> for RitaClientError {
 }
 impl From<SendRequestError> for RitaClientError {
     fn from(error: SendRequestError) -> Self {
-        RitaClientError::SendRequestError(error);
-        RitaClientError::TimeoutError(error)
+        RitaClientError::TimeoutError(error.to_string())
+    }
+}
+impl From<OldSendRequestError> for RitaClientError {
+    fn from(error: OldSendRequestError) -> Self {
+        RitaClientError::RitaCommonError(RitaCommonError::OldSendRequestError(error.to_string()))
     }
 }
 impl From<JsonPayloadError> for RitaClientError {
     fn from(error: JsonPayloadError) -> Self {
-        RitaClientError::JsonPayloadError(error)
+        RitaClientError::JsonPayloadError(error.to_string())
+    }
+}
+impl From<OldJsonPayloadError> for RitaClientError {
+    fn from(error: OldJsonPayloadError) -> Self {
+        RitaClientError::OldJsonPayloadError(error.to_string())
     }
 }
 impl From<serde_json::Error> for RitaClientError {
@@ -99,40 +108,63 @@ impl From<RitaCommonError> for RitaClientError {
 }
 impl From<BabelMonitorError> for RitaClientError {
     fn from(error: BabelMonitorError) -> Self {
-        RitaClientError::BabelMonitorError(error)
+        RitaClientError::RitaCommonError(RitaCommonError::BabelMonitorError(error))
+    }
+}
+impl From<MailboxError> for RitaClientError {
+    fn from(error: MailboxError) -> Self {
+        RitaClientError::RitaCommonError(RitaCommonError::MailboxError(error))
+    }
+}
+impl From<ParseIntError> for RitaClientError {
+    fn from(error: ParseIntError) -> Self {
+        RitaClientError::ParseIntError(error)
+    }
+}
+impl From<std::io::Error> for RitaClientError {
+    fn from(error: std::io::Error) -> Self {
+        RitaClientError::RitaCommonError(RitaCommonError::StdError(error))
     }
 }
 
 impl Display for RitaClientError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            RitaClientError::ConversionError(a) => write!(
-                f, "Conversion Error: {}", a,
-            ),
-            RitaClientError::LoggerError(e) => write!(f, "{}", e),
-            RitaClientError::SetLoggerError(e) => write!(f, "{}", e),
             RitaClientError::InterfaceModeError(a) => write!(f, "{}", a,),
-            RitaClientError::InterfaceToggleError{main_error, revert_status} => {
-                write!(f, "Error running UCI commands! {:?} \nRevert attempted: {:?}", main_error, revert_status)
+            RitaClientError::InterfaceToggleError {
+                main_error,
+                revert_status,
+            } => {
+                write!(
+                    f,
+                    "Error running UCI commands! {:?} \nRevert attempted: {:?}",
+                    main_error, revert_status
+                )
             }
-            RitaClientError::KernelInterfaceError(a) => write!(f, "{}", a,),
-            RitaClientError::SettingsError(a) => write!(f, "{}", a,),
             RitaClientError::AddrParseError(a) => write!(f, "{}", a,),
             RitaClientError::MiscStringError(e) => write!(f, "{}", e),
             RitaClientError::ValidationError(e) => write!(f, "{}", e),
-            RitaClientError::SendRequestError(e) => write!(f, "Error with get request for exit info: {}", e),
+            RitaClientError::SendRequestError(e) => {
+                write!(f, "Error with get request for exit info: {}", e)
+            }
             RitaClientError::JsonPayloadError(e) => write!(f, "{}", e),
+            RitaClientError::OldJsonPayloadError(e) => write!(f, "{}", e),
             RitaClientError::SerdeJsonError(e) => write!(f, "{}", e),
             RitaClientError::FromUtf8Error(e) => write!(f, "{}", e),
-            RitaClientError::TimeoutError(e) => write!(f, "Error with post request for exit status: {}", e),
+            RitaClientError::TimeoutError(e) => {
+                write!(f, "Error with post request for exit status: {}", e)
+            }
             RitaClientError::NoExitError(e) => write!(f, "No valid exit for {}", e),
             RitaClientError::ExitNotFound(e) => write!(f, "Could not find exit {:?}", e),
-            RitaClientError::NoExitIPError(e) => write!(f, "Found exitServer: {:?}, but no exit ip", e),
+            RitaClientError::NoExitIPError(e) => {
+                write!(f, "Found exitServer: {:?}, but no exit ip", e)
+            }
             RitaClientError::RitaCommonError(e) => write!(f, "{}", e),
-            RitaClientError::BabelMonitorError(e) => write!(f, "{}", e),
-
+            RitaClientError::ParseIntError(e) => write!(f, "{}", e),
         }
     }
 }
 
 impl Error for RitaClientError {}
+
+impl actix_web::ResponseError for RitaClientError {}

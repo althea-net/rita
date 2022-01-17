@@ -2,6 +2,7 @@ use actix_web::http::StatusCode;
 use actix_web::Path;
 use actix_web::{HttpRequest, HttpResponse};
 use althea_types::SystemChain;
+use rita_common::blockchain_oracle::set_oracle_net_version;
 use settings::payment::PaymentSettings;
 use settings::payment::ETH_FEE_MULTIPLIER;
 use settings::payment::XDAI_FEE_MULTIPLIER;

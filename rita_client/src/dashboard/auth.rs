@@ -1,10 +1,8 @@
-use rita_common::KI;
-
+use crate::RitaClientError;
 use actix_web::{HttpResponse, Json};
 use clarity::utils::bytes_to_hex_str;
+use rita_common::{RitaCommonError, KI};
 use sha3::{Digest, Sha3_512};
-
-use crate::RitaClientError;
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct RouterPassword {
@@ -25,7 +23,7 @@ pub fn set_pass(router_pass: Json<RouterPassword>) -> Result<HttpResponse, RitaC
     rita_client.network.rita_dashboard_password = Some(hashed_pass);
 
     if let Err(e) = settings::write_config() {
-        return Err(RitaClientError::SettingsError(e));
+        return Err(RitaCommonError::SettingsError(e).into());
     }
 
     if KI.is_openwrt() {

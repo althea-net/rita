@@ -4,7 +4,7 @@ use ::actix_web::http::StatusCode;
 use ::actix_web::Path;
 use ::actix_web::{HttpRequest, HttpResponse, Json};
 use rita_common::dashboard::nickname::maybe_set_nickname;
-use rita_common::KI;
+use rita_common::{RitaCommonError, KI};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -88,17 +88,20 @@ pub enum ValidationError {
 impl Display for ValidationError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            ValidationError::IllegalCharacter { pos, c } => write!(
-                f, "Illegal character {} at position {}", pos, c
-            ),
+            ValidationError::IllegalCharacter { pos, c } => {
+                write!(f, "Illegal character {} at position {}", pos, c)
+            }
             ValidationError::Empty => write!(f, "Empty value"),
             ValidationError::BadChannel(a, b) => write!(
-                f, "Incorrect channel! Your radio has a channel width of {} please select one of {}", a, b
+                f,
+                "Incorrect channel! Your radio has a channel width of {} please select one of {}",
+                a, b
             ),
-            ValidationError::WrongRadio => write!(f, "Trying to set a 5ghz channel on a 2.4ghz radio or vice versa!"),
-            ValidationError::TooShort(a) => write!(
-                f, "Value too short ({} required)", a
+            ValidationError::WrongRadio => write!(
+                f,
+                "Trying to set a 5ghz channel on a 2.4ghz radio or vice versa!"
             ),
+            ValidationError::TooShort(a) => write!(f, "Value too short ({} required)", a),
             ValidationError::InvalidChoice => write!(f, "Invalid Choice"),
         }
     }
@@ -507,7 +510,10 @@ fn get_wifi_config_internal() -> Result<Vec<WifiInterface>, RitaClientError> {
         Some(i) => i,
         None => {
             error!("No \"values\" key in parsed wifi config!");
-            return Err(RitaClientError::ConversionError("No \"values\" key in parsed wifi config!".to_string()));
+            return Err(RitaCommonError::ConversionError(
+                "No \"values\" key in parsed wifi config!".to_string(),
+            )
+            .into());
         }
     };
     for (k, v) in items {
