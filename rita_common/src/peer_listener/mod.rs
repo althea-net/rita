@@ -395,11 +395,11 @@ pub fn receive_hello(writer: &mut PeerListener) {
                                             Some(l_inter) => {
                                                 send_hello(&response_hello, &l_inter.linklocal_socket, sock_addr, sender_wgport);
                                             },
-                                            None => info!("No udpsocket present for interface inorder to send a response"),
+                                            None => warn!("No udpsocket present for interface inorder to send a response"),
                                         }
                                     }
                                     None => {
-                                        info!("No interface present for peer inorder to send a response");
+                                        warn!("No interface present for peer inorder to send a response");
                                     }
                                 };
                                 Ok(())

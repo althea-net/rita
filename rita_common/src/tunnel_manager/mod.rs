@@ -11,6 +11,7 @@ pub mod shaping;
 
 use crate::hello_handler::Hello;
 use crate::peer_listener::Hello as NewHello;
+use crate::peer_listener::PeerListener;
 use crate::peer_listener::PEER_LISTENER;
 use crate::peer_listener::{send_hello, Peer};
 use crate::rita_loop::is_gateway;
@@ -363,9 +364,13 @@ impl Handler<PeersToContact> for TunnelManager {
         let rita_hello_port = network_settings.rita_hello_port;
         drop(network_settings);
 
+        // Hold a lock on shared state until we finish sending all messages. This prevents a race condition
+        // where the hashmaps get cleared out during subsequent ticks
+        let writer = &mut *PEER_LISTENER.write().unwrap();
+
         trace!("TunnelManager contacting peers");
         for (_, peer) in msg.peers.iter() {
-            let res = self.neighbor_inquiry(peer, false);
+            let res = self.neighbor_inquiry(peer, false, writer);
             if res.is_err() {
                 warn!("Neighbor inqury for {:?} failed! with {:?}", peer, res);
             }
@@ -380,7 +385,7 @@ impl Handler<PeersToContact> for TunnelManager {
                         ifidx: 0,
                         contact_socket: socket,
                     };
-                    let res = self.neighbor_inquiry(&man_peer, true);
+                    let res = self.neighbor_inquiry(&man_peer, true, writer);
                     if res.is_err() {
                         warn!(
                             "Neighbor inqury for {:?} failed with: {:?}",
@@ -618,22 +623,25 @@ impl TunnelManager {
 
     /// Contacts one neighbor with our LocalIdentity to get their LocalIdentity and wireguard tunnel
     /// interface name. Sends a Hello over udp, or http if its a manual peer
-    pub fn neighbor_inquiry(&mut self, peer: &Peer, is_manual_peer: bool) -> Result<(), Error> {
+    pub fn neighbor_inquiry(
+        &mut self,
+        peer: &Peer,
+        is_manual_peer: bool,
+        peer_listener: &mut PeerListener,
+    ) -> Result<(), Error> {
         trace!("TunnelManager neigh inquiry for {:?}", peer);
         let our_port = self.get_port();
 
         if is_manual_peer {
             contact_manual_peer(peer, our_port)
         } else {
-            let reader = PEER_LISTENER.read().unwrap();
-
-            let iface_name = match reader.interface_map.get(&peer.contact_socket) {
+            let iface_name = match peer_listener.interface_map.get(&peer.contact_socket) {
                 Some(a) => a,
-                None => panic!("No interface in the hashmap to send a message"),
+                None => bail!("No interface in the hashmap to send a message"),
             };
-            let udp_socket = match reader.interfaces.get(iface_name) {
+            let udp_socket = match peer_listener.interfaces.get(iface_name) {
                 Some(a) => &a.linklocal_socket,
-                None => panic!("No udp socket present for given interface"),
+                None => bail!("No udp socket present for given interface"),
             };
             contact_neighbor(peer, our_port, udp_socket, peer.contact_socket)
         }
