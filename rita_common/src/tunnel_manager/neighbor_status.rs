@@ -1,5 +1,4 @@
 use super::{PaymentState, TunnelManager};
-use actix::{Context, Handler, Message};
 use althea_types::Identity;
 use althea_types::NeighborStatus;
 use std::collections::HashMap;
@@ -18,46 +17,37 @@ pub fn get_neighbor_status() -> HashMap<Identity, NeighborStatus> {
     NEIGHBOR_STATUS.read().unwrap().clone()
 }
 
-pub struct UpdateNeighborStatus;
-
-impl Message for UpdateNeighborStatus {
-    type Result = ();
-}
-
-impl Handler<UpdateNeighborStatus> for TunnelManager {
-    type Result = ();
-
-    fn handle(&mut self, _: UpdateNeighborStatus, _: &mut Context<Self>) -> Self::Result {
-        let mut external_list = NEIGHBOR_STATUS.write().unwrap();
-        for (id, tunnel_list) in self.tunnels.iter() {
-            // we may have many tunnels with this same peer, we want to get
-            // the lowest shaper value of any of the recently active tunnels
-            let mut lowest_shaper_speed = None;
-            let mut enforced = false;
-            for tunnel in tunnel_list.iter() {
-                match (tunnel.speed_limit, lowest_shaper_speed) {
-                    (Some(new), Some(current)) => {
-                        if new < current {
-                            lowest_shaper_speed = Some(new);
-                        }
+/// Handles updates to neighbor status with lazy static lock
+pub fn update_neighbor_status(tunnel_manager: &mut TunnelManager) {
+    let mut external_list = NEIGHBOR_STATUS.write().unwrap();
+    for (id, tunnel_list) in tunnel_manager.tunnels.iter() {
+        // we may have many tunnels with this same peer, we want to get
+        // the lowest shaper value of any of the recently active tunnels
+        let mut lowest_shaper_speed = None;
+        let mut enforced = false;
+        for tunnel in tunnel_list.iter() {
+            match (tunnel.speed_limit, lowest_shaper_speed) {
+                (Some(new), Some(current)) => {
+                    if new < current {
+                        lowest_shaper_speed = Some(new);
                     }
-                    (Some(new), None) => lowest_shaper_speed = Some(new),
-                    (None, Some(_)) => {}
-                    (None, None) => {}
                 }
-                if tunnel.payment_state == PaymentState::Overdue {
-                    enforced = true;
-                }
+                (Some(new), None) => lowest_shaper_speed = Some(new),
+                (None, Some(_)) => {}
+                (None, None) => {}
             }
-
-            external_list.insert(
-                *id,
-                NeighborStatus {
-                    id: *id,
-                    shaper_speed: lowest_shaper_speed,
-                    enforced,
-                },
-            );
+            if tunnel.payment_state == PaymentState::Overdue {
+                enforced = true;
+            }
         }
+
+        external_list.insert(
+            *id,
+            NeighborStatus {
+                id: *id,
+                shaper_speed: lowest_shaper_speed,
+                enforced,
+            },
+        );
     }
 }

@@ -9,18 +9,12 @@
 //! on traffic over every interface and base our action off of spikes in throughput as well as spikes in latency.
 
 use crate::rita_loop::fast_loop::FAST_LOOP_SPEED;
-use crate::tunnel_manager::shaping::ShapeMany;
+use crate::set_to_shape;
 use crate::tunnel_manager::shaping::ShapingAdjust;
 use crate::tunnel_manager::shaping::ShapingAdjustAction;
 use crate::tunnel_manager::Neighbor as RitaNeighbor;
-use crate::tunnel_manager::TunnelManager;
 use crate::RitaCommonError;
-use actix::Actor;
-use actix::Context;
-use actix::Handler;
-use actix::Message;
-use actix::Supervised;
-use actix::SystemService;
+
 use althea_types::monitoring::has_packet_loss;
 use althea_types::monitoring::SAMPLE_PERIOD;
 use althea_types::RunningLatencyStats;
@@ -29,10 +23,15 @@ use althea_types::WgKey;
 use babel_monitor::Neighbor as BabelNeighborLegacy;
 use babel_monitor::Route as BabelRouteLegacy;
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::Duration;
 use std::time::Instant;
 
-use super::tunnel_manager::neighbor_status::UpdateNeighborStatus;
+lazy_static! {
+    static ref NETWORK_MONITOR: Arc<RwLock<NetworkMonitor>> =
+        Arc::new(RwLock::new(NetworkMonitor::default()));
+}
 
 /// 10 minutes in seconds, the amount of time we wait for an interface to be
 /// 'good' before we start trying to increase it's speed
@@ -46,24 +45,6 @@ pub struct NetworkMonitor {
     latency_history: HashMap<String, RunningLatencyStats>,
     packet_loss_history: HashMap<String, RunningPacketLossStats>,
     last_babel_dump: Option<NetworkInfo>,
-}
-
-impl Actor for NetworkMonitor {
-    type Context = Context<Self>;
-}
-
-impl Supervised for NetworkMonitor {}
-impl SystemService for NetworkMonitor {
-    fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        info!("NetworkMonitor started");
-
-        // if this assertion is failing you're running this slowly enough
-        // that all the sample period logic is not relevent, go disable it
-        assert_eq!(SAMPLE_PERIOD as u64, FAST_LOOP_SPEED.as_secs());
-        if !SAMPLE_PERIOD <= 16 {
-            panic!("NetworkMonitor is running too slowly! Please adjust constants");
-        }
-    }
 }
 
 impl NetworkMonitor {
@@ -102,84 +83,66 @@ pub struct IfaceStats {
     packet_loss: PacketLossStats,
 }
 
-impl Message for GetStats {
-    type Result = Result<Stats, RitaCommonError>;
-}
-
 pub type Stats = HashMap<String, IfaceStats>;
 
-impl Handler<GetStats> for NetworkMonitor {
-    type Result = Result<Stats, RitaCommonError>;
+pub fn get_stats() -> Stats {
+    let mut stats = Stats::new();
+    let network_monitor = &*(NETWORK_MONITOR.write().unwrap());
 
-    fn handle(&mut self, _msg: GetStats, _ctx: &mut Context<Self>) -> Self::Result {
-        let mut stats = Stats::new();
-
-        for (iface, latency_stats) in self.latency_history.iter() {
-            if let Some(packet_loss_stats) = self.packet_loss_history.get(iface) {
-                stats.insert(
-                    iface.clone(),
-                    IfaceStats {
-                        latency: LatencyStats {
-                            avg: latency_stats.get_avg(),
-                            std_dev: latency_stats.get_std_dev(),
-                        },
-                        packet_loss: PacketLossStats {
-                            avg: packet_loss_stats.get_avg(),
-                            five_min_avg: packet_loss_stats.get_five_min_average(),
-                        },
+    for (iface, latency_stats) in network_monitor.latency_history.iter() {
+        if let Some(packet_loss_stats) = network_monitor.packet_loss_history.get(iface) {
+            stats.insert(
+                iface.clone(),
+                IfaceStats {
+                    latency: LatencyStats {
+                        avg: latency_stats.get_avg(),
+                        std_dev: latency_stats.get_std_dev(),
                     },
-                );
-            } else {
-                error!("Found entry in one that's not in the other ")
-            }
+                    packet_loss: PacketLossStats {
+                        avg: packet_loss_stats.get_avg(),
+                        five_min_avg: packet_loss_stats.get_five_min_average(),
+                    },
+                },
+            );
+        } else {
+            error!("Found entry in one that's not in the other ")
         }
-
-        Ok(stats)
     }
+    stats
 }
 
 pub struct GetNetworkInfo;
 
-impl Message for GetNetworkInfo {
-    type Result = Result<NetworkInfo, RitaCommonError>;
-}
-
-impl Handler<GetNetworkInfo> for NetworkMonitor {
-    type Result = Result<NetworkInfo, RitaCommonError>;
-
-    fn handle(&mut self, _msg: GetNetworkInfo, _ctx: &mut Context<Self>) -> Self::Result {
-        match self.last_babel_dump.clone() {
-            Some(dump) => Ok(dump),
-            None => Err(RitaCommonError::MiscStringError(
-                "No babel info ready!".to_string(),
-            )),
-        }
+pub fn get_network_info(_msg: GetNetworkInfo) -> Result<NetworkInfo, RitaCommonError> {
+    match (*(NETWORK_MONITOR.read().unwrap())).last_babel_dump.clone() {
+        Some(dump) => Ok(dump),
+        None => Err(RitaCommonError::MiscStringError(
+            "No babel info ready!".to_string(),
+        )),
     }
 }
 
-#[derive(Message, Clone)]
+#[derive(Clone)]
 pub struct NetworkInfo {
     pub babel_neighbors: Vec<BabelNeighborLegacy>,
     pub babel_routes: Vec<BabelRouteLegacy>,
     pub rita_neighbors: Vec<RitaNeighbor>,
 }
 
-impl Handler<NetworkInfo> for NetworkMonitor {
-    type Result = ();
-
-    fn handle(&mut self, msg: NetworkInfo, _ctx: &mut Context<Self>) -> Self::Result {
-        let babel_neighbors = &msg.babel_neighbors;
-        let babel_routes = &msg.babel_routes;
-        let rita_neighbors = &msg.rita_neighbors;
-        observe_network(
-            babel_neighbors,
-            rita_neighbors,
-            &mut self.latency_history,
-            &mut self.packet_loss_history,
-        );
-        network_stats(babel_routes, babel_neighbors);
-        self.last_babel_dump = Some(msg);
-    }
+/// updates babel neighbors, babel routes, and rita neighbors for a NetworkInfo
+pub fn update_network_info(msg: NetworkInfo) {
+    let mut network_monitor = &mut *(NETWORK_MONITOR.write().unwrap());
+    let babel_neighbors = &msg.babel_neighbors;
+    let babel_routes = &msg.babel_routes;
+    let rita_neighbors = &msg.rita_neighbors;
+    observe_network(
+        babel_neighbors,
+        rita_neighbors,
+        &mut network_monitor.latency_history,
+        &mut network_monitor.packet_loss_history,
+    );
+    network_stats(babel_routes, babel_neighbors);
+    network_monitor.last_babel_dump = Some(msg);
 }
 
 /// Attempts to detect bufferbloat by looking at neighbor latency over time
@@ -189,6 +152,12 @@ fn observe_network(
     latency_history: &mut HashMap<String, RunningLatencyStats>,
     packet_loss_history: &mut HashMap<String, RunningPacketLossStats>,
 ) {
+    // if this assertion is failing you're running this slowly enough
+    // that all the sample period logic is not relevent, go disable it
+    assert_eq!(SAMPLE_PERIOD as u64, FAST_LOOP_SPEED.as_secs());
+    if !SAMPLE_PERIOD <= 16 {
+        panic!("NetworkMonitor is running too slowly! Please adjust constants");
+    }
     let mut to_shape = Vec::new();
     for neigh in babel_neighbors.iter() {
         let iface = &neigh.iface;
@@ -287,10 +256,7 @@ fn observe_network(
     // shape the misbehaving tunnels, we do this all at once for the sake
     // of efficiency as lots of do_sends have a high chance of getting lost
     // also there's nontrivial overhead
-    TunnelManager::from_registry().do_send(ShapeMany { to_shape });
-
-    // update NeighborStatus info for operator tools
-    TunnelManager::from_registry().do_send(UpdateNeighborStatus);
+    set_to_shape(to_shape);
 }
 
 fn get_wg_key_by_ifname(

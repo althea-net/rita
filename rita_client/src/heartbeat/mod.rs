@@ -22,8 +22,8 @@ use babel_monitor::BabelMonitorError;
 
 use dummy::dummy_selected_exit_details;
 
+use rita_common::network_monitor::get_network_info;
 use rita_common::network_monitor::GetNetworkInfo;
-use rita_common::network_monitor::NetworkMonitor;
 use rita_common::tunnel_manager::Neighbor as RitaNeighbor;
 
 use actix::actors::resolver;
@@ -95,9 +95,6 @@ pub fn send_udp_heartbeat() {
     let dns_request = Resolver::from_registry()
         .send(resolver::Resolve::host(heartbeat_url.to_string()))
         .timeout(CLIENT_LOOP_TIMEOUT);
-    let network_info = NetworkMonitor::from_registry()
-        .send(GetNetworkInfo {})
-        .timeout(CLIENT_LOOP_TIMEOUT);
 
     // Check for the basics first, before doing any of the hard futures work
     #[allow(unused_assignments, unused_mut)]
@@ -130,12 +127,20 @@ pub fn send_udp_heartbeat() {
 
     trace!("we have heartbeat basic info");
 
-    let res = dns_request.join(network_info).then(move |res| {
+    let network_info = match get_network_info(GetNetworkInfo) {
+        Ok(network_info_val) => network_info_val,
+        Err(e) => {
+            warn!("Could not get network info with {:?}", e);
+            return;
+        }
+    };
+
+    let res = dns_request.then(move |res| {
         // In this block we handle gathering all the info and the many ways gathering it could fail
         // once we have succeeded even if only once we have a cached value that is updated regularly
         // if for some reason the cache update fails, we can still progress with the heartbeat
         match res {
-            Ok((Ok(dnsresult), Ok(network_info))) => {
+            Ok(Ok(dnsresult)) => {
                 #[cfg(not(feature = "operator_debug"))]
                 let selected_exit_route = get_selected_exit_route(&network_info.babel_routes);
                 #[cfg(feature = "operator_debug")]
@@ -187,11 +192,8 @@ pub fn send_udp_heartbeat() {
             Err(e) => {
                 warn!("Failed to resolve domain and get network info! {:?}", e);
             }
-            Ok((Err(e), _)) => {
+            Ok(Err(e)) => {
                 warn!("DNS resolution failed with {:?}", e);
-            }
-            Ok((_, Err(e))) => {
-                warn!("Could not get network info with {:?}", e);
             }
         }
         // Now we actually send the heartbeat, using the cached data if it is
