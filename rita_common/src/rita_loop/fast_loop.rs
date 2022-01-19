@@ -1,8 +1,8 @@
 use crate::blockchain_oracle::update as BlockchainOracleUpdate;
 use crate::debt_keeper::send_debt_update;
 use crate::eth_compatible_withdraw;
+use crate::network_monitor::update_network_info;
 use crate::network_monitor::NetworkInfo as NetworkMonitorTick;
-use crate::network_monitor::NetworkMonitor;
 use crate::payment_controller::tick_payment_controller;
 use crate::payment_validator::validate;
 use crate::peer_listener::get_peers;
@@ -155,13 +155,11 @@ impl Handler<Tick> for RitaFastLoop {
                                         parse_interfaces_legacy(stream).and_then(
                                             move |(_stream, babel_interfaces)| {
                                                 trace!("Sending network monitor tick");
-                                                NetworkMonitor::from_registry().do_send(
-                                                    NetworkMonitorTick {
-                                                        babel_neighbors,
-                                                        babel_routes,
-                                                        rita_neighbors,
-                                                    },
-                                                );
+                                                update_network_info(NetworkMonitorTick {
+                                                    babel_neighbors,
+                                                    babel_routes,
+                                                    rita_neighbors,
+                                                });
 
                                                 trace!("Sending tunnel GC");
                                                 TunnelManager::from_registry().do_send(TriggerGc {

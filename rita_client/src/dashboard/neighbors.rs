@@ -10,7 +10,7 @@ use babel_monitor_legacy::start_connection_legacy;
 use futures01::Future;
 use num256::{Int256, Uint256};
 use rita_common::debt_keeper::{dump, NodeDebtData};
-use rita_common::network_monitor::{GetStats, IfaceStats, NetworkMonitor, Stats};
+use rita_common::network_monitor::{get_stats, IfaceStats, Stats};
 use rita_common::tunnel_manager::{GetNeighbors, Neighbor, TunnelManager};
 use std::collections::HashMap;
 
@@ -82,20 +82,13 @@ pub fn get_neighbor_info(
                                     .from_err()
                                     .and_then(|(_stream, routes)| {
                                         let route_table_sample = routes;
-
-                                        NetworkMonitor::from_registry()
-                                            .send(GetStats {})
-                                            .from_err()
-                                            .and_then(|stats| {
-                                                let stats = stats.unwrap();
-                                                let output = generate_neighbors_list(
-                                                    stats,
-                                                    route_table_sample,
-                                                    combined_list,
-                                                );
-
-                                                Ok(Json(output))
-                                            })
+                                        let stats = get_stats();
+                                        let output = generate_neighbors_list(
+                                            stats,
+                                            route_table_sample,
+                                            combined_list,
+                                        );
+                                        Ok(Json(output))
                                     })
                                     .responder()
                             })

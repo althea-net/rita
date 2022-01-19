@@ -9,12 +9,14 @@ pub mod id_callback;
 pub mod neighbor_status;
 pub mod shaping;
 
+use crate::handle_shaping;
 use crate::hello_handler::Hello;
 use crate::peer_listener::Hello as NewHello;
 use crate::peer_listener::PeerListener;
 use crate::peer_listener::PEER_LISTENER;
 use crate::peer_listener::{send_hello, Peer};
 use crate::rita_loop::is_gateway;
+use crate::update_neighbor_status;
 use crate::RitaCommonError;
 use crate::FAST_LOOP_TIMEOUT;
 use crate::KI;
@@ -37,7 +39,19 @@ use std::fmt::Display;
 use std::fmt::{Formatter, Result as FmtResult};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::{Duration, Instant};
+
+/// Holds messages from NetworkMonitor that need to be processed by TunnelManager
+#[derive(Debug, Default)]
+struct NetworkMonitorQueue {}
+
+lazy_static! {
+    /// Partial storage for tunnel manager data, Tunnel Manager is not fully migrated to async/await so this stores
+    /// data that other modules need to send to tunnel manager for it to dequeue later.
+    static ref TUNNEL_MANAGER: Arc<RwLock<NetworkMonitorQueue>> = Arc::new(RwLock::new(NetworkMonitorQueue::default()));
+}
 
 #[cfg(test)]
 type HelloHandler = Mocker<crate::hello_handler::HelloHandler>;
@@ -370,6 +384,11 @@ impl Message for PeersToContact {
 impl Handler<PeersToContact> for TunnelManager {
     type Result = ();
     fn handle(&mut self, msg: PeersToContact, _ctx: &mut Context<Self>) -> Self::Result {
+        // TODO remove these in TunnelManager async/await migration and move to its own function
+        // these are put here so that they are run, not for any logical reason
+        update_neighbor_status(self);
+        handle_shaping(self);
+
         let network_settings = settings::get_rita_common().network;
         let manual_peers = network_settings.manual_peers.clone();
         let is_gateway = is_gateway();
