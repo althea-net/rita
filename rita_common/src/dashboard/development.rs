@@ -19,7 +19,6 @@ use std::path::Path;
 #[cfg(not(feature = "development"))]
 use crate::RitaCommonError;
 pub fn crash_actors(_req: HttpRequest) -> Result<HttpResponse, RitaCommonError> {
-
     // This is returned on production builds.
     Ok(HttpResponse::NotFound().finish())
 }

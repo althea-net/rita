@@ -115,7 +115,7 @@ fn write_all_spinlock_internal(
             } else if bytes == 0 {
                 Err(IoError::new(
                     std::io::ErrorKind::WriteZero,
-                    AntennaForwardingError::ConnectionDownError, 
+                    AntennaForwardingError::ConnectionDownError,
                 ))
             } else {
                 trace!("Did not write all, recursing",);
@@ -703,7 +703,7 @@ impl ForwardingProtocolMessage {
             }
             (Err(a), Err(b)) => {
                 trace!("Double read failure {:?} {:?}", a, b);
-                Err(AntennaForwardingError::DoubleReadFailure{a, b})
+                Err(AntennaForwardingError::DoubleReadFailure { a, b })
             }
             (_, _) => {
                 trace!("Impossible error");
@@ -799,7 +799,10 @@ impl ForwardingProtocolMessage {
                 }
                 _ => {
                     if !remaining_bytes.is_empty() {
-                        Err(AntennaForwardingError::UnparsedBytesError{messages, remaining_bytes})
+                        Err(AntennaForwardingError::UnparsedBytesError {
+                            messages,
+                            remaining_bytes,
+                        })
                     } else {
                         Ok(messages)
                     }

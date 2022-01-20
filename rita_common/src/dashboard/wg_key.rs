@@ -8,6 +8,8 @@ pub fn get_wg_public_key(_req: HttpRequest) -> Result<HttpResponse, RitaCommonEr
     if let Some(wg_public_key) = wg_public_key {
         Ok(HttpResponse::Ok().json(wg_public_key.to_string()))
     } else {
-        Err(RitaCommonError::MiscStringError("wg_public_key not set!".to_string()))
+        Err(RitaCommonError::MiscStringError(
+            "wg_public_key not set!".to_string(),
+        ))
     }
 }

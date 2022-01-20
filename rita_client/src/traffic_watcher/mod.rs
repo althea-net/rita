@@ -21,11 +21,11 @@
 //! in debt keeper more than anything that can be done here. What we can do here is take action if several requests fail, falling
 //! back to local debt computation rather than running blind.
 
-use crate::RitaClientError;
 use crate::rita_loop::is_gateway_client;
+use crate::RitaClientError;
 use althea_types::Identity;
-use babel_monitor::BabelMonitorError;
 use babel_monitor::get_installed_route;
+use babel_monitor::BabelMonitorError;
 use babel_monitor::Route as RouteLegacy;
 use num256::Int256;
 use num_traits::identities::Zero;
@@ -200,7 +200,9 @@ pub fn local_traffic_calculation(
                 warn!("wg_exit client tunnel has multiple peers!");
             } else if res.is_empty() {
                 warn!("No peers on wg_exit why is client traffic watcher running?");
-                return Err(RitaClientError::MiscStringError("No peers on wg_exit".to_string())); 
+                return Err(RitaClientError::MiscStringError(
+                    "No peers on wg_exit".to_string(),
+                ));
             }
             // unwrap is safe because we check that len is not equal to zero
             // then we toss the exit's wg key as we don't need it

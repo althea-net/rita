@@ -1,9 +1,9 @@
-use crate::RitaExitError;
 use crate::database::database_tools::text_sent;
 use crate::database::database_tools::verify_client;
 use crate::database::get_database_connection;
 use crate::database::get_exit_info;
 use crate::database::struct_tools::texts_sent;
+use crate::RitaExitError;
 
 use actix_web::client as actix_client;
 use actix_web::client::ClientResponse;
@@ -63,7 +63,10 @@ pub struct SmsRequest {
 }
 
 /// Sends the authy verification text by hitting the api endpoint
-fn send_text(number: String, api_key: String) -> impl Future<Item = ClientResponse, Error = RitaExitError> {
+fn send_text(
+    number: String,
+    api_key: String,
+) -> impl Future<Item = ClientResponse, Error = RitaExitError> {
     info!("Sending message for {}", number);
     let url = "https://api.authy.com/protected/json/phones/verification/start";
     let number: PhoneNumber = match number.parse() {

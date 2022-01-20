@@ -11,8 +11,8 @@ use diesel::*;
 use exit_db::schema;
 use futures01::future::Future;
 
-use crate::RitaExitError;
 use crate::database::database_tools::get_database_connection;
+use crate::RitaExitError;
 
 #[derive(Default)]
 pub struct DbClient;

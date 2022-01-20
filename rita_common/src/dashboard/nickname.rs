@@ -9,7 +9,9 @@ pub fn get_nickname(_req: HttpRequest) -> Result<HttpResponse, RitaCommonError> 
     if let Some(nick) = nick {
         Ok(HttpResponse::Ok().json(nick.to_string()))
     } else {
-        Err(RitaCommonError::NicknameError("Nickname not set!".to_string()))
+        Err(RitaCommonError::NicknameError(
+            "Nickname not set!".to_string(),
+        ))
     }
 }
 
@@ -28,12 +30,14 @@ pub fn set_nickname(nickname: Json<Nickname>) -> Result<HttpResponse, RitaCommon
 
             // try and save the config and fail if we can't
             if let Err(e) = settings::write_config() {
-                return Err(RitaCommonError::SettingsError(e))
+                return Err(RitaCommonError::SettingsError(e));
             }
 
             Ok(HttpResponse::Ok().json(()))
         }
-        Err(_e) => Err(RitaCommonError::CapacityError("Insufficient capacity for string!".to_string()))
+        Err(_e) => Err(RitaCommonError::CapacityError(
+            "Insufficient capacity for string!".to_string(),
+        )),
     }
 }
 
@@ -51,12 +55,14 @@ pub fn maybe_set_nickname(new_nick: String) -> Result<(), RitaCommonError> {
                 settings::set_rita_common(common);
                 // try and save the config and fail if we can't
                 if let Err(e) = settings::write_config() {
-                    return Err(RitaCommonError::SettingsError(e))
+                    return Err(RitaCommonError::SettingsError(e));
                 }
 
                 Ok(())
             }
-            Err(_e) => Err(RitaCommonError::CapacityError("Insufficient capacity for string!".to_string()))
+            Err(_e) => Err(RitaCommonError::CapacityError(
+                "Insufficient capacity for string!".to_string(),
+            )),
         }
     } else {
         Ok(())

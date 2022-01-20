@@ -13,7 +13,9 @@ pub fn incrementv4(address: Ipv4Addr, netmask: u8) -> Result<Ipv4Addr, RitaCommo
     }
     let new_ip = byte_vec + 1;
     if new_ip & !mask == 0 {
-        return Err(RitaCommonError::MiscStringError("Address space exhausted!".to_string()))
+        return Err(RitaCommonError::MiscStringError(
+            "Address space exhausted!".to_string(),
+        ));
     }
 
     let new_ip: Ipv4Addr = new_ip.to_be_bytes().into();
@@ -29,7 +31,9 @@ pub fn incrementv6(address: Ipv6Addr, netmask: u8) -> Result<Ipv6Addr, RitaCommo
     }
     let new_ip = byte_vec + 1;
     if new_ip & !mask == 0 {
-        return Err(RitaCommonError::MiscStringError("Address space exhausted!".to_string()))
+        return Err(RitaCommonError::MiscStringError(
+            "Address space exhausted!".to_string(),
+        ));
     }
 
     let new_ip: Ipv6Addr = new_ip.to_be_bytes().into();

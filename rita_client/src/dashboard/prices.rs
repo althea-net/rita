@@ -2,8 +2,8 @@ use actix_web::Path;
 use actix_web::{HttpRequest, HttpResponse, Json, Result};
 use num256::Uint256;
 
-use crate::RitaClientError;
 use crate::traffic_watcher::get_exit_dest_price;
+use crate::RitaClientError;
 pub fn auto_pricing_status(_req: HttpRequest) -> Result<Json<bool>, RitaClientError> {
     debug!("Get Auto pricing enabled hit!");
     Ok(Json(

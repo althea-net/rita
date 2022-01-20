@@ -2,13 +2,13 @@
 //! iptables and ipset counters on each per hop tunnel (the WireGuard tunnel between two devices). These counts
 //! are then stored and used to compute amounts for bills.
 
-use crate::RitaCommonError;
 use crate::debt_keeper::traffic_update;
 use crate::debt_keeper::Traffic;
 use crate::tunnel_manager::Neighbor;
 use crate::usage_tracker::update_usage_data;
 use crate::usage_tracker::UpdateUsage;
 use crate::usage_tracker::UsageType;
+use crate::RitaCommonError;
 use crate::KI;
 use actix::{Actor, Context, Handler, Message, Supervised, SystemService};
 use althea_kernel_interface::open_tunnel::is_link_local;
@@ -83,7 +83,9 @@ pub fn prepare_helper_maps(
     (identities, if_to_id)
 }
 
-pub fn get_babel_info(routes: Vec<RouteLegacy>) -> Result<(HashMap<IpAddr, i128>, u32), RitaCommonError> {
+pub fn get_babel_info(
+    routes: Vec<RouteLegacy>,
+) -> Result<(HashMap<IpAddr, i128>, u32), RitaCommonError> {
     trace!("Got {} routes: {:?}", routes.len(), routes);
     let mut destinations = HashMap::new();
     let common = settings::get_rita_common();
@@ -114,7 +116,11 @@ pub fn get_babel_info(routes: Vec<RouteLegacy>) -> Result<(HashMap<IpAddr, i128>
     destinations.insert(
         match common.network.mesh_ip {
             Some(ip) => ip,
-            None => return Err(RitaCommonError::MiscStringError("No mesh IP configured yet".to_string()))
+            None => {
+                return Err(RitaCommonError::MiscStringError(
+                    "No mesh IP configured yet".to_string(),
+                ))
+            }
         },
         i128::from(0),
     );

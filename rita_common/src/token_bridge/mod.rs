@@ -18,8 +18,8 @@
 // initiate a withdrawal. From there, we loop to check for events related to the withdraws,
 // simulate these, and those that pass are unlocked on the eth side.
 
-use crate::RitaCommonError;
 use crate::rita_loop::slow_loop::SLOW_LOOP_TIMEOUT;
+use crate::RitaCommonError;
 use althea_types::SystemChain;
 use auto_bridge::check_relayed_message;
 use auto_bridge::get_payload_for_funds_unlock;
@@ -345,9 +345,7 @@ fn get_acceptable_gas_price(
     let lowest_20: usize = (0.2_f32 * vector.len() as f32).ceil() as usize;
     let value = match vector.get(lowest_20 - 1) {
         Some(a) => a.clone(),
-        None => {
-            return Err(RitaCommonError::Lowest20Error(lowest_20 - 1))
-        }
+        None => return Err(RitaCommonError::Lowest20Error(lowest_20 - 1)),
     };
     Ok(value)
 }
@@ -465,7 +463,9 @@ pub fn setup_withdraw(msg: Withdraw) -> Result<(), RitaCommonError> {
 
     // If there is already a withdrawal that needs to be executed, return
     if writer.withdraw_in_progress {
-        return Err(RitaCommonError::MiscStringError("There is currently a withdraw in progress!".to_string()))
+        return Err(RitaCommonError::MiscStringError(
+            "There is currently a withdraw in progress!".to_string(),
+        ));
     }
 
     // Setup withdraw information so we can execute it during next tick
@@ -506,10 +506,14 @@ pub async fn withdraw(msg: Withdraw) -> Result<(), RitaCommonError> {
             writer.withdraw_in_progress = false;
             Ok(())
         } else {
-            Err(RitaCommonError::MiscStringError("There is currently a withdraw in progress!".to_string()))
+            Err(RitaCommonError::MiscStringError(
+                "There is currently a withdraw in progress!".to_string(),
+            ))
         }
     } else {
-        Err(RitaCommonError::MiscStringError("Not on Xdai chain!".to_string()))
+        Err(RitaCommonError::MiscStringError(
+            "Not on Xdai chain!".to_string(),
+        ))
     }
 }
 

@@ -3,19 +3,19 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
-use althea_kernel_interface::{KI};
+use althea_kernel_interface::KI;
 use clarity::PrivateKey;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use regex::Regex;
 use settings::client::RitaClientSettings;
 use settings::exit::RitaExitSettingsStruct;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::fs::File;
 use std::io::Read;
 use std::net::IpAddr;
 use std::path::Path;
 use std::str;
-use std::fmt::{Display, Formatter, Result as FmtResult};
 
 mod error;
 pub use error::NewCluError;
@@ -28,10 +28,7 @@ pub enum CluError {
 impl Display for CluError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            CluError::RuntimeError(a) => write!(
-                f, "Runtime Error:\n{:?}", a,
-            ),
-
+            CluError::RuntimeError(a) => write!(f, "Runtime Error:\n{:?}", a,),
         }
     }
 }
@@ -41,7 +38,7 @@ pub fn generate_mesh_ip() -> Result<IpAddr, NewCluError> {
         String::from_utf8(thread_rng().sample_iter(&Alphanumeric).take(50).collect()).unwrap();
     let mesh_ip = match ipgen::ip(&seed, "fd00::/8".parse().unwrap()) {
         Ok(ip) => ip,
-        Err(msg) => return Err(NewCluError::MeshError(msg)) // For some reason, ipgen devs decided to use Strings for all errors
+        Err(msg) => return Err(NewCluError::MeshError(msg)), // For some reason, ipgen devs decided to use Strings for all errors
     };
 
     info!("Generated a new mesh IP address: {}", mesh_ip);
@@ -202,7 +199,9 @@ fn linux_init(settings: RitaClientSettings) -> Result<RitaClientSettings, NewClu
     Ok(settings)
 }
 
-fn linux_exit_init(settings: RitaExitSettingsStruct) -> Result<RitaExitSettingsStruct, NewCluError> {
+fn linux_exit_init(
+    settings: RitaExitSettingsStruct,
+) -> Result<RitaExitSettingsStruct, NewCluError> {
     cleanup()?;
     let mut settings = settings;
 

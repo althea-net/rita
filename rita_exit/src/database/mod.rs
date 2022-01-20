@@ -2,7 +2,6 @@
 //! for the exit, which is most exit logic in general. Keep in mind database connections are remote
 //! and therefore synchronous database requests are quite expensive (on the order of tens of milliseconds)
 
-use crate::RitaExitError;
 use crate::create_or_update_user_record;
 use crate::database::database_tools::client_conflict;
 use crate::database::database_tools::delete_client;
@@ -24,6 +23,7 @@ use crate::database::struct_tools::to_exit_client;
 use crate::database::struct_tools::to_identity;
 use crate::database::struct_tools::verif_done;
 use crate::rita_loop::EXIT_LOOP_TIMEOUT;
+use crate::RitaExitError;
 
 use althea_kernel_interface::ExitClient;
 use althea_types::Identity;
@@ -106,7 +106,9 @@ pub fn secs_since_unix_epoch() -> i64 {
 /// Handles a new client registration api call. Performs a geoip lookup
 /// on their registration ip to make sure that they are coming from a valid gateway
 /// ip and then sends out an email of phone message
-pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState, Error = RitaExitError> {
+pub fn signup_client(
+    client: ExitClientIdentity,
+) -> impl Future<Item = ExitState, Error = RitaExitError> {
     info!("got setup request {:?}", client);
     get_gateway_ip_single(client.global.mesh_ip).and_then(move |gateway_ip| {
         info!("got gateway ip {:?}", client);
@@ -157,7 +159,7 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
                             }
                             let client_internal_ip = match their_record.internal_ip.parse() {
                                 Ok(ip) => ip,
-                                Err(e) => return Box::new(future::err(RitaExitError::AddrParseError(e))), 
+                                Err(e) => return Box::new(future::err(RitaExitError::AddrParseError(e))),
                             };
 
                             Box::new(future::ok(ExitState::Registered {
@@ -180,7 +182,10 @@ pub fn signup_client(client: ExitClientIdentity) -> impl Future<Item = ExitState
 }
 
 /// Gets the status of a client and updates it in the database
-pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<ExitState, RitaExitError> {
+pub fn client_status(
+    client: ExitClientIdentity,
+    conn: &PgConnection,
+) -> Result<ExitState, RitaExitError> {
     trace!("Checking if record exists for {:?}", client.global.mesh_ip);
 
     if let Some(their_record) = get_client(&client, conn)? {
@@ -219,7 +224,9 @@ pub fn client_status(client: ExitClientIdentity, conn: &PgConnection) -> Result<
         })
     } else {
         error!("De-registering client! {:?}", client);
-        Err(RitaExitError::MiscStringError("Refusing to de-register clients right now!".to_string()))
+        Err(RitaExitError::MiscStringError(
+            "Refusing to de-register clients right now!".to_string(),
+        ))
         // TODO restore this functionality once it's confirmed to be safe
         // Ok(ExitState::New)
     }
@@ -255,7 +262,9 @@ pub fn validate_clients_region(
     let list = match wait_timeout(get_gateway_ip_bulk(ip_vec), EXIT_LOOP_TIMEOUT) {
         WaitResult::Err(e) => return Err(e),
         WaitResult::Ok(val) => val,
-        WaitResult::TimedOut(_) => return Err(RitaExitError::MiscStringError("Timed out!".to_string())), 
+        WaitResult::TimedOut(_) => {
+            return Err(RitaExitError::MiscStringError("Timed out!".to_string()))
+        }
     };
     for item in list.iter() {
         let res = verify_ip_sync(item.gateway_ip);

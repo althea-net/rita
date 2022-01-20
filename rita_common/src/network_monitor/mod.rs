@@ -8,13 +8,13 @@
 //! as a bird flying through the connection rather than actual bloat. The solution here would be to also collect stats
 //! on traffic over every interface and base our action off of spikes in throughput as well as spikes in latency.
 
-use crate::RitaCommonError;
 use crate::rita_loop::fast_loop::FAST_LOOP_SPEED;
 use crate::tunnel_manager::shaping::ShapeMany;
 use crate::tunnel_manager::shaping::ShapingAdjust;
 use crate::tunnel_manager::shaping::ShapingAdjustAction;
 use crate::tunnel_manager::Neighbor as RitaNeighbor;
 use crate::tunnel_manager::TunnelManager;
+use crate::RitaCommonError;
 use actix::Actor;
 use actix::Context;
 use actix::Handler;
@@ -150,7 +150,9 @@ impl Handler<GetNetworkInfo> for NetworkMonitor {
     fn handle(&mut self, _msg: GetNetworkInfo, _ctx: &mut Context<Self>) -> Self::Result {
         match self.last_babel_dump.clone() {
             Some(dump) => Ok(dump),
-            None => Err(RitaCommonError::MiscStringError("No babel info ready!".to_string()))
+            None => Err(RitaCommonError::MiscStringError(
+                "No babel info ready!".to_string(),
+            )),
         }
     }
 }

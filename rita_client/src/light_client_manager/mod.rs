@@ -26,8 +26,8 @@ use std::collections::HashSet;
 use std::net::Ipv4Addr;
 use std::net::SocketAddr;
 
-use crate::RitaClientError;
 use crate::traffic_watcher::get_exit_dest_price;
+use crate::RitaClientError;
 
 /// Sets up a variant of the exit tunnel nat rules, assumes that the exit
 /// tunnel is already created and doesn't change the system routing table
@@ -142,13 +142,21 @@ pub fn light_client_hello_response(
                 .and_then(move |tunnel| {
                     let (tunnel, have_tunnel) = match tunnel {
                         Some(val) => val,
-                        None => return Err(RitaClientError::MiscStringError("tunnel open failure!".to_string())), 
+                        None => {
+                            return Err(RitaClientError::MiscStringError(
+                                "tunnel open failure!".to_string(),
+                            ))
+                        }
                     };
 
                     let lci = LightClientLocalIdentity {
                         global: match settings::get_rita_client().get_identity() {
                             Some(id) => id,
-                            None => return Err(RitaClientError::MiscStringError("Identity has no mesh IP ready yet".to_string())),
+                            None => {
+                                return Err(RitaClientError::MiscStringError(
+                                    "Identity has no mesh IP ready yet".to_string(),
+                                ))
+                            }
                         },
                         wg_port: tunnel.listen_port,
                         have_tunnel: Some(have_tunnel),

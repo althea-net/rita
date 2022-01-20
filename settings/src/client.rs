@@ -3,7 +3,9 @@ use crate::logging::LoggingSettings;
 use crate::network::NetworkSettings;
 use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
-use crate::{json_merge, set_rita_client, spawn_watch_thread_client, update_config, SUBNET, SettingsError};
+use crate::{
+    json_merge, set_rita_client, spawn_watch_thread_client, update_config, SettingsError, SUBNET,
+};
 use althea_types::wg_key::WgKey;
 use althea_types::{ContactStorage, ExitState, Identity};
 use clarity::Address;

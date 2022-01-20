@@ -1,8 +1,8 @@
-use crate::RitaCommonError;
 use crate::debt_keeper::get_debts_list;
 use crate::debt_keeper::traffic_replace;
 use crate::debt_keeper::GetDebtsResult;
 use crate::debt_keeper::Traffic;
+use crate::RitaCommonError;
 use actix_web::{HttpRequest, HttpResponse, Json};
 use althea_types::Identity;
 

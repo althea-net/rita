@@ -188,7 +188,9 @@ pub fn watch(
         Some(id) => id,
         None => {
             warn!("Our identity is not ready!");
-            return Err(RitaExitError::MiscStringError("Identity is not ready".to_string()))
+            return Err(RitaExitError::MiscStringError(
+                "Identity is not ready".to_string(),
+            ));
         }
     };
 

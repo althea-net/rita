@@ -1,9 +1,9 @@
-use crate::RitaExitError;
 use crate::database::database_tools::update_mail_sent_time;
 use crate::database::database_tools::verify_client;
 use crate::database::get_exit_info;
 use crate::database::secs_since_unix_epoch;
 use crate::database::struct_tools::verif_done;
+use crate::RitaExitError;
 
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState};
 use diesel::prelude::PgConnection;
@@ -23,8 +23,16 @@ use settings::exit::ExitVerifSettings;
 pub fn send_mail(client: &models::Client) -> Result<(), RitaExitError> {
     let mailer = match settings::get_rita_exit().verif_settings {
         Some(ExitVerifSettings::Email(mailer)) => mailer,
-        Some(_) => return Err(RitaExitError::MiscStringError("Verification mode is not email!".to_string())),
-        None => return Err(RitaExitError::MiscStringError("No verification mode configured!".to_string()))
+        Some(_) => {
+            return Err(RitaExitError::MiscStringError(
+                "Verification mode is not email!".to_string(),
+            ))
+        }
+        None => {
+            return Err(RitaExitError::MiscStringError(
+                "No verification mode configured!".to_string(),
+            ))
+        }
     };
 
     info!("Sending exit signup email for client");
@@ -83,7 +91,7 @@ pub fn handle_email_registration(
 
         let client_internal_ip = match their_record.internal_ip.parse() {
             Ok(ip) => ip,
-            Err(e) => return future::err(RitaExitError::AddrParseError(e)), 
+            Err(e) => return future::err(RitaExitError::AddrParseError(e)),
         };
         future::ok(ExitState::Registered {
             our_details: ExitClientDetails { client_internal_ip },

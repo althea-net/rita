@@ -1,4 +1,3 @@
-use crate::RitaCommonError;
 use crate::blockchain_oracle::update as BlockchainOracleUpdate;
 use crate::debt_keeper::send_debt_update;
 use crate::eth_compatible_withdraw;
@@ -13,6 +12,7 @@ use crate::traffic_watcher::{TrafficWatcher, Watch};
 use crate::tunnel_manager::gc::TriggerGc;
 use crate::tunnel_manager::PeersToContact;
 use crate::tunnel_manager::{GetNeighbors, TunnelManager};
+use crate::RitaCommonError;
 use crate::KI;
 use actix::{
     Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,

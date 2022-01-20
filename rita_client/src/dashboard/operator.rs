@@ -1,5 +1,5 @@
-use crate::RitaClientError;
 use crate::operator_fee_manager::get_operator_fee_debt;
+use crate::RitaClientError;
 use actix_web::Path;
 use actix_web::{HttpRequest, HttpResponse, Json, Result};
 use clarity::Address;

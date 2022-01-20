@@ -46,8 +46,6 @@ impl Display for SettingsError {
             SettingsError::IpNetworkError(e) => write!(f, "{}", e),
             SettingsError::SerdeJsonError(e) => write!(f, "{}", e),
             SettingsError::ConfigError(e) => write!(f, "{}", e),
-
-
         }
     }
 }

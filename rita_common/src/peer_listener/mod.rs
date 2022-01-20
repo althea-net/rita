@@ -9,9 +9,9 @@
 pub mod message;
 
 use self::message::PeerMessage;
-use crate::RitaCommonError;
 use crate::tunnel_manager::TunnelManager;
 use crate::IdentityCallback;
+use crate::RitaCommonError;
 use crate::KI;
 use actix::Arbiter;
 use actix::SystemService;

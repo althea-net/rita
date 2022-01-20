@@ -5,10 +5,10 @@
 //! peer listener gets udp ImHere -> TunnelManager tries to contact peer with hello
 //! -> hello manager actually manages that request -> hello manager calls back to tunnel manager
 
-use crate::RitaCommonError;
 use crate::peer_listener::Peer;
 use crate::tunnel_manager::id_callback::IdentityCallback;
 use crate::tunnel_manager::TunnelManager;
+use crate::RitaCommonError;
 use actix::{Actor, Context, Handler, Message, ResponseFuture, Supervised, SystemService};
 use actix_web::client::Connection;
 use actix_web::{client, HttpMessage, Result};
@@ -67,7 +67,8 @@ impl Handler<Hello> for HelloHandler {
                 Ok(s) => s,
                 Err(e) => {
                     trace!("Error getting stream from hello {:?}", e);
-                    return Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = RitaCommonError>>;
+                    return Box::new(future_ok(()))
+                        as Box<dyn Future<Item = (), Error = RitaCommonError>>;
                 }
             };
 
@@ -79,7 +80,8 @@ impl Handler<Hello> for HelloHandler {
                 Ok(n) => n,
                 Err(e) => {
                     trace!("Error serializing our request {:?}", e);
-                    return Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = RitaCommonError>>;
+                    return Box::new(future_ok(()))
+                        as Box<dyn Future<Item = (), Error = RitaCommonError>>;
                 }
             };
 
@@ -106,7 +108,8 @@ impl Handler<Hello> for HelloHandler {
                         as Box<dyn Future<Item = (), Error = RitaCommonError>>,
                     Err(e) => {
                         trace!("Got error getting Hello response {:?}", e);
-                        Box::new(future_ok(())) as Box<dyn Future<Item = (), Error = RitaCommonError>>
+                        Box::new(future_ok(()))
+                            as Box<dyn Future<Item = (), Error = RitaCommonError>>
                     }
                 }
             });

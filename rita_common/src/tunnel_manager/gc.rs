@@ -1,7 +1,7 @@
 use super::Tunnel;
 use super::TunnelManager;
-use crate::KI;
 use crate::RitaCommonError;
+use crate::KI;
 use actix::{Context, Handler, Message};
 use althea_types::Identity;
 use babel_monitor::Interface as InterfaceLegacy;

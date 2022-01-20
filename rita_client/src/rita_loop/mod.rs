@@ -4,7 +4,6 @@
 //! This loop manages exit signup based on the settings configuration state and deploys an exit vpn
 //! tunnel if the signup was successful on the selected exit.
 
-use crate::RitaClientError;
 use crate::exit_manager::exit_manager_tick;
 use crate::heartbeat::send_udp_heartbeat;
 use crate::heartbeat::HEARTBEAT_SERVER_KEY;
@@ -14,6 +13,7 @@ use crate::light_client_manager::Watch;
 use crate::operator_fee_manager::tick_operator_payments;
 use crate::operator_update::{OperatorUpdate, Update};
 use crate::traffic_watcher::get_exit_dest_price;
+use crate::RitaClientError;
 use actix::{
     Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
     System, SystemService,
