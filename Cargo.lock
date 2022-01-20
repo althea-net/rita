@@ -584,7 +584,7 @@ dependencies = [
  "ascii",
  "env_logger",
  "failure",
- "ipnetwork 0.14.0",
+ "ipnetwork 0.18.0",
  "log",
  "serde 1.0.133",
  "serde_derive",
@@ -599,7 +599,7 @@ dependencies = [
  "env_logger",
  "failure",
  "futures 0.1.31",
- "ipnetwork 0.14.0",
+ "ipnetwork 0.18.0",
  "log",
  "serde 1.0.133",
  "serde_derive",
@@ -1888,18 +1888,18 @@ checksum = "68f2d64f2edebec4ce84ad108148e67e1064789bee435edc5b60ad398714a3a9"
 
 [[package]]
 name = "ipnetwork"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3d862c86f7867f19b693ec86765e0252d82e53d4240b9b629815675a0714ad1"
-dependencies = [
- "serde 1.0.133",
-]
-
-[[package]]
-name = "ipnetwork"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02c3eaab3ac0ede60ffa41add21970a7df7d91772c03383aac6c2c3d53cc716b"
+
+[[package]]
+name = "ipnetwork"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4088d739b183546b239688ddbc79891831df421773df95e236daf7867866d355"
+dependencies = [
+ "serde 1.0.133",
+]
 
 [[package]]
 name = "itertools"
@@ -3223,7 +3223,7 @@ dependencies = [
  "failure",
  "futures 0.1.31",
  "hex-literal",
- "ipnetwork 0.14.0",
+ "ipnetwork 0.18.0",
  "lazy_static",
  "lettre",
  "lettre_email",
@@ -3270,7 +3270,7 @@ dependencies = [
  "futures 0.1.31",
  "futures 0.3.19",
  "hex-literal",
- "ipnetwork 0.14.0",
+ "ipnetwork 0.18.0",
  "lazy_static",
  "log",
  "num-traits 0.2.14",
@@ -3304,7 +3304,7 @@ dependencies = [
  "failure",
  "futures 0.1.31",
  "handlebars",
- "ipnetwork 0.14.0",
+ "ipnetwork 0.18.0",
  "lazy_static",
  "lettre",
  "lettre_email",
@@ -3581,7 +3581,7 @@ dependencies = [
  "clarity",
  "config",
  "failure",
- "ipnetwork 0.14.0",
+ "ipnetwork 0.18.0",
  "lazy_static",
  "log",
  "num256",
