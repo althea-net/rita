@@ -73,6 +73,7 @@ impl dyn KernelInterface {
             &[
                 "-I",
                 "OUTPUT",
+                "1",
                 "-o",
                 "wg_exit",
                 "-p",
@@ -204,6 +205,7 @@ impl dyn KernelInterface {
             &[
                 "-I",
                 "FORWARD",
+                "1",
                 "-p",
                 "tcp",
                 "--tcp-flags",
@@ -222,7 +224,7 @@ impl dyn KernelInterface {
     /// blocks the client nat by inserting a blocker in the start of the special lan forwarding
     /// table created by openwrt.
     pub fn block_client_nat(&self) -> Result<(), Error> {
-        self.add_iptables_rule("iptables", &["-I", "zone_lan_forward", "-j", "REJECT"])?;
+        self.add_iptables_rule("iptables", &["-I", "zone_lan_forward", "1", "-j", "REJECT"])?;
         Ok(())
     }
 

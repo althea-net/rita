@@ -2,6 +2,10 @@ use crate::KernelInterface;
 use crate::KernelInterfaceError;
 
 impl dyn KernelInterface {
+    /// -I and -A will be checked to see if they already exist before adding.
+    /// Expects that a rule with -I will also have an insertion location included.
+    /// Leaving it out will only impact if the rule is run multiple times,
+    /// in which case the check to see if it already exists will fail resulting in an additional rule being added.
     pub fn add_iptables_rule(
         &self,
         command: &str,

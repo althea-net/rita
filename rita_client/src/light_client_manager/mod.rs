@@ -55,6 +55,7 @@ fn setup_light_client_forwarding(client_addr: Ipv4Addr, nic: &str) -> Result<(),
         &[
             "-I",
             "FORWARD",
+            "1",
             "-i",
             nic,
             "--src",
