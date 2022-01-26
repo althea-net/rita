@@ -577,7 +577,7 @@ fn update_metric_value(
     metric_vec: &mut Vec<u16>,
     exit_map: &mut HashMap<IpAddr, ExitTracker>,
 ) -> ExitSwitchingCode {
-    let is_full = metric_vec.len() == metric_vec.capacity();
+    let is_full = metric_vec.len() == METRIC_ENTRIES;
     let current_exit = exit_metrics.cur_exit;
     let current_metric = exit_metrics.cur_exit_babel_met;
     let best_exit = exit_metrics.best_exit;
