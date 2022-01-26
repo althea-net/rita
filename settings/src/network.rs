@@ -16,7 +16,7 @@ fn default_metric_factor() -> u32 {
 }
 
 fn default_usage_tracker_file() -> String {
-    "/etc/rita-usage-tracker.json".to_string()
+    "/etc/rita-usage-tracker.bincode".to_string()
 }
 
 fn default_shaper_settings() -> ShaperSettings {
