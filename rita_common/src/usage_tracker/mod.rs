@@ -7,21 +7,26 @@
 use actix::Message;
 use althea_types::Identity;
 use althea_types::PaymentTx;
+use bincode::Error as BincodeError;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use num256::Uint256;
 use serde::{Deserialize, Serialize};
-use serde_json::Error as SerdeError;
+use serde_json::Error as JsonError;
+use settings::set_rita_common;
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Error as IOError;
 use std::io::Read;
 use std::io::Write;
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
+use std::usize;
 
 use crate::RitaCommonError;
 
@@ -52,7 +57,7 @@ pub enum UsageType {
 
 /// A struct for tracking each hour of usage, indexed by time in hours since
 /// the unix epoch
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
 pub struct UsageHour {
     index: u64,
     up: u64,
@@ -92,7 +97,7 @@ fn to_formatted_payment_tx(input: PaymentTx) -> FormattedPaymentTx {
 }
 
 /// A struct for tracking each hours of payments indexed in hours since unix epoch
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct PaymentHour {
     index: u64,
     payments: Vec<FormattedPaymentTx>,
@@ -100,7 +105,8 @@ pub struct PaymentHour {
 
 /// The main actor that holds the usage state for the duration of operations
 /// at some point loading and saving will be defined in service started
-#[derive(Clone, Debug, Serialize, Deserialize)]
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct UsageTracker {
     last_save_hour: u64,
     // at least one of these will be left unused
@@ -112,18 +118,46 @@ pub struct UsageTracker {
 }
 
 impl UsageTracker {
-    fn save(&mut self) -> Result<(), IOError> {
-        let serialized = serde_json::to_vec(self)?;
+    fn save(&mut self) -> Result<(), RitaCommonError> {
+        let serialized = bincode::serialize(self)?;
         let mut file = File::create(settings::get_rita_common().network.usage_tracker_file)?;
-        let buffer: Vec<u8> = Vec::new();
-        let mut encoder = ZlibEncoder::new(buffer, Compression::default());
-        encoder.write_all(&serialized)?;
-        let compressed_bytes = encoder.finish()?;
-        file.write_all(&compressed_bytes)
+
+        let mut compressed_bytes = match compress_serialized(serialized) {
+            Ok(bytes) => bytes,
+            Err(e) => return Err(RitaCommonError::StdError(e)),
+        };
+
+        let mut newsize = MAX_TX_ENTRIES;
+        loop {
+            match file.write_all(&compressed_bytes) {
+                Ok(save) => {
+                    return Ok(save);
+                }
+                Err(e) => {
+                    // 500 tx min. Payment data is trimmed if out of space as it is larger than usage data
+                    if newsize >= 1000 {
+                        newsize /= 2;
+                        trim_payments(newsize, &mut self.payments);
+                        let serialized = bincode::serialize(self)?;
+                        compressed_bytes = match compress_serialized(serialized) {
+                            Ok(bytes) => bytes,
+                            Err(e) => return Err(RitaCommonError::StdError(e)),
+                        };
+                    } else {
+                        return Err(RitaCommonError::StdError(e));
+                    }
+                    continue;
+                }
+            }
+        }
     }
 
+    /// Loads the UsageTracker struct from the disk using the rita_common.network.usage_tracker_file
+    /// path from the configuration. If the file is not found or fails to be deserialized a default UsageTracker
+    /// struct will be returned so data can be successfully collected from the present moment forward.
+    ///
+    /// TODO remove in beta 20 migration code migrates json serialized data to bincode
     fn load_from_disk() -> UsageTracker {
-        let file = File::open(settings::get_rita_common().network.usage_tracker_file);
         // if the loading process goes wrong for any reason, we just start again
         let blank_usage_tracker = UsageTracker {
             last_save_hour: 0,
@@ -133,42 +167,120 @@ impl UsageTracker {
             payments: VecDeque::new(),
         };
 
-        match file {
-            Ok(mut file) => {
-                let mut byte_contents = Vec::new();
-                // try compressed
-                match file.read_to_end(&mut byte_contents) {
-                    Ok(_bytes_read) => {
-                        let decoder = ZlibDecoder::new(&byte_contents[..]);
-                        // Extract data from decoder, note this is streaming decoding, so we're
-                        // decompressing the data as we take it out of the zlib compressed object
-                        trace!("attempting to unzip or read bw history");
-                        let deserialized: Result<UsageTracker, SerdeError> =
-                            serde_json::from_reader(decoder);
+        let file_path = settings::get_rita_common().network.usage_tracker_file;
 
-                        match deserialized {
-                            Ok(value) => value,
-                            Err(e) => {
-                                error!(
-                                    "Failed to deserialize bytes in compressed bw history {:?}",
-                                    e
-                                );
-                                blank_usage_tracker
-                            }
+        let file_exists = Path::new(&file_path).exists();
+        let file = File::open(&file_path);
+        let fileopen = match file {
+            Ok(file) => file,
+            Err(e) => {
+                error!("Failed to open usage tracker file! {:?}", e);
+                return blank_usage_tracker;
+            }
+        };
+
+        let unzipped_bytes = match decompressed(fileopen) {
+            Ok(bytes) => bytes,
+            Err(_e) => return blank_usage_tracker,
+        };
+
+        match (
+            file_exists,
+            try_bincode(&unzipped_bytes),
+            try_json(&unzipped_bytes),
+        ) {
+            // file exists and bincode deserialization was successful, in the case that somehow json deserialization of the same
+            // data was also successful just ignore it and use bincode
+            (true, Ok(bincode_tracker), _) => bincode_tracker,
+            //file exists, but bincode deserialization failed -> load using serde (old), update update settings and save file
+            (true, Err(_e), Ok(mut json_tracker)) => {
+                let mut settings = settings::get_rita_common();
+                // save with bincode regardless of result of serde deserialization in order to end reliance on serde
+                let old_path = PathBuf::from(settings.network.usage_tracker_file);
+
+                let mut new_path = old_path.clone();
+                new_path.set_extension("bincode");
+
+                settings.network.usage_tracker_file =
+                    new_path.clone().into_os_string().into_string().unwrap();
+                set_rita_common(settings);
+
+                match json_tracker.save() {
+                    Ok(()) => {
+                        // delete the old file after successfully migrating, this may cause problems on routers with
+                        // low available storage space since we want to take up space for both the new and old file
+                        if !(old_path.eq(&new_path)) {
+                            // check that we would not be deleting the file just saved to
+                            let _r = std::fs::remove_file(old_path);
+                        } else {
+                            error!(
+                                "We are trying to save over {:?} with {:?}, how are they same?",
+                                old_path, new_path
+                            )
                         }
+                        json_tracker
                     }
                     Err(e) => {
-                        error!("Failed to read usage tracker file! {:?}", e);
-                        blank_usage_tracker
+                        error!("Failed to save UsageTracker to bincode {:?}", e);
+                        json_tracker
                     }
                 }
             }
-            Err(e) => {
-                error!("Failed to open usage tracker file! {:?}", e);
+            // file does not exist; no data to load, this is probably a new router
+            // and we'll just generate a new file
+            (false, _, _) => blank_usage_tracker,
+            // the file exists but both encodings are invalid, we should log the error
+            // and return a new file so that the module can continue operating after discard
+            // the irrecoverable data.
+            (true, Err(e1), Err(e2)) => {
+                error!(
+                    "Failed to deserialize UsageTracker at location {}  {:?} {:?}",
+                    file_path, e1, e2
+                );
                 blank_usage_tracker
             }
         }
     }
+}
+
+/// takes a file handle, reads the file, and decompresses the data using zlibdecoder
+/// returning the decompressed data
+fn decompressed(mut file: File) -> Result<Vec<u8>, RitaCommonError> {
+    let mut byte_contents = Vec::new();
+    match file.read_to_end(&mut byte_contents) {
+        Ok(_bytes_read) => {
+            let mut decoder = ZlibDecoder::new(&byte_contents[..]);
+            let mut bytes = Vec::<u8>::new();
+            decoder.read_to_end(&mut bytes)?;
+
+            Ok(bytes)
+        }
+        Err(e) => {
+            error!("Failed to read usage tracker file! {:?}", e);
+            Err(RitaCommonError::StdError(e))
+        }
+    }
+}
+
+/// Attempts to deserialize the provided array of bytes as a bincode encoded UsageTracker struct
+fn try_bincode(bytes: &[u8]) -> Result<UsageTracker, BincodeError> {
+    let deserialized: Result<UsageTracker, _> = bincode::deserialize(bytes);
+    deserialized
+}
+
+/// Attempts to deserialize the provided array of bytes as a json encoded UsageTracker struct
+fn try_json(bytes: &[u8]) -> Result<UsageTracker, JsonError> {
+    let deserialized: Result<UsageTracker, _> = serde_json::from_slice(bytes);
+    deserialized
+}
+
+/// Compresses serialized data
+fn compress_serialized(serialized: Vec<u8>) -> Result<Vec<u8>, IOError> {
+    let buffer: Vec<u8> = Vec::new();
+    let mut encoder = ZlibEncoder::new(buffer, Compression::default());
+    encoder.write_all(&serialized)?;
+    let compressed_bytes = encoder.finish()?;
+    Ok(compressed_bytes)
 }
 
 /// Gets the current hour since the unix epoch
@@ -244,6 +356,12 @@ fn process_usage_update(current_hour: u64, msg: UpdateUsage, data: &mut UsageTra
     }
 }
 
+fn trim_payments(size: usize, history: &mut VecDeque<PaymentHour>) {
+    while history.len() > size {
+        let _discarded_entry = history.pop_back();
+    }
+}
+
 pub fn update_payments(payment: PaymentTx) {
     handle_payments(&mut *(USAGE_TRACKER.write().unwrap()), &payment);
 }
@@ -313,6 +431,100 @@ pub fn save_usage_on_shutdown() {
 
     let history = &mut USAGE_TRACKER.write().unwrap();
     history.last_save_hour = current_hour;
+    trim_payments(MAX_TX_ENTRIES, &mut history.payments);
     let res = history.save();
     info!("Shutdown: saving usage data: {:?}", res);
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::UsageTracker;
+    use crate::usage_tracker::{self, IOError};
+    use flate2::write::ZlibEncoder;
+    use flate2::Compression;
+    use settings::client::RitaClientSettings;
+    use settings::{get_rita_common, set_rita_client, set_rita_common};
+    use std::collections::VecDeque;
+    use std::fs::File;
+    use std::io::Write;
+    impl UsageTracker {
+        // previous implementation of save which uses serde_json to serialize
+        fn save2(&mut self) -> Result<(), IOError> {
+            let serialized = serde_json::to_vec(self)?;
+            let mut file = File::create(settings::get_rita_common().network.usage_tracker_file)?;
+            let buffer: Vec<u8> = Vec::new();
+            let mut encoder = ZlibEncoder::new(buffer, Compression::default());
+            encoder.write_all(&serialized)?;
+            let compressed_bytes = encoder.finish()?;
+            file.write_all(&compressed_bytes)
+        }
+    }
+
+    #[test]
+    fn save_usage_tracker_bincode() {
+        let rset = RitaClientSettings::new("../settings/test.toml").unwrap();
+        set_rita_client(rset);
+        let mut newrc = get_rita_common();
+        newrc.network.usage_tracker_file = "/tmp/usage_tracker.bincode".to_string();
+        set_rita_common(newrc);
+
+        let mut dummy_usage_tracker = UsageTracker {
+            last_save_hour: 9,
+            client_bandwidth: VecDeque::new(),
+            relay_bandwidth: VecDeque::new(),
+            exit_bandwidth: VecDeque::new(),
+            payments: VecDeque::new(),
+        };
+        let res = dummy_usage_tracker.save(); // saving to bincode with the new method
+        info!("Saving test  data: {:?}", res);
+
+        let res2 = usage_tracker::UsageTracker::load_from_disk();
+        info!("Loading test  data: {:?}", res2);
+
+        assert_eq!(dummy_usage_tracker, res2);
+    }
+
+    #[test]
+    fn convert_legacy_usage_tracker() {
+        // make a dummy ustage tracker instance
+        // save it as gzipped json ( pull code from the git history that you deleted and put it in this test)
+        // makes sure the file exists
+        // deserialize the file using the upgrade function
+        // make sure it's equal to the original dummy we made
+        let rset = RitaClientSettings::new("../settings/test.toml").unwrap();
+        set_rita_client(rset);
+        let mut newrc = get_rita_common();
+        newrc.network.usage_tracker_file = "/tmp/usage_tracker.json".to_string();
+        set_rita_common(newrc);
+        let mut dummy_usage_tracker = UsageTracker {
+            last_save_hour: 8,
+            client_bandwidth: VecDeque::new(),
+            relay_bandwidth: VecDeque::new(),
+            exit_bandwidth: VecDeque::new(),
+            payments: VecDeque::new(),
+        };
+        let res = dummy_usage_tracker.save2();
+        info!("Saving test data as json: {:?}", res);
+        // using load_from_disk() with usage_tracker_file set to a .json writes bincode
+        // serialized data to a .json extended file, but because load_from_disk() deletes
+        // the .json file, this test ends with no file left.
+        let mut res2 = usage_tracker::UsageTracker::load_from_disk();
+        info!("Loading test data from json: {:?}", res2);
+
+        // setting the usage_tracker_file to .bincode, which is what this upgrade expects
+        let mut newrc2 = get_rita_common();
+        newrc2.network.usage_tracker_file = "/tmp/usage_tracker.bincode".to_string();
+        set_rita_common(newrc2);
+
+        // Saving res2 with the new save() and updated usage_tracker_file in order to end with
+        // a .bincode file from the loaded json data saved to res2.
+        let res3 = res2.save();
+        info!("Saving test data as bincode: {:?}", res3);
+        let res4 = usage_tracker::UsageTracker::load_from_disk();
+        info!("Loading test data from bincode: {:?}", res4);
+
+        assert_eq!(dummy_usage_tracker, res2);
+        assert_eq!(res2, res4);
+    }
 }

@@ -11,6 +11,7 @@ use babel_monitor::BabelMonitorError;
 use compressed_log::builder::LoggerError;
 use log::SetLoggerError;
 use settings::SettingsError;
+use std::boxed::Box;
 
 #[derive(Debug)]
 pub enum RitaCommonError {
@@ -30,6 +31,7 @@ pub enum RitaCommonError {
     BabelMonitorError(BabelMonitorError),
     SysTimeError(SystemTimeError),
     OldSendRequestError(String),
+    BincodeError(Box<bincode::ErrorKind>),
 }
 
 impl From<LoggerError> for RitaCommonError {
@@ -72,6 +74,11 @@ impl From<SystemTimeError> for RitaCommonError {
         RitaCommonError::SysTimeError(error)
     }
 }
+impl From<std::boxed::Box<bincode::ErrorKind>> for RitaCommonError {
+    fn from(error: std::boxed::Box<bincode::ErrorKind>) -> Self {
+        RitaCommonError::BincodeError(error)
+    }
+}
 
 impl ResponseError for RitaCommonError {}
 
@@ -104,6 +111,7 @@ impl Display for RitaCommonError {
             RitaCommonError::BabelMonitorError(a) => write!(f, "{}", a,),
             RitaCommonError::SysTimeError(a) => write!(f, "{}", a,),
             RitaCommonError::OldSendRequestError(e) => write!(f, "{}", e),
+            RitaCommonError::BincodeError(e) => write!(f, "{}", e),
 
         }
     }
