@@ -43,9 +43,7 @@ impl dyn KernelInterface {
                         args.insert(0, "update".to_string());
                         let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
                         res = self.run_command("opkg", &args_ref);
-                        if res.is_err() {
-                            return res;
-                        }
+                        res.clone()?;
                     }
                     res
                 }
@@ -63,9 +61,7 @@ impl dyn KernelInterface {
                     args.insert(0, "install".to_string());
                     let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
                     res = self.run_command("opkg", &args_ref);
-                    if res.is_err() {
-                        return res;
-                    }
+                    res.clone()?;
                 }
                 res
             }

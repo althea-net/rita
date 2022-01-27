@@ -289,7 +289,7 @@ pub fn watch(routes: Vec<RouteLegacy>, neighbors: &[Neighbor]) -> Result<(), Rit
     let mut debts = HashMap::new();
 
     // Setup the debts table
-    for (_, ident) in identities.clone() {
+    for (_, ident) in identities {
         debts.insert(ident, 0i128);
     }
 

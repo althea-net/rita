@@ -19,9 +19,7 @@ pub fn update_rita(instruction: UpdateType) -> Result<Output, KernelInterfaceErr
                 ));
                 for cmd in commands.command_list {
                     let res = KI.perform_opkg(cmd);
-                    if res.is_err() {
-                        return res;
-                    }
+                    res.clone()?;
                 }
                 res
             }

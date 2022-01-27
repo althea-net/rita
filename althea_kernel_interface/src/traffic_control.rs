@@ -399,7 +399,7 @@ impl dyn KernelInterface {
                 "match",
                 "ip",
                 "dst",
-                &format!("{}/32", ip.to_string()),
+                &format!("{}/32", ip),
                 "flowid",
                 &format!("1:{}", class_id),
             ],
