@@ -7,6 +7,7 @@ impl dyn KernelInterface {
     pub fn perform_sysupgrade(&self, command: SysupgradeCommand) -> Result<Output, Error> {
         //If empty url, return error
         if command.url.is_empty() {
+            info!("Empty url given to sysupgrade");
             return Err(Error::RuntimeError(
                 "Empty url given to sysupgrade".to_string(),
             ));
@@ -20,6 +21,10 @@ impl dyn KernelInterface {
         };
         args.push(command.url);
         let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
+        info!(
+            "Running the command /sbin/sysupgrade with args: {:?}",
+            args_ref
+        );
         self.run_command("/sbin/sysupgrade", &args_ref)
     }
 
@@ -32,6 +37,7 @@ impl dyn KernelInterface {
                     let mut args = command.arguments.unwrap();
                     args.insert(0, "update".to_string());
                     let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
+                    info!("Running command opkg with args: {:?}", args_ref);
                     self.run_command("opkg", &args_ref)
                 } else {
                     let mut res = Err(Error::RuntimeError(
@@ -42,6 +48,7 @@ impl dyn KernelInterface {
                         args.insert(0, packet);
                         args.insert(0, "update".to_string());
                         let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
+                        info!("Running command opkg with args: {:?}", args_ref);
                         res = self.run_command("opkg", &args_ref);
                         res.clone()?;
                     }
@@ -53,6 +60,7 @@ impl dyn KernelInterface {
                     "No packages given to install".to_string(),
                 ));
                 if command.packages.is_none() {
+                    error!("No packages given to opkg install");
                     return res;
                 }
                 for packet in command.packages.clone().unwrap() {
@@ -60,6 +68,7 @@ impl dyn KernelInterface {
                     args.insert(0, packet);
                     args.insert(0, "install".to_string());
                     let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
+                    info!("Running command opkg with args: {:?}", args_ref);
                     res = self.run_command("opkg", &args_ref);
                     res.clone()?;
                 }

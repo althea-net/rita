@@ -12,6 +12,7 @@ pub fn update_rita(instruction: UpdateType) -> Result<Output, KernelInterfaceErr
             UpdateType::Opkg(commands) => {
                 //update the feed
                 handle_release_feed_update(Some(commands.feed));
+                info!("Set new release feed for opkg");
 
                 //opkg commands
                 let res = Err(KernelInterfaceError::RuntimeError(
@@ -19,12 +20,16 @@ pub fn update_rita(instruction: UpdateType) -> Result<Output, KernelInterfaceErr
                 ));
                 for cmd in commands.command_list {
                     let res = KI.perform_opkg(cmd);
-                    res.clone()?;
+                    if res.is_err() {
+                        error!("Unable to perform opkg with error: {:?}", res);
+                        return res;
+                    }
                 }
                 res
             }
         }
     } else {
+        error!("Recieved update command for device not openWRT");
         Err(KernelInterfaceError::RuntimeError(
             "Not an openwrt device, not updating".to_string(),
         ))
