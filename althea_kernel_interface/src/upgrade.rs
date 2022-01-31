@@ -34,7 +34,7 @@ impl dyn KernelInterface {
         match command.opkg_command {
             OpkgCommandType::Update => {
                 if command.packages.is_none() {
-                    let mut args = command.arguments.unwrap();
+                    let mut args = command.arguments.unwrap_or_default();
                     args.insert(0, "update".to_string());
                     let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
                     info!("Running command opkg with args: {:?}", args_ref);
@@ -44,7 +44,7 @@ impl dyn KernelInterface {
                         "No packages given to update".to_string(),
                     ));
                     for packet in command.packages.clone().unwrap() {
-                        let mut args = command.arguments.clone().unwrap();
+                        let mut args = command.arguments.clone().unwrap_or_default();
                         args.insert(0, packet);
                         args.insert(0, "update".to_string());
                         let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
@@ -64,7 +64,7 @@ impl dyn KernelInterface {
                     return res;
                 }
                 for packet in command.packages.clone().unwrap() {
-                    let mut args = command.arguments.clone().unwrap();
+                    let mut args = command.arguments.clone().unwrap_or_default();
                     args.insert(0, packet);
                     args.insert(0, "install".to_string());
                     let args_ref: Vec<&str> = args.iter().map(std::ops::Deref::deref).collect();
