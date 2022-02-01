@@ -1,27 +1,31 @@
 use crate::blockchain_oracle::update as BlockchainOracleUpdate;
 use crate::debt_keeper::send_debt_update;
 use crate::eth_compatible_withdraw;
+use crate::handle_shaping;
 use crate::network_monitor::update_network_info;
 use crate::network_monitor::NetworkInfo as NetworkMonitorTick;
 use crate::payment_controller::tick_payment_controller;
 use crate::payment_validator::validate;
 use crate::peer_listener::get_peers;
 use crate::peer_listener::tick;
-use crate::rita_loop::set_gateway;
+use crate::tm_trigger_gc;
 use crate::traffic_watcher::{TrafficWatcher, Watch};
 use crate::tunnel_manager::gc::TriggerGc;
+use crate::tunnel_manager::tm_contact_peers;
+use crate::tunnel_manager::tm_get_neighbors;
 use crate::tunnel_manager::PeersToContact;
-use crate::tunnel_manager::{GetNeighbors, TunnelManager};
+use crate::update_neighbor_status;
 use crate::RitaCommonError;
-use crate::KI;
 use actix::{
     Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
     System, SystemService,
 };
 use actix_async::System as AsyncSystem;
+use babel_monitor::open_babel_stream;
+use babel_monitor::parse_interfaces;
+use babel_monitor::parse_neighs;
+use babel_monitor::parse_routes;
 use babel_monitor_legacy::open_babel_stream_legacy;
-use babel_monitor_legacy::parse_interfaces_legacy;
-use babel_monitor_legacy::parse_neighs_legacy;
 use babel_monitor_legacy::parse_routes_legacy;
 use babel_monitor_legacy::start_connection_legacy;
 use futures01::Future;
@@ -90,51 +94,44 @@ impl Handler<Tick> for RitaFastLoop {
         let babel_port = settings::get_rita_common().network.babel_port;
         trace!("Common tick!");
 
-        manage_gateway();
-
         let start = Instant::now();
 
-        // watch neighbors for billing
+        let res = tm_get_neighbors();
+        trace!("Currently open tunnels: {:?}", res);
+        let neighbors = res;
+        let neigh = Instant::now();
+        info!(
+            "GetNeighbors completed in {}s {}ms",
+            start.elapsed().as_secs(),
+            start.elapsed().subsec_millis()
+        );
+
+        //watch neighbors for billing
         Arbiter::spawn(
-            TunnelManager::from_registry()
-                .send(GetNeighbors)
-                .timeout(FAST_LOOP_TIMEOUT)
-                .then(move |res| {
-                    trace!("Currently open tunnels: {:?}", res);
-                    let neighbors = res.unwrap().unwrap();
-
-                    let neigh = Instant::now();
-                    info!(
-                        "GetNeighbors completed in {}s {}ms",
-                        start.elapsed().as_secs(),
-                        start.elapsed().subsec_millis()
-                    );
-
-                    open_babel_stream_legacy(babel_port)
-                        .from_err()
-                        .and_then(move |stream| {
-                            start_connection_legacy(stream).and_then(move |stream| {
-                                parse_routes_legacy(stream).and_then(move |routes| {
-                                    TrafficWatcher::from_registry()
-                                        .send(Watch::new(neighbors, routes.1))
-                                        .timeout(FAST_LOOP_TIMEOUT)
-                                        .then(move |_res| {
-                                            info!(
-                                                "TrafficWatcher completed in {}s {}ms",
-                                                neigh.elapsed().as_secs(),
-                                                neigh.elapsed().subsec_millis()
-                                            );
-                                            Ok(())
-                                        })
+            open_babel_stream_legacy(babel_port)
+                .from_err()
+                .and_then(move |stream| {
+                    start_connection_legacy(stream).and_then(move |stream| {
+                        parse_routes_legacy(stream).and_then(move |routes| {
+                            TrafficWatcher::from_registry()
+                                .send(Watch::new(neighbors, routes.1))
+                                .timeout(FAST_LOOP_TIMEOUT)
+                                .then(move |_res| {
+                                    info!(
+                                        "TrafficWatcher completed in {}s {}ms",
+                                        neigh.elapsed().as_secs(),
+                                        neigh.elapsed().subsec_millis()
+                                    );
+                                    Ok(())
                                 })
-                            })
                         })
-                        .then(|ret| {
-                            if let Err(e) = ret {
-                                error!("Failed to watch client traffic with {:?}", e)
-                            }
-                            Ok(())
-                        })
+                    })
+                })
+                .then(|ret| {
+                    if let Err(e) = ret {
+                        error!("Failed to watch client traffic with {:?}", e)
+                    }
+                    Ok(())
                 }),
         );
 
@@ -142,48 +139,29 @@ impl Handler<Tick> for RitaFastLoop {
         // (tunnels that are installed but not active) and cleans up cruft. We put these together
         // because both can fail without anything truly bad happening and we get a slight efficiency
         // bonus running them together (fewer babel socket connections per loop iteration)
-        Arbiter::spawn(TunnelManager::from_registry().send(GetNeighbors).then(
-            move |rita_neighbors| {
-                let rita_neighbors = rita_neighbors.unwrap().unwrap();
-                open_babel_stream_legacy(babel_port)
-                    .from_err()
-                    .and_then(move |stream| {
-                        start_connection_legacy(stream).and_then(move |stream| {
-                            parse_routes_legacy(stream).and_then(move |(stream, babel_routes)| {
-                                parse_neighs_legacy(stream).and_then(
-                                    move |(stream, babel_neighbors)| {
-                                        parse_interfaces_legacy(stream).and_then(
-                                            move |(_stream, babel_interfaces)| {
-                                                trace!("Sending network monitor tick");
-                                                update_network_info(NetworkMonitorTick {
-                                                    babel_neighbors,
-                                                    babel_routes,
-                                                    rita_neighbors,
-                                                });
+        let rita_neighbors = tm_get_neighbors();
+        if let Ok(mut stream) = open_babel_stream(babel_port, FAST_LOOP_TIMEOUT) {
+            let babel_neighbors = parse_neighs(&mut stream);
+            let babel_interfaces = parse_interfaces(&mut stream);
+            let babel_routes = parse_routes(&mut stream);
+            if let (Ok(babel_neighbors), Ok(babel_routes)) = (babel_neighbors, babel_routes) {
+                trace!("Sending network monitor tick");
+                update_network_info(NetworkMonitorTick {
+                    babel_neighbors,
+                    babel_routes,
+                    rita_neighbors,
+                });
+            }
 
-                                                trace!("Sending tunnel GC");
-                                                TunnelManager::from_registry().do_send(TriggerGc {
-                                                    tunnel_timeout: TUNNEL_TIMEOUT,
-                                                    tunnel_handshake_timeout:
-                                                        TUNNEL_HANDSHAKE_TIMEOUT,
-                                                    babel_interfaces,
-                                                });
-                                                Ok(())
-                                            },
-                                        )
-                                    },
-                                )
-                            })
-                        })
-                    })
-                    .then(|ret| {
-                        if let Err(e) = ret {
-                            error!("Failed to watch network latency with {:?}", e)
-                        }
-                        Ok(())
-                    })
-            },
-        ));
+            if let Ok(babel_interfaces) = babel_interfaces {
+                trace!("Sending tunnel GC");
+                let _res = tm_trigger_gc(TriggerGc {
+                    tunnel_timeout: TUNNEL_TIMEOUT,
+                    tunnel_handshake_timeout: TUNNEL_HANDSHAKE_TIMEOUT,
+                    babel_interfaces,
+                });
+            }
+        }
 
         // Update debts
         if let Err(e) = send_debt_update() {
@@ -211,7 +189,11 @@ impl Handler<Tick> for RitaFastLoop {
             start.elapsed().as_secs(),
             start.elapsed().subsec_millis(),
         );
-        TunnelManager::from_registry().do_send(PeersToContact::new(peers));
+
+        update_neighbor_status();
+        handle_shaping();
+        //Contact peers
+        tm_contact_peers(PeersToContact::new(peers));
 
         Ok(())
     }
@@ -268,36 +250,4 @@ pub fn start_rita_fast_loop() {
             last_restart = Instant::now();
         }
     });
-}
-
-/// Manages gateway functionality and maintains the gateway parameter, this is different from the gateway
-/// identification in rita_client because this must function even if we aren't registered for an exit it's also
-/// very prone to being true when the device has a wan port but no actual wan connection.
-fn manage_gateway() {
-    // Resolves the gateway client corner case
-    // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
-    // the is_up detection is mostly useless because these ports reside on switches which mark
-    // all ports as up all the time.
-    let gateway = match settings::get_rita_common().network.external_nic {
-        Some(ref external_nic) => KI.is_iface_up(external_nic).unwrap_or(false),
-        None => false,
-    };
-
-    info!("We are a Gateway: {}", gateway);
-    set_gateway(gateway);
-
-    if gateway {
-        let mut common = settings::get_rita_common();
-        match KI.get_resolv_servers() {
-            Ok(s) => {
-                for ip in s.iter() {
-                    trace!("Resolv route {:?}", ip);
-                    KI.manual_peers_route(ip, &mut common.network.last_default_route)
-                        .unwrap();
-                }
-                settings::set_rita_common(common);
-            }
-            Err(e) => warn!("Failed to add DNS routes with {:?}", e),
-        }
-    }
 }

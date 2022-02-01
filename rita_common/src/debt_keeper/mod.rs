@@ -13,13 +13,12 @@ use crate::blockchain_oracle::get_oracle_pay_thresh;
 use crate::payment_controller::queue_payment;
 use crate::payment_validator::PAYMENT_SEND_TIMEOUT;
 use crate::simulated_txfee_manager::add_tx_to_total;
+use crate::tunnel_manager::tm_tunnel_state_change;
 use crate::tunnel_manager::TunnelAction;
 use crate::tunnel_manager::TunnelChange;
-use crate::tunnel_manager::TunnelManager;
 use crate::tunnel_manager::TunnelStateChange;
 use crate::RitaCommonError;
 
-use actix::SystemService;
 use althea_types::{Identity, PaymentTx};
 use num256::{Int256, Uint256};
 use num_traits::identities::Zero;
@@ -275,11 +274,11 @@ pub fn send_debt_update() -> Result<(), RitaCommonError> {
         }
     }
 
-    // this should always be called from within an actix context, when it comes time to move this out of the
-    // old rita fast loop these calls will need to be updated
-    TunnelManager::from_registry().do_send(TunnelStateChange {
+    if let Err(e) = tm_tunnel_state_change(TunnelStateChange {
         tunnels: debts_message,
-    });
+    }) {
+        warn!("Error during tunnel state change: {}", e);
+    }
     Ok(())
 }
 

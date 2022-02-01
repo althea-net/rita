@@ -1,9 +1,10 @@
-use actix::SystemService;
 use actix_web::AsyncResponder;
 use actix_web::{HttpRequest, Json};
 use althea_types::Identity;
 use arrayvec::ArrayString;
-use babel_monitor::{get_installed_route, get_route_via_neigh, Route as RouteLegacy};
+use babel_monitor::{
+    get_installed_route, get_route_via_neigh, open_babel_stream, parse_routes, Route as RouteLegacy,
+};
 use babel_monitor_legacy::open_babel_stream_legacy;
 use babel_monitor_legacy::parse_routes_legacy;
 use babel_monitor_legacy::start_connection_legacy;
@@ -11,10 +12,13 @@ use futures01::Future;
 use num256::{Int256, Uint256};
 use rita_common::debt_keeper::{dump, NodeDebtData};
 use rita_common::network_monitor::{get_stats, IfaceStats, Stats};
-use rita_common::tunnel_manager::{GetNeighbors, Neighbor, TunnelManager};
+use rita_common::tunnel_manager::{tm_get_neighbors, Neighbor};
 use std::collections::HashMap;
+use std::time::Duration;
 
 use crate::RitaClientError;
+
+const BABEL_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Serialize)]
 pub struct NodeInfo {
@@ -57,44 +61,30 @@ pub fn get_routes(
 /// since the /debts endpoint was introduced, and should be removed when it can be
 /// coordinated with the frontend.
 /// The routes info might also belong in /exits or a dedicated /routes endpoint
-pub fn get_neighbor_info(
-    _req: HttpRequest,
-) -> Box<dyn Future<Item = Json<Vec<NodeInfo>>, Error = RitaClientError>> {
+pub fn get_neighbor_info(_req: HttpRequest) -> Result<Json<Vec<NodeInfo>>, RitaClientError> {
     let debts = dump();
-    Box::new(
-        TunnelManager::from_registry()
-            .send(GetNeighbors {})
-            .from_err()
-            .and_then(|neighbors| {
-                let neighbors = neighbors.unwrap();
+    let neighbors = tm_get_neighbors();
+    let combined_list = merge_debts_and_neighbors(neighbors, debts);
+    let babel_port = settings::get_rita_client().network.babel_port;
 
-                let combined_list = merge_debts_and_neighbors(neighbors, debts);
-
-                let babel_port = settings::get_rita_client().network.babel_port;
-
-                open_babel_stream_legacy(babel_port)
-                    .from_err()
-                    .and_then(move |stream| {
-                        start_connection_legacy(stream)
-                            .from_err()
-                            .and_then(move |stream| {
-                                parse_routes_legacy(stream)
-                                    .from_err()
-                                    .and_then(|(_stream, routes)| {
-                                        let route_table_sample = routes;
-                                        let stats = get_stats();
-                                        let output = generate_neighbors_list(
-                                            stats,
-                                            route_table_sample,
-                                            combined_list,
-                                        );
-                                        Ok(Json(output))
-                                    })
-                                    .responder()
-                            })
-                    })
-            }),
-    )
+    match open_babel_stream(babel_port, BABEL_TIMEOUT) {
+        Ok(mut stream) => {
+            let routes = parse_routes(&mut stream);
+            if let Ok(routes) = routes {
+                let route_table_sample = routes;
+                let stats = get_stats();
+                let output = generate_neighbors_list(stats, route_table_sample, combined_list);
+                Ok(Json(output))
+            } else {
+                Err(RitaClientError::MiscStringError(
+                    "Could not get babel routes".to_string(),
+                ))
+            }
+        }
+        Err(_) => Err(RitaClientError::MiscStringError(
+            "Could not open babel stream".to_string(),
+        )),
+    }
 }
 
 /// generates a list of neighbors coorelated with the quality of the route to the exit they provide

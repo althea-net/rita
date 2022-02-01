@@ -1,8 +1,7 @@
 use super::Tunnel;
-use super::TunnelManager;
+use crate::tunnel_manager::TUNNEL_MANAGER;
 use crate::RitaCommonError;
 use crate::KI;
-use actix::{Context, Handler, Message};
 use althea_types::Identity;
 use babel_monitor::Interface as InterfaceLegacy;
 use std::{collections::HashMap, time::Instant};
@@ -34,80 +33,74 @@ pub struct TriggerGc {
     pub babel_interfaces: Vec<InterfaceLegacy>,
 }
 
-impl Message for TriggerGc {
-    type Result = Result<(), RitaCommonError>;
-}
-
-impl Handler<TriggerGc> for TunnelManager {
-    type Result = Result<(), RitaCommonError>;
-    fn handle(&mut self, msg: TriggerGc, _ctx: &mut Context<Self>) -> Self::Result {
-        let mut last_gc = LAST_GC.write().unwrap();
-        let time_since = Instant::now().checked_duration_since(*last_gc);
-        match time_since {
-            Some(time) => {
-                if time < GC_FREQUENCY {
-                    return Ok(());
-                }
-            }
-            None => return Ok(()),
-        }
-        *last_gc = Instant::now();
-        drop(last_gc);
-
-        let interfaces = into_interfaces_hashmap(&msg.babel_interfaces);
-        trace!("Starting tunnel gc {:?}", interfaces);
-        let mut good: HashMap<Identity, Vec<Tunnel>> = HashMap::new();
-        let mut to_delete: HashMap<Identity, Vec<Tunnel>> = HashMap::new();
-        // Split entries into good and timed out rebuilding the double hashmap structure
-        // as you can tell this is totally copy based and uses 2n ram to prevent borrow
-        // checker issues, we should consider a method that does modify in place
-        for (_identity, tunnels) in self.tunnels.iter() {
-            for tunnel in tunnels.iter() {
-                if tunnel_should_be_kept(tunnel, &msg, &interfaces) {
-                    insert_into_tunnel_list(tunnel, &mut good);
-                } else {
-                    insert_into_tunnel_list(tunnel, &mut to_delete)
-                }
+pub fn tm_trigger_gc(msg: TriggerGc) -> Result<(), RitaCommonError> {
+    let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
+    let mut last_gc = LAST_GC.write().unwrap();
+    let time_since = Instant::now().checked_duration_since(*last_gc);
+    match time_since {
+        Some(time) => {
+            if time < GC_FREQUENCY {
+                return Ok(());
             }
         }
-
-        for (id, tunnels) in to_delete.iter() {
-            for tunnel in tunnels {
-                info!("TriggerGC: removing tunnel: {} {}", id, tunnel);
-            }
-        }
-
-        // Please keep in mind it makes more sense to update the tunnel map *before* yielding the
-        // actual interfaces and ports from timed_out.
-        //
-        // The difference is leaking interfaces on del_interface() failure vs. Rita thinking
-        // it has freed ports/interfaces which are still there/claimed.
-        //
-        // The former would be a mere performance bug while inconsistent-with-reality Rita state
-        // would lead to nasty bugs in case del_interface() goes wrong for whatever reason.
-        self.tunnels = good;
-
-        for (_ident, tunnels) in to_delete {
-            for tunnel in tunnels {
-                match tunnel.light_client_details {
-                    None => {
-                        // In the same spirit, we return the port to the free port pool only after tunnel
-                        // deletion goes well.
-                        let res = tunnel.unmonitor();
-                        error!(
-                            "Tunnel unmonitor failed during gc, garbage idle tunnel! {:?}",
-                            res
-                        );
-                    }
-                    Some(_) => {
-                        tunnel.close_light_client_tunnel();
-                    }
-                }
-            }
-        }
-
-        Ok(())
+        None => return Ok(()),
     }
+    *last_gc = Instant::now();
+    drop(last_gc);
+
+    let interfaces = into_interfaces_hashmap(&msg.babel_interfaces);
+    trace!("Starting tunnel gc {:?}", interfaces);
+    let mut good: HashMap<Identity, Vec<Tunnel>> = HashMap::new();
+    let mut to_delete: HashMap<Identity, Vec<Tunnel>> = HashMap::new();
+    // Split entries into good and timed out rebuilding the double hashmap structure
+    // as you can tell this is totally copy based and uses 2n ram to prevent borrow
+    // checker issues, we should consider a method that does modify in place
+    for (_identity, tunnels) in tunnel_manager.tunnels.iter() {
+        for tunnel in tunnels.iter() {
+            if tunnel_should_be_kept(tunnel, &msg, &interfaces) {
+                insert_into_tunnel_list(tunnel, &mut good);
+            } else {
+                insert_into_tunnel_list(tunnel, &mut to_delete)
+            }
+        }
+    }
+
+    for (id, tunnels) in to_delete.iter() {
+        for tunnel in tunnels {
+            info!("TriggerGC: removing tunnel: {} {}", id, tunnel);
+        }
+    }
+
+    // Please keep in mind it makes more sense to update the tunnel map *before* yielding the
+    // actual interfaces and ports from timed_out.
+    //
+    // The difference is leaking interfaces on del_interface() failure vs. Rita thinking
+    // it has freed ports/interfaces which are still there/claimed.
+    //
+    // The former would be a mere performance bug while inconsistent-with-reality Rita state
+    // would lead to nasty bugs in case del_interface() goes wrong for whatever reason.
+    tunnel_manager.tunnels = good;
+
+    for (_ident, tunnels) in to_delete {
+        for tunnel in tunnels {
+            match tunnel.light_client_details {
+                None => {
+                    // In the same spirit, we return the port to the free port pool only after tunnel
+                    // deletion goes well.
+                    let res = tunnel.unmonitor();
+                    error!(
+                        "Tunnel unmonitor failed during gc, garbage idle tunnel! {:?}",
+                        res
+                    );
+                }
+                Some(_) => {
+                    tunnel.close_light_client_tunnel();
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// This routine has two independent purposes, first is to clear out tunnels

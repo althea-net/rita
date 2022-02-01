@@ -1,4 +1,4 @@
-use super::TunnelManager;
+use super::TUNNEL_MANAGER;
 use crate::KI;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -39,7 +39,8 @@ pub enum ShapingAdjustAction {
     ReduceSpeed,
 }
 
-pub fn handle_shaping(tunnel_manager: &mut TunnelManager) {
+pub fn handle_shaping() {
+    let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
     let network_settings = settings::get_rita_common().network;
     let minimum_bandwidth_limit = network_settings.shaper_settings.min_speed;
     let starting_bandwidth_limit = network_settings.shaper_settings.max_speed;
