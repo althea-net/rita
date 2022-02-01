@@ -9,14 +9,11 @@
 pub mod message;
 
 use self::message::PeerMessage;
-use crate::tunnel_manager::TunnelManager;
+use crate::tm_identity_callback;
 use crate::IdentityCallback;
 use crate::RitaCommonError;
 use crate::KI;
-use actix::Arbiter;
-use actix::SystemService;
 use althea_types::LocalIdentity;
-use futures01::Future;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
 use std::sync::Arc;
@@ -120,7 +117,6 @@ pub fn tick() {
         (*writer).peers = a;
         (*writer).interface_map = b;
     }
-
     receive_hello(&mut writer);
 
     listen_to_available_ifaces(&mut writer);
@@ -362,48 +358,35 @@ pub fn receive_hello(writer: &mut PeerListener) {
                             ifidx: 0,
                         };
 
-                        let future = TunnelManager::from_registry()
-                            .send(IdentityCallback::new(their_id, peer, None, None))
-                            .from_err()
-                            .and_then(move |tunnel| {
-                                let tunnel = match tunnel {
-                                    Some(val) => val,
-                                    None => return Err(RitaCommonError::MiscStringError("tunnel open failure!".to_string()))
-                                };
+                        let tunnel =
+                            tm_identity_callback(IdentityCallback::new(their_id, peer, None, None));
+                        let tunnel = match tunnel {
+                            Some(val) => val,
+                            None => {
+                                error!("Tunnel Open failure from peer listener");
+                                return;
+                            }
+                        };
 
-                                let our_id = LocalIdentity {
-                                    global: match settings::get_rita_common().get_identity() {
-                                        Some(id) => id,
-                                        None => {
-                                            return Err(RitaCommonError::MiscStringError("Identity has no mesh IP ready yet".to_string()))
-                                        }
-                                    },
-                                    wg_port: tunnel.0.listen_port,
-                                    have_tunnel: Some(tunnel.1),
-                                };
+                        let our_id = LocalIdentity {
+                            global: match settings::get_rita_common().get_identity() {
+                                Some(id) => id,
+                                None => {
+                                    error!("Identity has no mesh IP ready yet in peer listener");
+                                    return;
+                                }
+                            },
+                            wg_port: tunnel.0.listen_port,
+                            have_tunnel: Some(tunnel.1),
+                        };
 
-
-                                let response_hello = Hello::new(our_id, peer, true);
-
-                                let reader = PEER_LISTENER.read().unwrap();
-                                match reader.interface_map.get(&sock_addr) {
-                                    Some(str) => {
-                                        let peer_reader = PEER_LISTENER.read().unwrap();
-                                        match peer_reader.interfaces.get(str) {
-                                            Some(l_inter) => {
-                                                send_hello(&response_hello, &l_inter.linklocal_socket, sock_addr, sender_wgport);
-                                            },
-                                            None => warn!("No udpsocket present for interface inorder to send a response"),
-                                        }
-                                    }
-                                    None => {
-                                        warn!("No interface present for peer inorder to send a response");
-                                    }
-                                };
-                                Ok(())
-                            })
-                            .then(|_| Ok(()));
-                        Arbiter::spawn(future);
+                        let response_hello = Hello::new(our_id, peer, true);
+                        send_hello(
+                            &response_hello,
+                            &listen_interface.linklocal_socket,
+                            sock_addr,
+                            sender_wgport,
+                        );
 
                         //we received a hello response message
                     } else {
@@ -412,7 +395,7 @@ pub fn receive_hello(writer: &mut PeerListener) {
                             my_id.wg_port
                         );
                         let their_id = my_id;
-                        TunnelManager::from_registry().do_send(IdentityCallback::new(
+                        tm_identity_callback(IdentityCallback::new(
                             their_id,
                             peer_to_send,
                             Some(sender_wgport),

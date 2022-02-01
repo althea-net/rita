@@ -17,9 +17,8 @@ use rita_common::debt_keeper::Traffic;
 use rita_common::peer_listener::Peer;
 use rita_common::tunnel_manager::id_callback::IdentityCallback;
 use rita_common::tunnel_manager::Tunnel;
-use rita_common::tunnel_manager::TunnelManager;
 use rita_common::utils::ip_increment::incrementv4;
-use rita_common::KI;
+use rita_common::{tm_identity_callback, KI};
 use std::boxed::Box;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -127,65 +126,68 @@ pub fn light_client_hello_response(
             ifidx: 0, // only works because we lookup ifname in kernel interface
         };
 
+        let tunnel = tm_identity_callback(IdentityCallback::new(
+            their_id,
+            peer,
+            None,
+            light_client_address_option,
+        ));
+        let (tunnel, have_tunnel) = match tunnel {
+            Some(val) => val,
+            None => {
+                error!("Light Client Manager: tunnel open failure!");
+                return Either::A(future::ok(
+                    HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+                        .into_builder()
+                        .json(err_mesg),
+                ));
+            }
+        };
+        let lci = LightClientLocalIdentity {
+            global: match settings::get_rita_client().get_identity() {
+                Some(id) => id,
+                None => {
+                    error!("Light Client Manager: Identity has no mesh IP ready yet");
+                    return Either::A(future::ok(
+                        HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+                            .into_builder()
+                            .json(err_mesg),
+                    ));
+                }
+            },
+            wg_port: tunnel.listen_port,
+            have_tunnel: Some(have_tunnel),
+            tunnel_address: light_client_address,
+            price: settings::get_rita_client().payment.light_client_fee as u128 + exit_dest_price,
+        };
+        // Two bools -> 4 state truth table, in 3 of
+        // those states we need to re-add these rules
+        // router phone
+        // false false  we need to add rules to new tunnel
+        // true  false  tunnel will be re-created so new rules
+        // false true   new tunnel on our side new rules
+        // true  true   only case where we don't need to run this
+        if let Some(they_have_tunnel) = their_id.have_tunnel {
+            if !(have_tunnel && they_have_tunnel) {
+                if let Err(e) =
+                    setup_light_client_forwarding(light_client_address, &tunnel.iface_name)
+                {
+                    error!("Light Client Manager: {}", e);
+                    return Either::A(future::ok(
+                        HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+                            .into_builder()
+                            .json(err_mesg),
+                    ));
+                }
+            }
+        } else {
+            error!("Light clients should never send the none tunnel option!");
+        }
+        let response = HttpResponse::Ok().json(lci);
         // We send the callback, which can safely allocate a port because it already successfully
         // contacted a neighbor. The exception to this is when the TCP session fails at exactly
         // the wrong time.
-        Either::B(
-            TunnelManager::from_registry()
-                .send(IdentityCallback::new(
-                    their_id,
-                    peer,
-                    None,
-                    light_client_address_option,
-                ))
-                .from_err()
-                .and_then(move |tunnel| {
-                    let (tunnel, have_tunnel) = match tunnel {
-                        Some(val) => val,
-                        None => {
-                            return Err(RitaClientError::MiscStringError(
-                                "tunnel open failure!".to_string(),
-                            ))
-                        }
-                    };
-
-                    let lci = LightClientLocalIdentity {
-                        global: match settings::get_rita_client().get_identity() {
-                            Some(id) => id,
-                            None => {
-                                return Err(RitaClientError::MiscStringError(
-                                    "Identity has no mesh IP ready yet".to_string(),
-                                ))
-                            }
-                        },
-                        wg_port: tunnel.listen_port,
-                        have_tunnel: Some(have_tunnel),
-                        tunnel_address: light_client_address,
-                        price: settings::get_rita_client().payment.light_client_fee as u128
-                            + exit_dest_price,
-                    };
-                    // Two bools -> 4 state truth table, in 3 of
-                    // those states we need to re-add these rules
-                    // router phone
-                    // false false  we need to add rules to new tunnel
-                    // true  false  tunnel will be re-created so new rules
-                    // false true   new tunnel on our side new rules
-                    // true  true   only case where we don't need to run this
-                    if let Some(they_have_tunnel) = their_id.have_tunnel {
-                        if !(have_tunnel && they_have_tunnel) {
-                            setup_light_client_forwarding(
-                                light_client_address,
-                                &tunnel.iface_name,
-                            )?;
-                        }
-                    } else {
-                        error!("Light clients should never send the none tunnel option!");
-                    }
-
-                    let response = HttpResponse::Ok().json(lci);
-                    Ok(response)
-                }),
-        )
+        Either::B(future::ok(response))
     }))
 }
 

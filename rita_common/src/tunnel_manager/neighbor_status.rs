@@ -1,4 +1,5 @@
-use super::{PaymentState, TunnelManager};
+use super::PaymentState;
+use super::TUNNEL_MANAGER;
 use althea_types::Identity;
 use althea_types::NeighborStatus;
 use std::collections::HashMap;
@@ -18,7 +19,8 @@ pub fn get_neighbor_status() -> HashMap<Identity, NeighborStatus> {
 }
 
 /// Handles updates to neighbor status with lazy static lock
-pub fn update_neighbor_status(tunnel_manager: &mut TunnelManager) {
+pub fn update_neighbor_status() {
+    let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
     let mut external_list = NEIGHBOR_STATUS.write().unwrap();
     for (id, tunnel_list) in tunnel_manager.tunnels.iter() {
         // we may have many tunnels with this same peer, we want to get

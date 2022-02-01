@@ -21,12 +21,13 @@ use actix::{
 use actix_async::System as AsyncSystem;
 use actix_web::http::Method;
 use actix_web::{server, App};
+use althea_kernel_interface::KI;
 use althea_types::ExitState;
 use antenna_forwarding_client::start_antenna_forwarding_proxy;
 use futures01::future::Future;
-use rita_common::tunnel_manager::GetNeighbors;
-use rita_common::tunnel_manager::GetTunnels;
-use rita_common::tunnel_manager::TunnelManager;
+use rita_common::rita_loop::set_gateway;
+use rita_common::tunnel_manager::tm_get_neighbors;
+use rita_common::tunnel_manager::tm_get_tunnels;
 use settings::client::RitaClientSettings;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -113,23 +114,17 @@ impl Handler<Tick> for RitaLoop {
         let start = Instant::now();
         trace!("Client Tick!");
 
-        Arbiter::spawn(check_for_gateway_client_billing_corner_case());
-
         let exit_dest_price = get_exit_dest_price();
-        let tunnels = TunnelManager::from_registry().send(GetTunnels);
-        Arbiter::spawn(tunnels.then(move |res| {
-            // unwrap top level actix error, ok to crash if this fails
-            let tunnels = res.unwrap();
-            // these can't ever happen as the function only returns a Result for Actix
-            // type checking
-            let tunnels = tunnels.unwrap();
+        let tunnels = tm_get_tunnels().unwrap();
+
+        Arbiter::spawn(
             LightClientManager::from_registry()
                 .send(Watch {
                     tunnels,
                     exit_dest_price,
                 })
-                .then(|_res| Ok(()))
-        }));
+                .then(|_res| Ok(())),
+        );
 
         if metrics_permitted() {
             send_udp_heartbeat();
@@ -167,6 +162,9 @@ pub fn start_rita_loop() {
 
                 let runner = AsyncSystem::new();
                 runner.block_on(async move {
+                    manage_gateway();
+
+                    check_for_gateway_client_billing_corner_case();
                     // update the client exit manager, which handles exit registrations
                     // and manages the exit state machine in general. This includes
                     // updates to the local ip and description from the exit side
@@ -205,43 +203,39 @@ pub fn check_rita_client_actors() {
 /// the exit who just has the single billing id for the client and is combining debts
 /// This function grabs neighbors and determines if we have a neighbor with the same mesh ip
 /// and eth address as our selected exit, if we do we trigger the special case handling
-fn check_for_gateway_client_billing_corner_case() -> impl Future<Item = (), Error = ()> {
-    TunnelManager::from_registry()
-        .send(GetNeighbors)
-        .timeout(CLIENT_LOOP_TIMEOUT)
-        .then(move |res| {
-            // strange notation lets us scope our access to SETTING and prevent
-            // holding a readlock
-            let exit_server = {
-                settings::get_rita_client()
-                    .exit_client
-                    .get_current_exit()
-                    .cloned()
-            };
-            let neighbors = res.unwrap().unwrap();
-
-            if let Some(exit) = exit_server {
-                if let ExitState::Registered { .. } = exit.info {
-                    for neigh in neighbors {
-                        // we have a neighbor who is also our selected exit!
-                        // wg_key excluded due to multihomed exits having a different one
-                        if neigh.identity.global.mesh_ip
-                            == exit
-                                .selected_exit
-                                .selected_id
-                                .expect("Expected exit ip, none present")
-                            && neigh.identity.global.eth_address == exit.eth_address
-                        {
-                            info!("We are a gateway client");
-                            set_gateway_client(true);
-                            return Ok(());
-                        }
-                    }
-                    set_gateway_client(false);
+fn check_for_gateway_client_billing_corner_case() {
+    let res = tm_get_neighbors();
+    // strange notation lets us scope our access to SETTING and prevent
+    // holding a readlock
+    let exit_server = {
+        settings::get_rita_client()
+            .exit_client
+            .get_current_exit()
+            .cloned()
+    };
+    let neighbors = res;
+    if let Some(exit) = exit_server {
+        if let ExitState::Registered { .. } = exit.info {
+            for neigh in neighbors {
+                info!("Neighbor is {:?}", neigh);
+                // we have a neighbor who is also our selected exit!
+                // wg_key excluded due to multihomed exits having a different one
+                if neigh.identity.global.mesh_ip
+                    == exit
+                        .selected_exit
+                        .selected_id
+                        .expect("Expected exit ip, none present")
+                    && neigh.identity.global.eth_address == exit.eth_address
+                {
+                    info!("We are a gateway client");
+                    set_gateway_client(true);
+                    return;
                 }
             }
-            Ok(())
-        })
+            info!("We are NOT a gateway client");
+            set_gateway_client(false);
+        }
+    }
 }
 
 pub fn start_rita_client_endpoints(workers: usize) {
@@ -290,5 +284,37 @@ pub fn start_antenna_forwarder(settings: RitaClientSettings) {
             network.wg_private_key.unwrap(),
             interfaces,
         );
+    }
+}
+
+/// Manages gateway functionality and maintains the gateway parameter, this is different from the gateway
+/// identification in rita_client because this must function even if we aren't registered for an exit it's also
+/// very prone to being true when the device has a wan port but no actual wan connection.
+fn manage_gateway() {
+    // Resolves the gateway client corner case
+    // Background info here https://forum.altheamesh.com/t/the-gateway-client-corner-case/35
+    // the is_up detection is mostly useless because these ports reside on switches which mark
+    // all ports as up all the time.
+    let gateway = match settings::get_rita_common().network.external_nic {
+        Some(ref external_nic) => KI.is_iface_up(external_nic).unwrap_or(false),
+        None => false,
+    };
+
+    info!("We are a Gateway: {}", gateway);
+    set_gateway(gateway);
+
+    if gateway {
+        let mut common = settings::get_rita_common();
+        match KI.get_resolv_servers() {
+            Ok(s) => {
+                for ip in s.iter() {
+                    trace!("Resolv route {:?}", ip);
+                    KI.manual_peers_route(ip, &mut common.network.last_default_route)
+                        .unwrap();
+                }
+                settings::set_rita_common(common);
+            }
+            Err(e) => warn!("Failed to add DNS routes with {:?}", e),
+        }
     }
 }

@@ -7,8 +7,7 @@
 
 use crate::peer_listener::Peer;
 use crate::tunnel_manager::id_callback::IdentityCallback;
-use crate::tunnel_manager::TunnelManager;
-use crate::RitaCommonError;
+use crate::{tm_identity_callback, RitaCommonError};
 use actix::{Actor, Context, Handler, Message, ResponseFuture, Supervised, SystemService};
 use actix_web::client::Connection;
 use actix_web::{client, HttpMessage, Result};
@@ -92,7 +91,7 @@ impl Handler<Hello> for HelloHandler {
                 match response {
                     Ok(response) => Box::new(response.json().then(move |val| match val {
                         Ok(val) => {
-                            TunnelManager::from_registry().do_send(IdentityCallback::new(
+                            tm_identity_callback(IdentityCallback::new(
                                 val,
                                 peer,
                                 Some(wg_port),

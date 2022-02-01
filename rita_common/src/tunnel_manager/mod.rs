@@ -9,21 +9,19 @@ pub mod id_callback;
 pub mod neighbor_status;
 pub mod shaping;
 
-use crate::handle_shaping;
 use crate::hello_handler::Hello;
 use crate::peer_listener::Hello as NewHello;
 use crate::peer_listener::PeerListener;
 use crate::peer_listener::PEER_LISTENER;
 use crate::peer_listener::{send_hello, Peer};
 use crate::rita_loop::is_gateway;
-use crate::update_neighbor_status;
 use crate::RitaCommonError;
 use crate::FAST_LOOP_TIMEOUT;
 use crate::KI;
 #[cfg(test)]
 use actix::actors::mocker::Mocker;
 use actix::actors::resolver;
-use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
+use actix::{Arbiter, SystemService};
 use althea_kernel_interface::open_tunnel::TunnelOpenArgs;
 use althea_types::Identity;
 use althea_types::LocalIdentity;
@@ -48,9 +46,12 @@ use std::time::{Duration, Instant};
 struct NetworkMonitorQueue {}
 
 lazy_static! {
-    /// Partial storage for tunnel manager data, Tunnel Manager is not fully migrated to async/await so this stores
-    /// data that other modules need to send to tunnel manager for it to dequeue later.
-    static ref TUNNEL_MANAGER: Arc<RwLock<NetworkMonitorQueue>> = Arc::new(RwLock::new(NetworkMonitorQueue::default()));
+    static ref TUNNEL_MANAGER: Arc<RwLock<TunnelManager>> =
+        Arc::new(RwLock::new(TunnelManager::default()));
+}
+
+pub fn get_tunnel_manager() -> TunnelManager {
+    TUNNEL_MANAGER.read().unwrap().clone()
 }
 
 #[cfg(test)]
@@ -277,19 +278,10 @@ impl Tunnel {
     }
 }
 
+#[derive(Clone)]
 pub struct TunnelManager {
     free_ports: VecDeque<u16>,
     tunnels: HashMap<Identity, Vec<Tunnel>>,
-}
-
-impl Actor for TunnelManager {
-    type Context = Context<Self>;
-}
-impl Supervised for TunnelManager {}
-impl SystemService for TunnelManager {
-    fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        info!("Tunnel manager started");
-    }
 }
 
 impl Default for TunnelManager {
@@ -324,45 +316,33 @@ impl Neighbor {
     }
 }
 
-impl Message for GetNeighbors {
-    type Result = Result<Vec<Neighbor>, RitaCommonError>;
-}
-impl Handler<GetNeighbors> for TunnelManager {
-    type Result = Result<Vec<Neighbor>, RitaCommonError>;
-
-    fn handle(&mut self, _: GetNeighbors, _: &mut Context<Self>) -> Self::Result {
-        let mut res = Vec::new();
-        for (_, tunnels) in self.tunnels.iter() {
-            for tunnel in tunnels.iter() {
-                res.push(Neighbor::new(
-                    tunnel.neigh_id,
-                    tunnel.iface_name.clone(),
-                    tunnel.ip,
-                    tunnel.speed_limit,
-                ));
-            }
+pub fn tm_get_neighbors() -> Vec<Neighbor> {
+    let tunnel_manager = get_tunnel_manager();
+    let mut res = Vec::new();
+    for (_, tunnels) in tunnel_manager.tunnels.iter() {
+        for tunnel in tunnels.iter() {
+            res.push(Neighbor::new(
+                tunnel.neigh_id,
+                tunnel.iface_name.clone(),
+                tunnel.ip,
+                tunnel.speed_limit,
+            ));
         }
-        Ok(res)
     }
+    res
 }
 
 pub struct GetTunnels;
 
-impl Message for GetTunnels {
-    type Result = Result<Vec<Tunnel>, RitaCommonError>;
-}
-impl Handler<GetTunnels> for TunnelManager {
-    type Result = Result<Vec<Tunnel>, RitaCommonError>;
-
-    fn handle(&mut self, _: GetTunnels, _: &mut Context<Self>) -> Self::Result {
-        let mut res = Vec::new();
-        for (_, tunnels) in self.tunnels.iter() {
-            for tunnel in tunnels.iter() {
-                res.push(tunnel.clone());
-            }
+pub fn tm_get_tunnels() -> Result<Vec<Tunnel>, RitaCommonError> {
+    let tunnel_manager = get_tunnel_manager();
+    let mut res = Vec::new();
+    for (_, tunnels) in tunnel_manager.tunnels.iter() {
+        for tunnel in tunnels.iter() {
+            res.push(tunnel.clone());
         }
-        Ok(res)
     }
+    Ok(res)
 }
 
 pub struct PeersToContact {
@@ -375,68 +355,55 @@ impl PeersToContact {
     }
 }
 
-impl Message for PeersToContact {
-    type Result = ();
-}
-
 /// Takes a list of peers to contact and dispatches requests if you have a WAN connection
-/// it will also dispatch neighbor requests to manual peers
-impl Handler<PeersToContact> for TunnelManager {
-    type Result = ();
-    fn handle(&mut self, msg: PeersToContact, _ctx: &mut Context<Self>) -> Self::Result {
-        // TODO remove these in TunnelManager async/await migration and move to its own function
-        // these are put here so that they are run, not for any logical reason
-        update_neighbor_status(self);
-        handle_shaping(self);
+/// it will also dispatch neighbor requests to manual peersINGS MENTIONED
+pub fn tm_contact_peers(msg: PeersToContact) {
+    let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
 
-        let network_settings = settings::get_rita_common().network;
-        let manual_peers = network_settings.manual_peers.clone();
-        let is_gateway = is_gateway();
-        let rita_hello_port = network_settings.rita_hello_port;
-        drop(network_settings);
-
-        // Hold a lock on shared state until we finish sending all messages. This prevents a race condition
-        // where the hashmaps get cleared out during subsequent ticks
-        let writer = &mut *PEER_LISTENER.write().unwrap();
-
-        trace!("TunnelManager contacting peers");
-        for (_, peer) in msg.peers.iter() {
-            let res = self.neighbor_inquiry(peer, false, writer);
-            if res.is_err() {
-                warn!("Neighbor inqury for {:?} failed! with {:?}", peer, res);
-            }
+    let network_settings = settings::get_rita_common().network;
+    let manual_peers = network_settings.manual_peers.clone();
+    let is_gateway = is_gateway();
+    let rita_hello_port = network_settings.rita_hello_port;
+    drop(network_settings);
+    // Hold a lock on shared state until we finish sending all messages. This prevents a race condition
+    // where the hashmaps get cleared out during subsequent ticks
+    let writer = &mut *PEER_LISTENER.write().unwrap();
+    trace!("TunnelManager contacting peers");
+    for (_, peer) in msg.peers.iter() {
+        let res = tunnel_manager.neighbor_inquiry(peer, false, writer);
+        if res.is_err() {
+            warn!("Neighbor inqury for {:?} failed! with {:?}", peer, res);
         }
-        for manual_peer in manual_peers.iter() {
-            let ip = manual_peer.parse::<IpAddr>();
-
-            match ip {
-                Ok(ip) => {
-                    let socket = SocketAddr::new(ip, rita_hello_port);
-                    let man_peer = Peer {
-                        ifidx: 0,
-                        contact_socket: socket,
-                    };
-                    let res = self.neighbor_inquiry(&man_peer, true, writer);
+    }
+    for manual_peer in manual_peers.iter() {
+        let ip = manual_peer.parse::<IpAddr>();
+        match ip {
+            Ok(ip) => {
+                let socket = SocketAddr::new(ip, rita_hello_port);
+                let man_peer = Peer {
+                    ifidx: 0,
+                    contact_socket: socket,
+                };
+                let res = tunnel_manager.neighbor_inquiry(&man_peer, true, writer);
+                if res.is_err() {
+                    warn!(
+                        "Neighbor inqury for {:?} failed with: {:?}",
+                        manual_peer, res
+                    );
+                }
+            }
+            Err(_) => {
+                // Do not contact manual peers on the internet if we are not a gateway
+                // it will just fill the logs with failed dns resolution attempts or result
+                // in bad behavior, we do allow the addressing of direct ip address gateways
+                // for the special case that the user is attempting some special behavior
+                if is_gateway {
+                    let res = tunnel_manager.neighbor_inquiry_hostname(manual_peer.to_string());
                     if res.is_err() {
                         warn!(
                             "Neighbor inqury for {:?} failed with: {:?}",
                             manual_peer, res
                         );
-                    }
-                }
-                Err(_) => {
-                    // Do not contact manual peers on the internet if we are not a gateway
-                    // it will just fill the logs with failed dns resolution attempts or result
-                    // in bad behavior, we do allow the addressing of direct ip address gateways
-                    // for the special case that the user is attempting some special behavior
-                    if is_gateway {
-                        let res = self.neighbor_inquiry_hostname(manual_peer.to_string());
-                        if res.is_err() {
-                            warn!(
-                                "Neighbor inqury for {:?} failed with: {:?}",
-                                manual_peer, res
-                            );
-                        }
                     }
                 }
             }
@@ -847,20 +814,13 @@ pub struct TunnelStateChange {
     pub tunnels: Vec<TunnelChange>,
 }
 
-impl Message for TunnelStateChange {
-    type Result = Result<(), RitaCommonError>;
-}
-
-// Called by DebtKeeper with the updated billing status of every tunnel every round
-impl Handler<TunnelStateChange> for TunnelManager {
-    type Result = Result<(), RitaCommonError>;
-
-    fn handle(&mut self, msg: TunnelStateChange, _: &mut Context<Self>) -> Self::Result {
-        for tunnel in msg.tunnels {
-            tunnel_state_change(tunnel, &mut self.tunnels);
-        }
-        Ok(())
+/// Called by DebtKeeper with the updated billing status of every tunnel every round
+pub fn tm_tunnel_state_change(msg: TunnelStateChange) -> Result<(), RitaCommonError> {
+    let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
+    for tunnel in msg.tunnels {
+        tunnel_state_change(tunnel, &mut tunnel_manager.tunnels);
     }
+    Ok(())
 }
 
 fn tunnel_state_change(msg: TunnelChange, tunnels: &mut HashMap<Identity, Vec<Tunnel>>) {
