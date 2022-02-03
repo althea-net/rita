@@ -13,9 +13,6 @@ use rita_common::tunnel_manager::shaping::flag_reset_shaper;
 use rita_common::utils::option_convert;
 use updater::update_rita;
 
-use actix::{Actor, Arbiter, Context, Handler, Message, Supervised, SystemService};
-use actix_web::Error;
-use actix_web::{client, HttpMessage};
 use althea_kernel_interface::hardware_info::get_hardware_info;
 use althea_kernel_interface::opkg_feeds::get_release_feed;
 use althea_kernel_interface::opkg_feeds::set_release_feed;
@@ -23,7 +20,6 @@ use althea_kernel_interface::opkg_feeds::set_release_feed;
 use althea_types::OperatorAction;
 use althea_types::OperatorCheckinMessage;
 use althea_types::OperatorUpdateMessage;
-use futures01::Future;
 use num256::Uint256;
 use rita_common::KI;
 use serde_json::Map;
@@ -72,6 +68,8 @@ lazy_static! {
     pub static ref RITA_UPTIME: Instant = Instant::now();
     pub static ref TIME_PASSED: Arc<RwLock<UptimeStruct>> =
         Arc::new(RwLock::new(UptimeStruct::new()));
+    static ref OPERATOR_UPDATE: Arc<RwLock<OperatorUpdate>> =
+        Arc::new(RwLock::new(OperatorUpdate::default()));
 }
 
 /// Perform operator updates every UPDATE_FREQUENCY seconds,
@@ -80,17 +78,6 @@ const UPDATE_FREQUENCY: Duration = Duration::from_secs(60);
 
 pub struct OperatorUpdate {
     last_update: Instant,
-}
-
-impl Actor for OperatorUpdate {
-    type Context = Context<Self>;
-}
-
-impl Supervised for OperatorUpdate {}
-impl SystemService for OperatorUpdate {
-    fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        info!("OperatorUpdate started");
-    }
 }
 
 impl OperatorUpdate {
@@ -112,23 +99,19 @@ impl Default for OperatorUpdate {
 /// in the rita_client loop
 pub const OPERATOR_UPDATE_TIMEOUT: Duration = CLIENT_LOOP_TIMEOUT;
 
-#[derive(Message)]
 pub struct Update;
 
-impl Handler<Update> for OperatorUpdate {
-    type Result = ();
-
-    fn handle(&mut self, _msg: Update, _ctx: &mut Context<Self>) -> Self::Result {
-        let time_elapsed = Instant::now().checked_duration_since(self.last_update);
-        if time_elapsed.is_some() && time_elapsed.unwrap() > UPDATE_FREQUENCY {
-            checkin();
-            self.last_update = Instant::now();
-        }
+pub async fn operator_update() {
+    let operator_update = &mut *OPERATOR_UPDATE.write().unwrap();
+    let time_elapsed = Instant::now().checked_duration_since(operator_update.last_update);
+    if time_elapsed.is_some() && time_elapsed.unwrap() > UPDATE_FREQUENCY {
+        checkin().await;
+        operator_update.last_update = Instant::now();
     }
 }
 
 /// Checks in with the operator server
-fn checkin() {
+async fn checkin() {
     let url: &str;
     if cfg!(feature = "dev_env") {
         url = "http://0.0.0.0:8080/checkin";
@@ -186,9 +169,11 @@ fn checkin() {
         }
     };
 
-    let res = client::post(url)
-        .header("User-Agent", "Actix-web")
-        .json(OperatorCheckinMessage {
+    let client = awc::Client::default();
+    let response = client
+        .post(url)
+        .timeout(OPERATOR_UPDATE_TIMEOUT)
+        .send_json(&OperatorCheckinMessage {
             id,
             operator_address,
             system_chain,
@@ -200,107 +185,99 @@ fn checkin() {
             user_bandwidth_limit,
             rita_uptime: TIME_PASSED.write().unwrap().time_elapsed(&RITA_UPTIME),
         })
-        .unwrap()
-        .send()
-        .timeout(OPERATOR_UPDATE_TIMEOUT)
-        .from_err()
-        .and_then(move |response| {
+        .await;
+
+    let response = match response {
+        Ok(mut response) => {
             trace!("Response is {:?}", response.status());
             trace!("Response is {:?}", response.headers());
-            response
-                .json()
-                .from_err()
-                .and_then(move |new_settings: OperatorUpdateMessage| {
-                    let mut rita_client = settings::get_rita_client();
+            response.json().await
+        }
+        Err(e) => {
+            error!("Failed to perform operator checkin with {:?}", e);
+            return;
+        }
+    };
 
-                    let mut network = rita_client.network;
-                    trace!("Updating from operator settings");
-                    let mut payment = rita_client.payment;
+    let new_settings: OperatorUpdateMessage = match response {
+        Ok(a) => a,
+        Err(e) => {
+            error!("Failed to perform operator checkin with {:?}", e);
+            return;
+        }
+    };
 
-                    if use_operator_price {
-                        // This will be true on devices that have integrated switches
-                        // and a wan port configured. Mostly not a problem since we stopped
-                        // shipping wan ports by default
-                        if is_gateway {
-                            payment.local_fee = new_settings.gateway;
-                        } else {
-                            payment.local_fee = new_settings.relay;
-                        }
-                        payment.light_client_fee = new_settings.phone_relay;
-                    } else {
-                        info!("User has disabled the OperatorUpdate!");
-                    }
+    let mut rita_client = settings::get_rita_client();
 
-                    payment.max_fee = new_settings.max;
-                    payment.balance_warning_level = new_settings.warning.into();
-                    if let Some(new_chain) = new_settings.system_chain {
-                        if payment.system_chain != new_chain {
-                            set_system_blockchain(new_chain, &mut payment);
-                        }
-                    }
-                    if let Some(new_chain) = new_settings.withdraw_chain {
-                        payment.withdraw_chain = new_chain;
-                    }
-                    rita_client.payment = payment;
-                    trace!("Done with payment");
-
-                    let mut operator = rita_client.operator;
-                    let new_operator_fee = Uint256::from(new_settings.operator_fee);
-                    operator.operator_fee = new_operator_fee;
-                    rita_client.operator = operator;
-
-                    merge_settings_safely(new_settings.merge_json);
-
-                    //Every tick, update the local router update instructions
-                    set_router_update_instruction(new_settings.local_update_instruction);
-
-                    match new_settings.operator_action {
-                        Some(OperatorAction::ResetShaper) => flag_reset_shaper(),
-                        Some(OperatorAction::Reboot) => {
-                            let _res = KI.run_command("reboot", &[]);
-                        }
-                        Some(OperatorAction::ResetRouterPassword) => {
-                            network.rita_dashboard_password = None;
-                        }
-                        Some(OperatorAction::ResetWiFiPassword) => {
-                            let _res = reset_wifi_pass();
-                        }
-                        Some(OperatorAction::ChangeOperatorAddress { new_address }) => {
-                            rita_client.operator.operator_address = new_address;
-                        }
-                        Some(OperatorAction::Update { instruction }) => {
-                            info!(
-                                "Received an update command from op tools! The instruction is {:?}",
-                                instruction
-                            );
-                            let res = update_rita(instruction);
-                            info!("Update command result is {:?}", res);
-                        }
-                        // both of these actions have been removed, but need to be kept
-                        // for backwards compatibility for a while
-                        Some(OperatorAction::ChangeReleaseFeedAndUpdate { feed: _ }) => {
-                            info!("Got outdated command ChangeReleaseFeedAndUpdate")
-                        }
-                        Some(OperatorAction::UpdateNow) => info!("Got outdated command UpdateNow"),
-                        None => {}
-                    }
-
-                    network.shaper_settings = new_settings.shaper_settings;
-                    rita_client.network = network;
-
-                    settings::set_rita_client(rita_client);
-                    trace!("Successfully completed OperatorUpdate");
-                    Ok(())
-                })
-        })
-        .then(|res: Result<(), Error>| {
-            if let Err(e) = res {
-                error!("Failed to perform operator checkin with {:?}", e);
-            }
-            Ok(())
-        });
-
-    Arbiter::spawn(res);
+    let mut network = rita_client.network;
+    trace!("Updating from operator settings");
+    let mut payment = rita_client.payment;
+    if use_operator_price {
+        // This will be true on devices that have integrated switches
+        // and a wan port configured. Mostly not a problem since we stopped
+        // shipping wan ports by default
+        if is_gateway {
+            payment.local_fee = new_settings.gateway;
+        } else {
+            payment.local_fee = new_settings.relay;
+        }
+        payment.light_client_fee = new_settings.phone_relay;
+    } else {
+        info!("User has disabled the OperatorUpdate!");
+    }
+    payment.max_fee = new_settings.max;
+    payment.balance_warning_level = new_settings.warning.into();
+    if let Some(new_chain) = new_settings.system_chain {
+        if payment.system_chain != new_chain {
+            set_system_blockchain(new_chain, &mut payment);
+        }
+    }
+    if let Some(new_chain) = new_settings.withdraw_chain {
+        payment.withdraw_chain = new_chain;
+    }
+    rita_client.payment = payment;
+    trace!("Done with payment");
+    let mut operator = rita_client.operator;
+    let new_operator_fee = Uint256::from(new_settings.operator_fee);
+    operator.operator_fee = new_operator_fee;
+    rita_client.operator = operator;
+    merge_settings_safely(new_settings.merge_json);
+    //Every tick, update the local router update instructions
+    set_router_update_instruction(new_settings.local_update_instruction);
+    match new_settings.operator_action {
+        Some(OperatorAction::ResetShaper) => flag_reset_shaper(),
+        Some(OperatorAction::Reboot) => {
+            let _res = KI.run_command("reboot", &[]);
+        }
+        Some(OperatorAction::ResetRouterPassword) => {
+            network.rita_dashboard_password = None;
+        }
+        Some(OperatorAction::ResetWiFiPassword) => {
+            let _res = reset_wifi_pass();
+        }
+        Some(OperatorAction::ChangeOperatorAddress { new_address }) => {
+            rita_client.operator.operator_address = new_address;
+        }
+        Some(OperatorAction::Update { instruction }) => {
+            info!(
+                "Received an update command from op tools! The instruction is {:?}",
+                instruction
+            );
+            let res = update_rita(instruction);
+            info!("Update command result is {:?}", res);
+        }
+        // both of these actions have been removed, but need to be kept
+        // for backwards compatibility for a while
+        Some(OperatorAction::ChangeReleaseFeedAndUpdate { feed: _ }) => {
+            info!("Got outdated command ChangeReleaseFeedAndUpdate")
+        }
+        Some(OperatorAction::UpdateNow) => info!("Got outdated command UpdateNow"),
+        None => {}
+    }
+    network.shaper_settings = new_settings.shaper_settings;
+    rita_client.network = network;
+    settings::set_rita_client(rita_client);
+    trace!("Successfully completed OperatorUpdate");
 }
 
 /// Allows for online updating of the release feed, note that this not run
@@ -399,6 +376,7 @@ mod tests {
         }
     }
 }
+
 #[test]
 fn test_rita_uptime() {
     // exact key match should fail
