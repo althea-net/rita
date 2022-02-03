@@ -39,6 +39,8 @@ pub enum InterfaceMode {
         ipaddr: Ipv4Addr,
         gateway: Ipv4Addr,
     },
+    /// Similar to WAN, but not a gateway, so no static DNS routes and only IP peers (10.45.0.1)
+    LTE,
     /// This represents a port dedicated to phone network extending antennas. This is an extension of the
     /// AltheaMobile SSID and can be boiled down to attaching the port to br-pbs over which devices will
     /// then be assigned phone network DHCP and IPs
@@ -57,6 +59,7 @@ impl ToString for InterfaceMode {
             InterfaceMode::StaticWan { .. } => "StaticWAN".to_owned(),
             InterfaceMode::Phone => "Phone".to_owned(),
             InterfaceMode::Unknown => "unknown".to_owned(),
+            InterfaceMode::LTE => "LTE".to_owned(),
         }
     }
 }
@@ -105,6 +108,7 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
         s if s.contains("rita_") => InterfaceMode::Mesh,
         s if s.contains("lan") => InterfaceMode::Lan,
         s if s.contains("pbs") => InterfaceMode::Phone,
+        s if s.contains("lte") => InterfaceMode::LTE,
         s if s.contains("backhaul") => {
             let prefix = "network.backhaul";
             let backhaul = KI.uci_show(Some(prefix))?;
@@ -152,7 +156,7 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
 }
 
 fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), RitaClientError> {
-    trace!("InterfaceToSet recieved");
+    trace!("InterfaceToSet received");
     let iface_name = iface_name;
     let target_mode = mode;
     let interfaces = get_interfaces()?;
@@ -161,13 +165,14 @@ fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), RitaC
         return Err(RitaClientError::InterfaceModeError(
             "Attempted to configure non-existant or unavailable interface!".to_string(),
         ));
-    } else if target_mode == InterfaceMode::Wan {
+    } else if target_mode == InterfaceMode::Wan || target_mode == InterfaceMode::LTE {
         // we can only have one WAN interface, check for others
-        // StaticWAN entires are not identified seperately but if they ever are
+        // StaticWAN entries are not identified seperately but if they ever are
         // you'll have to handle them here
         for entry in interfaces {
+            let iface = entry.0;
             let mode = entry.1;
-            if mode == InterfaceMode::Wan {
+            if iface != iface_name && (mode == InterfaceMode::Wan || mode == InterfaceMode::LTE) {
                 return Err(RitaClientError::InterfaceModeError(
                     "There can only be one WAN interface!".to_string(),
                 ));
@@ -214,6 +219,11 @@ pub fn ethernet_transform_mode(
             network.external_nic = None;
 
             let ret = KI.del_uci_var("network.backhaul");
+            return_codes.push(ret);
+        }
+        // LTE is even simpler
+        InterfaceMode::LTE => {
+            let ret = KI.del_uci_var("network.lte");
             return_codes.push(ret);
         }
         // LAN is a bridge and the lan bridge must always remain because things
@@ -276,6 +286,14 @@ pub fn ethernet_transform_mode(
             let ret = KI.set_uci_var("network.backhaul.ipaddr", &format!("{}", ipaddr));
             return_codes.push(ret);
             let ret = KI.set_uci_var("network.backhaul.gateway", &format!("{}", gateway));
+            return_codes.push(ret);
+        }
+        InterfaceMode::LTE => {
+            let ret = KI.set_uci_var("network.lte", "interface");
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.lte.ifname", ifname);
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.lte.proto", "dhcp");
             return_codes.push(ret);
         }
         // since we left lan mostly unmodified we just pop in the ifname
