@@ -165,14 +165,13 @@ fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), RitaC
         return Err(RitaClientError::InterfaceModeError(
             "Attempted to configure non-existant or unavailable interface!".to_string(),
         ));
-    } else if target_mode == InterfaceMode::Wan || target_mode == InterfaceMode::LTE {
+    } else if target_mode == InterfaceMode::Wan {
         // we can only have one WAN interface, check for others
         // StaticWAN entries are not identified seperately but if they ever are
         // you'll have to handle them here
         for entry in interfaces {
-            let iface = entry.0;
             let mode = entry.1;
-            if iface != iface_name && (mode == InterfaceMode::Wan || mode == InterfaceMode::LTE) {
+            if mode == InterfaceMode::Wan {
                 return Err(RitaClientError::InterfaceModeError(
                     "There can only be one WAN interface!".to_string(),
                 ));
