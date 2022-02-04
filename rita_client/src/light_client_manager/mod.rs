@@ -4,14 +4,11 @@
 //! especially since the client traffic exits unencrypted at one point on the participating Rita Client router. Sadly this is unavoidable as
 //! far as I can tell due to the restrictive nature of how and when Android allows ipv6 routing.
 
-use actix::{Actor, Context, Handler, Message, Supervised, SystemService};
-use actix_web::http::StatusCode;
-use actix_web::{HttpRequest, HttpResponse, Json};
+use actix_web_async::http::StatusCode;
+use actix_web_async::{web::Json, HttpRequest, HttpResponse};
 use althea_kernel_interface::wg_iface_counter::prepare_usage_history;
 use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_types::{Identity, LightClientLocalIdentity, LocalIdentity, WgKey};
-use futures01::future::Either;
-use futures01::{future, Future};
 use rita_common::debt_keeper::traffic_update;
 use rita_common::debt_keeper::Traffic;
 use rita_common::peer_listener::Peer;
@@ -19,14 +16,18 @@ use rita_common::tunnel_manager::id_callback::IdentityCallback;
 use rita_common::tunnel_manager::Tunnel;
 use rita_common::utils::ip_increment::incrementv4;
 use rita_common::{tm_identity_callback, KI};
-use std::boxed::Box;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::Ipv4Addr;
-use std::net::SocketAddr;
+use std::sync::{Arc, RwLock};
 
 use crate::traffic_watcher::get_exit_dest_price;
 use crate::RitaClientError;
+
+lazy_static! {
+    static ref LIGHT_CLIENT_MANAGER: Arc<RwLock<LightClientManager>> =
+        Arc::new(RwLock::new(LightClientManager::default()));
+}
 
 /// Sets up a variant of the exit tunnel nat rules, assumes that the exit
 /// tunnel is already created and doesn't change the system routing table
@@ -68,127 +69,84 @@ fn setup_light_client_forwarding(client_addr: Ipv4Addr, nic: &str) -> Result<(),
 /// Response to the light_client_hello endpoint on the Rita client module with a modified hello packet
 /// this modified packet includes an ipv4 address and opens a modified tunnel that is attached to the
 /// phone network bridge into a natted ipv4 network rather than into a Babel network.
-pub fn light_client_hello_response(
-    req: (Json<LocalIdentity>, HttpRequest),
-) -> Box<dyn Future<Item = HttpResponse, Error = RitaClientError>> {
+pub async fn light_client_hello_response(req: (Json<LocalIdentity>, HttpRequest)) -> HttpResponse {
     let their_id = *req.0;
-    let a = LightClientManager::from_registry().send(GetAddress(their_id));
+    let light_client_address = lcm_get_address(GetAddress(their_id));
     let exit_dest_price = get_exit_dest_price();
 
-    Box::new(a.from_err().and_then(move |light_client_address| {
-        let err_mesg = "Malformed light client hello tcp packet!";
-        let socket = match req.1.connection_info().remote() {
-            Some(val) => match val.parse::<SocketAddr>() {
-                Ok(val) => val,
-                Err(e) => {
-                    error!("{}", e);
-                    return Either::A(future::ok(
-                        HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
-                            .into_builder()
-                            .json(err_mesg),
-                    ));
-                }
-            },
-            None => {
-                error!("{}", err_mesg);
-                return Either::A(future::ok(
-                    HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
-                        .into_builder()
-                        .json(err_mesg),
-                ));
-            }
-        };
-
-        let (light_client_address_option, light_client_address) = match light_client_address {
-            Ok(addr) => (Some(addr), addr),
-            Err(e) => {
-                let err_mesg = "Could not allocate address!";
-                error!("{} {}", err_mesg, e);
-                return Either::A(future::ok(
-                    HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
-                        .into_builder()
-                        .json(err_mesg),
-                ));
-            }
-        };
-
-        trace!(
-            "Got light client Hello from {:?}",
-            req.1.connection_info().remote()
-        );
-        trace!(
-            "opening tunnel in light_client_hello_response for {:?}",
-            their_id
-        );
-
-        let peer = Peer {
-            contact_socket: socket,
-            ifidx: 0, // only works because we lookup ifname in kernel interface
-        };
-
-        let tunnel = tm_identity_callback(IdentityCallback::new(
-            their_id,
-            peer,
-            None,
-            light_client_address_option,
-        ));
-        let (tunnel, have_tunnel) = match tunnel {
-            Some(val) => val,
-            None => {
-                error!("Light Client Manager: tunnel open failure!");
-                return Either::A(future::ok(
-                    HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
-                        .into_builder()
-                        .json(err_mesg),
-                ));
-            }
-        };
-        let lci = LightClientLocalIdentity {
-            global: match settings::get_rita_client().get_identity() {
-                Some(id) => id,
-                None => {
-                    error!("Light Client Manager: Identity has no mesh IP ready yet");
-                    return Either::A(future::ok(
-                        HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
-                            .into_builder()
-                            .json(err_mesg),
-                    ));
-                }
-            },
-            wg_port: tunnel.listen_port,
-            have_tunnel: Some(have_tunnel),
-            tunnel_address: light_client_address,
-            price: settings::get_rita_client().payment.light_client_fee as u128 + exit_dest_price,
-        };
-        // Two bools -> 4 state truth table, in 3 of
-        // those states we need to re-add these rules
-        // router phone
-        // false false  we need to add rules to new tunnel
-        // true  false  tunnel will be re-created so new rules
-        // false true   new tunnel on our side new rules
-        // true  true   only case where we don't need to run this
-        if let Some(they_have_tunnel) = their_id.have_tunnel {
-            if !(have_tunnel && they_have_tunnel) {
-                if let Err(e) =
-                    setup_light_client_forwarding(light_client_address, &tunnel.iface_name)
-                {
-                    error!("Light Client Manager: {}", e);
-                    return Either::A(future::ok(
-                        HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
-                            .into_builder()
-                            .json(err_mesg),
-                    ));
-                }
-            }
-        } else {
-            error!("Light clients should never send the none tunnel option!");
+    let err_mesg = "Malformed light client hello tcp packet!";
+    let socket = match req.1.peer_addr() {
+        Some(val) => val,
+        None => {
+            error!("{}", err_mesg);
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(err_mesg);
         }
-        let response = HttpResponse::Ok().json(lci);
-        // We send the callback, which can safely allocate a port because it already successfully
-        // contacted a neighbor. The exception to this is when the TCP session fails at exactly
-        // the wrong time.
-        Either::B(future::ok(response))
-    }))
+    };
+    let (light_client_address_option, light_client_address) = match light_client_address {
+        Ok(addr) => (Some(addr), addr),
+        Err(e) => {
+            let err_mesg = "Could not allocate address!";
+            error!("{} {}", err_mesg, e);
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(err_mesg);
+        }
+    };
+    trace!("Got light client Hello from {:?}", req.1.peer_addr());
+    trace!(
+        "opening tunnel in light_client_hello_response for {:?}",
+        their_id
+    );
+    let peer = Peer {
+        contact_socket: socket,
+        ifidx: 0, // only works because we lookup ifname in kernel interface
+    };
+    let tunnel = tm_identity_callback(IdentityCallback::new(
+        their_id,
+        peer,
+        None,
+        light_client_address_option,
+    ));
+    let (tunnel, have_tunnel) = match tunnel {
+        Some(val) => val,
+        None => {
+            error!("Light Client Manager: tunnel open failure!");
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(err_mesg);
+        }
+    };
+    let lci = LightClientLocalIdentity {
+        global: match settings::get_rita_client().get_identity() {
+            Some(id) => id,
+            None => {
+                error!("Light Client Manager: Identity has no mesh IP ready yet");
+                return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(err_mesg);
+            }
+        },
+        wg_port: tunnel.listen_port,
+        have_tunnel: Some(have_tunnel),
+        tunnel_address: light_client_address,
+        price: settings::get_rita_client().payment.light_client_fee as u128 + exit_dest_price,
+    };
+    // Two bools -> 4 state truth table, in 3 of
+    // those states we need to re-add these rules
+    // router phone
+    // false false  we need to add rules to new tunnel
+    // true  false  tunnel will be re-created so new rules
+    // false true   new tunnel on our side new rules
+    // true  true   only case where we don't need to run this
+    if let Some(they_have_tunnel) = their_id.have_tunnel {
+        if !(have_tunnel && they_have_tunnel) {
+            if let Err(e) = setup_light_client_forwarding(light_client_address, &tunnel.iface_name)
+            {
+                error!("Light Client Manager: {}", e);
+                return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(err_mesg);
+            }
+        }
+    } else {
+        error!("Light clients should never send the none tunnel option!");
+    }
+    // We send the callback, which can safely allocate a port because it already successfully
+    // contacted a neighbor. The exception to this is when the TCP session fails at exactly
+    // the wrong time.
+    HttpResponse::Ok().json(lci)
 }
 
 pub struct LightClientManager {
@@ -209,37 +167,17 @@ impl Default for LightClientManager {
     }
 }
 
-impl Actor for LightClientManager {
-    type Context = Context<Self>;
-
-    fn started(&mut self, _ctx: &mut Context<Self>) {
-        info!("Started LightClientManager")
-    }
-}
-
-impl Supervised for LightClientManager {}
-impl SystemService for LightClientManager {
-    fn service_started(&mut self, _ctx: &mut Context<Self>) {}
-}
-
 pub struct GetAddress(LocalIdentity);
 
-impl Message for GetAddress {
-    type Result = Result<Ipv4Addr, RitaClientError>;
-}
-
-impl Handler<GetAddress> for LightClientManager {
-    type Result = Result<Ipv4Addr, RitaClientError>;
-
-    fn handle(&mut self, msg: GetAddress, _: &mut Context<Self>) -> Self::Result {
-        let requester_id = msg.0;
-        assign_client_address(
-            &mut self.assigned_addresses,
-            requester_id.global,
-            self.start_address,
-            self.prefix,
-        )
-    }
+pub fn lcm_get_address(msg: GetAddress) -> Result<Ipv4Addr, RitaClientError> {
+    let lcm = &mut *LIGHT_CLIENT_MANAGER.write().unwrap();
+    let requester_id = msg.0;
+    assign_client_address(
+        &mut lcm.assigned_addresses,
+        requester_id.global,
+        lcm.start_address,
+        lcm.prefix,
+    )
 }
 
 fn assign_client_address(
@@ -323,51 +261,42 @@ pub struct Watch {
     pub exit_dest_price: u128,
 }
 
-impl Message for Watch {
-    type Result = ();
-}
-
-impl Handler<Watch> for LightClientManager {
-    type Result = ();
-
-    fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        trace!("Starting light client traffic watcher");
-        let our_price =
-            settings::get_rita_client().payment.light_client_fee as u128 + msg.exit_dest_price;
-        let tunnels = msg.tunnels;
-        let mut debts: HashMap<Identity, i128> = HashMap::new();
-        for tunnel in tunnels.iter() {
-            if let Some(_val) = tunnel.light_client_details {
-                if let Ok(counter) = KI.read_wg_counters(&tunnel.iface_name) {
-                    prepare_usage_history(&counter, &mut self.last_seen_bytes);
-                    // there should only be one, more than one client on a single
-                    // interface is not supported
-                    assert!(counter.len() == 1);
-                    // get only the first element
-                    let (key, usage) = counter.iter().next().unwrap();
-                    // unwrap is safe before prepare usage history will ensure an entry exits
-                    let last_seen_usage = self.last_seen_bytes.get_mut(key).unwrap();
-                    let round_upload = usage.upload - last_seen_usage.upload;
-                    let round_download = usage.download - last_seen_usage.download;
-                    *last_seen_usage = *usage;
-                    let debt = ((round_upload + round_download) * our_price as u64) as i128;
-                    subtract_or_insert_and_subtract(&mut debts, tunnel.neigh_id.global, debt);
-                }
+pub fn lcm_watch(msg: Watch) {
+    let lcm = &mut *LIGHT_CLIENT_MANAGER.write().unwrap();
+    trace!("Starting light client traffic watcher");
+    let our_price =
+        settings::get_rita_client().payment.light_client_fee as u128 + msg.exit_dest_price;
+    let tunnels = msg.tunnels;
+    let mut debts: HashMap<Identity, i128> = HashMap::new();
+    for tunnel in tunnels.iter() {
+        if let Some(_val) = tunnel.light_client_details {
+            if let Ok(counter) = KI.read_wg_counters(&tunnel.iface_name) {
+                prepare_usage_history(&counter, &mut lcm.last_seen_bytes);
+                // there should only be one, more than one client on a single
+                // interface is not supported
+                assert!(counter.len() == 1);
+                // get only the first element
+                let (key, usage) = counter.iter().next().unwrap();
+                // unwrap is safe before prepare usage history will ensure an entry exits
+                let last_seen_usage = lcm.last_seen_bytes.get_mut(key).unwrap();
+                let round_upload = usage.upload - last_seen_usage.upload;
+                let round_download = usage.download - last_seen_usage.download;
+                *last_seen_usage = *usage;
+                let debt = ((round_upload + round_download) * our_price as u64) as i128;
+                subtract_or_insert_and_subtract(&mut debts, tunnel.neigh_id.global, debt);
             }
         }
-
-        let mut traffic_vec = Vec::new();
-        for (from, amount) in debts {
-            traffic_vec.push(Traffic {
-                from,
-                amount: amount.into(),
-            })
-        }
-        traffic_update(traffic_vec);
-
-        // tunnel address garbage collection
-        return_addresses(&tunnels, &mut self.assigned_addresses);
     }
+    let mut traffic_vec = Vec::new();
+    for (from, amount) in debts {
+        traffic_vec.push(Traffic {
+            from,
+            amount: amount.into(),
+        })
+    }
+    traffic_update(traffic_vec);
+    // tunnel address garbage collection
+    return_addresses(&tunnels, &mut lcm.assigned_addresses);
 }
 
 /// inserts and also negates since negative means they owe us and we can never owe phone clients
