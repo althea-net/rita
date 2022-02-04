@@ -2,34 +2,16 @@
 
 use crate::payment_validator::{validate_later, ToValidate};
 use crate::peer_listener::Peer;
+use crate::tm_identity_callback;
 use crate::tunnel_manager::id_callback::IdentityCallback;
-use crate::{tm_identity_callback, RitaCommonError};
 
-use actix_web::http::StatusCode;
-use actix_web::{HttpRequest, HttpResponse, Json, Result};
+use actix_web::HttpRequest as OldHttpRequest;
+use actix_web_async::http::StatusCode;
+use actix_web_async::web::Json;
+
+use actix_web_async::{HttpRequest, HttpResponse};
 use althea_types::{LocalIdentity, PaymentTx};
-use std::net::SocketAddr;
 use std::time::Instant;
-
-#[derive(Serialize)]
-pub struct JsonStatusResponse {
-    response: String,
-}
-
-impl JsonStatusResponse {
-    pub fn new(
-        ret_val: Result<String, RitaCommonError>,
-    ) -> Result<Json<JsonStatusResponse>, RitaCommonError> {
-        let res_string = match ret_val {
-            Ok(msg) => msg,
-            Err(e) => format!("{}", e),
-        };
-
-        Ok(Json(JsonStatusResponse {
-            response: res_string,
-        }))
-    }
-}
 
 /// The recieve side of the make payments call
 pub fn make_payments(pmt: (Json<PaymentTx>, HttpRequest)) -> HttpResponse {
@@ -40,16 +22,13 @@ pub fn make_payments(pmt: (Json<PaymentTx>, HttpRequest)) -> HttpResponse {
     // why don't we need an Either up here? Because the types ultimately match?
     if txid.is_none() {
         error!("Did not find txid, payment failed!");
-        return HttpResponse::new(StatusCode::from_u16(400u16).unwrap())
-            .into_builder()
+        return HttpResponse::build(StatusCode::from_u16(400u16).unwrap())
             .json("txid not provided! Invalid payment!");
     } else if pmt.0.to.eth_address != our_address {
-        return HttpResponse::new(StatusCode::from_u16(400u16).unwrap())
-            .into_builder()
-            .json(format!(
-                "We are not {} our address is {}! Invalid payment",
-                pmt.0.to.eth_address, our_address
-            ));
+        return HttpResponse::build(StatusCode::from_u16(400u16).unwrap()).json(format!(
+            "We are not {} our address is {}! Invalid payment",
+            pmt.0.to.eth_address, our_address
+        ));
     }
     let txid = txid.unwrap();
     info!(
@@ -66,21 +45,16 @@ pub fn make_payments(pmt: (Json<PaymentTx>, HttpRequest)) -> HttpResponse {
     HttpResponse::Ok().json("Payment Received!")
 }
 
-pub fn hello_response(
-    req: (Json<LocalIdentity>, HttpRequest),
-) -> Result<Json<LocalIdentity>, RitaCommonError> {
+pub fn hello_response(req: (Json<LocalIdentity>, HttpRequest)) -> HttpResponse {
     let their_id = *req.0;
 
     let err_mesg = "Malformed hello tcp packet!";
-    let socket = match req.1.connection_info().remote() {
-        Some(val) => match val.parse::<SocketAddr>() {
-            Ok(val) => val,
-            Err(_e) => return Err(RitaCommonError::MiscStringError(err_mesg.to_string())),
-        },
-        None => return Err(RitaCommonError::MiscStringError(err_mesg.to_string())),
+    let socket = match req.1.peer_addr() {
+        Some(val) => val,
+        None => return HttpResponse::build(StatusCode::from_u16(400u16).unwrap()).json(err_mesg),
     };
 
-    trace!("Got Hello from {:?}", req.1.connection_info().remote());
+    trace!("Got Hello from {:?}", req.1.peer_addr());
     trace!("opening tunnel in hello_response for {:?}", their_id);
 
     let peer = Peer {
@@ -92,27 +66,25 @@ pub fn hello_response(
     let tunnel = match tunnel {
         Some(val) => val,
         None => {
-            return Err(RitaCommonError::MiscStringError(
-                "tunnel open failure!".to_string(),
-            ))
+            return HttpResponse::build(StatusCode::from_u16(400u16).unwrap())
+                .json("Tunnel open failure")
         }
     };
 
-    Ok(Json(LocalIdentity {
+    HttpResponse::Ok().json(LocalIdentity {
         global: match settings::get_rita_common().get_identity() {
             Some(id) => id,
             None => {
-                return Err(RitaCommonError::MiscStringError(
-                    "Identity has no mesh IP ready yet".to_string(),
-                ))
+                return HttpResponse::build(StatusCode::from_u16(400u16).unwrap())
+                    .json("Identity has no mesh ip ready")
             }
         },
         wg_port: tunnel.0.listen_port,
         have_tunnel: Some(tunnel.1),
-    }))
+    })
 }
 
-pub fn version(_req: HttpRequest) -> String {
+pub fn version(_req: OldHttpRequest) -> String {
     format!(
         "crate ver {}\ngit hash {}",
         env!("CARGO_PKG_VERSION"),

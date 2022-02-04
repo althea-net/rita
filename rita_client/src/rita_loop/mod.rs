@@ -7,24 +7,19 @@
 use crate::exit_manager::exit_manager_tick;
 use crate::heartbeat::send_udp_heartbeat;
 use crate::heartbeat::HEARTBEAT_SERVER_KEY;
+use crate::light_client_manager::lcm_watch;
 use crate::light_client_manager::light_client_hello_response;
-use crate::light_client_manager::LightClientManager;
 use crate::light_client_manager::Watch;
 use crate::operator_fee_manager::tick_operator_payments;
 use crate::operator_update::operator_update;
 use crate::traffic_watcher::get_exit_dest_price;
-use crate::RitaClientError;
-use actix::{
-    Actor, ActorContext, Addr, Arbiter, AsyncContext, Context, Handler, Message, Supervised,
-    System, SystemService,
-};
+use actix::System;
 use actix_async::System as AsyncSystem;
-use actix_web::http::Method;
-use actix_web::{server, App};
+use actix_web_async::web;
+use actix_web_async::{App, HttpServer};
 use althea_kernel_interface::KI;
 use althea_types::ExitState;
 use antenna_forwarding_client::start_antenna_forwarding_proxy;
-use futures01::future::Future;
 use rita_common::rita_loop::set_gateway;
 use rita_common::tunnel_manager::tm_get_neighbors;
 use rita_common::tunnel_manager::tm_get_tunnels;
@@ -32,6 +27,11 @@ use settings::client::RitaClientSettings;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
+
+use crate::RitaClientError;
+use actix::{
+    Actor, ActorContext, Addr, AsyncContext, Context, Handler, Message, Supervised, SystemService,
+};
 
 lazy_static! {
     /// see the comment on check_for_gateway_client_billing_corner_case()
@@ -62,12 +62,12 @@ pub fn metrics_permitted() -> bool {
             .is_some()
 }
 
-#[derive(Default)]
-pub struct RitaLoop {}
-
 // the speed in seconds for the client loop
 pub const CLIENT_LOOP_SPEED: u64 = 5;
 pub const CLIENT_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
+
+#[derive(Default)]
+pub struct RitaLoop {}
 
 impl Actor for RitaLoop {
     type Context = Context<Self>;
@@ -114,18 +114,6 @@ impl Handler<Tick> for RitaLoop {
         let start = Instant::now();
         trace!("Client Tick!");
 
-        let exit_dest_price = get_exit_dest_price();
-        let tunnels = tm_get_tunnels().unwrap();
-
-        Arbiter::spawn(
-            LightClientManager::from_registry()
-                .send(Watch {
-                    tunnels,
-                    exit_dest_price,
-                })
-                .then(|_res| Ok(())),
-        );
-
         if metrics_permitted() {
             send_udp_heartbeat();
         }
@@ -161,6 +149,14 @@ pub fn start_rita_loop() {
                 runner.block_on(async move {
                     manage_gateway();
 
+                    let exit_dest_price = get_exit_dest_price();
+                    let tunnels = tm_get_tunnels().unwrap();
+
+                    lcm_watch(Watch {
+                        tunnels,
+                        exit_dest_price,
+                    });
+
                     check_for_gateway_client_billing_corner_case();
                     // update the client exit manager, which handles exit registrations
                     // and manages the exit state machine in general. This includes
@@ -171,6 +167,12 @@ pub fn start_rita_loop() {
                     // Check in with Operator
                     operator_update().await;
                 });
+
+                info!(
+                    "Rita Client loop completed in {}s {}ms",
+                    start.elapsed().as_secs(),
+                    start.elapsed().subsec_millis()
+                );
 
                 // sleep until it has been CLIENT_LOOP_SPEED seconds from start, whenever that may be
                 // if it has been more than CLIENT_LOOP_SPEED seconds from start, go right ahead
@@ -239,25 +241,32 @@ fn check_for_gateway_client_billing_corner_case() {
 
 pub fn start_rita_client_endpoints(workers: usize) {
     // listen on the light client gateway ip if it's not none
-    if let Some(gateway_ip) = settings::get_rita_client().network.light_client_router_ip {
-        trace!("Listening for light client hellos on {}", gateway_ip);
-        let unstarted_server = server::new(|| {
-            App::new().resource("/light_client_hello", |r| {
-                r.method(Method::POST).with(light_client_hello_response)
-            })
-        })
-        .workers(workers)
-        .bind(format!(
-            "{}:{}",
-            gateway_ip,
-            settings::get_rita_client().network.light_client_hello_port
-        ));
-        if let Ok(val) = unstarted_server {
-            val.shutdown_timeout(0).start();
-        } else {
-            trace!("Failed to bind to light client ip, probably toggled off!")
-        }
-    }
+    thread::spawn(move || {
+        let runner = AsyncSystem::new();
+        runner.block_on(async move {
+            if let Some(gateway_ip) = settings::get_rita_client().network.light_client_router_ip {
+                trace!("Listening for light client hellos on {}", gateway_ip);
+                let unstarted_server = HttpServer::new(|| {
+                    App::new().route(
+                        "/light_client_hello",
+                        web::post().to(light_client_hello_response),
+                    )
+                })
+                .workers(workers)
+                .bind(format!(
+                    "{}:{}",
+                    gateway_ip,
+                    settings::get_rita_client().network.light_client_hello_port
+                ));
+                if let Ok(val) = unstarted_server {
+                    info!("Starting client endpoint: light client");
+                    let _res = val.shutdown_timeout(0).run().await;
+                } else {
+                    trace!("Failed to bind to light client ip, probably toggled off!")
+                }
+            }
+        });
+    });
 }
 
 pub fn start_antenna_forwarder(settings: RitaClientSettings) {

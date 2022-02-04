@@ -8,12 +8,13 @@
 use crate::network_endpoints::*;
 use crate::traffic_watcher::init_traffic_watcher;
 use actix::SystemService;
-use actix_web::http::Method;
-use actix_web::{server, App};
+use actix_async::System;
+use actix_web_async::{web, App, HttpServer};
 use rand::thread_rng;
 use rand::Rng;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
+use std::thread;
 
 pub mod fast_loop;
 pub mod slow_loop;
@@ -52,26 +53,42 @@ pub fn get_web3_server() -> String {
 }
 
 pub fn start_core_rita_endpoints(workers: usize) {
-    let common = settings::get_rita_common();
     // Rita hello function
-    server::new(|| App::new().resource("/hello", |r| r.method(Method::POST).with(hello_response)))
-        .workers(workers)
-        .bind(format!("[::0]:{}", common.network.rita_hello_port))
-        .unwrap()
-        .shutdown_timeout(0)
-        .start();
 
-    // Rita accept payment function, on a different port
-    server::new(|| {
-        App::new().resource("/make_payment", |r| {
-            r.method(Method::POST).with(make_payments)
-        })
-    })
-    .workers(workers)
-    .bind(format!("[::0]:{}", common.network.rita_contact_port))
-    .unwrap()
-    .shutdown_timeout(0)
-    .start();
+    thread::spawn(move || {
+        let runner = System::new();
+        runner.block_on(async move {
+            let common = settings::get_rita_common();
+            let res =
+                HttpServer::new(|| App::new().route("/hello", web::post().to(hello_response)))
+                    .workers(workers)
+                    .bind(format!("[::0]:{}", common.network.rita_hello_port))
+                    .unwrap()
+                    .shutdown_timeout(0)
+                    .run()
+                    .await;
+
+            info!("Hello handler endpoint started with: {:?}", res);
+        });
+    });
+    thread::spawn(move || {
+        let runner = System::new();
+        runner.block_on(async move {
+            let common = settings::get_rita_common();
+
+            // Rita accept payment function, on a different port
+            let res = HttpServer::new(|| {
+                App::new().route("/make_payment", web::post().to(make_payments))
+            })
+            .workers(workers)
+            .bind(format!("[::0]:{}", common.network.rita_contact_port))
+            .unwrap()
+            .shutdown_timeout(0)
+            .run()
+            .await;
+            info!("Make payment endpoint started with: {:?}", res);
+        });
+    });
 }
 
 pub fn check_rita_common_actors() {
