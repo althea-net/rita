@@ -10,7 +10,6 @@ use crate::usage_tracker::UpdateUsage;
 use crate::usage_tracker::UsageType;
 use crate::RitaCommonError;
 use crate::KI;
-use actix::{Actor, Context, Handler, Message, Supervised, SystemService};
 use althea_kernel_interface::open_tunnel::is_link_local;
 use althea_kernel_interface::FilterTarget;
 use althea_types::Identity;
@@ -22,27 +21,6 @@ use std::net::IpAddr;
 
 #[derive(Default)]
 pub struct TrafficWatcher;
-
-impl Actor for TrafficWatcher {
-    type Context = Context<Self>;
-}
-
-impl Supervised for TrafficWatcher {}
-
-impl SystemService for TrafficWatcher {
-    fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        KI.init_counter(&FilterTarget::Input)
-            .expect("Is ipset installed?");
-        KI.init_counter(&FilterTarget::Output)
-            .expect("Is ipset installed?");
-        KI.init_counter(&FilterTarget::ForwardInput)
-            .expect("Is ipset installed?");
-        KI.init_counter(&FilterTarget::ForwardOutput)
-            .expect("Is ipset installed?");
-
-        info!("Traffic Watcher started");
-    }
-}
 
 pub struct Watch {
     /// List of neighbors to watch
@@ -56,16 +34,17 @@ impl Watch {
     }
 }
 
-impl Message for Watch {
-    type Result = Result<(), RitaCommonError>;
-}
+pub fn init_traffic_watcher() {
+    KI.init_counter(&FilterTarget::Input)
+        .expect("Is ipset installed?");
+    KI.init_counter(&FilterTarget::Output)
+        .expect("Is ipset installed?");
+    KI.init_counter(&FilterTarget::ForwardInput)
+        .expect("Is ipset installed?");
+    KI.init_counter(&FilterTarget::ForwardOutput)
+        .expect("Is ipset installed?");
 
-impl Handler<Watch> for TrafficWatcher {
-    type Result = Result<(), RitaCommonError>;
-
-    fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        watch(msg.routes, &msg.neighbors)
-    }
+    info!("Traffic Watcher started");
 }
 
 pub fn prepare_helper_maps(

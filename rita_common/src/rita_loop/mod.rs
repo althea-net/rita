@@ -6,6 +6,7 @@
 //! halt essential functions like opening tunnels and managing peers
 
 use crate::network_endpoints::*;
+use crate::traffic_watcher::init_traffic_watcher;
 use actix::SystemService;
 use actix_web::http::Method;
 use actix_web::{server, App};
@@ -74,8 +75,8 @@ pub fn start_core_rita_endpoints(workers: usize) {
 }
 
 pub fn check_rita_common_actors() {
+    init_traffic_watcher();
     assert!(crate::hello_handler::HelloHandler::from_registry().connected());
-    assert!(crate::traffic_watcher::TrafficWatcher::from_registry().connected());
     assert!(crate::rita_loop::fast_loop::RitaFastLoop::from_registry().connected());
     crate::rita_loop::slow_loop::start_rita_slow_loop();
     crate::rita_loop::fast_loop::start_rita_fast_loop();
