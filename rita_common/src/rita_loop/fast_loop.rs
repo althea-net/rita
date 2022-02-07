@@ -9,7 +9,7 @@ use crate::payment_validator::validate;
 use crate::peer_listener::get_peers;
 use crate::peer_listener::tick;
 use crate::tm_trigger_gc;
-use crate::traffic_watcher::{TrafficWatcher, Watch};
+use crate::traffic_watcher::watch;
 use crate::tunnel_manager::gc::TriggerGc;
 use crate::tunnel_manager::tm_contact_peers;
 use crate::tunnel_manager::tm_get_neighbors;
@@ -113,17 +113,13 @@ impl Handler<Tick> for RitaFastLoop {
                 .and_then(move |stream| {
                     start_connection_legacy(stream).and_then(move |stream| {
                         parse_routes_legacy(stream).and_then(move |routes| {
-                            TrafficWatcher::from_registry()
-                                .send(Watch::new(neighbors, routes.1))
-                                .timeout(FAST_LOOP_TIMEOUT)
-                                .then(move |_res| {
-                                    info!(
-                                        "TrafficWatcher completed in {}s {}ms",
-                                        neigh.elapsed().as_secs(),
-                                        neigh.elapsed().subsec_millis()
-                                    );
-                                    Ok(())
-                                })
+                            let _res = watch(routes.1, &neighbors);
+                            info!(
+                                "TrafficWatcher completed in {}s {}ms",
+                                neigh.elapsed().as_secs(),
+                                neigh.elapsed().subsec_millis()
+                            );
+                            Ok(())
                         })
                     })
                 })
