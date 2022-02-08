@@ -21,8 +21,8 @@ use crate::traffic_watcher::{TrafficWatcher, Watch};
 use actix::Addr;
 use actix::System;
 use actix::SystemService;
-use actix_web::http::Method;
-use actix_web::{server, App};
+use actix_async::System as AsyncSystem;
+use actix_web_async::{web, App, HttpServer};
 use althea_kernel_interface::ExitClient;
 use althea_types::Identity;
 use babel_monitor_legacy::open_babel_stream_legacy;
@@ -260,28 +260,26 @@ pub fn check_rita_exit_actors() {
 }
 
 pub fn start_rita_exit_endpoints(workers: usize) {
-    // Exit stuff, huge threadpool to offset Pgsql blocking
-    server::new(|| {
-        App::new()
-            .resource("/secure_setup", |r| {
-                r.method(Method::POST).with(secure_setup_request)
+    thread::spawn(move || {
+        let runner = AsyncSystem::new();
+        runner.block_on(async move {
+            // Exit stuff, huge threadpool to offset Pgsql blocking
+            let _res = HttpServer::new(|| {
+                App::new()
+                    .route("/secure_setup", web::post().to(secure_setup_request))
+                    .route("/secure_status", web::post().to(secure_status_request))
+                    .route("/exit_info", web::get().to(get_exit_info_http))
+                    .route("/client_debt", web::post().to(get_client_debt))
             })
-            .resource("/secure_status", |r| {
-                r.method(Method::POST).with(secure_status_request)
-            })
-            .resource("/exit_info", |r| {
-                r.method(Method::GET).with(get_exit_info_http)
-            })
-            .resource("/client_debt", |r| {
-                r.method(Method::POST).with(get_client_debt)
-            })
-    })
-    .workers(workers)
-    .bind(format!(
-        "[::0]:{}",
-        settings::get_rita_exit().exit_network.exit_hello_port
-    ))
-    .unwrap()
-    .shutdown_timeout(0)
-    .start();
+            .workers(workers)
+            .bind(format!(
+                "[::0]:{}",
+                settings::get_rita_exit().exit_network.exit_hello_port
+            ))
+            .unwrap()
+            .shutdown_timeout(0)
+            .run()
+            .await;
+        });
+    });
 }

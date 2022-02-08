@@ -1,5 +1,4 @@
 use actix::Actor;
-use actix::Arbiter;
 use actix::Context;
 use actix::Handler;
 use actix::Message;
@@ -9,7 +8,6 @@ use actix_web::Result;
 use diesel::dsl::delete;
 use diesel::*;
 use exit_db::schema;
-use futures01::future::Future;
 
 use crate::database::database_tools::get_database_connection;
 use crate::RitaExitError;
@@ -39,14 +37,8 @@ impl Handler<TruncateTables> for DbClient {
     fn handle(&mut self, _: TruncateTables, _: &mut Self::Context) -> Self::Result {
         use self::schema::clients::dsl::*;
         info!("Deleting all clients in database");
-        Arbiter::spawn(
-            get_database_connection()
-                .and_then(|connection| {
-                    (delete(clients).execute(&connection).unwrap());
-                    Ok(())
-                })
-                .then(|_| Ok(())),
-        );
+        let connection = get_database_connection()?;
+        (delete(clients).execute(&connection).unwrap());
 
         Ok(())
     }

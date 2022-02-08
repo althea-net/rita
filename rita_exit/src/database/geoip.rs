@@ -1,7 +1,8 @@
+use babel_monitor::open_babel_stream;
+use babel_monitor::parse_routes;
 use babel_monitor_legacy::open_babel_stream_legacy;
 use babel_monitor_legacy::parse_routes_legacy;
 use babel_monitor_legacy::start_connection_legacy;
-use futures01::future;
 use futures01::future::Future;
 use ipnetwork::IpNetwork;
 use rita_common::utils::ip_increment::is_unicast_link_local;
@@ -19,43 +20,47 @@ lazy_static! {
 }
 
 /// gets the gateway ip for a given mesh IP
-pub fn get_gateway_ip_single(
-    mesh_ip: IpAddr,
-) -> Box<dyn Future<Item = IpAddr, Error = RitaExitError>> {
+pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Result<IpAddr, RitaExitError> {
     let babel_port = settings::get_rita_exit().network.babel_port;
 
-    Box::new(
-        open_babel_stream_legacy(babel_port)
-            .from_err()
-            .and_then(move |stream| {
-                start_connection_legacy(stream)
-                    .from_err()
-                    .and_then(move |stream| {
-                        parse_routes_legacy(stream)
-                            .from_err()
-                            .and_then(move |routes| {
-                                let mut route_to_des = None;
-                                for route in routes.1.iter() {
-                                    // Only ip6
-                                    if let IpNetwork::V6(ref ip) = route.prefix {
-                                        // Only host addresses and installed routes
-                                        if ip.prefix() == 128
-                                            && route.installed
-                                            && IpAddr::V6(ip.ip()) == mesh_ip
-                                        {
-                                            route_to_des = Some(route.clone());
-                                        }
-                                    }
-                                }
+    match open_babel_stream(babel_port, Duration::from_secs(5)) {
+        Ok(mut stream) => {
+            match parse_routes(&mut stream) {
+                Ok(routes) => {
+                    let mut route_to_des = None;
+                    for route in routes.iter() {
+                        // Only ip6
+                        if let IpNetwork::V6(ref ip) = route.prefix {
+                            // Only host addresses and installed routes
+                            if ip.prefix() == 128
+                                && route.installed
+                                && IpAddr::V6(ip.ip()) == mesh_ip
+                            {
+                                route_to_des = Some(route.clone());
+                            }
+                        }
+                    }
 
-                                match route_to_des {
-                                    Some(route) => Ok(KI.get_wg_remote_ip(&route.iface)?),
-                                    None => Err(RitaExitError::IpAddrError(mesh_ip)),
-                                }
-                            })
-                    })
-            }),
-    )
+                    match route_to_des {
+                        Some(route) => Ok(KI.get_wg_remote_ip(&route.iface)?),
+                        None => Err(RitaExitError::IpAddrError(mesh_ip)),
+                    }
+                }
+                Err(e) => {
+                    return Err(RitaExitError::MiscStringError(format!(
+                        "Parse routes babel monitor error, {:?}",
+                        e
+                    )))
+                }
+            }
+        }
+        Err(e) => {
+            return Err(RitaExitError::MiscStringError(format!(
+                "Error opening babel stream, {:?}",
+                e
+            )));
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -141,10 +146,10 @@ struct CountryDetails {
     iso_code: String,
 }
 
-pub fn get_country_async(ip: IpAddr) -> impl Future<Item = String, Error = RitaExitError> {
+pub fn get_country_async(ip: IpAddr) -> Result<String, RitaExitError> {
     match get_country(ip) {
-        Ok(res) => future::ok(res),
-        Err(e) => future::err(e),
+        Ok(res) => Ok(res),
+        Err(e) => Err(e),
     }
 }
 
@@ -233,10 +238,10 @@ pub fn get_country(ip: IpAddr) -> Result<String, RitaExitError> {
 
 /// Returns true or false if an ip is confirmed to be inside or outside the region and error
 /// if an api error is encountered trying to figure that out.
-pub fn verify_ip(request_ip: IpAddr) -> impl Future<Item = bool, Error = RitaExitError> {
+pub fn verify_ip(request_ip: IpAddr) -> Result<bool, RitaExitError> {
     match verify_ip_sync(request_ip) {
-        Ok(item) => future::ok(item),
-        Err(e) => future::err(e),
+        Ok(item) => Ok(item),
+        Err(e) => Err(e),
     }
 }
 
