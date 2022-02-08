@@ -16,6 +16,8 @@ althea_types = { path = "../althea_types" }
 settings = { path = "../settings" }
 babel_monitor = { path = "../babel_monitor" }
 actix = "0.7"
+actix-async = { package = "actix", version = "0.12"}
+awc = "3.0.0-beta.18"
 handlebars = "4.0"
 rand = "0.8.0"
 lazy_static = "1.4"
@@ -35,6 +37,7 @@ exit_db = { path = "../exit_db" }
 babel_monitor_legacy = {path = "../babel_monitor_legacy"}
 actix-web-httpauth = {git = "https://github.com/althea-net/actix-web-httpauth"}
 actix-web = { version = "0.7", default_features = false, features= ["ssl"] }
+actix-web-async = {package="actix-web", version = "4.0.0-beta.8", default_features = false, features= ["openssl"] }
 diesel = { version = "1.4", features = ["postgres", "r2d2"] }
 futures01 = { package = "futures", version = "0.1"}
 [features]

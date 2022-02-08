@@ -13,8 +13,6 @@ use diesel::r2d2::ConnectionManager;
 use diesel::r2d2::PooledConnection;
 use diesel::select;
 use exit_db::{models, schema};
-use futures01::future;
-use futures01::future::Future;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 
@@ -314,20 +312,14 @@ pub fn update_mail_sent_time(
 /// Gets the Postgres database connection from the threadpool, since there are dedicated
 /// connections for each threadpool member error if non is available right away
 pub fn get_database_connection(
-) -> impl Future<Item = PooledConnection<ConnectionManager<PgConnection>>, Error = RitaExitError> {
+) -> Result<PooledConnection<ConnectionManager<PgConnection>>, RitaExitError> {
     match DB_POOL.read().unwrap().try_get() {
-        Some(connection) => Box::new(future::ok(connection))
-            as Box<
-                dyn Future<
-                    Item = PooledConnection<ConnectionManager<PgConnection>>,
-                    Error = RitaExitError,
-                >,
-            >,
+        Some(connection) => Ok(connection),
         None => {
             error!("No available db connection!");
-            Box::new(future::err(RitaExitError::MiscStringError(
+            Err(RitaExitError::MiscStringError(
                 "No Database connection available!".to_string(),
-            )))
+            ))
         }
     }
 }

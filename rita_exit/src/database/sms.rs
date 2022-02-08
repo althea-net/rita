@@ -5,12 +5,7 @@ use crate::database::get_exit_info;
 use crate::database::struct_tools::texts_sent;
 use crate::RitaExitError;
 
-use actix_web::client as actix_client;
-use actix_web::client::ClientResponse;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState};
-use futures01::future;
-use futures01::future::Either;
-use futures01::future::Future;
 use phonenumber::PhoneNumber;
 use settings::exit::ExitVerifSettings;
 use std::time::Duration;
@@ -25,33 +20,36 @@ pub struct SmsCheck {
 
 /// Posts to the validation endpoint with the code, will return success if the code
 /// is the same as the one sent to the user
-fn check_text(
-    number: String,
-    code: String,
-    api_key: String,
-) -> impl Future<Item = bool, Error = RitaExitError> {
+async fn check_text(number: String, code: String, api_key: String) -> Result<bool, RitaExitError> {
     trace!("About to check text message status for {}", number);
     let number: PhoneNumber = match number.parse() {
         Ok(number) => number,
-        Err(e) => return Either::A(future::err(e.into())),
+        Err(e) => return Err(e.into()),
     };
     let url = "https://api.authy.com/protected/json/phones/verification/check";
-    Either::B(
-        actix_client::get(&url)
-            .form(&SmsCheck {
-                api_key,
-                verification_code: code,
-                phone_number: number.national().to_string(),
-                country_code: number.code().value().to_string(),
-            })
-            .unwrap()
-            .send()
-            .from_err()
-            .and_then(|value| {
-                trace!("Got {} back from check text", value.status());
-                Ok(value.status().is_success())
-            }),
-    )
+
+    let client = awc::Client::default();
+    let response = match client
+        .get(url)
+        .send_form(&SmsCheck {
+            api_key,
+            verification_code: code,
+            phone_number: number.national().to_string(),
+            country_code: number.code().value().to_string(),
+        })
+        .await
+    {
+        Ok(a) => a,
+        Err(e) => {
+            return Err(RitaExitError::MiscStringError(format!(
+                "Send request error: {:?}",
+                e
+            )))
+        }
+    };
+
+    trace!("Got {} back from check text", response.status());
+    Ok(response.status().is_success())
 }
 
 #[derive(Serialize)]
@@ -63,36 +61,41 @@ pub struct SmsRequest {
 }
 
 /// Sends the authy verification text by hitting the api endpoint
-fn send_text(
-    number: String,
-    api_key: String,
-) -> impl Future<Item = ClientResponse, Error = RitaExitError> {
+async fn send_text(number: String, api_key: String) -> Result<(), RitaExitError> {
     info!("Sending message for {}", number);
     let url = "https://api.authy.com/protected/json/phones/verification/start";
     let number: PhoneNumber = match number.parse() {
         Ok(number) => number,
-        Err(e) => return Either::A(future::err(e.into())),
+        Err(e) => return Err(e.into()),
     };
-    Either::B(
-        actix_client::post(&url)
-            .form(&SmsRequest {
-                api_key,
-                via: "sms".to_string(),
-                phone_number: number.national().to_string(),
-                country_code: number.code().value().to_string(),
-            })
-            .unwrap()
-            .send()
-            .from_err(),
-    )
+
+    let client = awc::Client::default();
+    match client
+        .post(url)
+        .send_form(&SmsRequest {
+            api_key,
+            via: "sms".to_string(),
+            phone_number: number.national().to_string(),
+            country_code: number.code().value().to_string(),
+        })
+        .await
+    {
+        Ok(_a) => Ok(()),
+        Err(e) => {
+            return Err(RitaExitError::MiscStringError(format!(
+                "Send text error: {:?}",
+                e
+            )))
+        }
+    }
 }
 
 /// Handles the minutia of phone registration states
-pub fn handle_sms_registration(
+pub async fn handle_sms_registration(
     client: ExitClientIdentity,
     their_record: exit_db::models::Client,
     api_key: String,
-) -> impl Future<Item = ExitState, Error = RitaExitError> {
+) -> Result<ExitState, RitaExitError> {
     info!(
         "Handling phone registration for {}",
         client.global.wg_public_key
@@ -106,88 +109,81 @@ pub fn handle_sms_registration(
     ) {
         // all texts exhausted, but they can still submit the correct code
         (Some(number), Some(code), true) => {
-            Box::new(check_text(number, code, api_key).and_then(move |result| {
-                get_database_connection().and_then(move |conn| {
-                    if result {
-                        verify_client(&client, true, &conn)?;
-
-                        info!(
-                            "Phone registration complete for {}",
-                            client.global.wg_public_key
-                        );
-                        Ok(ExitState::Registered {
-                            our_details: ExitClientDetails {
-                                client_internal_ip: their_record.internal_ip.parse()?,
-                            },
-                            general_details: get_exit_info(),
-                            message: "Registration OK".to_string(),
-                        })
-                    } else {
-                        Ok(ExitState::Pending {
-                            general_details: get_exit_info(),
-                            message: "awaiting phone verification".to_string(),
-                            email_code: None,
-                            phone_code: None,
-                        })
-                    }
+            let result = check_text(number, code, api_key).await?;
+            let conn = get_database_connection()?;
+            if result {
+                verify_client(&client, true, &conn)?;
+                info!(
+                    "Phone registration complete for {}",
+                    client.global.wg_public_key
+                );
+                Ok(ExitState::Registered {
+                    our_details: ExitClientDetails {
+                        client_internal_ip: their_record.internal_ip.parse()?,
+                    },
+                    general_details: get_exit_info(),
+                    message: "Registration OK".to_string(),
                 })
-            })) as Box<dyn Future<Item = ExitState, Error = RitaExitError>>
+            } else {
+                Ok(ExitState::Pending {
+                    general_details: get_exit_info(),
+                    message: "awaiting phone verification".to_string(),
+                    email_code: None,
+                    phone_code: None,
+                })
+            }
         }
         // user has exhausted attempts but is still not submitting code
-        (Some(_number), None, true) => Box::new(future::ok(ExitState::Pending {
+        (Some(_number), None, true) => Ok(ExitState::Pending {
             general_details: get_exit_info(),
             message: "awaiting phone verification".to_string(),
             email_code: None,
             phone_code: None,
-        })),
+        }),
         // user has attempts remaining and is requesting the code be resent
         (Some(number), None, false) => {
-            Box::new(send_text(number, api_key).and_then(move |_result| {
-                get_database_connection().and_then(move |conn| {
-                    text_sent(&client, &conn, text_num)?;
-                    Ok(ExitState::Pending {
-                        general_details: get_exit_info(),
-                        message: "awaiting phone verification".to_string(),
-                        email_code: None,
-                        phone_code: None,
-                    })
-                })
-            })) as Box<dyn Future<Item = ExitState, Error = RitaExitError>>
+            let _res = send_text(number, api_key).await?;
+            let conn = get_database_connection()?;
+            text_sent(&client, &conn, text_num)?;
+            Ok(ExitState::Pending {
+                general_details: get_exit_info(),
+                message: "awaiting phone verification".to_string(),
+                email_code: None,
+                phone_code: None,
+            })
         }
         // user has attempts remaining and is submitting a code
         (Some(number), Some(code), false) => {
-            Box::new(check_text(number, code, api_key).and_then(move |result| {
-                get_database_connection().and_then(move |conn| {
-                    trace!("Check text returned {}", result);
-                    if result {
-                        verify_client(&client, true, &conn)?;
+            let result = check_text(number, code, api_key).await?;
+            let conn = get_database_connection()?;
 
-                        info!(
-                            "Phone registration complete for {}",
-                            client.global.wg_public_key
-                        );
-                        Ok(ExitState::Registered {
-                            our_details: ExitClientDetails {
-                                client_internal_ip: their_record.internal_ip.parse()?,
-                            },
-                            general_details: get_exit_info(),
-                            message: "Registration OK".to_string(),
-                        })
-                    } else {
-                        Ok(ExitState::Pending {
-                            general_details: get_exit_info(),
-                            message: "awaiting phone verification".to_string(),
-                            email_code: None,
-                            phone_code: None,
-                        })
-                    }
+            trace!("Check text returned {}", result);
+            if result {
+                verify_client(&client, true, &conn)?;
+                info!(
+                    "Phone registration complete for {}",
+                    client.global.wg_public_key
+                );
+                Ok(ExitState::Registered {
+                    our_details: ExitClientDetails {
+                        client_internal_ip: their_record.internal_ip.parse()?,
+                    },
+                    general_details: get_exit_info(),
+                    message: "Registration OK".to_string(),
                 })
-            })) as Box<dyn Future<Item = ExitState, Error = RitaExitError>>
+            } else {
+                Ok(ExitState::Pending {
+                    general_details: get_exit_info(),
+                    message: "awaiting phone verification".to_string(),
+                    email_code: None,
+                    phone_code: None,
+                })
+            }
         }
         // user did not submit a phonenumber
-        (None, _, _) => Box::new(future::ok(ExitState::Denied {
+        (None, _, _) => Ok(ExitState::Denied {
             message: "This exit requires a phone number to register!".to_string(),
-        })) as Box<dyn Future<Item = ExitState, Error = RitaExitError>>,
+        }),
     }
 }
 

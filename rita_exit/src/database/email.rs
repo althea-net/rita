@@ -8,8 +8,6 @@ use crate::RitaExitError;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState};
 use diesel::prelude::PgConnection;
 use exit_db::models;
-use futures01::future;
-use futures01::future::Future;
 use handlebars::Handlebars;
 use lettre::file::FileTransport;
 use lettre::smtp::authentication::{Credentials, Mechanism};
@@ -74,14 +72,14 @@ pub fn handle_email_registration(
     their_record: &exit_db::models::Client,
     conn: &PgConnection,
     cooldown: i64,
-) -> impl Future<Item = ExitState, Error = RitaExitError> {
+) -> Result<ExitState, RitaExitError> {
     let mut their_record = their_record.clone();
     if client.reg_details.email_code == Some(their_record.email_code.clone()) {
         info!("email verification complete for {:?}", client);
 
         match verify_client(client, true, conn) {
             Ok(_) => (),
-            Err(e) => return future::err(e),
+            Err(e) => return Err(e),
         }
         their_record.verified = true;
     }
@@ -91,9 +89,9 @@ pub fn handle_email_registration(
 
         let client_internal_ip = match their_record.internal_ip.parse() {
             Ok(ip) => ip,
-            Err(e) => return future::err(RitaExitError::AddrParseError(e)),
+            Err(e) => return Err(RitaExitError::AddrParseError(e)),
         };
-        future::ok(ExitState::Registered {
+        Ok(ExitState::Registered {
             our_details: ExitClientDetails { client_internal_ip },
             general_details: get_exit_info(),
             message: "Registration OK".to_string(),
@@ -102,7 +100,7 @@ pub fn handle_email_registration(
         let time_since_last_email = secs_since_unix_epoch() - their_record.email_sent_time;
 
         if time_since_last_email < cooldown {
-            future::ok(ExitState::GotInfo {
+            Ok(ExitState::GotInfo {
                 general_details: get_exit_info(),
                 message: format!(
                     "Wait {} more seconds for verification cooldown",
@@ -112,13 +110,13 @@ pub fn handle_email_registration(
         } else {
             match update_mail_sent_time(client, conn) {
                 Ok(_) => (),
-                Err(e) => return future::err(e),
+                Err(e) => return Err(e),
             }
             match send_mail(&their_record) {
                 Ok(_) => (),
-                Err(e) => return future::err(e),
+                Err(e) => return Err(e),
             }
-            future::ok(ExitState::Pending {
+            Ok(ExitState::Pending {
                 general_details: get_exit_info(),
                 message: "awaiting email verification".to_string(),
                 email_code: None,
