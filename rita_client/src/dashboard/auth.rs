@@ -1,5 +1,4 @@
-use crate::RitaClientError;
-use actix_web::{HttpResponse, Json};
+use actix_web_async::{http::StatusCode, web::Json, HttpResponse};
 use clarity::utils::bytes_to_hex_str;
 use rita_common::{RitaCommonError, KI};
 use sha3::{Digest, Sha3_512};
@@ -9,7 +8,7 @@ pub struct RouterPassword {
     pub password: String,
 }
 
-pub fn set_pass(router_pass: Json<RouterPassword>) -> Result<HttpResponse, RitaClientError> {
+pub fn set_pass(router_pass: Json<RouterPassword>) -> HttpResponse {
     debug!("/router/password hit with {:?}", router_pass);
     let router_pass = router_pass.into_inner();
     let input_string = router_pass.password.clone() + "RitaSalt";
@@ -23,17 +22,22 @@ pub fn set_pass(router_pass: Json<RouterPassword>) -> Result<HttpResponse, RitaC
     rita_client.network.rita_dashboard_password = Some(hashed_pass);
 
     if let Err(e) = settings::write_config() {
-        return Err(RitaCommonError::SettingsError(e).into());
+        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+            .json(format!("{}", RitaCommonError::SettingsError(e)));
     }
 
     if KI.is_openwrt() {
-        KI.set_system_password(router_pass.password)?;
+        if let Err(e) = KI.set_system_password(router_pass.password) {
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{}", e));
+        }
 
         // We edited disk contents, force global sync
-        KI.fs_sync()?;
+        if let Err(e) = KI.fs_sync() {
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{}", e));
+        }
     }
 
-    Ok(HttpResponse::Ok().json(()))
+    HttpResponse::Ok().json(())
 }
 
 #[cfg(test)]

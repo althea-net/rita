@@ -13,6 +13,7 @@ pub mod rita_loop;
 pub mod traffic_watcher;
 
 mod error;
+use actix_async::System;
 pub use error::RitaExitError;
 
 pub use crate::database::database_tools::*;
@@ -22,8 +23,7 @@ pub use crate::database::email::*;
 pub use crate::database::geoip::*;
 pub use crate::database::sms::*;
 use crate::network_endpoints::nuke_db;
-use actix_web::http::Method;
-use actix_web::{server, App};
+use actix_web_async::{web, App, HttpServer};
 use althea_types::SystemChain;
 use althea_types::WgKey;
 use diesel::r2d2::ConnectionManager;
@@ -47,6 +47,7 @@ use settings::exit::ExitVerifSettings;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::RwLock;
+use std::thread;
 use std::time::Instant;
 
 // These are a set of vars that are never updated during runtime. This means we can have
@@ -128,36 +129,42 @@ About:
 
 pub fn start_rita_exit_dashboard() {
     // Dashboard
-    server::new(|| {
-        App::new()
-            .middleware(middleware::Headers)
-            .route("/info", Method::GET, get_own_info)
-            .route("/local_fee", Method::GET, get_local_fee)
-            .route("/local_fee/{fee}", Method::POST, set_local_fee)
-            .route("/metric_factor", Method::GET, get_metric_factor)
-            .route("/metric_factor/{factor}", Method::POST, set_metric_factor)
-            .route("/settings", Method::GET, get_settings)
-            .route("/settings", Method::POST, set_settings)
-            .route("/version", Method::GET, version)
-            .route("/wg_public_key", Method::GET, get_wg_public_key)
-            .route("/wipe", Method::POST, wipe)
-            .route("/database", Method::DELETE, nuke_db)
-            .route("/debts", Method::GET, get_debts)
-            .route("/debts/reset", Method::POST, reset_debt)
-            .route("/withdraw/{address}/{amount}", Method::POST, withdraw)
-            .route("/withdraw_all/{address}", Method::POST, withdraw_all)
-            .route("/nickname/get/", Method::GET, get_nickname)
-            .route("/nickname/set/", Method::POST, set_nickname)
-            .route("/crash_actors", Method::POST, crash_actors)
-            .route("/usage/payments", Method::GET, get_payments)
-            .route("/token_bridge/status", Method::GET, get_bridge_status)
-    })
-    .bind(format!(
-        "[::0]:{}",
-        settings::get_rita_exit().network.rita_dashboard_port
-    ))
-    .unwrap()
-    .workers(1)
-    .shutdown_timeout(0)
-    .start();
+    thread::spawn(move || {
+        let runner = System::new();
+        runner.block_on(async move {
+            let _res = HttpServer::new(|| {
+                App::new()
+                    .wrap(middleware::HeadersMiddlewareFactory)
+                    .route("/info", web::get().to(get_own_info))
+                    .route("/local_fee", web::get().to(get_local_fee))
+                    .route("/local_fee/{fee}", web::post().to(set_local_fee))
+                    .route("/metric_factor", web::get().to(get_metric_factor))
+                    .route("/metric_factor/{factor}", web::post().to(set_metric_factor))
+                    .route("/settings", web::get().to(get_settings))
+                    .route("/settings", web::post().to(set_settings))
+                    .route("/version", web::get().to(version))
+                    .route("/wg_public_key", web::get().to(get_wg_public_key))
+                    .route("/wipe", web::post().to(wipe))
+                    .route("/database", web::delete().to(nuke_db))
+                    .route("/debts", web::get().to(get_debts))
+                    .route("/debts/reset", web::post().to(reset_debt))
+                    .route("/withdraw/{address}/{amount}", web::post().to(withdraw))
+                    .route("/withdraw_all/{address}", web::post().to(withdraw_all))
+                    .route("/nickname/get/", web::get().to(get_nickname))
+                    .route("/nickname/set/", web::post().to(set_nickname))
+                    .route("/crash_actors", web::post().to(crash_actors))
+                    .route("/usage/payments", web::get().to(get_payments))
+                    .route("/token_bridge/status", web::get().to(get_bridge_status))
+            })
+            .bind(format!(
+                "[::0]:{}",
+                settings::get_rita_exit().network.rita_dashboard_port
+            ))
+            .unwrap()
+            .workers(1)
+            .shutdown_timeout(0)
+            .run()
+            .await;
+        });
+    });
 }

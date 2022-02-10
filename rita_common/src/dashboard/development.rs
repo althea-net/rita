@@ -8,7 +8,7 @@ use crate::KI;
 use crate::SETTING;
 #[cfg(feature = "development")]
 use actix::SystemService;
-use actix_web::{HttpRequest, HttpResponse, Result};
+use actix_web_async::{HttpRequest, HttpResponse};
 #[cfg(feature = "development")]
 use clu::{cleanup, generate_mesh_ip};
 #[cfg(feature = "development")]
@@ -17,10 +17,9 @@ use settings::RitaCommonSettings;
 use std::path::Path;
 
 #[cfg(not(feature = "development"))]
-use crate::RitaCommonError;
-pub fn crash_actors(_req: HttpRequest) -> Result<HttpResponse, RitaCommonError> {
+pub fn crash_actors(_req: HttpRequest) -> HttpResponse {
     // This is returned on production builds.
-    Ok(HttpResponse::NotFound().finish())
+    HttpResponse::NotFound().finish()
 }
 
 #[cfg(feature = "development")]
@@ -30,9 +29,9 @@ pub fn crash_actors(_req: HttpRequest) -> Result<HttpResponse, Error> {
 }
 
 #[cfg(not(feature = "development"))]
-pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, RitaCommonError> {
+pub fn wipe(_req: HttpRequest) -> HttpResponse {
     // This is returned on production builds.
-    Ok(HttpResponse::NotFound().finish())
+    HttpResponse::NotFound().finish()
 }
 
 #[cfg(feature = "development")]

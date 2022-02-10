@@ -4,8 +4,8 @@
 
 use rita_common::utils::option_convert;
 
-use actix_web::HttpRequest;
-use actix_web::HttpResponse;
+use actix_web_async::HttpRequest;
+use actix_web_async::HttpResponse;
 use althea_types::ContactType;
 use lettre::EmailAddress;
 use phonenumber::PhoneNumber;

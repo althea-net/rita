@@ -1,5 +1,5 @@
-use ::actix_web::Path;
-use ::actix_web::{HttpRequest, HttpResponse};
+use ::actix_web_async::web::Path;
+use ::actix_web_async::{HttpRequest, HttpResponse};
 
 pub fn get_low_balance_notification(_req: HttpRequest) -> HttpResponse {
     let setting = settings::get_rita_client()

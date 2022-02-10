@@ -1,17 +1,16 @@
-use actix_web::Path;
-use actix_web::{HttpRequest, HttpResponse, Json, Result};
+use actix_web_async::http::StatusCode;
+use actix_web_async::web::Path;
+use actix_web_async::{HttpRequest, HttpResponse};
 use num256::Uint256;
 
 use crate::traffic_watcher::get_exit_dest_price;
-use crate::RitaClientError;
-pub fn auto_pricing_status(_req: HttpRequest) -> Result<Json<bool>, RitaClientError> {
+
+pub fn auto_pricing_status(_req: HttpRequest) -> HttpResponse {
     debug!("Get Auto pricing enabled hit!");
-    Ok(Json(
-        settings::get_rita_client().operator.use_operator_price,
-    ))
+    HttpResponse::Ok().json(settings::get_rita_client().operator.use_operator_price)
 }
 
-pub fn set_auto_pricing(path: Path<bool>) -> Result<HttpResponse, RitaClientError> {
+pub fn set_auto_pricing(path: Path<bool>) -> HttpResponse {
     let value = path.into_inner();
     debug!("Set Auto pricing enabled hit!");
     let mut rita_client = settings::get_rita_client();
@@ -23,9 +22,12 @@ pub fn set_auto_pricing(path: Path<bool>) -> Result<HttpResponse, RitaClientErro
     settings::set_rita_client(rita_client);
 
     // try and save the config and fail if we can't
-    settings::write_config()?;
+    if let Err(e) = settings::write_config() {
+        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+            .json(format!("Error writing config: {}", e));
+    }
 
-    Ok(HttpResponse::Ok().json(()))
+    HttpResponse::Ok().json(())
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -35,7 +37,7 @@ pub struct Prices {
     simulated_tx_fee: u8,
 }
 
-pub fn get_prices(_req: HttpRequest) -> Result<Json<Prices>, RitaClientError> {
+pub fn get_prices(_req: HttpRequest) -> HttpResponse {
     debug!("/prices GET hit");
 
     let payment = settings::get_rita_client().payment;
@@ -47,5 +49,5 @@ pub fn get_prices(_req: HttpRequest) -> Result<Json<Prices>, RitaClientError> {
         dao_fee: operator_fee,
         simulated_tx_fee,
     };
-    Ok(Json(p))
+    HttpResponse::Ok().json(p)
 }

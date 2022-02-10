@@ -1,9 +1,9 @@
-use crate::usage_tracker::{get_payments_data, PaymentHour};
-use ::actix_web::{HttpRequest, Json};
-use std::collections::VecDeque;
+use crate::usage_tracker::get_payments_data;
+use ::actix_web_async::HttpRequest;
+use actix_web_async::HttpResponse;
 
-pub fn get_payments(_req: HttpRequest) -> Json<VecDeque<PaymentHour>> {
+pub fn get_payments(_req: HttpRequest) -> HttpResponse {
     trace!("/usage/relay hit");
 
-    Json(get_payments_data())
+    HttpResponse::Ok().json(get_payments_data())
 }

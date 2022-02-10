@@ -3,9 +3,9 @@ use crate::blockchain_oracle::get_oracle_nonce;
 use crate::rita_loop::get_web3_server;
 use crate::token_bridge::setup_withdraw as bridge_withdraw;
 use crate::token_bridge::Withdraw as WithdrawMsg;
-use actix_web::http::StatusCode;
-use actix_web::HttpResponse;
-use actix_web::Path;
+use actix_web_async::http::StatusCode;
+use actix_web_async::web::Path;
+use actix_web_async::HttpResponse;
 use althea_types::SystemChain;
 use clarity::Address;
 use num256::Uint256;
@@ -67,12 +67,10 @@ fn withdraw_handler(address: Address, amount: Option<Uint256>) -> HttpResponse {
         }
         (SystemChain::Xdai, SystemChain::Xdai) => queue_eth_compatible_withdraw(address, amount),
         (SystemChain::Xdai, SystemChain::Ethereum) => xdai_to_eth_withdraw(address, amount),
-        (_, _) => HttpResponse::new(StatusCode::from_u16(500u16).unwrap())
-            .into_builder()
-            .json(format!(
-                "System chain is {} but withdraw chain is {}, withdraw impossible!",
-                system_chain, withdraw_chain
-            )),
+        (_, _) => HttpResponse::build(StatusCode::from_u16(500u16).unwrap()).json(format!(
+            "System chain is {} but withdraw chain is {}, withdraw impossible!",
+            system_chain, withdraw_chain
+        )),
     }
 }
 
@@ -89,9 +87,7 @@ pub fn withdraw_all(path: Path<Address>) -> HttpResponse {
 fn queue_eth_compatible_withdraw(address: Address, amount: Uint256) -> HttpResponse {
     let mut writer = WITHDRAW_QUEUE.write().unwrap();
     *writer = Some((address, amount));
-    HttpResponse::new(StatusCode::OK)
-        .into_builder()
-        .json("Withdraw queued")
+    HttpResponse::build(StatusCode::OK).json("Withdraw queued")
 }
 
 /// Withdraw for eth compatible chains, pulls from the queued withdraw
@@ -139,8 +135,8 @@ fn xdai_to_eth_withdraw(address: Address, amount: Uint256) -> HttpResponse {
         amount,
     }) {
         Ok(_) => HttpResponse::Ok().json("View endpoints for progress"),
-        Err(e) => HttpResponse::new(StatusCode::from_u16(500u16).unwrap())
-            .into_builder()
-            .json(format!("{:?}", e)),
+        Err(e) => {
+            HttpResponse::build(StatusCode::from_u16(500u16).unwrap()).json(format!("{:?}", e))
+        }
     }
 }

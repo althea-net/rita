@@ -1,16 +1,17 @@
-use actix_web::{HttpRequest, HttpResponse, Json, Result};
+use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
 use arrayvec::ArrayString;
 
 use crate::RitaCommonError;
 
-pub fn get_nickname(_req: HttpRequest) -> Result<HttpResponse, RitaCommonError> {
+pub fn get_nickname(_req: HttpRequest) -> HttpResponse {
     let nick = settings::get_rita_common().network.nickname;
 
     if let Some(nick) = nick {
-        Ok(HttpResponse::Ok().json(nick.to_string()))
+        HttpResponse::Ok().json(nick.to_string())
     } else {
-        Err(RitaCommonError::NicknameError(
-            "Nickname not set!".to_string(),
+        HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!(
+            "{}",
+            RitaCommonError::NicknameError("Nickname not set!".to_string())
         ))
     }
 }
@@ -20,7 +21,7 @@ pub struct Nickname {
     nickname: String,
 }
 
-pub fn set_nickname(nickname: Json<Nickname>) -> Result<HttpResponse, RitaCommonError> {
+pub fn set_nickname(nickname: Json<Nickname>) -> HttpResponse {
     let new_nick = &nickname.nickname;
     match ArrayString::<32>::from(new_nick) {
         Ok(new) => {
@@ -30,14 +31,18 @@ pub fn set_nickname(nickname: Json<Nickname>) -> Result<HttpResponse, RitaCommon
 
             // try and save the config and fail if we can't
             if let Err(e) = settings::write_config() {
-                return Err(RitaCommonError::SettingsError(e));
+                return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+                    .json(format!("{}", RitaCommonError::SettingsError(e)));
             }
 
-            Ok(HttpResponse::Ok().json(()))
+            HttpResponse::Ok().json(())
         }
-        Err(_e) => Err(RitaCommonError::CapacityError(
-            "Insufficient capacity for string!".to_string(),
-        )),
+        Err(_e) => {
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!(
+                "{}",
+                RitaCommonError::CapacityError("Insufficient capacity for string!".to_string())
+            ));
+        }
     }
 }
 

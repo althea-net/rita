@@ -1,7 +1,7 @@
-use actix_web::http::StatusCode;
-use actix_web::HttpRequest;
-use actix_web::HttpResponse;
-use actix_web::Path;
+use actix_web_async::http::StatusCode;
+use actix_web_async::web::Path;
+use actix_web_async::HttpRequest;
+use actix_web_async::HttpResponse;
 use althea_kernel_interface::file_io::get_lines;
 use althea_kernel_interface::file_io::write_out;
 use rita_common::RitaCommonError;
@@ -12,11 +12,16 @@ use crate::RitaClientError;
 static DROPBEAR_CONFIG: &str = "/etc/config/dropbear";
 static FIREWALL_CONFIG: &str = "/etc/config/firewall";
 
-pub fn get_remote_access_status(_req: HttpRequest) -> Result<HttpResponse, RitaClientError> {
+pub fn get_remote_access_status(_req: HttpRequest) -> HttpResponse {
     if !KI.is_openwrt() {
-        return Ok(HttpResponse::new(StatusCode::BAD_REQUEST));
+        return HttpResponse::new(StatusCode::BAD_REQUEST);
     }
-    Ok(HttpResponse::Ok().json(check_dropbear_config()?))
+    HttpResponse::Ok().json(match check_dropbear_config() {
+        Ok(a) => a,
+        Err(e) => {
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{}", e));
+        }
+    })
 }
 
 // todo try and combine the above function with this one and maintain
@@ -55,10 +60,12 @@ fn check_dropbear_config() -> Result<bool, RitaClientError> {
     Ok(true)
 }
 
-pub fn set_remote_access_status(path: Path<bool>) -> Result<HttpResponse, RitaClientError> {
+pub fn set_remote_access_status(path: Path<bool>) -> HttpResponse {
     let remote_access = path.into_inner();
-    set_remote_access_internal(remote_access)?;
-    Ok(HttpResponse::Ok().json(()))
+    if let Err(e) = set_remote_access_internal(remote_access) {
+        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{}", e));
+    }
+    HttpResponse::Ok().json(())
 }
 
 pub fn set_remote_access_internal(remote_access: bool) -> Result<(), RitaClientError> {

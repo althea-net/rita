@@ -1,22 +1,19 @@
-use actix_web::http::StatusCode;
-use actix_web::Path;
-use actix_web::{HttpRequest, HttpResponse};
+use actix_web_async::http::StatusCode;
+use actix_web_async::web::Path;
+use actix_web_async::{HttpRequest, HttpResponse};
 use althea_types::SystemChain;
 use rita_common::blockchain_oracle::set_oracle_net_version;
 use settings::payment::PaymentSettings;
 use settings::payment::ETH_FEE_MULTIPLIER;
 use settings::payment::XDAI_FEE_MULTIPLIER;
 
-use crate::RitaClientError;
-
 /// Changes the full node configuration value between test/prod and other networks
-pub fn set_system_blockchain_endpoint(path: Path<String>) -> Result<HttpResponse, RitaClientError> {
+pub fn set_system_blockchain_endpoint(path: Path<String>) -> HttpResponse {
     info!("Blockchain change endpoint hit!");
     let id: Result<SystemChain, ()> = path.into_inner().parse();
     if id.is_err() {
-        return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
-            .into_builder()
-            .json(format!("Could not parse {:?} into a SystemChain enum!", id)));
+        return HttpResponse::build(StatusCode::BAD_REQUEST)
+            .json(format!("Could not parse {:?} into a SystemChain enum!", id));
     }
     let id = id.unwrap();
 
@@ -26,15 +23,18 @@ pub fn set_system_blockchain_endpoint(path: Path<String>) -> Result<HttpResponse
     rita_client.payment = payment;
     settings::set_rita_client(rita_client);
 
-    settings::write_config()?;
+    if let Err(e) = settings::write_config() {
+        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+            .json(format!("Error while writing config: {:?}", e));
+    }
 
-    Ok(HttpResponse::Ok().json(()))
+    HttpResponse::Ok().json(())
 }
 
-pub fn get_system_blockchain(_req: HttpRequest) -> Result<HttpResponse, RitaClientError> {
+pub fn get_system_blockchain(_req: HttpRequest) -> HttpResponse {
     debug!("/blockchain/ GET hit");
 
-    Ok(HttpResponse::Ok().json(settings::get_rita_client().payment.system_chain))
+    HttpResponse::Ok().json(settings::get_rita_client().payment.system_chain)
 }
 
 pub fn set_system_blockchain(id: SystemChain, payment: &mut PaymentSettings) {

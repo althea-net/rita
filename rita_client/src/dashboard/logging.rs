@@ -1,15 +1,13 @@
-use actix_web::http::StatusCode;
-use actix_web::{HttpRequest, HttpResponse, Path};
+use actix_web_async::http::StatusCode;
+use actix_web_async::{web::Path, HttpRequest, HttpResponse};
 use log::LevelFilter;
 use rita_common::KI;
 
-use crate::RitaClientError;
-
-pub fn get_remote_logging(_req: HttpRequest) -> Result<HttpResponse, RitaClientError> {
-    Ok(HttpResponse::Ok().json(settings::get_rita_client().log.enabled))
+pub fn get_remote_logging(_req: HttpRequest) -> HttpResponse {
+    HttpResponse::Ok().json(settings::get_rita_client().log.enabled)
 }
 
-pub fn remote_logging(path: Path<bool>) -> Result<HttpResponse, RitaClientError> {
+pub fn remote_logging(path: Path<bool>) -> HttpResponse {
     let enabled = path.into_inner();
     debug!("/remote_logging/enable/{} hit", enabled);
 
@@ -23,36 +21,33 @@ pub fn remote_logging(path: Path<bool>) -> Result<HttpResponse, RitaClientError>
     settings::set_rita_client(rita_client);
 
     if let Err(e) = settings::write_config() {
-        return Ok(HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
-            .into_builder()
-            .json(format!("Failed to write config {:?}", e)));
+        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+            .json(format!("Failed to write config {:?}", e));
     }
 
     if let Err(e) = KI.run_command(service_path.as_str(), &["restart"]) {
-        return Ok(HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
-            .into_builder()
-            .json(format!("Failed to restart service {:?}", e)));
+        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+            .json(format!("Failed to restart service {:?}", e));
     }
 
-    Ok(HttpResponse::Ok().json(()))
+    HttpResponse::Ok().json(())
 }
 
-pub fn get_remote_logging_level(_req: HttpRequest) -> Result<HttpResponse, RitaClientError> {
+pub fn get_remote_logging_level(_req: HttpRequest) -> HttpResponse {
     let rita_client = settings::get_rita_client();
     let level = &rita_client.log.level;
-    Ok(HttpResponse::Ok().json(level))
+    HttpResponse::Ok().json(level)
 }
 
-pub fn remote_logging_level(path: Path<String>) -> Result<HttpResponse, RitaClientError> {
+pub fn remote_logging_level(path: Path<String>) -> HttpResponse {
     let level = path.into_inner();
     debug!("/remote_logging/level/{}", level);
 
     let log_level: LevelFilter = match level.parse() {
         Ok(level) => level,
         Err(e) => {
-            return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
-                .into_builder()
-                .json(format!("Could not parse loglevel {:?}", e)));
+            return HttpResponse::build(StatusCode::BAD_REQUEST)
+                .json(format!("Could not parse loglevel {:?}", e));
         }
     };
 
@@ -65,16 +60,14 @@ pub fn remote_logging_level(path: Path<String>) -> Result<HttpResponse, RitaClie
     settings::set_rita_client(rita_client);
 
     if let Err(e) = settings::write_config() {
-        return Ok(HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
-            .into_builder()
-            .json(format!("Failed to write config {:?}", e)));
+        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+            .json(format!("Failed to write config {:?}", e));
     }
 
     if let Err(e) = KI.run_command(service_path.as_str(), &["restart"]) {
-        return Ok(HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
-            .into_builder()
-            .json(format!("Failed to restart service {:?}", e)));
+        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+            .json(format!("Failed to restart service {:?}", e));
     }
 
-    Ok(HttpResponse::Ok().json(()))
+    HttpResponse::Ok().json(())
 }
