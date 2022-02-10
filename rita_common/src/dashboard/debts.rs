@@ -1,14 +1,12 @@
 use crate::debt_keeper::get_debts_list;
 use crate::debt_keeper::traffic_replace;
-use crate::debt_keeper::GetDebtsResult;
 use crate::debt_keeper::Traffic;
-use crate::RitaCommonError;
-use actix_web::{HttpRequest, HttpResponse, Json};
+use actix_web_async::{web::Json, HttpRequest, HttpResponse};
 use althea_types::Identity;
 
-pub fn get_debts(_req: HttpRequest) -> Result<Json<Vec<GetDebtsResult>>, RitaCommonError> {
+pub fn get_debts(_req: HttpRequest) -> HttpResponse {
     trace!("get_debts: Hit");
-    Ok(Json(get_debts_list()))
+    HttpResponse::Ok().json(get_debts_list())
 }
 
 pub fn reset_debt(user_to_forgive: Json<Identity>) -> HttpResponse {

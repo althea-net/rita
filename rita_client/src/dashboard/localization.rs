@@ -1,16 +1,10 @@
-use actix_web::error::JsonPayloadError;
-use actix_web::{client, HttpMessage, HttpRequest, HttpResponse, Json};
-use althea_types::WyreReservationRequestCarrier;
-use althea_types::WyreReservationResponse;
-use futures01::future;
-use futures01::future::Either;
-use futures01::Future;
+use actix_web_async::http::StatusCode;
+use actix_web_async::{web::Json, HttpRequest, HttpResponse};
+use althea_types::{WyreReservationRequestCarrier, WyreReservationResponse};
 use phonenumber::Mode;
 use settings::localization::LocalizationSettings;
 
 use std::time::Duration;
-
-use crate::RitaClientError;
 
 /// A version of the localization struct that serializes into a more easily
 /// consumable form
@@ -35,10 +29,10 @@ impl From<LocalizationSettings> for LocalizationReturn {
     }
 }
 
-pub fn get_localization(_req: HttpRequest) -> Json<LocalizationReturn> {
+pub fn get_localization(_req: HttpRequest) -> HttpResponse {
     debug!("/localization GET hit");
     let localization = settings::get_rita_client().localization;
-    Json(localization.into())
+    HttpResponse::Ok().json(localization)
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -51,9 +45,7 @@ pub struct AmountRequest {
 /// wyre provides. In theory this is actually a general 'redirect user to payment
 /// processor' endpoint that we could integrate with Moonpay or another provider
 /// TODO generalize naming of this endpoint
-pub fn get_wyre_reservation(
-    amount: Json<AmountRequest>,
-) -> Box<dyn Future<Item = HttpResponse, Error = RitaClientError>> {
+pub async fn get_wyre_reservation(amount: Json<AmountRequest>) -> HttpResponse {
     info!("Getting wyre reservation");
 
     let mut rita_client = settings::get_rita_client();
@@ -80,26 +72,26 @@ pub fn get_wyre_reservation(
         api_url = "https://operator.althea.net:8080/wyre_reservation";
     }
 
-    Box::new(
-        client::post(&api_url)
-            .timeout(Duration::from_secs(10))
-            .json(&payload)
-            .unwrap()
-            .send()
-            .then(move |response| match response {
-                Ok(response) => Either::A(response.json().then(
-                    move |value: Result<WyreReservationResponse, JsonPayloadError>| match value {
-                        Ok(value) => Ok(HttpResponse::Ok().json(value)),
-                        Err(e) => {
-                            error!("Failed to deserialize wyre response  {:?}", e);
-                            Ok(HttpResponse::InternalServerError().finish())
-                        }
-                    },
-                )),
-                Err(e) => {
-                    error!("Failed to send wyre request {:?}", e);
-                    Either::B(future::ok(HttpResponse::InternalServerError().finish()))
-                }
-            }),
-    )
+    let client = awc::Client::default();
+    let response = client
+        .post(api_url)
+        .timeout(Duration::from_secs(10))
+        .send_json(&payload)
+        .await;
+    let mut response = match response {
+        Ok(a) => a,
+        Err(e) => {
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{}", e));
+        }
+    };
+
+    let value: WyreReservationResponse = match response.json().await {
+        Ok(a) => a,
+        Err(e) => {
+            error!("Failed to deserialize wyre response  {:?}", e);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(value)
 }

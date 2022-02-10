@@ -1,4 +1,4 @@
-use actix_web::{HttpRequest, HttpResponse};
+use actix_web_async::{HttpRequest, HttpResponse};
 use std::collections::HashMap;
 
 pub fn get_mesh_ip(_req: HttpRequest) -> HttpResponse {

@@ -5,7 +5,6 @@ use crate::peer_listener::Peer;
 use crate::tm_identity_callback;
 use crate::tunnel_manager::id_callback::IdentityCallback;
 
-use actix_web::HttpRequest as OldHttpRequest;
 use actix_web_async::http::StatusCode;
 use actix_web_async::web::Json;
 
@@ -84,7 +83,7 @@ pub fn hello_response(req: (Json<LocalIdentity>, HttpRequest)) -> HttpResponse {
     })
 }
 
-pub fn version(_req: OldHttpRequest) -> String {
+pub async fn version(_req: HttpRequest) -> String {
     format!(
         "crate ver {}\ngit hash {}",
         env!("CARGO_PKG_VERSION"),

@@ -1,26 +1,65 @@
 //! This is the Actix-web middleware that attaches the content headers we need for
 //! the client dashboard
+//!
+//! This middleware was setup using the example here: https://actix.rs/docs/middleware/
+//! Two middleware are setup, HttpAuthentication and Header middleware
+//! To setup middleware we implement two traits, Service and Transform for the struct in question
+//! The service trait has a fn 'call', which where we are able to take the req, modify it
+//! as necessary and convert it into a response, modify it as necessary and then return that
+//! response
 
-use actix_web::http::{header, HttpTryFrom, Method, StatusCode};
-use actix_web::middleware::{Middleware, Response, Started};
-use actix_web::{FromRequest, HttpRequest, HttpResponse, Result};
-use actix_web_httpauth::extractors::basic::{BasicAuth, Config};
-use actix_web_httpauth::extractors::AuthenticationError;
+use actix_web_async::dev::{Service, Transform};
+use actix_web_async::http::header::{
+    Header, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_ORIGIN,
+};
+use actix_web_async::http::{header, Method, StatusCode};
+use actix_web_httpauth_async::extractors::basic::Config;
+use actix_web_httpauth_async::extractors::AuthenticationError;
+
+use actix_web_async::{dev::ServiceRequest, dev::ServiceResponse, Error};
+use actix_web_httpauth_async::headers::authorization::{Authorization, Basic};
+use futures::future::{ok, LocalBoxFuture, Ready};
+use futures::FutureExt;
 use regex::Regex;
 
-pub struct Headers;
+pub struct HeadersMiddlewareFactory;
 
-impl<S> Middleware<S> for Headers {
-    fn start(&self, _req: &HttpRequest<S>) -> Result<Started> {
-        Ok(Started::Done)
+impl<S, B> Transform<S, ServiceRequest> for HeadersMiddlewareFactory
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
+{
+    type Response = ServiceResponse<B>;
+    type Error = Error;
+    type InitError = ();
+    type Transform = HeadersMiddleware<S>;
+    type Future = Ready<Result<Self::Transform, Self::InitError>>;
+
+    fn new_transform(&self, service: S) -> Self::Future {
+        ok(HeadersMiddleware { service })
     }
+}
 
-    fn response(&self, req: &HttpRequest<S>, mut resp: HttpResponse) -> Result<Response> {
-        let url = req.connection_info().host().to_owned();
+pub struct HeadersMiddleware<S> {
+    service: S,
+}
+
+impl<S, B> Service<ServiceRequest> for HeadersMiddleware<S>
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
+{
+    type Response = ServiceResponse<B>;
+    type Error = Error;
+    type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
+
+    actix_service::forward_ready!(service);
+
+    fn call(&self, req: ServiceRequest) -> Self::Future {
+        let conn = req.connection_info().clone();
+        let url = conn.host();
         let re = Regex::new(r"^(.*):").unwrap();
-        let url_no_port = re.captures(&url).unwrap()[1].to_string();
+        let url_no_port = re.captures(url).unwrap()[1].to_string();
 
-        let origin = match req.headers().get("origin") {
+        let origin = match req.headers().clone().get("origin") {
             Some(origin) => {
                 if origin == "http://althea.net" {
                     "althea.net".to_string()
@@ -33,55 +72,109 @@ impl<S> Middleware<S> for Headers {
             None => url_no_port,
         };
 
-        if req.method() == Method::OPTIONS {
-            *resp.status_mut() = StatusCode::OK;
-        }
+        let req_method = req.method().clone();
 
-        if !origin.is_empty() {
-            #[cfg(not(feature = "dash_debug"))]
+        let fut = self.service.call(req);
+
+        async move {
+            //Convert the request into a response
+            let mut resp = fut.await?;
+
+            if req_method == Method::OPTIONS {
+                *resp.response_mut().status_mut() = StatusCode::OK;
+            }
+
+            if !origin.is_empty() {
+                #[cfg(not(feature = "dash_debug"))]
+                resp.headers_mut().insert(
+                    ACCESS_CONTROL_ALLOW_ORIGIN,
+                    header::HeaderValue::from_str(&format!("http://{}", origin)).unwrap(),
+                );
+                #[cfg(feature = "dash_debug")]
+                resp.headers_mut().insert(
+                    ACCESS_CONTROL_ALLOW_ORIGIN,
+                    header::HeaderValue::from_str("*").unwrap(),
+                );
+            }
             resp.headers_mut().insert(
-                header::HeaderName::try_from("Access-Control-Allow-Origin").unwrap(),
-                header::HeaderValue::from_str(&format!("http://{}", origin)).unwrap(),
+                ACCESS_CONTROL_ALLOW_HEADERS,
+                header::HeaderValue::from_static("authorization, content-type"),
             );
-            #[cfg(feature = "dash_debug")]
-            resp.headers_mut().insert(
-                header::HeaderName::try_from("Access-Control-Allow-Origin").unwrap(),
-                header::HeaderValue::from_str("*").unwrap(),
-            );
+
+            Ok(resp)
         }
-        resp.headers_mut().insert(
-            header::HeaderName::try_from("Access-Control-Allow-Headers").unwrap(),
-            header::HeaderValue::from_static("authorization, content-type"),
-        );
-        Ok(Response::Done(resp))
+        .boxed_local()
     }
 }
 
-// for some reason the Headers struct doesn't get this
-#[allow(dead_code)]
-pub struct Auth;
+pub struct AuthMiddlewareFactory;
 
-impl<S> Middleware<S> for Auth {
-    fn start(&self, req: &HttpRequest<S>) -> Result<Started> {
+impl<S, B> Transform<S, ServiceRequest> for AuthMiddlewareFactory
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
+{
+    type Response = ServiceResponse<B>;
+    type Error = Error;
+    type InitError = ();
+    type Transform = AuthMiddleware<S>;
+    type Future = Ready<Result<Self::Transform, Self::InitError>>;
+
+    fn new_transform(&self, service: S) -> Self::Future {
+        ok(AuthMiddleware { service })
+    }
+}
+
+pub struct AuthMiddleware<S> {
+    service: S,
+}
+
+impl<S, B> Service<ServiceRequest> for AuthMiddleware<S>
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
+{
+    type Response = ServiceResponse<B>;
+    type Error = Error;
+    type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
+
+    actix_service::forward_ready!(service);
+
+    fn call(&self, req: ServiceRequest) -> Self::Future {
         let password = settings::get_rita_client().network.rita_dashboard_password;
-        let mut config = Config::default();
 
-        // the /exits path is exempted from authenticaiton so that the
-        // checkup.ash cron script can continue to query it without issue
-        if password.is_none() || req.request().path() == "/exits" {
-            return Ok(Started::Done);
-        }
+        let req_path = req.path().to_string();
 
-        config.realm("Admin");
-        let auth = BasicAuth::from_request(req, &config)?;
-        // hardcoded username since we don't have a user system
-        if auth.username() == "rita"
-            && auth.password().is_some()
-            && auth.password().unwrap() == password.unwrap()
-        {
-            Ok(Started::Done)
-        } else {
-            Err(AuthenticationError::from(config).into())
+        let auth = Authorization::<Basic>::parse(&req);
+
+        let fut = self.service.call(req);
+
+        async move {
+            // the /exits path is exempted from authenticaiton so that the
+            // checkup.ash cron script can continue to query it without issue
+            if password.is_none() || req_path == "/exits" {
+                let resp = fut.await?;
+                return Ok(resp);
+            }
+
+            let auth = match auth {
+                Ok(auth) => auth,
+                Err(_) => {
+                    let config = Config::default();
+                    return Err(AuthenticationError::from(config.realm("Admin")).into());
+                }
+            };
+
+            // If the user is authenticated, convert request -> response and return, else return Authenticaiton error
+            if auth.as_ref().user_id() == "rita"
+                && auth.as_ref().password().is_some()
+                && auth.as_ref().password().unwrap().clone() == password.unwrap()
+            {
+                let resp = fut.await?;
+                Ok(resp)
+            } else {
+                let config = Config::default();
+                Err(AuthenticationError::from(config.realm("Admin")).into())
+            }
         }
+        .boxed_local()
     }
 }

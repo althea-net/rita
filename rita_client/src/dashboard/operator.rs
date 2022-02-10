@@ -1,18 +1,20 @@
 use crate::operator_fee_manager::get_operator_fee_debt;
-use crate::RitaClientError;
-use actix_web::Path;
-use actix_web::{HttpRequest, HttpResponse, Json, Result};
+use actix_web_async::web::Path;
+use actix_web_async::{HttpRequest, HttpResponse};
 use clarity::Address;
 use num256::Uint256;
 use std::collections::HashMap;
 
 /// TODO remove after beta 12, provided for backwards compat
-pub fn get_dao_list(_req: HttpRequest) -> Result<Json<Vec<Address>>, RitaClientError> {
+pub fn get_dao_list(_req: HttpRequest) -> HttpResponse {
     trace!("get dao list: Hit");
     let rita_client = settings::get_rita_client();
     match rita_client.operator.operator_address {
-        Some(address) => Ok(Json(vec![address])),
-        None => Ok(Json(Vec::new())),
+        Some(address) => HttpResponse::Ok().json(vec![address]),
+        None => {
+            let emp_vec: Vec<Address> = Vec::new();
+            HttpResponse::Ok().json(emp_vec)
+        }
     }
 }
 
@@ -67,12 +69,15 @@ pub fn set_dao_fee(path: Path<Uint256>) -> HttpResponse {
     HttpResponse::Ok().finish()
 }
 
-pub fn get_operator(_req: HttpRequest) -> Json<Option<Address>> {
+pub fn get_operator(_req: HttpRequest) -> HttpResponse {
     trace!("get operator address: Hit");
     let rita_client = settings::get_rita_client();
     match rita_client.operator.operator_address {
-        Some(address) => Json(Some(address)),
-        None => Json(None),
+        Some(address) => HttpResponse::Ok().json(Some(address)),
+        None => {
+            let emp_op: Option<Address> = None;
+            HttpResponse::Ok().json(emp_op)
+        }
     }
 }
 

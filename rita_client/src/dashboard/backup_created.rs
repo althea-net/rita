@@ -1,11 +1,8 @@
-use actix_web::Path;
-use actix_web::{HttpRequest, HttpResponse, Result};
+use actix_web_async::{http::StatusCode, web::Path, HttpRequest, HttpResponse};
 use rita_common::RitaCommonError;
 use std::collections::HashMap;
 
-use crate::RitaClientError;
-
-pub fn get_backup_created(_req: HttpRequest) -> Result<HttpResponse, RitaClientError> {
+pub fn get_backup_created(_req: HttpRequest) -> HttpResponse {
     debug!("/backup_created GET hit");
     let mut ret = HashMap::new();
     ret.insert(
@@ -16,10 +13,10 @@ pub fn get_backup_created(_req: HttpRequest) -> Result<HttpResponse, RitaClientE
             .to_string(),
     );
 
-    Ok(HttpResponse::Ok().json(ret))
+    HttpResponse::Ok().json(ret)
 }
 
-pub fn set_backup_created(path: Path<bool>) -> Result<HttpResponse, RitaClientError> {
+pub fn set_backup_created(path: Path<bool>) -> HttpResponse {
     debug!("Setting backup created");
     let value = path.into_inner();
 
@@ -28,8 +25,9 @@ pub fn set_backup_created(path: Path<bool>) -> Result<HttpResponse, RitaClientEr
     settings::set_rita_client(rita_client);
 
     if let Err(e) = settings::write_config() {
-        return Err(RitaCommonError::SettingsError(e).into());
+        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+            .json(format!("{:?}", RitaCommonError::SettingsError(e)));
     }
 
-    Ok(HttpResponse::Ok().json(()))
+    HttpResponse::Ok().json(())
 }

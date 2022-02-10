@@ -1,6 +1,7 @@
 //! A generalized interface for modifying networking interface assignments using UCI
-use actix_web::Path;
-use actix_web::{HttpRequest, HttpResponse, Json};
+use actix_web_async::http::StatusCode;
+use actix_web_async::web::Path;
+use actix_web_async::{web::Json, HttpRequest, HttpResponse};
 use rita_common::peer_listener::unlisten_interface;
 use rita_common::{RitaCommonError, KI};
 use std::collections::HashMap;
@@ -628,15 +629,13 @@ mod tests {
     }
 }
 
-pub fn get_interfaces_endpoint(
-    _req: HttpRequest,
-) -> Result<Json<HashMap<String, InterfaceMode>>, RitaClientError> {
+pub fn get_interfaces_endpoint(_req: HttpRequest) -> HttpResponse {
     debug!("get /interfaces hit");
     match get_interfaces() {
-        Ok(val) => Ok(Json(val)),
+        Ok(val) => HttpResponse::Ok().json(val),
         Err(e) => {
             error!("get_interfaces failed with {:?}", e);
-            Err(e)
+            HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{:?}", e))
         }
     }
 }

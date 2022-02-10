@@ -1,39 +1,42 @@
-use crate::{operator_update::updater::update_rita, RitaClientError};
-use actix_web::{HttpRequest, HttpResponse};
+use crate::operator_update::updater::update_rita;
+use actix_web_async::{http::StatusCode, HttpRequest, HttpResponse};
 use althea_types::UpdateType;
 use rita_common::KI;
 use std::sync::{Arc, RwLock};
+
 lazy_static! {
     pub static ref UPDATE_INSTRUCTION: Arc<RwLock<Option<UpdateType>>> =
         Arc::new(RwLock::new(None));
 }
 
-pub fn reboot_router(_req: HttpRequest) -> Result<HttpResponse, RitaClientError> {
+pub fn reboot_router(_req: HttpRequest) -> HttpResponse {
     if KI.is_openwrt() {
-        KI.run_command("reboot", &[])?;
-        Ok(HttpResponse::Ok().json(()))
+        if let Err(e) = KI.run_command("reboot", &[]) {
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+                .json(format!("Cannot run reboot: {}", e));
+        }
+        HttpResponse::Ok().json(())
     } else {
-        Ok(HttpResponse::Ok().json("This isn't an OpenWRT device, doing nothing"))
+        HttpResponse::Ok().json("This isn't an OpenWRT device, doing nothing")
     }
 }
 
 /// This function is triggered by the user from the router dashboard. Retrive the firmware image from
 /// the lazy static variable and use this to perform a sysupgrade. If device is not openwrt or no image
 /// link is available, do nothing
-pub fn update_router(_req: HttpRequest) -> Result<HttpResponse, RitaClientError> {
+pub fn update_router(_req: HttpRequest) -> HttpResponse {
     if KI.is_openwrt() {
         let reader = &*UPDATE_INSTRUCTION.read().unwrap();
         if reader.is_none() {
-            return Ok(HttpResponse::Ok().json("No update instructions set, doing nothing"));
+            return HttpResponse::Ok().json("No update instructions set, doing nothing");
         }
         if let Err(e) = update_rita(reader.as_ref().unwrap().clone()) {
-            return Ok(
-                HttpResponse::Ok().json(format!("Retrieved Error while performing update {}", e))
-            );
+            return HttpResponse::Ok()
+                .json(format!("Retrieved Error while performing update {}", e));
         }
-        Ok(HttpResponse::Ok().json(()))
+        HttpResponse::Ok().json(())
     } else {
-        Ok(HttpResponse::Ok().json("This isn't an OpenWRT device, doing nothing"))
+        HttpResponse::Ok().json("This isn't an OpenWRT device, doing nothing")
     }
 }
 

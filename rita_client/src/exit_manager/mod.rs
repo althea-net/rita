@@ -21,9 +21,8 @@ mod exit_switcher;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use crate::RitaClientError;
-use actix_web::client::Connection;
 
-use actix_web::{client, HttpMessage, Result};
+use actix_web_async::Result;
 use althea_kernel_interface::{
     exit_client_tunnel::ClientExitTunnelConfig, DefaultRoute, KernelInterfaceError,
 };
@@ -34,8 +33,7 @@ use althea_types::WgKey;
 use althea_types::{EncryptedExitClientIdentity, EncryptedExitState};
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState, ExitVerifMode};
 use exit_switcher::{get_babel_routes, set_best_exit};
-use futures01::future;
-use futures01::Future;
+
 use rita_common::blockchain_oracle::low_balance;
 use rita_common::KI;
 use settings::client::ExitServer;
@@ -46,8 +44,6 @@ use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::time::Duration;
-use tokio::net::TcpStream as TokioTcpStream;
 
 /// The number of times ExitSwitcher will try to connect to an unresponsive exit before blacklisting its ip
 const MAX_BLACKLIST_STRIKES: u16 = 100;
@@ -255,46 +251,48 @@ fn decrypt_exit_state(
     Ok(decrypted_exit_state)
 }
 
-fn send_exit_setup_request(
+async fn send_exit_setup_request(
     exit_pubkey: WgKey,
     to: SocketAddr,
     ident: ExitClientIdentity,
-) -> impl Future<Item = ExitState, Error = RitaClientError> {
+) -> Result<ExitState, RitaClientError> {
     let endpoint = format!("http://[{}]:{}/secure_setup", to.ip(), to.port());
     let ident = encrypt_exit_client_id(&exit_pubkey.into(), ident);
 
-    let stream = TokioTcpStream::connect(&to);
+    let client = awc::Client::default();
 
-    // TODO: Add a timeout check here when this is migrate to async await. We check if request is timed out,
-    // and after a few attempts, blacklist the ip with bad repsonses.
-    stream.from_err().and_then(move |stream| {
-        client::post(&endpoint)
-            .timeout(Duration::from_secs(600))
-            .with_connection(Connection::from_stream(stream))
-            .json(ident)
-            .unwrap()
-            .send()
-            .from_err()
-            .and_then(move |response| {
-                response
-                    .json()
-                    .from_err()
-                    .and_then(move |value: EncryptedExitState| {
-                        // If we are unable to decrypt this exit state, it is likely a rogue ip, we black list this
-                        match decrypt_exit_state(value, exit_pubkey.into()) {
-                            Err(e) => {
-                                blacklist_strike_ip(to.ip(), WarningType::HardWarning);
-                                Err(e)
-                            }
-                            a => {
-                                reset_blacklist_warnings(to.ip());
-                                a
-                            }
-                        }
-                    })
-                    .from_err()
-            })
-    })
+    let response = client
+        .post(&endpoint)
+        .timeout(CLIENT_LOOP_TIMEOUT)
+        .send_json(&ident)
+        .await;
+    let mut response = match response {
+        Ok(a) => {
+            reset_blacklist_warnings(to.ip());
+            a
+        }
+        Err(awc::error::SendRequestError::Timeout) => {
+            // Did not get a response, is it a rogue exit or some netork error?
+            blacklist_strike_ip(to.ip(), WarningType::SoftWarning);
+            return Err(RitaClientError::SendRequestError(
+                awc::error::SendRequestError::Timeout.to_string(),
+            ));
+        }
+        Err(e) => return Err(RitaClientError::SendRequestError(e.to_string())),
+    };
+
+    let value = response.json().await?;
+
+    match decrypt_exit_state(value, exit_pubkey.into()) {
+        Err(e) => {
+            blacklist_strike_ip(to.ip(), WarningType::HardWarning);
+            Err(e)
+        }
+        a => {
+            reset_blacklist_warnings(to.ip());
+            a
+        }
+    }
 }
 
 async fn send_exit_status_request(
@@ -367,19 +365,16 @@ async fn exit_general_details_request(exit: String) -> Result<(), RitaClientErro
     Ok(())
 }
 
-pub fn exit_setup_request(
-    exit: String,
-    code: Option<String>,
-) -> Box<dyn Future<Item = (), Error = RitaClientError>> {
+pub async fn exit_setup_request(exit: String, code: Option<String>) -> Result<(), RitaClientError> {
     let exit_client = settings::get_rita_client().exit_client;
     let current_exit = match exit_client.exits.get(&exit) {
         Some(exit_struct) => exit_struct.clone(),
-        None => return Box::new(future::err(RitaClientError::ExitNotFound(exit))),
+        None => return Err(RitaClientError::ExitNotFound(exit)),
     };
 
     let current_exit_ip = match current_exit.selected_exit.selected_id {
         Some(a) => a,
-        None => return Box::new(future::err(RitaClientError::NoExitIPError(exit))),
+        None => return Err(RitaClientError::NoExitIPError(exit)),
     };
 
     let exit_server = current_exit_ip;
@@ -388,9 +383,9 @@ pub fn exit_setup_request(
     let exit_auth_type = match current_exit.info.general_details() {
         Some(details) => details.verif_mode,
         None => {
-            return Box::new(future::err(RitaClientError::MiscStringError(
+            return Err(RitaClientError::MiscStringError(
                 "Exit is not ready to be setup!".to_string(),
-            )))
+            ))
         }
     };
 
@@ -406,9 +401,9 @@ pub fn exit_setup_request(
                         phone_code: None,
                     }
                 } else {
-                    return Box::new(future::err(RitaClientError::MiscStringError(
+                    return Err(RitaClientError::MiscStringError(
                         "No registration info set!".to_string(),
-                    )));
+                    ));
                 }
             }
         };
@@ -427,9 +422,9 @@ pub fn exit_setup_request(
         global: match settings::get_rita_client().get_identity() {
             Some(id) => id,
             None => {
-                return Box::new(future::err(RitaClientError::MiscStringError(
+                return Err(RitaClientError::MiscStringError(
                     "Identity has no mesh IP ready yet".to_string(),
-                )));
+                ));
             }
         },
         wg_port: exit_client.wg_listen_port,
@@ -438,30 +433,23 @@ pub fn exit_setup_request(
 
     let endpoint = SocketAddr::new(exit_server, current_exit.registration_port);
 
-    trace!(
+    info!(
         "sending exit setup request {:?} to {}, using {:?}",
-        ident,
-        exit,
-        endpoint
+        ident, exit, endpoint
     );
 
-    Box::new(
-        send_exit_setup_request(exit_pubkey, endpoint, ident)
-            .from_err()
-            .and_then(move |exit_response| {
-                let mut rita_client = settings::get_rita_client();
+    let exit_response = send_exit_setup_request(exit_pubkey, endpoint, ident).await?;
+    let mut rita_client = settings::get_rita_client();
 
-                let current_exit = match rita_client.exit_client.exits.get_mut(&exit) {
-                    Some(exit_struct) => exit_struct,
-                    None => return Err(RitaClientError::ExitNotFound(exit)),
-                };
+    let current_exit = match rita_client.exit_client.exits.get_mut(&exit) {
+        Some(exit_struct) => exit_struct,
+        None => return Err(RitaClientError::ExitNotFound(exit)),
+    };
 
-                current_exit.info = exit_response;
-                settings::set_rita_client(rita_client);
+    current_exit.info = exit_response;
+    settings::set_rita_client(rita_client);
 
-                Ok(())
-            }),
-    )
+    Ok(())
 }
 
 async fn exit_status_request(exit: String) -> Result<(), RitaClientError> {

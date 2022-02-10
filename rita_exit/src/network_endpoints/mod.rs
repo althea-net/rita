@@ -223,10 +223,10 @@ pub fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -> Http
 }
 
 pub fn get_exit_info_http(_req: HttpRequest) -> HttpResponse {
-    HttpResponse::Ok().json(Json(ExitState::GotInfo {
+    HttpResponse::Ok().json(ExitState::GotInfo {
         general_details: get_exit_info(),
         message: "Got info successfully".to_string(),
-    }))
+    })
 }
 
 /// Used by clients to get their debt from the exits. While it is in theory possible for the
@@ -247,9 +247,9 @@ pub fn get_client_debt(client: Json<Identity>) -> HttpResponse {
 }
 
 #[cfg(not(feature = "development"))]
-pub fn nuke_db(_req: actix_web::HttpRequest) -> Result<actix_web::HttpResponse, RitaExitError> {
+pub fn nuke_db(_req: HttpRequest) -> HttpResponse {
     // This is returned on production builds.
-    Ok(actix_web::HttpResponse::NotFound().finish())
+    HttpResponse::NotFound().finish()
 }
 
 #[cfg(feature = "development")]

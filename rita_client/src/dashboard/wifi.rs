@@ -1,8 +1,8 @@
 //! These endpoints are used to modify mundane wireless settings
 
-use ::actix_web::http::StatusCode;
-use ::actix_web::Path;
-use ::actix_web::{HttpRequest, HttpResponse, Json};
+use ::actix_web_async::http::StatusCode;
+use ::actix_web_async::web::Path;
+use ::actix_web_async::{web::Json, HttpRequest, HttpResponse};
 use rita_common::dashboard::nickname::maybe_set_nickname;
 use rita_common::{RitaCommonError, KI};
 use serde_json::Value;
@@ -274,7 +274,7 @@ pub enum WifiToken {
 /// an endpoint that takes a series of wifi tokens in json format and applies them all at once
 /// the reason for this is that changing any setting while on wifi will disconnect the caller
 /// so in order to have all the changes 'take' we need to have a single endpoint for all changes
-pub fn set_wifi_multi(wifi_changes: Json<Vec<WifiToken>>) -> Result<HttpResponse, RitaClientError> {
+pub fn set_wifi_multi(wifi_changes: Json<Vec<WifiToken>>) -> HttpResponse {
     trace!("Got multi wifi change!");
     let mut needs_reboot = false;
 
@@ -282,33 +282,36 @@ pub fn set_wifi_multi(wifi_changes: Json<Vec<WifiToken>>) -> Result<HttpResponse
         match token {
             WifiToken::WifiChannel(val) => {
                 if let Err(e) = set_channel(val) {
-                    return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
-                        .into_builder()
-                        .json(ErrorJsonResponse {
-                            error: format!("Failed to set channel: {}", e),
-                        }));
+                    return HttpResponse::build(StatusCode::BAD_REQUEST).json(ErrorJsonResponse {
+                        error: format!("Failed to set channel: {}", e),
+                    });
                 }
             }
             WifiToken::WifiPass(val) => {
                 if let Err(e) = set_pass(val) {
-                    return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
-                        .into_builder()
-                        .json(ErrorJsonResponse {
-                            error: format!("Failed to set password: {}", e),
-                        }));
+                    return HttpResponse::build(StatusCode::BAD_REQUEST).json(ErrorJsonResponse {
+                        error: format!("Failed to set password: {}", e),
+                    });
                 }
             }
             WifiToken::WifiSsid(val) => {
                 if let Err(e) = set_ssid(val) {
-                    return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
-                        .into_builder()
-                        .json(ErrorJsonResponse {
-                            error: format!("Failed to set SSID: {}", e),
-                        }));
+                    return HttpResponse::build(StatusCode::BAD_REQUEST).json(ErrorJsonResponse {
+                        error: format!("Failed to set SSID: {}", e),
+                    });
                 }
             }
             WifiToken::WifiDisabled(val) => {
-                let result = set_disabled(val)?;
+                let result = match set_disabled(val) {
+                    Ok(a) => a,
+                    Err(e) => {
+                        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(
+                            ErrorJsonResponse {
+                                error: format!("{}", e),
+                            },
+                        );
+                    }
+                };
                 if result.needs_reboot {
                     needs_reboot = true;
                 }
@@ -316,21 +319,43 @@ pub fn set_wifi_multi(wifi_changes: Json<Vec<WifiToken>>) -> Result<HttpResponse
         };
     }
 
-    KI.uci_commit("wireless")?;
-    KI.openwrt_reset_wireless()?;
+    if let Err(e) = KI.uci_commit("wireless") {
+        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(ErrorJsonResponse {
+            error: format!("{}", e),
+        });
+    }
+    if let Err(e) = KI.openwrt_reset_wireless() {
+        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(ErrorJsonResponse {
+            error: format!("{}", e),
+        });
+    }
 
     // We edited disk contents, force global sync
-    KI.fs_sync()?;
+    if let Err(e) = KI.fs_sync() {
+        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(ErrorJsonResponse {
+            error: format!("{}", e),
+        });
+    }
     // we have invalidated the old nat rules, update them
-    KI.create_client_nat_rules()?;
+    if let Err(e) = KI.create_client_nat_rules() {
+        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(ErrorJsonResponse {
+            error: format!("{}", e),
+        });
+    }
 
     if needs_reboot {
         info!("Changed a radio's active state, rebooting");
-        KI.run_command("reboot", &[])?;
-        return Ok(HttpResponse::Ok().json(RebootJsonResponse { needs_reboot: true }));
+        if let Err(e) = KI.run_command("reboot", &[]) {
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(
+                ErrorJsonResponse {
+                    error: format!("{}", e),
+                },
+            );
+        }
+        return HttpResponse::Ok().json(RebootJsonResponse { needs_reboot: true });
     }
 
-    Ok(HttpResponse::Ok().json(()))
+    HttpResponse::Ok().json(())
 }
 
 /// Validates that the channel is both correct and legal the underlying driver should prevent
@@ -418,58 +443,70 @@ fn validate_channel(
 }
 
 // returns what channels are allowed for the provided radio value
-pub fn get_allowed_wifi_channels(radio: Path<String>) -> Result<HttpResponse, RitaClientError> {
+pub fn get_allowed_wifi_channels(radio: Path<String>) -> HttpResponse {
     debug!("/wifi_settings/get_channels hit with {:?}", radio);
     let radio = radio.into_inner();
 
-    let current_channel: u16 = KI
-        .get_uci_var(&format!("wireless.{}.channel", radio))?
-        .parse()?;
-    let five_channel_width = KI.get_uci_var(&format!("wireless.{}.htmode", radio))?;
+    let current_channel: u16 = match KI.get_uci_var(&format!("wireless.{}.channel", radio)) {
+        Ok(uci) => match uci.parse() {
+            Ok(a) => a,
+            Err(e) => {
+                return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+                    .json(format!("{}", e));
+            }
+        },
+        Err(e) => {
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{}", e));
+        }
+    };
+    let five_channel_width = match KI.get_uci_var(&format!("wireless.{}.htmode", radio)) {
+        Ok(a) => a,
+        Err(e) => {
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{}", e));
+        }
+    };
     let model = settings::get_rita_client().network.device;
 
     if current_channel < 20 {
-        Ok(HttpResponse::Ok().json(ALLOWED_TWO))
+        HttpResponse::Ok().json(ALLOWED_TWO)
 
     // model specific values start here
     } else if model.is_some() && (model.clone().unwrap().contains("linksys_mr8300")) {
         if five_channel_width.contains("80") && radio == "radio0" {
-            Ok(HttpResponse::Ok().json(ALLOWED_FIVE_80_LOW))
+            HttpResponse::Ok().json(ALLOWED_FIVE_80_LOW)
         } else if five_channel_width.contains("80") && radio == "radio2" {
-            Ok(HttpResponse::Ok().json(ALLOWED_FIVE_80_HIGH))
+            HttpResponse::Ok().json(ALLOWED_FIVE_80_HIGH)
         } else if five_channel_width.contains("40") && radio == "radio0" {
-            Ok(HttpResponse::Ok().json(ALLOWED_FIVE_40_LOW))
+            HttpResponse::Ok().json(ALLOWED_FIVE_40_LOW)
         } else if five_channel_width.contains("40") && radio == "radio2" {
-            Ok(HttpResponse::Ok().json(ALLOWED_FIVE_40_HIGH))
+            HttpResponse::Ok().json(ALLOWED_FIVE_40_HIGH)
         } else {
-            Ok(HttpResponse::Ok().json(ALLOWED_NONE))
+            HttpResponse::Ok().json(ALLOWED_NONE)
         }
     } else if model.is_some()
         && (model.clone().unwrap().contains("gl-b1300")
             || model.clone().unwrap().contains("linksys_ea6350v3"))
         && five_channel_width.contains("80")
     {
-        Ok(HttpResponse::Ok().json(ALLOWED_FIVE_80_IPQ40XX))
+        HttpResponse::Ok().json(ALLOWED_FIVE_80_IPQ40XX)
     } else if model.is_some()
         && (model.clone().unwrap().contains("tplink_archer-a6-v3")
             || model.clone().unwrap().contains("cudy_wr2100")
             || model.unwrap().contains("linksys_e5600"))
         && five_channel_width.contains("80")
     {
-        Ok(HttpResponse::Ok().json(ALLOWED_FIVE_80_MT7621))
+        HttpResponse::Ok().json(ALLOWED_FIVE_80_MT7621)
     // model specific values end here
     } else if five_channel_width.contains("20") {
-        Ok(HttpResponse::Ok().json(ALLOWED_FIVE_20))
+        HttpResponse::Ok().json(ALLOWED_FIVE_20)
     } else if five_channel_width.contains("40") {
-        Ok(HttpResponse::Ok().json(ALLOWED_FIVE_40))
+        HttpResponse::Ok().json(ALLOWED_FIVE_40)
     } else if five_channel_width.contains("80") {
-        Ok(HttpResponse::Ok().json(ALLOWED_FIVE_80))
+        HttpResponse::Ok().json(ALLOWED_FIVE_80)
     } else if five_channel_width.contains("160") {
-        Ok(HttpResponse::Ok().json(ALLOWED_FIVE_160))
+        HttpResponse::Ok().json(ALLOWED_FIVE_160)
     } else {
-        Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
-            .into_builder()
-            .json("Can't identify Radio!"))
+        HttpResponse::build(StatusCode::BAD_REQUEST).json("Can't identify Radio!")
     }
 }
 
@@ -495,10 +532,15 @@ fn validate_config_value(s: &str) -> Result<(), ValidationError> {
     }
 }
 
-pub fn get_wifi_config(_req: HttpRequest) -> Result<Json<Vec<WifiInterface>>, RitaClientError> {
+pub fn get_wifi_config(_req: HttpRequest) -> HttpResponse {
     debug!("Get wificonfig hit!");
-    let config = get_wifi_config_internal()?;
-    Ok(Json(config))
+    let config = match get_wifi_config_internal() {
+        Ok(con) => con,
+        Err(e) => {
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{}", e));
+        }
+    };
+    HttpResponse::Ok().json(config)
 }
 
 fn get_wifi_config_internal() -> Result<Vec<WifiInterface>, RitaClientError> {
