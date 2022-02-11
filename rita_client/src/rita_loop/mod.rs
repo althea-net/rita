@@ -5,7 +5,7 @@
 //! tunnel if the signup was successful on the selected exit.
 
 use crate::exit_manager::exit_manager_tick;
-use crate::heartbeat::send_udp_heartbeat;
+use crate::heartbeat::send_heartbeat_loop;
 use crate::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::light_client_manager::lcm_watch;
 use crate::light_client_manager::light_client_hello_response;
@@ -114,10 +114,6 @@ impl Handler<Tick> for RitaLoop {
         let start = Instant::now();
         trace!("Client Tick!");
 
-        if metrics_permitted() {
-            send_udp_heartbeat();
-        }
-
         info!(
             "Rita Client loop completed in {}s {}ms",
             start.elapsed().as_secs(),
@@ -195,6 +191,9 @@ pub fn start_rita_loop() {
 
 pub fn check_rita_client_actors() {
     assert!(crate::rita_loop::RitaLoop::from_registry().connected());
+    if metrics_permitted() {
+        send_heartbeat_loop();
+    }
     crate::rita_loop::start_rita_loop();
 }
 

@@ -52,6 +52,7 @@ jemallocator = {version = "0.3", optional = true}
 openssl = {version = "0.10", features = ["vendored"], optional = true}
 
 [features]
+default = ["bundle_openssl"]
 jemalloc = ["jemallocator"]
 bundle_openssl = ["openssl"]
 # Features for big iron devices with more ram
