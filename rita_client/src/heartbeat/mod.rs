@@ -13,7 +13,6 @@
 //! This packet is encrypted using the usual LibSodium box construction and sent to the heartbeat server in the following format
 //! WgKey, Nonce, Ciphertext for the HeartBeatMessage. This consumes 32 bytes, 24 bytes, and to the end of the message
 
-use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use althea_types::ExitDetails;
 
 use babel_monitor::get_installed_route;
@@ -26,17 +25,19 @@ use rita_common::network_monitor::get_network_info;
 use rita_common::network_monitor::GetNetworkInfo;
 use rita_common::tunnel_manager::Neighbor as RitaNeighbor;
 
-use actix::actors::resolver;
-use actix::{Arbiter, SystemService};
+use actix::System;
 use althea_types::HeartbeatMessage;
 use althea_types::Identity;
 use althea_types::WgKey;
 use babel_monitor::Neighbor as NeighborLegacy;
 use babel_monitor::Route as RouteLegacy;
-use futures01::future::Future;
 use settings::client::ExitServer;
 use sodiumoxide::crypto::box_;
 use std::collections::VecDeque;
+use std::iter::FromIterator;
+use std::net::ToSocketAddrs;
+use std::thread;
+use std::time::Instant;
 
 #[allow(unused_imports)]
 use dummy::dummy_neigh_babel;
@@ -51,7 +52,7 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
 
-type Resolver = resolver::Resolver;
+pub const HEARTBEAT_LOOP_SPEED: u64 = 5;
 
 mod dummy;
 pub struct HeartbeatCache {
@@ -78,7 +79,49 @@ lazy_static! {
         Arc::new(RwLock::new(None));
 }
 
-pub fn send_udp_heartbeat() {
+pub fn send_heartbeat_loop() {
+    let mut last_restart = Instant::now();
+    // this is a reference to the non-async actix system since this can bring down the whole process
+    let system = System::current();
+
+    // outer thread is a watchdog inner thread is the runner
+    thread::spawn(move || {
+        // this will always be an error, so it's really just a loop statement
+        // with some fancy destructuring
+
+        while let Err(e) = {
+            thread::spawn(move || loop {
+                let start = Instant::now();
+                trace!("Client tick!");
+
+                send_udp_heartbeat();
+
+                info!(
+                    "Heartbeat loop completed in {}s {}ms",
+                    start.elapsed().as_secs(),
+                    start.elapsed().subsec_millis()
+                );
+
+                // sleep until it has been HEARTBEAT_LOOP_SPEED seconds from start, whenever that may be
+                // if it has been more than HEARTBEAT_LOOP_SPEED seconds from start, go right ahead
+                let heartbeat_loop_speed = Duration::from_secs(HEARTBEAT_LOOP_SPEED);
+                if start.elapsed() < heartbeat_loop_speed {
+                    thread::sleep(heartbeat_loop_speed - start.elapsed());
+                }
+            })
+            .join()
+        } {
+            error!("Heartbeat loop thread panicked! Respawning {:?}", e);
+            if Instant::now() - last_restart < Duration::from_secs(60) {
+                error!("Restarting too quickly, leaving it to auto rescue!");
+                system.stop_with_code(121)
+            }
+            last_restart = Instant::now();
+        }
+    });
+}
+
+fn send_udp_heartbeat() {
     let heartbeat_url: &str;
     if cfg!(feature = "dev_env") {
         heartbeat_url = "0.0.0.0:33333";
@@ -92,9 +135,7 @@ pub fn send_udp_heartbeat() {
     }
 
     trace!("attempting to send heartbeat");
-    let dns_request = Resolver::from_registry()
-        .send(resolver::Resolve::host(heartbeat_url.to_string()))
-        .timeout(CLIENT_LOOP_TIMEOUT);
+    let dns_request = heartbeat_url.to_socket_addrs();
 
     // Check for the basics first, before doing any of the hard futures work
     #[allow(unused_assignments, unused_mut)]
@@ -135,91 +176,89 @@ pub fn send_udp_heartbeat() {
         }
     };
 
-    let res = dns_request.then(move |res| {
-        // In this block we handle gathering all the info and the many ways gathering it could fail
-        // once we have succeeded even if only once we have a cached value that is updated regularly
-        // if for some reason the cache update fails, we can still progress with the heartbeat
-        match res {
-            Ok(Ok(dnsresult)) => {
-                #[cfg(not(feature = "operator_debug"))]
-                let selected_exit_route = get_selected_exit_route(&network_info.babel_routes);
-                #[cfg(feature = "operator_debug")]
-                let selected_exit_route: Result<RouteLegacy, BabelMonitorError> = Ok(dummy_route());
+    // In this block we handle gathering all the info and the many ways gathering it could fail
+    // once we have succeeded even if only once we have a cached value that is updated regularly
+    // if for some reason the cache update fails, we can still progress with the heartbeat
+    match dns_request {
+        Ok(dnsres) => {
+            let dnsresult = VecDeque::from_iter(dnsres);
+            let selected_exit_route: Result<RouteLegacy, BabelMonitorError>;
+            if cfg!(feature = "operator_debug") {
+                selected_exit_route = Ok(dummy_route());
+            } else {
+                selected_exit_route = get_selected_exit_route(&network_info.babel_routes);
+            }
 
-                match selected_exit_route {
-                    Ok(route) => {
-                        #[allow(unused_variables)]
-                        let neigh_option =
+            match selected_exit_route {
+                Ok(route) => {
+                    // #[allow(unused_variables)]
+                    // let neigh_option =
+                    //     get_neigh_given_route(&route, &network_info.babel_neighbors);
+                    let neigh_option;
+                    if cfg!(feature = "operator_debug") {
+                        neigh_option = Some((dummy_neigh_babel(), dummy_neigh_tunnel()));
+                    } else {
+                        let neigh_option1 =
                             get_neigh_given_route(&route, &network_info.babel_neighbors);
-
-                        #[cfg(not(feature = "operator_debug"))]
-                        let neigh_option =
-                            get_rita_neigh_option(neigh_option, &network_info.rita_neighbors);
-                        #[cfg(feature = "operator_debug")]
-                        let neigh_option = Some((dummy_neigh_babel(), dummy_neigh_tunnel()));
-
-                        if let Some((neigh, rita_neigh)) = neigh_option {
-                            // Now that we have all the info we can stop and try to update the
-                            // heartbeat cache
-                            let mut hb_cache = HEARTBEAT_CACHE.write().unwrap();
-                            if let Some(ref mut hb_cache) = &mut *hb_cache {
-                                trace!("we have heartbeat dns");
-                                // having successfully talked to the DNS server does not mean we have any dns records
-                                // this is where we disambiguate that. If we have seen records before we reject and refuse
-                                // to update if the server tells us there are no longer any records. Yes this does actually
-                                // happen very rarely, even on the worlds most reliable DNS servers
-                                if !dnsresult.is_empty() {
-                                    hb_cache.dns = dnsresult;
-                                }
-                                hb_cache.exit_route = route;
-                                hb_cache.exit_neighbor_babel = neigh;
-                                hb_cache.exit_neighbor_rita = rita_neigh;
-                            } else {
-                                *hb_cache = Some(HeartbeatCache {
-                                    dns: dnsresult,
-                                    exit_route: route,
-                                    exit_neighbor_babel: neigh,
-                                    exit_neighbor_rita: rita_neigh,
-                                });
-                            }
-                        } else {
-                            warn!("Failed to find neigh for heartbeat!");
-                        }
+                        neigh_option =
+                            get_rita_neigh_option(neigh_option1, &network_info.rita_neighbors);
                     }
-                    Err(e) => warn!("Failed to get heartbeat route with {:?}", e),
-                }
-            }
-            Err(e) => {
-                warn!("Failed to resolve domain and get network info! {:?}", e);
-            }
-            Ok(Err(e)) => {
-                warn!("DNS resolution failed with {:?}", e);
-            }
-        }
-        // Now we actually send the heartbeat, using the cached data if it is
-        // available. We should only ever see it not be available for short periods
-        // on startup
-        let hb_cache = &*HEARTBEAT_CACHE.read().unwrap();
-        if let Some(hb_cache) = hb_cache {
-            // this is intentional behavior, if we have multiple DNS records we should
-            // send heartbeats to all of them
-            for dns_socket in hb_cache.dns.iter() {
-                send_udp_heartbeat_packet(
-                    dns_socket,
-                    our_id,
-                    selected_exit_details.exit_price,
-                    hb_cache.exit_route.clone(),
-                    hb_cache.exit_neighbor_babel.clone(),
-                    hb_cache.exit_neighbor_rita.identity.global,
-                );
-            }
-        } else {
-            warn!("Cache not populated, can't heartbeat!");
-        }
-        Ok(())
-    });
 
-    Arbiter::spawn(res);
+                    if let Some((neigh, rita_neigh)) = neigh_option {
+                        // Now that we have all the info we can stop and try to update the
+                        // heartbeat cache
+                        let mut hb_cache = HEARTBEAT_CACHE.write().unwrap();
+                        if let Some(ref mut hb_cache) = &mut *hb_cache {
+                            trace!("we have heartbeat dns");
+                            // having successfully talked to the DNS server does not mean we have any dns records
+                            // this is where we disambiguate that. If we have seen records before we reject and refuse
+                            // to update if the server tells us there are no longer any records. Yes this does actually
+                            // happen very rarely, even on the worlds most reliable DNS servers
+                            if !dnsresult.is_empty() {
+                                hb_cache.dns = dnsresult;
+                            }
+                            hb_cache.exit_route = route;
+                            hb_cache.exit_neighbor_babel = neigh;
+                            hb_cache.exit_neighbor_rita = rita_neigh;
+                        } else {
+                            *hb_cache = Some(HeartbeatCache {
+                                dns: dnsresult,
+                                exit_route: route,
+                                exit_neighbor_babel: neigh,
+                                exit_neighbor_rita: rita_neigh,
+                            });
+                        }
+                    } else {
+                        warn!("Failed to find neigh for heartbeat!");
+                    }
+                }
+                Err(e) => warn!("Failed to get heartbeat route with {:?}", e),
+            }
+        }
+        Err(e) => {
+            warn!("DNS resolution failed with {:?}", e);
+        }
+    }
+    // Now we actually send the heartbeat, using the cached data if it is
+    // available. We should only ever see it not be available for short periods
+    // on startup
+    let hb_cache = &*HEARTBEAT_CACHE.read().unwrap();
+    if let Some(hb_cache) = hb_cache {
+        // this is intentional behavior, if we have multiple DNS records we should
+        // send heartbeats to all of them
+        for dns_socket in hb_cache.dns.iter() {
+            send_udp_heartbeat_packet(
+                dns_socket,
+                our_id,
+                selected_exit_details.exit_price,
+                hb_cache.exit_route.clone(),
+                hb_cache.exit_neighbor_babel.clone(),
+                hb_cache.exit_neighbor_rita.identity.global,
+            );
+        }
+    } else {
+        warn!("Cache not populated, can't heartbeat!");
+    }
 }
 
 #[allow(dead_code)]
@@ -350,4 +389,26 @@ fn send_udp_heartbeat_packet(
     }
     rita_client.payment = payment;
     settings::set_rita_client(rita_client);
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::ToSocketAddrs;
+
+    #[test]
+    fn check_resolver() {
+        let heartbeat_url = "dai.althea.net:33333";
+        println!("heartbeat url set to {}", heartbeat_url);
+        //let mut length = false;
+        let dns_request = heartbeat_url.to_socket_addrs();
+        println!("dns_req set");
+        let res = match dns_request {
+            Ok(iter) => iter.len() > 1,
+            Err(_e) => {
+                println!("Number of returned dns entries must be >1");
+                false
+            }
+        };
+        println!("{}", res)
+    }
 }
