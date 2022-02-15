@@ -93,8 +93,8 @@ pub fn start_core_rita_endpoints(workers: usize) {
 
 pub fn check_rita_common_actors() {
     init_traffic_watcher();
-    assert!(crate::hello_handler::HelloHandler::from_registry().connected());
     assert!(crate::rita_loop::fast_loop::RitaFastLoop::from_registry().connected());
     crate::rita_loop::slow_loop::start_rita_slow_loop();
     crate::rita_loop::fast_loop::start_rita_fast_loop();
+    crate::rita_loop::fast_loop::peer_discovery_loop();
 }

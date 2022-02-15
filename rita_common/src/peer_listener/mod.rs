@@ -106,7 +106,7 @@ fn listen_to_available_ifaces(peer_listener: &mut PeerListener) {
     }
 }
 
-pub fn tick() {
+pub fn peerlistener_tick() {
     trace!("Starting PeerListener tick!");
 
     let mut writer = PEER_LISTENER.write().unwrap();
