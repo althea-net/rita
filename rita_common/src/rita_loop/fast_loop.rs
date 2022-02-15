@@ -7,7 +7,7 @@ use crate::network_monitor::NetworkInfo as NetworkMonitorTick;
 use crate::payment_controller::tick_payment_controller;
 use crate::payment_validator::validate;
 use crate::peer_listener::get_peers;
-use crate::peer_listener::tick;
+use crate::peer_listener::peerlistener_tick;
 use crate::tm_trigger_gc;
 use crate::traffic_watcher::watch;
 use crate::tunnel_manager::gc::TriggerGc;
@@ -164,32 +164,8 @@ impl Handler<Tick> for RitaFastLoop {
             warn!("Debt keeper update failed! {:?}", e);
         }
 
-        let start = Instant::now();
-        trace!("Starting PeerListener tick");
-
-        tick();
-
-        info!(
-            "PeerListener tick completed in {}s {}ms",
-            start.elapsed().as_secs(),
-            start.elapsed().subsec_millis(),
-        );
-
-        let start = Instant::now();
-        trace!("Getting Peers from PeerListener to pass to TunnelManager");
-
-        let peers = get_peers();
-        info!(
-            "PeerListener get {} peers completed in {}s {}ms",
-            peers.len(),
-            start.elapsed().as_secs(),
-            start.elapsed().subsec_millis(),
-        );
-
         update_neighbor_status();
         handle_shaping();
-        //Contact peers
-        tm_contact_peers(PeersToContact::new(peers));
 
         Ok(())
     }
@@ -239,6 +215,63 @@ pub fn start_rita_fast_loop() {
             .join()
         } {
             error!("Rita common fast loop thread paniced! Respawning {:?}", e);
+            if Instant::now() - last_restart < Duration::from_secs(60) {
+                error!("Restarting too quickly, leaving it to auto rescue!");
+                system.stop_with_code(121)
+            }
+            last_restart = Instant::now();
+        }
+    });
+}
+
+/// This asnyc loop runs functions related to peer discovery. This is put in its own loop to prevent dns lookup
+/// to block the entire loop
+pub fn peer_discovery_loop() {
+    let mut last_restart = Instant::now();
+    // this is a reference to the non-async actix system since this can bring down the whole process
+    let system = System::current();
+    // outer thread is a watchdog inner thread is the runner
+    thread::spawn(move || {
+        // this will always be an error, so it's really just a loop statement
+        // with some fancy destructuring
+        while let Err(e) = {
+            thread::spawn(move || loop {
+                let start = Instant::now();
+                trace!("Common peer discovery tick!");
+
+                let runner = AsyncSystem::new();
+                runner.block_on(async move {
+                    trace!("Getting Peers from PeerListener to pass to TunnelManager");
+
+                    let start = Instant::now();
+                    trace!("Starting PeerListener tick");
+
+                    peerlistener_tick();
+
+                    info!(
+                        "PeerListener tick completed in {}s {}ms",
+                        start.elapsed().as_secs(),
+                        start.elapsed().subsec_millis(),
+                    );
+
+                    let peers = get_peers();
+
+                    //Contact peers
+                    tm_contact_peers(PeersToContact::new(peers)).await;
+                });
+
+                // sleep until it has been FAST_LOOP_SPEED seconds from start, whenever that may be
+                // if it has been more than FAST_LOOP_SPEED seconds from start, go right ahead
+                if start.elapsed() < FAST_LOOP_SPEED {
+                    thread::sleep(FAST_LOOP_SPEED - start.elapsed());
+                }
+            })
+            .join()
+        } {
+            error!(
+                "Rita common peer discovery loop thread paniced! Respawning {:?}",
+                e
+            );
             if Instant::now() - last_restart < Duration::from_secs(60) {
                 error!("Restarting too quickly, leaving it to auto rescue!");
                 system.stop_with_code(121)
