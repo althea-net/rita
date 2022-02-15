@@ -9,7 +9,9 @@ pub mod id_callback;
 pub mod neighbor_status;
 pub mod shaping;
 
+use crate::hello_handler::handle_hello;
 use crate::hello_handler::Hello;
+use crate::peer_listener::get_peers;
 use crate::peer_listener::Hello as NewHello;
 use crate::peer_listener::PeerListener;
 use crate::peer_listener::PEER_LISTENER;
@@ -18,10 +20,6 @@ use crate::rita_loop::is_gateway;
 use crate::RitaCommonError;
 use crate::FAST_LOOP_TIMEOUT;
 use crate::KI;
-#[cfg(test)]
-use actix::actors::mocker::Mocker;
-use actix::actors::resolver;
-use actix::{Arbiter, SystemService};
 use althea_kernel_interface::open_tunnel::TunnelOpenArgs;
 use althea_types::Identity;
 use althea_types::LocalIdentity;
@@ -29,17 +27,17 @@ use babel_monitor::monitor;
 use babel_monitor::open_babel_stream;
 use babel_monitor::unmonitor;
 use babel_monitor::BabelMonitorError;
-use futures01::Future;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::Display;
 use std::fmt::{Formatter, Result as FmtResult};
+use std::net::ToSocketAddrs;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Holds messages from NetworkMonitor that need to be processed by TunnelManager
 #[derive(Debug, Default)]
@@ -53,15 +51,6 @@ lazy_static! {
 pub fn get_tunnel_manager() -> TunnelManager {
     TUNNEL_MANAGER.read().unwrap().clone()
 }
-
-#[cfg(test)]
-type HelloHandler = Mocker<crate::hello_handler::HelloHandler>;
-#[cfg(not(test))]
-type HelloHandler = crate::hello_handler::HelloHandler;
-#[cfg(test)]
-type Resolver = Mocker<resolver::Resolver>;
-#[cfg(not(test))]
-type Resolver = resolver::Resolver;
 
 #[derive(Debug)]
 pub enum TunnelManagerError {
@@ -357,7 +346,7 @@ impl PeersToContact {
 
 /// Takes a list of peers to contact and dispatches requests if you have a WAN connection
 /// it will also dispatch neighbor requests to manual peersINGS MENTIONED
-pub fn tm_contact_peers(msg: PeersToContact) {
+pub async fn tm_contact_peers() {
     let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
 
     let network_settings = settings::get_rita_common().network;
@@ -367,10 +356,14 @@ pub fn tm_contact_peers(msg: PeersToContact) {
     drop(network_settings);
     // Hold a lock on shared state until we finish sending all messages. This prevents a race condition
     // where the hashmaps get cleared out during subsequent ticks
-    let writer = &mut *PEER_LISTENER.write().unwrap();
     trace!("TunnelManager contacting peers");
+    let peers = get_peers();
+    let msg = PeersToContact::new(peers);
+
+    let writer = &mut *PEER_LISTENER.write().unwrap();
+
     for (_, peer) in msg.peers.iter() {
-        let res = tunnel_manager.neighbor_inquiry(peer, false, writer);
+        let res = tunnel_manager.neighbor_inquiry(peer, false, writer).await;
         if res.is_err() {
             warn!("Neighbor inqury for {:?} failed! with {:?}", peer, res);
         }
@@ -384,7 +377,9 @@ pub fn tm_contact_peers(msg: PeersToContact) {
                     ifidx: 0,
                     contact_socket: socket,
                 };
-                let res = tunnel_manager.neighbor_inquiry(&man_peer, true, writer);
+                let res = tunnel_manager
+                    .neighbor_inquiry(&man_peer, true, writer)
+                    .await;
                 if res.is_err() {
                     warn!(
                         "Neighbor inqury for {:?} failed with: {:?}",
@@ -398,7 +393,9 @@ pub fn tm_contact_peers(msg: PeersToContact) {
                 // in bad behavior, we do allow the addressing of direct ip address gateways
                 // for the special case that the user is attempting some special behavior
                 if is_gateway {
-                    let res = tunnel_manager.neighbor_inquiry_hostname(manual_peer.to_string());
+                    let res = tunnel_manager
+                        .neighbor_inquiry_hostname(manual_peer.to_string())
+                        .await;
                     if res.is_err() {
                         warn!(
                             "Neighbor inqury for {:?} failed with: {:?}",
@@ -413,7 +410,7 @@ pub fn tm_contact_peers(msg: PeersToContact) {
 
 /// Sets out to contact a neighbor, takes a speculative port (only assigned if the neighbor
 /// responds successfully)
-fn contact_neighbor(
+async fn contact_neighbor(
     peer: &Peer,
     our_port: u16,
     socket: &UdpSocket,
@@ -454,14 +451,14 @@ fn contact_neighbor(
     send_hello(&new_msg, socket, send_addr, our_port);
 
     //old hello manager over http
-    HelloHandler::from_registry().do_send(msg);
+    handle_hello(msg).await;
 
     Ok(())
 }
 
 /// Uses Hello Handler to send a Hello over http. Takes a speculative port (only assigned
 /// if neighbor responds successfully)
-fn contact_manual_peer(peer: &Peer, our_port: u16) -> Result<(), RitaCommonError> {
+async fn contact_manual_peer(peer: &Peer, our_port: u16) -> Result<(), RitaCommonError> {
     let mut settings = settings::get_rita_common();
     KI.manual_peers_route(
         &peer.contact_socket.ip(),
@@ -482,7 +479,7 @@ fn contact_manual_peer(peer: &Peer, our_port: u16) -> Result<(), RitaCommonError
     settings::set_rita_common(settings);
 
     //old hello manager over http
-    HelloHandler::from_registry().do_send(msg);
+    handle_hello(msg).await;
 
     Ok(())
 }
@@ -566,7 +563,7 @@ impl TunnelManager {
     /// This function generates a future and hands it off to the Actix arbiter to actually resolve
     /// in the case that the DNS request is successful the hello handler and eventually the Identity
     /// callback continue execution flow. But this function itself returns syncronously
-    pub fn neighbor_inquiry_hostname(
+    pub async fn neighbor_inquiry_hostname(
         &mut self,
         their_hostname: String,
     ) -> Result<(), RitaCommonError> {
@@ -577,54 +574,43 @@ impl TunnelManager {
 
         let our_port = self.get_port();
 
-        let res = Resolver::from_registry()
-            .send(resolver::Resolve::host(their_hostname.clone()))
-            .timeout(Duration::from_secs(1))
-            .then(move |res| match res {
-                Ok(Ok(dnsresult)) => {
-                    let url = format!("http://[{}]:{}/hello", their_hostname, rita_hello_port);
-                    trace!("Saying hello to: {:?} at ip {:?}", url, dnsresult);
-                    if !dnsresult.is_empty() && is_gateway {
-                        // dns records may have many ip's if we get multiple it's a load
-                        // balanced exit and we need to create tunnels to all of them
-                        for dns_socket in dnsresult {
-                            let their_ip = dns_socket.ip();
-                            let socket = SocketAddr::new(their_ip, rita_hello_port);
-                            let man_peer = Peer {
-                                ifidx: 0,
-                                contact_socket: socket,
-                            };
-
-                            let res = contact_manual_peer(&man_peer, our_port);
-                            if res.is_err() {
-                                warn!("Contact neighbor failed with {:?}", res);
-                            }
+        let res = their_hostname.clone().to_socket_addrs();
+        match res {
+            Ok(dnsresult) => {
+                let url = format!("http://[{}]:{}/hello", their_hostname, rita_hello_port);
+                trace!("Saying hello to: {:?} at ip {:?}", url, dnsresult);
+                if dnsresult.clone().next().is_some() && is_gateway {
+                    // dns records may have many ip's if we get multiple it's a load
+                    // balanced exit and we need to create tunnels to all of them
+                    for dns_socket in dnsresult {
+                        let their_ip = dns_socket.ip();
+                        let socket = SocketAddr::new(their_ip, rita_hello_port);
+                        let man_peer = Peer {
+                            ifidx: 0,
+                            contact_socket: socket,
+                        };
+                        let res = contact_manual_peer(&man_peer, our_port).await;
+                        if res.is_err() {
+                            warn!("Contact neighbor failed with {:?}", res);
                         }
-                    } else {
-                        trace!(
-                            "We're not a gateway or we got a zero length dns response: {:?}",
-                            dnsresult
-                        );
                     }
-                    Ok(())
+                } else {
+                    trace!(
+                        "We're not a gateway or we got a zero length dns response: {:?}",
+                        dnsresult
+                    );
                 }
-                Err(e) => {
-                    warn!("Actor mailbox failure from DNS resolver! {:?}", e);
-                    Ok(())
-                }
-
-                Ok(Err(e)) => {
-                    warn!("DNS resolution failed with {:?}", e);
-                    Ok(())
-                }
-            });
-        Arbiter::spawn(res);
+            }
+            Err(e) => {
+                warn!("DNS resolution failed with {:?}", e);
+            }
+        }
         Ok(())
     }
 
     /// Contacts one neighbor with our LocalIdentity to get their LocalIdentity and wireguard tunnel
     /// interface name. Sends a Hello over udp, or http if its a manual peer
-    pub fn neighbor_inquiry(
+    pub async fn neighbor_inquiry(
         &mut self,
         peer: &Peer,
         is_manual_peer: bool,
@@ -634,7 +620,7 @@ impl TunnelManager {
         let our_port = self.get_port();
 
         if is_manual_peer {
-            contact_manual_peer(peer, our_port)
+            contact_manual_peer(peer, our_port).await
         } else {
             let iface_name = match peer_listener.interface_map.get(&peer.contact_socket) {
                 Some(a) => a,
@@ -652,7 +638,7 @@ impl TunnelManager {
                     ))
                 }
             };
-            contact_neighbor(peer, our_port, udp_socket, peer.contact_socket)
+            contact_neighbor(peer, our_port, udp_socket, peer.contact_socket).await
         }
     }
 
