@@ -138,17 +138,14 @@ fn send_udp_heartbeat() {
     let dns_request = heartbeat_url.to_socket_addrs();
 
     // Check for the basics first, before doing any of the hard futures work
-    #[allow(unused_assignments, unused_mut)]
     let mut our_id: Identity = if settings::get_rita_client().get_identity().is_some() {
         settings::get_rita_client().get_identity().unwrap()
     } else {
         return;
     };
-    #[allow(unused_assignments, unused_mut)]
     let mut selected_exit_details: ExitDetails = dummy_selected_exit_details();
 
-    #[cfg(not(feature = "operator_debug"))]
-    {
+    if !cfg!(feature = "operator_debug") {
         if let (Some(id), Some(exit)) = (
             settings::get_rita_client().get_identity(),
             get_selected_exit(),
@@ -191,9 +188,6 @@ fn send_udp_heartbeat() {
 
             match selected_exit_route {
                 Ok(route) => {
-                    // #[allow(unused_variables)]
-                    // let neigh_option =
-                    //     get_neigh_given_route(&route, &network_info.babel_neighbors);
                     let neigh_option;
                     if cfg!(feature = "operator_debug") {
                         neigh_option = Some((dummy_neigh_babel(), dummy_neigh_tunnel()));
@@ -261,7 +255,6 @@ fn send_udp_heartbeat() {
     }
 }
 
-#[allow(dead_code)]
 fn get_selected_exit_route(route_dump: &[RouteLegacy]) -> Result<RouteLegacy, BabelMonitorError> {
     let rita_client = settings::get_rita_client();
     let exit_client = rita_client.exit_client;
@@ -275,7 +268,6 @@ fn get_selected_exit_route(route_dump: &[RouteLegacy]) -> Result<RouteLegacy, Ba
     get_installed_route(&exit_mesh_ip, route_dump)
 }
 
-#[allow(dead_code)]
 fn get_selected_exit() -> Option<ExitServer> {
     let rita_client = settings::get_rita_client();
     let exit_client = rita_client.exit_client;
@@ -283,7 +275,6 @@ fn get_selected_exit() -> Option<ExitServer> {
     Some(exit.clone())
 }
 
-#[allow(dead_code)]
 fn get_rita_neigh_option(
     neigh: Option<NeighborLegacy>,
     rita_neighbors: &[RitaNeighbor],
@@ -296,7 +287,6 @@ fn get_rita_neigh_option(
     }
 }
 
-#[allow(dead_code)]
 fn get_rita_neighbor(
     neigh: &NeighborLegacy,
     rita_neighbors: &[RitaNeighbor],
