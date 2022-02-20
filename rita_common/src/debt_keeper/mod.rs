@@ -499,7 +499,6 @@ impl DebtKeeper {
         let payment_settings = settings::get_rita_common().payment;
         let close_threshold = get_oracle_close_thresh();
         let pay_threshold = get_oracle_pay_thresh();
-        let fudge_factor = payment_settings.fudge_factor;
         let debt_limit_enabled = payment_settings.debt_limit_enabled;
         let apply_incoming_credit_immediately = payment_settings.apply_incoming_credit_immediately;
 
@@ -538,14 +537,9 @@ impl DebtKeeper {
                 Ok(DebtAction::SuspendTunnel)
             }
             (false, true, false) => {
-                let mut to_pay: Uint256 = debt_data.debt.to_uint256().ok_or_else(|| {
+                let to_pay: Uint256 = debt_data.debt.to_uint256().ok_or_else(|| {
                     format_err!("Unable to convert debt data into unsigned 256 bit integer")
                 })?;
-                // overpay by the fudge_factor to encourage convergence, this is currently set
-                // to zero in all production networks, so maybe it can be removed
-                if fudge_factor != 0 {
-                    to_pay = to_pay.clone() + (to_pay / fudge_factor.into());
-                }
 
                 debt_data.payment_in_flight = true;
                 debt_data.payment_in_flight_start = Some(Instant::now());
