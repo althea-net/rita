@@ -18,10 +18,6 @@ fn default_dynamic_fee_multiplier() -> u32 {
     XDAI_FEE_MULTIPLIER
 }
 
-fn default_fudge_factor() -> u8 {
-    0
-}
-
 fn default_free_tier_throughput() -> u32 {
     1000
 }
@@ -127,13 +123,6 @@ pub struct PaymentSettings {
     pub debts_file: String,
     #[serde(default = "default_bridge_enabled")]
     pub bridge_enabled: bool,
-    /// A value used to divide and add to a payment, essentailly a cheating tool for
-    /// payment convergence. Computed as payment_amount + (payment_amount/fudge_factor)
-    /// so a factor of 100 would be a 1% overpayment this helps cover up errors in accounting
-    /// by pushing the system into overpayment and therefore convergence. Currently not used
-    /// probably should be axed as cruft
-    #[serde(default = "default_fudge_factor")]
-    pub fudge_factor: u8,
     /// See where this is referenced in debt keeper, this option is on for exits and off everywhere
     /// else. The problem requiring it's creation is that the Exit has it's debts observed by clients
     /// who pay when it exceeds the pay threshold. Relays have no such issue and their internal balances
@@ -181,7 +170,6 @@ impl Default for PaymentSettings {
             withdraw_chain: default_system_chain(),
             debts_file: default_debts_file(),
             bridge_enabled: default_bridge_enabled(),
-            fudge_factor: 0u8,
             debt_limit_enabled: default_debt_limit_enabled(),
             apply_incoming_credit_immediately: default_apply_incoming_credit(),
             bridge_addresses: default_bridge_addresses(),
