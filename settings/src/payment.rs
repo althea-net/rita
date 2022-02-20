@@ -72,7 +72,7 @@ fn default_forgive_on_reboot() -> bool {
 }
 
 fn default_min_gas() -> Uint256 {
-    0u8.into()
+    2_000_000_000u128.into()
 }
 
 /// This struct is used by both rita and rita_exit to configure the dummy payment controller and
