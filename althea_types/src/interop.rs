@@ -391,6 +391,9 @@ pub enum OperatorAction {
     /// this has it's own logic in the operator tools that will later be removed for the logic
     /// you see in Althea_rs
     ChangeOperatorAddress { new_address: Option<Address> },
+    /// Sets the min gas value to the provided value, primarily intended for use on xDai where
+    /// the validators set a minimum gas price as a group without warning
+    SetMinGas { new_min_gas: Uint256 },
 }
 
 /// Operator update that we get from the operator server during our checkin

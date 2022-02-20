@@ -272,6 +272,13 @@ async fn checkin() {
             info!("Got outdated command ChangeReleaseFeedAndUpdate")
         }
         Some(OperatorAction::UpdateNow) => info!("Got outdated command UpdateNow"),
+        Some(OperatorAction::SetMinGas { new_min_gas }) => {
+            info!(
+                "Updated min gas from {} to {}",
+                rita_client.payment.min_gas, new_min_gas
+            );
+            rita_client.payment.min_gas = new_min_gas;
+        }
         None => {}
     }
     network.shaper_settings = new_settings.shaper_settings;

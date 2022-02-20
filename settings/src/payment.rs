@@ -71,6 +71,10 @@ fn default_forgive_on_reboot() -> bool {
     true
 }
 
+fn default_min_gas() -> Uint256 {
+    2_000_000_000u128.into()
+}
+
 /// This struct is used by both rita and rita_exit to configure the dummy payment controller and
 /// debt keeper
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -150,6 +154,10 @@ pub struct PaymentSettings {
     /// if we forgive all debts on reboot
     #[serde(default = "default_forgive_on_reboot")]
     pub forgive_on_reboot: bool,
+    /// We will not send a tx with a gas price lower than this, useful for pre eip-1559 networks and
+    /// post-eip1599 networks that do not respect min-fee
+    #[serde(default = "default_min_gas")]
+    pub min_gas: Uint256,
 }
 
 impl Default for PaymentSettings {
@@ -176,6 +184,7 @@ impl Default for PaymentSettings {
             simulated_transaction_fee_address: default_simulated_transaction_fee_address(),
             simulated_transaction_fee: default_simulated_transaction_fee(),
             forgive_on_reboot: default_forgive_on_reboot(),
+            min_gas: default_min_gas(),
         }
     }
 }
