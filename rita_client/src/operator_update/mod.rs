@@ -279,6 +279,13 @@ fn checkin() {
                         // for backwards compatibility for a while
                         Some(OperatorAction::ChangeReleaseFeedAndUpdate { feed: _ }) => {}
                         Some(OperatorAction::UpdateNow) => {}
+                        Some(OperatorAction::SetMinGas { new_min_gas }) => {
+                            info!(
+                                "Updated min gas from {} to {}",
+                                rita_client.payment.min_gas, new_min_gas
+                            );
+                            rita_client.payment.min_gas = new_min_gas;
+                        }
                         None => {}
                     }
 
