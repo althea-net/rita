@@ -89,6 +89,8 @@ pub fn start_core_rita_endpoints(workers: usize) {
             info!("Make payment endpoint started with: {:?}", res);
         });
     });
+
+    start_make_payment_tcp_listener();
 }
 
 pub fn check_rita_common_actors() {

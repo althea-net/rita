@@ -10,7 +10,12 @@ use actix_web_async::web::Json;
 
 use actix_web_async::{HttpRequest, HttpResponse};
 use althea_types::{LocalIdentity, PaymentTx};
-use std::time::Instant;
+use std::io::{Read, Write};
+use std::net::{TcpListener};
+use std::thread;
+use std::time::{Instant, Duration};
+
+const MAX_WRITE_WAIT_TIME: Duration = Duration::from_secs(2);
 
 /// The recieve side of the make payments call
 pub fn make_payments(pmt: (Json<PaymentTx>, HttpRequest)) -> HttpResponse {
@@ -42,6 +47,90 @@ pub fn make_payments(pmt: (Json<PaymentTx>, HttpRequest)) -> HttpResponse {
     validate_later(ts);
 
     HttpResponse::Ok().json("Payment Received!")
+}
+
+pub fn start_make_payment_tcp_listener() {
+    info!("Starting make payment endpoint listener!");
+
+    let common = settings::get_rita_common();
+    let listener = TcpListener::bind(format!("[::0]:{}", common.network.rita_contact_port))
+        .expect("Failed to bind to forwarding port!");
+
+    thread::spawn(move || {
+        for conn in listener.incoming() {
+            match conn {
+                Ok(mut stream) => {
+                    trace!("Got connection from {:?}", stream.local_addr());
+                    let start = Instant::now();
+                    const BUFFER_SIZE: usize = 10_000;
+                    let mut data: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+
+                    while Instant::now() - start < MAX_WRITE_WAIT_TIME {
+                        match stream.read(&mut data) {
+                            Ok(size) => {
+                                if size == BUFFER_SIZE {
+                                    error!(
+                                        "Failed to read entire datagram of tcp socket! {:?}",
+                                        data
+                                    );
+                                    continue;
+                                }
+
+                                let payment: PaymentTx = match bincode::deserialize(&data) {
+                                    Ok(a) => a, 
+                                    Err(e) => {
+                                        error!("Unable to deserialize with bincode {}", e);
+                                        continue;
+                                    }
+                                };
+
+                                // Do processing
+                                let txid = payment.txid.clone();
+                                let our_address = settings::get_rita_common().payment.eth_address.unwrap();
+
+                                // we didn't get a txid, probably an old client.
+                                if txid.is_none() {
+                                    error!("Did not find txid, payment failed!");
+                                    return;
+                                } else if payment.to.eth_address != our_address {
+                                    error!(
+                                        "We are not {} our address is {}! Invalid payment",
+                                        payment.to.eth_address, our_address
+                                    );
+                                    return;
+                                }
+                                let txid = txid.unwrap();
+
+                                info!(
+                                    "Got Payment from {} for {} with txid {:#066x}",
+                                    payment.from.wg_public_key, payment.amount, txid,
+                                );
+                                let ts = ToValidate {
+                                    payment: payment,
+                                    received: Instant::now(),
+                                    checked: false,
+                                };
+                                validate_later(ts);
+
+                                //send acknowledgement
+                                if let Err(e) = stream.write(b"Ok\n") {
+                                    error!("unable to send acknowledgement back {}", e);
+                                }
+                            }
+                            Err(e) => {
+                                warn!("Unable to read payment receipt {:?}", e);
+                                break;
+                            }
+                        }
+                    }
+                },
+                Err(e) => {
+                    warn!("Connection start failed {}", e);
+                }
+            }
+        
+        }
+    });
 }
 
 pub fn hello_response(req: (Json<LocalIdentity>, HttpRequest)) -> HttpResponse {

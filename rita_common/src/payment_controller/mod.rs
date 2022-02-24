@@ -10,7 +10,7 @@ use num256::Uint256;
 use std::error::Error;
 use std::fmt::Result as DisplayResult;
 use std::fmt::{Display, Formatter};
-use std::io::{Write, self, Read};
+use std::io::{Write, Read};
 use std::net::{SocketAddr, ToSocketAddrs, TcpStream};
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -272,14 +272,14 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
                         //sleep for a small NET_TIMEOUT amount of time and wait for an ack from the router
                         thread::sleep(NET_TIMEOUT);
 
-                        // Our ack 
+                        // Try to read our ack
                         let mut bytes = vec![0u8; 50];
                         match server_stream.read(&mut bytes) {
                             Ok(a) => {
                                 info!("We have received an acknowledgement from the link of {} bytes", a);
                             },
                             Err(e) => {
-                                error!("could not receive an ack");
+                                error!("could not receive an ack {}", e);
                                 queue_resend(resend_info.clone());
                             }
                         }
@@ -293,7 +293,6 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
     
         }
     }
-
 
     // set the url to be the endpoint addr
     let neighbor_url = if cfg!(not(test)) {
