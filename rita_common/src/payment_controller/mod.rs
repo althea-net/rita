@@ -10,7 +10,10 @@ use num256::Uint256;
 use std::error::Error;
 use std::fmt::Result as DisplayResult;
 use std::fmt::{Display, Formatter};
+use std::io::{Write, self, Read};
+use std::net::{SocketAddr, ToSocketAddrs, TcpStream};
 use std::sync::{Arc, RwLock};
+use std::thread;
 use std::time::Duration;
 use std::time::Instant;
 use web30::client::Web3;
@@ -23,6 +26,8 @@ use crate::rita_loop::get_web3_server;
 
 pub const TRANSACTION_SUBMISSION_TIMEOUT: Duration = Duration::from_secs(15);
 pub const MAX_TXID_RETRIES: u8 = 15u8;
+/// The amount of time to wait for a blocking read
+pub const NET_TIMEOUT: Duration = Duration::from_secs(1);
 
 lazy_static! {
     static ref PAYMENT_DATA: Arc<RwLock<PaymentController>> =
@@ -173,11 +178,11 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
     // testing hack
     let neighbor_url = if cfg!(not(test)) {
         format!(
-            "http://[{}]:{}/make_payment",
+            "http://[{}]:{}/",
             pmt.to.mesh_ip, network_settings.rita_contact_port,
         )
     } else {
-        String::from("http://127.0.0.1:1234/make_payment")
+        String::from("http://127.0.0.1:1234/")
     };
 
     let full_node = get_web3_server();
@@ -221,6 +226,86 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
     // add published txid to submission
     pmt.txid = Some(tx_id.clone());
 
+    // Setup a tcp session
+    let resend_info = ResendInfo {
+        txid: tx_id.clone(),
+        neigh_url: neighbor_url.clone(),
+        pmt: pmt.clone(),
+        attempt: 0u8,
+    };
+    info!("About to connect with {}", neighbor_url);
+    let socket: Option<SocketAddr> = match neighbor_url.to_socket_addrs() {
+        Ok(mut res) => match res.next() {
+            Some(sock) => {
+                Some(sock)
+            }
+            None => {
+                error!("Could not perform DNS lookup for {}!", neighbor_url);
+                queue_resend(resend_info.clone());
+                None
+            }
+        },
+        Err(_) => {
+            error!("Could not parse {}!", neighbor_url);
+            queue_resend(resend_info.clone());
+            None
+        }
+    };
+
+    if let Some(socket) = socket {
+        if let Ok(mut server_stream) = TcpStream::connect_timeout(&socket, NET_TIMEOUT) {
+            info!("connected to {}", neighbor_url);
+            match bincode::serialize(&pmt) {
+                Ok(bytes) => {
+                    server_stream
+                    .set_read_timeout(Some(NET_TIMEOUT))
+                    .expect("set_read_timeout failed");
+                    server_stream
+                    .set_write_timeout(Some(NET_TIMEOUT))
+                    .expect("set_read_timeout failed");
+
+                    let out = server_stream.write_all(&bytes);
+                    if out.is_err() {
+                        error!("Error while writing payment info to buffer");
+                        queue_resend(resend_info.clone());
+                    } else {
+                        //sleep for a small NET_TIMEOUT amount of time and wait for an ack from the router
+                        thread::sleep(NET_TIMEOUT);
+
+                        // Our ack 
+                        let mut bytes = vec![0u8; 50];
+                        match server_stream.read(&mut bytes) {
+                            Ok(a) => {
+                                info!("We have received an acknowledgement from the link of {} bytes", a);
+                            },
+                            Err(e) => {
+                                error!("could not receive an ack");
+                                queue_resend(resend_info.clone());
+                            }
+                        }
+                    }
+                },
+                Err(e) => {
+                    error!("Unable to serialize payment info to send via tcp: {}", e);
+                    queue_resend(resend_info);
+                }
+            }
+    
+        }
+    }
+
+
+    // set the url to be the endpoint addr
+    let neighbor_url = if cfg!(not(test)) {
+        format!(
+            "http://[{}]:{}/make_payment",
+            pmt.to.mesh_ip, network_settings.rita_contact_port,
+        )
+    } else {
+        String::from("http://127.0.0.1:1234/make_payment")
+    };
+
+    // This is to communicate with legacy routers. This post request can be removed when all routers are migrated to beta 19
     let actix_client = awc::Client::new();
     let neigh_ack = actix_client
         .post(neighbor_url.clone())
