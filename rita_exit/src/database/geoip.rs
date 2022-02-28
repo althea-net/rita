@@ -1,9 +1,5 @@
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
-use babel_monitor_legacy::open_babel_stream_legacy;
-use babel_monitor_legacy::parse_routes_legacy;
-use babel_monitor_legacy::start_connection_legacy;
-use futures01::future::Future;
 use ipnetwork::IpNetwork;
 use rita_common::utils::ip_increment::is_unicast_link_local;
 use rita_common::KI;
@@ -73,67 +69,61 @@ pub struct IpPair {
 /// not appear in the result vec
 pub fn get_gateway_ip_bulk(
     mesh_ip_list: Vec<IpAddr>,
-) -> Box<dyn Future<Item = Vec<IpPair>, Error = RitaExitError>> {
+    timeout: Duration,
+) -> Result<Vec<IpPair>, RitaExitError> {
     let babel_port = settings::get_rita_exit().network.babel_port;
     trace!("getting gateway ip bulk");
 
-    Box::new(
-        open_babel_stream_legacy(babel_port)
-            .from_err()
-            .and_then(|stream| {
-                start_connection_legacy(stream)
-                    .from_err()
-                    .and_then(|stream| {
-                        parse_routes_legacy(stream).from_err().and_then(|routes| {
-                            trace!("done talking to babel for gateway ip bulk");
-                            let mut remote_ip_cache: HashMap<String, IpAddr> = HashMap::new();
-                            let mut results = Vec::new();
-                            for mesh_ip in mesh_ip_list {
-                                for route in routes.1.iter() {
-                                    // Only ip6
-                                    if let IpNetwork::V6(ref ip) = route.prefix {
-                                        // Only host addresses and installed routes
-                                        if ip.prefix() == 128
-                                            && route.installed
-                                            && IpAddr::V6(ip.ip()) == mesh_ip
-                                        {
-                                            // check if we've already looked up this interface this round, since gateways
-                                            // have many clients this will often be the case
-                                            if let Some(remote_ip) =
-                                                remote_ip_cache.get(&route.iface)
-                                            {
+    match open_babel_stream(babel_port, timeout) {
+        Ok(mut stream) => {
+            match parse_routes(&mut stream) {
+                Ok(routes) => {
+                    trace!("done talking to babel for gateway ip bulk");
+                    let mut remote_ip_cache: HashMap<String, IpAddr> = HashMap::new();
+                    let mut results = Vec::new();
+                    for mesh_ip in mesh_ip_list {
+                        for route in routes.iter() {
+                            // Only ip6
+                            if let IpNetwork::V6(ref ip) = route.prefix {
+                                // Only host addresses and installed routes
+                                if ip.prefix() == 128
+                                    && route.installed
+                                    && IpAddr::V6(ip.ip()) == mesh_ip
+                                {
+                                    // check if we've already looked up this interface this round, since gateways
+                                    // have many clients this will often be the case
+                                    if let Some(remote_ip) = remote_ip_cache.get(&route.iface) {
+                                        results.push(IpPair {
+                                            mesh_ip,
+                                            gateway_ip: *remote_ip,
+                                        });
+                                    } else {
+                                        match KI.get_wg_remote_ip(&route.iface) {
+                                            Ok(remote_ip) => {
+                                                remote_ip_cache
+                                                    .insert(route.iface.clone(), remote_ip);
                                                 results.push(IpPair {
                                                     mesh_ip,
-                                                    gateway_ip: *remote_ip,
-                                                });
-                                            } else {
-                                                match KI.get_wg_remote_ip(&route.iface) {
-                                                    Ok(remote_ip) => {
-                                                        remote_ip_cache
-                                                            .insert(route.iface.clone(), remote_ip);
-                                                        results.push(IpPair {
-                                                            mesh_ip,
-                                                            gateway_ip: remote_ip,
-                                                        })
-                                                    }
-                                                    Err(e) => {
-                                                        error!(
-                                                            "Failure looking up remote ip {:?}",
-                                                            e
-                                                        )
-                                                    }
-                                                }
+                                                    gateway_ip: remote_ip,
+                                                })
+                                            }
+                                            Err(e) => {
+                                                error!("Failure looking up remote ip {:?}", e)
                                             }
                                         }
                                     }
                                 }
                             }
+                        }
+                    }
 
-                            Ok(results)
-                        })
-                    })
-            }),
-    )
+                    Ok(results)
+                }
+                Err(e) => Err(e.into()),
+            }
+        }
+        Err(e) => Err(e.into()),
+    }
 }
 
 #[derive(Deserialize, Debug)]

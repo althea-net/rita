@@ -17,23 +17,18 @@ use crate::database::struct_tools::clients_to_ids;
 use crate::database::{
     cleanup_exit_clients, enforce_exit_clients, setup_clients, validate_clients_region,
 };
-use crate::traffic_watcher::{TrafficWatcher, Watch};
-use actix::Addr;
+use crate::traffic_watcher::{watch_exit_traffic, Watch};
 use actix::System;
-use actix::SystemService;
 use actix_async::System as AsyncSystem;
 use actix_web_async::{web, App, HttpServer};
 use althea_kernel_interface::ExitClient;
 use althea_types::Identity;
-use babel_monitor_legacy::open_babel_stream_legacy;
-use babel_monitor_legacy::parse_routes_legacy;
-use babel_monitor_legacy::start_connection_legacy;
+use babel_monitor::{open_babel_stream, parse_routes};
+
 use diesel::{query_dsl::RunQueryDsl, PgConnection};
 use exit_db::models;
-use futures01::future::Future;
 use rita_common::debt_keeper::DebtAction;
-use rita_common::utils::wait_timeout::wait_timeout;
-use rita_common::utils::wait_timeout::WaitResult;
+
 use std::collections::HashSet;
 use std::thread;
 use std::time::Duration;
@@ -65,7 +60,6 @@ pub fn start_rita_exit_loop() {
         while let Err(e) = {
             let system_ref = system.clone();
             thread::spawn(move || {
-                let tw = system_ref.registry().get();
                 // a cache of what tunnels we had setup last round, used to prevent extra setup ops
                 let mut wg_clients: HashSet<ExitClient> = HashSet::new();
                 // a list of client debts from the last round, to prevent extra enforcement ops
@@ -74,13 +68,9 @@ pub fn start_rita_exit_loop() {
                 // setup exit clients and should crash if we fail to do so, otherwise we are preventing
                 // proper failover
                 let mut successful_setup: bool = false;
-                // wait until the system gets started
-                while !tw.connected() {
-                    trace!("Waiting for actors to start");
-                }
+
                 loop {
                     rita_exit_loop(
-                        tw.clone(),
                         &mut wg_clients,
                         &mut debt_actions,
                         &mut successful_setup,
@@ -101,7 +91,6 @@ pub fn start_rita_exit_loop() {
 }
 
 fn rita_exit_loop(
-    tw: Addr<TrafficWatcher>,
     wg_clients: &mut HashSet<ExitClient>,
     debt_actions: &mut HashSet<(Identity, DebtAction)>,
     successful_setup: &mut bool,
@@ -125,7 +114,7 @@ fn rita_exit_loop(
                 let ids = clients_to_ids(clients_list.clone());
 
                 // watch and bill for traffic
-                bill(babel_port, &tw, start, ids);
+                bill(babel_port, start, ids);
 
                 info!("about to setup clients");
                 // Create and update client tunnels
@@ -183,40 +172,41 @@ fn rita_exit_loop(
     }
 }
 
-fn bill(babel_port: u16, tw: &Addr<TrafficWatcher>, start: Instant, ids: Vec<Identity>) {
+fn bill(babel_port: u16, start: Instant, ids: Vec<Identity>) {
     trace!("about to try opening babel stream");
-    let res = wait_timeout(
-        open_babel_stream_legacy(babel_port)
-            .from_err()
-            .and_then(|stream| {
-                trace!("got babel stream");
-                start_connection_legacy(stream).and_then(|stream| {
-                    parse_routes_legacy(stream).and_then(|routes| {
-                        trace!("Sending traffic watcher message?");
-                        tw.do_send(Watch {
-                            users: ids,
-                            routes: routes.1,
-                        });
-                        Ok(())
-                    })
-                })
-            }),
-        EXIT_LOOP_TIMEOUT,
-    );
-    match res {
-        WaitResult::Err(e) => warn!(
-            "Failed to watch exit traffic with {:?} {}ms since start",
-            e,
-            start.elapsed().as_millis()
-        ),
-        WaitResult::Ok(_) => info!(
-            "watch exit traffic completed successfully {}ms since loop start",
-            start.elapsed().as_millis()
-        ),
-        WaitResult::TimedOut(_) => error!(
-            "watch exit traffic timed out! {}ms since loop start",
-            start.elapsed().as_millis()
-        ),
+
+    match open_babel_stream(babel_port, EXIT_LOOP_TIMEOUT) {
+        Ok(mut stream) => match parse_routes(&mut stream) {
+            Ok(routes) => {
+                trace!("Sending traffic watcher message?");
+                if let Err(e) = watch_exit_traffic(Watch { users: ids, routes }) {
+                    error!(
+                        "Watch exit traffic failed with {}, in {} millis",
+                        e,
+                        start.elapsed().as_millis()
+                    );
+                } else {
+                    info!(
+                        "Watch exit traffic completed successfully in {} millis",
+                        start.elapsed().as_millis()
+                    );
+                }
+            }
+            Err(e) => {
+                error!(
+                    "Watch exit traffic failed with: {} in {} millis",
+                    e,
+                    start.elapsed().as_millis()
+                );
+            }
+        },
+        Err(e) => {
+            error!(
+                "Watch exit traffic failed with: {} in {} millis",
+                e,
+                start.elapsed().as_millis()
+            );
+        }
     }
 }
 
@@ -252,11 +242,6 @@ fn setup_exit_wg_tunnel() {
     .expect("Failed to setup wg_exit!");
     KI.setup_nat(&settings::get_rita_exit().network.external_nic.unwrap())
         .unwrap();
-}
-
-pub fn check_rita_exit_actors() {
-    assert!(crate::traffic_watcher::TrafficWatcher::from_registry().connected());
-    assert!(crate::database::db_client::DbClient::from_registry().connected());
 }
 
 pub fn start_rita_exit_endpoints(workers: usize) {
