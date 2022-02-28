@@ -30,7 +30,6 @@ use rita_common::rita_loop::start_rita_common_loops;
 use rita_common::usage_tracker::save_usage_on_shutdown;
 use rita_common::utils::env_vars_contains;
 use rita_exit::database::sms::send_admin_notification_sms;
-use rita_exit::rita_loop::check_rita_exit_actors;
 use rita_exit::rita_loop::start_rita_exit_endpoints;
 use rita_exit::rita_loop::start_rita_exit_loop;
 use rita_exit::start_rita_exit_dashboard;
@@ -124,7 +123,6 @@ fn main() {
     let system = actix::System::new(format!("main {:?}", settings.network.mesh_ip));
 
     start_rita_common_loops();
-    check_rita_exit_actors();
     start_rita_exit_loop();
     let workers = settings.workers;
     start_core_rita_endpoints(workers as usize);

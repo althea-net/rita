@@ -253,11 +253,12 @@ pub fn nuke_db(_req: HttpRequest) -> HttpResponse {
 }
 
 #[cfg(feature = "development")]
-pub fn nuke_db(_req: HttpRequest) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+pub fn nuke_db(_req: HttpRequest) -> HttpResponse {
+    use crate::truncate_db_tables;
+
     trace!("nuke_db: Truncating all data from the database");
-    DbClient::from_registry()
-        .send(TruncateTables {})
-        .from_err()
-        .and_then(move |_| Ok(HttpResponse::NoContent().finish()))
-        .responder()
+    if let Err(e) = truncate_db_tables() {
+        error!("Error: {}", e);
+    }
+    HttpResponse::NoContent().finish()
 }

@@ -34,8 +34,6 @@ use ipnetwork::IpNetwork;
 use rita_common::blockchain_oracle::get_oracle_close_thresh;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::debt_keeper::DebtAction;
-use rita_common::utils::wait_timeout::wait_timeout;
-use rita_common::utils::wait_timeout::WaitResult;
 use settings::exit::ExitVerifSettings;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -252,12 +250,9 @@ pub fn validate_clients_region(
             Err(_e) => error!("Database entry with invalid mesh ip! {:?}", item),
         }
     }
-    let list = match wait_timeout(get_gateway_ip_bulk(ip_vec), EXIT_LOOP_TIMEOUT) {
-        WaitResult::Err(e) => return Err(e),
-        WaitResult::Ok(val) => val,
-        WaitResult::TimedOut(_) => {
-            return Err(RitaExitError::MiscStringError("Timed out!".to_string()))
-        }
+    let list = match get_gateway_ip_bulk(ip_vec, EXIT_LOOP_TIMEOUT) {
+        Err(e) => return Err(e),
+        Ok(val) => val,
     };
     for item in list.iter() {
         let res = verify_ip_sync(item.gateway_ip);

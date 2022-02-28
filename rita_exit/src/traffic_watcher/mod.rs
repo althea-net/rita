@@ -14,7 +14,6 @@ use rita_common::usage_tracker::update_usage_data;
 use rita_common::usage_tracker::UpdateUsage;
 use rita_common::usage_tracker::UsageType;
 
-use actix::{Actor, Context, Handler, Message, Supervised, SystemService};
 use althea_kernel_interface::wg_iface_counter::prepare_usage_history;
 use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_kernel_interface::KI;
@@ -24,23 +23,19 @@ use babel_monitor::Route as RouteLegacy;
 use ipnetwork::IpNetwork;
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::sync::Arc;
+use std::sync::RwLock;
 
 use crate::RitaExitError;
+
+lazy_static! {
+    static ref TRAFFIC_WATCHER: Arc<RwLock<TrafficWatcher>> =
+        Arc::new(RwLock::new(TrafficWatcher::default()));
+}
 
 #[derive(Default)]
 pub struct TrafficWatcher {
     last_seen_bytes: HashMap<WgKey, WgUsage>,
-}
-
-impl Actor for TrafficWatcher {
-    type Context = Context<Self>;
-}
-
-impl Supervised for TrafficWatcher {}
-impl SystemService for TrafficWatcher {
-    fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        info!("Traffic Watcher started");
-    }
 }
 
 pub struct Watch {
@@ -48,16 +43,13 @@ pub struct Watch {
     pub routes: Vec<RouteLegacy>,
 }
 
-impl Message for Watch {
-    type Result = Result<(), RitaExitError>;
-}
-
-impl Handler<Watch> for TrafficWatcher {
-    type Result = Result<(), RitaExitError>;
-
-    fn handle(&mut self, msg: Watch, _: &mut Context<Self>) -> Self::Result {
-        watch(&mut self.last_seen_bytes, &msg.routes, &msg.users)
-    }
+pub fn watch_exit_traffic(msg: Watch) -> Result<(), RitaExitError> {
+    let traffic_watcher = &mut *TRAFFIC_WATCHER.write().unwrap();
+    watch(
+        &mut traffic_watcher.last_seen_bytes,
+        &msg.routes,
+        &msg.users,
+    )
 }
 
 fn get_babel_info(

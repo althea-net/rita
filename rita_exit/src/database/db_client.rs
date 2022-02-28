@@ -1,10 +1,3 @@
-use actix::Actor;
-use actix::Context;
-use actix::Handler;
-use actix::Message;
-use actix::Supervised;
-use actix::SystemService;
-use actix_web::Result;
 use diesel::dsl::delete;
 use diesel::*;
 use exit_db::schema;
@@ -12,34 +5,11 @@ use exit_db::schema;
 use crate::database::database_tools::get_database_connection;
 use crate::RitaExitError;
 
-#[derive(Default)]
-pub struct DbClient;
+pub fn truncate_db_tables() -> Result<(), RitaExitError> {
+    use self::schema::clients::dsl::*;
+    info!("Deleting all clients in database");
+    let connection = get_database_connection()?;
+    (delete(clients).execute(&connection).unwrap());
 
-impl Actor for DbClient {
-    type Context = Context<Self>;
-}
-
-impl Supervised for DbClient {}
-impl SystemService for DbClient {
-    fn service_started(&mut self, _ctx: &mut Context<Self>) {
-        info!("DB Client started");
-    }
-}
-
-pub struct TruncateTables;
-impl Message for TruncateTables {
-    type Result = Result<(), RitaExitError>;
-}
-
-impl Handler<TruncateTables> for DbClient {
-    type Result = Result<(), RitaExitError>;
-
-    fn handle(&mut self, _: TruncateTables, _: &mut Self::Context) -> Self::Result {
-        use self::schema::clients::dsl::*;
-        info!("Deleting all clients in database");
-        let connection = get_database_connection()?;
-        (delete(clients).execute(&connection).unwrap());
-
-        Ok(())
-    }
+    Ok(())
 }
