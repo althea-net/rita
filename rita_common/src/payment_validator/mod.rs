@@ -13,6 +13,7 @@ use crate::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
 use crate::rita_loop::get_web3_server;
 use crate::usage_tracker::update_payments;
 
+use althea_types::Identity;
 use althea_types::PaymentTx;
 use num256::Uint256;
 use web30::client::Web3;
@@ -89,6 +90,22 @@ impl Default for PaymentValidator {
     fn default() -> PaymentValidator {
         PaymentValidator::new()
     }
+}
+
+/// Function to compute the total amount of all unverified payments
+/// Input: takes in an identity which represents the router we are
+/// going to exclude from the total amount of all unverified payments.
+pub fn calculate_unverified_payments(router: Identity) -> Uint256 {
+    let history = HISTORY.read().unwrap();
+    let payments_to_process = history.unvalidated_transactions.clone();
+    drop(history);
+    let mut total_unverified_payment: Uint256 = Uint256::from(0u32);
+    for iterate in payments_to_process.iter() {
+        if iterate.payment.from == router && iterate.payment.to != router {
+            total_unverified_payment += iterate.payment.amount.clone();
+        }
+    }
+    total_unverified_payment
 }
 
 /// Message to insert transactions into payment validator, once inserted they will remain

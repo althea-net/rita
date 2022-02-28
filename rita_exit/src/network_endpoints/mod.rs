@@ -20,6 +20,7 @@ use althea_types::{
 };
 use num256::Int256;
 use rita_common::debt_keeper::get_debts_list;
+use rita_common::payment_validator::calculate_unverified_payments;
 use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
@@ -237,10 +238,45 @@ pub fn get_exit_info_http(_req: HttpRequest) -> HttpResponse {
 /// TODO secure this endpoint with libsodium
 pub fn get_client_debt(client: Json<Identity>) -> HttpResponse {
     let client = client.into_inner();
+    let neg_one: i32 = -1;
+    let neg_one = Int256::from(neg_one);
+    let zero: Int256 = 0u8.into();
+
+    // these are payments to us, remember debt is positive when we owe and negative when we are owed
+    // this value is being presented to the client router who's debt is positive (they owe the exit) so we
+    // want to make it negative
+    let unverified_payments_uint = calculate_unverified_payments(client);
+    let unverified_payments = unverified_payments_uint.to_int256().unwrap();
+
     let debts = get_debts_list();
     for debt in debts {
         if debt.identity == client {
-            return HttpResponse::Ok().json(debt.payment_details.debt * Int256::from(-1));
+            let client_debt = debt.payment_details.debt;
+            let incoming_payments = debt.payment_details.incoming_payments;
+            
+            let we_owe_them = client_debt > zero;
+            let they_owe_more_than_in_queue =
+                client_debt.to_uint256().unwrap() > unverified_payments_uint;
+
+            // they have more credit than they owe, wait for this to unwind
+            // we apply credit right before enforcing or on payment.
+            if !we_owe_them && incoming_payments > client_debt.to_uint256().unwrap() {
+                return HttpResponse::Ok().json(0);
+            }
+
+            match (we_owe_them, they_owe_more_than_in_queue) {
+                // in this case we owe them, return zero
+                (true, _) => return HttpResponse::Ok().json(0),
+                // they owe us more than is in the queue
+                (false, true) => {
+                    // client debt is negative, they owe us, so we make it positive and subtract
+                    // the unverified payments, which we're sure are less than or equal to the debt
+                    let ret = (client_debt * neg_one) - unverified_payments;
+                    return HttpResponse::Ok().json(ret);
+                }
+                // they owe us less than what is in the queue, return zero
+                (false, false) => return HttpResponse::Ok().json(0),
+            }
         }
     }
     HttpResponse::NotFound().json("No client by that ID")
