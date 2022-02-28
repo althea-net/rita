@@ -34,8 +34,8 @@ use rita_client::wait_for_settings;
 use rita_client::Args;
 use rita_common::debt_keeper::save_debt_on_shutdown;
 use rita_common::logging::enable_remote_logging;
-use rita_common::rita_loop::check_rita_common_actors;
 use rita_common::rita_loop::start_core_rita_endpoints;
+use rita_common::rita_loop::start_rita_common_loops;
 use rita_common::usage_tracker::save_usage_on_shutdown;
 use rita_common::utils::env_vars_contains;
 use settings::client::RitaClientSettings;
@@ -137,7 +137,7 @@ fn main() {
 
     let system = actix::System::new(format!("main {:?}", settings.network.mesh_ip));
 
-    check_rita_common_actors();
+    start_rita_common_loops();
     start_rita_client_loops();
     start_core_rita_endpoints(4);
     start_rita_client_endpoints(1);

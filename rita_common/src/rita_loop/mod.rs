@@ -7,7 +7,6 @@
 
 use crate::network_endpoints::*;
 use crate::traffic_watcher::init_traffic_watcher;
-use actix::SystemService;
 use actix_async::System;
 use actix_web_async::{web, App, HttpServer};
 use rand::thread_rng;
@@ -91,9 +90,8 @@ pub fn start_core_rita_endpoints(workers: usize) {
     });
 }
 
-pub fn check_rita_common_actors() {
+pub fn start_rita_common_loops() {
     init_traffic_watcher();
-    assert!(crate::rita_loop::fast_loop::RitaFastLoop::from_registry().connected());
     crate::rita_loop::slow_loop::start_rita_slow_loop();
     crate::rita_loop::fast_loop::start_rita_fast_loop();
     crate::rita_loop::fast_loop::peer_discovery_loop();
