@@ -4,7 +4,6 @@ use crate::database::ONE_DAY;
 use rita_common::utils::ip_increment::increment;
 
 use crate::{RitaExitError, DB_POOL};
-use actix_web::Result;
 use althea_kernel_interface::ExitClient;
 use althea_types::ExitClientIdentity;
 use diesel::dsl::{delete, exists};

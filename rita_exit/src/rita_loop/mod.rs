@@ -18,7 +18,6 @@ use crate::database::{
     cleanup_exit_clients, enforce_exit_clients, setup_clients, validate_clients_region,
 };
 use crate::traffic_watcher::{watch_exit_traffic, Watch};
-use actix::System;
 use actix_async::System as AsyncSystem;
 use actix_web_async::{web, App, HttpServer};
 use althea_kernel_interface::ExitClient;
@@ -50,15 +49,12 @@ pub const EXIT_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
 /// TODO remove futures on the actix parts of this by moving to thread local state
 pub fn start_rita_exit_loop() {
     setup_exit_wg_tunnel();
-    // this is a reference to the non-async actix system
-    let system = System::current();
     let mut last_restart = Instant::now();
     // outer thread is a watchdog, inner thread is the runner
     thread::spawn(move || {
         // this will always be an error, so it's really just a loop statement
         // with some fancy destructuring
         while let Err(e) = {
-            let system_ref = system.clone();
             thread::spawn(move || {
                 // a cache of what tunnels we had setup last round, used to prevent extra setup ops
                 let mut wg_clients: HashSet<ExitClient> = HashSet::new();
@@ -70,12 +66,7 @@ pub fn start_rita_exit_loop() {
                 let mut successful_setup: bool = false;
 
                 loop {
-                    rita_exit_loop(
-                        &mut wg_clients,
-                        &mut debt_actions,
-                        &mut successful_setup,
-                        &system_ref,
-                    )
+                    rita_exit_loop(&mut wg_clients, &mut debt_actions, &mut successful_setup)
                 }
             })
             .join()
@@ -83,7 +74,8 @@ pub fn start_rita_exit_loop() {
             error!("Exit loop thread panicked! Respawning {:?}", e);
             if Instant::now() - last_restart < Duration::from_secs(60) {
                 error!("Restarting too quickly, leaving it to systemd!");
-                system.stop_with_code(121)
+                let sys = AsyncSystem::current();
+                sys.stop_with_code(121);
             }
             last_restart = Instant::now();
         }
@@ -94,7 +86,6 @@ fn rita_exit_loop(
     wg_clients: &mut HashSet<ExitClient>,
     debt_actions: &mut HashSet<(Identity, DebtAction)>,
     successful_setup: &mut bool,
-    system: &System,
 ) {
     let start = Instant::now();
     // opening a database connection takes at least several milliseconds, as the database server
@@ -160,7 +151,8 @@ fn rita_exit_loop(
                     db_uri
                 );
                 error!("{}", message);
-                system.stop();
+                let sys = AsyncSystem::current();
+                sys.stop();
                 panic!("{}", message);
             }
         }

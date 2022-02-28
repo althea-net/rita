@@ -1,4 +1,3 @@
-use actix_web::client::SendRequestError as OldSendRequestError;
 use althea_kernel_interface::KernelInterfaceError;
 use althea_types::{error::AltheaTypesError, ExitClientIdentity};
 use babel_monitor::BabelMonitorError;
@@ -95,11 +94,6 @@ impl From<BabelMonitorError> for RitaExitError {
         RitaExitError::RitaCommonError(RitaCommonError::BabelMonitorError(error))
     }
 }
-impl From<OldSendRequestError> for RitaExitError {
-    fn from(error: OldSendRequestError) -> Self {
-        RitaExitError::RitaCommonError(RitaCommonError::OldSendRequestError(error.to_string()))
-    }
-}
 
 impl Display for RitaExitError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
@@ -124,5 +118,3 @@ impl Display for RitaExitError {
 }
 
 impl Error for RitaExitError {}
-
-impl actix_web::ResponseError for RitaExitError {}
