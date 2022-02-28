@@ -27,9 +27,9 @@ use althea_kernel_interface::LinuxCommandRunner;
 use docopt::Docopt;
 use rita_client::dashboard::start_client_dashboard;
 use rita_client::get_client_usage;
-use rita_client::rita_loop::check_rita_client_actors;
 use rita_client::rita_loop::start_antenna_forwarder;
 use rita_client::rita_loop::start_rita_client_endpoints;
+use rita_client::rita_loop::start_rita_client_loops;
 use rita_client::wait_for_settings;
 use rita_client::Args;
 use rita_common::debt_keeper::save_debt_on_shutdown;
@@ -138,7 +138,7 @@ fn main() {
     let system = actix::System::new(format!("main {:?}", settings.network.mesh_ip));
 
     check_rita_common_actors();
-    check_rita_client_actors();
+    start_rita_client_loops();
     start_core_rita_endpoints(4);
     start_rita_client_endpoints(1);
     start_client_dashboard(settings.network.rita_dashboard_port);

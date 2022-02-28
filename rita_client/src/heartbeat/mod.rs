@@ -25,7 +25,6 @@ use rita_common::network_monitor::get_network_info;
 use rita_common::network_monitor::GetNetworkInfo;
 use rita_common::tunnel_manager::Neighbor as RitaNeighbor;
 
-use actix::System;
 use althea_types::HeartbeatMessage;
 use althea_types::Identity;
 use althea_types::WgKey;
@@ -81,8 +80,6 @@ lazy_static! {
 
 pub fn send_heartbeat_loop() {
     let mut last_restart = Instant::now();
-    // this is a reference to the non-async actix system since this can bring down the whole process
-    let system = System::current();
 
     // outer thread is a watchdog inner thread is the runner
     thread::spawn(move || {
@@ -114,7 +111,8 @@ pub fn send_heartbeat_loop() {
             error!("Heartbeat loop thread panicked! Respawning {:?}", e);
             if Instant::now() - last_restart < Duration::from_secs(60) {
                 error!("Restarting too quickly, leaving it to auto rescue!");
-                system.stop_with_code(121)
+                let sys = actix_async::System::current();
+                sys.stop_with_code(121);
             }
             last_restart = Instant::now();
         }

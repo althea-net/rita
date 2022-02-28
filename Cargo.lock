@@ -3216,8 +3216,6 @@ name = "rita_client"
 version = "0.19.2"
 dependencies = [
  "actix 0.12.0",
- "actix 0.7.11",
- "actix-web 0.7.19",
  "actix-web 4.0.0-beta.20",
  "actix-web-httpauth 0.6.0-beta.7",
  "althea_kernel_interface",
@@ -3226,11 +3224,9 @@ dependencies = [
  "arrayvec 0.7.2",
  "awc",
  "babel_monitor",
- "babel_monitor_legacy",
  "clarity",
  "clu",
  "compressed_log",
- "futures 0.1.31",
  "hex-literal",
  "ipnetwork 0.18.0",
  "lazy_static",
@@ -3247,9 +3243,6 @@ dependencies = [
  "settings",
  "sha3",
  "sodiumoxide",
- "tokio 0.1.22",
- "tokio-codec",
- "tokio-io",
  "web30",
 ]
 

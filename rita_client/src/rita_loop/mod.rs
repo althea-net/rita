@@ -13,7 +13,6 @@ use crate::light_client_manager::Watch;
 use crate::operator_fee_manager::tick_operator_payments;
 use crate::operator_update::operator_update;
 use crate::traffic_watcher::get_exit_dest_price;
-use actix::System;
 use actix_async::System as AsyncSystem;
 use actix_web_async::web;
 use actix_web_async::{App, HttpServer};
@@ -27,11 +26,6 @@ use settings::client::RitaClientSettings;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
-
-use crate::RitaClientError;
-use actix::{
-    Actor, ActorContext, Addr, AsyncContext, Context, Handler, Message, Supervised, SystemService,
-};
 
 lazy_static! {
     /// see the comment on check_for_gateway_client_billing_corner_case()
@@ -66,70 +60,11 @@ pub fn metrics_permitted() -> bool {
 pub const CLIENT_LOOP_SPEED: u64 = 5;
 pub const CLIENT_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
 
-#[derive(Default)]
-pub struct RitaLoop {}
-
-impl Actor for RitaLoop {
-    type Context = Context<Self>;
-
-    fn started(&mut self, ctx: &mut Context<Self>) {
-        ctx.run_interval(Duration::from_secs(CLIENT_LOOP_SPEED), |_act, ctx| {
-            let addr: Addr<Self> = ctx.address();
-            addr.do_send(Tick);
-        });
-    }
-}
-
-impl SystemService for RitaLoop {}
-impl Supervised for RitaLoop {
-    fn restarting(&mut self, _ctx: &mut Context<RitaLoop>) {
-        error!("Rita Client loop actor died! recovering!");
-    }
-}
-
-/// Used to test actor respawning
-pub struct Crash;
-
-impl Message for Crash {
-    type Result = Result<(), RitaClientError>;
-}
-
-impl Handler<Crash> for RitaLoop {
-    type Result = Result<(), RitaClientError>;
-    fn handle(&mut self, _: Crash, ctx: &mut Context<Self>) -> Self::Result {
-        ctx.stop();
-        Ok(())
-    }
-}
-
-pub struct Tick;
-
-impl Message for Tick {
-    type Result = Result<(), RitaClientError>;
-}
-
-impl Handler<Tick> for RitaLoop {
-    type Result = Result<(), RitaClientError>;
-    fn handle(&mut self, _: Tick, _ctx: &mut Context<Self>) -> Self::Result {
-        let start = Instant::now();
-        trace!("Client Tick!");
-
-        info!(
-            "Rita Client loop completed in {}s {}ms",
-            start.elapsed().as_secs(),
-            start.elapsed().subsec_millis()
-        );
-        Ok(())
-    }
-}
-
 /// Rita loop thread spawning function, there are currently two rita loops, one that
 /// runs as a thread with async/await support and one that runs as a actor using old futures
 /// slowly things will be migrated into this new sync loop as we move to async/await
 pub fn start_rita_loop() {
     let mut last_restart = Instant::now();
-    // this is a reference to the non-async actix system since this can bring down the whole process
-    let system = System::current();
 
     // outer thread is a watchdog inner thread is the runner
     thread::spawn(move || {
@@ -182,15 +117,15 @@ pub fn start_rita_loop() {
             error!("Rita client loop thread paniced! Respawning {:?}", e);
             if Instant::now() - last_restart < Duration::from_secs(60) {
                 error!("Restarting too quickly, leaving it to auto rescue!");
-                system.stop_with_code(121)
+                let sys = AsyncSystem::current();
+                sys.stop_with_code(121);
             }
             last_restart = Instant::now();
         }
     });
 }
 
-pub fn check_rita_client_actors() {
-    assert!(crate::rita_loop::RitaLoop::from_registry().connected());
+pub fn start_rita_client_loops() {
     if metrics_permitted() {
         send_heartbeat_loop();
     }
