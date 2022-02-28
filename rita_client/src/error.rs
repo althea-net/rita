@@ -6,9 +6,6 @@ use std::{
     string::FromUtf8Error,
 };
 
-use actix::MailboxError;
-use actix_web::client::SendRequestError as OldSendRequestError;
-use actix_web::error::JsonPayloadError as OldJsonPayloadError;
 use althea_kernel_interface::KernelInterfaceError;
 use awc::error::{JsonPayloadError, SendRequestError};
 use babel_monitor::BabelMonitorError;
@@ -76,19 +73,9 @@ impl From<SendRequestError> for RitaClientError {
         RitaClientError::TimeoutError(error.to_string())
     }
 }
-impl From<OldSendRequestError> for RitaClientError {
-    fn from(error: OldSendRequestError) -> Self {
-        RitaClientError::RitaCommonError(RitaCommonError::OldSendRequestError(error.to_string()))
-    }
-}
 impl From<JsonPayloadError> for RitaClientError {
     fn from(error: JsonPayloadError) -> Self {
         RitaClientError::JsonPayloadError(error.to_string())
-    }
-}
-impl From<OldJsonPayloadError> for RitaClientError {
-    fn from(error: OldJsonPayloadError) -> Self {
-        RitaClientError::OldJsonPayloadError(error.to_string())
     }
 }
 impl From<serde_json::Error> for RitaClientError {
@@ -109,11 +96,6 @@ impl From<RitaCommonError> for RitaClientError {
 impl From<BabelMonitorError> for RitaClientError {
     fn from(error: BabelMonitorError) -> Self {
         RitaClientError::RitaCommonError(RitaCommonError::BabelMonitorError(error))
-    }
-}
-impl From<MailboxError> for RitaClientError {
-    fn from(error: MailboxError) -> Self {
-        RitaClientError::RitaCommonError(RitaCommonError::MailboxError(error))
     }
 }
 impl From<ParseIntError> for RitaClientError {
@@ -166,5 +148,3 @@ impl Display for RitaClientError {
 }
 
 impl Error for RitaClientError {}
-
-impl actix_web::ResponseError for RitaClientError {}
