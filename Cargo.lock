@@ -3251,9 +3251,7 @@ name = "rita_common"
 version = "0.19.2"
 dependencies = [
  "actix 0.12.0",
- "actix 0.7.11",
  "actix-service",
- "actix-web 0.7.19",
  "actix-web 4.0.0-beta.20",
  "actix-web-httpauth 0.6.0-beta.7",
  "althea_kernel_interface",
@@ -3262,7 +3260,6 @@ dependencies = [
  "auto-bridge",
  "awc",
  "babel_monitor",
- "babel_monitor_legacy",
  "bincode",
  "byteorder",
  "bytes 1.1.0",
@@ -3285,7 +3282,6 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "settings",
- "tokio 0.1.22",
  "web30",
 ]
 

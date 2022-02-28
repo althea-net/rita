@@ -13,7 +13,6 @@ use crate::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
 use crate::rita_loop::get_web3_server;
 use crate::usage_tracker::update_payments;
 
-use actix::System;
 use althea_types::PaymentTx;
 use num256::Uint256;
 use web30::client::Web3;
@@ -197,9 +196,9 @@ pub async fn validate() {
                 error!("{}", msg);
                 // drop the lock to prevent poisoning if we don't manage to crash
                 drop(history);
-                // get the non-async actix system and try to shut down the whole process
-                let system = System::current();
-                system.stop_with_code(121);
+
+                let sys = actix_async::System::current();
+                sys.stop_with_code(121);
                 // this satisfies the borrow checker to let us drop history so that if we
                 // fail to get the current actix system we don't poison the lock fatally
                 return;

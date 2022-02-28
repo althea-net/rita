@@ -4,7 +4,6 @@
 //! the handler updates the storage to reflect the new total. When a user would like to inspect
 //! or graph usage they query an endpoint which will request the data from this module.
 
-use actix::Message;
 use althea_types::Identity;
 use althea_types::PaymentTx;
 use bincode::Error as BincodeError;
@@ -297,10 +296,6 @@ pub struct UpdateUsage {
     pub up: u64,
     pub down: u64,
     pub price: u32,
-}
-
-impl Message for UpdateUsage {
-    type Result = Result<(), RitaCommonError>;
 }
 
 pub fn update_usage_data(msg: UpdateUsage) {

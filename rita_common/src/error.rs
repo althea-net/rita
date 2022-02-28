@@ -4,8 +4,6 @@ use std::{
     time::SystemTimeError,
 };
 
-use actix::MailboxError;
-use actix_web::ResponseError;
 use althea_kernel_interface::KernelInterfaceError;
 use babel_monitor::BabelMonitorError;
 use compressed_log::builder::LoggerError;
@@ -24,7 +22,6 @@ pub enum RitaCommonError {
     SettingsError(SettingsError),
     CapacityError(String),
     MiscStringError(String),
-    MailboxError(actix::MailboxError),
     KernelInterfaceError(KernelInterfaceError),
     StdError(std::io::Error),
     Lowest20Error(usize),
@@ -47,11 +44,6 @@ impl From<SetLoggerError> for RitaCommonError {
 impl From<SettingsError> for RitaCommonError {
     fn from(error: SettingsError) -> Self {
         RitaCommonError::SettingsError(error)
-    }
-}
-impl From<MailboxError> for RitaCommonError {
-    fn from(error: MailboxError) -> Self {
-        RitaCommonError::MailboxError(error)
     }
 }
 impl From<KernelInterfaceError> for RitaCommonError {
@@ -80,8 +72,6 @@ impl From<std::boxed::Box<bincode::ErrorKind>> for RitaCommonError {
     }
 }
 
-impl ResponseError for RitaCommonError {}
-
 impl Display for RitaCommonError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
@@ -102,7 +92,6 @@ impl Display for RitaCommonError {
                 f, "Capacity Error: {}", a,
             ),
             RitaCommonError::MiscStringError(a) => write!(f, "{}", a,),
-            RitaCommonError::MailboxError(a) => write!(f, "{}", a,),
             RitaCommonError::KernelInterfaceError(a) => write!(f, "{}", a,),
             RitaCommonError::StdError(a) => write!(f, "{}", a,),
             RitaCommonError::Lowest20Error(a) => write!(

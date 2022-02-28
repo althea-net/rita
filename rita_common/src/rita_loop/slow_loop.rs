@@ -1,6 +1,5 @@
 use crate::simulated_txfee_manager::tick_simulated_tx;
 use crate::token_bridge::tick_token_bridge;
-use actix::System;
 use actix_async::System as AsyncSystem;
 use babel_monitor::open_babel_stream;
 use babel_monitor::set_local_fee;
@@ -14,7 +13,6 @@ pub const SLOW_LOOP_SPEED: Duration = Duration::from_secs(60);
 pub const SLOW_LOOP_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub fn start_rita_slow_loop() {
-    let system = System::current();
     let mut last_restart = Instant::now();
     thread::spawn(move || {
         // this will always be an error, so it's really just a loop statement
@@ -50,7 +48,8 @@ pub fn start_rita_slow_loop() {
             error!("Rita common slow loop thread panicked! Respawning {:?}", e);
             if Instant::now() - last_restart < Duration::from_secs(120) {
                 error!("Restarting too quickly, leaving it to auto rescue!");
-                system.stop_with_code(121)
+                let sys = AsyncSystem::current();
+                sys.stop_with_code(121);
             }
             last_restart = Instant::now();
         }
