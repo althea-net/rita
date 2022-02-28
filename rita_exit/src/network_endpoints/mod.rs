@@ -20,6 +20,7 @@ use althea_types::{
 };
 use num256::Int256;
 use rita_common::debt_keeper::get_debts_list;
+use rita_common::payment_validator::calculate_unverified_payments;
 use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
@@ -240,7 +241,11 @@ pub fn get_client_debt(client: Json<Identity>) -> HttpResponse {
     let debts = get_debts_list();
     for debt in debts {
         if debt.identity == client {
-            return HttpResponse::Ok().json(debt.payment_details.debt * Int256::from(-1));
+            let ret = (debt.payment_details.debt * Int256::from(-1))
+                - calculate_unverified_payments(client)
+                    .to_int256()
+                    .unwrap_or_else(|| 0.into());
+            return HttpResponse::Ok().json(ret);
         }
     }
     HttpResponse::NotFound().json("No client by that ID")
