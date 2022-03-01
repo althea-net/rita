@@ -135,7 +135,7 @@ fn main() {
     );
     trace!("Starting with Identity: {:?}", settings.get_identity());
 
-    let system = actix::System::new(format!("main {:?}", settings.network.mesh_ip));
+    let system = actix_async::System::new();
 
     start_rita_common_loops();
     start_rita_client_loops();
@@ -144,6 +144,9 @@ fn main() {
     start_client_dashboard(settings.network.rita_dashboard_port);
     start_antenna_forwarder(settings);
 
-    system.run();
+    if let Err(e) = system.run() {
+        error!("Starting client failed with {}", e);
+    }
+
     info!("Started Rita Client!");
 }

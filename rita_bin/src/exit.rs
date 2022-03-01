@@ -120,7 +120,7 @@ fn main() {
 
     send_admin_notification_sms("Exit restarted");
 
-    let system = actix::System::new(format!("main {:?}", settings.network.mesh_ip));
+    let system = actix_async::System::new();
 
     start_rita_common_loops();
     start_rita_exit_loop();
@@ -129,5 +129,9 @@ fn main() {
     start_rita_exit_endpoints(workers as usize);
     start_rita_exit_dashboard();
 
-    system.run();
+    if let Err(e) = system.run() {
+        error!("Starting Exit failed with {}", e);
+    }
+
+    info!("Started rita Exit");
 }

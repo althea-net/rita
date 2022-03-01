@@ -253,7 +253,7 @@ pub fn get_client_debt(client: Json<Identity>) -> HttpResponse {
         if debt.identity == client {
             let client_debt = debt.payment_details.debt;
             let incoming_payments = debt.payment_details.incoming_payments;
-            
+
             let we_owe_them = client_debt > zero;
             let they_owe_more_than_in_queue =
                 client_debt.to_uint256().unwrap() > unverified_payments_uint;

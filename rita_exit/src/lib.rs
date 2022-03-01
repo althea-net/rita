@@ -152,7 +152,6 @@ pub fn start_rita_exit_dashboard() {
                     .route("/withdraw_all/{address}", web::post().to(withdraw_all))
                     .route("/nickname/get/", web::get().to(get_nickname))
                     .route("/nickname/set/", web::post().to(set_nickname))
-                    .route("/crash_actors", web::post().to(crash_actors))
                     .route("/usage/payments", web::get().to(get_payments))
                     .route("/token_bridge/status", web::get().to(get_bridge_status))
             })

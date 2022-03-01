@@ -180,7 +180,6 @@ pub fn start_client_dashboard(rita_dashboard_port: u16) {
                         web::post().to(set_remote_access_status),
                     )
                     .route("/wipe", web::post().to(wipe))
-                    .route("/crash_actors", web::post().to(crash_actors))
                     .route("/localization", web::get().to(get_localization))
                     .route("/wyre_reservation", web::post().to(get_wyre_reservation))
                     .route(
