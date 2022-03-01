@@ -57,4 +57,3 @@ pub use crate::tunnel_manager::id_callback::*;
 pub use crate::tunnel_manager::neighbor_status::*;
 pub use crate::tunnel_manager::shaping::*;
 pub use crate::utils::ip_increment::*;
-pub use crate::utils::wait_timeout::*;

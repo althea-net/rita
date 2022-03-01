@@ -1,6 +1,4 @@
 #[cfg(feature = "development")]
-use crate::rita_common::rita_loop::fast_loop::Crash;
-#[cfg(feature = "development")]
 use crate::rita_common::rita_loop::fast_loop::RitaFastLoop as RitaCommonLoop;
 #[cfg(feature = "development")]
 use crate::KI;
@@ -15,18 +13,6 @@ use clu::{cleanup, generate_mesh_ip};
 use settings::RitaCommonSettings;
 #[cfg(feature = "development")]
 use std::path::Path;
-
-#[cfg(not(feature = "development"))]
-pub fn crash_actors(_req: HttpRequest) -> HttpResponse {
-    // This is returned on production builds.
-    HttpResponse::NotFound().finish()
-}
-
-#[cfg(feature = "development")]
-pub fn crash_actors(_req: HttpRequest) -> Result<HttpResponse, Error> {
-    RitaCommonLoop::from_registry().do_send(Crash {});
-    Ok(HttpResponse::Ok().json(()))
-}
 
 #[cfg(not(feature = "development"))]
 pub fn wipe(_req: HttpRequest) -> HttpResponse {

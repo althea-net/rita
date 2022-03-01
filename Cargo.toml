@@ -5,14 +5,10 @@ authors = ["Stan Drozd <drozdziak1@gmail.com>"]
 edition = "2018"
 
 [workspace]
-members = ["althea_kernel_interface", "settings", "clu", "exit_db", "antenna_forwarding_client", "antenna_forwarding_protocol", "auto_bridge", "babel_monitor_legacy","rita_common","rita_exit","rita_client", "rita_bin"]
+members = ["althea_kernel_interface", "settings", "clu", "exit_db", "antenna_forwarding_client", "antenna_forwarding_protocol", "auto_bridge","rita_common","rita_exit","rita_client", "rita_bin"]
 
 [profile.release]
 opt-level = "z"
 lto = true
 codegen-units = 1
 incremental = false
-
-
-[patch.crates-io]
-actix = {git = "https://github.com/althea-net/actix", branch = "0.7"}
