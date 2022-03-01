@@ -12,26 +12,25 @@ use crate::debt_keeper::payment_succeeded;
 use crate::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
 use crate::rita_loop::get_web3_server;
 use crate::usage_tracker::update_payments;
-
 use althea_types::Identity;
 use althea_types::PaymentTx;
+use futures::future::join_all;
 use num256::Uint256;
-use web30::client::Web3;
-use web30::types::TransactionResponse;
-
 use std::collections::HashSet;
 use std::fmt;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
+use web30::client::Web3;
+use web30::types::TransactionResponse;
 
 pub const TRANSACTION_VERIFICATION_TIMEOUT: Duration = FAST_LOOP_TIMEOUT;
 
-/// Discard payments after 15 minutes of failing to find txid, this is very generous
+/// Discard payments after 72 hours of failing to find txid, this is very generous
 /// because attempting to validate an incoming payment for longer does nothing to harm
 /// us, we can still send and receive other payments to all other nodes while waiting
 /// So it make sense to give the maximum benefit of the doubt. Or time to resubmit
-pub const PAYMENT_RECEIVE_TIMEOUT: Duration = Duration::from_secs(900u64);
+pub const PAYMENT_RECEIVE_TIMEOUT: Duration = Duration::from_secs(259200u64);
 /// Retry payments after a much shorter period, this is because other nodes may
 /// enforce upon us if we miss a payment and due to the implementation of DebtKeeper
 /// we will not send another payment while one is in flight. On Xdai the block time is
@@ -178,25 +177,25 @@ fn checked(msg: ToValidate, history: &mut PaymentValidator) {
     }
 }
 
-#[allow(clippy::await_holding_lock)]
 pub async fn validate() {
     // we panic on a failed receive so it should always be longer than the minimum
     // time we expect payments to take to enter the blockchain (the send timeout)
     assert!(PAYMENT_RECEIVE_TIMEOUT > PAYMENT_SEND_TIMEOUT);
 
     let our_address = settings::get_rita_common().payment.eth_address.unwrap();
-
-    let mut history = HISTORY.write().unwrap();
-
     let mut to_delete = Vec::new();
 
+    let history = HISTORY.read().unwrap();
+    let unvalidated_transactions = history.unvalidated_transactions.clone();
     info!(
         "Attempting to validate {} transactions {}",
         history.unvalidated_transactions.len(),
         print_txids(&history.unvalidated_transactions)
     );
+    drop(history);
 
-    for item in history.unvalidated_transactions.clone().iter() {
+    let mut futs = Vec::new();
+    for item in unvalidated_transactions {
         let elapsed = Instant::now().checked_duration_since(item.received);
         let from_us = item.payment.from.eth_address == our_address;
 
@@ -209,10 +208,8 @@ pub async fn validate() {
             // if we fail to so much as get a block height for the full duration of a payment timeout, we have problems and probably we are not counting payments correctly potentially leading to wallet
             // drain and other bad outcomes. So we should restart with the hope that the system will be restored to a working state by this last resort action
             if !item.checked {
-                let msg = format!("We failed to check txid {:#066x} against full nodes for the full duration of it's timeout period, please check full nodes", item.payment.txid.clone().unwrap());
+                let msg = format!("We failed to check txid {:#066x} against full nodes for the full duration of it's timeout period, please check full nodes", item.payment.txid.unwrap());
                 error!("{}", msg);
-                // drop the lock to prevent poisoning if we don't manage to crash
-                drop(history);
 
                 let sys = actix_async::System::current();
                 sys.stop_with_code(121);
@@ -232,10 +229,18 @@ pub async fn validate() {
             );
             to_delete.push(item.clone());
         } else {
-            validate_transaction(item, &mut history).await;
+            // we take all these futures and put them onto an array that we will execute
+            // in parallel, this is essential on the exit where in the worst case scenario
+            // we could have a thousand or more payments in the queue
+            let fut = validate_transaction(item);
+            futs.push(fut);
         }
     }
 
+    // execute all of the above verification operations in parallel
+    join_all(futs).await;
+
+    let mut history = HISTORY.write().unwrap();
     for item in to_delete.iter() {
         history.unvalidated_transactions.remove(item);
     }
@@ -243,7 +248,7 @@ pub async fn validate() {
 
 /// Attempt to validate that a given transaction has been accepted into the blockchain and
 /// is at least some configurable number of blocks behind the head.
-pub async fn validate_transaction(ts: &ToValidate, history: &mut PaymentValidator) {
+pub async fn validate_transaction(ts: ToValidate) {
     trace!("validating transaction");
     // we validate that a txid is present before adding to the validation list
     let txid = ts.payment.clone().txid.unwrap();
@@ -253,25 +258,26 @@ pub async fn validate_transaction(ts: &ToValidate, history: &mut PaymentValidato
     let block_num = web3.eth_block_number().await;
     let transaction = web3.eth_get_transaction_by_hash(txid.clone()).await;
 
+    let mut history = HISTORY.write().unwrap();
     match (transaction, block_num) {
         (Ok(Some(transaction)), Ok(block_num)) => {
             if !ts.checked {
-                checked(ts.clone(), history);
+                checked(ts.clone(), &mut history);
             }
-            handle_tx_messaging(txid, transaction, ts.clone(), block_num, history);
+            handle_tx_messaging(txid, transaction, ts.clone(), block_num, &mut history);
         }
         (Ok(None), _) => {
             // we have a response back from the full node that this tx is not in the mempool this
             // satisfies our checked requirement
             if !ts.checked {
-                checked(ts.clone(), history);
+                checked(ts.clone(), &mut history);
             }
         }
         (Err(_), Ok(_)) => {
             // we get an error from the full node but a successful block request, clearly we can contact
             // the full node so the transaction check has been attempted
             if !ts.checked {
-                checked(ts.clone(), history);
+                checked(ts.clone(), &mut history);
             }
         }
         (Ok(Some(_)), Err(_)) => trace!("Failed to check transaction {:#066x}", txid),
