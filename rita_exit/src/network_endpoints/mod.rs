@@ -255,18 +255,29 @@ pub fn get_client_debt(client: Json<Identity>) -> HttpResponse {
             let incoming_payments = debt.payment_details.incoming_payments;
 
             let we_owe_them = client_debt > zero;
-            let they_owe_more_than_in_queue =
-                client_debt.to_uint256().unwrap() > unverified_payments_uint;
+            let they_owe_more_than_in_queue = if we_owe_them {
+                false
+            } else {
+                (neg_one.clone() * client_debt.clone())
+                    .to_uint256()
+                    .unwrap()
+                    > unverified_payments_uint
+            };
 
             // they have more credit than they owe, wait for this to unwind
             // we apply credit right before enforcing or on payment.
-            if !we_owe_them && incoming_payments > client_debt.to_uint256().unwrap() {
-                return HttpResponse::Ok().json(0);
+            if !we_owe_them
+                && incoming_payments
+                    > (neg_one.clone() * client_debt.clone())
+                        .to_uint256()
+                        .unwrap()
+            {
+                return HttpResponse::Ok().json(zero);
             }
 
             match (we_owe_them, they_owe_more_than_in_queue) {
                 // in this case we owe them, return zero
-                (true, _) => return HttpResponse::Ok().json(0),
+                (true, _) => return HttpResponse::Ok().json(zero),
                 // they owe us more than is in the queue
                 (false, true) => {
                     // client debt is negative, they owe us, so we make it positive and subtract
@@ -275,7 +286,7 @@ pub fn get_client_debt(client: Json<Identity>) -> HttpResponse {
                     return HttpResponse::Ok().json(ret);
                 }
                 // they owe us less than what is in the queue, return zero
-                (false, false) => return HttpResponse::Ok().json(0),
+                (false, false) => return HttpResponse::Ok().json(zero),
             }
         }
     }
