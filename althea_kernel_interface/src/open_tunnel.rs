@@ -103,7 +103,7 @@ impl dyn KernelInterface {
                 "listen-port",
                 &format!("{}", args.port),
                 "private-key",
-                &args.private_key_path.to_str().unwrap().to_string(),
+                args.private_key_path.to_str().unwrap(),
                 "peer",
                 &format!("{}", args.remote_pub_key),
                 "endpoint",

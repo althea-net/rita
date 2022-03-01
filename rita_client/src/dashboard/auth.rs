@@ -16,7 +16,7 @@ pub fn set_pass(router_pass: Json<RouterPassword>) -> HttpResponse {
     debug!("Using {} as sha3 512 input", input_string);
     let mut hasher = Sha3_512::new();
     hasher.update(input_string.as_bytes());
-    let hashed_pass = bytes_to_hex_str(&hasher.finalize().to_vec());
+    let hashed_pass = bytes_to_hex_str(&hasher.finalize());
 
     let mut rita_client = settings::get_rita_client();
     rita_client.network.rita_dashboard_password = Some(hashed_pass);

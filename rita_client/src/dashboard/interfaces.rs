@@ -80,7 +80,7 @@ pub fn get_interfaces() -> Result<HashMap<String, InterfaceMode>, RitaClientErro
                         continue;
                     }
                     retval.insert(
-                        list_member.replace(" ", "").to_string(),
+                        list_member.replace(' ', "").to_string(),
                         ethernet2mode(&value, &setting_name)?,
                     );
                 }
@@ -211,7 +211,7 @@ pub fn ethernet_transform_mode(
     let mut return_codes = Vec::new();
     // in case of failure we revert to here
     let old_network_settings = { network.clone() };
-    let filtered_ifname = format!("network.rita_{}", ifname.replace(".", ""));
+    let filtered_ifname = format!("network.rita_{}", ifname.replace('.', ""));
 
     match a {
         // Wan is very simple, just delete it
@@ -563,7 +563,7 @@ pub fn list_remove(list: &str, entry: &str) -> String {
                 trace!("{} is not {} it's on the list!", filtered_item, entry);
                 let tmp_list = new_list.to_string();
                 if first {
-                    new_list = tmp_list + &filtered_item.to_string();
+                    new_list = tmp_list + filtered_item;
                     first = false;
                 } else {
                     new_list = tmp_list + &format!(" {}", filtered_item);

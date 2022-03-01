@@ -177,24 +177,22 @@ fn send_udp_heartbeat() {
     match dns_request {
         Ok(dnsres) => {
             let dnsresult = VecDeque::from_iter(dnsres);
-            let selected_exit_route: Result<RouteLegacy, BabelMonitorError>;
-            if cfg!(feature = "operator_debug") {
-                selected_exit_route = Ok(dummy_route());
+            let selected_exit_route = if cfg!(feature = "operator_debug") {
+                Ok(dummy_route())
             } else {
-                selected_exit_route = get_selected_exit_route(&network_info.babel_routes);
-            }
+                get_selected_exit_route(&network_info.babel_routes)
+            };
 
             match selected_exit_route {
                 Ok(route) => {
-                    let neigh_option;
-                    if cfg!(feature = "operator_debug") {
-                        neigh_option = Some((dummy_neigh_babel(), dummy_neigh_tunnel()));
+                    let neigh_option = if cfg!(feature = "operator_debug") {
+                        Some((dummy_neigh_babel(), dummy_neigh_tunnel()))
                     } else {
                         let neigh_option1 =
                             get_neigh_given_route(&route, &network_info.babel_neighbors);
-                        neigh_option =
-                            get_rita_neigh_option(neigh_option1, &network_info.rita_neighbors);
-                    }
+
+                        get_rita_neigh_option(neigh_option1, &network_info.rita_neighbors)
+                    };
 
                     if let Some((neigh, rita_neigh)) = neigh_option {
                         // Now that we have all the info we can stop and try to update the

@@ -246,7 +246,7 @@ fn receive_im_here(
                 sock_addr
             );
 
-            let ipaddr = match PeerMessage::decode(&datagram.to_vec()) {
+            let ipaddr = match PeerMessage::decode(datagram.as_ref()) {
                 Ok(PeerMessage::ImHere(ipaddr)) => ipaddr,
                 Err(e) => {
                     warn!("ImHere decode failed: {:?}", e);
