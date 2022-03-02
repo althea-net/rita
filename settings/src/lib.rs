@@ -17,14 +17,11 @@ extern crate serde_derive;
 extern crate log;
 extern crate arrayvec;
 
-use crate::client::{ExitClientSettings, ExitServer, SelectedExit};
 use althea_types::Identity;
-use ipnetwork::IpNetwork;
 use network::NetworkSettings;
 use payment::PaymentSettings;
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::Write;
@@ -386,98 +383,6 @@ where
     }
 }
 
-///Takes a file config and updates the config to use the new ExitServer struct
-pub fn update_config(
-    old_settings: RitaClientSettings,
-    subnet: u8,
-) -> Result<RitaClientSettings, SettingsError> {
-    let mut new_settings = RitaClientSettings {
-        payment: old_settings.payment,
-        log: old_settings.log,
-        operator: old_settings.operator,
-        localization: old_settings.localization,
-        network: old_settings.network,
-        exit_client: old_settings.exit_client.clone(),
-        future: old_settings.future,
-        app_name: old_settings.app_name,
-    };
-
-    // we have already updated to reading the new settings
-    if old_settings.exit_client.old_exits.is_empty() {
-        return Ok(new_settings);
-    }
-
-    let mut new_exits: HashMap<String, ExitServer> = HashMap::new();
-    for (k, v) in old_settings.exit_client.clone().old_exits {
-        let s_len = if v.subnet_len.is_some() {
-            v.subnet_len.unwrap()
-        } else {
-            subnet
-        };
-        let mut new_exit: ExitServer = ExitServer {
-            subnet: IpNetwork::new(v.id.mesh_ip, s_len)?,
-            id: Some(v.id),
-            subnet_len: s_len,
-            selected_exit: SelectedExit::default(),
-            eth_address: v.id.eth_address,
-            wg_public_key: v.id.wg_public_key,
-            registration_port: v.registration_port,
-            description: v.description,
-            info: v.info,
-        };
-
-        // we set the selected exit (starting exit) to be the one provided in config. This is required for registration
-        new_exit.selected_exit.selected_id = Some(v.id.mesh_ip);
-
-        // Special case for us_west, making it subnet 116. For africa, apac and sa, migrate ip such that they dont collide with uswest subnet
-        if v.id.mesh_ip == IpAddr::V6("fd00::1337:e2f".parse().unwrap()) {
-            new_exit = migrate_exit_ip(
-                new_exit.clone(),
-                new_exit.id.unwrap().mesh_ip,
-                US_WEST_SUBNET,
-            );
-        } else if v.id.mesh_ip == IpAddr::V6("fd00::1337:e7f".parse().unwrap()) {
-            //africa
-            new_exit = migrate_exit_ip(new_exit, AFRICA_IP, SUBNET);
-        } else if v.id.mesh_ip == IpAddr::V6("fd00::1337:e4f".parse().unwrap()) {
-            //apac
-            new_exit = migrate_exit_ip(new_exit, APAC_IP, SUBNET);
-        } else if v.id.mesh_ip == IpAddr::V6("fd00::1337:e8f".parse().unwrap()) {
-            //South Africa
-            new_exit = migrate_exit_ip(new_exit, SA_IP, SUBNET);
-        }
-
-        new_exits.insert(k, new_exit);
-    }
-
-    let exit_client = old_settings.exit_client;
-    new_settings.exit_client = ExitClientSettings {
-        old_exits: exit_client.clone().old_exits,
-        exits: exit_client.clone().exits,
-        current_exit: exit_client.clone().current_exit,
-        wg_listen_port: exit_client.wg_listen_port,
-        contact_info: exit_client.clone().contact_info,
-        lan_nics: exit_client.clone().lan_nics,
-        low_balance_notification: exit_client.low_balance_notification,
-    };
-    new_settings.exit_client.exits = new_exits.clone();
-    //remove old info after migrating over
-    new_settings.exit_client.old_exits = HashMap::new();
-    Ok(new_settings)
-}
-
-/// This function updates RitaClient struct with hardcoded values for exit. For US West the subnet is expanded to 116 and for those
-/// exits colliding within this subnet, they're ip gets mapped to a dummy ip
-fn migrate_exit_ip(exit: ExitServer, exit_ip: IpAddr, subnet: u8) -> ExitServer {
-    let mut new_exit = exit;
-    new_exit.subnet = IpNetwork::new(exit_ip, subnet).unwrap();
-    new_exit.subnet_len = subnet;
-    let mut id = new_exit.id.as_mut().unwrap();
-    id.mesh_ip = exit_ip;
-    new_exit.selected_exit.selected_id = Some(exit_ip);
-    new_exit
-}
-
 #[cfg(test)]
 mod tests {
     use crate::client::RitaClientSettings;
@@ -486,12 +391,6 @@ mod tests {
     #[test]
     fn test_settings_test() {
         RitaClientSettings::new("test.toml").unwrap();
-    }
-
-    #[test]
-    fn test_settings_example() {
-        let settings = RitaClientSettings::new("old_example.toml").unwrap();
-        assert!(!settings.exit_client.exits.is_empty())
     }
 
     #[test]

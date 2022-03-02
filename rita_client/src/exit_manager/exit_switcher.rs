@@ -1109,7 +1109,6 @@ mod tests {
         let path = "./src/exit_manager/config_in_use.toml".to_string();
         let settings = RitaClientSettings::new(&path).unwrap();
 
-        println!("Old Settings: {:#?}", settings.exit_client.old_exits);
         println!("\n\n\n\nNew Settings: {:#?}", settings.exit_client.exits);
     }
 
