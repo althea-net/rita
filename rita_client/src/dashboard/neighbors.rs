@@ -33,7 +33,7 @@ pub struct NodeInfo {
     pub stats: IfaceStats,
 }
 
-pub fn get_routes(_req: HttpRequest) -> HttpResponse {
+pub async fn get_routes(_req: HttpRequest) -> HttpResponse {
     let babel_port = settings::get_rita_client().network.babel_port;
     match open_babel_stream(babel_port, Duration::from_secs(5)) {
         Ok(mut stream) => match parse_routes(&mut stream) {
@@ -51,7 +51,7 @@ pub fn get_routes(_req: HttpRequest) -> HttpResponse {
 /// since the /debts endpoint was introduced, and should be removed when it can be
 /// coordinated with the frontend.
 /// The routes info might also belong in /exits or a dedicated /routes endpoint
-pub fn get_neighbor_info(_req: HttpRequest) -> HttpResponse {
+pub async fn get_neighbor_info(_req: HttpRequest) -> HttpResponse {
     let debts = dump();
     let neighbors = tm_get_neighbors();
     let combined_list = merge_debts_and_neighbors(neighbors, debts);

@@ -1,7 +1,7 @@
 use ::actix_web_async::web::Path;
 use ::actix_web_async::{HttpRequest, HttpResponse};
 
-pub fn get_low_balance_notification(_req: HttpRequest) -> HttpResponse {
+pub async fn get_low_balance_notification(_req: HttpRequest) -> HttpResponse {
     let setting = settings::get_rita_client()
         .exit_client
         .low_balance_notification;
@@ -9,7 +9,7 @@ pub fn get_low_balance_notification(_req: HttpRequest) -> HttpResponse {
     HttpResponse::Ok().json(setting.to_string())
 }
 
-pub fn set_low_balance_notification(path: Path<bool>) -> HttpResponse {
+pub async fn set_low_balance_notification(path: Path<bool>) -> HttpResponse {
     let value = path.into_inner();
     debug!("Set low balance notification hit!");
 

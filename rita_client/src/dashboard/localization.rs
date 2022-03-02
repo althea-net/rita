@@ -29,7 +29,7 @@ impl From<LocalizationSettings> for LocalizationReturn {
     }
 }
 
-pub fn get_localization(_req: HttpRequest) -> HttpResponse {
+pub async fn get_localization(_req: HttpRequest) -> HttpResponse {
     debug!("/localization GET hit");
     let localization = settings::get_rita_client().localization;
     HttpResponse::Ok().json(localization)

@@ -7,7 +7,7 @@ use babel_monitor::set_metric_factor as babel_set_metric_factor;
 use std::collections::HashMap;
 use std::time::Duration;
 
-pub fn get_local_fee(_req: HttpRequest) -> HttpResponse {
+pub async fn get_local_fee(_req: HttpRequest) -> HttpResponse {
     debug!("/local_fee GET hit");
     let mut ret = HashMap::new();
     ret.insert("local_fee", settings::get_rita_common().payment.local_fee);
@@ -15,7 +15,7 @@ pub fn get_local_fee(_req: HttpRequest) -> HttpResponse {
     HttpResponse::Ok().json(ret)
 }
 
-pub fn get_metric_factor(_req: HttpRequest) -> HttpResponse {
+pub async fn get_metric_factor(_req: HttpRequest) -> HttpResponse {
     debug!("/local_fee GET hit");
     let mut ret = HashMap::new();
     ret.insert(
@@ -26,7 +26,7 @@ pub fn get_metric_factor(_req: HttpRequest) -> HttpResponse {
     HttpResponse::Ok().json(ret)
 }
 
-pub fn set_local_fee(path: Path<u32>) -> HttpResponse {
+pub async fn set_local_fee(path: Path<u32>) -> HttpResponse {
     let new_fee = path.into_inner();
     debug!("/local_fee/{} POST hit", new_fee);
     let babel_port = settings::get_rita_common().network.babel_port;
@@ -66,7 +66,7 @@ pub fn set_local_fee(path: Path<u32>) -> HttpResponse {
 
 /// Sets the metric factor for this node, lower values mean a higher price preference while higher
 /// values mean a higher weight on route quality.
-pub fn set_metric_factor(path: Path<u32>) -> HttpResponse {
+pub async fn set_metric_factor(path: Path<u32>) -> HttpResponse {
     let new_factor = path.into_inner();
     debug!("/metric_factor/{} POST hit", new_factor);
     let babel_port = settings::get_rita_common().network.babel_port;

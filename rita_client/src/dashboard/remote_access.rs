@@ -12,7 +12,7 @@ use crate::RitaClientError;
 static DROPBEAR_CONFIG: &str = "/etc/config/dropbear";
 static FIREWALL_CONFIG: &str = "/etc/config/firewall";
 
-pub fn get_remote_access_status(_req: HttpRequest) -> HttpResponse {
+pub async fn get_remote_access_status(_req: HttpRequest) -> HttpResponse {
     if !KI.is_openwrt() {
         return HttpResponse::new(StatusCode::BAD_REQUEST);
     }
@@ -60,7 +60,7 @@ fn check_dropbear_config() -> Result<bool, RitaClientError> {
     Ok(true)
 }
 
-pub fn set_remote_access_status(path: Path<bool>) -> HttpResponse {
+pub async fn set_remote_access_status(path: Path<bool>) -> HttpResponse {
     let remote_access = path.into_inner();
     if let Err(e) = set_remote_access_internal(remote_access) {
         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{}", e));

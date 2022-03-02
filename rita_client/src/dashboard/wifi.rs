@@ -274,7 +274,7 @@ pub enum WifiToken {
 /// an endpoint that takes a series of wifi tokens in json format and applies them all at once
 /// the reason for this is that changing any setting while on wifi will disconnect the caller
 /// so in order to have all the changes 'take' we need to have a single endpoint for all changes
-pub fn set_wifi_multi(wifi_changes: Json<Vec<WifiToken>>) -> HttpResponse {
+pub async fn set_wifi_multi(wifi_changes: Json<Vec<WifiToken>>) -> HttpResponse {
     trace!("Got multi wifi change!");
     let mut needs_reboot = false;
 
@@ -443,7 +443,7 @@ fn validate_channel(
 }
 
 // returns what channels are allowed for the provided radio value
-pub fn get_allowed_wifi_channels(radio: Path<String>) -> HttpResponse {
+pub async fn get_allowed_wifi_channels(radio: Path<String>) -> HttpResponse {
     debug!("/wifi_settings/get_channels hit with {:?}", radio);
     let radio = radio.into_inner();
 
@@ -532,7 +532,7 @@ fn validate_config_value(s: &str) -> Result<(), ValidationError> {
     }
 }
 
-pub fn get_wifi_config(_req: HttpRequest) -> HttpResponse {
+pub async fn get_wifi_config(_req: HttpRequest) -> HttpResponse {
     debug!("Get wificonfig hit!");
     let config = match get_wifi_config_internal() {
         Ok(con) => con,

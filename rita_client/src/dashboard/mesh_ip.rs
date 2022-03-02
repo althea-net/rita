@@ -1,7 +1,7 @@
 use actix_web_async::{HttpRequest, HttpResponse};
 use std::collections::HashMap;
 
-pub fn get_mesh_ip(_req: HttpRequest) -> HttpResponse {
+pub async fn get_mesh_ip(_req: HttpRequest) -> HttpResponse {
     debug!("/mesh_ip GET hit");
 
     let mut ret = HashMap::new();

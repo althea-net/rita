@@ -9,7 +9,7 @@ lazy_static! {
         Arc::new(RwLock::new(None));
 }
 
-pub fn reboot_router(_req: HttpRequest) -> HttpResponse {
+pub async fn reboot_router(_req: HttpRequest) -> HttpResponse {
     if KI.is_openwrt() {
         if let Err(e) = KI.run_command("reboot", &[]) {
             return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
@@ -24,7 +24,7 @@ pub fn reboot_router(_req: HttpRequest) -> HttpResponse {
 /// This function is triggered by the user from the router dashboard. Retrive the firmware image from
 /// the lazy static variable and use this to perform a sysupgrade. If device is not openwrt or no image
 /// link is available, do nothing
-pub fn update_router(_req: HttpRequest) -> HttpResponse {
+pub async fn update_router(_req: HttpRequest) -> HttpResponse {
     if KI.is_openwrt() {
         let reader = &*UPDATE_INSTRUCTION.read().unwrap();
         if reader.is_none() {
