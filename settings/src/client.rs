@@ -3,9 +3,7 @@ use crate::logging::LoggingSettings;
 use crate::network::NetworkSettings;
 use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
-use crate::{
-    json_merge, set_rita_client, spawn_watch_thread_client, update_config, SettingsError, SUBNET,
-};
+use crate::{json_merge, set_rita_client, spawn_watch_thread_client, SettingsError};
 use althea_types::wg_key::WgKey;
 use althea_types::{ContactStorage, ExitState, Identity};
 use clarity::Address;
@@ -49,22 +47,6 @@ pub struct ExitServer {
 
     /// The port over which we will reach the exit apis on over the mesh
     #[serde(default)]
-    pub registration_port: u16,
-    #[serde(default)]
-    pub description: String,
-    /// The state and data about the exit
-    #[serde(default, flatten)]
-    pub info: ExitState,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
-pub struct OldExitServer {
-    pub id: Identity,
-    /// The port over which we will reach the exit apis on over the mesh
-
-    #[serde(default)]
-    pub subnet_len: Option<u8>,
-
     pub registration_port: u16,
     #[serde(default)]
     pub description: String,
@@ -123,10 +105,8 @@ fn default_balance_notification() -> bool {
 /// to a exit and to setup the exit tunnel
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitClientSettings {
-    #[serde(rename = "exits", default)]
-    pub old_exits: HashMap<String, OldExitServer>,
     /// This stores a mapping between an identifier (any string) to exits
-    #[serde(rename = "new_exits", default)]
+    #[serde(alias = "new_exits", default)]
     pub exits: HashMap<String, ExitServer>,
     /// This stores the current exit identifier
     pub current_exit: Option<String>,
@@ -147,7 +127,6 @@ pub struct ExitClientSettings {
 impl Default for ExitClientSettings {
     fn default() -> Self {
         ExitClientSettings {
-            old_exits: HashMap::new(),
             exits: HashMap::new(),
             current_exit: None,
             wg_listen_port: 59999,
@@ -169,14 +148,13 @@ impl RitaClientSettings {
         let mut s = Config::new();
         assert!(Path::new(file_name).exists());
         s.merge(config::File::with_name(file_name).required(false))?;
-        let settings: Self = update_config(s.try_into()?, SUBNET)?;
-        Ok(settings)
+        Ok(s.try_into()?)
     }
 
     pub fn new_watched(file_name: &str) -> Result<Self, SettingsError> {
         let mut s = Config::new();
         s.merge(config::File::with_name(file_name).required(false))?;
-        let settings: Self = update_config(s.try_into()?, SUBNET)?;
+        let settings: RitaClientSettings = s.try_into()?;
 
         set_rita_client(settings.clone());
 
@@ -222,7 +200,7 @@ impl RitaClientSettings {
 
         match serde_json::from_value(settings_value) {
             Ok(new_settings) => {
-                *self = update_config(new_settings, SUBNET)?;
+                *self = new_settings;
                 Ok(())
             }
             Err(e) => Err(e.into()),
