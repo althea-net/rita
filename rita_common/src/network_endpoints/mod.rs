@@ -13,8 +13,9 @@ use althea_types::{LocalIdentity, PaymentTx};
 use std::time::Instant;
 
 /// The recieve side of the make payments call
-pub fn make_payments(pmt: (Json<PaymentTx>, HttpRequest)) -> HttpResponse {
-    let txid = pmt.0.txid.clone();
+pub async fn make_payments(item: Json<PaymentTx>) -> HttpResponse {
+    let pmt = item.into_inner();
+    let txid = pmt.txid.clone();
     let our_address = settings::get_rita_common().payment.eth_address.unwrap();
 
     // we didn't get a txid, probably an old client.
@@ -23,19 +24,19 @@ pub fn make_payments(pmt: (Json<PaymentTx>, HttpRequest)) -> HttpResponse {
         error!("Did not find txid, payment failed!");
         return HttpResponse::build(StatusCode::from_u16(400u16).unwrap())
             .json("txid not provided! Invalid payment!");
-    } else if pmt.0.to.eth_address != our_address {
+    } else if pmt.to.eth_address != our_address {
         return HttpResponse::build(StatusCode::from_u16(400u16).unwrap()).json(format!(
             "We are not {} our address is {}! Invalid payment",
-            pmt.0.to.eth_address, our_address
+            pmt.to.eth_address, our_address
         ));
     }
     let txid = txid.unwrap();
     info!(
         "Got Payment from {} for {} with txid {:#066x}",
-        pmt.0.from.wg_public_key, pmt.0.amount, txid,
+        pmt.from.wg_public_key, pmt.amount, txid,
     );
     let ts = ToValidate {
-        payment: pmt.0.into_inner(),
+        payment: pmt,
         received: Instant::now(),
         checked: false,
     };
@@ -44,16 +45,16 @@ pub fn make_payments(pmt: (Json<PaymentTx>, HttpRequest)) -> HttpResponse {
     HttpResponse::Ok().json("Payment Received!")
 }
 
-pub fn hello_response(req: (Json<LocalIdentity>, HttpRequest)) -> HttpResponse {
-    let their_id = *req.0;
+pub async fn hello_response(item: Json<LocalIdentity>, req: HttpRequest) -> HttpResponse {
+    let their_id = item.into_inner();
 
     let err_mesg = "Malformed hello tcp packet!";
-    let socket = match req.1.peer_addr() {
+    let socket = match req.peer_addr() {
         Some(val) => val,
         None => return HttpResponse::build(StatusCode::from_u16(400u16).unwrap()).json(err_mesg),
     };
 
-    trace!("Got Hello from {:?}", req.1.peer_addr());
+    trace!("Got Hello from {:?}", req.peer_addr());
     trace!("opening tunnel in hello_response for {:?}", their_id);
 
     let peer = Peer {

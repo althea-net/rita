@@ -181,7 +181,7 @@ pub async fn secure_setup_request(
     }
 }
 
-pub fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -> HttpResponse {
+pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -> HttpResponse {
     let our_secretkey: WgKey = *EXIT_WG_PRIVATE_KEY;
     let our_secretkey = our_secretkey.into();
 
@@ -223,7 +223,7 @@ pub fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -> Http
     ))
 }
 
-pub fn get_exit_info_http(_req: HttpRequest) -> HttpResponse {
+pub async fn get_exit_info_http(_req: HttpRequest) -> HttpResponse {
     HttpResponse::Ok().json(ExitState::GotInfo {
         general_details: get_exit_info(),
         message: "Got info successfully".to_string(),
@@ -236,7 +236,7 @@ pub fn get_exit_info_http(_req: HttpRequest) -> HttpResponse {
 /// which means packet loss simply resolves to overpayment, but the exit is being paid for uploaded traffic
 /// (the clients download traffic) which breaks this assumption
 /// TODO secure this endpoint with libsodium
-pub fn get_client_debt(client: Json<Identity>) -> HttpResponse {
+pub async fn get_client_debt(client: Json<Identity>) -> HttpResponse {
     let client = client.into_inner();
     let neg_one: i32 = -1;
     let neg_one = Int256::from(neg_one);
@@ -294,13 +294,13 @@ pub fn get_client_debt(client: Json<Identity>) -> HttpResponse {
 }
 
 #[cfg(not(feature = "development"))]
-pub fn nuke_db(_req: HttpRequest) -> HttpResponse {
+pub async fn nuke_db(_req: HttpRequest) -> HttpResponse {
     // This is returned on production builds.
     HttpResponse::NotFound().finish()
 }
 
 #[cfg(feature = "development")]
-pub fn nuke_db(_req: HttpRequest) -> HttpResponse {
+pub async fn nuke_db(_req: HttpRequest) -> HttpResponse {
     use crate::truncate_db_tables;
 
     trace!("nuke_db: Truncating all data from the database");

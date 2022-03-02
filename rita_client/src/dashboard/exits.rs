@@ -113,7 +113,7 @@ pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
     }
 }
 
-pub fn add_exits(new_exits: Json<HashMap<String, ExitServer>>) -> HttpResponse {
+pub async fn add_exits(new_exits: Json<HashMap<String, ExitServer>>) -> HttpResponse {
     debug!("/exits POST hit with {:?}", new_exits);
     let mut rita_client = settings::get_rita_client();
     let mut exits = rita_client.exit_client.exits;
@@ -127,7 +127,7 @@ pub fn add_exits(new_exits: Json<HashMap<String, ExitServer>>) -> HttpResponse {
     HttpResponse::Ok().json(copy)
 }
 
-pub fn get_exit_info(_req: HttpRequest) -> HttpResponse {
+pub async fn get_exit_info(_req: HttpRequest) -> HttpResponse {
     debug!("Exit endpoint hit!");
     match dashboard_get_exit_info() {
         Ok(a) => HttpResponse::Ok().json(a),
@@ -135,7 +135,7 @@ pub fn get_exit_info(_req: HttpRequest) -> HttpResponse {
     }
 }
 
-pub fn reset_exit(path: Path<String>) -> HttpResponse {
+pub async fn reset_exit(path: Path<String>) -> HttpResponse {
     let exit_name = path.into_inner();
     debug!("/exits/{}/reset hit", exit_name);
     let mut rita_client = settings::get_rita_client();
@@ -167,7 +167,7 @@ pub fn reset_exit(path: Path<String>) -> HttpResponse {
     }
 }
 
-pub fn select_exit(path: Path<String>) -> HttpResponse {
+pub async fn select_exit(path: Path<String>) -> HttpResponse {
     let exit_name = path.into_inner();
     debug!("/exits/{}/select hit", exit_name);
 

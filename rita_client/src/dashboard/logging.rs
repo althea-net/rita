@@ -3,11 +3,11 @@ use actix_web_async::{web::Path, HttpRequest, HttpResponse};
 use log::LevelFilter;
 use rita_common::KI;
 
-pub fn get_remote_logging(_req: HttpRequest) -> HttpResponse {
+pub async fn get_remote_logging(_req: HttpRequest) -> HttpResponse {
     HttpResponse::Ok().json(settings::get_rita_client().log.enabled)
 }
 
-pub fn remote_logging(path: Path<bool>) -> HttpResponse {
+pub async fn remote_logging(path: Path<bool>) -> HttpResponse {
     let enabled = path.into_inner();
     debug!("/remote_logging/enable/{} hit", enabled);
 
@@ -33,13 +33,13 @@ pub fn remote_logging(path: Path<bool>) -> HttpResponse {
     HttpResponse::Ok().json(())
 }
 
-pub fn get_remote_logging_level(_req: HttpRequest) -> HttpResponse {
+pub async fn get_remote_logging_level(_req: HttpRequest) -> HttpResponse {
     let rita_client = settings::get_rita_client();
     let level = &rita_client.log.level;
     HttpResponse::Ok().json(level)
 }
 
-pub fn remote_logging_level(path: Path<String>) -> HttpResponse {
+pub async fn remote_logging_level(path: Path<String>) -> HttpResponse {
     let level = path.into_inner();
     debug!("/remote_logging/level/{}", level);
 

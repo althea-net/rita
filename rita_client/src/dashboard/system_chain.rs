@@ -8,7 +8,7 @@ use settings::payment::ETH_FEE_MULTIPLIER;
 use settings::payment::XDAI_FEE_MULTIPLIER;
 
 /// Changes the full node configuration value between test/prod and other networks
-pub fn set_system_blockchain_endpoint(path: Path<String>) -> HttpResponse {
+pub async fn set_system_blockchain_endpoint(path: Path<String>) -> HttpResponse {
     info!("Blockchain change endpoint hit!");
     let id: Result<SystemChain, ()> = path.into_inner().parse();
     if id.is_err() {
@@ -31,7 +31,7 @@ pub fn set_system_blockchain_endpoint(path: Path<String>) -> HttpResponse {
     HttpResponse::Ok().json(())
 }
 
-pub fn get_system_blockchain(_req: HttpRequest) -> HttpResponse {
+pub async fn get_system_blockchain(_req: HttpRequest) -> HttpResponse {
     debug!("/blockchain/ GET hit");
 
     HttpResponse::Ok().json(settings::get_rita_client().payment.system_chain)

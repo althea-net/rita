@@ -74,11 +74,11 @@ fn withdraw_handler(address: Address, amount: Option<Uint256>) -> HttpResponse {
     }
 }
 
-pub fn withdraw(path: Path<(Address, Uint256)>) -> HttpResponse {
+pub async fn withdraw(path: Path<(Address, Uint256)>) -> HttpResponse {
     withdraw_handler(path.0, Some(path.1.clone()))
 }
 
-pub fn withdraw_all(path: Path<Address>) -> HttpResponse {
+pub async fn withdraw_all(path: Path<Address>) -> HttpResponse {
     let address = path.into_inner();
     debug!("/withdraw_all/{} hit", address);
     withdraw_handler(address, None)

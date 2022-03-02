@@ -25,7 +25,7 @@ pub struct InstallationDetailsPost {
     pub equipment_details: String,
 }
 
-pub fn set_installation_details(req: Json<InstallationDetailsPost>) -> HttpResponse {
+pub async fn set_installation_details(req: Json<InstallationDetailsPost>) -> HttpResponse {
     let input = req.into_inner();
     trace!("Setting install details with {:?}", input);
 
@@ -126,17 +126,17 @@ pub fn set_installation_details(req: Json<InstallationDetailsPost>) -> HttpRespo
     HttpResponse::Ok().finish()
 }
 
-pub fn get_installation_details(_req: HttpRequest) -> HttpResponse {
+pub async fn get_installation_details(_req: HttpRequest) -> HttpResponse {
     let rita_client = settings::get_rita_client();
     let operator_settings = rita_client.operator;
     HttpResponse::Ok().json(operator_settings.installation_details)
 }
 
-pub fn display_operator_setup(_req: HttpRequest) -> HttpResponse {
+pub async fn display_operator_setup(_req: HttpRequest) -> HttpResponse {
     HttpResponse::Ok().json(settings::get_rita_client().operator.display_operator_setup)
 }
 
-pub fn set_display_operator_setup(val: Path<bool>) -> HttpResponse {
+pub async fn set_display_operator_setup(val: Path<bool>) -> HttpResponse {
     // scoped so that this value gets dropped before we get to save, preventing
     // deadlock
     {
@@ -155,13 +155,13 @@ pub fn set_display_operator_setup(val: Path<bool>) -> HttpResponse {
     HttpResponse::Ok().finish()
 }
 
-pub fn get_billing_details(_req: HttpRequest) -> HttpResponse {
+pub async fn get_billing_details(_req: HttpRequest) -> HttpResponse {
     let rita_client = settings::get_rita_client();
     let operator_settings = rita_client.operator;
     HttpResponse::Ok().json(operator_settings.billing_details)
 }
 
-pub fn set_billing_details(req: Json<BillingDetails>) -> HttpResponse {
+pub async fn set_billing_details(req: Json<BillingDetails>) -> HttpResponse {
     let mut rita_client = settings::get_rita_client();
     let mut operator = rita_client.operator;
     operator.billing_details = Some(req.into_inner());
