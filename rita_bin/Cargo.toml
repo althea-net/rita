@@ -5,6 +5,9 @@ edition = "2018"
 license = "Apache-2.0"
 build = "build.rs"
 
+[profile.release]
+strip = "true"
+
 [[bin]]
 name = "rita_exit"
 path = "src/exit.rs"
@@ -60,3 +63,4 @@ dev_env = []
 development = ["rita_common/dash_debug","rita_client/operator_debug"]
 # Op tools dev environement
 optools_dev_env = ["rita_client/dev_env"]
+
