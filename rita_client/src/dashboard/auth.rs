@@ -8,7 +8,7 @@ pub struct RouterPassword {
     pub password: String,
 }
 
-pub fn set_pass(router_pass: Json<RouterPassword>) -> HttpResponse {
+pub async fn set_pass(router_pass: Json<RouterPassword>) -> HttpResponse {
     debug!("/router/password hit with {:?}", router_pass);
     let router_pass = router_pass.into_inner();
     let input_string = router_pass.password.clone() + "RitaSalt";

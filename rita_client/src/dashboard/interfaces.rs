@@ -437,7 +437,7 @@ fn wlan_toggle_get(uci_spec: &str) -> Result<bool, RitaClientError> {
     Ok(current_state)
 }
 
-pub fn wlan_mesh_get(_: HttpRequest) -> HttpResponse {
+pub async fn wlan_mesh_get(_: HttpRequest) -> HttpResponse {
     let res = wlan_toggle_get("wireless.mesh.disabled");
     match res {
         Ok(b) => HttpResponse::Ok().json(b),
@@ -448,7 +448,7 @@ pub fn wlan_mesh_get(_: HttpRequest) -> HttpResponse {
     }
 }
 
-pub fn wlan_lightclient_get(_: HttpRequest) -> HttpResponse {
+pub async fn wlan_lightclient_get(_: HttpRequest) -> HttpResponse {
     let res = wlan_toggle_get("wireless.lightclient.disabled");
     match res {
         Ok(b) => HttpResponse::Ok().json(b),
@@ -518,7 +518,7 @@ fn wlan_toggle_set(uci_spec: &str, enabled: bool) -> Result<(), RitaClientError>
     Ok(())
 }
 
-pub fn wlan_mesh_set(enabled: Path<bool>) -> HttpResponse {
+pub async fn wlan_mesh_set(enabled: Path<bool>) -> HttpResponse {
     let enabled = enabled.into_inner();
     let res = wlan_toggle_set("wireless.mesh.disabled", enabled);
     match res {
@@ -530,7 +530,7 @@ pub fn wlan_mesh_set(enabled: Path<bool>) -> HttpResponse {
     }
 }
 
-pub fn wlan_lightclient_set(enabled: Path<bool>) -> HttpResponse {
+pub async fn wlan_lightclient_set(enabled: Path<bool>) -> HttpResponse {
     let enabled = enabled.into_inner();
     let res = wlan_toggle_set("wireless.lightclient.disabled", enabled);
     match res {
@@ -629,7 +629,7 @@ mod tests {
     }
 }
 
-pub fn get_interfaces_endpoint(_req: HttpRequest) -> HttpResponse {
+pub async fn get_interfaces_endpoint(_req: HttpRequest) -> HttpResponse {
     debug!("get /interfaces hit");
     match get_interfaces() {
         Ok(val) => HttpResponse::Ok().json(val),
@@ -640,7 +640,7 @@ pub fn get_interfaces_endpoint(_req: HttpRequest) -> HttpResponse {
     }
 }
 
-pub fn set_interfaces_endpoint(interface: Json<InterfaceToSet>) -> HttpResponse {
+pub async fn set_interfaces_endpoint(interface: Json<InterfaceToSet>) -> HttpResponse {
     let interface = interface.into_inner();
     debug!("set /interfaces hit");
 

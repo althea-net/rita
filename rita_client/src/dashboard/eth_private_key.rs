@@ -6,7 +6,7 @@ pub struct EthPrivateKey {
     pub eth_private_key: String,
 }
 
-pub fn get_eth_private_key(_req: HttpRequest) -> HttpResponse {
+pub async fn get_eth_private_key(_req: HttpRequest) -> HttpResponse {
     debug!("/eth_private_key GET hit");
 
     let mut ret = HashMap::new();

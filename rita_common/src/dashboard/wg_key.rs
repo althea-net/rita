@@ -3,7 +3,7 @@ use actix_web_async::{HttpRequest, HttpResponse};
 
 use crate::RitaCommonError;
 
-pub fn get_wg_public_key(_req: HttpRequest) -> HttpResponse {
+pub async fn get_wg_public_key(_req: HttpRequest) -> HttpResponse {
     let wg_public_key = settings::get_rita_common().network.wg_public_key;
 
     if let Some(wg_public_key) = wg_public_key {

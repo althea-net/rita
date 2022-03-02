@@ -14,7 +14,7 @@ fn clean_quotes(val: &str) -> String {
     val.trim().trim_matches('"').trim_matches('\\').to_string()
 }
 
-pub fn set_phone_number(req: String) -> HttpResponse {
+pub async fn set_phone_number(req: String) -> HttpResponse {
     let clean_string = clean_quotes(&req);
     trace!("Got number {:?}", clean_string);
     let number: PhoneNumber = match clean_string.parse() {
@@ -50,7 +50,7 @@ pub fn set_phone_number(req: String) -> HttpResponse {
     HttpResponse::Ok().finish()
 }
 
-pub fn get_phone_number(_req: HttpRequest) -> HttpResponse {
+pub async fn get_phone_number(_req: HttpRequest) -> HttpResponse {
     let rita_client = settings::get_rita_client();
     let exit_client = rita_client.exit_client;
     match &option_convert(exit_client.contact_info) {
@@ -63,7 +63,7 @@ pub fn get_phone_number(_req: HttpRequest) -> HttpResponse {
     }
 }
 
-pub fn set_email(req: String) -> HttpResponse {
+pub async fn set_email(req: String) -> HttpResponse {
     let clean_string = clean_quotes(&req);
     trace!("Got email {:?}", clean_string);
     let email: EmailAddress = match clean_string.parse() {
@@ -98,7 +98,7 @@ pub fn set_email(req: String) -> HttpResponse {
     HttpResponse::Ok().finish()
 }
 
-pub fn get_email(_req: HttpRequest) -> HttpResponse {
+pub async fn get_email(_req: HttpRequest) -> HttpResponse {
     let rita_client = settings::get_rita_client();
     let exit_client = rita_client.exit_client;
     match &option_convert(exit_client.contact_info) {

@@ -3,7 +3,7 @@ use arrayvec::ArrayString;
 
 use crate::RitaCommonError;
 
-pub fn get_nickname(_req: HttpRequest) -> HttpResponse {
+pub async fn get_nickname(_req: HttpRequest) -> HttpResponse {
     let nick = settings::get_rita_common().network.nickname;
 
     if let Some(nick) = nick {
@@ -21,7 +21,7 @@ pub struct Nickname {
     nickname: String,
 }
 
-pub fn set_nickname(nickname: Json<Nickname>) -> HttpResponse {
+pub async fn set_nickname(nickname: Json<Nickname>) -> HttpResponse {
     let new_nick = &nickname.nickname;
     match ArrayString::<32>::from(new_nick) {
         Ok(new) => {

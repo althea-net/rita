@@ -2,7 +2,7 @@ use actix_web_async::{http::StatusCode, web::Path, HttpRequest, HttpResponse};
 use rita_common::RitaCommonError;
 use std::collections::HashMap;
 
-pub fn get_backup_created(_req: HttpRequest) -> HttpResponse {
+pub async fn get_backup_created(_req: HttpRequest) -> HttpResponse {
     debug!("/backup_created GET hit");
     let mut ret = HashMap::new();
     ret.insert(
@@ -16,7 +16,7 @@ pub fn get_backup_created(_req: HttpRequest) -> HttpResponse {
     HttpResponse::Ok().json(ret)
 }
 
-pub fn set_backup_created(path: Path<bool>) -> HttpResponse {
+pub async fn set_backup_created(path: Path<bool>) -> HttpResponse {
     debug!("Setting backup created");
     let value = path.into_inner();
 

@@ -17,5 +17,5 @@ tokio = "1.0"
 futures = {version="0.3", features = ["thread-pool"]}
 
 [dev-dependencies]
-actix = "0.12"
+actix = "0.13"
 futures = "0.3"

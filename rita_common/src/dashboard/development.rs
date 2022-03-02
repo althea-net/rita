@@ -15,13 +15,13 @@ use settings::RitaCommonSettings;
 use std::path::Path;
 
 #[cfg(not(feature = "development"))]
-pub fn wipe(_req: HttpRequest) -> HttpResponse {
+pub async fn wipe(_req: HttpRequest) -> HttpResponse {
     // This is returned on production builds.
     HttpResponse::NotFound().finish()
 }
 
 #[cfg(feature = "development")]
-pub fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {
+pub async fn wipe(_req: HttpRequest) -> Result<HttpResponse, Error> {
     let mut network_settings = SETTING.get_network_mut();
 
     // Clean up existing WG interfaces

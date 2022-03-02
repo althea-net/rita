@@ -24,7 +24,7 @@ pub struct OwnInfo {
     pub client_can_use_free_tier: bool,
 }
 
-pub fn get_own_info(_req: HttpRequest) -> HttpResponse {
+pub async fn get_own_info(_req: HttpRequest) -> HttpResponse {
     debug!("Get own info endpoint hit!");
     let payment_settings = settings::get_rita_common().payment;
     let eth_address = payment_settings.eth_address.unwrap();

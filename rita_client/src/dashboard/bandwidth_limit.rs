@@ -6,12 +6,12 @@ use actix_web_async::HttpResponse;
 use actix_web_async::{web::Path, HttpRequest};
 use rita_common::{RitaCommonError, KI};
 
-pub fn get_bandwidth_limit(_req: HttpRequest) -> HttpResponse {
+pub async fn get_bandwidth_limit(_req: HttpRequest) -> HttpResponse {
     let val = settings::get_rita_client().network.user_bandwidth_limit;
     HttpResponse::Ok().json(val)
 }
 
-pub fn set_bandwidth_limit(path: Path<String>) -> HttpResponse {
+pub async fn set_bandwidth_limit(path: Path<String>) -> HttpResponse {
     let value = path.into_inner();
     debug!("Set bandwidth limit!");
     let mut rita_client = settings::get_rita_client();
