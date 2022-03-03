@@ -15,15 +15,24 @@ pub fn update_rita(instruction: UpdateType) -> Result<Output, KernelInterfaceErr
                 info!("Set new release feed for opkg");
 
                 //opkg commands
-                let res = Err(KernelInterfaceError::RuntimeError(
+                let mut res = Err(KernelInterfaceError::RuntimeError(
                     "No commands given for opkg".to_string(),
                 ));
                 for cmd in commands.command_list {
-                    let res = KI.perform_opkg(cmd);
+                    res = KI.perform_opkg(cmd);
                     if res.is_err() {
                         error!("Unable to perform opkg with error: {:?}", res);
                         return res;
                     }
+                }
+
+                // Restart rita after opkg
+                let args = vec!["restart"];
+                if let Err(e) = KI.run_command("/etc/init.d/babeld", &args) {
+                    error!("Unable to restart babel after opkg update: {}", e);
+                }
+                if let Err(e) = KI.run_command("/etc/init.d/rita", &args) {
+                    error!("Unable to restart rita after opkg update: {}", e)
                 }
                 res
             }
