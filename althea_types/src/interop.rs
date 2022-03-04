@@ -1,3 +1,4 @@
+use crate::WifiDevice;
 use crate::{contact_info::ContactType, wg_key::WgKey, BillingDetails, InstallationDetails};
 use arrayvec::ArrayString;
 use babel_monitor::Neighbor as NeighborLegacy;
@@ -572,6 +573,8 @@ pub struct HardwareInfo {
     pub entire_system_kernel_version: String,
     /// Vector of eth data i.e. whether a link is up and if so what the link speed is
     pub ethernet_stats: Option<Vec<EthernetStats>>,
+    // Vector of wifi devices on router with staion and survey data for each
+    pub wifi_devices: Vec<WifiDevice>,
 }
 
 fn default_kernel_version() -> String {

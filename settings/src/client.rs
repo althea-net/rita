@@ -139,7 +139,11 @@ impl Default for ExitClientSettings {
 
 impl ExitClientSettings {
     pub fn get_current_exit(&self) -> Option<&ExitServer> {
-        Some(&self.exits[self.current_exit.as_ref()?])
+        if self.exits.contains_key(self.current_exit.as_ref()?) {
+            Some(&self.exits[self.current_exit.as_ref()?])
+        } else {
+            None
+        }
     }
 }
 
