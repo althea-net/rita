@@ -2,13 +2,15 @@
 //! we end up processing and moving contact data in a few other places (exit registration, text notifications) the contact_details member of
 //! the exit settings struct is the one true source. All the others are updated as needed and you should try to phase them out if practical.
 
-use rita_common::utils::option_convert;
-
 use actix_web_async::HttpRequest;
 use actix_web_async::HttpResponse;
+use althea_types::ContactDetails;
 use althea_types::ContactType;
 use lettre::EmailAddress;
 use phonenumber::PhoneNumber;
+
+use crate::operator_update::get_contact_info;
+use crate::operator_update::set_contact_info;
 
 fn clean_quotes(val: &str) -> String {
     val.trim().trim_matches('"').trim_matches('\\').to_string()
@@ -25,10 +27,8 @@ pub async fn set_phone_number(req: String) -> HttpResponse {
         }
     };
 
-    let mut rita_client = settings::get_rita_client();
-
     // merge the new value into the existing struct, for the various possibilities
-    let res = match option_convert(rita_client.exit_client.contact_info.clone()) {
+    let res = match ContactType::convert(get_contact_info()) {
         Some(ContactType::Phone { .. }) => Some(ContactType::Phone { number }),
         Some(ContactType::Email { email }) => Some(ContactType::Both { number, email }),
         Some(ContactType::Both {
@@ -38,9 +38,7 @@ pub async fn set_phone_number(req: String) -> HttpResponse {
         Some(ContactType::Bad { .. }) => Some(ContactType::Phone { number }),
         None => Some(ContactType::Phone { number }),
     };
-    rita_client.exit_client.contact_info = option_convert(res);
-
-    settings::set_rita_client(rita_client);
+    set_contact_info(ContactDetails::from(res));
 
     // save immediately
     if let Err(_e) = settings::write_config() {
@@ -51,9 +49,7 @@ pub async fn set_phone_number(req: String) -> HttpResponse {
 }
 
 pub async fn get_phone_number(_req: HttpRequest) -> HttpResponse {
-    let rita_client = settings::get_rita_client();
-    let exit_client = rita_client.exit_client;
-    match &option_convert(exit_client.contact_info) {
+    match ContactType::convert(get_contact_info()) {
         Some(ContactType::Phone { number }) => HttpResponse::Ok().json(number.to_string()),
         Some(ContactType::Both {
             email: _email,
@@ -74,10 +70,8 @@ pub async fn set_email(req: String) -> HttpResponse {
         }
     };
 
-    let mut rita_client = settings::get_rita_client();
-
     // merge the new value into the existing struct, for the various possibilities
-    let res = match option_convert(rita_client.exit_client.contact_info.clone()) {
+    let res = match ContactType::convert(get_contact_info()) {
         Some(ContactType::Phone { number }) => Some(ContactType::Both { number, email }),
         Some(ContactType::Email { .. }) => Some(ContactType::Email { email }),
         Some(ContactType::Both {
@@ -88,8 +82,7 @@ pub async fn set_email(req: String) -> HttpResponse {
         None => Some(ContactType::Email { email }),
     };
 
-    rita_client.exit_client.contact_info = option_convert(res);
-    settings::set_rita_client(rita_client);
+    set_contact_info(ContactDetails::from(res));
 
     if let Err(_e) = settings::write_config() {
         return HttpResponse::InternalServerError().finish();
@@ -99,9 +92,7 @@ pub async fn set_email(req: String) -> HttpResponse {
 }
 
 pub async fn get_email(_req: HttpRequest) -> HttpResponse {
-    let rita_client = settings::get_rita_client();
-    let exit_client = rita_client.exit_client;
-    match &option_convert(exit_client.contact_info) {
+    match ContactType::convert(get_contact_info()) {
         Some(ContactType::Email { email }) => HttpResponse::Ok().json(email.to_string()),
         Some(ContactType::Both {
             number: _number,

@@ -7,10 +7,11 @@ use crate::rita_loop::is_gateway_client;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::set_router_update_instruction;
 use althea_kernel_interface::opkg_feeds::CUSTOMFEEDS;
+use althea_types::ContactDetails;
+use althea_types::ContactType;
 use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use rita_common::tunnel_manager::shaping::flag_reset_shaper;
-use rita_common::utils::option_convert;
 use updater::update_rita;
 
 use althea_kernel_interface::hardware_info::get_hardware_info;
@@ -70,6 +71,11 @@ lazy_static! {
         Arc::new(RwLock::new(UptimeStruct::new()));
     static ref OPERATOR_UPDATE: Arc<RwLock<OperatorUpdate>> =
         Arc::new(RwLock::new(OperatorUpdate::default()));
+    pub static ref CONTACT_INFO: Arc<RwLock<ContactDetails>> =
+        Arc::new(RwLock::new(ContactDetails {
+            phone: None,
+            email: None
+        }));
 }
 
 /// Perform operator updates every UPDATE_FREQUENCY seconds,
@@ -134,7 +140,7 @@ async fn checkin() {
     // So we accept either of these conditions being true.
     let is_gateway = is_gateway() || is_gateway_client();
 
-    let contact_info = option_convert(rita_client.exit_client.contact_info.clone());
+    let contact_info = ContactType::convert(get_contact_info());
     let install_details = operator_settings.installation_details.clone();
     let billing_details = operator_settings.billing_details;
     let user_bandwidth_limit = rita_client.network.user_bandwidth_limit;
@@ -354,6 +360,16 @@ fn contains_forbidden_key(map: Map<String, Value>, forbidden_values: &[&str]) ->
         }
     }
     false
+}
+
+/// setter for contact info lazy static
+pub fn set_contact_info(cd: ContactDetails) {
+    CONTACT_INFO.write().unwrap().email = cd.email;
+    CONTACT_INFO.write().unwrap().phone = cd.phone;
+}
+/// getter for contact info lazy static
+pub fn get_contact_info() -> ContactDetails {
+    CONTACT_INFO.read().unwrap().clone()
 }
 
 #[cfg(test)]

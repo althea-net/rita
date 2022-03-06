@@ -1,8 +1,10 @@
 use actix_web_async::HttpResponse;
 use actix_web_async::{web::Json, web::Path, HttpRequest};
-use althea_types::ContactType;
 use althea_types::InstallationDetails;
 use althea_types::{BillingDetails, MailingAddress};
+use althea_types::{ContactDetails, ContactType};
+
+use crate::operator_update::set_contact_info;
 
 /// This is a utility type that is used by the front end when sending us
 /// installation details. This lets us do the validation and parsing here
@@ -29,8 +31,6 @@ pub async fn set_installation_details(req: Json<InstallationDetailsPost>) -> Htt
     let input = req.into_inner();
     trace!("Setting install details with {:?}", input);
 
-    let mut rita_client = settings::get_rita_client();
-    let mut exit_client = rita_client.exit_client;
     let contact_details = match (input.phone, input.email) {
         (None, None) => return HttpResponse::BadRequest().finish(),
         (Some(phone), Some(email)) => match (phone.parse(), email.parse()) {
@@ -87,9 +87,7 @@ pub async fn set_installation_details(req: Json<InstallationDetailsPost>) -> Htt
     // update the contact info, we display this as part of the forum but it's
     // stored separately since it's used elsewhere and sent to the operator tools
     // on it's own.
-    exit_client.contact_info = Some(contact_details.into());
-    rita_client.exit_client = exit_client;
-    settings::set_rita_client(rita_client);
+    set_contact_info(ContactDetails::from(contact_details));
 
     let new_installation_details = InstallationDetails {
         client_antenna_ip: parsed_client_antenna_ip,

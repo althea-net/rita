@@ -18,6 +18,7 @@
 
 mod exit_switcher;
 
+use crate::operator_update::get_contact_info;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use crate::RitaClientError;
@@ -26,10 +27,10 @@ use actix_web_async::Result;
 use althea_kernel_interface::{
     exit_client_tunnel::ClientExitTunnelConfig, DefaultRoute, KernelInterfaceError,
 };
-use althea_types::ExitClientDetails;
 use althea_types::ExitDetails;
 use althea_types::Identity;
 use althea_types::WgKey;
+use althea_types::{ContactType, ExitClientDetails};
 use althea_types::{EncryptedExitClientIdentity, EncryptedExitState};
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState, ExitVerifMode};
 use exit_switcher::{get_babel_routes, set_best_exit};
@@ -389,24 +390,23 @@ pub async fn exit_setup_request(exit: String, code: Option<String>) -> Result<()
         }
     };
 
-    let mut reg_details: ExitRegistrationDetails =
-        match settings::get_rita_client().exit_client.contact_info {
-            Some(val) => val.into(),
-            None => {
-                if let ExitVerifMode::Off = exit_auth_type {
-                    ExitRegistrationDetails {
-                        email: None,
-                        email_code: None,
-                        phone: None,
-                        phone_code: None,
-                    }
-                } else {
-                    return Err(RitaClientError::MiscStringError(
-                        "No registration info set!".to_string(),
-                    ));
+    let mut reg_details: ExitRegistrationDetails = match ContactType::convert(get_contact_info()) {
+        Some(val) => val.into(),
+        None => {
+            if let ExitVerifMode::Off = exit_auth_type {
+                ExitRegistrationDetails {
+                    email: None,
+                    email_code: None,
+                    phone: None,
+                    phone_code: None,
                 }
+            } else {
+                return Err(RitaClientError::MiscStringError(
+                    "No registration info set!".to_string(),
+                ));
             }
-        };
+        }
+    };
 
     match exit_auth_type {
         ExitVerifMode::Email => {
@@ -459,7 +459,7 @@ async fn exit_status_request(exit: String) -> Result<(), RitaClientError> {
             return Err(RitaClientError::NoExitError(exit));
         }
     };
-    let reg_details = match settings::get_rita_client().exit_client.contact_info {
+    let reg_details = match ContactType::convert(get_contact_info()) {
         Some(val) => val.into(),
         None => {
             return Err(RitaClientError::MiscStringError(

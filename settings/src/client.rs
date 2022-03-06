@@ -7,7 +7,7 @@ use crate::{
     json_merge, set_rita_client, spawn_watch_thread_client, update_config, SettingsError, SUBNET,
 };
 use althea_types::wg_key::WgKey;
-use althea_types::{ContactStorage, ExitState, Identity};
+use althea_types::{ExitState, Identity};
 use clarity::Address;
 use config::Config;
 use ipnetwork::IpNetwork;
@@ -136,7 +136,7 @@ pub struct ExitClientSettings {
     /// ContactStorage is a TOML serialized representation of ContactType, use the .into()
     /// traits to get ContactType for actual operations. This struct represents a full range
     /// of possibilities for contact info.
-    pub contact_info: Option<ContactStorage>,
+    //pub contact_info: Option<ContactStorage>,
     /// This controls which interfaces will be proxied over the exit tunnel
     pub lan_nics: HashSet<String>,
     /// Specifies if the user would like to receive low balance messages from the exit
@@ -151,7 +151,7 @@ impl Default for ExitClientSettings {
             exits: HashMap::new(),
             current_exit: None,
             wg_listen_port: 59999,
-            contact_info: None,
+            //contact_info: None,
             lan_nics: HashSet::new(),
             low_balance_notification: true,
         }

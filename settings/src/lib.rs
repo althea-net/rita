@@ -456,7 +456,7 @@ pub fn update_config(
         exits: exit_client.clone().exits,
         current_exit: exit_client.clone().current_exit,
         wg_listen_port: exit_client.wg_listen_port,
-        contact_info: exit_client.clone().contact_info,
+        //contact_info: exit_client.clone().contact_info,
         lan_nics: exit_client.clone().lan_nics,
         low_balance_notification: exit_client.low_balance_notification,
     };

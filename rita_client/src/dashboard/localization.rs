@@ -1,9 +1,10 @@
 use actix_web_async::http::StatusCode;
 use actix_web_async::{web::Json, HttpRequest, HttpResponse};
-use althea_types::{WyreReservationRequestCarrier, WyreReservationResponse};
+use althea_types::{ContactType, WyreReservationRequestCarrier, WyreReservationResponse};
 use phonenumber::Mode;
 use settings::localization::LocalizationSettings;
 
+use crate::operator_update::get_contact_info;
 use std::time::Duration;
 
 /// A version of the localization struct that serializes into a more easily
@@ -49,17 +50,22 @@ pub async fn get_wyre_reservation(amount: Json<AmountRequest>) -> HttpResponse {
     info!("Getting wyre reservation");
 
     let mut rita_client = settings::get_rita_client();
-    let exit_client = rita_client.exit_client;
     let operator = rita_client.operator;
     let id = settings::get_rita_client().get_identity();
+    let contact_info = match ContactType::convert(get_contact_info()) {
+        Some(info) => info,
+        None => ContactType::Bad {
+            invalid_number: None,
+            invalid_email: None,
+        },
+    };
     let payload = WyreReservationRequestCarrier {
         amount: amount.amount,
         address: None,
         id,
-        contact_info: exit_client.contact_info.clone().unwrap().into(),
+        contact_info,
         billing_details: operator.billing_details.clone().unwrap(),
     };
-    rita_client.exit_client = exit_client;
     rita_client.operator = operator;
     settings::set_rita_client(rita_client);
 
