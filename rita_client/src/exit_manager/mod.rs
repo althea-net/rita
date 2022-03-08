@@ -399,6 +399,7 @@ pub async fn exit_setup_request(exit: String, code: Option<String>) -> Result<()
                         email_code: None,
                         phone: None,
                         phone_code: None,
+                        sequence_number: None,
                     }
                 } else {
                     return Err(RitaClientError::MiscStringError(

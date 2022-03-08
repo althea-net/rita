@@ -37,15 +37,23 @@ pub async fn set_installation_details(req: Json<InstallationDetailsPost>) -> Htt
             (Ok(p), Ok(e)) => ContactType::Both {
                 number: p,
                 email: e,
+                // initialize sequence with 0
+                sequence_number: Some(0),
             },
             (_, _) => return HttpResponse::BadRequest().finish(),
         },
         (None, Some(email)) => match email.parse() {
-            Ok(e) => ContactType::Email { email: e },
+            Ok(e) => ContactType::Email {
+                email: e,
+                sequence_number: Some(0),
+            },
             Err(_e) => return HttpResponse::BadRequest().finish(),
         },
         (Some(phone), None) => match phone.parse() {
-            Ok(p) => ContactType::Phone { number: p },
+            Ok(p) => ContactType::Phone {
+                number: p,
+                sequence_number: Some(0),
+            },
             Err(_e) => return HttpResponse::BadRequest().finish(),
         },
     };
