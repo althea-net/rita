@@ -7,6 +7,7 @@ use crate::rita_loop::is_gateway_client;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::set_router_update_instruction;
 use althea_kernel_interface::opkg_feeds::CUSTOMFEEDS;
+use althea_types::get_sequence_num;
 use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use rita_common::tunnel_manager::shaping::flag_reset_shaper;
@@ -208,6 +209,39 @@ async fn checkin() {
     };
 
     let mut rita_client = settings::get_rita_client();
+
+    // the current sequence number to check the update against
+    let current_sequence = match rita_client.exit_client.contact_info.clone() {
+        Some(storage) => get_sequence_num(storage),
+        None => 0,
+    };
+    if let Some(info) = new_settings.contact_info {
+        // the incoming sequence number
+        let seq = match info {
+            althea_types::ContactType::Phone {
+                number: _,
+                sequence_number,
+            } => sequence_number,
+            althea_types::ContactType::Email {
+                email: _,
+                sequence_number,
+            } => sequence_number,
+            althea_types::ContactType::Both {
+                number: _,
+                email: _,
+                sequence_number,
+            } => sequence_number,
+            althea_types::ContactType::Bad {
+                invalid_number: _,
+                invalid_email: _,
+                sequence_number,
+            } => sequence_number,
+        };
+        if seq.unwrap_or(0) > current_sequence {
+            rita_client.exit_client.contact_info = option_convert(Some(info));
+        }
+        // else the existing config is more recent, so do not update
+    };
 
     let mut network = rita_client.network;
     trace!("Updating from operator settings");
