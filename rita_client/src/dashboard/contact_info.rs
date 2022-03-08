@@ -14,10 +14,17 @@ fn clean_quotes(val: &str) -> String {
     val.trim().trim_matches('"').trim_matches('\\').to_string()
 }
 
+fn add_to_sequence(sequence: Option<u32>) -> u32 {
+    match sequence {
+        Some(seq) => seq + 1,
+        None => 1,
+    }
+}
+
 pub async fn set_phone_number(req: String) -> HttpResponse {
     let clean_string = clean_quotes(&req);
     trace!("Got number {:?}", clean_string);
-    let number: PhoneNumber = match clean_string.parse() {
+    let phone_number: PhoneNumber = match clean_string.parse() {
         Ok(p) => p,
         Err(e) => {
             info!("Failed to parse phonenumber with {:?}", e);
@@ -29,14 +36,42 @@ pub async fn set_phone_number(req: String) -> HttpResponse {
 
     // merge the new value into the existing struct, for the various possibilities
     let res = match option_convert(rita_client.exit_client.contact_info.clone()) {
-        Some(ContactType::Phone { .. }) => Some(ContactType::Phone { number }),
-        Some(ContactType::Email { email }) => Some(ContactType::Both { number, email }),
+        Some(ContactType::Phone {
+            number: _,
+            sequence_number,
+        }) => Some(ContactType::Phone {
+            number: phone_number,
+            sequence_number: Some(add_to_sequence(sequence_number)),
+        }),
+        Some(ContactType::Email {
+            email,
+            sequence_number,
+        }) => Some(ContactType::Both {
+            number: phone_number,
+            email,
+            sequence_number: Some(add_to_sequence(sequence_number)),
+        }),
         Some(ContactType::Both {
             number: _number,
             email,
-        }) => Some(ContactType::Both { number, email }),
-        Some(ContactType::Bad { .. }) => Some(ContactType::Phone { number }),
-        None => Some(ContactType::Phone { number }),
+            sequence_number,
+        }) => Some(ContactType::Both {
+            number: phone_number,
+            email,
+            sequence_number: Some(add_to_sequence(sequence_number)),
+        }),
+        Some(ContactType::Bad {
+            invalid_number: _,
+            invalid_email: _,
+            sequence_number,
+        }) => Some(ContactType::Phone {
+            number: phone_number,
+            sequence_number: Some(add_to_sequence(sequence_number)),
+        }),
+        None => Some(ContactType::Phone {
+            number: phone_number,
+            sequence_number: Some(0),
+        }),
     };
     rita_client.exit_client.contact_info = option_convert(res);
 
@@ -54,10 +89,14 @@ pub async fn get_phone_number(_req: HttpRequest) -> HttpResponse {
     let rita_client = settings::get_rita_client();
     let exit_client = rita_client.exit_client;
     match &option_convert(exit_client.contact_info) {
-        Some(ContactType::Phone { number }) => HttpResponse::Ok().json(number.to_string()),
+        Some(ContactType::Phone {
+            number,
+            sequence_number: _,
+        }) => HttpResponse::Ok().json(number.to_string()),
         Some(ContactType::Both {
             email: _email,
             number,
+            sequence_number: _,
         }) => HttpResponse::Ok().json(number.to_string()),
         _ => HttpResponse::Ok().finish(),
     }
@@ -78,14 +117,42 @@ pub async fn set_email(req: String) -> HttpResponse {
 
     // merge the new value into the existing struct, for the various possibilities
     let res = match option_convert(rita_client.exit_client.contact_info.clone()) {
-        Some(ContactType::Phone { number }) => Some(ContactType::Both { number, email }),
-        Some(ContactType::Email { .. }) => Some(ContactType::Email { email }),
+        Some(ContactType::Phone {
+            number,
+            sequence_number,
+        }) => Some(ContactType::Both {
+            number,
+            email,
+            sequence_number: Some(add_to_sequence(sequence_number)),
+        }),
+        Some(ContactType::Email {
+            email,
+            sequence_number,
+        }) => Some(ContactType::Email {
+            email,
+            sequence_number: Some(add_to_sequence(sequence_number)),
+        }),
         Some(ContactType::Both {
             number,
             email: _email,
-        }) => Some(ContactType::Both { number, email }),
-        Some(ContactType::Bad { .. }) => Some(ContactType::Email { email }),
-        None => Some(ContactType::Email { email }),
+            sequence_number,
+        }) => Some(ContactType::Both {
+            number,
+            email,
+            sequence_number: Some(add_to_sequence(sequence_number)),
+        }),
+        Some(ContactType::Bad {
+            invalid_number: _,
+            invalid_email: _,
+            sequence_number,
+        }) => Some(ContactType::Email {
+            email,
+            sequence_number: Some(add_to_sequence(sequence_number)),
+        }),
+        None => Some(ContactType::Email {
+            email,
+            sequence_number: Some(0),
+        }),
     };
 
     rita_client.exit_client.contact_info = option_convert(res);
@@ -102,10 +169,14 @@ pub async fn get_email(_req: HttpRequest) -> HttpResponse {
     let rita_client = settings::get_rita_client();
     let exit_client = rita_client.exit_client;
     match &option_convert(exit_client.contact_info) {
-        Some(ContactType::Email { email }) => HttpResponse::Ok().json(email.to_string()),
+        Some(ContactType::Email {
+            email,
+            sequence_number: _,
+        }) => HttpResponse::Ok().json(email.to_string()),
         Some(ContactType::Both {
             number: _number,
             email,
+            sequence_number: _,
         }) => HttpResponse::Ok().json(email.to_string()),
         _ => HttpResponse::Ok().finish(),
     }

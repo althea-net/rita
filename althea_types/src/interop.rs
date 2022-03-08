@@ -141,6 +141,8 @@ pub struct ExitRegistrationDetails {
     pub phone: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub phone_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub sequence_number: Option<u32>,
 }
 
 /// This is the state an exit can be in
@@ -454,6 +456,8 @@ pub struct OperatorUpdateMessage {
     /// settings for the device bandwidth shaper
     #[serde(default = "default_shaper_settings")]
     pub shaper_settings: ShaperSettings,
+    /// Updated contact info from ops tools
+    pub contact_info: Option<ContactType>,
 }
 
 /// Settings for the bandwidth shaper
