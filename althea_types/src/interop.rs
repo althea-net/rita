@@ -574,6 +574,7 @@ pub struct HardwareInfo {
     /// Vector of eth data i.e. whether a link is up and if so what the link speed is
     pub ethernet_stats: Option<Vec<EthernetStats>>,
     // Vector of wifi devices on router with staion and survey data for each
+    #[serde(default)]
     pub wifi_devices: Vec<WifiDevice>,
 }
 
