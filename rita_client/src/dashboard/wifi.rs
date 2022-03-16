@@ -29,8 +29,9 @@ pub const ALLOWED_FIVE_80_IPQ40XX: [u16; 2] = [36, 149];
 /// list of nonoverlapping 80mhz channels for the TPLink-a6v3/wr-2100/e5600
 pub const ALLOWED_FIVE_80_MT7621: [u16; 1] = [36];
 /// NOTE: linksys_mr8300: The first 5 GHz radio (IPQ4019) is limited to ch. 64 and below. The second 5 GHz radio (QCA9888), is limited to ch. 100 and above.
-pub const ALLOWED_FIVE_80_LOW: [u16; 2] = [36, 52];
-pub const ALLOWED_FIVE_80_HIGH: [u16; 4] = [100, 116, 132, 149];
+/// But experience suggests it's only channels 36 and 149 that work with 80mhz channel widths.  Maybe there's a different way to declare the channels that will work?
+pub const ALLOWED_FIVE_80_LOW: [u16; 1] = [36];
+pub const ALLOWED_FIVE_80_HIGH: [u16; 1] = [149];
 pub const ALLOWED_FIVE_40_LOW: [u16; 4] = [36, 44, 52, 60];
 pub const ALLOWED_FIVE_40_HIGH: [u16; 8] = [100, 108, 116, 124, 132, 140, 149, 157];
 
