@@ -8,10 +8,15 @@ use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::set_router_update_instruction;
 use althea_kernel_interface::opkg_feeds::CUSTOMFEEDS;
 use althea_types::get_sequence_num;
+use althea_types::ContactStorage;
+use althea_types::ContactType;
 use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use rita_common::tunnel_manager::shaping::flag_reset_shaper;
 use rita_common::utils::option_convert;
+use settings::client::RitaClientSettings;
+use settings::network::NetworkSettings;
+use settings::payment::PaymentSettings;
 use updater::update_rita;
 
 use althea_kernel_interface::hardware_info::get_hardware_info;
@@ -210,74 +215,41 @@ async fn checkin() {
 
     let mut rita_client = settings::get_rita_client();
 
-    // the current sequence number to check the update against
-    let current_sequence = match rita_client.exit_client.contact_info.clone() {
-        Some(storage) => get_sequence_num(storage),
-        None => 0,
-    };
-    if let Some(info) = new_settings.contact_info {
-        // the incoming sequence number
-        let seq = match info {
-            althea_types::ContactType::Phone {
-                number: _,
-                sequence_number,
-            } => sequence_number,
-            althea_types::ContactType::Email {
-                email: _,
-                sequence_number,
-            } => sequence_number,
-            althea_types::ContactType::Both {
-                number: _,
-                email: _,
-                sequence_number,
-            } => sequence_number,
-            althea_types::ContactType::Bad {
-                invalid_number: _,
-                invalid_email: _,
-                sequence_number,
-            } => sequence_number,
-        };
-        if seq.unwrap_or(0) > current_sequence {
-            rita_client.exit_client.contact_info = option_convert(Some(info));
-        }
-        // else the existing config is more recent, so do not update
-    };
+    let update = check_contacts_update(
+        rita_client.exit_client.contact_info.clone(),
+        new_settings.contact_info.clone(),
+    );
+    if update {
+        rita_client.exit_client.contact_info = option_convert(new_settings.contact_info.clone());
+    }
 
-    let mut network = rita_client.network;
+    let network = rita_client.network.clone();
     trace!("Updating from operator settings");
-    let mut payment = rita_client.payment;
-    if use_operator_price {
-        // This will be true on devices that have integrated switches
-        // and a wan port configured. Mostly not a problem since we stopped
-        // shipping wan ports by default
-        if is_gateway {
-            payment.local_fee = new_settings.gateway;
-        } else {
-            payment.local_fee = new_settings.relay;
-        }
-        payment.light_client_fee = new_settings.phone_relay;
-    } else {
-        info!("User has disabled the OperatorUpdate!");
-    }
-    payment.max_fee = new_settings.max;
-    payment.balance_warning_level = new_settings.warning.into();
-    if let Some(new_chain) = new_settings.system_chain {
-        if payment.system_chain != new_chain {
-            set_system_blockchain(new_chain, &mut payment);
-        }
-    }
-    if let Some(new_chain) = new_settings.withdraw_chain {
-        payment.withdraw_chain = new_chain;
-    }
+    let payment = update_payment_settings(
+        rita_client.payment,
+        use_operator_price,
+        is_gateway,
+        new_settings.clone(),
+    );
     rita_client.payment = payment;
     trace!("Done with payment");
+
     let mut operator = rita_client.operator;
     let new_operator_fee = Uint256::from(new_settings.operator_fee);
     operator.operator_fee = new_operator_fee;
     rita_client.operator = operator;
-    merge_settings_safely(new_settings.merge_json);
+    merge_settings_safely(new_settings.merge_json.clone());
     //Every tick, update the local router update instructions
-    set_router_update_instruction(new_settings.local_update_instruction);
+    set_router_update_instruction(new_settings.local_update_instruction.clone());
+    perform_operator_update(new_settings, rita_client, network)
+}
+
+/// checks the operatoraction and performs it, if any.
+fn perform_operator_update(
+    new_settings: OperatorUpdateMessage,
+    mut rita_client: RitaClientSettings,
+    mut network: NetworkSettings,
+) {
     match new_settings.operator_action {
         Some(OperatorAction::ResetShaper) => flag_reset_shaper(),
         Some(OperatorAction::Reboot) => {
@@ -319,6 +291,78 @@ async fn checkin() {
     rita_client.network = network;
     settings::set_rita_client(rita_client);
     trace!("Successfully completed OperatorUpdate");
+}
+
+/// Creates a payment settings from OperatorUpdateMessage to be returned and applied
+fn update_payment_settings(
+    mut payment: PaymentSettings,
+    use_operator_price: bool,
+    is_gateway: bool,
+    new_settings: OperatorUpdateMessage,
+) -> PaymentSettings {
+    if use_operator_price {
+        // This will be true on devices that have integrated switches
+        // and a wan port configured. Mostly not a problem since we stopped
+        // shipping wan ports by default
+        if is_gateway {
+            payment.local_fee = new_settings.gateway;
+        } else {
+            payment.local_fee = new_settings.relay;
+        }
+        payment.light_client_fee = new_settings.phone_relay;
+    } else {
+        info!("User has disabled the OperatorUpdate!");
+    }
+    payment.max_fee = new_settings.max;
+    payment.balance_warning_level = new_settings.warning.into();
+    if let Some(new_chain) = new_settings.system_chain {
+        if payment.system_chain != new_chain {
+            set_system_blockchain(new_chain, &mut payment);
+        }
+    }
+    if let Some(new_chain) = new_settings.withdraw_chain {
+        payment.withdraw_chain = new_chain;
+    }
+    payment
+}
+
+/// Returns true if the contact info sent through OperatorUpdateMessage have been more
+/// recently updated than the router's current contact info
+fn check_contacts_update(current: Option<ContactStorage>, incoming: Option<ContactType>) -> bool {
+    // the current sequence number to check the update against
+    let current_sequence = match current {
+        Some(storage) => get_sequence_num(storage),
+        None => 0,
+    };
+    if let Some(info) = incoming {
+        // the incoming sequence number
+        let seq = match info {
+            althea_types::ContactType::Phone {
+                number: _,
+                sequence_number,
+            } => sequence_number,
+            althea_types::ContactType::Email {
+                email: _,
+                sequence_number,
+            } => sequence_number,
+            althea_types::ContactType::Both {
+                number: _,
+                email: _,
+                sequence_number,
+            } => sequence_number,
+            althea_types::ContactType::Bad {
+                invalid_number: _,
+                invalid_email: _,
+                sequence_number,
+            } => sequence_number,
+        };
+        if seq.unwrap_or(0) > current_sequence {
+            return true;
+        }
+        // else the existing config is more recent, so do not update
+        return false;
+    }
+    false
 }
 
 /// Allows for online updating of the release feed, note that this not run
