@@ -390,10 +390,11 @@ def main():
     print("Waiting for clients to get info from exits")
     time.sleep(5)
 
+
     for k, v in world.nodes.items():
         if k != world.exit_id:
             register_to_exit(v)
-
+    
     print("waiting for emails to be sent")
     time.sleep(15)
 

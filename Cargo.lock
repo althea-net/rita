@@ -115,7 +115,7 @@ dependencies = [
  "firestorm",
  "http",
  "log",
- "regex",
+ "regex 1.5.5",
  "serde 1.0.136",
 ]
 
@@ -215,7 +215,7 @@ dependencies = [
  "mime",
  "once_cell",
  "pin-project-lite",
- "regex",
+ "regex 1.5.5",
  "serde 1.0.136",
  "serde_json",
  "serde_urlencoded",
@@ -270,6 +270,15 @@ dependencies = [
 
 [[package]]
 name = "aho-corasick"
+version = "0.6.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81ce3d38065e618af2d7b77e10c5ad9a069859b4be3c2250f674af3840d9c8a5"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
+name = "aho-corasick"
 version = "0.7.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e37cfd5e7657ada45f742d6e99ca5788580b5c529dc78faf11ece6dc702656f"
@@ -301,7 +310,7 @@ dependencies = [
  "lazy_static",
  "log",
  "oping",
- "regex",
+ "regex 1.5.5",
  "serde 1.0.136",
  "serde_derive",
 ]
@@ -704,7 +713,7 @@ dependencies = [
  "lazy_static",
  "log",
  "rand 0.8.5",
- "regex",
+ "regex 1.5.5",
  "serde 1.0.136",
  "serde_derive",
  "serde_json",
@@ -920,7 +929,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f3f119846c823f9eafcf953a8f6ffb6ed69bf6240883261a7f13b634579a51f"
 dependencies = [
  "lazy_static",
- "regex",
+ "regex 1.5.5",
  "serde 1.0.136",
  "strsim",
 ]
@@ -1043,7 +1052,7 @@ dependencies = [
  "atty",
  "humantime",
  "log",
- "regex",
+ "regex 1.5.5",
  "termcolor",
 ]
 
@@ -1493,6 +1502,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ipaddress"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9e999e655a4d0ab9b8d21026760e5154d8adee48c9149c67f918f540f6a05f5"
+dependencies = [
+ "lazy_static",
+ "libc",
+ "num 0.1.42",
+ "num-integer",
+ "num-traits 0.1.43",
+ "regex 0.2.11",
+]
+
+[[package]]
 name = "ipgen"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1847,6 +1870,20 @@ dependencies = [
 
 [[package]]
 name = "num"
+version = "0.1.42"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4703ad64153382334aa8db57c637364c322d3372e097840c72000dabdcf6156e"
+dependencies = [
+ "num-bigint 0.1.44",
+ "num-complex 0.1.43",
+ "num-integer",
+ "num-iter",
+ "num-rational 0.1.42",
+ "num-traits 0.2.14",
+]
+
+[[package]]
+name = "num"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8536030f9fea7127f841b45bb6243b27255787fb4eb83958aa1ef9d2fdc0c36"
@@ -1875,6 +1912,18 @@ dependencies = [
 
 [[package]]
 name = "num-bigint"
+version = "0.1.44"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e63899ad0da84ce718c14936262a41cee2c79c981fc0a0e7c7beb47d5a07e8c1"
+dependencies = [
+ "num-integer",
+ "num-traits 0.2.14",
+ "rand 0.4.6",
+ "rustc-serialize",
+]
+
+[[package]]
+name = "num-bigint"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "090c7f9998ee0ff65aa5b723e4009f7b217707f1fb5ea551329cc4d6231fb304"
@@ -1894,6 +1943,16 @@ dependencies = [
  "num-integer",
  "num-traits 0.2.14",
  "serde 1.0.136",
+]
+
+[[package]]
+name = "num-complex"
+version = "0.1.43"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b288631d7878aaf59442cffd36910ea604ecd7745c36054328595114001c9656"
+dependencies = [
+ "num-traits 0.2.14",
+ "rustc-serialize",
 ]
 
 [[package]]
@@ -1945,6 +2004,18 @@ dependencies = [
  "autocfg 1.1.0",
  "num-integer",
  "num-traits 0.2.14",
+]
+
+[[package]]
+name = "num-rational"
+version = "0.1.42"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee314c74bd753fc86b4780aa9475da469155f3848473a261d2d18e35245a784e"
+dependencies = [
+ "num-bigint 0.1.44",
+ "num-integer",
+ "num-traits 0.2.14",
+ "rustc-serialize",
 ]
 
 [[package]]
@@ -2225,7 +2296,7 @@ dependencies = [
  "lazy_static",
  "nom 5.1.2",
  "quick-xml",
- "regex",
+ "regex 1.5.5",
  "regex-cache",
  "serde 1.0.136",
  "serde_derive",
@@ -2478,13 +2549,26 @@ dependencies = [
 
 [[package]]
 name = "regex"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9329abc99e39129fcceabd24cf5d85b4671ef7c29c50e972bc5afe32438ec384"
+dependencies = [
+ "aho-corasick 0.6.10",
+ "memchr",
+ "regex-syntax 0.5.6",
+ "thread_local",
+ "utf8-ranges",
+]
+
+[[package]]
+name = "regex"
 version = "1.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a11647b6b25ff05a515cb92c365cec08801e83423a235b51e231e1808747286"
 dependencies = [
- "aho-corasick",
+ "aho-corasick 0.7.18",
  "memchr",
- "regex-syntax",
+ "regex-syntax 0.6.25",
 ]
 
 [[package]]
@@ -2495,8 +2579,17 @@ checksum = "2f7b62d69743b8b94f353b6b7c3deb4c5582828328bcb8d5fedf214373808793"
 dependencies = [
  "lru-cache",
  "oncemutex",
- "regex",
- "regex-syntax",
+ "regex 1.5.5",
+ "regex-syntax 0.6.25",
+]
+
+[[package]]
+name = "regex-syntax"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d707a4fa2637f2dca2ef9fd02225ec7661fe01a53623c1e6515b6916511f7a7"
+dependencies = [
+ "ucd-util",
 ]
 
 [[package]]
@@ -2647,7 +2740,7 @@ dependencies = [
  "num-traits 0.2.14",
  "num256",
  "rand 0.8.5",
- "regex",
+ "regex 1.5.5",
  "serde 1.0.136",
  "serde_cbor",
  "serde_derive",
@@ -2672,6 +2765,7 @@ dependencies = [
  "diesel",
  "exit_db",
  "handlebars",
+ "ipaddress",
  "ipnetwork 0.18.0",
  "lazy_static",
  "lettre",
@@ -2695,6 +2789,12 @@ name = "rust-ini"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3e52c148ef37f8c375d49d5a73aa70713125b7f19095948a923f80afdeb22ec2"
+
+[[package]]
+name = "rustc-serialize"
+version = "0.3.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dcf128d1287d2ea9d80910b5f1120d0b8eede3fbf1abe91c40d39ea7d51e6fda"
 
 [[package]]
 name = "rustc_version"
@@ -2821,7 +2921,7 @@ checksum = "6a3a4e0ea8a88553209f6cc6cfe8724ecad22e1acf372793c27d995290fe74f8"
 dependencies = [
  "lazy_static",
  "num-traits 0.1.43",
- "regex",
+ "regex 1.5.5",
  "serde 0.8.23",
 ]
 
@@ -3073,6 +3173,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "thread_local"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6b53e329000edc2b34dbe8545fd20e55a333362d0a321909685a19bd28c3f1b"
+dependencies = [
+ "lazy_static",
+]
+
+[[package]]
 name = "time"
 version = "0.1.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3275,6 +3384,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56dee185309b50d1f11bfedef0fe6d036842e3fb77413abef29f8f8d1c5d4c1c"
 
 [[package]]
+name = "ucd-util"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c85f514e095d348c279b1e5cd76795082cf15bd59b93207832abe0b1d8fed236"
+
+[[package]]
 name = "unicode-bidi"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3306,6 +3421,12 @@ dependencies = [
  "matches",
  "percent-encoding",
 ]
+
+[[package]]
+name = "utf8-ranges"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4ae116fef2b7fea257ed6440d3cfcff7f190865f170cdad00bb6465bf18ecba"
 
 [[package]]
 name = "uuid"

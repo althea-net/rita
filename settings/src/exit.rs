@@ -5,6 +5,7 @@ use crate::{json_merge, set_rita_exit, spawn_watch_thread_exit, SettingsError};
 use althea_types::{Identity, WgKey};
 use config::Config;
 use core::str::FromStr;
+use ipnetwork::IpNetwork;
 use phonenumber::PhoneNumber;
 use std::collections::HashSet;
 use std::net::Ipv4Addr;
@@ -26,6 +27,8 @@ pub struct ExitNetworkSettings {
     pub exit_start_ip: Ipv4Addr,
     /// The netmask, in bits to mask out, for the exit tunnel
     pub netmask: u8,
+    /// The subnet we use to assign to client routers for ipv6
+    pub subnet: IpNetwork,
     /// Time in seconds before user is dropped from the db due to inactivity
     /// 0 means disabled
     pub entry_timeout: u32,
@@ -53,6 +56,7 @@ impl ExitNetworkSettings {
             own_internal_ip: "172.16.255.254".parse().unwrap(),
             exit_start_ip: "172.16.0.0".parse().unwrap(),
             netmask: 12,
+            subnet: IpNetwork::V6("ff01::0/128".parse().unwrap()),
             entry_timeout: 0,
             geoip_api_user: None,
             geoip_api_key: None,
