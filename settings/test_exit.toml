@@ -37,6 +37,7 @@ exit_price = 50
 own_internal_ip = "172.168.1.254"
 exit_start_ip = "172.168.1.100"
 netmask = 24
+subnet = "fd00::1337/40"
 entry_timeout = 7776000
 wg_public_key = "H/ABwzXk834OwGYU8CZGfFxNZOd+BAJEaVDHiEiWWhU="
 wg_private_key = "ALxcZm2r58gY0sB4vIfnjShc86qBoVK3f32H9VrwqWU="

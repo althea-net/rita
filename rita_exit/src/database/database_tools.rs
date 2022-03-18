@@ -1,6 +1,9 @@
 use crate::database::secs_since_unix_epoch;
 use crate::database::struct_tools::client_to_new_db_client;
 use crate::database::ONE_DAY;
+use exit_db::models::AssignedIps;
+use ipaddress::IPAddress;
+use ipnetwork::IpNetwork;
 use rita_common::utils::ip_increment::increment;
 
 use crate::{RitaExitError, DB_POOL};
@@ -12,8 +15,12 @@ use diesel::r2d2::ConnectionManager;
 use diesel::r2d2::PooledConnection;
 use diesel::select;
 use exit_db::{models, schema};
+use std::convert::TryInto;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
+
+// Subnet size assigned to each client
+const CLIENT_SUBNET_SIZE: u8 = 64;
 
 /// Takes a list of clients and returns a sorted list of ip addresses spefically v4 since it
 /// can implement comparison operators
@@ -264,12 +271,65 @@ pub fn client_conflict(
     Ok(ip_exists || eth_exists || wg_exists)
 }
 
+/// Delete a client from the Clients database. Retrieve the reclaimed subnet index and add it to
+/// available_subnets in assigned_ips database
 pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<(), RitaExitError> {
+    use self::schema::assigned_ips::dsl::{assigned_ips, available_subnets, subnet};
     use self::schema::clients::dsl::*;
     info!("Deleting clients {:?} in database", client);
 
     let mesh_ip_string = client.mesh_ip.to_string();
     let statement = clients.find(&mesh_ip_string);
+
+    // Add the reclaimed subnet to available subnets
+    let filtered_list = clients
+        .select(internet_ipv6)
+        .filter(mesh_ip.eq(&mesh_ip_string));
+    let mut sub = filtered_list.load::<String>(connection)?;
+    if let Some(sub) = sub.pop() {
+        let rita_exit = settings::get_rita_exit();
+        let exit_settings = rita_exit.exit_network;
+        let exit_sub = exit_settings.subnet;
+        // This is a valid subnet in database so this unwrap should not panic
+        let sub: IpNetwork = sub.parse().expect("Unable to parse subnet in database");
+        let index = match generate_index_from_subnet(exit_sub, sub) {
+            Ok(a) => a,
+            Err(e) => {
+                return Err(e);
+            }
+        };
+
+        let filtered_list = assigned_ips.filter(subnet.eq(sub.to_string()));
+        let res = filtered_list.load::<models::AssignedIps>(connection);
+
+        match res {
+            Ok(mut a) => {
+                if a.len() > 1 {
+                    error!("Received multiple assigned ip entries for a singular subnet! Error");
+                }
+                let a_ip = a.pop().unwrap();
+                let mut avail_ips = a_ip.available_subnets;
+                if avail_ips.is_empty() {
+                    avail_ips.push_str(&index.to_string())
+                } else {
+                    // if our index is '10', we need to append ",10" to the end
+                    let mut new_str = ",".to_owned();
+                    new_str.push_str(&index.to_string());
+                    avail_ips.push_str(&new_str);
+                }
+                diesel::update(assigned_ips.find(sub.to_string()))
+                    .set(available_subnets.eq(avail_ips))
+                    .execute(connection)?;
+            }
+            Err(e) => {
+                error!(
+                    "unable to add a reclaimed ip to database with error: {:?}",
+                    e
+                );
+            }
+        }
+    }
+
     delete(statement).execute(connection)?;
     Ok(())
 }
@@ -323,20 +383,22 @@ pub fn get_database_connection(
     }
 }
 
-pub fn get_database_connection_sync(
-) -> Result<PooledConnection<ConnectionManager<PgConnection>>, RitaExitError> {
-    match DB_POOL.read().unwrap().try_get() {
-        Some(connection) => Ok(connection),
-        None => Err(RitaExitError::MiscStringError("No connection!".to_string())),
-    }
-}
-
 pub fn create_or_update_user_record(
     conn: &PgConnection,
     client: &ExitClientIdentity,
     user_country: String,
 ) -> Result<models::Client, RitaExitError> {
     use self::schema::clients::dsl::clients;
+
+    // Retrieve exit subnet
+    let rita_exit = settings::get_rita_exit();
+    let exit_settings = rita_exit.exit_network;
+    let subnet = exit_settings.subnet;
+
+    // If subnet isnt already present in database, create it
+    let subnet_entry = initialize_subnet_datastore(subnet, conn)?;
+    info!("Subnet Database entry: {:?}", subnet_entry);
+
     if let Some(val) = get_client(client, conn)? {
         update_client(client, &val, conn)?;
         Ok(val)
@@ -348,11 +410,372 @@ pub fn create_or_update_user_record(
 
         let new_ip = get_next_client_ip(conn)?;
 
-        let c = client_to_new_db_client(client, new_ip, user_country);
+        let internet_ip = get_client_subnet(subnet, subnet_entry, conn)?;
+
+        let c = client_to_new_db_client(client, new_ip, user_country, internet_ip);
 
         info!("Inserting new client {}", client.global.wg_public_key);
         diesel::insert_into(clients).values(&c).execute(conn)?;
 
         Ok(c)
+    }
+}
+
+/// This function creates an entry for the given subnet in the assgined_ips table if doesnt exist
+fn initialize_subnet_datastore(
+    sub: IpNetwork,
+    conn: &PgConnection,
+) -> Result<models::AssignedIps, RitaExitError> {
+    use self::schema::assigned_ips::dsl::{assigned_ips, subnet};
+    let filtered_list = assigned_ips.filter(subnet.eq(sub.to_string()));
+    match filtered_list.load::<models::AssignedIps>(conn) {
+        Err(_) => {
+            // When there is no entry create an entry in the database
+            let record = AssignedIps {
+                subnet: sub.to_string(),
+                available_subnets: "".to_string(),
+                iterative_index: 0,
+            };
+            diesel::insert_into(assigned_ips)
+                .values(&record)
+                .execute(conn)?;
+            Ok(record)
+        }
+        Ok(mut a) => {
+            // There is an entry in the database. If the entry is just an empty vector, create a new entry
+            // else, pop the vector (should be only 1 entry) and return it
+            if a.len() > 1 {
+                error!("More than one entry for singular subnet in database, please fix");
+            } else if a.is_empty() {
+                let record = AssignedIps {
+                    subnet: sub.to_string(),
+                    available_subnets: "".to_string(),
+                    iterative_index: 0,
+                };
+                info!("Received an empty vector, adding new subnet entry");
+                diesel::insert_into(assigned_ips)
+                    .values(&record)
+                    .execute(conn)?;
+                return Ok(record);
+            }
+            Ok(a.pop().unwrap())
+        }
+    }
+}
+
+/// This function finds an available ipv6 subnet for a client that connects. It works as follows:
+/// 1.) Take assigned subnet and client configured subnet length (currently hardcoded to CLIENT_SUBNET_LENGTH)
+/// 2.) Retreive all active subnets from database
+/// 3.) Retrieve assigned_ips struct from database table for given exit subnet. Check for any available subnet index
+/// 4.) If not get the subnets next iterative index instead
+/// 5.) Use this index to retrieve the 'ith' iterative subnet in the larger subnet
+/// Max Iterative index should theoretically never be reached because we choose subnets from deleted clients before generating
+/// an iterative subnet
+pub fn get_client_subnet(
+    sub: IpNetwork,
+    ip_tracker: AssignedIps,
+    conn: &PgConnection,
+) -> Result<IpNetwork, RitaExitError> {
+    use self::schema::assigned_ips::dsl::{assigned_ips, available_subnets, iterative_index};
+    use self::schema::clients::dsl::{clients, internet_ipv6};
+    // Get our assigned subnet
+    info!("Received Exit assigned ipv6 subnet: {}", sub);
+
+    // Make sql query to get list of all client subnets in use
+    // SELECT internet_ipv6 FROM <TABLE>
+    let filtered_list = clients.select(internet_ipv6);
+    let ip_list = filtered_list.load::<String>(conn)?;
+
+    let mut index: Option<u64> = None;
+
+    // First check for any available subnets to reclaim
+    if !ip_tracker.available_subnets.is_empty() {
+        // available ips are stored in the form of "1,2,5" etc
+        if let Some((remaining, i)) = ip_tracker.available_subnets.rsplit_once(',') {
+            // set database available subnets to remainging
+            diesel::update(assigned_ips.find(sub.to_string()))
+                .set(available_subnets.eq(remaining))
+                .execute(conn)?;
+
+            index = match i.parse() {
+                Ok(a) => Some(a),
+                Err(e) => {
+                    return Err(RitaExitError::MiscStringError(format!(
+                        "Unable to assign user ipv6 subnet when parsing latest index: {}",
+                        e
+                    )));
+                }
+            }
+        } else {
+            // This is case of singular entry in, for exmaple "2"
+            // set database available subnets to ""
+            diesel::update(assigned_ips.find(sub.to_string()))
+                .set(available_subnets.eq(""))
+                .execute(conn)?;
+
+            index = match ip_tracker.available_subnets.parse() {
+                Ok(a) => Some(a),
+                Err(e) => {
+                    return Err(RitaExitError::MiscStringError(format!(
+                        "Unable to assign user ipv6 subnet: {}",
+                        e
+                    )));
+                }
+            }
+        }
+    }
+
+    let mut used_iterative_index = false;
+    // Next get iterative index to generate next subnet. If index is not already set from available subnets, set it here from database
+    if index.is_none() {
+        used_iterative_index = true;
+        index = Some(match ip_tracker.iterative_index.try_into() {
+            Ok(a) => a,
+            Err(e) => {
+                return Err(RitaExitError::MiscStringError(format!(
+                    "Unable to assign user ipv6 subnet when parsing iterative index: {}",
+                    e
+                )));
+            }
+        });
+    }
+
+    // Once we get the index, generate the subnet
+    match generate_iterative_client_subnet(sub, index.unwrap(), CLIENT_SUBNET_SIZE.into()) {
+        Ok(addr) => {
+            // increment iterative index
+            if used_iterative_index {
+                let new_ind = (index.unwrap() + 1) as i64;
+                diesel::update(assigned_ips.find(sub.to_string()))
+                    .set(iterative_index.eq(new_ind))
+                    .execute(conn)?;
+            }
+
+            if !ip_list.contains(&addr.to_string()) {
+                Ok(addr)
+            } else {
+                error!("Chosen subnet: {:?} is in use! Race condition hit", addr);
+                return Err(RitaExitError::MiscStringError(format!(
+                    "Unable to assign user ipv6 subnet. Chosen subnet {:?} is in use",
+                    addr
+                )));
+            }
+        }
+        Err(e) => {
+            error!(
+                "Unable to retrieve an available ipv6 subnet for client: {}",
+                e
+            );
+            Err(e)
+        }
+    }
+}
+
+/// Take an index i, a larger subnet and a smaller subnet length and generate the ith smaller subnet in the larger subnet
+/// For instance, if our larger subnet is fd00::1330/120, smaller sub len is 124, and index is 1, our generated subnet would be fd00::1310/124
+fn generate_iterative_client_subnet(
+    exit_sub: IpNetwork,
+    ind: u64,
+    subprefix: usize,
+) -> Result<IpNetwork, RitaExitError> {
+    // Convert IpNetwork into IPAdress type
+    let network: IPAddress = IPAddress::parse(exit_sub.to_string())
+        .expect("Paniced while parsing the exit subnet: IpNetwork -> IPAddress");
+    let mut net = network.network();
+    net.prefix = net.prefix.from(subprefix).unwrap();
+
+    if subprefix < network.prefix.num {
+        return Err(RitaExitError::MiscStringError(
+            "Client subnet larger than exit subnet".to_string(),
+        ));
+    }
+
+    // This is the total number of client subnets available. We are checking that our iterative index
+    // is lower than this number. For example, exit subnet: fd00:1000/120, client subnet /124, number of subnets will be
+    // 2^(124 - 120) => 2^4 => 16
+    if ind < (1 << (subprefix - network.prefix.num)) {
+        net = net.from(&net.host_address, &net.prefix);
+        let size = net.size();
+        net.host_address += ind * size;
+        let ret = net
+            .to_string()
+            .parse()
+            .expect("Paniced while parsing exit subnet: IPAdress -> IpNetwork");
+        Ok(ret)
+    } else {
+        error!(
+            "Our index is larger than available subnets, either error in logic or no more subnets"
+        );
+        Err(RitaExitError::MiscStringError(
+            "Index larger than available subnets".to_string(),
+        ))
+    }
+}
+
+/// This function takes a larger subnet and a smaller subnet and generates an iterative index of the smaller
+/// subnet within the larger subnet
+/// For exmaple fd00::1020/124 is the 3rd subnet in fd00::1000/120, so it generates the index '2'
+fn generate_index_from_subnet(exit_sub: IpNetwork, sub: IpNetwork) -> Result<u64, RitaExitError> {
+    let exit_sub_mig: IPAddress = IPAddress::parse(exit_sub.to_string())
+        .expect("Paniced while migrating IpNetwork -> IPAddress");
+    let sub_mig: IPAddress =
+        IPAddress::parse(sub.to_string()).expect("Paniced while parsing IpNetwork -> IPAddress");
+
+    if exit_sub_mig.size() < sub_mig.size() {
+        error!("Invalid subnet sizes");
+        return Err(RitaExitError::MiscStringError(
+            "Invalid subnet sizes provided to generate_index_from_subnet".to_string(),
+        ));
+    }
+    let size = sub_mig.size();
+    let ret = (sub_mig.host_address - exit_sub_mig.host_address) / size;
+
+    Ok(ret
+        .to_string()
+        .parse::<u64>()
+        .expect("Unalbe to parse biguint into u64"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test to strings conversions and parsing from IpNetwork -> IPAdress -> IpNetwork
+    #[test]
+    fn test_ipnetwork_tostring() {
+        let ip: IpNetwork = "2602:FBAD::/40".parse().unwrap();
+        let to_str = ip.to_string();
+        println!("network: {}", to_str);
+
+        let ip_ad: IPAddress = IPAddress::parse(to_str).unwrap();
+        println!("IPAdress network: {:?}", ip_ad);
+
+        let to_str = ip_ad.to_string();
+        println!("network: {}", to_str);
+
+        let ip: IpNetwork = to_str.parse().unwrap();
+        println!("IpNetwork network: {:?}", ip);
+    }
+
+    /// This checks the functionality of IPAddress 'subnet' function which divides a larger subnet
+    /// into individual smaller ones. Source code of this function is used
+    #[ignore]
+    #[test]
+    fn test_subnet_splitting() {
+        let ip = IPAddress::parse("2602:FBAD::/40").unwrap();
+        println!("we got: {:?}", ip);
+        let subnets = ip.subnet(42);
+        println!("subners: {:?}", subnets);
+
+        println!("Subnets custom: {:?}", test_subnet_aggregate(ip, 42));
+    }
+
+    #[allow(dead_code)]
+    fn test_subnet_aggregate(network: IPAddress, subprefix: usize) -> Vec<IPAddress> {
+        let mut ret = Vec::new();
+        let mut net = network.network();
+        for _ in 0..(1 << (subprefix - network.prefix.num)) {
+            ret.push(net.clone());
+            net = net.from(&net.host_address, &net.prefix);
+            let size = net.size();
+            net.host_address += size;
+        }
+
+        ret
+    }
+
+    /// Test iterative subnet generation
+    #[test]
+    fn test_generate_iterative_subnet() {
+        // Complex subnet example
+        let net: IpNetwork = "2602:FBAD::/40".parse().unwrap();
+        let ret = generate_iterative_client_subnet(net, 0, 64);
+        assert_eq!("2602:FBAD::/64".parse::<IpNetwork>().unwrap(), ret.unwrap());
+
+        let net: IpNetwork = "2602:FBAD::/40".parse().unwrap();
+        let ret = generate_iterative_client_subnet(net, 1, 64);
+        assert_eq!(
+            "2602:FBAD:0:1::/64".parse::<IpNetwork>().unwrap(),
+            ret.unwrap()
+        );
+
+        let net: IpNetwork = "2602:FBAD::/40".parse().unwrap();
+        let ret = generate_iterative_client_subnet(net, 50, 64);
+        assert_eq!(
+            "2602:FBAD:0:32::/64".parse::<IpNetwork>().unwrap(),
+            ret.unwrap()
+        );
+
+        let net: IpNetwork = "2602:FBAD::/40".parse().unwrap();
+        let ret = generate_iterative_client_subnet(net, 2_u64.pow(24), 64);
+        assert!(ret.is_err());
+
+        let net: IpNetwork = "2602:FBAD::/40".parse().unwrap();
+        let ret = generate_iterative_client_subnet(net, 0, 30);
+        assert!(ret.is_err());
+
+        // Simple subnet example
+        let net: IpNetwork = "fd00::1337/120".parse().unwrap();
+        let ret = generate_iterative_client_subnet(net, 0, 124);
+        assert_eq!("fd00::1300/124".parse::<IpNetwork>().unwrap(), ret.unwrap());
+
+        let net: IpNetwork = "fd00::1337/120".parse().unwrap();
+        let ret = generate_iterative_client_subnet(net, 2, 124);
+        assert_eq!("fd00::1320/124".parse::<IpNetwork>().unwrap(), ret.unwrap());
+
+        let net: IpNetwork = "fd00::1337/120".parse().unwrap();
+        let ret = generate_iterative_client_subnet(net, 15, 124);
+        assert_eq!("fd00::13f0/124".parse::<IpNetwork>().unwrap(), ret.unwrap());
+
+        let net: IpNetwork = "fd00::1337/120".parse().unwrap();
+        let ret = generate_iterative_client_subnet(net, 16, 124);
+        assert!(ret.is_err());
+    }
+
+    #[test]
+    fn test_reclaiming_ips() {
+        let str = "";
+        let str2 = "2";
+        let str3 = "1,2,5,10,92";
+        let vec = str.rsplit_once(',');
+        println!("{:?}", vec);
+
+        let vec = str2.rsplit_once(',');
+        println!("{:?}", vec);
+
+        let vec = str3.rsplit_once(',');
+        println!("{:?}", vec);
+    }
+
+    #[test]
+    fn test_subnet_to_index() {
+        let exit_sub: IpNetwork = "fd00::1000/120".parse().unwrap();
+        let sub: IpNetwork = "fd00::1000/124".parse().unwrap();
+
+        let exit_sub_mig: IPAddress = IPAddress::parse(exit_sub.to_string())
+            .expect("Paniced while migrating IpNetwork -> IPAddress");
+        let sub_mig: IPAddress = IPAddress::parse(sub.to_string())
+            .expect("Paniced while parsing IpNetwork -> IPAddress");
+
+        let net = sub_mig.network();
+        println!("net: {:?}", net);
+        let size = net.size();
+        println!("size: {:?}", size);
+
+        let test = (sub_mig.host_address - exit_sub_mig.host_address) / size;
+        let a: u64 = test.to_string().parse().unwrap();
+        println!("Res: {:?}", a);
+
+        let exit_sub: IpNetwork = "fd00::1000/120".parse().unwrap();
+        let sub: IpNetwork = "fd00::1060/124".parse().unwrap();
+        assert_eq!(generate_index_from_subnet(exit_sub, sub).unwrap(), 6);
+
+        let exit_sub: IpNetwork = "fd00::1000/120".parse().unwrap();
+        let sub: IpNetwork = "fd00::1060/128".parse().unwrap();
+        assert_eq!(generate_index_from_subnet(exit_sub, sub).unwrap(), 96);
+
+        let exit_sub: IpNetwork = "2602:FBAD::/40".parse().unwrap();
+        let sub: IpNetwork = "2602:FBAD:0:32::/64".parse().unwrap();
+        assert_eq!(generate_index_from_subnet(exit_sub, sub).unwrap(), 50);
     }
 }
