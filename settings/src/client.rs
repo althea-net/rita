@@ -106,7 +106,7 @@ fn default_balance_notification() -> bool {
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitClientSettings {
     /// This stores a mapping between an identifier (any string) to exits
-    #[serde(alias = "new_exits", default)]
+    #[serde(rename = "new_exits", default)]
     pub exits: HashMap<String, ExitServer>,
     /// This stores the current exit identifier
     pub current_exit: Option<String>,
