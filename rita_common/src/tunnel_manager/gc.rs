@@ -18,6 +18,17 @@ lazy_static! {
     static ref LAST_GC: Arc<RwLock<Instant>> = Arc::new(RwLock::new(Instant::now()));
 }
 
+/// gets the last GC instant
+fn get_last_gc() -> Instant {
+    *LAST_GC.read().unwrap()
+}
+
+/// sets the last GC time to the current instant
+fn set_last_gc() {
+    let mut last_gc = LAST_GC.write().unwrap();
+    *last_gc = Instant::now();
+}
+
 /// A message type for deleting all tunnels we haven't heard from for more than the duration.
 pub struct TriggerGc {
     /// if we do not receive a hello within this many seconds we attempt to gc the tunnel
@@ -35,8 +46,7 @@ pub struct TriggerGc {
 
 pub fn tm_trigger_gc(msg: TriggerGc) -> Result<(), RitaCommonError> {
     let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
-    let mut last_gc = LAST_GC.write().unwrap();
-    let time_since = Instant::now().checked_duration_since(*last_gc);
+    let time_since = Instant::now().checked_duration_since(get_last_gc());
     match time_since {
         Some(time) => {
             if time < GC_FREQUENCY {
@@ -45,8 +55,7 @@ pub fn tm_trigger_gc(msg: TriggerGc) -> Result<(), RitaCommonError> {
         }
         None => return Ok(()),
     }
-    *last_gc = Instant::now();
-    drop(last_gc);
+    set_last_gc();
 
     let interfaces = into_interfaces_hashmap(&msg.babel_interfaces);
     trace!("Starting tunnel gc {:?}", interfaces);
