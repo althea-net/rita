@@ -26,11 +26,20 @@ pub struct Hello {
 pub async fn handle_hello(msg: Hello) {
     trace!("Sending Hello {:?}", msg);
 
-    let endpoint = format!(
-        "http://[{}]:{}/hello",
-        msg.to.contact_socket.ip(),
-        msg.to.contact_socket.port()
-    );
+    // ipv6 addresses need the [] bracket format, ipv4 address literals do not
+    let endpoint = if msg.to.contact_socket.is_ipv4() {
+        format!(
+            "http://{}:{}/hello",
+            msg.to.contact_socket.ip(),
+            msg.to.contact_socket.port()
+        )
+    } else {
+        format!(
+            "http://[{}]:{}/hello",
+            msg.to.contact_socket.ip(),
+            msg.to.contact_socket.port()
+        )
+    };
 
     let client = awc::Client::default();
     info!("Sending hello request to manual peer: {}", endpoint);
