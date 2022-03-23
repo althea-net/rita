@@ -86,7 +86,7 @@ SPEED = int(os.getenv('SPEEDTEST_THROUGHPUT'))
 TEST_PASSES = True
 
 EXIT_SETTINGS = {
-    "exits": {
+    "new_exits": {
         "exit_a": {
             "subnet": "fd00::5/128",
             "id": {
@@ -109,7 +109,7 @@ EXIT_SETTINGS = {
 }
 
 EXIT_SELECT = {
-    "exits": {
+    "new_exits": {
         "exit_a": {
             "state": "Registering",
         }
