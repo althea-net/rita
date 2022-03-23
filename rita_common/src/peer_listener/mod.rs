@@ -89,6 +89,7 @@ impl PeerListener {
     }
 }
 
+/// Creates a listen interface on all interfaces in the peer_interfaces hashmap.
 fn listen_to_available_ifaces(peer_listener: &mut PeerListener) {
     let interfaces = settings::get_rita_common().network.peer_interfaces;
     let iface_list = interfaces;
@@ -106,6 +107,8 @@ fn listen_to_available_ifaces(peer_listener: &mut PeerListener) {
     }
 }
 
+/// Ticks the peer listener module sending ImHere messages and receiving Hello messages from all
+/// peers over UDP
 pub fn peerlistener_tick() {
     trace!("Starting PeerListener tick!");
 
@@ -198,6 +201,7 @@ impl ListenInterface {
     }
 }
 
+/// send UDP ImHere messages over IPV6 link local
 fn send_im_here(interfaces: &mut HashMap<String, ListenInterface>) {
     trace!("About to send ImHere");
     for obj in interfaces.iter_mut() {
@@ -218,6 +222,7 @@ fn send_im_here(interfaces: &mut HashMap<String, ListenInterface>) {
     }
 }
 
+/// receive UDP ImHere messages over IPV6 link local
 fn receive_im_here(
     interfaces: &mut HashMap<String, ListenInterface>,
 ) -> (HashMap<IpAddr, Peer>, HashMap<SocketAddr, String>) {
@@ -279,6 +284,7 @@ fn receive_im_here(
     (output, interface_map)
 }
 
+/// Send UDP hello message over IPV6
 pub fn send_hello(msg: &Hello, socket: &UdpSocket, send_addr: SocketAddr, sender_wgport: u16) {
     trace!("Sending a Hello message");
 
@@ -294,6 +300,7 @@ pub fn send_hello(msg: &Hello, socket: &UdpSocket, send_addr: SocketAddr, sender
     }
 }
 
+/// receive UDP hello messages over IPV6 link local ports
 pub fn receive_hello(writer: &mut PeerListener) {
     trace!("Dequeing Hello");
     for obj in writer.interfaces.iter_mut() {
