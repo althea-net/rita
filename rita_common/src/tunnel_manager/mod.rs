@@ -4,18 +4,13 @@
 //! up tunnels if they respond, likewise if someone calls us their hello goes through network_endpoints
 //! then into TunnelManager to open a tunnel for them.
 
+pub mod contact_peers;
 pub mod gc;
 pub mod id_callback;
 pub mod neighbor_status;
 pub mod shaping;
 
-use crate::hello_handler::handle_hello;
-use crate::hello_handler::Hello;
-use crate::peer_listener::Hello as NewHello;
-use crate::peer_listener::PeerListener;
-use crate::peer_listener::PEER_LISTENER;
-use crate::peer_listener::{send_hello, Peer};
-use crate::rita_loop::is_gateway;
+use crate::peer_listener::Peer;
 use crate::RitaCommonError;
 use crate::FAST_LOOP_TIMEOUT;
 use crate::KI;
@@ -31,8 +26,7 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::Display;
 use std::fmt::{Formatter, Result as FmtResult};
-use std::net::ToSocketAddrs;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -320,8 +314,6 @@ pub fn tm_get_neighbors() -> Vec<Neighbor> {
     res
 }
 
-pub struct GetTunnels;
-
 pub fn tm_get_tunnels() -> Result<Vec<Tunnel>, RitaCommonError> {
     let tunnel_manager = get_tunnel_manager();
     let mut res = Vec::new();
@@ -333,131 +325,36 @@ pub fn tm_get_tunnels() -> Result<Vec<Tunnel>, RitaCommonError> {
     Ok(res)
 }
 
-pub struct PeersToContact {
-    pub peers: HashMap<IpAddr, Peer>,
-}
-
-impl PeersToContact {
-    pub fn new(peers: HashMap<IpAddr, Peer>) -> PeersToContact {
-        PeersToContact { peers }
-    }
-}
-
-/// Takes a list of peers to contact and dispatches requests if you have a WAN connection
-/// it will also dispatch neighbor requests to manual peers
-pub async fn tm_contact_peers(msg: PeersToContact) {
+/// Gets a port off of the internal port list after checking that said port is free
+/// with the operating system. It maintains a list of all possible ports and gives out
+/// the oldest port, i.e. when it gives out a port, it pushes it back on the end of the
+/// vecdeque so that by the time we come back around to it, it is either in use, or tunnel
+/// allocation has failed so we can use it without issues.
+fn tm_get_port() -> u16 {
+    let udp_table = KI.used_ports();
     let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
 
-    let network_settings = settings::get_rita_common().network;
-    let manual_peers = network_settings.manual_peers.clone();
-    let is_gateway = is_gateway();
-    let rita_hello_port = network_settings.rita_hello_port;
-    drop(network_settings);
-    // Hold a lock on shared state until we finish sending all messages. This prevents a race condition
-    // where the hashmaps get cleared out during subsequent ticks
-    trace!("TunnelManager contacting peers");
-
-    let writer = &mut *PEER_LISTENER.write().unwrap();
-
-    for (_, peer) in msg.peers.iter() {
-        let res = tunnel_manager.neighbor_inquiry(peer, false, writer).await;
-        if res.is_err() {
-            warn!("Neighbor inqury for {:?} failed! with {:?}", peer, res);
-        }
-    }
-    for manual_peer in manual_peers.iter() {
-        let ip = manual_peer.parse::<IpAddr>();
-        match ip {
-            Ok(ip) => {
-                let socket = SocketAddr::new(ip, rita_hello_port);
-                let man_peer = Peer {
-                    ifidx: 0,
-                    contact_socket: socket,
-                };
-                let res = tunnel_manager
-                    .neighbor_inquiry(&man_peer, true, writer)
-                    .await;
-                if res.is_err() {
-                    warn!(
-                        "Neighbor inqury for {:?} failed with: {:?}",
-                        manual_peer, res
-                    );
+    loop {
+        let port = match tunnel_manager.free_ports.pop_front() {
+            Some(a) => a,
+            None => panic!("No elements present in the ports vecdeque"),
+        };
+        tunnel_manager.free_ports.push_back(port);
+        match (port, &udp_table) {
+            (p, Ok(used_ports)) => {
+                if used_ports.contains(&p) {
+                    continue;
+                } else {
+                    return p;
                 }
             }
-            Err(_) => {
-                // Do not contact manual peers on the internet if we are not a gateway
-                // it will just fill the logs with failed dns resolution attempts or result
-                // in bad behavior, we do allow the addressing of direct ip address gateways
-                // for the special case that the user is attempting some special behavior
-                if is_gateway {
-                    let res = tunnel_manager
-                        .neighbor_inquiry_hostname(manual_peer.to_string())
-                        .await;
-                    if res.is_err() {
-                        warn!(
-                            "Neighbor inqury for {:?} failed with: {:?}",
-                            manual_peer, res
-                        );
-                    }
-                }
+            (_p, Err(e)) => {
+                // better not to open an individual tunnel than it is to
+                // risk having a failed one
+                panic!("Failed to check if port was in use! UdpTable from get_port returned error {:?}", e);
             }
         }
     }
-}
-
-/// Sets out to contact a neighbor, takes a speculative port (only assigned if the neighbor
-/// responds successfully)
-async fn contact_neighbor(
-    peer: &Peer,
-    our_port: u16,
-    socket: &UdpSocket,
-    send_addr: SocketAddr,
-) -> Result<(), RitaCommonError> {
-    let new_msg = NewHello {
-        my_id: LocalIdentity {
-            global: settings::get_rita_common().get_identity().ok_or_else(|| {
-                RitaCommonError::MiscStringError("Identity has no mesh IP ready yet".to_string())
-            })?,
-            wg_port: our_port,
-            have_tunnel: None,
-        },
-        to: *peer,
-        response: false,
-    };
-
-    // new send_hello call using udp socket
-    // We do not need the old http hello except for exits, which are called as manual peers
-    send_hello(&new_msg, socket, send_addr, our_port);
-
-    Ok(())
-}
-
-/// Uses Hello Handler to send a Hello over http. Takes a speculative port (only assigned
-/// if neighbor responds successfully)
-async fn contact_manual_peer(peer: &Peer, our_port: u16) -> Result<(), RitaCommonError> {
-    let mut settings = settings::get_rita_common();
-    KI.manual_peers_route(
-        &peer.contact_socket.ip(),
-        &mut settings.network.last_default_route,
-    )?;
-
-    let msg = Hello {
-        my_id: LocalIdentity {
-            global: settings.get_identity().ok_or_else(|| {
-                RitaCommonError::MiscStringError("Identity has no mesh IP ready yet".to_string())
-            })?,
-            wg_port: our_port,
-            have_tunnel: None,
-        },
-        to: *peer,
-    };
-
-    settings::set_rita_common(settings);
-
-    //old hello manager over http
-    handle_hello(msg).await;
-
-    Ok(())
 }
 
 /// determines if the list contains a tunnel with the given target ip
@@ -502,121 +399,6 @@ impl TunnelManager {
         TunnelManager {
             free_ports: ports,
             tunnels: HashMap::new(),
-        }
-    }
-
-    /// Gets a port off of the internal port list after checking that said port is free
-    /// with the operating system. It maintains a list of all possible ports and gives out
-    /// the oldest port, i.e. when it gives out a port, it pushes it back on the end of the
-    /// vecdeque so that by the time we come back around to it, it is either in use, or tunnel
-    /// allocation has failed so we can use it without issues.
-    fn get_port(&mut self) -> u16 {
-        let udp_table = KI.used_ports();
-
-        loop {
-            let port = match self.free_ports.pop_front() {
-                Some(a) => a,
-                None => panic!("No elements present in the ports vecdeque"),
-            };
-            self.free_ports.push_back(port);
-            match (port, &udp_table) {
-                (p, Ok(used_ports)) => {
-                    if used_ports.contains(&p) {
-                        continue;
-                    } else {
-                        return p;
-                    }
-                }
-                (_p, Err(e)) => {
-                    // better not to open an individual tunnel than it is to
-                    // risk having a failed one
-                    panic!("Failed to check if port was in use! UdpTable from get_port returned error {:?}", e);
-                }
-            }
-        }
-    }
-
-    /// This function generates a future and hands it off to the Actix arbiter to actually resolve
-    /// in the case that the DNS request is successful the hello handler and eventually the Identity
-    /// callback continue execution flow. But this function itself returns syncronously
-    pub async fn neighbor_inquiry_hostname(
-        &mut self,
-        their_hostname: String,
-    ) -> Result<(), RitaCommonError> {
-        trace!("Getting tunnel, inq");
-        let network_settings = settings::get_rita_common().network;
-        let is_gateway = is_gateway();
-        let rita_hello_port = network_settings.rita_hello_port;
-
-        let our_port = self.get_port();
-
-        // This resolution is done in its own async loop, so processes other than
-        // peer discovery wont be blocked if this blocks
-        let res = their_hostname.clone().to_socket_addrs();
-        match res {
-            Ok(dnsresult) => {
-                let url = format!("http://[{}]:{}/hello", their_hostname, rita_hello_port);
-                trace!("Saying hello to: {:?} at ip {:?}", url, dnsresult);
-                if dnsresult.clone().next().is_some() && is_gateway {
-                    // dns records may have many ip's if we get multiple it's a load
-                    // balanced exit and we need to create tunnels to all of them
-                    for dns_socket in dnsresult {
-                        let their_ip = dns_socket.ip();
-                        let socket = SocketAddr::new(their_ip, rita_hello_port);
-                        let man_peer = Peer {
-                            ifidx: 0,
-                            contact_socket: socket,
-                        };
-                        let res = contact_manual_peer(&man_peer, our_port).await;
-                        if res.is_err() {
-                            warn!("Contact neighbor failed with {:?}", res);
-                        }
-                    }
-                } else {
-                    trace!(
-                        "We're not a gateway or we got a zero length dns response: {:?}",
-                        dnsresult
-                    );
-                }
-            }
-            Err(e) => {
-                warn!("DNS resolution failed with {:?}", e);
-            }
-        }
-        Ok(())
-    }
-
-    /// Contacts one neighbor with our LocalIdentity to get their LocalIdentity and wireguard tunnel
-    /// interface name. Sends a Hello over udp, or http if its a manual peer
-    pub async fn neighbor_inquiry(
-        &mut self,
-        peer: &Peer,
-        is_manual_peer: bool,
-        peer_listener: &mut PeerListener,
-    ) -> Result<(), RitaCommonError> {
-        trace!("TunnelManager neigh inquiry for {:?}", peer);
-        let our_port = self.get_port();
-
-        if is_manual_peer {
-            contact_manual_peer(peer, our_port).await
-        } else {
-            let iface_name = match peer_listener.interface_map.get(&peer.contact_socket) {
-                Some(a) => a,
-                None => {
-                    return Err(RitaCommonError::MiscStringError(
-                        "No interface in the hashmap to send a message".to_string(),
-                    ))
-                }
-            };
-            let udp_socket = match peer_listener.interfaces.get(iface_name) {
-                Some(a) => &a.linklocal_socket,
-                None => {
-                    return Err(RitaCommonError::MiscStringError(
-                        "No udp socket present for given interface".to_string(),
-                    ))
-                }
-            };
-            contact_neighbor(peer, our_port, udp_socket, peer.contact_socket).await
         }
     }
 

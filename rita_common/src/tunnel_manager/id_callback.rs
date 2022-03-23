@@ -3,7 +3,7 @@ use crate::tunnel_manager::Tunnel;
 use althea_types::LocalIdentity;
 use std::net::Ipv4Addr;
 
-use super::TUNNEL_MANAGER;
+use super::{tm_get_port, TUNNEL_MANAGER};
 
 pub struct IdentityCallback {
     pub local_identity: LocalIdentity,
@@ -31,16 +31,16 @@ impl IdentityCallback {
 /// An attempt to contact a neighbor has succeeded or a neighbor has contacted us, either way
 /// we need to allocate a tunnel for them and place it onto our local storage.  In the case
 /// that a neighbor contacts us we don't have a port already allocated and we need to choose one
-/// in the case that we have atempted to contact a neighbor we have already sent them a port that
+/// in the case that we have attempted to contact a neighbor we have already sent them a port that
 /// we now must attach to their tunnel entry. If we also return a bool for if the tunnel already
 /// exists
 pub fn tm_identity_callback(msg: IdentityCallback) -> Option<(Tunnel, bool)> {
-    let mut tunnel_manager = TUNNEL_MANAGER.write().unwrap();
     let our_port = match msg.our_port {
         Some(port) => port,
-        _ => tunnel_manager.get_port(),
+        _ => tm_get_port(),
     };
-
+    // must be called after tm_get_port to avoid a deadlock
+    let mut tunnel_manager = TUNNEL_MANAGER.write().unwrap();
     let res = tunnel_manager.open_tunnel(
         msg.local_identity,
         msg.peer,

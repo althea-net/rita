@@ -10,10 +10,9 @@ use crate::peer_listener::get_peers;
 use crate::peer_listener::peerlistener_tick;
 use crate::tm_trigger_gc;
 use crate::traffic_watcher::watch;
+use crate::tunnel_manager::contact_peers::tm_contact_peers;
 use crate::tunnel_manager::gc::TriggerGc;
-use crate::tunnel_manager::tm_contact_peers;
 use crate::tunnel_manager::tm_get_neighbors;
-use crate::tunnel_manager::PeersToContact;
 use crate::update_neighbor_status;
 
 use actix_async::System as AsyncSystem;
@@ -182,10 +181,8 @@ pub fn peer_discovery_loop() {
                         start.elapsed().subsec_millis(),
                     );
 
-                    let peers = get_peers();
-
-                    //Contact peers
-                    tm_contact_peers(PeersToContact::new(peers)).await;
+                    // Contact manual peers
+                    tm_contact_peers(get_peers()).await;
                 });
 
                 // sleep until it has been FAST_LOOP_SPEED seconds from start, whenever that may be
