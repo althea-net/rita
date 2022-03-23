@@ -222,23 +222,29 @@ impl dyn KernelInterface {
         Ok(())
     }
 
-    pub fn update_settings_route(&self, settings_default_route: &mut Option<DefaultRoute>) {
+    /// Updates the settings default route, returns true if an edit to the settings has been performed
+    pub fn update_settings_route(&self, settings_default_route: &mut Option<DefaultRoute>) -> bool {
         let def_route = match self.get_default_route() {
             Some(route) => route,
-            None => return,
+            None => return false,
         };
         if !def_route.is_althea_default_route() {
             // update the default route if default route is not wg exit
             *settings_default_route = Some(def_route);
+            true
+        } else {
+            false
         }
     }
 
+    /// sets the manual route for a peer using ip route, returns true if the settings
+    /// have been updated
     pub fn manual_peers_route(
         &self,
         endpoint_ip: &IpAddr,
         settings_default_route: &mut Option<DefaultRoute>,
-    ) -> Result<(), Error> {
-        self.update_settings_route(settings_default_route);
+    ) -> Result<bool, Error> {
+        let changed = self.update_settings_route(settings_default_route);
         match settings_default_route {
             Some(d) => {
                 self.set_route(&IpRoute::ToSubnet(ToSubnet {
@@ -251,10 +257,10 @@ impl dyn KernelInterface {
                     src: None,
                     scope: None,
                 }))?;
-                Ok(())
+                Ok(changed)
             }
             // no default route, nothing to do
-            None => Ok(()),
+            None => Ok(changed),
         }
     }
 
