@@ -7,4 +7,4 @@ source $DIR/build_common.sh
 
 cargo install cross
 
-cross build --target mips-unknown-linux-musl ${PROFILE} ${FEATURES} -p rita_bin --bin rita --features rita_bin/bundle_openssl
+cross build --target mips-unknown-linux-musl ${PROFILE} ${FEATURES} -p rita_bin --bin rita

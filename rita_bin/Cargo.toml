@@ -46,15 +46,14 @@ jemallocator = {version = "0.3", optional = true}
 # we don't call or us OpenSSL directly in this codebase, but by adding
 # this dependency with this feature we can enforce that openssl is compiled
 # in 'vendored' mode all the way down the tree. What this means is that we use
-# an openssl implementation from the crate and not from the system. This adds about
-# 3mb to the build so it's tagged into the server feature and it's own feature
-openssl = {version = "0.10", features = ["vendored"], optional = true}
+# an openssl implementation from the crate and not from the system, simplifying
+# our build process for a lot of cross-compile situations
+openssl = {version = "0.10", features = ["vendored"]}
 
 [features]
 jemalloc = ["jemallocator"]
-bundle_openssl = ["openssl"]
 # Features for big iron devices with more ram
-server = ["jemalloc", "openssl"]
+server = ["jemalloc"]
 # disables cors for dash debugging
 dash_debug = []
 # changes operator urls
