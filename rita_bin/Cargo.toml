@@ -5,9 +5,6 @@ edition = "2018"
 license = "Apache-2.0"
 build = "build.rs"
 
-[profile.release]
-strip = "true"
-
 [[bin]]
 name = "rita_exit"
 path = "src/exit.rs"
