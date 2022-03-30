@@ -1,4 +1,4 @@
-use crate::blockchain_oracle::low_balance;
+use crate::blockchain_oracle::{get_oracle_balance, low_balance};
 use crate::blockchain_oracle::{get_oracle_close_thresh, get_oracle_pay_thresh};
 use crate::rita_loop::is_gateway;
 use actix_web_async::HttpRequest;
@@ -11,7 +11,7 @@ pub static READABLE_VERSION: &str = "Beta 19 RC4";
 #[derive(Serialize)]
 pub struct OwnInfo {
     pub address: Address,
-    pub balance: Uint256,
+    pub balance: Option<Uint256>,
     pub local_fee: u32,
     pub metric_factor: u32,
     pub pay_threshold: Int256,
@@ -28,7 +28,7 @@ pub async fn get_own_info(_req: HttpRequest) -> HttpResponse {
     debug!("Get own info endpoint hit!");
     let payment_settings = settings::get_rita_common().payment;
     let eth_address = payment_settings.eth_address.unwrap();
-    let balance = payment_settings.balance.clone();
+    let balance = get_oracle_balance();
     let pay_threshold = get_oracle_pay_thresh();
     let close_threshold = get_oracle_close_thresh();
     let local_fee = payment_settings.local_fee;

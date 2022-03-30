@@ -17,6 +17,7 @@ use std::thread;
 
 pub mod fast_loop;
 pub mod slow_loop;
+pub mod write_to_disk;
 
 lazy_static! {
     /// keeps track of if this node is a gateway, specifically if this node

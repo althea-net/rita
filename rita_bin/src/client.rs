@@ -36,6 +36,8 @@ use rita_common::debt_keeper::save_debt_on_shutdown;
 use rita_common::logging::enable_remote_logging;
 use rita_common::rita_loop::start_core_rita_endpoints;
 use rita_common::rita_loop::start_rita_common_loops;
+use rita_common::rita_loop::write_to_disk::save_to_disk_loop;
+use rita_common::rita_loop::write_to_disk::SettingsOnDisk;
 use rita_common::usage_tracker::save_usage_on_shutdown;
 use rita_common::utils::env_vars_contains;
 use settings::client::RitaClientSettings;
@@ -66,7 +68,7 @@ fn main() {
     .and_then(|d| d.deserialize())
     .unwrap_or_else(|e| e.exit());
 
-    let settings_file = args.flag_config;
+    let settings_file = args.flag_config.clone();
     println!("Settings file {}", settings_file);
 
     wait_for_settings(&settings_file);
@@ -139,6 +141,10 @@ fn main() {
 
     start_rita_common_loops();
     start_rita_client_loops();
+    save_to_disk_loop(
+        SettingsOnDisk::RitaClientSettings(settings::get_rita_client()),
+        &args.flag_config,
+    );
     start_core_rita_endpoints(4);
     start_rita_client_endpoints(1);
     start_client_dashboard(settings.network.rita_dashboard_port);

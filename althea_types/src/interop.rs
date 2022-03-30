@@ -658,7 +658,7 @@ pub struct HeartbeatMessage {
     pub organizer_address: Option<Address>,
     /// The devices current balance, we could in theory query this
     /// using the address in the id anyways, consider dropping
-    pub balance: Uint256,
+    pub balance: Option<Uint256>,
     /// The full price this node is paying for each byte of traffic
     /// in the usual unit of wei/byte
     pub exit_dest_price: u64,

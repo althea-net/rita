@@ -12,21 +12,20 @@ use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use num256::Uint256;
 use serde::{Deserialize, Serialize};
-use serde_json::Error as JsonError;
-use settings::set_rita_common;
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Error as IOError;
+use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Write;
 use std::path::Path;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 use std::usize;
 
+use crate::rita_loop::write_to_disk::is_router_storage_small;
 use crate::RitaCommonError;
 
 /// one year worth of usage storage
@@ -36,8 +35,6 @@ const MAX_USAGE_ENTRIES: usize = 8_760;
 /// so we can store less, it's also less predictable for what values
 /// map to how much time in history, 2000 is hopefully enough
 const MAX_TX_ENTRIES: usize = 2_000;
-/// Save every 4 hours
-const SAVE_FREQENCY: u64 = 4;
 
 lazy_static! {
     static ref USAGE_TRACKER: Arc<RwLock<UsageTracker>> =
@@ -116,8 +113,62 @@ pub struct UsageTracker {
     payments: VecDeque<PaymentHour>,
 }
 
+/// This function checks to see how many bytes were used
+/// and if the amount used is not greater than 10gb than
+/// it will return false. Essentially, it's checking to make
+/// sure that there is usage within the router.
+fn check_usage_hour(input: &mut VecDeque<UsageHour>, last_save_hour: u64) -> bool {
+    let number_of_bytes = 10000;
+    let mut total_used_bytes = 0;
+    while !input.is_empty() {
+        match input.pop_front() {
+            Some(val) => {
+                total_used_bytes += val.up;
+                if val.index < last_save_hour {
+                    return total_used_bytes < number_of_bytes;
+                }
+            }
+            None => break,
+        }
+    }
+    false
+}
+
+fn at_least_two(a: bool, b: bool, c: bool) -> bool {
+    if a {
+        b || c
+    } else {
+        b && c
+    }
+}
+
+/// Writes the usage data to disk
+pub fn save_usage_to_disk(minimum_number_transactions: usize) {
+    match USAGE_TRACKER
+        .write()
+        .unwrap()
+        .save(minimum_number_transactions)
+    {
+        Ok(_val) => log::info!("Saved usage tracker successfully"),
+        Err(e) => warn!("Unable to save usage tracker {:}", e),
+    };
+}
+
 impl UsageTracker {
-    fn save(&mut self) -> Result<(), RitaCommonError> {
+    pub fn save(&mut self, minimum_number_of_transactions: usize) -> Result<(), RitaCommonError> {
+        if self.payments.len() < minimum_number_of_transactions
+            || at_least_two(
+                check_usage_hour(&mut self.client_bandwidth, self.last_save_hour),
+                check_usage_hour(&mut self.exit_bandwidth, self.last_save_hour),
+                check_usage_hour(&mut self.relay_bandwidth, self.last_save_hour),
+            )
+        {
+            return Err(RitaCommonError::StdError(IOError::new(
+                ErrorKind::Other,
+                "Too little data for writing",
+            )));
+        }
+
         let serialized = bincode::serialize(self)?;
         let mut file = File::create(settings::get_rita_common().network.usage_tracker_file)?;
 
@@ -130,6 +181,10 @@ impl UsageTracker {
         loop {
             match file.write_all(&compressed_bytes) {
                 Ok(save) => {
+                    info!(
+                        "Saved to disk for usage tracker {:}",
+                        compressed_bytes.len()
+                    );
                     return Ok(save);
                 }
                 Err(e) => {
@@ -183,58 +238,20 @@ impl UsageTracker {
             Err(_e) => return blank_usage_tracker,
         };
 
-        match (
-            file_exists,
-            try_bincode(&unzipped_bytes),
-            try_json(&unzipped_bytes),
-        ) {
+        match (file_exists, try_bincode(&unzipped_bytes)) {
             // file exists and bincode deserialization was successful, in the case that somehow json deserialization of the same
             // data was also successful just ignore it and use bincode
-            (true, Ok(bincode_tracker), _) => bincode_tracker,
-            //file exists, but bincode deserialization failed -> load using serde (old), update update settings and save file
-            (true, Err(_e), Ok(mut json_tracker)) => {
-                let mut settings = settings::get_rita_common();
-                // save with bincode regardless of result of serde deserialization in order to end reliance on serde
-                let old_path = PathBuf::from(settings.network.usage_tracker_file);
-
-                let mut new_path = old_path.clone();
-                new_path.set_extension("bincode");
-
-                settings.network.usage_tracker_file =
-                    new_path.clone().into_os_string().into_string().unwrap();
-                set_rita_common(settings);
-
-                match json_tracker.save() {
-                    Ok(()) => {
-                        // delete the old file after successfully migrating, this may cause problems on routers with
-                        // low available storage space since we want to take up space for both the new and old file
-                        if !(old_path.eq(&new_path)) {
-                            // check that we would not be deleting the file just saved to
-                            let _r = std::fs::remove_file(old_path);
-                        } else {
-                            error!(
-                                "We are trying to save over {:?} with {:?}, how are they same?",
-                                old_path, new_path
-                            )
-                        }
-                        json_tracker
-                    }
-                    Err(e) => {
-                        error!("Failed to save UsageTracker to bincode {:?}", e);
-                        json_tracker
-                    }
-                }
-            }
+            (true, Ok(bincode_tracker)) => bincode_tracker,
             // file does not exist; no data to load, this is probably a new router
             // and we'll just generate a new file
-            (false, _, _) => blank_usage_tracker,
+            (false, _) => blank_usage_tracker,
             // the file exists but both encodings are invalid, we should log the error
             // and return a new file so that the module can continue operating after discard
             // the irrecoverable data.
-            (true, Err(e1), Err(e2)) => {
+            (true, Err(e1)) => {
                 error!(
-                    "Failed to deserialize UsageTracker at location {}  {:?} {:?}",
-                    file_path, e1, e2
+                    "Failed to deserialize UsageTracker at location {}  {:?}",
+                    file_path, e1
                 );
                 blank_usage_tracker
             }
@@ -264,12 +281,6 @@ fn decompressed(mut file: File) -> Result<Vec<u8>, RitaCommonError> {
 /// Attempts to deserialize the provided array of bytes as a bincode encoded UsageTracker struct
 fn try_bincode(bytes: &[u8]) -> Result<UsageTracker, BincodeError> {
     let deserialized: Result<UsageTracker, _> = bincode::deserialize(bytes);
-    deserialized
-}
-
-/// Attempts to deserialize the provided array of bytes as a json encoded UsageTracker struct
-fn try_json(bytes: &[u8]) -> Result<UsageTracker, JsonError> {
-    let deserialized: Result<UsageTracker, _> = serde_json::from_slice(bytes);
     deserialized
 }
 
@@ -344,11 +355,6 @@ fn process_usage_update(current_hour: u64, msg: UpdateUsage, data: &mut UsageTra
     while history.len() > MAX_USAGE_ENTRIES {
         let _discarded_entry = history.pop_back();
     }
-    if (current_hour - SAVE_FREQENCY) > data.last_save_hour {
-        data.last_save_hour = current_hour;
-        let res = data.save();
-        info!("Saving usage data: {:?}", res);
-    }
 }
 
 fn trim_payments(size: usize, history: &mut VecDeque<PaymentHour>) {
@@ -391,11 +397,6 @@ fn handle_payments(history: &mut UsageTracker, payment: &PaymentTx) {
     while history.payments.len() > MAX_TX_ENTRIES {
         let _discarded_entry = history.payments.pop_back();
     }
-    if (current_hour - SAVE_FREQENCY) > history.last_save_hour {
-        history.last_save_hour = current_hour;
-        let res = history.save();
-        info!("Saving usage data: {:?}", res);
-    }
 }
 
 /// Gets usage data for this router, stored on the local disk at periodic intervals
@@ -425,10 +426,19 @@ pub fn save_usage_on_shutdown() {
     };
 
     let history = &mut USAGE_TRACKER.write().unwrap();
+
+    let router_model = settings::get_rita_common().network.device;
+    match router_model {
+        Some(router_model_unwrapped) => {
+            is_router_storage_small(&router_model_unwrapped);
+            let res = history.save(75);
+            info!("Shutdown: saving usage data: {:?}", res);
+        }
+        None => todo!(),
+    }
+
     history.last_save_hour = current_hour;
     trim_payments(MAX_TX_ENTRIES, &mut history.payments);
-    let res = history.save();
-    info!("Shutdown: saving usage data: {:?}", res);
 }
 
 #[cfg(test)]
@@ -465,13 +475,13 @@ mod tests {
         set_rita_common(newrc);
 
         let mut dummy_usage_tracker = UsageTracker {
-            last_save_hour: 9,
+            last_save_hour: 0,
             client_bandwidth: VecDeque::new(),
             relay_bandwidth: VecDeque::new(),
             exit_bandwidth: VecDeque::new(),
             payments: VecDeque::new(),
         };
-        let res = dummy_usage_tracker.save(); // saving to bincode with the new method
+        let res = dummy_usage_tracker.save(75); // saving to bincode with the new method
         info!("Saving test  data: {:?}", res);
 
         let res2 = usage_tracker::UsageTracker::load_from_disk();
@@ -493,7 +503,7 @@ mod tests {
         newrc.network.usage_tracker_file = "/tmp/usage_tracker.json".to_string();
         set_rita_common(newrc);
         let mut dummy_usage_tracker = UsageTracker {
-            last_save_hour: 8,
+            last_save_hour: 0,
             client_bandwidth: VecDeque::new(),
             relay_bandwidth: VecDeque::new(),
             exit_bandwidth: VecDeque::new(),
@@ -514,7 +524,7 @@ mod tests {
 
         // Saving res2 with the new save() and updated usage_tracker_file in order to end with
         // a .bincode file from the loaded json data saved to res2.
-        let res3 = res2.save();
+        let res3 = res2.save(75);
         info!("Saving test data as bincode: {:?}", res3);
         let res4 = usage_tracker::UsageTracker::load_from_disk();
         info!("Loading test data from bincode: {:?}", res4);

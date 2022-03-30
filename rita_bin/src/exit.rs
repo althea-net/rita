@@ -27,6 +27,8 @@ use rita_common::debt_keeper::save_debt_on_shutdown;
 use rita_common::logging::enable_remote_logging;
 use rita_common::rita_loop::start_core_rita_endpoints;
 use rita_common::rita_loop::start_rita_common_loops;
+use rita_common::rita_loop::write_to_disk::save_to_disk_loop;
+use rita_common::rita_loop::write_to_disk::SettingsOnDisk;
 use rita_common::usage_tracker::save_usage_on_shutdown;
 use rita_common::utils::env_vars_contains;
 use rita_exit::database::sms::send_admin_notification_sms;
@@ -67,7 +69,7 @@ fn main() {
     // load the settings file, setup a thread to save it out every so often
     // and populate the memory cache of settings used throughout the program
     let settings = {
-        let settings_file = args.flag_config;
+        let settings_file = args.flag_config.clone();
         let settings = RitaExitSettingsStruct::new_watched(&settings_file).unwrap();
 
         settings::set_git_hash(env!("GIT_HASH").to_string());
@@ -124,6 +126,11 @@ fn main() {
 
     start_rita_common_loops();
     start_rita_exit_loop();
+    save_to_disk_loop(
+        SettingsOnDisk::RitaExitSettingsStruct(settings::get_rita_exit()),
+        &args.flag_config,
+    );
+
     let workers = settings.workers;
     start_core_rita_endpoints(workers as usize);
     start_rita_exit_endpoints(workers as usize);
