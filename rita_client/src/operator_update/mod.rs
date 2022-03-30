@@ -167,12 +167,16 @@ async fn checkin() {
         neighbor_info.push(status);
     }
 
-    let hardware_info = match get_hardware_info(rita_client.network.device) {
-        Ok(info) => Some(info),
-        Err(e) => {
-            error!("Failed to get hardware info with {:?}", e);
-            None
-        }
+    // disable hardware info sending if logging is disabled
+    let hardware_info = match logging_enabled {
+        true => match get_hardware_info(rita_client.network.device) {
+            Ok(info) => Some(info),
+            Err(e) => {
+                error!("Failed to get hardware info with {:?}", e);
+                None
+            }
+        },
+        false => None,
     };
 
     let client = awc::Client::default();
