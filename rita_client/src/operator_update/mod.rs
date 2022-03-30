@@ -10,6 +10,7 @@ use althea_kernel_interface::opkg_feeds::CUSTOMFEEDS;
 use althea_types::get_sequence_num;
 use althea_types::ContactStorage;
 use althea_types::ContactType;
+use althea_types::HardwareInfo;
 use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use rita_common::tunnel_manager::shaping::flag_reset_shaper;
@@ -179,6 +180,8 @@ async fn checkin() {
         false => None,
     };
 
+    hardware_info_logs(&hardware_info);
+
     let client = awc::Client::default();
     let response = client
         .post(url)
@@ -246,6 +249,34 @@ async fn checkin() {
     //Every tick, update the local router update instructions
     set_router_update_instruction(new_settings.local_update_instruction.clone());
     perform_operator_update(new_settings, rita_client, network)
+}
+
+/// logs some hardware info that may help debug this router
+fn hardware_info_logs(info: &Option<HardwareInfo>) {
+    if let Some(info) = info {
+        info!(
+            "HardwareInfo: Allocated memory {}/{}",
+            info.allocated_memory, info.system_memory
+        );
+        info!(
+            "HardwareInfo: 15 minute load average {}",
+            info.load_avg_fifteen_minute
+        );
+        info!("HardwareInfo: logical cores {}", info.logical_processors);
+        info!("HardwareInfo: model {}", info.model);
+        info!("HardwareInfo: uptime {}", info.system_uptime.as_secs());
+        let mut total_wifi_clients = 0;
+        for wifi in info.wifi_devices.iter() {
+            for _ in wifi.station_data.iter() {
+                total_wifi_clients += 1;
+            }
+        }
+        info!("HardwareInfo: total wifi clients {}", total_wifi_clients);
+        info!(
+            "HardwareInfo: Kernel version {}",
+            info.system_kernel_version,
+        );
+    }
 }
 
 /// checks the operatoraction and performs it, if any.
