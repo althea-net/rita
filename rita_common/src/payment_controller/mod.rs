@@ -16,7 +16,9 @@ use std::time::Instant;
 use web30::client::Web3;
 use web30::types::SendTxOption;
 
-use crate::blockchain_oracle::{get_oracle_latest_gas_price, get_oracle_nonce, set_oracle_nonce};
+use crate::blockchain_oracle::{
+    get_oracle_balance, get_oracle_latest_gas_price, get_oracle_nonce, set_oracle_nonce,
+};
 use crate::debt_keeper::payment_failed;
 use crate::payment_validator::{validate_later, ToValidate};
 use crate::rita_loop::get_web3_server;
@@ -141,7 +143,7 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
     let common = settings::get_rita_common();
     let network_settings = common.network;
     let payment_settings = common.payment;
-    let balance = payment_settings.balance.clone();
+    let balance = get_oracle_balance();
     let nonce = get_oracle_nonce();
     let gas_price = get_oracle_latest_gas_price();
     let our_private_key = &payment_settings
@@ -153,21 +155,32 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
         "current balance: {:?}, payment of {:?}, from address {} to address {} with nonce {}",
         balance, pmt.amount, our_address, pmt.to.eth_address, nonce
     );
-    if balance < pmt.amount {
-        warn!("Not enough money to pay debts! Cutoff imminent");
-        // having this here really doesn't matter much, either we
-        // tell debt keeper the payment failed and it enqueues another
-        // that also won't succeed right away, or it waits for the timeout
-        // and does the same thing.
-        payment_failed(pmt.to);
-        return Err(PaymentControllerError::InsufficientFunds {
-            amount: pmt.amount,
-            balance,
-        });
-    } else if pmt.amount == 0u32.into() {
-        // in this case we just drop the tx, no retry no other messages
-        error!("Trying to pay nothing!");
-        return Err(PaymentControllerError::ZeroPayment);
+    match balance.clone() {
+        Some(value) => {
+            if value < pmt.amount {
+                warn!("Not enough money to pay debts! Cutoff imminent");
+                // having this here really doesn't matter much, either we
+                // tell debt keeper the payment failed and it enqueues another
+                // that also won't succeed right away, or it waits for the timeout
+                // and does the same thing.
+                payment_failed(pmt.to);
+                return Err(PaymentControllerError::InsufficientFunds {
+                    amount: pmt.amount,
+                    balance: balance.unwrap_or_else(|| 0u64.into()),
+                });
+            } else if pmt.amount == 0u32.into() {
+                // in this case we just drop the tx, no retry no other messages
+                error!("Trying to pay nothing!");
+                return Err(PaymentControllerError::ZeroPayment);
+            }
+        }
+        None => {
+            warn!("Balance is none");
+            return Err(PaymentControllerError::InsufficientFunds {
+                amount: pmt.amount,
+                balance: balance.unwrap_or_else(|| 0u64.into()),
+            });
+        }
     }
 
     // testing hack

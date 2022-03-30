@@ -1,7 +1,7 @@
 use crate::localization::LocalizationSettings;
 use crate::network::NetworkSettings;
 use crate::payment::PaymentSettings;
-use crate::{json_merge, set_rita_exit, spawn_watch_thread_exit, SettingsError};
+use crate::{json_merge, set_rita_exit, SettingsError};
 use althea_types::{Identity, WgKey};
 use config::Config;
 use core::str::FromStr;
@@ -84,6 +84,9 @@ fn default_balance_notification_email_body() -> String {
 
 fn default_remote_log() -> bool {
     false
+}
+fn default_save_interval() -> u64 {
+    300
 }
 
 /// These are the settings for email verification
@@ -181,6 +184,9 @@ pub struct RitaExitSettingsStruct {
     pub verif_settings: Option<ExitVerifSettings>,
     #[serde(skip)]
     pub future: bool,
+    /// The save interval defaults to 5 minutes for exit settings represented in seconds
+    #[serde(default = "default_save_interval")]
+    pub save_interval: u64,
 }
 
 impl RitaExitSettingsStruct {
@@ -199,6 +205,7 @@ impl RitaExitSettingsStruct {
             allowed_countries: HashSet::new(),
             verif_settings: None,
             future: false,
+            save_interval: default_save_interval(),
         }
     }
 
@@ -242,8 +249,6 @@ impl RitaExitSettingsStruct {
         let settings: Self = s.try_into()?;
 
         set_rita_exit(settings.clone());
-
-        spawn_watch_thread_exit(settings.clone(), file_name);
 
         Ok(settings)
     }

@@ -2,7 +2,7 @@ use actix_web_async::http::StatusCode;
 use actix_web_async::web::Path;
 use actix_web_async::{HttpRequest, HttpResponse};
 use althea_types::SystemChain;
-use rita_common::blockchain_oracle::set_oracle_net_version;
+use rita_common::blockchain_oracle::{set_oracle_balance, set_oracle_net_version};
 use settings::payment::PaymentSettings;
 use settings::payment::ETH_FEE_MULTIPLIER;
 use settings::payment::XDAI_FEE_MULTIPLIER;
@@ -48,7 +48,7 @@ pub fn set_system_blockchain(id: SystemChain, payment: &mut PaymentSettings) {
             payment.system_chain = SystemChain::Ethereum;
             payment.withdraw_chain = SystemChain::Ethereum;
             // reset balance so that things take effect immediatley in the UI
-            payment.balance = 0u32.into();
+            set_oracle_balance(Some(0u32.into()));
             payment.dynamic_fee_multiplier = ETH_FEE_MULTIPLIER;
         }
         SystemChain::Xdai => {
@@ -57,7 +57,8 @@ pub fn set_system_blockchain(id: SystemChain, payment: &mut PaymentSettings) {
             payment.system_chain = SystemChain::Xdai;
             payment.withdraw_chain = SystemChain::Xdai;
             // reset balance so that things take effect immediatley in the UI
-            payment.balance = 0u32.into();
+            set_oracle_balance(Some(0u32.into()));
+
             payment.dynamic_fee_multiplier = XDAI_FEE_MULTIPLIER;
         }
         SystemChain::Rinkeby => {
@@ -67,7 +68,7 @@ pub fn set_system_blockchain(id: SystemChain, payment: &mut PaymentSettings) {
             payment.system_chain = SystemChain::Rinkeby;
             payment.withdraw_chain = SystemChain::Rinkeby;
             // reset balance so that things take effect immediatley in the UI
-            payment.balance = 0u32.into();
+            set_oracle_balance(Some(0u32.into()));
             payment.dynamic_fee_multiplier = ETH_FEE_MULTIPLIER;
         }
     }

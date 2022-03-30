@@ -3,7 +3,7 @@ use crate::logging::LoggingSettings;
 use crate::network::NetworkSettings;
 use crate::operator::OperatorSettings;
 use crate::payment::PaymentSettings;
-use crate::{json_merge, set_rita_client, spawn_watch_thread_client, SettingsError};
+use crate::{json_merge, set_rita_client, SettingsError};
 use althea_types::wg_key::WgKey;
 use althea_types::{ContactStorage, ExitState, Identity};
 use clarity::Address;
@@ -17,6 +17,10 @@ pub const APP_NAME: &str = "rita";
 
 pub fn default_app_name() -> String {
     APP_NAME.to_string()
+}
+
+pub fn default_save_interval() -> u64 {
+    172800
 }
 
 pub fn default_config_path() -> String {
@@ -162,8 +166,6 @@ impl RitaClientSettings {
 
         set_rita_client(settings.clone());
 
-        spawn_watch_thread_client(settings.clone(), file_name);
-
         Ok(settings)
     }
 
@@ -192,6 +194,9 @@ pub struct RitaClientSettings {
     pub future: bool,
     #[serde(default = "default_app_name")]
     pub app_name: String,
+    /// The save interval defaults to 48 hours for exit settings represented in seconds
+    #[serde(default = "default_save_interval")]
+    pub save_interval: u64,
 }
 
 impl RitaClientSettings {

@@ -21,6 +21,7 @@ use babel_monitor::BabelMonitorError;
 
 use dummy::dummy_selected_exit_details;
 
+use rita_common::blockchain_oracle::get_oracle_balance;
 use rita_common::network_monitor::get_network_info;
 use rita_common::network_monitor::GetNetworkInfo;
 use rita_common::tunnel_manager::Neighbor as RitaNeighbor;
@@ -344,7 +345,7 @@ fn send_udp_heartbeat_packet(
     let message = HeartbeatMessage {
         id: our_id,
         organizer_address: settings::get_rita_client().operator.operator_address,
-        balance: payment.balance.clone(),
+        balance: get_oracle_balance(),
         exit_dest_price: exit_price + exit_route.price as u64,
         upstream_id: exit_neighbor_id,
         exit_route,

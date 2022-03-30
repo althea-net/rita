@@ -53,7 +53,7 @@ fn default_system_chain() -> SystemChain {
 }
 
 fn default_debts_file() -> String {
-    "/etc/rita-debts.json".to_string()
+    "/etc/rita-debts.bincode".to_string()
 }
 
 fn default_simulated_transaction_fee_address() -> Address {
@@ -107,8 +107,6 @@ pub struct PaymentSettings {
     pub eth_private_key: Option<PrivateKey>,
     // Our own eth Address, derived from the private key on startup and not stored
     pub eth_address: Option<Address>,
-    #[serde(default)]
-    pub balance: Uint256,
     /// A list of nodes to query for blockchain data
     /// this is kept seperate from the version for DAO settings node
     /// list in order to allow for the DAO and payments to exist on different
@@ -172,7 +170,6 @@ impl Default for PaymentSettings {
             balance_warning_level: default_balance_warning_level(),
             eth_private_key: None,
             eth_address: None,
-            balance: 0u64.into(),
             node_list: default_node_list(),
             system_chain: default_system_chain(),
             withdraw_chain: default_system_chain(),

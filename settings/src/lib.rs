@@ -27,8 +27,6 @@ use std::fs::File;
 use std::io::Write;
 use std::net::{IpAddr, Ipv6Addr};
 use std::sync::{Arc, RwLock};
-use std::thread;
-use std::time::Duration;
 
 pub mod client;
 pub mod exit;
@@ -156,6 +154,20 @@ pub fn save_settings_on_shutdown() {
     }
 
     info!("Shutdown: saving settings");
+}
+
+pub fn save_exit_settings(new_settings: RitaExitSettingsStruct, file_path: String) {
+    if let Err(e) = new_settings.write(&file_path) {
+        warn!("writing updated exit config failed {:?}", e);
+    }
+    log::info!("Exit Config/settings is being saved to");
+}
+
+pub fn save_client_settings(new_settings: RitaClientSettings, file_path: String) {
+    if let Err(e) = new_settings.write(&file_path) {
+        warn!("writing updated client config failed {:?}", e);
+    }
+    log::info!("Client Config/settings is being saved to");
 }
 
 /// get a JSON value of all settings
@@ -297,6 +309,16 @@ pub fn get_rita_exit() -> RitaExitSettingsStruct {
     }
 }
 
+/// This code checks to see if the current device/setting is an exit or not
+pub fn check_if_exit() -> bool {
+    match &*SETTINGS.read().unwrap() {
+        Some(Settings::Adaptor(_)) => false,
+        Some(Settings::Client(_)) => false,
+        Some(Settings::Exit(_)) => true,
+        None => false,
+    }
+}
+
 /// This merges 2 json objects, overwriting conflicting values in `a`
 pub fn json_merge(a: &mut Value, b: &Value) {
     match (a, b) {
@@ -309,55 +331,6 @@ pub fn json_merge(a: &mut Value, b: &Value) {
             *a = b.clone();
         }
     }
-}
-
-/// Spawns a thread that will grab a copy of the updated RitaSettings
-/// struct and then write it to the disk, if it changes every so often
-/// currently this period is 600 seconds or 10 minutes per write. The value
-/// should be kept low on routers due to low write endurance of storage
-fn spawn_watch_thread_client(settings: RitaClientSettings, file_path: &str) {
-    let file_path = file_path.to_string();
-
-    thread::spawn(move || {
-        let mut old_settings = settings.clone();
-        loop {
-            thread::sleep(Duration::from_secs(600));
-
-            let new_settings = get_rita_client();
-
-            if old_settings != new_settings {
-                if let Err(e) = new_settings.write(&file_path) {
-                    warn!("writing updated config failed {:?}", e);
-                }
-                old_settings = new_settings.clone();
-            }
-        }
-    });
-}
-
-/// Spawns a thread that will grab a copy of the updated RitaSettings
-/// struct and then write it to the disk, if it changes every so often
-/// currently this period is 600 seconds or 10 minutes per write. The value
-/// should be kept low on routers due to low write endurance of storage
-fn spawn_watch_thread_exit(settings: RitaExitSettingsStruct, file_path: &str) {
-    let file_path = file_path.to_string();
-
-    thread::spawn(move || {
-        let mut old_settings = settings.clone();
-        loop {
-            thread::sleep(Duration::from_secs(600));
-
-            let new_settings = get_rita_exit();
-
-            if old_settings != new_settings {
-                trace!("writing updated config: {:?}", new_settings);
-                if let Err(e) = new_settings.write(&file_path) {
-                    warn!("writing updated config failed {:?}", e);
-                }
-                old_settings = new_settings.clone();
-            }
-        }
-    });
 }
 
 /// FileWrite does the actual write of settings to disk.

@@ -77,6 +77,7 @@ pub struct BlockchainOracle {
     pub nonce: Uint256,
     pub net_version: u64,
     pub gas_info: GasInfo,
+    pub balance: Option<Uint256>,
 }
 
 /// This struct contains important information to determine when a router should be paying and when it should be enforcing on
@@ -121,6 +122,7 @@ impl BlockchainOracle {
             //xdai by default
             net_version: default_net_version(),
             gas_info: GasInfo::default(),
+            balance: None,
         }
     }
 }
@@ -162,6 +164,10 @@ pub fn get_oracle_net_version() -> u64 {
     ORACLE.read().unwrap().net_version
 }
 
+pub fn get_oracle_balance() -> Option<Uint256> {
+    ORACLE.read().unwrap().balance.clone()
+}
+
 // Oracle setters
 pub fn set_oracle_gas_info(info: GasInfo) {
     ORACLE.write().unwrap().gas_info = info;
@@ -173,6 +179,9 @@ pub fn set_oracle_nonce(n: Uint256) {
 
 pub fn set_oracle_net_version(net_v: u64) {
     ORACLE.write().unwrap().net_version = net_v;
+}
+pub fn set_oracle_balance(new_balance: Option<Uint256>) {
+    ORACLE.write().unwrap().balance = new_balance
 }
 
 pub async fn update() {
@@ -193,9 +202,11 @@ async fn update_blockchain_info(our_address: Address, web3: Web3, full_node: Str
     let gas_price = web3.eth_gas_price();
     let (balance, nonce, net_version, gas_price) =
         join4(balance, nonce, net_version, gas_price).await;
+
     let mut settings = settings::get_rita_common();
+
     match balance {
-        Ok(balance) => update_balance(&full_node, &mut settings.payment.balance, balance),
+        Ok(balance) => update_balance(&full_node, balance),
         Err(e) => warn!("Failed to update balance with {:?}", e),
     }
     match gas_price {
@@ -218,13 +229,14 @@ async fn update_blockchain_info(our_address: Address, web3: Web3, full_node: Str
 /// Gets the balance for the provided eth address and updates it
 /// in the global SETTING variable, do not use this function as a generic
 /// balance getter.
-fn update_balance(full_node: &str, our_balance: &mut Uint256, new_balance: Uint256) {
+fn update_balance(full_node: &str, new_balance: Uint256) {
     let value = new_balance;
+
     info!(
         "Got response from {} balance request {:?}",
         full_node, value
     );
-    *our_balance = value;
+    set_oracle_balance(Some(value));
 }
 
 /// Updates the net_version in our global setting variable, this function
@@ -323,10 +335,13 @@ fn update_gas_price(
 /// if the system should go into low balance mode
 pub fn low_balance() -> bool {
     let payment_settings = settings::get_rita_common().payment;
-    let balance = payment_settings.balance.clone();
+    let balance = get_oracle_balance();
     let balance_warning_level = payment_settings.balance_warning_level;
 
-    balance < balance_warning_level
+    match balance {
+        Some(val) => val < balance_warning_level,
+        None => false,
+    }
 }
 
 #[cfg(test)]

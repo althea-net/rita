@@ -1,3 +1,4 @@
+use crate::blockchain_oracle::get_oracle_balance;
 use crate::blockchain_oracle::get_oracle_latest_gas_price;
 use crate::blockchain_oracle::get_oracle_nonce;
 use crate::rita_loop::get_web3_server;
@@ -34,13 +35,16 @@ fn withdraw_handler(address: Address, amount: Option<Uint256>) -> HttpResponse {
     let system_chain = payment_settings.system_chain;
     let withdraw_chain = payment_settings.withdraw_chain;
     let mut gas_price = get_oracle_latest_gas_price();
-    let balance = payment_settings.balance;
+    let balance = get_oracle_balance();
 
     // if no amount is specified we are withdrawing our entire balance
     let mut amount = if let Some(amount) = amount {
         amount
     } else {
-        balance.clone()
+        match balance.clone() {
+            Some(value) => value,
+            None => return HttpResponse::BadRequest().finish(),
+        }
     };
 
     let tx_gas: Uint256 =
@@ -54,8 +58,13 @@ fn withdraw_handler(address: Address, amount: Option<Uint256>) -> HttpResponse {
         };
 
     let tx_cost = gas_price * tx_gas;
-    if amount.clone() + tx_cost.clone() >= balance {
-        amount = balance - tx_cost;
+    match balance {
+        Some(value) => {
+            if amount.clone() + tx_cost.clone() >= value {
+                amount = value - tx_cost;
+            }
+        }
+        None => error!("Unable to retrieve balance for withdrawing"),
     }
 
     match (system_chain, withdraw_chain) {

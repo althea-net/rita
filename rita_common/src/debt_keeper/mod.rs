@@ -23,9 +23,9 @@ use althea_types::{Identity, PaymentTx};
 use num256::{Int256, Uint256};
 use num_traits::identities::Zero;
 use num_traits::Signed;
-use serde_json::Error as SerdeError;
 
 use std::collections::HashMap;
+use std::fs;
 use std::fs::File;
 use std::io::Error as IOError;
 use std::io::Read;
@@ -33,9 +33,6 @@ use std::io::Write;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use std::time::Instant;
-
-/// How often we save the nodes debt data, currently 30 minutes
-const SAVE_FREQUENCY: Duration = Duration::from_secs(1800);
 
 lazy_static! {
     /// A locked global ref containing the state for this module. Note that the default implementation
@@ -237,8 +234,6 @@ pub enum DebtAction {
 
 pub fn send_debt_update() -> Result<(), RitaCommonError> {
     let mut dk = DEBT_DATA.write().unwrap();
-    trace!("sending debt keeper update");
-    dk.save_if_needed();
 
     // in order to keep from overloading actix when we have thousands of debts to process
     // (mainly on exits) we batch tunnel change operations before sending them over
@@ -282,46 +277,90 @@ pub fn send_debt_update() -> Result<(), RitaCommonError> {
     Ok(())
 }
 
+/// deserialize debt data from bincode format
+fn deserialize_from_binary(file_path: String) -> Option<DebtDataSer> {
+    let file = fs::read(file_path);
+    match file {
+        Ok(file) => {
+            let deserialized_binary: DebtDataSer = match bincode::deserialize(&file) {
+                Ok(value) => value,
+                Err(val) => {
+                    error!("Failed to deserialize debts file via bincode {:?}", val);
+                    Vec::new()
+                }
+            };
+            Some(deserialized_binary)
+        }
+        Err(e) => {
+            error!("Failed to deserialize debts file via binary{:?}", e);
+            None
+        }
+    }
+}
+
+/// deserialize debt data from json format
+fn deserialize_from_json(file_path: String) -> Option<DebtDataSer> {
+    let file = File::open(file_path);
+    match file {
+        Ok(mut file) => {
+            let mut contents = String::new();
+            match file.read_to_string(&mut contents) {
+                Ok(_bytes_read) => {
+                    let deserialized_json = match serde_json::from_str(&contents) {
+                        Ok(value) => value,
+                        Err(e) => {
+                            error!("Failed to deserialize debts file via json{:?}", e);
+                            Vec::new()
+                        }
+                    };
+                    Some(deserialized_json)
+                }
+                Err(e) => {
+                    error!("Failed to read debts file! {:?}", e);
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            error!("Failed to open debts file! {:?}", e);
+            None
+        }
+    }
+}
+
 impl Default for DebtKeeper {
     fn default() -> DebtKeeper {
-        let common = settings::get_rita_common();
         assert!(get_oracle_pay_thresh() >= Int256::zero());
         assert!(get_oracle_close_thresh() <= Int256::zero());
-        let file = File::open(common.payment.debts_file);
         // if the loading process goes wrong for any reason, we just start again
         let blank_debt_keeper = DebtKeeper {
             last_save: None,
             debt_data: HashMap::new(),
         };
 
-        match file {
-            Ok(mut file) => {
-                let mut contents = String::new();
-                match file.read_to_string(&mut contents) {
-                    Ok(_bytes_read) => {
-                        let deserialized: Result<DebtDataSer, SerdeError> =
-                            serde_json::from_str(&contents);
-
-                        match deserialized {
-                            Ok(value) => DebtKeeper {
-                                last_save: None,
-                                debt_data: ser_to_debt_data(value),
-                            },
-                            Err(e) => {
-                                error!("Failed to deserialize debts file {:?}", e);
-                                blank_debt_keeper
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        error!("Failed to read debts file! {:?}", e);
-                        blank_debt_keeper
-                    }
-                }
-            }
-            Err(e) => {
-                error!("Failed to open debts file! {:?}", e);
+        let deserialized_binary =
+            deserialize_from_binary(settings::get_rita_common().payment.debts_file);
+        let deserialized_json =
+            deserialize_from_json(settings::get_rita_common().payment.debts_file);
+        match (deserialized_binary, deserialized_json) {
+            (None, None) => {
+                error!("Unable to deserialize file from json and binary");
                 blank_debt_keeper
+            }
+            (None, Some(val)) => DebtKeeper {
+                last_save: None,
+                debt_data: ser_to_debt_data(val),
+            },
+            (Some(val), None) => DebtKeeper {
+                last_save: None,
+                debt_data: ser_to_debt_data(val),
+            },
+            (Some(val), Some(_)) => {
+                log::info!("File is both binary and json");
+                DebtKeeper {
+                    last_save: None,
+                    debt_data: ser_to_debt_data(val),
+                }
             }
         }
     }
@@ -339,14 +378,15 @@ impl DebtKeeper {
         }
     }
 
-    fn save_if_needed(&mut self) {
+    pub fn save_if_needed(&mut self, save_frequency: Duration) {
         match self.last_save {
             Some(val) => {
-                if Instant::now() - val > SAVE_FREQUENCY {
+                if Instant::now() - val > save_frequency {
                     if let Err(e) = self.save() {
                         error!("Failed to save debts {:?}", e);
                     } else {
                         self.last_save = Some(Instant::now());
+                        info!("Writing to disk the save data");
                     }
                 }
             }
@@ -361,10 +401,19 @@ impl DebtKeeper {
     }
 
     fn save(&mut self) -> Result<(), IOError> {
+        let mut new_settings = settings::get_rita_common();
+        let mut file_path: String = new_settings.payment.debts_file;
         // convert to the serializeable format and dump to the disk
-        let serialized = serde_json::to_string(&debt_data_to_ser(self.debt_data.clone()))?;
-        let mut file = File::create(settings::get_rita_common().payment.debts_file)?;
-        file.write_all(serialized.as_bytes())
+        if file_path.ends_with("json") {
+            file_path.drain(0..file_path.len() - 4);
+            file_path.push_str("bincode");
+        }
+        new_settings.payment.debts_file = file_path.clone();
+        settings::set_rita_common(new_settings);
+
+        let serialized = bincode::serialize(&debt_data_to_ser(self.debt_data.clone())).unwrap();
+        let mut file = File::create(file_path)?;
+        file.write_all(&serialized)
     }
 
     fn get_debts(&self) -> DebtData {
@@ -615,6 +664,13 @@ impl DebtKeeper {
             }
         }
     }
+}
+
+/// Saves the debt keeper to disk
+pub fn save_debt_to_disk(save_frequency: Duration) {
+    let mut dk = DEBT_DATA.write().unwrap();
+    trace!("sending debt keeper update");
+    dk.save_if_needed(save_frequency);
 }
 
 /// On an interupt (SIGTERM), saving debtkeeper before exiting

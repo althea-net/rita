@@ -16,8 +16,8 @@
 
 use althea_types::Identity;
 use althea_types::PaymentTx;
-use num256::Int256;
 use num256::Uint256;
+use rita_common::blockchain_oracle::get_oracle_balance;
 use rita_common::blockchain_oracle::get_oracle_latest_gas_price;
 use rita_common::blockchain_oracle::get_oracle_nonce;
 use rita_common::blockchain_oracle::get_oracle_pay_thresh;
@@ -73,7 +73,7 @@ pub async fn tick_operator_payments() {
     let payment_settings = common.payment;
     let eth_private_key = payment_settings.eth_private_key.unwrap();
     let eth_address = payment_settings.eth_address.unwrap();
-    let our_balance = payment_settings.balance.clone();
+    let our_balance = get_oracle_balance();
     let gas_price = get_oracle_latest_gas_price();
     let nonce = get_oracle_nonce();
     let pay_threshold = get_oracle_pay_thresh();
@@ -95,8 +95,8 @@ pub async fn tick_operator_payments() {
 
     // we should pay if the amount is greater than the pay threshold and if we have the
     // balance to do so.
-    let should_pay = amount_to_pay.to_int256().unwrap_or_else(|| Int256::from(0)) > pay_threshold
-        && amount_to_pay <= our_balance;
+    let should_pay = amount_to_pay.to_int256().unwrap_or_else(|| 0u64.into()) > pay_threshold
+        && amount_to_pay <= our_balance.clone().unwrap_or_else(|| 0u64.into());
     trace!("We should pay our operator {}", should_pay);
 
     if should_pay {
