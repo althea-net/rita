@@ -4,6 +4,7 @@ use arrayvec::ArrayString;
 use babel_monitor::Neighbor as NeighborLegacy;
 use babel_monitor::Route as RouteLegacy;
 use clarity::Address;
+use ipnetwork::IpNetwork;
 use num256::Uint256;
 use std::collections::hash_map::DefaultHasher;
 use std::fmt;
@@ -277,6 +278,7 @@ pub struct ExitDetails {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct ExitClientDetails {
     pub client_internal_ip: IpAddr,
+    pub internet_ipv6_subnet: IpNetwork,
 }
 
 /// This is all the data we need to give a neighbor to open a wg connection
