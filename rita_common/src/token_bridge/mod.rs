@@ -760,6 +760,7 @@ mod tests {
     /// This function not currently in use and we instead use check_relayed_message because of simplicity, but simulate_signature_submission() is also functional and
     /// checks the same thing as check_relayed_message() does.
     #[test]
+    #[ignore]
     fn test_simulate_unlock_funds() {
         let pk = PrivateKey::from_str(&format!(
             "983aa7cb3e22b5aa8425facb9703a{}e04bd829e675b{}e5df",
