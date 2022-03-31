@@ -328,6 +328,7 @@ dependencies = [
  "base64 0.13.0",
  "clarity",
  "hex",
+ "ipnetwork 0.18.0",
  "lettre",
  "num256",
  "phonenumber",

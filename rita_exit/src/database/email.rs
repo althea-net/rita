@@ -91,8 +91,15 @@ pub fn handle_email_registration(
             Ok(ip) => ip,
             Err(e) => return Err(RitaExitError::AddrParseError(e)),
         };
+        let client_internet_ipv6_subnet = match their_record.internet_ipv6.parse() {
+            Ok(sub) => sub,
+            Err(e) => return Err(RitaExitError::IpNetworkError(e)),
+        };
         Ok(ExitState::Registered {
-            our_details: ExitClientDetails { client_internal_ip },
+            our_details: ExitClientDetails {
+                client_internal_ip,
+                internet_ipv6_subnet: client_internet_ipv6_subnet,
+            },
             general_details: get_exit_info(),
             message: "Registration OK".to_string(),
         })
