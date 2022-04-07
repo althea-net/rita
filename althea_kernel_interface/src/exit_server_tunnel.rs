@@ -39,8 +39,6 @@ impl dyn KernelInterface {
             args.push(format!("[{}]:{}", c.mesh_ip, c.port));
             args.push("allowed-ips".into());
             args.push(format!("{}", c.internal_ip));
-            args.push("persistent-keepalive".into());
-            args.push("5".into());
 
             client_pubkeys.insert(c.public_key);
         }
