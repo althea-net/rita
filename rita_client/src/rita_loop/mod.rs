@@ -5,6 +5,7 @@
 //! tunnel if the signup was successful on the selected exit.
 
 use crate::exit_manager::exit_manager_tick;
+use crate::exit_manager::get_current_selected_exit;
 use crate::heartbeat::send_heartbeat_loop;
 use crate::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::light_client_manager::lcm_watch;
@@ -156,10 +157,7 @@ fn check_for_gateway_client_billing_corner_case() {
                 // we have a neighbor who is also our selected exit!
                 // wg_key excluded due to multihomed exits having a different one
                 if neigh.identity.global.mesh_ip
-                    == exit
-                        .selected_exit
-                        .selected_id
-                        .expect("Expected exit ip, none present")
+                    == get_current_selected_exit().expect("Expected exit ip, none present")
                     && neigh.identity.global.eth_address == exit.eth_address
                 {
                     info!("We are a gateway client");

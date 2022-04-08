@@ -36,7 +36,7 @@ use exit_switcher::{get_babel_routes, set_best_exit};
 
 use rita_common::blockchain_oracle::low_balance;
 use rita_common::KI;
-use settings::client::ExitServer;
+use settings::client::{ExitServer, SelectedExit};
 use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
@@ -71,10 +71,50 @@ pub struct ExitBlacklist {
 /// An actor which pays the exit
 #[derive(Default)]
 pub struct ExitManager {
-    // used to determine if we've changed exits
-    pub last_exit: Option<ExitServer>,
     pub nat_setup: bool,
+    /// This struct hold infomation about exits that have misbehaved and are blacklisted, or are being watched
+    /// to being blacklisted through bad responses.
     pub exit_blacklist: ExitBlacklist,
+    /// Struct containing information of current exit we are connected to and tracking exit, if connected to one
+    /// It also holds information about metrics and degradation values. Look at doc comment on 'set_best_exit' for more
+    /// information on what these mean
+    pub selected_exit: SelectedExit,
+}
+
+pub fn get_current_selected_exit() -> Option<IpAddr> {
+    EXIT_MANAGER.read().unwrap().selected_exit.selected_id
+}
+
+pub fn get_current_selected_exit_metric() -> Option<u16> {
+    EXIT_MANAGER
+        .read()
+        .unwrap()
+        .selected_exit
+        .selected_id_metric
+}
+
+pub fn get_current_selected_exit_tracking() -> Option<IpAddr> {
+    EXIT_MANAGER.read().unwrap().selected_exit.tracking_exit
+}
+
+pub fn get_current_selected_exit_degradation() -> Option<u16> {
+    EXIT_MANAGER
+        .read()
+        .unwrap()
+        .selected_exit
+        .selected_id_degradation
+}
+
+pub fn set_current_selected_exit(exit_info: SelectedExit) {
+    EXIT_MANAGER.write().unwrap().selected_exit = exit_info
+}
+
+pub fn set_em_nat(val: bool) {
+    EXIT_MANAGER.write().unwrap().nat_setup = val;
+}
+
+pub fn get_em_nat() -> bool {
+    EXIT_MANAGER.read().unwrap().nat_setup
 }
 
 fn linux_setup_exit_tunnel(
@@ -93,7 +133,7 @@ fn linux_setup_exit_tunnel(
 
     let args = ClientExitTunnelConfig {
         endpoint: SocketAddr::new(
-            current_exit.selected_exit.selected_id.unwrap(),
+            get_current_selected_exit().unwrap(),
             general_details.wg_exit_port,
         ),
         pubkey: current_exit.wg_public_key,
@@ -346,9 +386,13 @@ async fn exit_general_details_request(exit: String) -> Result<(), RitaClientErro
         }
     };
 
-    let current_exit_ip = match current_exit.selected_exit.selected_id {
+    let current_exit_ip = match get_current_selected_exit() {
         Some(a) => a,
-        None => return Err(RitaClientError::NoExitError(exit)),
+        // When none, set to default subnet IP address
+        None => {
+            trace!("No ip selected, choosing default subnet ip");
+            current_exit.subnet.ip()
+        }
     };
 
     let endpoint = SocketAddr::new(current_exit_ip, current_exit.registration_port);
@@ -372,9 +416,11 @@ pub async fn exit_setup_request(exit: String, code: Option<String>) -> Result<()
         None => return Err(RitaClientError::ExitNotFound(exit)),
     };
 
-    let current_exit_ip = match current_exit.selected_exit.selected_id {
+    let current_exit_ip = match get_current_selected_exit() {
         Some(a) => a,
-        None => return Err(RitaClientError::NoExitIPError(exit)),
+        // There is not exit selected yet, so we selected the default exit ip
+        // This only works if subnet ip is set to default ip
+        None => current_exit.subnet.ip(),
     };
 
     let exit_server = current_exit_ip;
@@ -469,7 +515,7 @@ async fn exit_status_request(exit: String) -> Result<(), RitaClientError> {
         }
     };
 
-    let current_exit_ip = match current_exit.selected_exit.selected_id {
+    let current_exit_ip = match get_current_selected_exit() {
         Some(a) => a,
         None => return Err(RitaClientError::NoExitError(exit)),
     };
@@ -519,9 +565,10 @@ fn correct_default_route(input: Option<DefaultRoute>) -> bool {
 pub async fn exit_manager_tick() {
     info!("Exit_Switcher: exit manager tick");
     let client_can_use_free_tier = { settings::get_rita_client().payment.client_can_use_free_tier };
+    let last_exit = get_current_selected_exit();
 
     //  Get mut rita client server to setup exits
-    let mut rita_client = settings::get_rita_client();
+    let rita_client = settings::get_rita_client();
     let current_exit = match rita_client.clone().exit_client.current_exit {
         Some(a) => a,
         None => "".to_string(),
@@ -550,7 +597,7 @@ pub async fn exit_manager_tick() {
             };
 
             info!("Exit_Switcher: Calling set best exit");
-            let selected_exit = match set_best_exit(exit_subnet, routes, exit) {
+            let selected_exit = match set_best_exit(exit_subnet, routes) {
                 Ok(a) => Some(a),
                 Err(e) => {
                     warn!("Found no exit yet : {}", e);
@@ -558,55 +605,36 @@ pub async fn exit_manager_tick() {
                 }
             };
 
-            //set in rita client
-            let exit = exit.clone();
-            rita_client.exit_client.exits = exits;
-            settings::set_rita_client(rita_client);
-
-            info!("Exit_Switcher: After selecting best exit this tick, we have selected_id: {:?}, selected_metric: {:?}, tracking_ip: {:?}", exit.clone().selected_exit.selected_id, exit.clone().selected_exit.selected_id_metric, exit.clone().selected_exit.tracking_exit);
+            info!("Exit_Switcher: After selecting best exit this tick, we have selected_id: {:?}, selected_metric: {:?}, tracking_ip: {:?}", get_current_selected_exit(), get_current_selected_exit_metric(), get_current_selected_exit_tracking());
 
             // Determine states to setup tunnels
-            let mut writer = &mut *EXIT_MANAGER.write().unwrap();
             let signed_up_for_exit = exit.info.our_details().is_some();
-            let exit_has_changed = !(writer.last_exit.is_some()
-                && writer
-                    .last_exit
-                    .clone()
-                    .unwrap()
-                    .selected_exit
-                    .selected_id
-                    .is_some()
-                && writer
-                    .last_exit
-                    .clone()
-                    .unwrap()
-                    .selected_exit
-                    .selected_id
-                    .unwrap()
-                    == selected_exit.unwrap());
+            let exit_has_changed = !(last_exit.is_some()
+                && selected_exit.is_some()
+                && last_exit.unwrap() == selected_exit.unwrap());
             let correct_default_route = correct_default_route(KI.get_default_route());
+            let current_exit_id = get_current_selected_exit();
 
             match (signed_up_for_exit, exit_has_changed, correct_default_route) {
                 (true, true, _) => {
                     trace!("Exit change, setting up exit tunnel");
                     linux_setup_exit_tunnel(
-                        &exit,
+                        exit,
                         &general_details.clone(),
                         exit.info.our_details().unwrap(),
                     )
                     .expect("failure setting up exit tunnel");
-                    writer.nat_setup = true;
-                    writer.last_exit = Some(exit.clone());
+                    set_em_nat(true);
                 }
                 (true, false, false) => {
                     trace!("DHCP overwrite setup exit tunnel again");
                     linux_setup_exit_tunnel(
-                        &exit,
+                        exit,
                         &general_details.clone(),
                         exit.info.our_details().unwrap(),
                     )
                     .expect("failure setting up exit tunnel");
-                    writer.nat_setup = true;
+                    set_em_nat(true);
                 }
                 _ => {}
             }
@@ -615,7 +643,7 @@ pub async fn exit_manager_tick() {
             // this prevents the free tier from being confusing (partially working)
             // when deployments are not interested in having a sufficiently fast one
             let low_balance = low_balance();
-            let nat_setup = writer.nat_setup;
+            let nat_setup = get_em_nat();
             trace!(
                 "client can use free tier {} low balance {}",
                 client_can_use_free_tier,
@@ -627,21 +655,21 @@ pub async fn exit_manager_tick() {
                 (true, false, true) => {
                     trace!("removing exit tunnel!");
                     remove_nat();
-                    writer.nat_setup = false;
+                    set_em_nat(false);
                 }
                 // restore when our balance is not low and our nat is not setup
                 // regardless of the free tier value
                 (false, _, false) => {
                     trace!("restoring exit tunnel!");
                     restore_nat();
-                    writer.nat_setup = true;
+                    set_em_nat(true);
                 }
                 // restore if the nat is not setup and the free tier is enabled
                 // this only happens when settings change under the hood
                 (true, true, false) => {
                     trace!("restoring exit tunnel!");
                     restore_nat();
-                    writer.nat_setup = true;
+                    set_em_nat(true);
                 }
                 _ => {}
             }
@@ -652,7 +680,7 @@ pub async fn exit_manager_tick() {
                 let exit_internal_addr = general_details.clone().server_internal_ip;
                 let exit_port = exit.registration_port;
                 let exit_id = Identity::new(
-                    exit.selected_exit.selected_id.unwrap(),
+                    current_exit_id.expect("There should be a selected mesh ip here"),
                     exit.eth_address,
                     exit.wg_public_key,
                     None,
