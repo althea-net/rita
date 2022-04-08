@@ -11,14 +11,18 @@
 //! 4.) Switch only if another exit has been considered better than our current exit for an extended period of time.
 //!
 //! See doc comment for 'set_best_exit' for a more detailed description of workflow
-use crate::exit_manager::{reset_exit_blacklist, EXIT_MANAGER};
+use crate::exit_manager::{
+    get_current_selected_exit, get_current_selected_exit_degradation,
+    get_current_selected_exit_metric, get_current_selected_exit_tracking, reset_exit_blacklist,
+    set_current_selected_exit, EXIT_MANAGER,
+};
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
 use babel_monitor::{open_babel_stream, parse_routes, Route};
 use ipnetwork::IpNetwork;
 use rita_common::FAST_LOOP_SPEED;
+use settings::client::ExitSwitchingCode;
 use settings::client::SelectedExit;
-use settings::client::{ExitServer, ExitSwitchingCode};
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -188,11 +192,7 @@ impl From<ExitMetrics>
 /// be the current exit we are connected to or a different one. If its a different one we switch to it, else we just clear the vector, and start from (1)
 ///
 /// Look at the enum 'ExitSwitchingCode' to see all state and function 'update_metric_value' to see when these are triggered.
-pub fn set_best_exit(
-    exits: IpNetwork,
-    routes: Vec<Route>,
-    rita_client_exit_ser_ref: &mut ExitServer,
-) -> Result<IpAddr, RitaClientError> {
+pub fn set_best_exit(exits: IpNetwork, routes: Vec<Route>) -> Result<IpAddr, RitaClientError> {
     if routes.is_empty() {
         return Err(RitaClientError::MiscStringError(
             "No routes are found".to_string(),
@@ -201,14 +201,11 @@ pub fn set_best_exit(
 
     // Metric that we advertise which is differnt from babel's advertised metric. Babel_metric - SomeConstant that measures how much our connection degrades the route
     // (ignores the degradation of metric value due to current traffic, unlike the babel Route metric, which smoothens the value)
-    let current_adjusted_metric: u16 = rita_client_exit_ser_ref
-        .selected_exit
-        .selected_id_metric
-        .unwrap_or(u16::MAX);
+    let current_adjusted_metric: u16 = get_current_selected_exit_metric().unwrap_or(u16::MAX);
     // Ip of exit we are currently tracking in lazy static, if present
-    let tracking_exit = rita_client_exit_ser_ref.selected_exit.tracking_exit;
+    let tracking_exit = get_current_selected_exit_tracking();
     // Retrieve current exit ip, if connected
-    let current_exit_ip: Option<IpAddr> = rita_client_exit_ser_ref.selected_exit.selected_id;
+    let current_exit_ip: Option<IpAddr> = get_current_selected_exit();
 
     let exit_map = &mut *EXIT_TRACKER.write().unwrap();
 
@@ -246,7 +243,7 @@ pub fn set_best_exit(
         metric_vec.len(),
         current_adjusted_metric,
         exit_metrics.cur_exit_babel_met,
-        rita_client_exit_ser_ref.selected_exit.selected_id_degradation
+        get_current_selected_exit_degradation()
     );
 
     info!(
@@ -262,12 +259,12 @@ pub fn set_best_exit(
                     "Exit_Switcher: setup all initial exit informaion with selected_id_metric = {}",
                     exit_metrics.best_exit_met
                 );
-                rita_client_exit_ser_ref.selected_exit = SelectedExit {
+                set_current_selected_exit(SelectedExit {
                     selected_id: exit_metrics.best_exit,
                     selected_id_metric: Some(exit_metrics.best_exit_met),
                     selected_id_degradation: None,
                     tracking_exit: exit_metrics.best_exit,
-                };
+                });
                 metric_vec.clear();
                 reset_exit_tracking(exit_map);
                 Ok(a)
@@ -278,18 +275,12 @@ pub fn set_best_exit(
         }
     } else {
         //logic to determine wheter we should switch or not.
-        set_exit_state(
-            rita_client_exit_ser_ref,
-            exit_code,
-            exit_metrics,
-            metric_vec,
-        )
+        set_exit_state(exit_code, exit_metrics, metric_vec)
     }
 }
 
 /// This function looks at the corresponding exit code and makes a decision based on what state we are currently in
 fn set_exit_state(
-    rita_client_exit_ser_ref: &mut ExitServer,
     exit_code: ExitSwitchingCode,
     exit_metrics: ExitMetrics,
     metric_vec: &mut [u16],
@@ -301,50 +292,50 @@ fn set_exit_state(
             // We reach this when we continue with the same exit after 15mins of tracking.
             // Degradation is a measure of how much the route metric degrades after connecting to it
             // We set the degradation value = RelU(babel_metric - our_advertised_metric).
-            rita_client_exit_ser_ref
-                .selected_exit
-                .selected_id_degradation = exit_metrics.cur_exit_babel_met.checked_sub(
-                rita_client_exit_ser_ref
-                    .selected_exit
-                    .selected_id_metric
-                    .expect("No selected Ip metric where there should be one"),
-            );
+            set_current_selected_exit(SelectedExit {
+                selected_id: get_current_selected_exit(),
+                selected_id_metric: get_current_selected_exit_metric(),
+                selected_id_degradation: exit_metrics.cur_exit_babel_met.checked_sub(
+                    get_current_selected_exit_metric()
+                        .expect("No selected Ip metric where there should be one"),
+                ),
+                tracking_exit: get_current_selected_exit_tracking(),
+            });
             Ok(exit_metrics
                 .cur_exit
                 .expect("Ip value expected, none present"))
         }
         ExitSwitchingCode::ContinueCurrent => {
             // set a degradation values if none, else update the current exit advertised values
-            if rita_client_exit_ser_ref
-                .selected_exit
-                .selected_id_degradation
-                .is_none()
-            {
-                let average_metric = calculate_average(metric_vec.to_owned());
+            if get_current_selected_exit_degradation().is_none() {
+                let average_metric = calculate_average(metric_vec.to_vec());
                 // We set degradation value = RelU(average_metric val - our_advertised_metric). Since we know tracking_exit == current_exit,
                 // We can use values in the vector.
-                rita_client_exit_ser_ref
-                    .selected_exit
-                    .selected_id_degradation = average_metric.checked_sub(
-                    rita_client_exit_ser_ref
-                        .selected_exit
-                        .selected_id_metric
-                        .expect("No selected Ip metric where there should be one"),
-                );
+                set_current_selected_exit(SelectedExit {
+                    selected_id: get_current_selected_exit(),
+                    selected_id_metric: get_current_selected_exit_metric(),
+                    selected_id_degradation: average_metric.checked_sub(
+                        get_current_selected_exit_metric()
+                            .expect("No selected Ip metric where there should be one"),
+                    ),
+                    tracking_exit: get_current_selected_exit_tracking(),
+                });
             } else {
                 // We have already set a degradation value, so we continue using the same value until the clock reset
-                let res = exit_metrics.cur_exit_babel_met.checked_sub(
-                    rita_client_exit_ser_ref
-                        .selected_exit
-                        .selected_id_degradation
-                        .unwrap(),
-                );
+                let res = exit_metrics
+                    .cur_exit_babel_met
+                    .checked_sub(get_current_selected_exit_degradation().unwrap());
 
                 // We should not be setting 'selected_id_metric' as None. If we do, that means degradation > current_metric, meaning an error with logic somewhere
                 if res.is_none() {
                     error!("Setting selected_id_metric as none during ExitSwitchingCode::ContinueCurrent. Error with degradation logic");
                 } else {
-                    rita_client_exit_ser_ref.selected_exit.selected_id_metric = res;
+                    set_current_selected_exit(SelectedExit {
+                        selected_id: get_current_selected_exit(),
+                        selected_id_metric: res,
+                        selected_id_degradation: get_current_selected_exit_degradation(),
+                        tracking_exit: get_current_selected_exit_tracking(),
+                    });
                 }
             }
             Ok(exit_metrics
@@ -353,12 +344,12 @@ fn set_exit_state(
         }
         ExitSwitchingCode::SwitchExit => {
             // We swtich to the new exit
-            rita_client_exit_ser_ref.selected_exit = SelectedExit {
+            set_current_selected_exit(SelectedExit {
                 selected_id: exit_metrics.best_exit,
                 selected_id_metric: Some(exit_metrics.best_exit_met),
                 selected_id_degradation: None,
                 tracking_exit: exit_metrics.best_exit,
-            };
+            });
             Ok(exit_metrics
                 .best_exit
                 .expect("Ip value expected, none present"))
@@ -368,7 +359,12 @@ fn set_exit_state(
             .expect("Ip value expected, none present")),
         ExitSwitchingCode::ResetTracking => {
             // selected id is still the same, we dont change exit, just change what we track
-            rita_client_exit_ser_ref.selected_exit.tracking_exit = exit_metrics.best_exit;
+            set_current_selected_exit(SelectedExit {
+                selected_id: get_current_selected_exit(),
+                selected_id_metric: get_current_selected_exit_metric(),
+                selected_id_degradation: get_current_selected_exit_degradation(),
+                tracking_exit: exit_metrics.best_exit,
+            });
             Ok(exit_metrics
                 .cur_exit
                 .expect("Ip value expected, none present"))
@@ -1211,5 +1207,12 @@ mod tests {
         drop(writer);
 
         reset_exit_blacklist();
+    }
+
+    /// Test that IpNetwork ip() function doesnt mask out non prefix bits
+    #[test]
+    fn test_ipnetwork_ip() {
+        let ip_network: IpNetwork = "fd00::1340/116".parse().unwrap();
+        assert_eq!(ip_network.ip(), "fd00::1340".parse::<IpAddr>().unwrap())
     }
 }

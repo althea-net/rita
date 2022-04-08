@@ -40,9 +40,6 @@ pub struct ExitServer {
     //field added for serde config writing
     pub subnet_len: u8,
 
-    // Struct containing information of current exit and tracking exit, if connected to one
-    pub selected_exit: SelectedExit,
-
     // eth address of Selected exit
     pub eth_address: Address,
 
@@ -167,14 +164,6 @@ impl RitaClientSettings {
         set_rita_client(settings.clone());
 
         Ok(settings)
-    }
-
-    pub fn get_exit_id(&self) -> Option<IpAddr> {
-        self.exit_client
-            .get_current_exit()
-            .as_ref()?
-            .selected_exit
-            .selected_id
     }
 }
 

@@ -13,6 +13,7 @@ use rita_common::tunnel_manager::{tm_get_neighbors, Neighbor};
 use std::collections::HashMap;
 use std::time::Duration;
 
+use crate::exit_manager::get_current_selected_exit;
 use crate::RitaClientError;
 
 const BABEL_TIMEOUT: Duration = Duration::from_secs(5);
@@ -86,9 +87,6 @@ fn generate_neighbors_list(
     debts: HashMap<Identity, (NodeDebtData, Neighbor)>,
 ) -> Vec<NodeInfo> {
     let mut output = Vec::new();
-    let rita_client = settings::get_rita_client();
-    let exit_client = rita_client.exit_client;
-    let current_exit = exit_client.get_current_exit();
 
     for (identity, (debt_info, neigh)) in debts.iter() {
         let nickname = match identity.nickname {
@@ -108,10 +106,9 @@ fn generate_neighbors_list(
         }
         let neigh_route = maybe_route.unwrap();
 
-        let tup = (current_exit, stats.get(&neigh_route.iface));
-        if let (Some(current_exit), Some(stats_entry)) = tup {
-            if current_exit.selected_exit.selected_id.is_some() {
-                let exit_ip = current_exit.selected_exit.selected_id.unwrap();
+        if let Some(stats_entry) = stats.get(&neigh_route.iface) {
+            if get_current_selected_exit().is_some() {
+                let exit_ip = get_current_selected_exit().unwrap();
                 let maybe_exit_route =
                     get_route_via_neigh(identity.mesh_ip, exit_ip, &route_table_sample);
 

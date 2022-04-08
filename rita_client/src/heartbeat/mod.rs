@@ -52,6 +52,8 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
 
+use crate::exit_manager::get_current_selected_exit;
+
 pub const HEARTBEAT_LOOP_SPEED: u64 = 5;
 
 mod dummy;
@@ -253,12 +255,8 @@ fn send_udp_heartbeat() {
 }
 
 fn get_selected_exit_route(route_dump: &[RouteLegacy]) -> Result<RouteLegacy, BabelMonitorError> {
-    let rita_client = settings::get_rita_client();
-    let exit_client = rita_client.exit_client;
-    let exit_mesh_ip = if let Some(e) = exit_client.get_current_exit() {
-        e.selected_exit
-            .selected_id
-            .expect("Expected Exit ip, none present")
+    let exit_mesh_ip = if let Some(e) = get_current_selected_exit() {
+        e
     } else {
         return Err(BabelMonitorError::MiscStringError("No Exit".to_string()));
     };
