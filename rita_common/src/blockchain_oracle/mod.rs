@@ -17,6 +17,13 @@ use std::sync::RwLock;
 use std::time::Duration;
 
 /// This is the value pay_threshold is multiplied by to determine the close threshold
+/// the close pay_threshold is when one router will pay another, the close_threshold is when
+/// one router will throttle the connection of a peer that has not paid. It is obviously highly
+/// important for these values to be 'convergent' between routers so that bandwidth can continue to flow
+/// This comment concerns exactly how this value takes into account gas prices, as gas prices increase our
+/// pay_threshold changes to prevent fees from being to large a portion of the payment, it's critical that
+/// routers do not come to disagree about when to pay versus close given these changes.
+///
 /// This value is determined as follows
 ///
 /// In the new averaging scheme, consider these constraints and assumptions:
@@ -77,7 +84,11 @@ pub struct BlockchainOracle {
     pub nonce: Uint256,
     pub net_version: u64,
     pub gas_info: GasInfo,
+    /// The latest balance for this router, none if not yet set
     pub balance: Option<Uint256>,
+    /// The last seen block, if this goes backwards we will
+    /// ignore the update, none if not yet set
+    pub last_seen_block: Option<Uint256>,
 }
 
 /// This struct contains important information to determine when a router should be paying and when it should be enforcing on
@@ -123,6 +134,7 @@ impl BlockchainOracle {
             net_version: default_net_version(),
             gas_info: GasInfo::default(),
             balance: None,
+            last_seen_block: None,
         }
     }
 }
@@ -168,6 +180,10 @@ pub fn get_oracle_balance() -> Option<Uint256> {
     ORACLE.read().unwrap().balance.clone()
 }
 
+pub fn get_oracle_last_seen_block() -> Option<Uint256> {
+    ORACLE.read().unwrap().last_seen_block.clone()
+}
+
 // Oracle setters
 pub fn set_oracle_gas_info(info: GasInfo) {
     ORACLE.write().unwrap().gas_info = info;
@@ -183,6 +199,9 @@ pub fn set_oracle_net_version(net_v: u64) {
 pub fn set_oracle_balance(new_balance: Option<Uint256>) {
     ORACLE.write().unwrap().balance = new_balance
 }
+fn set_oracle_last_seen_block(block: Uint256) {
+    ORACLE.write().unwrap().last_seen_block = Some(block)
+}
 
 pub async fn update() {
     let payment_settings = settings::get_rita_common().payment;
@@ -196,6 +215,29 @@ pub async fn update() {
 }
 
 async fn update_blockchain_info(our_address: Address, web3: Web3, full_node: String) {
+    // all web30 functions check if the node is syncing, but sometimes the nodes lie about
+    // syncing, this block checks the actual block number we've last seen and if we get a lower
+    // value returns early, refusing to update our state with stale data.
+    let latest_block = web3.eth_block_number().await;
+    match latest_block {
+        Ok(latest_block) => {
+            if let Some(last_seen_block) = get_oracle_last_seen_block() {
+                if latest_block < last_seen_block {
+                    warn!(
+                        "Got stale blockchain oracle data! {} < {}",
+                        latest_block, last_seen_block
+                    );
+                    return;
+                }
+            }
+            set_oracle_last_seen_block(latest_block);
+        }
+        Err(e) => {
+            warn!("Failed to get latest block number with {:?}", e);
+            return;
+        }
+    }
+
     let balance = web3.eth_get_balance(our_address);
     let nonce = web3.eth_get_transaction_count(our_address);
     let net_version = web3.net_version();
