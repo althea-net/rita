@@ -292,7 +292,7 @@ fn set_exit_state(
     rita_client_exit_ser_ref: &mut ExitServer,
     exit_code: ExitSwitchingCode,
     exit_metrics: ExitMetrics,
-    metric_vec: &mut Vec<u16>,
+    metric_vec: &mut [u16],
 ) -> Result<IpAddr, RitaClientError> {
     match exit_code {
         // we get this code when the exit is not setup, meaning it should not reach this else statement in the first place.
@@ -320,7 +320,7 @@ fn set_exit_state(
                 .selected_id_degradation
                 .is_none()
             {
-                let average_metric = calculate_average(metric_vec.clone());
+                let average_metric = calculate_average(metric_vec.to_owned());
                 // We set degradation value = RelU(average_metric val - our_advertised_metric). Since we know tracking_exit == current_exit,
                 // We can use values in the vector.
                 rita_client_exit_ser_ref
@@ -669,14 +669,14 @@ fn reset_exit_tracking(exit_map: &mut HashMap<IpAddr, ExitTracker>) {
 /// reseting our tracking exit every tick, we continue with one exit, either B or C, unless one exit becomes significantly better than the other. This way
 /// we dont get stuck at exit A when there are better exits available.
 fn worth_switching_tracking_exit(
-    metric_vec: &mut Vec<u16>,
+    metric_vec: &mut [u16],
     best_ip: IpAddr,
     exit_map: &mut HashMap<IpAddr, ExitTracker>,
 ) -> bool {
     if metric_vec.is_empty() {
         return false;
     }
-    let avg_tracking_metric = calculate_average(metric_vec.clone());
+    let avg_tracking_metric = calculate_average(metric_vec.to_owned());
 
     let exit_tracker = exit_map
         .get(&best_ip)

@@ -286,7 +286,7 @@ impl CommandRunner for TestCommandRunner {
             args_owned.push((*a).to_string())
         }
 
-        (&mut *self.run_command.lock().unwrap())(program.to_string(), args_owned)
+        (*self.run_command.lock().unwrap())(program.to_string(), args_owned)
     }
 
     fn set_mock(&self, mock: CommandFunction) {
