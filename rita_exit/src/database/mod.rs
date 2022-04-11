@@ -224,11 +224,7 @@ pub fn client_status(
         })
     } else {
         error!("De-registering client! {:?}", client);
-        Err(RitaExitError::MiscStringError(
-            "Refusing to de-register clients right now!".to_string(),
-        ))
-        // TODO restore this functionality once it's confirmed to be safe
-        // Ok(ExitState::New)
+        Ok(ExitState::New)
     }
 }
 
