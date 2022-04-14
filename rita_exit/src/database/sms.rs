@@ -120,7 +120,7 @@ pub async fn handle_sms_registration(
                 Ok(ExitState::Registered {
                     our_details: ExitClientDetails {
                         client_internal_ip: their_record.internal_ip.parse()?,
-                        internet_ipv6_subnet: their_record.internet_ipv6.parse()?,
+                        internet_ipv6_subnet: Some(their_record.internet_ipv6.parse()?),
                     },
                     general_details: get_exit_info(),
                     message: "Registration OK".to_string(),
@@ -168,7 +168,7 @@ pub async fn handle_sms_registration(
                 Ok(ExitState::Registered {
                     our_details: ExitClientDetails {
                         client_internal_ip: their_record.internal_ip.parse()?,
-                        internet_ipv6_subnet: their_record.internet_ipv6.parse()?,
+                        internet_ipv6_subnet: Some(their_record.internet_ipv6.parse()?),
                     },
                     general_details: get_exit_info(),
                     message: "Registration OK".to_string(),

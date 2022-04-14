@@ -98,7 +98,7 @@ pub fn handle_email_registration(
         Ok(ExitState::Registered {
             our_details: ExitClientDetails {
                 client_internal_ip,
-                internet_ipv6_subnet: client_internet_ipv6_subnet,
+                internet_ipv6_subnet: Some(client_internet_ipv6_subnet),
             },
             general_details: get_exit_info(),
             message: "Registration OK".to_string(),

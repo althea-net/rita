@@ -278,7 +278,7 @@ pub struct ExitDetails {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct ExitClientDetails {
     pub client_internal_ip: IpAddr,
-    pub internet_ipv6_subnet: IpNetwork,
+    pub internet_ipv6_subnet: Option<IpNetwork>,
 }
 
 /// This is all the data we need to give a neighbor to open a wg connection

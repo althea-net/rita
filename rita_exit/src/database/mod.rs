@@ -164,7 +164,7 @@ pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Rita
             Ok(ExitState::Registered {
                 our_details: ExitClientDetails {
                     client_internal_ip,
-                    internet_ipv6_subnet: client_internet_ipv6_subnet,
+                    internet_ipv6_subnet: Some(client_internet_ipv6_subnet),
                 },
                 general_details: get_exit_info(),
                 message: "Registration OK".to_string(),
@@ -217,7 +217,7 @@ pub fn client_status(
         Ok(ExitState::Registered {
             our_details: ExitClientDetails {
                 client_internal_ip: current_ip,
-                internet_ipv6_subnet: current_internet_ipv6,
+                internet_ipv6_subnet: Some(current_internet_ipv6),
             },
             general_details: get_exit_info(),
             message: "Registration OK".to_string(),
