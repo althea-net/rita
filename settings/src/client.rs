@@ -27,31 +27,35 @@ pub fn default_config_path() -> String {
     format!("/etc/{}.toml", APP_NAME)
 }
 
-/// This struct is used by rita to store exit specific information
-/// There is one instance per exit
+/// This struct represents an exit server cluster, meaning
+/// an arbitrary number of actual machines may be represented here
+/// all exits in a cluster share a wireguard and eth private key used for their
+/// wg_exit connections and are found via searching the routing table for
+/// ip's within the provided subnet.
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitServer {
-    // Subnet of exits in cluster
+    /// Subnet of exits in cluster
     pub subnet: IpNetwork,
 
-    // Field added for serde config writing
-    pub id: Option<Identity>,
-
-    //field added for serde config writing
-    pub subnet_len: u8,
-
-    // eth address of Selected exit
+    /// eth address of this exit cluster
     pub eth_address: Address,
 
-    //wg public key of selected exit
+    /// wg public key used for wg_exit by this cluster
+    /// each exit has a distinct wg key used for peer
+    /// to peer tunnels and to identify it in logs
     pub wg_public_key: WgKey,
 
-    /// The port over which we will reach the exit apis on over the mesh
+    /// The power we reach out to to hit the register endpoint
+    /// also used for all other exit lifecycle management api calls
     #[serde(default)]
     pub registration_port: u16,
+
+    /// the exit description, a short string blurb that is displayed
+    /// directly to the user
+    ///
     #[serde(default)]
     pub description: String,
-    /// The state and data about the exit
+    /// The registration state and other data about the exit
     #[serde(default, flatten)]
     pub info: ExitState,
 }
