@@ -86,7 +86,7 @@ About:
 /// two minutes
 pub fn wait_for_settings(settings_file: &str) -> RitaClientSettings {
     let start = Instant::now();
-    let timeout = Duration::from_secs(120);
+    let timeout = Duration::from_secs(5);
     let mut res = RitaClientSettings::new(settings_file);
     while (Instant::now() - start) < timeout {
         if let Ok(val) = res {
