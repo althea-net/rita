@@ -1,6 +1,6 @@
 //! The Exit info endpoint gathers infromation about exit status and presents it to the dashbaord.
 
-use crate::exit_manager::{exit_setup_request, get_current_selected_exit};
+use crate::exit_manager::{exit_setup_request, get_selected_exit};
 use crate::RitaClientError;
 use actix_web_async::http::StatusCode;
 use actix_web_async::{web::Json, web::Path, HttpRequest, HttpResponse};
@@ -65,20 +65,19 @@ pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
 
                     for exit in exit_client.exits.clone().into_iter() {
                         let selected = is_selected(&exit.1, current_exit);
-                        let have_route = if let Some(selected_ip) = get_current_selected_exit() {
-                            do_we_have_route(&selected_ip, &route_table_sample)?
-                        } else {
-                            false
+                        let route_ip = match get_selected_exit(exit.0.clone()) {
+                            Some(a) => a,
+                            None => {
+                                error!("Found no exit ip where one was expected!");
+                                continue;
+                            }
                         };
+                        let have_route = do_we_have_route(&route_ip, &route_table_sample)?;
 
                         // failed pings block for one second, so we should be sure it's at least reasonable
                         // to expect the pings to work before issuing them.
                         let reachable = if have_route {
-                            KI.ping_check(
-                                &get_current_selected_exit()
-                                    .expect("Expected exit ip here, but none present"),
-                                EXIT_PING_TIMEOUT,
-                            )?
+                            KI.ping_check(&route_ip, EXIT_PING_TIMEOUT)?
                         } else {
                             false
                         };

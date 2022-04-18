@@ -122,6 +122,7 @@ pub async fn tm_contact_peers(peers: HashMap<IpAddr, Peer>) {
     for manual_peer in manual_peers.iter() {
         info!("contacting manual peer {:?}", manual_peer);
         let ip = manual_peer.parse::<IpAddr>();
+
         match ip {
             Ok(ip) => {
                 let socket = SocketAddr::new(ip, rita_hello_port);
