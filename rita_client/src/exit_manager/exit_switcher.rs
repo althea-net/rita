@@ -12,9 +12,8 @@
 //!
 //! See doc comment for 'set_best_exit' for a more detailed description of workflow
 use crate::exit_manager::{
-    get_current_selected_exit, get_current_selected_exit_degradation,
-    get_current_selected_exit_metric, get_current_selected_exit_tracking, reset_exit_blacklist,
-    set_current_selected_exit, EXIT_MANAGER,
+    get_selected_exit, get_selected_exit_degradation, get_selected_exit_metric,
+    get_selected_exit_tracking, reset_exit_blacklist, set_selected_exit, EXIT_MANAGER,
 };
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
@@ -192,7 +191,11 @@ impl From<ExitMetrics>
 /// be the current exit we are connected to or a different one. If its a different one we switch to it, else we just clear the vector, and start from (1)
 ///
 /// Look at the enum 'ExitSwitchingCode' to see all state and function 'update_metric_value' to see when these are triggered.
-pub fn set_best_exit(exits: IpNetwork, routes: Vec<Route>) -> Result<IpAddr, RitaClientError> {
+pub fn set_best_exit(
+    exit_name: String,
+    exits: IpNetwork,
+    routes: Vec<Route>,
+) -> Result<IpAddr, RitaClientError> {
     if routes.is_empty() {
         return Err(RitaClientError::MiscStringError(
             "No routes are found".to_string(),
@@ -201,11 +204,12 @@ pub fn set_best_exit(exits: IpNetwork, routes: Vec<Route>) -> Result<IpAddr, Rit
 
     // Metric that we advertise which is differnt from babel's advertised metric. Babel_metric - SomeConstant that measures how much our connection degrades the route
     // (ignores the degradation of metric value due to current traffic, unlike the babel Route metric, which smoothens the value)
-    let current_adjusted_metric: u16 = get_current_selected_exit_metric().unwrap_or(u16::MAX);
+    let current_adjusted_metric: u16 =
+        get_selected_exit_metric(exit_name.clone()).unwrap_or(u16::MAX);
     // Ip of exit we are currently tracking in lazy static, if present
-    let tracking_exit = get_current_selected_exit_tracking();
+    let tracking_exit = get_selected_exit_tracking(exit_name.clone());
     // Retrieve current exit ip, if connected
-    let current_exit_ip: Option<IpAddr> = get_current_selected_exit();
+    let current_exit_ip: Option<IpAddr> = get_selected_exit(exit_name.clone());
 
     let exit_map = &mut *EXIT_TRACKER.write().unwrap();
 
@@ -243,7 +247,7 @@ pub fn set_best_exit(exits: IpNetwork, routes: Vec<Route>) -> Result<IpAddr, Rit
         metric_vec.len(),
         current_adjusted_metric,
         exit_metrics.cur_exit_babel_met,
-        get_current_selected_exit_degradation()
+        get_selected_exit_degradation(exit_name.clone())
     );
 
     info!(
@@ -259,12 +263,15 @@ pub fn set_best_exit(exits: IpNetwork, routes: Vec<Route>) -> Result<IpAddr, Rit
                     "Exit_Switcher: setup all initial exit informaion with selected_id_metric = {}",
                     exit_metrics.best_exit_met
                 );
-                set_current_selected_exit(SelectedExit {
-                    selected_id: exit_metrics.best_exit,
-                    selected_id_metric: Some(exit_metrics.best_exit_met),
-                    selected_id_degradation: None,
-                    tracking_exit: exit_metrics.best_exit,
-                });
+                set_selected_exit(
+                    exit_name,
+                    SelectedExit {
+                        selected_id: exit_metrics.best_exit,
+                        selected_id_metric: Some(exit_metrics.best_exit_met),
+                        selected_id_degradation: None,
+                        tracking_exit: exit_metrics.best_exit,
+                    },
+                );
                 metric_vec.clear();
                 reset_exit_tracking(exit_map);
                 Ok(a)
@@ -275,12 +282,13 @@ pub fn set_best_exit(exits: IpNetwork, routes: Vec<Route>) -> Result<IpAddr, Rit
         }
     } else {
         //logic to determine wheter we should switch or not.
-        set_exit_state(exit_code, exit_metrics, metric_vec)
+        set_exit_state(exit_name, exit_code, exit_metrics, metric_vec)
     }
 }
 
 /// This function looks at the corresponding exit code and makes a decision based on what state we are currently in
 fn set_exit_state(
+    exit_name: String,
     exit_code: ExitSwitchingCode,
     exit_metrics: ExitMetrics,
     metric_vec: &mut [u16],
@@ -292,50 +300,61 @@ fn set_exit_state(
             // We reach this when we continue with the same exit after 15mins of tracking.
             // Degradation is a measure of how much the route metric degrades after connecting to it
             // We set the degradation value = RelU(babel_metric - our_advertised_metric).
-            set_current_selected_exit(SelectedExit {
-                selected_id: get_current_selected_exit(),
-                selected_id_metric: get_current_selected_exit_metric(),
-                selected_id_degradation: exit_metrics.cur_exit_babel_met.checked_sub(
-                    get_current_selected_exit_metric()
-                        .expect("No selected Ip metric where there should be one"),
-                ),
-                tracking_exit: get_current_selected_exit_tracking(),
-            });
+            set_selected_exit(
+                exit_name.clone(),
+                SelectedExit {
+                    selected_id: get_selected_exit(exit_name.clone()),
+                    selected_id_metric: get_selected_exit_metric(exit_name.clone()),
+                    selected_id_degradation: exit_metrics.cur_exit_babel_met.checked_sub(
+                        get_selected_exit_metric(exit_name.clone())
+                            .expect("No selected Ip metric where there should be one"),
+                    ),
+                    tracking_exit: get_selected_exit_tracking(exit_name),
+                },
+            );
             Ok(exit_metrics
                 .cur_exit
                 .expect("Ip value expected, none present"))
         }
         ExitSwitchingCode::ContinueCurrent => {
             // set a degradation values if none, else update the current exit advertised values
-            if get_current_selected_exit_degradation().is_none() {
+            if get_selected_exit_degradation(exit_name.clone()).is_none() {
                 let average_metric = calculate_average(metric_vec.to_vec());
                 // We set degradation value = RelU(average_metric val - our_advertised_metric). Since we know tracking_exit == current_exit,
                 // We can use values in the vector.
-                set_current_selected_exit(SelectedExit {
-                    selected_id: get_current_selected_exit(),
-                    selected_id_metric: get_current_selected_exit_metric(),
-                    selected_id_degradation: average_metric.checked_sub(
-                        get_current_selected_exit_metric()
-                            .expect("No selected Ip metric where there should be one"),
-                    ),
-                    tracking_exit: get_current_selected_exit_tracking(),
-                });
+                set_selected_exit(
+                    exit_name.clone(),
+                    SelectedExit {
+                        selected_id: get_selected_exit(exit_name.clone()),
+                        selected_id_metric: get_selected_exit_metric(exit_name.clone()),
+                        selected_id_degradation: average_metric.checked_sub(
+                            get_selected_exit_metric(exit_name.clone())
+                                .expect("No selected Ip metric where there should be one"),
+                        ),
+                        tracking_exit: get_selected_exit_tracking(exit_name),
+                    },
+                );
             } else {
                 // We have already set a degradation value, so we continue using the same value until the clock reset
                 let res = exit_metrics
                     .cur_exit_babel_met
-                    .checked_sub(get_current_selected_exit_degradation().unwrap());
+                    .checked_sub(get_selected_exit_degradation(exit_name.clone()).unwrap());
 
                 // We should not be setting 'selected_id_metric' as None. If we do, that means degradation > current_metric, meaning an error with logic somewhere
                 if res.is_none() {
                     error!("Setting selected_id_metric as none during ExitSwitchingCode::ContinueCurrent. Error with degradation logic");
                 } else {
-                    set_current_selected_exit(SelectedExit {
-                        selected_id: get_current_selected_exit(),
-                        selected_id_metric: res,
-                        selected_id_degradation: get_current_selected_exit_degradation(),
-                        tracking_exit: get_current_selected_exit_tracking(),
-                    });
+                    set_selected_exit(
+                        exit_name.clone(),
+                        SelectedExit {
+                            selected_id: get_selected_exit(exit_name.clone()),
+                            selected_id_metric: res,
+                            selected_id_degradation: get_selected_exit_degradation(
+                                exit_name.clone(),
+                            ),
+                            tracking_exit: get_selected_exit_tracking(exit_name),
+                        },
+                    );
                 }
             }
             Ok(exit_metrics
@@ -344,12 +363,15 @@ fn set_exit_state(
         }
         ExitSwitchingCode::SwitchExit => {
             // We swtich to the new exit
-            set_current_selected_exit(SelectedExit {
-                selected_id: exit_metrics.best_exit,
-                selected_id_metric: Some(exit_metrics.best_exit_met),
-                selected_id_degradation: None,
-                tracking_exit: exit_metrics.best_exit,
-            });
+            set_selected_exit(
+                exit_name,
+                SelectedExit {
+                    selected_id: exit_metrics.best_exit,
+                    selected_id_metric: Some(exit_metrics.best_exit_met),
+                    selected_id_degradation: None,
+                    tracking_exit: exit_metrics.best_exit,
+                },
+            );
             Ok(exit_metrics
                 .best_exit
                 .expect("Ip value expected, none present"))
@@ -359,12 +381,15 @@ fn set_exit_state(
             .expect("Ip value expected, none present")),
         ExitSwitchingCode::ResetTracking => {
             // selected id is still the same, we dont change exit, just change what we track
-            set_current_selected_exit(SelectedExit {
-                selected_id: get_current_selected_exit(),
-                selected_id_metric: get_current_selected_exit_metric(),
-                selected_id_degradation: get_current_selected_exit_degradation(),
-                tracking_exit: exit_metrics.best_exit,
-            });
+            set_selected_exit(
+                exit_name.clone(),
+                SelectedExit {
+                    selected_id: get_selected_exit(exit_name.clone()),
+                    selected_id_metric: get_selected_exit_metric(exit_name.clone()),
+                    selected_id_degradation: get_selected_exit_degradation(exit_name),
+                    tracking_exit: exit_metrics.best_exit,
+                },
+            );
             Ok(exit_metrics
                 .cur_exit
                 .expect("Ip value expected, none present"))

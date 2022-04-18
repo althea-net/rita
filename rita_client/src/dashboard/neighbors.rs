@@ -13,7 +13,7 @@ use rita_common::tunnel_manager::{tm_get_neighbors, Neighbor};
 use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::exit_manager::get_current_selected_exit;
+use crate::exit_manager::get_selected_exit;
 use crate::RitaClientError;
 
 const BABEL_TIMEOUT: Duration = Duration::from_secs(5);
@@ -106,42 +106,47 @@ fn generate_neighbors_list(
         }
         let neigh_route = maybe_route.unwrap();
 
-        if let Some(stats_entry) = stats.get(&neigh_route.iface) {
-            if get_current_selected_exit().is_some() {
-                let exit_ip = get_current_selected_exit().unwrap();
-                let maybe_exit_route =
-                    get_route_via_neigh(identity.mesh_ip, exit_ip, &route_table_sample);
+        let rita_client = settings::get_rita_client();
+        let current_exit = match rita_client.clone().exit_client.current_exit {
+            Some(a) => a,
+            None => "".to_string(),
+        };
+        let exit_ip = get_selected_exit(current_exit);
+        let tup = (exit_ip, stats.get(&neigh_route.iface));
+        if let (Some(c_ip), Some(stats_entry)) = tup {
+            let exit_ip = c_ip;
+            let maybe_exit_route =
+                get_route_via_neigh(identity.mesh_ip, exit_ip, &route_table_sample);
 
-                // We have a peer that is an exit, so we can't find a route
-                // from them to our selected exit. Other errors can also get
-                // caught here
-                if maybe_exit_route.is_err() {
-                    output.push(nonviable_node_info(
-                        nickname,
-                        neigh_route.metric,
-                        identity.mesh_ip.to_string(),
-                        *identity,
-                        neigh.speed_limit,
-                    ));
-                    continue;
-                }
-                // we check that this is safe above
-                let exit_route = maybe_exit_route.unwrap();
-
-                output.push(NodeInfo {
-                    nickname: nickname.to_string(),
-                    ip: identity.mesh_ip.to_string(),
-                    id: *identity,
-                    route_metric_to_exit: exit_route.metric,
-                    route_metric: neigh_route.metric,
-                    speed_limit: neigh.speed_limit,
-                    total_payments: debt_info.total_payment_received.clone(),
-                    debt: debt_info.debt.clone(),
-                    link_cost: exit_route.refmetric,
-                    price_to_exit: exit_route.price,
-                    stats: *stats_entry,
-                })
+            // We have a peer that is an exit, so we can't find a route
+            // from them to our selected exit. Other errors can also get
+            // caught here
+            if maybe_exit_route.is_err() {
+                output.push(nonviable_node_info(
+                    nickname,
+                    neigh_route.metric,
+                    identity.mesh_ip.to_string(),
+                    *identity,
+                    neigh.speed_limit,
+                ));
+                continue;
             }
+            // we check that this is safe above
+            let exit_route = maybe_exit_route.unwrap();
+
+            output.push(NodeInfo {
+                nickname: nickname.to_string(),
+                ip: identity.mesh_ip.to_string(),
+                id: *identity,
+                route_metric_to_exit: exit_route.metric,
+                route_metric: neigh_route.metric,
+                speed_limit: neigh.speed_limit,
+                total_payments: debt_info.total_payment_received.clone(),
+                debt: debt_info.debt.clone(),
+                link_cost: exit_route.refmetric,
+                price_to_exit: exit_route.price,
+                stats: *stats_entry,
+            })
         } else {
             output.push(nonviable_node_info(
                 nickname,

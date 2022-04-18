@@ -75,38 +75,46 @@ pub struct ExitManager {
     /// This struct hold infomation about exits that have misbehaved and are blacklisted, or are being watched
     /// to being blacklisted through bad responses.
     pub exit_blacklist: ExitBlacklist,
-    /// Struct containing information of current exit we are connected to and tracking exit, if connected to one
+    /// Hashmap of Structs containing information of current exit we are connected to and tracking exit, if connected to one
     /// It also holds information about metrics and degradation values. Look at doc comment on 'set_best_exit' for more
     /// information on what these mean
-    pub selected_exit: SelectedExit,
+    pub selected_exit_list: HashMap<String, SelectedExit>,
 }
 
-pub fn get_current_selected_exit() -> Option<IpAddr> {
-    EXIT_MANAGER.read().unwrap().selected_exit.selected_id
+pub fn get_selected_exit(exit: String) -> Option<IpAddr> {
+    match EXIT_MANAGER.read().unwrap().selected_exit_list.get(&exit) {
+        Some(a) => a.selected_id,
+        None => None,
+    }
 }
 
-pub fn get_current_selected_exit_metric() -> Option<u16> {
+pub fn get_selected_exit_metric(exit: String) -> Option<u16> {
+    match EXIT_MANAGER.read().unwrap().selected_exit_list.get(&exit) {
+        Some(a) => a.selected_id_metric,
+        None => None,
+    }
+}
+
+pub fn get_selected_exit_tracking(exit: String) -> Option<IpAddr> {
+    match EXIT_MANAGER.read().unwrap().selected_exit_list.get(&exit) {
+        Some(a) => a.tracking_exit,
+        None => None,
+    }
+}
+
+pub fn get_selected_exit_degradation(exit: String) -> Option<u16> {
+    match EXIT_MANAGER.read().unwrap().selected_exit_list.get(&exit) {
+        Some(a) => a.selected_id_degradation,
+        None => None,
+    }
+}
+
+pub fn set_selected_exit(exit: String, exit_info: SelectedExit) {
     EXIT_MANAGER
-        .read()
+        .write()
         .unwrap()
-        .selected_exit
-        .selected_id_metric
-}
-
-pub fn get_current_selected_exit_tracking() -> Option<IpAddr> {
-    EXIT_MANAGER.read().unwrap().selected_exit.tracking_exit
-}
-
-pub fn get_current_selected_exit_degradation() -> Option<u16> {
-    EXIT_MANAGER
-        .read()
-        .unwrap()
-        .selected_exit
-        .selected_id_degradation
-}
-
-pub fn set_current_selected_exit(exit_info: SelectedExit) {
-    EXIT_MANAGER.write().unwrap().selected_exit = exit_info
+        .selected_exit_list
+        .insert(exit, exit_info);
 }
 
 pub fn set_em_nat(val: bool) {
@@ -118,6 +126,7 @@ pub fn get_em_nat() -> bool {
 }
 
 fn linux_setup_exit_tunnel(
+    exit: String,
     current_exit: &ExitServer,
     general_details: &ExitDetails,
     our_details: &ExitClientDetails,
@@ -133,7 +142,7 @@ fn linux_setup_exit_tunnel(
 
     let args = ClientExitTunnelConfig {
         endpoint: SocketAddr::new(
-            get_current_selected_exit().unwrap(),
+            get_selected_exit(exit).expect("There should be an exit ip here"),
             general_details.wg_exit_port,
         ),
         pubkey: current_exit.wg_public_key,
@@ -386,18 +395,17 @@ async fn exit_general_details_request(exit: String) -> Result<(), RitaClientErro
         }
     };
 
-    let current_exit_ip = match get_current_selected_exit() {
-        Some(a) => a,
-        // When none, set to default subnet IP address
-        None => {
-            trace!("No ip selected, choosing default subnet ip");
-            current_exit.subnet.ip()
-        }
-    };
+    info!("Getting details for exit: {:?}", exit);
+    let current_exit_ip = get_selected_exit(exit.clone()).expect("There should be an exit ip here");
+
+    info!("Current exit ip is : {:?}", current_exit_ip);
 
     let endpoint = SocketAddr::new(current_exit_ip, current_exit.registration_port);
 
-    trace!("sending exit general details request to {}", exit);
+    info!(
+        "sending exit general details request to {} with endpoint {:?}",
+        exit, endpoint
+    );
     let exit_details = get_exit_info(&endpoint).await?;
     let mut rita_client = settings::get_rita_client();
     let current_exit = match rita_client.exit_client.exits.get_mut(&exit) {
@@ -416,14 +424,17 @@ pub async fn exit_setup_request(exit: String, code: Option<String>) -> Result<()
         None => return Err(RitaClientError::ExitNotFound(exit)),
     };
 
-    let current_exit_ip = match get_current_selected_exit() {
-        Some(a) => a,
-        // There is not exit selected yet, so we selected the default exit ip
-        // This only works if subnet ip is set to default ip
-        None => current_exit.subnet.ip(),
-    };
+    let current_exit_ip = get_selected_exit(exit.clone());
 
-    let exit_server = current_exit_ip;
+    // If exit is not setup in lazy static, set up with subnet ip
+    let exit_server = match current_exit_ip {
+        Some(a) => a,
+        None => {
+            // set this ip in the lazy static
+            initialize_selected_exit_list(exit.clone(), current_exit.clone());
+            current_exit.subnet.ip()
+        }
+    };
     let exit_pubkey = current_exit.wg_public_key;
 
     let exit_auth_type = match current_exit.info.general_details() {
@@ -493,6 +504,7 @@ pub async fn exit_setup_request(exit: String, code: Option<String>) -> Result<()
         None => return Err(RitaClientError::ExitNotFound(exit)),
     };
 
+    info!("Setting an exit setup response");
     current_exit.info = exit_response;
     settings::set_rita_client(rita_client);
 
@@ -515,12 +527,9 @@ async fn exit_status_request(exit: String) -> Result<(), RitaClientError> {
         }
     };
 
-    let current_exit_ip = match get_current_selected_exit() {
-        Some(a) => a,
-        None => return Err(RitaClientError::NoExitError(exit)),
-    };
+    let current_exit_ip = get_selected_exit(exit.clone());
 
-    let exit_server = current_exit_ip;
+    let exit_server = current_exit_ip.expect("There should be an exit ip here");
     let exit_pubkey = current_exit.wg_public_key;
     let ident = ExitClientIdentity {
         global: match settings::get_rita_client().get_identity() {
@@ -562,10 +571,23 @@ fn correct_default_route(input: Option<DefaultRoute>) -> bool {
     }
 }
 
+/// This function initializes the Selected Exit list every tick by adding an entry if there isnt one
+/// THe reason we store this info is to get general details of all exits on the manual peers list
+/// This function call should be moved to another location as it doesnt need to be called on every tick, only on startup
+fn initialize_selected_exit_list(exit: String, server: ExitServer) {
+    let list = &mut EXIT_MANAGER.write().unwrap().selected_exit_list;
+
+    list.entry(exit).or_insert_with(|| SelectedExit {
+        selected_id: Some(server.subnet.ip()),
+        selected_id_degradation: None,
+        tracking_exit: None,
+        selected_id_metric: None,
+    });
+}
+
 pub async fn exit_manager_tick() {
     info!("Exit_Switcher: exit manager tick");
     let client_can_use_free_tier = { settings::get_rita_client().payment.client_can_use_free_tier };
-    let last_exit = get_current_selected_exit();
 
     //  Get mut rita client server to setup exits
     let rita_client = settings::get_rita_client();
@@ -573,6 +595,7 @@ pub async fn exit_manager_tick() {
         Some(a) => a,
         None => "".to_string(),
     };
+    let last_exit = get_selected_exit(current_exit.clone());
     let mut exits = rita_client.exit_client.exits;
 
     let exit_ser_ref = exits.get_mut(&current_exit);
@@ -580,7 +603,7 @@ pub async fn exit_manager_tick() {
     // code that connects to the current exit server
     info!("About to setup exit tunnel!");
     if let Some(exit) = exit_ser_ref {
-        info!("We have selected an exit!");
+        info!("We have selected an exit!, {:?}", exit.clone());
         if let Some(general_details) = exit.clone().info.general_details() {
             info!("We have details for the selected exit!");
 
@@ -597,7 +620,7 @@ pub async fn exit_manager_tick() {
             };
 
             info!("Exit_Switcher: Calling set best exit");
-            let selected_exit = match set_best_exit(exit_subnet, routes) {
+            let selected_exit = match set_best_exit(current_exit.clone(), exit_subnet, routes) {
                 Ok(a) => Some(a),
                 Err(e) => {
                     warn!("Found no exit yet : {}", e);
@@ -605,7 +628,7 @@ pub async fn exit_manager_tick() {
                 }
             };
 
-            info!("Exit_Switcher: After selecting best exit this tick, we have selected_id: {:?}, selected_metric: {:?}, tracking_ip: {:?}", get_current_selected_exit(), get_current_selected_exit_metric(), get_current_selected_exit_tracking());
+            info!("Exit_Switcher: After selecting best exit this tick, we have selected_id: {:?}, selected_metric: {:?}, tracking_ip: {:?}", get_selected_exit(current_exit.clone()), get_selected_exit_metric(current_exit.clone()), get_selected_exit_tracking(current_exit.clone()));
 
             // Determine states to setup tunnels
             let signed_up_for_exit = exit.info.our_details().is_some();
@@ -613,12 +636,13 @@ pub async fn exit_manager_tick() {
                 && selected_exit.is_some()
                 && last_exit.unwrap() == selected_exit.unwrap());
             let correct_default_route = correct_default_route(KI.get_default_route());
-            let current_exit_id = get_current_selected_exit();
+            let current_exit_id = selected_exit;
 
             match (signed_up_for_exit, exit_has_changed, correct_default_route) {
                 (true, true, _) => {
                     trace!("Exit change, setting up exit tunnel");
                     linux_setup_exit_tunnel(
+                        current_exit,
                         exit,
                         &general_details.clone(),
                         exit.info.our_details().unwrap(),
@@ -629,6 +653,7 @@ pub async fn exit_manager_tick() {
                 (true, false, false) => {
                     trace!("DHCP overwrite setup exit tunnel again");
                     linux_setup_exit_tunnel(
+                        current_exit,
                         exit,
                         &general_details.clone(),
                         exit.info.our_details().unwrap(),
@@ -712,6 +737,7 @@ pub async fn exit_manager_tick() {
     let servers = { settings::get_rita_client().exit_client.exits };
 
     for (k, s) in servers {
+        initialize_selected_exit_list(k.clone(), s.clone());
         match s.info {
             ExitState::Denied { .. } | ExitState::Disabled | ExitState::GotInfo { .. } => {}
 

@@ -52,7 +52,6 @@ pub struct ExitServer {
 
     /// the exit description, a short string blurb that is displayed
     /// directly to the user
-    ///
     #[serde(default)]
     pub description: String,
     /// The registration state and other data about the exit

@@ -26,6 +26,8 @@ use rita_common::network_monitor::get_network_info;
 use rita_common::network_monitor::GetNetworkInfo;
 use rita_common::tunnel_manager::Neighbor as RitaNeighbor;
 
+use crate::exit_manager::get_selected_exit as get_selected_exit_em;
+
 use althea_types::HeartbeatMessage;
 use althea_types::Identity;
 use althea_types::WgKey;
@@ -51,8 +53,6 @@ use std::net::{SocketAddr, UdpSocket};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
-
-use crate::exit_manager::get_current_selected_exit;
 
 pub const HEARTBEAT_LOOP_SPEED: u64 = 5;
 
@@ -255,7 +255,12 @@ fn send_udp_heartbeat() {
 }
 
 fn get_selected_exit_route(route_dump: &[RouteLegacy]) -> Result<RouteLegacy, BabelMonitorError> {
-    let exit_mesh_ip = if let Some(e) = get_current_selected_exit() {
+    let rita_client = settings::get_rita_client();
+    let current_exit = match rita_client.exit_client.current_exit {
+        Some(a) => a,
+        None => "".to_string(),
+    };
+    let exit_mesh_ip = if let Some(e) = get_selected_exit_em(current_exit) {
         e
     } else {
         return Err(BabelMonitorError::MiscStringError("No Exit".to_string()));
