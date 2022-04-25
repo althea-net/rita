@@ -182,7 +182,7 @@ pub fn process_streams<S: ::std::hash::BuildHasher>(
         match read_till_block(&mut antenna_stream.stream) {
             Ok(bytes) => {
                 if !bytes.is_empty() {
-                    info!(
+                    trace!(
                         "Got {} bytes for stream id {} from antenna/client",
                         bytes.len(),
                         stream_id
