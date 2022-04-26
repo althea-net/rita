@@ -64,13 +64,13 @@ pub struct HeartbeatCache {
     exit_neighbor_rita: RitaNeighbor,
 }
 
-#[cfg(not(feature = "operator_debug"))]
+#[cfg(not(any(feature = "operator_debug", feature = "dev_env")))]
 lazy_static! {
     pub static ref HEARTBEAT_SERVER_KEY: WgKey = "hizclQFo/ArWY+/9+AJ0LBY2dTiQK4smy5icM7GA5ng="
         .parse()
         .unwrap();
 }
-#[cfg(feature = "operator_debug")]
+#[cfg(any(feature = "operator_debug", feature = "dev_env"))]
 lazy_static! {
     pub static ref HEARTBEAT_SERVER_KEY: WgKey = "RECW5xQfDzo3bzaZtzepM/+qWRuFTohChKKzUqGA0n4="
         .parse()
@@ -140,8 +140,13 @@ fn send_udp_heartbeat() {
 
     // Check for the basics first, before doing any of the hard futures work
     let mut our_id: Identity = if settings::get_rita_client().get_identity().is_some() {
+        trace!(
+            "Got identity: {} ",
+            settings::get_rita_client().get_identity().unwrap()
+        );
         settings::get_rita_client().get_identity().unwrap()
     } else {
+        trace!("Could not get identity!");
         return;
     };
     let mut selected_exit_details: ExitDetails = dummy_selected_exit_details();
@@ -156,8 +161,12 @@ fn send_udp_heartbeat() {
                 Some(details) => {
                     our_id = id;
                     selected_exit_details = details.clone();
+                    trace!("got exit details for id: {}", id);
                 }
-                None => return,
+                None => {
+                    trace!("got no exit details!");
+                    return;
+                }
             }
         } else {
             return;
@@ -180,22 +189,24 @@ fn send_udp_heartbeat() {
     match dns_request {
         Ok(dnsres) => {
             let dnsresult = VecDeque::from_iter(dnsres);
-            let selected_exit_route = if cfg!(feature = "operator_debug") {
-                Ok(dummy_route())
-            } else {
-                get_selected_exit_route(&network_info.babel_routes)
-            };
+            let selected_exit_route =
+                if cfg!(feature = "operator_debug") || cfg!(feature = "dev_env") {
+                    Ok(dummy_route())
+                } else {
+                    get_selected_exit_route(&network_info.babel_routes)
+                };
 
             match selected_exit_route {
                 Ok(route) => {
-                    let neigh_option = if cfg!(feature = "operator_debug") {
-                        Some((dummy_neigh_babel(), dummy_neigh_tunnel()))
-                    } else {
-                        let neigh_option1 =
-                            get_neigh_given_route(&route, &network_info.babel_neighbors);
+                    let neigh_option =
+                        if cfg!(feature = "operator_debug") || cfg!(feature = "dev_env") {
+                            Some((dummy_neigh_babel(), dummy_neigh_tunnel()))
+                        } else {
+                            let neigh_option1 =
+                                get_neigh_given_route(&route, &network_info.babel_neighbors);
 
-                        get_rita_neigh_option(neigh_option1, &network_info.rita_neighbors)
-                    };
+                            get_rita_neigh_option(neigh_option1, &network_info.rita_neighbors)
+                        };
 
                     if let Some((neigh, rita_neigh)) = neigh_option {
                         // Now that we have all the info we can stop and try to update the
