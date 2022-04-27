@@ -10,6 +10,7 @@
 //! of the excess complexity you see, managing an incoming payments pool versus a incoming debts pool
 use crate::blockchain_oracle::get_oracle_close_thresh;
 use crate::blockchain_oracle::get_oracle_pay_thresh;
+use crate::blockchain_oracle::potential_payment_issues_detected;
 use crate::payment_controller::queue_payment;
 use crate::payment_validator::PAYMENT_SEND_TIMEOUT;
 use crate::simulated_txfee_manager::add_tx_to_total;
@@ -253,19 +254,27 @@ pub fn send_debt_update() -> Result<(), RitaCommonError> {
                     action: TunnelAction::PaidOnTime,
                 });
             }
-            DebtAction::MakePayment { to, amount } => queue_payment(PaymentTx {
-                to,
-                from: match settings::get_rita_common().get_identity() {
-                    Some(id) => id,
-                    None => {
-                        return Err(RitaCommonError::MiscStringError(
-                            "Identity has no mesh IP ready yet".to_string(),
-                        ))
-                    }
-                },
-                amount,
-                txid: None, // not yet published
-            }),
+            DebtAction::MakePayment { to, amount } => {
+                if potential_payment_issues_detected() {
+                    warn!("Potential payment issue detected");
+                    return Err(RitaCommonError::MiscStringError(
+                        "Potential payment issue detected".to_string(),
+                    ));
+                }
+                queue_payment(PaymentTx {
+                    to,
+                    from: match settings::get_rita_common().get_identity() {
+                        Some(id) => id,
+                        None => {
+                            return Err(RitaCommonError::MiscStringError(
+                                "Identity has no mesh IP ready yet".to_string(),
+                            ))
+                        }
+                    },
+                    amount,
+                    txid: None, // not yet published
+                });
+            }
         }
     }
 
