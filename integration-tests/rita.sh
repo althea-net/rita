@@ -84,7 +84,7 @@ if [ ! -z "${COMPAT_LAYOUT-}" ] ; then
 else
   pushd ..
     RUSTFLAGS="-C target-cpu=native"
-    cargo build --all --release
+    cargo build --all --release --features "rita_bin/development"
   popd
 fi
 

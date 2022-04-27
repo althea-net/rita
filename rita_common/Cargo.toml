@@ -44,3 +44,4 @@ features = ["std"]
 [features]
 # disables cors for dash debugging
 dash_debug = []
+integration_test = []
