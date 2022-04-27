@@ -56,7 +56,7 @@ dash_debug = []
 # changes operator urls
 operator_debug = []
 dev_env = []
-development = ["rita_common/dash_debug","rita_client/operator_debug"]
+development = ["rita_common/dash_debug","rita_client/operator_debug", "rita_exit/integration_test"]
 # Op tools dev environement
 optools_dev_env = ["rita_client/dev_env"]
 

@@ -15,6 +15,7 @@ use web30::client::Web3;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
+use std::time::Instant;
 
 /// This is the value pay_threshold is multiplied by to determine the close threshold
 /// the close pay_threshold is when one router will pay another, the close_threshold is when
@@ -89,6 +90,7 @@ pub struct BlockchainOracle {
     /// The last seen block, if this goes backwards we will
     /// ignore the update, none if not yet set
     pub last_seen_block: Option<Uint256>,
+    pub last_updated: Option<Instant>,
 }
 
 /// This struct contains important information to determine when a router should be paying and when it should be enforcing on
@@ -135,6 +137,7 @@ impl BlockchainOracle {
             gas_info: GasInfo::default(),
             balance: None,
             last_seen_block: None,
+            last_updated: None,
         }
     }
 }
@@ -184,6 +187,10 @@ pub fn get_oracle_last_seen_block() -> Option<Uint256> {
     ORACLE.read().unwrap().last_seen_block.clone()
 }
 
+pub fn get_oracle_last_updated() -> Option<Instant> {
+    ORACLE.read().unwrap().last_updated
+}
+
 // Oracle setters
 pub fn set_oracle_gas_info(info: GasInfo) {
     ORACLE.write().unwrap().gas_info = info;
@@ -203,6 +210,10 @@ fn set_oracle_last_seen_block(block: Uint256) {
     ORACLE.write().unwrap().last_seen_block = Some(block)
 }
 
+pub fn set_oracle_last_updated(update: Instant) {
+    ORACLE.write().unwrap().last_updated = Some(update)
+}
+
 pub async fn update() {
     let payment_settings = settings::get_rita_common().payment;
     let our_address = payment_settings.eth_address.expect("No address!");
@@ -212,6 +223,24 @@ pub async fn update() {
 
     info!("About to make web3 requests to {}", full_node);
     update_blockchain_info(our_address, web3, full_node).await;
+}
+
+/// The current amount of time before we consider that the blockchain oracle
+/// is too outdated and that we could have issues with payments.
+const OUTDATED_TIME: Duration = Duration::new(300, 0);
+/// This function is used to detect possible payment issues since we want to prevent
+/// node failures in the future. Currently, it only checks to make sure the blockchain
+/// oracle is semi-recent.
+pub fn potential_payment_issues_detected() -> bool {
+    match ORACLE.read().unwrap().last_updated {
+        Some(time) => {
+            if time.elapsed() > OUTDATED_TIME {
+                return true;
+            }
+        }
+        None => return true,
+    }
+    false
 }
 
 async fn update_blockchain_info(our_address: Address, web3: Web3, full_node: String) {
@@ -231,6 +260,7 @@ async fn update_blockchain_info(our_address: Address, web3: Web3, full_node: Str
                 }
             }
             set_oracle_last_seen_block(latest_block);
+            set_oracle_last_updated(Instant::now());
         }
         Err(e) => {
             warn!("Failed to get latest block number with {:?}", e);

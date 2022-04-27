@@ -10,6 +10,7 @@ pub mod id_callback;
 pub mod neighbor_status;
 pub mod shaping;
 
+//use crate::blockchain_oracle::potential_payment_issues_detected;
 use crate::peer_listener::Peer;
 use crate::RitaCommonError;
 use crate::FAST_LOOP_TIMEOUT;
@@ -579,6 +580,11 @@ fn tunnel_state_change(msg: TunnelChange, tunnels: &mut HashMap<Identity, Vec<Tu
     );
     let mut tunnel_bw_limits_need_change = false;
 
+    // if potential_payment_issues_detected() {
+    //     warn!("Potential payment issue detected");
+    //     return;
+    // }
+
     // Find a tunnel
     match tunnels.get_mut(&id) {
         Some(tunnels) => {
@@ -656,6 +662,7 @@ fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, Vec<Tunnel>>) -> Result<()
             }
         }
     }
+
     let payment = settings::get_rita_common().payment;
     let bw_per_iface = if limited_interfaces > 0 {
         payment.free_tier_throughput / u32::from(limited_interfaces)
