@@ -109,7 +109,7 @@ class World:
                 EXIT_NAMESPACE, POSTGRES_USER, POSTGRES_BIN, POSTGRES_DATABASE, POSTGRES_CONFIG), False)
             time.sleep(30)
         else:
-            exec_no_exit("sudo ip netns exec {} sudo -u {} PGDATA=/var/lib/postgresql/data {}".format(
+            exec_no_exit("sudo ip netns exec {} sudo -u {} PGDATA=/var/lib/postgresql/data {} --no-locale".format(
                 EXIT_NAMESPACE, POSTGRES_USER, INITDB_BIN), True)
             exec_or_exit("sudo ip netns exec {} sudo -u {} PGDATA=/var/lib/postgresql/data {}".format(
                 EXIT_NAMESPACE, POSTGRES_USER, POSTGRES_BIN), False)
