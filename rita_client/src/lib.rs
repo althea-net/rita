@@ -43,8 +43,7 @@ pub use crate::dashboard::router::*;
 pub use crate::dashboard::system_chain::*;
 pub use crate::dashboard::usage;
 pub use crate::dashboard::wifi::*;
-use settings::client::{default_config_path, RitaClientSettings, APP_NAME};
-use std::time::{Duration, Instant};
+use settings::client::{default_config_path, APP_NAME};
 
 #[derive(Debug, Deserialize)]
 pub struct Args {
@@ -79,23 +78,4 @@ About:
     git hash {}",
         APP_NAME, READABLE_VERSION, version, git_hash
     )
-}
-
-/// Some devices (n600/n750) will provide junk file reads during disk init
-/// post flashing, this adds in retry for the settings file read for up to
-/// two minutes
-pub fn wait_for_settings(settings_file: &str) -> RitaClientSettings {
-    let start = Instant::now();
-    let timeout = Duration::from_secs(5);
-    let mut res = RitaClientSettings::new(settings_file);
-    while (Instant::now() - start) < timeout {
-        if let Ok(val) = res {
-            return val;
-        }
-        res = RitaClientSettings::new(settings_file);
-    }
-    match res {
-        Ok(val) => val,
-        Err(e) => panic!("Settings parse failure {:?}", e),
-    }
 }

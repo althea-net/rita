@@ -30,7 +30,6 @@ use rita_client::get_client_usage;
 use rita_client::rita_loop::start_antenna_forwarder;
 use rita_client::rita_loop::start_rita_client_endpoints;
 use rita_client::rita_loop::start_rita_client_loops;
-use rita_client::wait_for_settings;
 use rita_client::Args;
 use rita_common::debt_keeper::save_debt_on_shutdown;
 use rita_common::logging::enable_remote_logging;
@@ -70,8 +69,6 @@ fn main() {
 
     let settings_file = args.flag_config.clone();
     println!("Settings file {}", settings_file);
-
-    wait_for_settings(&settings_file);
 
     // load the settings file, setup a thread to save it out every so often
     // and populate the memory cache of settings used throughout the program
