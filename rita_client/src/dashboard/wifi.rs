@@ -224,6 +224,32 @@ fn set_channel(wifi_channel: &WifiChannel) -> Result<(), RitaClientError> {
     Ok(())
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct WifiSecurity {
+    pub radio: String,
+    pub encryption: String,
+}
+
+/// Changes the wifi encryption mode from a given dropdown menu
+fn set_security(wifi_security: &WifiSecurity) -> Result<(), RitaClientError> {
+    // check that the given string is one of the approved strings for encryption mode
+    if wifi_security.encryption == "sae"
+        || wifi_security.encryption == "sae-mixed"
+        || wifi_security.encryption == "psk2+tkip+ccmp"
+        || wifi_security.encryption == "psk-mixed+tkip+ccmp"
+    {
+        KI.set_uci_var(
+            &format!("wireless.{}.encryption", wifi_security.radio),
+            &wifi_security.encryption,
+        )?;
+        Ok(())
+    } else {
+        Err(RitaClientError::MiscStringError(
+            "Could not set wifi encryption; invalid encryption mode".to_string(),
+        ))
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct WifiDisabledReturn {
     pub needs_reboot: bool,
@@ -270,6 +296,7 @@ pub enum WifiToken {
     WifiSsid(WifiSsid),
     WifiPass(WifiPass),
     WifiDisabled(WifiDisabled),
+    WifiSecurity(WifiSecurity),
 }
 
 /// an endpoint that takes a series of wifi tokens in json format and applies them all at once
@@ -315,6 +342,13 @@ pub async fn set_wifi_multi(wifi_changes: Json<Vec<WifiToken>>) -> HttpResponse 
                 };
                 if result.needs_reboot {
                     needs_reboot = true;
+                }
+            }
+            WifiToken::WifiSecurity(val) => {
+                if let Err(e) = set_security(val) {
+                    return HttpResponse::build(StatusCode::BAD_REQUEST).json(ErrorJsonResponse {
+                        error: format!("Failed to set encryption: {}", e),
+                    });
                 }
             }
         };
@@ -441,6 +475,13 @@ fn validate_channel(
     } else {
         Ok(())
     }
+}
+
+// returns allowed wifi encryption values
+pub async fn get_allowed_encryption_modes(radio: Path<String>) -> HttpResponse {
+    debug!("/wifi_settings/get_encryption hit with {:?}", radio);
+    HttpResponse::Ok().json(["sae", "sae-mixed", "psk2+tkip+ccmp", "psk-mixed+tkip+ccmp"])
+    // TODO: restrict list based on device compatibility. This is currently just the full list of used values
 }
 
 // returns what channels are allowed for the provided radio value
