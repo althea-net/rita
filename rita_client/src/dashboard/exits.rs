@@ -65,6 +65,7 @@ pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
 
                     for exit in exit_client.exits.clone().into_iter() {
                         let selected = is_selected(&exit.1, current_exit);
+                        info!("Trying to get exit: {}", exit.0.clone());
                         let route_ip = match get_selected_exit(exit.0.clone()) {
                             Some(a) => a,
                             None => {
