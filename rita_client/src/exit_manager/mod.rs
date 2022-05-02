@@ -577,6 +577,11 @@ fn correct_default_route(input: Option<DefaultRoute>) -> bool {
 fn initialize_selected_exit_list(exit: String, server: ExitServer) {
     let list = &mut EXIT_MANAGER.write().unwrap().selected_exit_list;
 
+    info!(
+        "Setting initialized IP for exit {} with ip: {}",
+        exit,
+        server.subnet.ip()
+    );
     list.entry(exit).or_insert_with(|| SelectedExit {
         selected_id: Some(server.subnet.ip()),
         selected_id_degradation: None,
@@ -597,6 +602,11 @@ pub async fn exit_manager_tick() {
     };
     let last_exit = get_selected_exit(current_exit.clone());
     let mut exits = rita_client.exit_client.exits;
+
+    // Initialize all exits ip addrs in local lazy static if they havent been set already
+    for (k, s) in exits.clone() {
+        initialize_selected_exit_list(k, s);
+    }
 
     let exit_ser_ref = exits.get_mut(&current_exit);
 
@@ -737,7 +747,6 @@ pub async fn exit_manager_tick() {
     let servers = { settings::get_rita_client().exit_client.exits };
 
     for (k, s) in servers {
-        initialize_selected_exit_list(k.clone(), s.clone());
         match s.info {
             ExitState::Denied { .. } | ExitState::Disabled | ExitState::GotInfo { .. } => {}
 
