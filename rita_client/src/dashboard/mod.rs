@@ -143,6 +143,10 @@ pub fn start_client_dashboard(rita_dashboard_port: u16) {
                         "/wifi_settings/get_channels/{radio}",
                         web::get().to(get_allowed_wifi_channels),
                     )
+                    .route(
+                        "/wifi_settings/get_encryption/{radio}",
+                        web::get().to(get_allowed_encryption_modes),
+                    )
                     .route("/wifi_settings", web::get().to(get_wifi_config))
                     .route("/withdraw/{address}/{amount}", web::post().to(withdraw))
                     .route("/withdraw_all/{address}", web::post().to(withdraw_all))
