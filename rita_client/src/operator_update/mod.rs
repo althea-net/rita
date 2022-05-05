@@ -7,6 +7,7 @@ use crate::rita_loop::is_gateway_client;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::set_router_update_instruction;
 use althea_kernel_interface::opkg_feeds::CUSTOMFEEDS;
+use althea_kernel_interface::KernelInterfaceError;
 use althea_types::get_sequence_num;
 use althea_types::ContactStorage;
 use althea_types::ContactType;
@@ -402,19 +403,32 @@ fn check_contacts_update(current: Option<ContactStorage>, incoming: Option<Conta
 
 /// Allows for online updating of the release feed, note that this not run
 /// on every device startup meaning just editing it the config is not sufficient
-fn handle_release_feed_update(val: Option<String>) {
+fn handle_release_feed_update(val: Option<String>) -> Result<(), KernelInterfaceError> {
     match (val, get_release_feed(CUSTOMFEEDS)) {
-        (None, _) => {}
-        (Some(new_feed), Err(_)) => {
-            if let Err(e) = set_release_feed(&new_feed, CUSTOMFEEDS) {
+        // a none argument is interpreted as not changing anything, rather than returning
+        // to no release feed.
+        (None, _) => Ok(()),
+        // if there's an error getting the current release feed, try to set anyways
+        (Some(new_feed), Err(_)) => match set_release_feed(&new_feed, CUSTOMFEEDS) {
+            Ok(_) => Ok(()),
+            Err(e) => {
                 error!("Failed to set new release feed! {:?}", e);
+                Err(e)
             }
-        }
+        },
+        // if we can successfully get the old release feed, check that we are
+        // actually changing it, then apply the change
         (Some(new_feed), Ok(old_feed)) => {
             if !old_feed.contains(&new_feed) {
-                if let Err(e) = set_release_feed(&new_feed, CUSTOMFEEDS) {
-                    error!("Failed to set new release feed! {:?}", e);
+                match set_release_feed(&new_feed, CUSTOMFEEDS) {
+                    Ok(_) => Ok(()),
+                    Err(e) => {
+                        error!("Failed to set new release feed! {:?}", e);
+                        Err(e)
+                    }
                 }
+            } else {
+                Ok(())
             }
         }
     }

@@ -11,7 +11,11 @@ pub fn update_rita(instruction: UpdateType) -> Result<Output, KernelInterfaceErr
             UpdateType::Sysupgrade(command) => KI.perform_sysupgrade(command),
             UpdateType::Opkg(commands) => {
                 //update the feed
-                handle_release_feed_update(Some(commands.feed));
+                let res = handle_release_feed_update(Some(commands.feed));
+                if let Err(e) = res {
+                    error!("Unable to update release feed for opkg update {:?}", e);
+                    return Err(e);
+                }
                 info!("Set new release feed for opkg");
 
                 //opkg commands
