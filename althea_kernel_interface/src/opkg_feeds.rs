@@ -3,12 +3,12 @@ use crate::file_io::write_out;
 use crate::KernelInterfaceError as Error;
 
 pub static CUSTOMFEEDS: &str = "/etc/opkg/customfeeds.conf";
-static FEED_NAME: &str = "openwrt_althea";
+static FEED_NAME: &str = "althea";
 
 pub fn get_release_feed(customfeeds: &str) -> Result<String, Error> {
     let lines = get_lines(customfeeds)?;
     for line in lines.iter() {
-        // there may be other custom feeds configured, if it's not openwrt_althea skip it
+        // there may be other custom feeds configured, if it's not althea skip it
         if !line.contains(&FEED_NAME.to_string()) {
             continue;
         }
@@ -23,7 +23,7 @@ pub fn set_release_feed(val: &str, customfeeds: &str) -> Result<(), Error> {
     for line in lines.iter_mut() {
         if line.contains(&FEED_NAME.to_string()) {
             let src_line = val.to_string();
-            let mut owned_string = "src/gz openwrt_althea ".to_string().to_owned();
+            let mut owned_string = "src/gz althea ".to_string().to_owned();
             owned_string.push_str(&src_line);
             *line = owned_string;
         }
@@ -36,7 +36,7 @@ pub fn set_release_feed(val: &str, customfeeds: &str) -> Result<(), Error> {
 fn test_reading_feed() {
     let path = "../settings/customfeed.conf";
     assert_eq!(
-        "src/gz openwrt_althea www.dummyurl.com".to_string(),
+        "src/gz althea www.dummyurl.com".to_string(),
         get_release_feed(path).unwrap()
     );
 }
@@ -46,7 +46,7 @@ fn test_writing_feed() {
     let path = "../settings/customfeed.conf";
     let _res = set_release_feed("www.dummyurl.com", path);
     assert_eq!(
-        "src/gz openwrt_althea www.dummyurl.com".to_string(),
+        "src/gz althea www.dummyurl.com".to_string(),
         get_release_feed(path).unwrap()
     );
 }
