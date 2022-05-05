@@ -8,15 +8,17 @@
 //! as necessary and convert it into a response, modify it as necessary and then return that
 //! response
 
+use actix_web_async::body::BoxBody;
 use actix_web_async::dev::{Service, Transform};
 use actix_web_async::http::header::{
     Header, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_ORIGIN,
 };
 use actix_web_async::http::{header, Method, StatusCode};
-use actix_web_httpauth_async::extractors::basic::Config;
-use actix_web_httpauth_async::extractors::AuthenticationError;
+use actix_web_async::HttpResponse;
 
 use actix_web_async::{dev::ServiceRequest, dev::ServiceResponse, Error};
+use actix_web_httpauth_async::extractors::basic::Config;
+use actix_web_httpauth_async::extractors::AuthenticationError;
 use actix_web_httpauth_async::headers::authorization::{Authorization, Basic};
 use futures::future::{ok, LocalBoxFuture, Ready};
 use futures::FutureExt;
@@ -72,6 +74,8 @@ where
             None => url_no_port,
         };
 
+        info!("our req is {:?} and origin is {:?}", req, origin);
+
         let req_method = req.method().clone();
 
         let fut = self.service.call(req);
@@ -109,11 +113,11 @@ where
 
 pub struct AuthMiddlewareFactory;
 
-impl<S, B> Transform<S, ServiceRequest> for AuthMiddlewareFactory
+impl<S> Transform<S, ServiceRequest> for AuthMiddlewareFactory
 where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
+    S: Service<ServiceRequest, Response = ServiceResponse<BoxBody>, Error = Error> + 'static,
 {
-    type Response = ServiceResponse<B>;
+    type Response = ServiceResponse<BoxBody>;
     type Error = Error;
     type InitError = ();
     type Transform = AuthMiddleware<S>;
@@ -128,11 +132,11 @@ pub struct AuthMiddleware<S> {
     service: S,
 }
 
-impl<S, B> Service<ServiceRequest> for AuthMiddleware<S>
+impl<S> Service<ServiceRequest> for AuthMiddleware<S>
 where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
+    S: Service<ServiceRequest, Response = ServiceResponse<BoxBody>, Error = Error> + 'static,
 {
-    type Response = ServiceResponse<B>;
+    type Response = ServiceResponse<BoxBody>;
     type Error = Error;
     type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
 
@@ -140,6 +144,7 @@ where
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let password = settings::get_rita_client().network.rita_dashboard_password;
+        info!("Password set is {:?}", password);
 
         let req_path = req.path().to_string();
 
@@ -158,8 +163,13 @@ where
             let auth = match auth {
                 Ok(auth) => auth,
                 Err(_) => {
-                    let config = Config::default();
-                    return Err(AuthenticationError::from(config.realm("Admin")).into());
+                    let resp = fut.await?;
+                    let requ = resp.request().clone();
+                    let http_resp: HttpResponse<BoxBody> = HttpResponse::Forbidden()
+                        .finish()
+                        .set_body(actix_web_async::body::BoxBody::new("Unauthorized"));
+                    let resp = ServiceResponse::new(requ, http_resp);
+                    return Ok(resp);
                 }
             };
 
