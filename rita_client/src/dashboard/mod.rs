@@ -69,8 +69,8 @@ pub fn start_client_dashboard(rita_dashboard_port: u16) {
         runner.block_on(async move {
             let _res = HttpServer::new(|| {
                 App::new()
-                    .wrap(middleware::HeadersMiddlewareFactory)
                     .wrap(middleware::AuthMiddlewareFactory)
+                    .wrap(middleware::HeadersMiddlewareFactory)
                     .route("/backup_created", web::get().to(get_backup_created))
                     .route(
                         "/backup_created/{status}",
