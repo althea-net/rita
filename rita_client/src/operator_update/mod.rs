@@ -73,34 +73,17 @@ impl UptimeStruct {
 }
 
 lazy_static! {
-    pub static ref RITA_UPTIME: Instant = Instant::now();
-    pub static ref TIME_PASSED: Arc<RwLock<UptimeStruct>> =
-        Arc::new(RwLock::new(UptimeStruct::new()));
-    static ref OPERATOR_UPDATE: Arc<RwLock<OperatorUpdate>> =
-        Arc::new(RwLock::new(OperatorUpdate::default()));
+    /// stores the startup time for Rita, used to compute uptime
+    static ref RITA_UPTIME: Instant = Instant::now();
+    /// a timer of when we last ran an operator update, used to
+    /// keep from running updates too often
+    static ref OPERATOR_UPDATE: Arc<RwLock<Instant>> =
+        Arc::new(RwLock::new(Instant::now()));
 }
 
 /// Perform operator updates every UPDATE_FREQUENCY seconds,
 /// even if we are called more often than that
 const UPDATE_FREQUENCY: Duration = Duration::from_secs(60);
-
-pub struct OperatorUpdate {
-    last_update: Instant,
-}
-
-impl OperatorUpdate {
-    pub fn new() -> Self {
-        OperatorUpdate {
-            last_update: Instant::now(),
-        }
-    }
-}
-
-impl Default for OperatorUpdate {
-    fn default() -> OperatorUpdate {
-        OperatorUpdate::new()
-    }
-}
 
 /// How long we wait for a response from the server
 /// this value must be less than or equal to the CLIENT_LOOP_SPEED
@@ -111,10 +94,10 @@ pub struct Update;
 
 pub async fn operator_update() {
     let operator_update = &mut *OPERATOR_UPDATE.write().unwrap();
-    let time_elapsed = Instant::now().checked_duration_since(operator_update.last_update);
+    let time_elapsed = Instant::now().checked_duration_since(*operator_update);
     if time_elapsed.is_some() && time_elapsed.unwrap() > UPDATE_FREQUENCY {
         checkin().await;
-        operator_update.last_update = Instant::now();
+        *operator_update = Instant::now();
     }
 }
 
@@ -197,7 +180,7 @@ async fn checkin() {
             billing_details,
             hardware_info,
             user_bandwidth_limit,
-            rita_uptime: TIME_PASSED.write().unwrap().time_elapsed(&RITA_UPTIME),
+            rita_uptime: RITA_UPTIME.elapsed(),
         })
         .await;
 
@@ -509,12 +492,4 @@ mod tests {
             panic!("Not a json map!");
         }
     }
-}
-
-#[test]
-fn test_rita_uptime() {
-    // exact key match should fail
-    let uptime = TIME_PASSED.read().unwrap();
-    let time = uptime.prev_time;
-    println!("Time: {}", time.as_secs());
 }
