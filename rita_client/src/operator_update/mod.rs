@@ -6,34 +6,28 @@ use crate::dashboard::wifi::reset_wifi_pass;
 use crate::rita_loop::is_gateway_client;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::set_router_update_instruction;
-use althea_kernel_interface::opkg_feeds::CUSTOMFEEDS;
-use althea_kernel_interface::KernelInterfaceError;
+use althea_kernel_interface::hardware_info::get_hardware_info;
 use althea_types::get_sequence_num;
 use althea_types::ContactStorage;
 use althea_types::ContactType;
 use althea_types::HardwareInfo;
-use rita_common::rita_loop::is_gateway;
-use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
-use rita_common::tunnel_manager::shaping::flag_reset_shaper;
-use rita_common::utils::option_convert;
-use settings::client::RitaClientSettings;
-use settings::network::NetworkSettings;
-use settings::payment::PaymentSettings;
-use updater::update_rita;
-
-use althea_kernel_interface::hardware_info::get_hardware_info;
-use althea_kernel_interface::opkg_feeds::get_release_feed;
-use althea_kernel_interface::opkg_feeds::set_release_feed;
-
 use althea_types::OperatorAction;
 use althea_types::OperatorCheckinMessage;
 use althea_types::OperatorUpdateMessage;
 use num256::Uint256;
+use rita_common::rita_loop::is_gateway;
+use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
+use rita_common::tunnel_manager::shaping::flag_reset_shaper;
+use rita_common::utils::option_convert;
 use rita_common::KI;
 use serde_json::Map;
 use serde_json::Value;
+use settings::client::RitaClientSettings;
+use settings::network::NetworkSettings;
+use settings::payment::PaymentSettings;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
+use updater::update_system;
 
 /// Things that you are not allowed to put into the merge json field of the OperatorUpdate,
 /// this mostly includes dangerous local things like eth private keys (erase money)
@@ -230,8 +224,18 @@ async fn checkin() {
     operator.operator_fee = new_operator_fee;
     rita_client.operator = operator;
     merge_settings_safely(new_settings.merge_json.clone());
-    //Every tick, update the local router update instructions
-    set_router_update_instruction(new_settings.local_update_instruction.clone());
+
+    // Every tick, update the local router update instructions
+    let update_instructions = match (
+        new_settings.local_update_instruction.clone(),
+        new_settings.local_update_instruction_v2.clone(),
+    ) {
+        (None, None) => None,
+        (Some(legacy), None) => Some(legacy.into()),
+        (_, Some(new)) => Some(new),
+    };
+    set_router_update_instruction(update_instructions);
+
     perform_operator_update(new_settings, rita_client, network)
 }
 
@@ -283,20 +287,22 @@ fn perform_operator_update(
         Some(OperatorAction::ChangeOperatorAddress { new_address }) => {
             rita_client.operator.operator_address = new_address;
         }
-        Some(OperatorAction::Update { instruction }) => {
+        Some(OperatorAction::UpdateV2 { instruction }) => {
             info!(
                 "Received an update command from op tools! The instruction is {:?}",
                 instruction
             );
-            let res = update_rita(instruction);
+            let res = update_system(instruction);
             info!("Update command result is {:?}", res);
         }
-        // both of these actions have been removed, but need to be kept
-        // for backwards compatibility for a while
-        Some(OperatorAction::ChangeReleaseFeedAndUpdate { feed: _ }) => {
-            info!("Got outdated command ChangeReleaseFeedAndUpdate")
+        Some(OperatorAction::Update { instruction }) => {
+            info!(
+                "Received a legacy update command from op tools! The instruction is {:?}",
+                instruction
+            );
+            let res = update_system(instruction.into());
+            info!("Update command result is {:?}", res);
         }
-        Some(OperatorAction::UpdateNow) => info!("Got outdated command UpdateNow"),
         Some(OperatorAction::SetMinGas { new_min_gas }) => {
             info!(
                 "Updated min gas from {} to {}",
@@ -382,39 +388,6 @@ fn check_contacts_update(current: Option<ContactStorage>, incoming: Option<Conta
         return false;
     }
     false
-}
-
-/// Allows for online updating of the release feed, note that this not run
-/// on every device startup meaning just editing it the config is not sufficient
-fn handle_release_feed_update(val: Option<String>) -> Result<(), KernelInterfaceError> {
-    match (val, get_release_feed(CUSTOMFEEDS)) {
-        // a none argument is interpreted as not changing anything, rather than returning
-        // to no release feed.
-        (None, _) => Ok(()),
-        // if there's an error getting the current release feed, try to set anyways
-        (Some(new_feed), Err(_)) => match set_release_feed(&new_feed, CUSTOMFEEDS) {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                error!("Failed to set new release feed! {:?}", e);
-                Err(e)
-            }
-        },
-        // if we can successfully get the old release feed, check that we are
-        // actually changing it, then apply the change
-        (Some(new_feed), Ok(old_feed)) => {
-            if !old_feed.contains(&new_feed) {
-                match set_release_feed(&new_feed, CUSTOMFEEDS) {
-                    Ok(_) => Ok(()),
-                    Err(e) => {
-                        error!("Failed to set new release feed! {:?}", e);
-                        Err(e)
-                    }
-                }
-            } else {
-                Ok(())
-            }
-        }
-    }
 }
 
 /// Merges an arbitrary settings string, after first filtering for several

@@ -317,12 +317,69 @@ pub struct PaymentTx {
     pub txid: Option<Uint256>,
 }
 
-///This enum contains information about what type of update we need to perform on a router initiated from op tools.
+/// This enum contains information about what type of update we need to perform on a router initiated from op tools.
 /// This can either be a sysupgrade with a url to a firmware image, or an opkg update with a url to a opkg feed
 #[derive(Serialize, Deserialize, Hash, Clone, Debug, Eq, PartialEq)]
 pub enum UpdateType {
     Sysupgrade(SysupgradeCommand),
-    Opkg(OpkgCommandList),
+    Opkg(Vec<OpkgCommand>),
+}
+
+static FEED_NAME: &str = "althea";
+impl From<UpdateTypeLegacy> for UpdateType {
+    fn from(legacy: UpdateTypeLegacy) -> Self {
+        match legacy {
+            UpdateTypeLegacy::Sysupgrade(command) => UpdateType::Sysupgrade(command),
+            UpdateTypeLegacy::Opkg(legacy_opkg) => {
+                let mut commands = Vec::new();
+                for item in legacy_opkg.command_list {
+                    match item.opkg_command {
+                        OpkgCommandTypeLegacy::Install => {
+                            if item.packages.is_none() {
+                                continue;
+                            }
+                            commands.push(OpkgCommand::Install {
+                                packages: item.packages.unwrap(),
+                                arguments: item.arguments.unwrap_or_default(),
+                            })
+                        }
+                        OpkgCommandTypeLegacy::Update => commands.push(OpkgCommand::Update {
+                            feed: legacy_opkg.feed.clone(),
+                            feed_name: FEED_NAME.to_string(),
+                            arguments: item.arguments.unwrap_or_default(),
+                        }),
+                    }
+                }
+                UpdateType::Opkg(commands)
+            }
+        }
+    }
+}
+
+/// This enum defines which opkg command we are performing during a router update
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub enum OpkgCommand {
+    Install {
+        packages: Vec<String>,
+        arguments: Vec<String>,
+    },
+    Remove {
+        packages: Vec<String>,
+        arguments: Vec<String>,
+    },
+    Update {
+        feed: String,
+        feed_name: String,
+        arguments: Vec<String>,
+    },
+}
+
+///This enum contains information about what type of update we need to perform on a router initiated from op tools.
+/// This can either be a sysupgrade with a url to a firmware image, or an opkg update with a url to a opkg feed
+#[derive(Serialize, Deserialize, Hash, Clone, Debug, Eq, PartialEq)]
+pub enum UpdateTypeLegacy {
+    Sysupgrade(SysupgradeCommand),
+    Opkg(OpkgCommandListLegacy),
 }
 
 #[derive(Serialize, Deserialize, Hash, Clone, Debug, Eq, PartialEq)]
@@ -334,22 +391,22 @@ pub struct SysupgradeCommand {
 
 #[derive(Serialize, Deserialize, Hash, Clone, Debug, Eq, PartialEq)]
 /// This struct contains the feed and a vector of opkg commands to run on an update
-pub struct OpkgCommandList {
+pub struct OpkgCommandListLegacy {
     pub feed: String,
-    pub command_list: Vec<OpkgCommand>,
+    pub command_list: Vec<OpkgCommandLegacy>,
 }
 
 /// This struct contains alls the information need to perfom an opkg command, i.e, install/update, list of arguments, and flags
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct OpkgCommand {
-    pub opkg_command: OpkgCommandType,
+pub struct OpkgCommandLegacy {
+    pub opkg_command: OpkgCommandTypeLegacy,
     pub packages: Option<Vec<String>>,
     pub arguments: Option<Vec<String>>,
 }
 
 /// This enum defines which opkg command we are performing during a router update
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub enum OpkgCommandType {
+pub enum OpkgCommandTypeLegacy {
     Install,
     Update,
 }
@@ -383,15 +440,12 @@ pub enum OperatorAction {
     /// routing processes. For x86 machines this action comes with some risk as devices may
     /// get stuck in the BIOS if not configured properly.
     Reboot,
-    /// Legacy action, remaining here for database backwards compatibility
-    UpdateNow,
     /// Sends instructions from op tools about the type of update to perform, either a sysupgrade
     /// or an opkg update
-    Update { instruction: UpdateType },
-    /// Changes the release feed to the specified value and runs the update script immediately after
-    /// instead of waiting for the cron job to complete. This allows for a simple, single operation
-    /// update of a specific router.
-    ChangeReleaseFeedAndUpdate { feed: ReleaseStatus },
+    UpdateV2 { instruction: UpdateType },
+    /// Sends instructions from op tools about the type of update to perform, either a sysupgrade
+    /// or an opkg update, to be removed after all routers >= beta 19 rc9
+    Update { instruction: UpdateTypeLegacy },
     /// Changes the operator address of a given router in order to support Beta 15 and below
     /// this has it's own logic in the operator tools that will later be removed for the logic
     /// you see in Althea_rs
@@ -452,9 +506,13 @@ pub struct OperatorUpdateMessage {
     /// An action the operator wants to take to affect this router, examples may include reset
     /// password or change the wifi ssid
     pub operator_action: Option<OperatorAction>,
-    /// String that holds the download link to the latest (or prefered) firmware release
+    /// String that holds the download link to the latest firmware release
     /// When a user hits 'update router', it updates to this version
-    pub local_update_instruction: Option<UpdateType>,
+    /// to be removed once all routesr are updated to >= beta 19 rc9
+    pub local_update_instruction: Option<UpdateTypeLegacy>,
+    /// String that holds the download link to the latest firmware release
+    /// When a user hits 'update router', it updates to this version
+    pub local_update_instruction_v2: Option<UpdateType>,
     /// settings for the device bandwidth shaper
     #[serde(default = "default_shaper_settings")]
     pub shaper_settings: ShaperSettings,

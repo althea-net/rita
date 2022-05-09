@@ -1,4 +1,4 @@
-use crate::operator_update::updater::update_rita;
+use crate::operator_update::updater::update_system;
 use actix_web_async::{http::StatusCode, HttpRequest, HttpResponse};
 use althea_types::UpdateType;
 use rita_common::KI;
@@ -30,7 +30,7 @@ pub async fn update_router(_req: HttpRequest) -> HttpResponse {
         if reader.is_none() {
             return HttpResponse::Ok().json("No update instructions set, doing nothing");
         }
-        if let Err(e) = update_rita(reader.as_ref().unwrap().clone()) {
+        if let Err(e) = update_system(reader.as_ref().unwrap().clone()) {
             return HttpResponse::Ok()
                 .json(format!("Retrieved Error while performing update {}", e));
         }
