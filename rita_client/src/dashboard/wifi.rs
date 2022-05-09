@@ -3,6 +3,7 @@
 use ::actix_web_async::http::StatusCode;
 use ::actix_web_async::web::Path;
 use ::actix_web_async::{web::Json, HttpRequest, HttpResponse};
+use althea_types::FromStr;
 use rita_common::dashboard::nickname::maybe_set_nickname;
 use rita_common::{RitaCommonError, KI};
 use serde_json::Value;
@@ -74,6 +75,41 @@ pub struct WifiDevice {
 static FORBIDDEN_CHARS: &str = "'/\"\\";
 
 static MINIMUM_PASS_CHARS: usize = 8;
+
+pub enum EncryptionModes {
+    //"sae", "sae-mixed", "psk2+tkip+ccmp", "psk-mixed+tkip+ccmp"
+    Sae,
+    SaeMixed,
+    Psk2TkipCcmp,
+    Psk2MixedTkipCcmp,
+}
+
+impl ToString for EncryptionModes {
+    fn to_string(&self) -> String {
+        match self {
+            EncryptionModes::Sae => "sae".to_string(),
+            EncryptionModes::SaeMixed => "sae-mixed".to_string(),
+            EncryptionModes::Psk2TkipCcmp => "psk2+tkip+ccmp".to_string(),
+            EncryptionModes::Psk2MixedTkipCcmp => "psk-mixed+tkip+ccmp".to_string(),
+        }
+    }
+}
+impl FromStr for EncryptionModes {
+    type Err = RitaClientError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "sae" => Ok(EncryptionModes::Sae),
+            "sae-mixed" => Ok(EncryptionModes::SaeMixed),
+            "psk2+tkip+ccmp" => Ok(EncryptionModes::Psk2TkipCcmp),
+            "psk-mixed+tkip+ccmp" => Ok(EncryptionModes::Psk2MixedTkipCcmp),
+            _ => {
+                let e = RitaClientError::MiscStringError("Invalid encryption mode!".to_string());
+                Err(e)
+            }
+        }
+    }
+}
 
 /// A helper error type for displaying UCI config value validation problems human-readably.
 #[derive(Debug, Serialize)]
@@ -233,15 +269,12 @@ pub struct WifiSecurity {
 /// Changes the wifi encryption mode from a given dropdown menu
 fn set_security(wifi_security: &WifiSecurity) -> Result<(), RitaClientError> {
     // check that the given string is one of the approved strings for encryption mode
-    if wifi_security.encryption == "sae"
-        || wifi_security.encryption == "sae-mixed"
-        || wifi_security.encryption == "psk2+tkip+ccmp"
-        || wifi_security.encryption == "psk-mixed+tkip+ccmp"
-    {
+    if EncryptionModes::from_str(&wifi_security.encryption).is_ok() {
         KI.set_uci_var(
             &format!("wireless.{}.encryption", wifi_security.radio),
             &wifi_security.encryption,
         )?;
+
         Ok(())
     } else {
         Err(RitaClientError::MiscStringError(
@@ -480,7 +513,12 @@ fn validate_channel(
 // returns allowed wifi encryption values
 pub async fn get_allowed_encryption_modes(radio: Path<String>) -> HttpResponse {
     debug!("/wifi_settings/get_encryption hit with {:?}", radio);
-    HttpResponse::Ok().json(["sae", "sae-mixed", "psk2+tkip+ccmp", "psk-mixed+tkip+ccmp"])
+    HttpResponse::Ok().json([
+        EncryptionModes::Sae.to_string(),
+        EncryptionModes::SaeMixed.to_string(),
+        EncryptionModes::Psk2TkipCcmp.to_string(),
+        EncryptionModes::Psk2MixedTkipCcmp.to_string(),
+    ])
     // TODO: restrict list based on device compatibility. This is currently just the full list of used values
 }
 
