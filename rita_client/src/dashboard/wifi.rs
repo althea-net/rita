@@ -77,10 +77,13 @@ static FORBIDDEN_CHARS: &str = "'/\"\\";
 static MINIMUM_PASS_CHARS: usize = 8;
 
 pub enum EncryptionModes {
-    //"sae", "sae-mixed", "psk2+tkip+ccmp", "psk-mixed+tkip+ccmp"
+    /// WPA3 Personal
     Sae,
+    /// WPA2/WPA3 Personal mixed mode
     SaeMixed,
+    /// WPA2 Personal
     Psk2TkipCcmp,
+    /// WPA/WPA2 Personal mixed mode
     Psk2MixedTkipCcmp,
 }
 
@@ -154,10 +157,6 @@ fn set_ssid(wifi_ssid: &WifiSsid) -> Result<(), RitaClientError> {
     if let Err(e) = validate_config_value(&wifi_ssid.ssid) {
         info!("Setting of invalid SSID was requested: {}", e);
         return Err(e.into());
-        // ret.insert("error".to_owned(), format!("{}", e));
-        // return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
-        //     .into_builder()
-        //     .json(ret));
     }
 
     // think radio0, radio1
@@ -247,9 +246,6 @@ fn set_channel(wifi_channel: &WifiChannel) -> Result<(), RitaClientError> {
     ) {
         info!("Setting of invalid SSID was requested: {}", e);
         return Err(e.into());
-        // return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)
-        //     .into_builder()
-        //     .json("Invalid SSID!"));
     }
 
     KI.set_uci_var(
@@ -270,8 +266,11 @@ pub struct WifiSecurity {
 fn set_security(wifi_security: &WifiSecurity) -> Result<(), RitaClientError> {
     // check that the given string is one of the approved strings for encryption mode
     if EncryptionModes::from_str(&wifi_security.encryption).is_ok() {
+        // think radio0, radio1
+        let iface_name = wifi_security.radio.clone();
+        let section_name = format!("default_{}", iface_name);
         KI.set_uci_var(
-            &format!("wireless.{}.encryption", wifi_security.radio),
+            &format!("wireless.{}.encryption", section_name),
             &wifi_security.encryption,
         )?;
 
