@@ -6,6 +6,7 @@ use ::actix_web_async::{web::Json, HttpRequest, HttpResponse};
 use althea_types::FromStr;
 use rita_common::dashboard::nickname::maybe_set_nickname;
 use rita_common::{RitaCommonError, KI};
+use serde::{Deserialize, Deserializer, Serializer};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -50,7 +51,11 @@ pub struct WifiInterface {
     pub mesh: bool,
     pub mode: String,
     pub ssid: String,
-    pub encryption: String,
+    #[serde(
+        deserialize_with = "parse_encryption_modes",
+        serialize_with = "print_encryption_modes"
+    )]
+    pub encryption: EncryptionModes,
     pub key: Option<String>,
     #[serde(default, skip_deserializing)]
     pub device: WifiDevice,
@@ -76,6 +81,7 @@ static FORBIDDEN_CHARS: &str = "'/\"\\";
 
 static MINIMUM_PASS_CHARS: usize = 8;
 
+#[derive(Serialize, Deserialize, Clone, Debug, Copy)]
 pub enum EncryptionModes {
     /// WPA3 Personal
     Sae,
@@ -85,15 +91,32 @@ pub enum EncryptionModes {
     Psk2TkipCcmp,
     /// WPA/WPA2 Personal mixed mode
     Psk2MixedTkipCcmp,
+    /// No encryption
+    None,
 }
 
-impl ToString for EncryptionModes {
-    fn to_string(&self) -> String {
+impl EncryptionModes {
+    /// returns the wifi mode as it needs to be in the uci config
+    fn as_config_value(&self) -> String {
         match self {
+            EncryptionModes::None => "none".to_string(),
             EncryptionModes::Sae => "sae".to_string(),
             EncryptionModes::SaeMixed => "sae-mixed".to_string(),
             EncryptionModes::Psk2TkipCcmp => "psk2+tkip+ccmp".to_string(),
             EncryptionModes::Psk2MixedTkipCcmp => "psk-mixed+tkip+ccmp".to_string(),
+        }
+    }
+}
+
+impl Display for EncryptionModes {
+    // This trait requires `fmt` with this exact signature.
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            EncryptionModes::None => write!(f, "none",),
+            EncryptionModes::Sae => write!(f, "WPA3",),
+            EncryptionModes::SaeMixed => write!(f, "WPA2+WPA3",),
+            EncryptionModes::Psk2TkipCcmp => write!(f, "WPA2",),
+            EncryptionModes::Psk2MixedTkipCcmp => write!(f, "WPA+WPA2",),
         }
     }
 }
@@ -102,15 +125,36 @@ impl FromStr for EncryptionModes {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "sae" => Ok(EncryptionModes::Sae),
-            "sae-mixed" => Ok(EncryptionModes::SaeMixed),
-            "psk2+tkip+ccmp" => Ok(EncryptionModes::Psk2TkipCcmp),
-            "psk-mixed+tkip+ccmp" => Ok(EncryptionModes::Psk2MixedTkipCcmp),
+            "none" | "NONE" => Ok(EncryptionModes::None),
+            "sae" | "WPA3" => Ok(EncryptionModes::Sae),
+            "sae-mixed" | "WPA2+WPA3" => Ok(EncryptionModes::SaeMixed),
+            "psk2+tkip+ccmp" | "WPA2" => Ok(EncryptionModes::Psk2TkipCcmp),
+            "psk-mixed+tkip+ccmp" | "WPA+WPA2" => Ok(EncryptionModes::Psk2MixedTkipCcmp),
             _ => {
                 let e = RitaClientError::MiscStringError("Invalid encryption mode!".to_string());
                 Err(e)
             }
         }
+    }
+}
+// below are specialized functions to deserialize/serialize encryption modes using from_str
+// and display traits
+/// actually will generically serialize anything that implements display, useful boilerplate
+pub fn print_encryption_modes<T, S>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
+where
+    T: Display,
+    S: Serializer,
+{
+    serializer.collect_str(value)
+}
+fn parse_encryption_modes<'de, D>(deserializer: D) -> Result<EncryptionModes, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: String = String::deserialize(deserializer)?;
+    match EncryptionModes::from_str(&s) {
+        Ok(val) => Ok(val),
+        Err(_) => Err(serde::de::Error::unknown_variant(&s, &["valid value"])),
     }
 }
 
@@ -265,13 +309,13 @@ pub struct WifiSecurity {
 /// Changes the wifi encryption mode from a given dropdown menu
 fn set_security(wifi_security: &WifiSecurity) -> Result<(), RitaClientError> {
     // check that the given string is one of the approved strings for encryption mode
-    if EncryptionModes::from_str(&wifi_security.encryption).is_ok() {
+    if let Ok(parsed) = EncryptionModes::from_str(&wifi_security.encryption) {
         // think radio0, radio1
         let iface_name = wifi_security.radio.clone();
         let section_name = format!("default_{}", iface_name);
         KI.set_uci_var(
             &format!("wireless.{}.encryption", section_name),
-            &wifi_security.encryption,
+            &parsed.as_config_value(),
         )?;
 
         Ok(())
@@ -509,10 +553,11 @@ fn validate_channel(
     }
 }
 
-// returns allowed wifi encryption values
+/// returns allowed wifi encryption values
 pub async fn get_allowed_encryption_modes(radio: Path<String>) -> HttpResponse {
     debug!("/wifi_settings/get_encryption hit with {:?}", radio);
     HttpResponse::Ok().json([
+        EncryptionModes::None.to_string(),
         EncryptionModes::Sae.to_string(),
         EncryptionModes::SaeMixed.to_string(),
         EncryptionModes::Psk2TkipCcmp.to_string(),
@@ -521,7 +566,7 @@ pub async fn get_allowed_encryption_modes(radio: Path<String>) -> HttpResponse {
     // TODO: restrict list based on device compatibility. This is currently just the full list of used values
 }
 
-// returns what channels are allowed for the provided radio value
+/// returns what channels are allowed for the provided radio value
 pub async fn get_allowed_wifi_channels(radio: Path<String>) -> HttpResponse {
     debug!("/wifi_settings/get_channels hit with {:?}", radio);
     let radio = radio.into_inner();
