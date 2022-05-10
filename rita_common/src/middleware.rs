@@ -74,7 +74,7 @@ where
             None => url_no_port,
         };
 
-        info!("our req is {:?} and origin is {:?}", req, origin);
+        trace!("our req is {:?} and origin is {:?}", req, origin);
 
         let req_method = req.method().clone();
 
@@ -144,7 +144,7 @@ where
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let password = settings::get_rita_client().network.rita_dashboard_password;
-        info!("Password set is {:?}", password);
+        trace!("Password set is {:?}", password);
 
         let req_path = req.path().to_string();
 
