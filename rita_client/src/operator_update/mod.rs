@@ -222,6 +222,7 @@ async fn checkin() {
     let mut operator = rita_client.operator;
     let new_operator_fee = Uint256::from(new_settings.operator_fee);
     operator.operator_fee = new_operator_fee;
+    operator.installation_details = None;
     rita_client.operator = operator;
     merge_settings_safely(new_settings.merge_json.clone());
 
