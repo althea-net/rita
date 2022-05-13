@@ -700,7 +700,7 @@ pub enum EthOperationMode {
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct NeighborStatus {
     /// the id of the neighbor
-    pub id: Identity,
+    pub neighbor_id: Identity,
     /// their shaped wg interface speed in mbps
     pub shaper_speed: Option<usize>,
     /// If this user is currently being enforced upon

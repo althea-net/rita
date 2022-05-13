@@ -46,7 +46,7 @@ pub fn update_neighbor_status() {
         external_list.insert(
             *id,
             NeighborStatus {
-                id: *id,
+                neighbor_id: *id,
                 shaper_speed: lowest_shaper_speed,
                 enforced,
             },
