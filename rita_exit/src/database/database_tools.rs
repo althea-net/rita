@@ -299,6 +299,8 @@ pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<()
             }
         };
 
+        info!("Reclaimed index is: {:?}", index);
+
         let filtered_list = assigned_ips.filter(subnet.eq(sub.to_string()));
         let res = filtered_list.load::<models::AssignedIps>(connection);
 
@@ -307,7 +309,14 @@ pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<()
                 if a.len() > 1 {
                     error!("Received multiple assigned ip entries for a singular subnet! Error");
                 }
-                let a_ip = a.pop().unwrap();
+                let a_ip = match a.pop() {
+                    Some(a) => a,
+                    None => {
+                        return Err(RitaExitError::MiscStringError(
+                            "Unable to retrive assigned ip database".to_string(),
+                        ))
+                    }
+                };
                 let mut avail_ips = a_ip.available_subnets;
                 if avail_ips.is_empty() {
                     avail_ips.push_str(&index.to_string())
@@ -317,6 +326,10 @@ pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<()
                     new_str.push_str(&index.to_string());
                     avail_ips.push_str(&new_str);
                 }
+                info!(
+                    "We are updating database with reclaim string: {:?}",
+                    avail_ips
+                );
                 diesel::update(assigned_ips.find(sub.to_string()))
                     .set(available_subnets.eq(avail_ips))
                     .execute(connection)?;
@@ -634,6 +647,50 @@ fn generate_index_from_subnet(exit_sub: IpNetwork, sub: IpNetwork) -> Result<u64
         .to_string()
         .parse::<u64>()
         .expect("Unalbe to parse biguint into u64"))
+}
+
+/// This function run on startup initializes databases and other missing fields from the previous database schema
+/// for ipv6 support. Existing clients in the previous schema will not have an ipv6 addr assigned, so every client is
+/// given one on startup
+pub fn initialize_exisitng_clients_ipv6() -> Result<(), RitaExitError> {
+    use self::schema::clients::dsl::{clients, internet_ipv6, mesh_ip};
+    let conn = get_database_connection()?;
+
+    // initialize the assigned_ips database
+    let rita_exit = settings::get_rita_exit();
+    let exit_settings = rita_exit.exit_network;
+    let subnet = exit_settings.subnet;
+
+    // If subnet isnt already present in database, create it
+    let subnet_entry = initialize_subnet_datastore(subnet, &conn)?;
+    info!("Subnet Database entry: {:?}", subnet_entry);
+
+    // update all client entries to have an ipv6 addr
+    // 1.) get list of mesh ips
+    // 2.) for each ip, select ipv6 field, if empty set an ipv6, else continue
+    let filtered_list = clients.select(mesh_ip);
+    let ip_list = filtered_list.load::<String>(&conn)?;
+
+    for ip in ip_list {
+        let filtered_list = clients.select(internet_ipv6).filter(mesh_ip.eq(&ip));
+        let mut sub = filtered_list.load::<String>(&conn)?;
+
+        if sub.len() > 1 {
+            error!("More than one ipv6 for a given client");
+        }
+
+        let ipv6 = sub.pop();
+        if ipv6.is_none() || ipv6.clone().unwrap().is_empty() {
+            let subnet_entry = initialize_subnet_datastore(subnet, &conn)?;
+            let internet_ip = get_client_subnet(subnet, subnet_entry.clone(), &conn)?;
+            info!("Initializing ipv6 addrs for existing clients, IP: {}, is given ip {:?}, subnet entry is {:?}", ip, internet_ip.clone(), subnet_entry.clone());
+            diesel::update(clients.find(ip))
+                .set(internet_ipv6.eq(internet_ip.to_string()))
+                .execute(&conn)?;
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
