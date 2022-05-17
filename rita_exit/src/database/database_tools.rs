@@ -301,7 +301,7 @@ pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<()
 
         info!("Reclaimed index is: {:?}", index);
 
-        let filtered_list = assigned_ips.filter(subnet.eq(sub.to_string()));
+        let filtered_list = assigned_ips.filter(subnet.eq(exit_sub.to_string()));
         let res = filtered_list.load::<models::AssignedIps>(connection);
 
         match res {
@@ -330,7 +330,7 @@ pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<()
                     "We are updating database with reclaim string: {:?}",
                     avail_ips
                 );
-                diesel::update(assigned_ips.find(sub.to_string()))
+                diesel::update(assigned_ips.find(exit_sub.to_string()))
                     .set(available_subnets.eq(avail_ips))
                     .execute(connection)?;
             }
