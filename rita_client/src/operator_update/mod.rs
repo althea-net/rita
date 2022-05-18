@@ -168,7 +168,7 @@ async fn checkin() {
             id,
             operator_address,
             system_chain,
-            neighbor_info: Some(neighbor_info),
+            neighbor_info,
             contact_info,
             install_details,
             billing_details,

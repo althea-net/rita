@@ -560,7 +560,7 @@ pub struct OperatorCheckinMessage {
     /// heartbeat packet, neither is it required that this data be sent very often
     /// we don't need instant updates of it. Arguably the phone number and email
     /// values for heartbeats should come in through here.
-    pub neighbor_info: Option<Vec<NeighborStatus>>,
+    pub neighbor_info: Vec<NeighborStatus>,
     /// The user contact details, stored in exit client details but used throughout
     /// for various reasons.
     ///  see the type definition for more details about how this type restricts values
@@ -697,7 +697,7 @@ pub enum EthOperationMode {
 /// Struct for storing peer status data for reporting to the operator tools server
 /// the goal is to give a full picture of all links in the network to the operator
 /// so we include not only the link speed but also the stats history of the link
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct NeighborStatus {
     /// the id of the neighbor
     pub id: Identity,
@@ -706,6 +706,8 @@ pub struct NeighborStatus {
     /// If this user is currently being enforced upon
     #[serde(default)]
     pub enforced: bool,
+    #[serde(default)]
+    pub neighbor_name: String,
 }
 
 /// Heartbeat sent to the operator server to help monitor
