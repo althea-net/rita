@@ -99,18 +99,21 @@ pub fn save_to_disk_loop(mut old_settings: SettingsOnDisk, file_path: &str) {
 /// running out of write endurance and
 /// the hard drive failing
 pub fn is_router_storage_small(router_model: &str) -> bool {
-    router_model
-        .to_lowercase()
-        .matches(
-            "linksys_e5600|
+    "linksys_e5600|
     tplink_archer-a6-v3|
     cudy_wr2100|
     mikrotik_hap-ac2|
     mikrotik_routerboard-750gr3|
     mikrotik_routerboard-760igs|
-    netgear_ex6100v2",
-        )
+    netgear_ex6100v2"
+        .matches(&router_model.to_lowercase())
         .into_iter()
         .count()
         != 0
+}
+
+#[test]
+fn test_is_router_storage_small() {
+    let router = "linksys_e5600";
+    assert!(is_router_storage_small(router));
 }
