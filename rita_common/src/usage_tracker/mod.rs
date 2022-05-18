@@ -428,13 +428,11 @@ pub fn save_usage_on_shutdown() {
     let history = &mut USAGE_TRACKER.write().unwrap();
 
     let router_model = settings::get_rita_common().network.device;
-    match router_model {
-        Some(router_model_unwrapped) => {
-            is_router_storage_small(&router_model_unwrapped);
+    if let Some(router_model_unwrapped) = router_model {
+        if !is_router_storage_small(&router_model_unwrapped) {
             let res = history.save(75);
             info!("Shutdown: saving usage data: {:?}", res);
         }
-        None => todo!(),
     }
 
     history.last_save_hour = current_hour;
