@@ -274,7 +274,7 @@ pub fn client_conflict(
 /// Delete a client from the Clients database. Retrieve the reclaimed subnet index and add it to
 /// available_subnets in assigned_ips database
 pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<(), RitaExitError> {
-    use self::schema::assigned_ips::dsl::{assigned_ips, available_subnets, subnet};
+    use self::schema::assigned_ips::dsl::{assigned_ips, subnet};
     use self::schema::clients::dsl::*;
     info!("Deleting clients {:?} in database", client);
 
@@ -285,65 +285,95 @@ pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<()
     let filtered_list = clients
         .select(internet_ipv6)
         .filter(mesh_ip.eq(&mesh_ip_string));
-    let mut sub = filtered_list.load::<String>(connection)?;
-    if let Some(sub) = sub.pop() {
-        let rita_exit = settings::get_rita_exit();
-        let exit_settings = rita_exit.exit_network;
-        let exit_sub = exit_settings.subnet;
-        // This is a valid subnet in database so this unwrap should not panic
-        let sub: IpNetwork = sub.parse().expect("Unable to parse subnet in database");
-        let index = match generate_index_from_subnet(exit_sub, sub) {
-            Ok(a) => a,
-            Err(e) => {
-                return Err(e);
-            }
-        };
+    let mut client_sub = filtered_list.load::<String>(connection)?;
 
-        info!("Reclaimed index is: {:?}", index);
+    let filtered_list = assigned_ips.select(subnet);
+    let exit_sub = filtered_list.load::<String>(connection)?;
 
-        let filtered_list = assigned_ips.filter(subnet.eq(exit_sub.to_string()));
-        let res = filtered_list.load::<models::AssignedIps>(connection);
-
-        match res {
-            Ok(mut a) => {
-                if a.len() > 1 {
-                    error!("Received multiple assigned ip entries for a singular subnet! Error");
-                }
-                let a_ip = match a.pop() {
-                    Some(a) => a,
-                    None => {
-                        return Err(RitaExitError::MiscStringError(
-                            "Unable to retrive assigned ip database".to_string(),
-                        ))
-                    }
-                };
-                let mut avail_ips = a_ip.available_subnets;
-                if avail_ips.is_empty() {
-                    avail_ips.push_str(&index.to_string())
-                } else {
-                    // if our index is '10', we need to append ",10" to the end
-                    let mut new_str = ",".to_owned();
-                    new_str.push_str(&index.to_string());
-                    avail_ips.push_str(&new_str);
-                }
-                info!(
-                    "We are updating database with reclaim string: {:?}",
-                    avail_ips
-                );
-                diesel::update(assigned_ips.find(exit_sub.to_string()))
-                    .set(available_subnets.eq(avail_ips))
-                    .execute(connection)?;
-            }
-            Err(e) => {
-                error!(
-                    "unable to add a reclaimed ip to database with error: {:?}",
-                    e
-                );
-            }
+    if let Some(client_sub) = client_sub.pop() {
+        if !client_sub.is_empty() {
+            let client_sub: Vec<&str> = client_sub.split(',').collect();
+            reclaim_all_ip_subnets(client_sub, exit_sub, connection)?;
         }
     }
 
     delete(statement).execute(connection)?;
+    Ok(())
+}
+
+/// Given a vector of client subnet and exit subnets, reclaim all client subnets into the given exit subnets
+/// This relies on the fact that there are no overlapping subnets
+/// For example, if client has Ip addrs : "fbad::1000/64,feee::1000/64"
+/// The exit subnets in the cluster are fbad::/40, feee::/40, fd00::/40
+/// Then fbad::/40 would gain the subnet fbad::1000/64 and feee::/40 would gain the subnet feee::1000/64 as available subnets
+/// when the client get deleted from the database. View the unit test below for more examples
+fn reclaim_all_ip_subnets(
+    client_sub: Vec<&str>,
+    exit_sub: Vec<String>,
+    conn: &PgConnection,
+) -> Result<(), RitaExitError> {
+    use self::schema::assigned_ips::dsl::{assigned_ips, available_subnets, subnet};
+
+    for client_ip in client_sub {
+        for exit_ip in &exit_sub {
+            let c_net: IpNetwork = client_ip.parse().expect("Unable to parse client subnet");
+            let e_net: IpNetwork = exit_ip.parse().expect("Unable to parse exit subnet");
+            if e_net.contains(c_net.ip()) {
+                let index = match generate_index_from_subnet(e_net, c_net) {
+                    Ok(a) => a,
+                    Err(e) => {
+                        return Err(e);
+                    }
+                };
+                info!("Reclaimed index is: {:?}", index);
+
+                let filtered_list = assigned_ips.filter(subnet.eq(exit_ip));
+                let res = filtered_list.load::<models::AssignedIps>(conn);
+
+                match res {
+                    Ok(mut a) => {
+                        if a.len() > 1 {
+                            error!("Received multiple assigned ip entries for a singular subnet! Error");
+                        }
+                        let a_ip = match a.pop() {
+                            Some(a) => a,
+                            None => {
+                                return Err(RitaExitError::MiscStringError(
+                                    "Unable to retrive assigned ip database".to_string(),
+                                ))
+                            }
+                        };
+                        let mut avail_ips = a_ip.available_subnets;
+                        if avail_ips.is_empty() {
+                            avail_ips.push_str(&index.to_string())
+                        } else {
+                            // if our index is '10', we need to append ",10" to the end
+                            let mut new_str = ",".to_owned();
+                            new_str.push_str(&index.to_string());
+                            avail_ips.push_str(&new_str);
+                        }
+                        info!(
+                            "We are updating database with reclaim string: {:?}",
+                            avail_ips
+                        );
+                        diesel::update(assigned_ips.find(exit_ip))
+                            .set(available_subnets.eq(avail_ips))
+                            .execute(conn)?;
+                    }
+                    Err(e) => {
+                        error!(
+                            "unable to add a reclaimed ip to database with error: {:?}",
+                            e
+                        );
+                    }
+                }
+
+                // After we reclaim an index, we break from the loop. The prevents duplicate reclaiming when two instances have the same subnet
+                break;
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -409,10 +439,17 @@ pub fn create_or_update_user_record(
     let subnet = exit_settings.subnet;
 
     // If subnet isnt already present in database, create it
-    let subnet_entry = initialize_subnet_datastore(subnet, conn)?;
-    info!("Subnet Database entry: {:?}", subnet_entry);
+    let mut subnet_entry = None;
+    if let Some(subnet) = subnet {
+        subnet_entry = Some(initialize_subnet_datastore(subnet, conn)?);
+        info!("Subnet Database entry: {:?}", subnet_entry);
+    }
 
     if let Some(val) = get_client(client, conn)? {
+        // Give ipv6 if not present
+        if let Some(subnet) = subnet {
+            assign_ip_to_client(val.mesh_ip.clone(), subnet, conn)?;
+        }
         update_client(client, &val, conn)?;
         Ok(val)
     } else {
@@ -423,7 +460,11 @@ pub fn create_or_update_user_record(
 
         let new_ip = get_next_client_ip(conn)?;
 
-        let internet_ip = get_client_subnet(subnet, subnet_entry, conn)?;
+        let internet_ip = if let (Some(subnet), Some(subnet_entry)) = (subnet, subnet_entry) {
+            Some(get_client_subnet(subnet, subnet_entry, conn)?)
+        } else {
+            None
+        };
 
         let c = client_to_new_db_client(client, new_ip, user_country, internet_ip);
 
@@ -653,7 +694,7 @@ fn generate_index_from_subnet(exit_sub: IpNetwork, sub: IpNetwork) -> Result<u64
 /// for ipv6 support. Existing clients in the previous schema will not have an ipv6 addr assigned, so every client is
 /// given one on startup
 pub fn initialize_exisitng_clients_ipv6() -> Result<(), RitaExitError> {
-    use self::schema::clients::dsl::{clients, internet_ipv6, mesh_ip};
+    use self::schema::clients::dsl::{clients, mesh_ip};
     let conn = get_database_connection()?;
 
     // initialize the assigned_ips database
@@ -661,36 +702,115 @@ pub fn initialize_exisitng_clients_ipv6() -> Result<(), RitaExitError> {
     let exit_settings = rita_exit.exit_network;
     let subnet = exit_settings.subnet;
 
-    // If subnet isnt already present in database, create it
-    let subnet_entry = initialize_subnet_datastore(subnet, &conn)?;
-    info!("Subnet Database entry: {:?}", subnet_entry);
+    if let Some(subnet) = subnet {
+        // If subnet isnt already present in database, create it
+        let subnet_entry = initialize_subnet_datastore(subnet, &conn)?;
+        info!("Subnet Database entry: {:?}", subnet_entry);
 
-    // update all client entries to have an ipv6 addr
-    // 1.) get list of mesh ips
-    // 2.) for each ip, select ipv6 field, if empty set an ipv6, else continue
-    let filtered_list = clients.select(mesh_ip);
-    let ip_list = filtered_list.load::<String>(&conn)?;
+        // update all client entries to have an ipv6 addr
+        // 1.) get list of mesh ips
+        // 2.) for each ip, select ipv6 field, if empty set an ipv6, else continue
+        let filtered_list = clients.select(mesh_ip);
+        let ip_list = filtered_list.load::<String>(&conn)?;
 
-    for ip in ip_list {
-        let filtered_list = clients.select(internet_ipv6).filter(mesh_ip.eq(&ip));
-        let mut sub = filtered_list.load::<String>(&conn)?;
-
-        if sub.len() > 1 {
-            error!("More than one ipv6 for a given client");
-        }
-
-        let ipv6 = sub.pop();
-        if ipv6.is_none() || ipv6.clone().unwrap().is_empty() {
-            let subnet_entry = initialize_subnet_datastore(subnet, &conn)?;
-            let internet_ip = get_client_subnet(subnet, subnet_entry.clone(), &conn)?;
-            info!("Initializing ipv6 addrs for existing clients, IP: {}, is given ip {:?}, subnet entry is {:?}", ip, internet_ip.clone(), subnet_entry.clone());
-            diesel::update(clients.find(ip))
-                .set(internet_ipv6.eq(internet_ip.to_string()))
-                .execute(&conn)?;
+        for ip in ip_list {
+            assign_ip_to_client(ip, subnet, &conn)?;
         }
     }
 
     Ok(())
+}
+
+/// This function updates the clients database with an added entry in the internet ipv6 field
+/// that stores client ipv6 addrs. ipv6 addrs are stored in the form of "fd00:1330/64,fde0::1100/40" etc
+/// with a comma being the delimiter
+fn assign_ip_to_client(
+    client_mesh_ip: String,
+    exit_sub: IpNetwork,
+    conn: &PgConnection,
+) -> Result<IpNetwork, RitaExitError> {
+    // check if ipv6 list already has an ip in its subnet
+    use self::schema::clients::dsl::{clients, internet_ipv6, mesh_ip};
+
+    let filtered_list = clients
+        .select(internet_ipv6)
+        .filter(mesh_ip.eq(&client_mesh_ip));
+    let mut sub = filtered_list.load::<String>(conn)?;
+
+    let client_ipv6_list = sub.pop();
+
+    if let Some(mut list_str) = client_ipv6_list {
+        if !list_str.is_empty() {
+            let list: Vec<&str> = list_str.split(',').collect();
+            for ipv6_str in list {
+                let ipv6_sub: IpNetwork =
+                    ipv6_str.parse().expect("Unable to parse ipnetwork subnet");
+                // Since there are no overlapping subnets, If the ip is in the subnet, so is the ip subnet
+                if exit_sub.contains(ipv6_sub.ip()) {
+                    return Ok(ipv6_sub);
+                }
+            }
+            // If code hasnt returned yet, we need to add the ip to the list
+            let subnet_entry = initialize_subnet_datastore(exit_sub, conn)?;
+            let internet_ip = get_client_subnet(exit_sub, subnet_entry.clone(), conn)?;
+            let mut new_str = ",".to_owned();
+            new_str.push_str(&internet_ip.to_string());
+            list_str.push_str(&new_str);
+            info!("Initializing ipv6 addrs for existing clients, IP: {}, is given ip {:?}, subnet entry is {:?}", client_mesh_ip, list_str.clone(), subnet_entry);
+            diesel::update(clients.find(client_mesh_ip))
+                .set(internet_ipv6.eq(list_str))
+                .execute(conn)?;
+            Ok(internet_ip)
+        } else {
+            // List is empty
+            let subnet_entry = initialize_subnet_datastore(exit_sub, conn)?;
+            let internet_ip = get_client_subnet(exit_sub, subnet_entry.clone(), conn)?;
+            info!("Initializing ipv6 addrs for existing clients, IP: {}, is given ip {:?}, subnet entry is {:?}", client_mesh_ip, internet_ip.clone(), subnet_entry);
+            diesel::update(clients.find(client_mesh_ip))
+                .set(internet_ipv6.eq(internet_ip.to_string()))
+                .execute(conn)?;
+            Ok(internet_ip)
+        }
+    } else {
+        // The client doesnt not have an appropriate ipv6 addr for our subnet, assign it one
+        let subnet_entry = initialize_subnet_datastore(exit_sub, conn)?;
+        let internet_ip = get_client_subnet(exit_sub, subnet_entry.clone(), conn)?;
+        info!("Initializing ipv6 addrs for existing clients, IP: {}, is given ip {:?}, subnet entry is {:?}", client_mesh_ip, internet_ip.clone(), subnet_entry);
+        diesel::update(clients.find(client_mesh_ip))
+            .set(internet_ipv6.eq(internet_ip.to_string()))
+            .execute(conn)?;
+        Ok(internet_ip)
+    }
+}
+
+/// Given a database client entry, get ipnetwork string ("fd00::1337,f100:1400") find the correct ipv6 address to send back to client corresponding to our exit instance
+pub fn get_client_ipv6(their_record: &models::Client) -> Result<Option<IpNetwork>, RitaExitError> {
+    let client_subs = &their_record.internet_ipv6;
+    let client_mesh_ip = &their_record.mesh_ip;
+
+    let rita_exit = settings::get_rita_exit();
+    let exit_settings = rita_exit.exit_network;
+    let exit_sub = exit_settings.subnet;
+
+    if let Some(exit_sub) = exit_sub {
+        if !client_subs.is_empty() {
+            let c_sub: Vec<&str> = client_subs.split(',').collect();
+            for sub in c_sub {
+                let c_net: IpNetwork = sub.parse().expect("Unable to parse client subnet");
+                if exit_sub.contains(c_net.ip()) {
+                    return Ok(Some(c_net));
+                }
+            }
+        }
+
+        // If no ip has been returned, an ip has not been setup, so we assign an ip in the database
+        let conn = get_database_connection()?;
+        let ip_net = assign_ip_to_client(client_mesh_ip.to_string(), exit_sub, &conn)?;
+        Ok(Some(ip_net))
+    } else {
+        // This exit doesnt support ipv6
+        Ok(None)
+    }
 }
 
 #[cfg(test)]
@@ -834,5 +954,150 @@ mod tests {
         let exit_sub: IpNetwork = "2602:FBAD::/40".parse().unwrap();
         let sub: IpNetwork = "2602:FBAD:0:32::/64".parse().unwrap();
         assert_eq!(generate_index_from_subnet(exit_sub, sub).unwrap(), 50);
+    }
+
+    #[test]
+    fn test_assignment_ipv6_to_client_logic() {
+        // TEST CASE 1
+        // let client_ipv6_list = Some("fbad::1330/64,fedd::1000/64".to_string());
+        // let exit_sub: IpNetwork = "fbad::1330/40".parse().unwrap();
+
+        // TEST CASE 2
+        let client_ipv6_list = Some("fbad::1330/64,fedd::1000/64".to_string());
+        let exit_sub: IpNetwork = "feee::1330/40".parse().unwrap();
+
+        // TEST CASE 3
+        // let client_ipv6_list = Some("".to_string());
+        // let exit_sub: IpNetwork = "fbad::1330/40".parse().unwrap();
+
+        // TEST CASE 4
+        // let client_ipv6_list: Option<String> = None;
+        // let exit_sub: IpNetwork = "fbad::1330/40".parse().unwrap();
+
+        if let Some(mut list_str) = client_ipv6_list {
+            if !list_str.is_empty() {
+                let list: Vec<&str> = list_str.split(',').collect();
+                println!("List looks like: {:?}", list);
+                for ipv6_str in list {
+                    let ipv6_sub: IpNetwork =
+                        ipv6_str.parse().expect("Unable to parse ipnetwork subnet");
+                    // Since there are no overlapping subnets, If the ip is in the subnet, so is the ip subnet
+                    if exit_sub.contains(ipv6_sub.ip()) {
+                        println!("Hit Test case 1");
+                        return;
+                    }
+                }
+                // If code hasnt returned yet, we need to add the ip to the list
+                let internet_ip: IpNetwork = "feee::1000/64".parse().unwrap();
+                let mut new_str = ",".to_owned();
+                new_str.push_str(&internet_ip.to_string());
+                list_str.push_str(&new_str);
+                println!("list_str looks like: {:?}", list_str);
+                println!("hit test case 2");
+            } else {
+                // List is empty
+                println!("Hit Test case 3");
+            }
+        } else {
+            // The client doesnt not have an appropriate ipv6 addr for our subnet, assign it one
+            println!("hit Test case 4");
+        }
+    }
+
+    #[test]
+    fn test_get_client_ipv6() {
+        let client_subs = "fbad::1000/64";
+        let exit_sub: Option<IpNetwork> = Some("fbad::1000/40".parse().unwrap());
+        assert_eq!(
+            get_client_ipv6_helper(client_subs.to_string(), exit_sub),
+            Some(client_subs.parse().unwrap())
+        );
+
+        let client_subs = "";
+        let exit_sub: Option<IpNetwork> = Some("fbad::1000/40".parse().unwrap());
+        assert_eq!(
+            get_client_ipv6_helper(client_subs.to_string(), exit_sub),
+            Some("fbad::1000/64".parse().unwrap())
+        );
+
+        let client_subs = "feee::1000/64";
+        let exit_sub: Option<IpNetwork> = Some("fbad::1000/40".parse().unwrap());
+        assert_eq!(
+            get_client_ipv6_helper(client_subs.to_string(), exit_sub),
+            Some("fbad::1000/64".parse().unwrap())
+        );
+
+        let client_subs = "feee::1000/64,fbad::1000/64";
+        let exit_sub: Option<IpNetwork> = Some("fbad::1000/40".parse().unwrap());
+        assert_eq!(
+            get_client_ipv6_helper(client_subs.to_string(), exit_sub),
+            Some("fbad::1000/64".parse().unwrap())
+        );
+    }
+
+    fn get_client_ipv6_helper(
+        client_subs: String,
+        exit_sub: Option<IpNetwork>,
+    ) -> Option<IpNetwork> {
+        if let Some(exit_sub) = exit_sub {
+            if !client_subs.is_empty() {
+                let c_sub: Vec<&str> = client_subs.split(',').collect();
+                for sub in c_sub {
+                    let c_net: IpNetwork = sub.parse().expect("Unable to parse client subnet");
+                    if exit_sub.contains(c_net.ip()) {
+                        return Some(c_net);
+                    }
+                }
+            }
+            // If no ip has been returned, an ip has not been setup, so we assign an ip in the database
+            let ip_net: IpNetwork = "fbad::1000/64".parse().unwrap();
+            Some(ip_net)
+        } else {
+            // This exit doesnt support ipv6
+            None
+        }
+    }
+
+    #[test]
+    fn test_reclaim_all_subnets() {
+        //Case 1: no ipv6 instances, should panic
+        // let client_sub = vec![""];
+        // let exit_sub = vec!["".to_string()];
+        // reclaim_all_subnets_helper(client_sub, exit_sub);
+
+        //Case 2: One ipv6 instance
+        let client_sub = vec!["fbad::1000/64"];
+        let exit_sub = vec!["fbad::1000/40".to_string()];
+        reclaim_all_subnets_helper(client_sub, exit_sub);
+
+        //Case 3: Two ipv6 instances, same subnet (invalid case, there shouldnt be two client subs for 1 exit sub)
+        let client_sub = vec!["fbad::1000/64", "fbad::eeee/64"];
+        let exit_sub = vec!["fbad::1000/40".to_string()];
+        reclaim_all_subnets_helper(client_sub, exit_sub);
+
+        //Case 3: Two ipv6 instances, same subnet (invalid case, no overlapping subnets)
+        let client_sub = vec!["fbad::1000/64"];
+        let exit_sub = vec!["fbad::1000/40".to_string(), "fbad::1000/50".to_string()];
+        reclaim_all_subnets_helper(client_sub, exit_sub);
+
+        //Case 4: Two ipv6 instances, different subnet
+        let client_sub = vec!["fbad::1000/64", "feee::eeee/64"];
+        let exit_sub = vec!["fbad::1000/40".to_string(), "feee::1000/40".to_string()];
+        reclaim_all_subnets_helper(client_sub, exit_sub);
+    }
+
+    fn reclaim_all_subnets_helper(client_sub: Vec<&str>, exit_sub: Vec<String>) {
+        for client_ip in client_sub {
+            for exit_ip in &exit_sub {
+                let c_net: IpNetwork = client_ip.parse().expect("Unable to parse client subnet");
+                let e_net: IpNetwork = exit_ip.parse().expect("Unable to parse exit subnet");
+                if e_net.contains(c_net.ip()) {
+                    println!("reclaiming client {:?} to exit sub {:?}", c_net, e_net);
+
+                    // After we reclaim an index, we break from the loop. The prevents duplicate reclaiming when two instances have the same subnet
+                    break;
+                }
+            }
+        }
     }
 }

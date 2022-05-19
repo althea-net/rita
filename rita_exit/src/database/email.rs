@@ -3,6 +3,7 @@ use crate::database::database_tools::verify_client;
 use crate::database::get_exit_info;
 use crate::database::secs_since_unix_epoch;
 use crate::database::struct_tools::verif_done;
+use crate::get_client_ipv6;
 use crate::RitaExitError;
 
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState};
@@ -91,14 +92,14 @@ pub fn handle_email_registration(
             Ok(ip) => ip,
             Err(e) => return Err(RitaExitError::AddrParseError(e)),
         };
-        let client_internet_ipv6_subnet = match their_record.internet_ipv6.parse() {
+        let client_internet_ipv6_subnet = match get_client_ipv6(&their_record) {
             Ok(sub) => sub,
-            Err(e) => return Err(RitaExitError::IpNetworkError(e)),
+            Err(e) => return Err(e),
         };
         Ok(ExitState::Registered {
             our_details: ExitClientDetails {
                 client_internal_ip,
-                internet_ipv6_subnet: Some(client_internet_ipv6_subnet),
+                internet_ipv6_subnet: client_internet_ipv6_subnet,
             },
             general_details: get_exit_info(),
             message: "Registration OK".to_string(),
