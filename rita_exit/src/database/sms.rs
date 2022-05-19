@@ -3,6 +3,7 @@ use crate::database::database_tools::verify_client;
 use crate::database::get_database_connection;
 use crate::database::get_exit_info;
 use crate::database::struct_tools::texts_sent;
+use crate::get_client_ipv6;
 use crate::RitaExitError;
 
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState};
@@ -120,7 +121,7 @@ pub async fn handle_sms_registration(
                 Ok(ExitState::Registered {
                     our_details: ExitClientDetails {
                         client_internal_ip: their_record.internal_ip.parse()?,
-                        internet_ipv6_subnet: Some(their_record.internet_ipv6.parse()?),
+                        internet_ipv6_subnet: get_client_ipv6(&their_record)?,
                     },
                     general_details: get_exit_info(),
                     message: "Registration OK".to_string(),
@@ -168,7 +169,7 @@ pub async fn handle_sms_registration(
                 Ok(ExitState::Registered {
                     our_details: ExitClientDetails {
                         client_internal_ip: their_record.internal_ip.parse()?,
-                        internet_ipv6_subnet: Some(their_record.internet_ipv6.parse()?),
+                        internet_ipv6_subnet: get_client_ipv6(&their_record)?,
                     },
                     general_details: get_exit_info(),
                     message: "Registration OK".to_string(),

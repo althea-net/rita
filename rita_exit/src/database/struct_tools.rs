@@ -66,7 +66,7 @@ pub fn client_to_new_db_client(
     client: &ExitClientIdentity,
     new_ip: IpAddr,
     country: String,
-    internet_ip: IpNetwork,
+    internet_ip: Option<IpNetwork>,
 ) -> models::Client {
     let mut rng = rand::thread_rng();
     let rand_code: u64 = rng.gen_range(0..999_999);
@@ -77,7 +77,13 @@ pub fn client_to_new_db_client(
         eth_address: client.global.eth_address.to_string().to_lowercase(),
         nickname: client.global.nickname.unwrap_or_default().to_string(),
         internal_ip: new_ip.to_string(),
-        internet_ipv6: internet_ip.to_string(),
+        internet_ipv6: {
+            if let Some(ip_net) = internet_ip {
+                ip_net.to_string()
+            } else {
+                "".to_string()
+            }
+        },
         email: client.reg_details.email.clone().unwrap_or_default(),
         phone: client.reg_details.phone.clone().unwrap_or_default(),
         country,
