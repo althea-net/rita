@@ -49,7 +49,6 @@ pub fn update_neighbor_status() {
                 id: *id,
                 shaper_speed: lowest_shaper_speed,
                 enforced,
-                neighbor_name: "".to_string(),
             },
         );
     }

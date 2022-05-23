@@ -706,8 +706,6 @@ pub struct NeighborStatus {
     /// If this user is currently being enforced upon
     #[serde(default)]
     pub enforced: bool,
-    #[serde(default)]
-    pub neighbor_name: String,
 }
 
 /// Heartbeat sent to the operator server to help monitor
