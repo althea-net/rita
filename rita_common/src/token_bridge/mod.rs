@@ -197,18 +197,23 @@ async fn xdai_bridge(bridge: TokenBridgeCore) {
         }
     };
 
-    // Add gas price entry to lazy static
-    let writer = &mut *GAS_PRICES.write().unwrap();
-    update_gas_price_store(eth_gas_price.clone(), writer);
+    let max_gas_price: Uint256;
+    {
+        // Add gas price entry to lazy static
+        let writer = &mut *GAS_PRICES.write().unwrap();
+        update_gas_price_store(eth_gas_price.clone(), writer);
 
-    // Get max acceptable gas price (within 20%)
-    let max_gas_price = match get_acceptable_gas_price(eth_gas_price.clone(), writer) {
-        Ok(a) => a,
-        Err(_) => {
-            error!("Not enough entries in gas price datastore, or error in datastore entry logic");
-            return;
-        }
-    };
+        // Get max acceptable gas price (within 20%)
+        max_gas_price = match get_acceptable_gas_price(eth_gas_price.clone(), writer) {
+            Ok(a) => a,
+            Err(_) => {
+                error!(
+                    "Not enough entries in gas price datastore, or error in datastore entry logic"
+                );
+                return;
+            }
+        };
+    }
 
     // the amount of Eth to retain in WEI. This is the cost of our transfer from the
     // xdai chain to the destination address.
@@ -224,13 +229,14 @@ async fn xdai_bridge(bridge: TokenBridgeCore) {
 
     // initiate withdrawals if any, scope bridge write
     {
-        let mut writer = BRIDGE.write().unwrap();
+        let mut writer = get_bridge_state();
         if writer.withdraw_in_progress {
             let withdraw_details = match &writer.withdraw_details {
                 Some(a) => a.clone(),
                 None => {
                     error!("No withdraw information present");
                     writer.withdraw_in_progress = false;
+                    set_bridge_state(writer.clone());
                     return;
                 }
             };
@@ -249,6 +255,7 @@ async fn xdai_bridge(bridge: TokenBridgeCore) {
             //reset the withdraw lock
             writer.withdraw_in_progress = false;
             writer.withdraw_details = None;
+            set_bridge_state(writer);
         }
     }
 
@@ -478,6 +485,14 @@ pub fn setup_withdraw(msg: Withdraw) -> Result<(), RitaCommonError> {
     Ok(())
 }
 
+fn get_bridge_state() -> TokenBridgeState {
+    BRIDGE.write().unwrap().clone()
+}
+
+fn set_bridge_state(set: TokenBridgeState) {
+    *BRIDGE.write().unwrap() = set;
+}
+
 /// This function initiates the withdrawal by calling the relayTokens function when there is no
 /// other withdrawal currently in progress. It receives the information from the lazy static varaible,
 /// which was setup by the function setup_withdrawal, and runs every loop to see if this lazy static has
@@ -494,9 +509,10 @@ pub async fn withdraw(msg: Withdraw) -> Result<(), RitaCommonError> {
 
     if let SystemChain::Xdai = system_chain {
         //check if a wtihdrawal is in progress, if not set bool to true
-        let mut writer = BRIDGE.write().unwrap();
+        let mut writer = get_bridge_state();
         if !writer.withdraw_in_progress {
             writer.withdraw_in_progress = true;
+            set_bridge_state(writer.clone());
             let _res =
                 encode_relaytokens(token_bridge, to, amount.clone(), Duration::from_secs(600))
                     .await;
@@ -504,6 +520,7 @@ pub async fn withdraw(msg: Withdraw) -> Result<(), RitaCommonError> {
             detailed_state_change(DetailedBridgeState::XdaiToDai { amount });
             // Reset the lock
             writer.withdraw_in_progress = false;
+            set_bridge_state(writer);
             Ok(())
         } else {
             Err(RitaCommonError::MiscStringError(

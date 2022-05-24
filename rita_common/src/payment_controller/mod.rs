@@ -101,24 +101,28 @@ impl Error for PaymentControllerError {}
 /// This function is called by the async loop in order to perform payment
 /// controller actions
 pub async fn tick_payment_controller() {
-    let mut data = PAYMENT_DATA.write().unwrap();
+    let outgoing_payments: Vec<PaymentTx>;
+    let resend_queue: Vec<ResendInfo>;
 
-    // we fully empty both queues every run, and replace them with empty
-    // vectors this helps deal with logic issues around outgoing payments
-    // needing to queue retries which would cause a deadlock if we needed
-    // a write lock to iterate.
-    let outgoing_payments = data.outgoing_queue.clone();
-    let resend_queue = data.resend_queue.clone();
+    {
+        let mut data = PAYMENT_DATA.write().unwrap();
 
-    info!(
-        "Ticking payment controller with {} payments and {} resends",
-        outgoing_payments.len(),
-        resend_queue.len()
-    );
+        // we fully empty both queues every run, and replace them with empty
+        // vectors this helps deal with logic issues around outgoing payments
+        // needing to queue retries which would cause a deadlock if we needed
+        // a write lock to iterate.
+        outgoing_payments = data.outgoing_queue.clone();
+        resend_queue = data.resend_queue.clone();
 
-    data.outgoing_queue = Vec::new();
-    data.resend_queue = Vec::new();
-    drop(data);
+        info!(
+            "Ticking payment controller with {} payments and {} resends",
+            outgoing_payments.len(),
+            resend_queue.len()
+        );
+
+        data.outgoing_queue = Vec::new();
+        data.resend_queue = Vec::new();
+    }
 
     // this creates a series of futures that we can use to perform
     // retires in parallel, this is helpful because retries may take

@@ -26,6 +26,7 @@ lazy_static! {
 
 #[derive(Debug)]
 pub struct PeerListener {
+    pub contacting_neighbors: bool,
     pub interfaces: HashMap<String, ListenInterface>,
     pub peers: HashMap<IpAddr, Peer>,
 
@@ -82,6 +83,7 @@ impl Default for PeerListener {
 impl PeerListener {
     pub fn new() -> Result<PeerListener, RitaCommonError> {
         Ok(PeerListener {
+            contacting_neighbors: false,
             interfaces: HashMap::new(),
             peers: HashMap::new(),
             interface_map: HashMap::new(),
@@ -113,16 +115,19 @@ pub fn peerlistener_tick() {
     trace!("Starting PeerListener tick!");
 
     let mut writer = PEER_LISTENER.write().unwrap();
-    send_im_here(&mut writer.interfaces);
+    if !writer.contacting_neighbors {
+        send_im_here(&mut writer.interfaces);
 
-    let (a, b) = receive_im_here(&mut writer.interfaces);
-    {
-        (*writer).peers = a;
-        (*writer).interface_map = b;
+        let (a, b) = receive_im_here(&mut writer.interfaces);
+        {
+            // Reset hashmaps only when not contacting peers
+            (*writer).peers = a;
+            (*writer).interface_map = b;
+        }
+        receive_hello(&mut writer);
+
+        listen_to_available_ifaces(&mut writer);
     }
-    receive_hello(&mut writer);
-
-    listen_to_available_ifaces(&mut writer);
 }
 
 #[allow(dead_code)]
