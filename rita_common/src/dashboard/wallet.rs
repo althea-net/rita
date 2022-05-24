@@ -99,18 +99,25 @@ fn queue_eth_compatible_withdraw(address: Address, amount: Uint256) -> HttpRespo
     HttpResponse::build(StatusCode::OK).json("Withdraw queued")
 }
 
+fn get_withdraw_queue() -> Option<(Address, Uint256)> {
+    WITHDRAW_QUEUE.write().unwrap().clone()
+}
+
+fn set_withraw_queue(set: Option<(Address, Uint256)>) {
+    *WITHDRAW_QUEUE.write().unwrap() = set;
+}
+
 /// Withdraw for eth compatible chains, pulls from the queued withdraw
 /// and executes it
 pub async fn eth_compatible_withdraw() {
     let full_node = get_web3_server();
     let web3 = Web3::new(&full_node, WITHDRAW_TIMEOUT);
     let payment_settings = settings::get_rita_common().payment;
-    let mut writer = WITHDRAW_QUEUE.write().unwrap();
 
-    if let Some((dest, amount)) = &*writer {
+    if let Some((dest, amount)) = get_withdraw_queue() {
         let transaction_status = web3
             .send_transaction(
-                *dest,
+                dest,
                 Vec::new(),
                 amount.clone(),
                 payment_settings.eth_address.unwrap(),
@@ -125,7 +132,7 @@ pub async fn eth_compatible_withdraw() {
             error!("Withdraw failed with {:?} retrying later!", e);
         } else {
             info!("Successful withdraw of {} to {}", amount, dest);
-            *writer = None;
+            set_withraw_queue(None);
         }
     }
 }

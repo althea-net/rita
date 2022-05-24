@@ -40,6 +40,7 @@ pub fn get_operator_fee_debt() -> Uint256 {
     state.operator_debt.clone()
 }
 
+#[derive(Clone)]
 struct OperatorFeeManager {
     /// the operator fee is denominated in wei per second, so every time this routine runs
     /// we take the number of seconds since the last time it ran and multiply that by the
@@ -58,6 +59,14 @@ impl OperatorFeeManager {
             operator_debt: 0u8.into(),
         }
     }
+}
+
+fn get_operator_fee_data() -> OperatorFeeManager {
+    OPERATOR_FEE_DATA.write().unwrap().clone()
+}
+
+fn set_operator_fee_data(set: OperatorFeeManager) {
+    *OPERATOR_FEE_DATA.write().unwrap() = set;
 }
 
 /// Very basic loop for async operator payments
@@ -83,12 +92,13 @@ pub async fn tick_operator_payments() {
     };
     let operator_fee = operator_settings.operator_fee.clone();
 
-    let mut state = OPERATOR_FEE_DATA.write().unwrap();
+    let mut state = get_operator_fee_data();
 
     // accumulate, if we don't pay this will count up, if we do pay we will pay the full amount
     let last_updated = state.last_updated.elapsed().as_secs();
     state.operator_debt += Uint256::from(last_updated) * operator_fee;
     state.last_updated = Instant::now();
+    set_operator_fee_data(state.clone());
 
     // reassign to an immutable variable to prevent mistakes
     let amount_to_pay = state.operator_debt.clone();
@@ -147,6 +157,7 @@ pub async fn tick_operator_payments() {
                 });
                 add_tx_to_total(amount_to_pay.clone());
                 state.operator_debt -= amount_to_pay;
+                set_operator_fee_data(state);
             }
             Err(e) => {
                 warn!("Failed to pay the operator! {:?}", e);

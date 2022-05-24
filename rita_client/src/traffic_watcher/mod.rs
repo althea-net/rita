@@ -82,15 +82,18 @@ pub struct QueryExitDebts {
 pub async fn query_exit_debts(msg: QueryExitDebts) {
     trace!("About to query the exit for client debts");
 
-    let writer = &mut *TRAFFIC_WATCHER.write().unwrap();
+    let local_debt: Option<Int256>;
+    {
+        let writer = &mut *TRAFFIC_WATCHER.write().unwrap();
 
-    // we could exit the function if this fails, but doing so would remove the chance
-    // that we can get debts from the exit and continue anyways
-    let local_debt =
-        match local_traffic_calculation(writer, &msg.exit_id, msg.exit_price, msg.routes) {
-            Ok(val) => Some(Int256::from(val)),
-            Err(_e) => None,
-        };
+        // we could exit the function if this fails, but doing so would remove the chance
+        // that we can get debts from the exit and continue anyways
+        local_debt =
+            match local_traffic_calculation(writer, &msg.exit_id, msg.exit_price, msg.routes) {
+                Ok(val) => Some(Int256::from(val)),
+                Err(_e) => None,
+            };
+    }
     let gateway_exit_client = is_gateway_client();
     let start = Instant::now();
     let exit_addr = msg.exit_internal_addr;

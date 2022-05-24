@@ -184,15 +184,17 @@ pub async fn validate() {
 
     let our_address = settings::get_rita_common().payment.eth_address.unwrap();
     let mut to_delete = Vec::new();
+    let unvalidated_transactions: HashSet<ToValidate>;
 
-    let history = HISTORY.read().unwrap();
-    let unvalidated_transactions = history.unvalidated_transactions.clone();
-    info!(
-        "Attempting to validate {} transactions {}",
-        history.unvalidated_transactions.len(),
-        print_txids(&history.unvalidated_transactions)
-    );
-    drop(history);
+    {
+        let history = HISTORY.read().unwrap();
+        unvalidated_transactions = history.unvalidated_transactions.clone();
+        info!(
+            "Attempting to validate {} transactions {}",
+            history.unvalidated_transactions.len(),
+            print_txids(&history.unvalidated_transactions)
+        );
+    }
 
     let mut futs = Vec::new();
     for item in unvalidated_transactions {

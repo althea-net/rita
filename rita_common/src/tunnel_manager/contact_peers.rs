@@ -7,7 +7,6 @@
 use crate::hello_handler::handle_hello;
 use crate::hello_handler::Hello;
 use crate::peer_listener::Hello as NewHello;
-use crate::peer_listener::PeerListener;
 use crate::peer_listener::PEER_LISTENER;
 use crate::peer_listener::{send_hello, Peer};
 use crate::rita_loop::is_gateway;
@@ -67,17 +66,14 @@ pub async fn tm_neighbor_inquiry_hostname(their_hostname: String) -> Result<(), 
 
 /// Contacts one neighbor with our LocalIdentity to get their LocalIdentity and wireguard tunnel
 /// interface name. Sends a Hello over udp, or http if its a manual peer
-pub async fn tm_neighbor_inquiry(
-    peer: &Peer,
-    is_manual_peer: bool,
-    peer_listener: &mut PeerListener,
-) -> Result<(), RitaCommonError> {
+pub async fn tm_neighbor_inquiry(peer: &Peer, is_manual_peer: bool) -> Result<(), RitaCommonError> {
     trace!("TunnelManager neigh inquiry for {:?}", peer);
     let our_port = tm_get_port();
 
     if is_manual_peer {
         contact_manual_peer(peer, our_port).await
     } else {
+        let peer_listener = &mut *PEER_LISTENER.write().unwrap();
         let iface_name = match peer_listener.interface_map.get(&peer.contact_socket) {
             Some(a) => a,
             None => {
@@ -94,8 +90,15 @@ pub async fn tm_neighbor_inquiry(
                 ))
             }
         };
-        contact_neighbor(peer, our_port, udp_socket, peer.contact_socket).await
+
+        contact_neighbor(peer, our_port, udp_socket, peer.contact_socket)
     }
+}
+
+/// This sets a lock on th Peer Listener lazy static to prevent the peer listner tick from overwriting
+/// hashmap data (which contact_peers uses) with new data until the peer contacting process has been complete
+fn set_contacting_neighbors(set: bool) {
+    PEER_LISTENER.write().unwrap().contacting_neighbors = set;
 }
 
 /// takes a list of peers to contact and dispatches UDP hello messages to peers discovered via IPv6 link local
@@ -107,14 +110,14 @@ pub async fn tm_contact_peers(peers: HashMap<IpAddr, Peer>) {
     let is_gateway = is_gateway();
     let rita_hello_port = network_settings.rita_hello_port;
     drop(network_settings);
-    // Hold a lock on shared state until we finish sending all messages. This prevents a race condition
-    // where the hashmaps get cleared out during subsequent ticks
+
     info!("TunnelManager contacting peers");
-    let writer = &mut *PEER_LISTENER.write().unwrap();
+    // Hashmaps will not get overwritten while this bool is set
+    set_contacting_neighbors(true);
 
     for (_, peer) in peers.iter() {
         info!("contacting peer found by UDP {:?}", peer);
-        let res = tm_neighbor_inquiry(peer, false, writer).await;
+        let res = tm_neighbor_inquiry(peer, false).await;
         if res.is_err() {
             warn!("Neighbor inqury for {:?} failed! with {:?}", peer, res);
         }
@@ -130,7 +133,7 @@ pub async fn tm_contact_peers(peers: HashMap<IpAddr, Peer>) {
                     ifidx: 0,
                     contact_socket: socket,
                 };
-                let res = tm_neighbor_inquiry(&man_peer, true, writer).await;
+                let res = tm_neighbor_inquiry(&man_peer, true).await;
                 if res.is_err() {
                     warn!(
                         "Neighbor inqury for {:?} failed with: {:?}",
@@ -155,11 +158,14 @@ pub async fn tm_contact_peers(peers: HashMap<IpAddr, Peer>) {
             }
         }
     }
+
+    // Hashmaps can now get overwritten
+    set_contacting_neighbors(false);
 }
 
 /// Sets out to contacts a local mesh neighbor, takes a speculative port (only assigned if the neighbor
 /// responds successfully). This function is used for mesh peers
-async fn contact_neighbor(
+fn contact_neighbor(
     peer: &Peer,
     our_port: u16,
     socket: &UdpSocket,

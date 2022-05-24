@@ -86,12 +86,21 @@ pub const OPERATOR_UPDATE_TIMEOUT: Duration = CLIENT_LOOP_TIMEOUT;
 
 pub struct Update;
 
+fn get_operator_update() -> Instant {
+    *OPERATOR_UPDATE.write().unwrap()
+}
+
+fn set_operator_update(set: Instant) {
+    *OPERATOR_UPDATE.write().unwrap() = set;
+}
+
 pub async fn operator_update() {
-    let operator_update = &mut *OPERATOR_UPDATE.write().unwrap();
-    let time_elapsed = Instant::now().checked_duration_since(*operator_update);
+    let operator_update = get_operator_update();
+    let time_elapsed = Instant::now().checked_duration_since(operator_update);
     if time_elapsed.is_some() && time_elapsed.unwrap() > UPDATE_FREQUENCY {
         checkin().await;
-        *operator_update = Instant::now();
+        let operator_update = Instant::now();
+        set_operator_update(operator_update);
     }
 }
 
