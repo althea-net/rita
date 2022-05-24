@@ -5,7 +5,6 @@ CREATE TABLE clients
     wg_port integer NOT NULL,
     eth_address varchar(64) NOT NULL,
     internal_ip varchar(42) NOT NULL,
-    internet_ipv6 varchar(132) NOT NULL,
     nickname varchar(32) NOT NULL,
     email varchar(512) NOT NULL,
     phone varchar(32) NOT NULL,
@@ -16,11 +15,4 @@ CREATE TABLE clients
     text_sent integer DEFAULT 0 NOT NULL,
     last_seen bigint DEFAULT 0 NOT NULL,
     last_balance_warning_time bigint DEFAULT 0 NOT NULL
-);
-
-CREATE TABLE assigned_ips
-(
-    subnet varchar(132) CONSTRAINT secondkey PRIMARY KEY,
-    available_subnets varchar(512) NOT NULL,
-    iterative_index bigint DEFAULT 0 NOT NULL
 );
