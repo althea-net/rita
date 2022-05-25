@@ -9,6 +9,7 @@ use crate::RitaExitError;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState};
 use phonenumber::PhoneNumber;
 use settings::exit::ExitVerifSettings;
+use settings::get_rita_exit;
 use std::time::Duration;
 
 #[derive(Serialize)]
@@ -101,8 +102,18 @@ pub async fn handle_sms_registration(
         "Handling phone registration for {}",
         client.global.wg_public_key
     );
+
+    // Get magic phone number
+    let magic_phone_number = get_rita_exit().exit_network.magic_phone_number;
+
     let text_num = texts_sent(&their_record);
     let sent_more_than_allowed_texts = text_num > 10;
+    info!(
+        "Magic number is : {:?} and client nubmer is {:?}",
+        magic_phone_number,
+        client.reg_details.phone.clone()
+    );
+
     match (
         client.reg_details.phone.clone(),
         client.reg_details.phone_code.clone(),
@@ -110,7 +121,9 @@ pub async fn handle_sms_registration(
     ) {
         // all texts exhausted, but they can still submit the correct code
         (Some(number), Some(code), true) => {
-            let result = check_text(number, code, api_key).await?;
+            let result = (magic_phone_number.is_some()
+                && magic_phone_number.unwrap() == number.clone())
+                || check_text(number.clone(), code, api_key).await?;
             let conn = get_database_connection()?;
             if result {
                 verify_client(&client, true, &conn)?;
@@ -156,7 +169,9 @@ pub async fn handle_sms_registration(
         }
         // user has attempts remaining and is submitting a code
         (Some(number), Some(code), false) => {
-            let result = check_text(number, code, api_key).await?;
+            let result = (magic_phone_number.is_some()
+                && magic_phone_number.unwrap() == number.clone())
+                || check_text(number, code, api_key).await?;
             let conn = get_database_connection()?;
 
             trace!("Check text returned {}", result);

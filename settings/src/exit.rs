@@ -42,6 +42,8 @@ pub struct ExitNetworkSettings {
     pub wg_private_key: WgKey,
     /// path for the exit tunnel keyfile must be distinct from the common tunnel path!
     pub wg_private_key_path: String,
+    /// Magic phone number operators enter in order to register to exit without auth
+    pub magic_phone_number: Option<String>,
 }
 
 impl ExitNetworkSettings {
@@ -64,6 +66,7 @@ impl ExitNetworkSettings {
             wg_private_key: WgKey::from_str("mFFBLqQYrycxfHo10P9l8I2G7zbw8tia4WkGGgjGCn8=")
                 .unwrap(),
             wg_private_key_path: String::new(),
+            magic_phone_number: None,
         }
     }
 }
