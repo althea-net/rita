@@ -80,38 +80,6 @@ pub struct WyreReservationRequestCarrier {
     pub billing_details: BillingDetails,
 }
 
-/// The exact struct for sending to this endpoint
-///https://docs.sendwyre.com/docs/wallet-order-reservations
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WyreReservationRequest {
-    pub amount: f32,
-    #[serde(rename = "sourceCurrency")]
-    pub source_currency: String,
-    #[serde(rename = "destCurrency")]
-    pub dest_currency: String,
-    pub dest: String,
-    #[serde(rename = "firstName")]
-    pub first_name: String,
-    #[serde(rename = "lastName")]
-    pub last_name: String,
-    pub city: String,
-    pub state: String,
-    pub country: String,
-    pub phone: Option<String>,
-    pub email: Option<String>,
-    pub street1: String,
-    #[serde(rename = "postalCode")]
-    pub postal_code: String,
-    #[serde(rename = "lockFields")]
-    pub lock_fields: Vec<String>,
-    #[serde(rename = "redirectUrl")]
-    pub redirect_url: String,
-    #[serde(rename = "failureRedirectUrl")]
-    pub failure_redirect_url: String,
-    #[serde(rename = "referrerAccountId")]
-    pub referrer_account_id: String,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WyreReservationResponse {
     pub url: String,
