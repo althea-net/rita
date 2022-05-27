@@ -1,3 +1,4 @@
+use crate::file_io::get_lines;
 use crate::KernelInterface;
 use crate::KernelInterfaceError as Error;
 use regex::Regex;
@@ -118,6 +119,32 @@ impl dyn KernelInterface {
         if !output.stderr.is_empty() {
             return Err(Error::RuntimeError(format!(
                 "received error setting wg interface up: {}",
+                String::from_utf8(output.stderr)?
+            )));
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Gets the mtu from an interface
+    pub fn get_mtu(&self, if_name: &str) -> Result<usize, Error> {
+        let lines = get_lines(&format!("/sys/class/net/{}/mtu", if_name))?;
+        if let Some(mtu) = lines.get(0) {
+            Ok(mtu.parse()?)
+        } else {
+            Err(Error::NoInterfaceError(if_name.to_string()))
+        }
+    }
+
+    /// Sets the mtu of an interface
+    pub fn set_mtu(&self, if_name: &str, mtu: usize) -> Result<(), Error> {
+        let output = self.run_command(
+            "ip",
+            &["link", "set", "dev", if_name, "mtu", &mtu.to_string()],
+        )?;
+        if !output.stderr.is_empty() {
+            return Err(Error::RuntimeError(format!(
+                "received error setting interface mtu: {}",
                 String::from_utf8(output.stderr)?
             )));
         } else {
