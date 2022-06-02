@@ -19,8 +19,8 @@ use std::convert::TryInto;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 
-// Subnet size assigned to each client
-const CLIENT_SUBNET_SIZE: u8 = 64;
+// Default Subnet size assigned to each client
+const DEFAULT_CLIENT_SUBNET_SIZE: u8 = 56;
 
 /// Takes a list of clients and returns a sorted list of ip addresses spefically v4 since it
 /// can implement comparison operators
@@ -595,7 +595,14 @@ pub fn get_client_subnet(
     }
 
     // Once we get the index, generate the subnet
-    match generate_iterative_client_subnet(sub, index.unwrap(), CLIENT_SUBNET_SIZE.into()) {
+    match generate_iterative_client_subnet(
+        sub,
+        index.unwrap(),
+        settings::get_rita_exit()
+            .get_client_subnet_size()
+            .unwrap_or(DEFAULT_CLIENT_SUBNET_SIZE)
+            .into(),
+    ) {
         Ok(addr) => {
             // increment iterative index
             if used_iterative_index {

@@ -29,6 +29,8 @@ pub struct ExitNetworkSettings {
     pub netmask: u8,
     /// The subnet we use to assign to client routers for ipv6
     pub subnet: Option<IpNetwork>,
+    /// The specified client subnet, else use /56
+    pub client_subnet_size: Option<u8>,
     /// Time in seconds before user is dropped from the db due to inactivity
     /// 0 means disabled
     pub entry_timeout: u32,
@@ -59,6 +61,7 @@ impl ExitNetworkSettings {
             exit_start_ip: "172.16.0.0".parse().unwrap(),
             netmask: 12,
             subnet: Some(IpNetwork::V6("ff01::0/128".parse().unwrap())),
+            client_subnet_size: None,
             entry_timeout: 0,
             geoip_api_user: None,
             geoip_api_key: None,
@@ -223,6 +226,10 @@ impl RitaExitSettingsStruct {
             self.network.wg_public_key?,
             self.network.nickname,
         ))
+    }
+
+    pub fn get_client_subnet_size(&self) -> Option<u8> {
+        self.exit_network.client_subnet_size
     }
 
     pub fn get_all(&self) -> Result<serde_json::Value, SettingsError> {
