@@ -361,10 +361,10 @@ def fuzzy_traffic_match(numA, numB):
     # signs must not match
     if numA > 0 and numB > 0 or numA < 0 and numB < 0:
         return False
-    if numA > 0:
+    if numA >= 0:
         pos = numA
         neg = numB
-    if numB > 0:
+    if numB >= 0:
         pos = numB
         neg = numA
     pos_abs = abs(pos)
