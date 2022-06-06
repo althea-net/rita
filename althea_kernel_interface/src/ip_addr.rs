@@ -1,5 +1,6 @@
 use crate::KernelInterface;
 use crate::KernelInterfaceError as Error;
+use ipnetwork::IpNetwork;
 use std::net::Ipv4Addr;
 
 impl dyn KernelInterface {
@@ -41,6 +42,38 @@ impl dyn KernelInterface {
                 "Could not decode stderr from ip with {:?}",
                 e
             ))),
+        }
+    }
+
+    /// After receiving an ipv6 addr from the exit, this function adds that ip
+    /// to /etc/network/addr. SLAAC takes this ip and assigns a /64 to hosts that connect
+    /// to the router
+    pub fn setup_ipv6_slaac(&self, router_ipv6_str: IpNetwork) {
+        let output = self
+            .run_command("uci", &["get", "network.lan.ip6addr"])
+            .unwrap();
+
+        match String::from_utf8(output.stdout) {
+            Ok(a) => {
+                if a.is_empty() || {
+                    router_ipv6_str
+                        != a.replace('\n', "")
+                            .parse::<IpNetwork>()
+                            .expect("This should be a valid network")
+                } {
+                    let mut append_str = "network.lan.ip6addr=".to_owned();
+                    append_str.push_str(&router_ipv6_str.to_string());
+                    let res1 = self.run_command("uci", &["set", &append_str]);
+                    let res2 = self.run_command("uci", &["commit", "network"]);
+                    let res3 = self.run_command("/etc/init.d/network", &["reload"]);
+
+                    match (res1.clone(), res2.clone(), res3.clone()) {
+                        (Ok(_), Ok(_), Ok(_)) => {},
+                        _ => error!("Unable to set ipv6 subnet correctly. Following are the results of command: {:?}, {:?}, {:?}", res1, res2, res3),
+                    }
+                }
+            }
+            Err(e) => error!("Error setting ipv6: {:?}", e),
         }
     }
 

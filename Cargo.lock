@@ -306,6 +306,7 @@ name = "althea_kernel_interface"
 version = "0.1.0"
 dependencies = [
  "althea_types",
+ "ipnetwork 0.18.0",
  "itertools 0.10.3",
  "lazy_static",
  "log",

@@ -568,6 +568,7 @@ async fn exit_status_request(exit: String) -> Result<(), RitaClientError> {
     };
     current_exit.info = exit_response.clone();
     settings::set_rita_client(rita_client);
+
     trace!("Got exit status response {:?}", exit_response);
     Ok(())
 }
@@ -866,6 +867,26 @@ pub async fn exit_manager_tick() {
 
             state => {
                 trace!("Waiting on exit state {:?} for {}", state, k);
+            }
+        }
+    }
+
+    // This block runs after an exit manager tick (an exit is selected), 
+    // and looks at the ipv6 subnet assigned to our router in the ExitState struct
+    // which should be present after requesting general status from a registered exit.
+    // This subnet is then added the lan network interface on the router to be used by slaac
+    trace!("Setting up ipv6 for slaac");
+    let rita_settings = settings::get_rita_client();
+    let current_exit = rita_settings.exit_client.current_exit;
+    if let Some(exit) = current_exit {
+        let exit_ser = rita_settings.exit_client.exits.get(&exit);
+        if let Some(exit_ser) = exit_ser {
+            let exit_info = exit_ser.info.clone();
+
+            if let ExitState::Registered { our_details, .. } = exit_info {
+                if let Some(ipv6_sub) = our_details.internet_ipv6_subnet {
+                    KI.setup_ipv6_slaac(ipv6_sub)
+                }
             }
         }
     }
