@@ -135,6 +135,8 @@ fn linux_setup_exit_tunnel(
 ) -> Result<(), RitaClientError> {
     let mut rita_client = settings::get_rita_client();
     let mut network = rita_client.network;
+    let local_mesh_ip = network.mesh_ip;
+
     // TODO this should be refactored to return a value
     KI.update_settings_route(&mut network.last_default_route);
 
@@ -159,7 +161,7 @@ fn linux_setup_exit_tunnel(
     rita_client.network = network;
     settings::set_rita_client(rita_client);
 
-    KI.set_client_exit_tunnel_config(args)?;
+    KI.set_client_exit_tunnel_config(args, local_mesh_ip)?;
     KI.set_route_to_tunnel(&general_details.server_internal_ip)?;
 
     KI.create_client_nat_rules()?;
@@ -784,7 +786,7 @@ pub async fn exit_manager_tick() {
         }
     }
 
-    // This block runs after an exit manager tick (an exit is selected), 
+    // This block runs after an exit manager tick (an exit is selected),
     // and looks at the ipv6 subnet assigned to our router in the ExitState struct
     // which should be present after requesting general status from a registered exit.
     // This subnet is then added the lan network interface on the router to be used by slaac

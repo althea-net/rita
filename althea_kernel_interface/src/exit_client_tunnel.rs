@@ -1,5 +1,5 @@
 use super::KernelInterface;
-use crate::KernelInterfaceError as Error;
+use crate::{open_tunnel::to_wg_local, KernelInterfaceError as Error};
 use althea_types::WgKey;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
@@ -31,7 +31,11 @@ pub struct ClientExitTunnelConfig {
 }
 
 impl dyn KernelInterface {
-    pub fn set_client_exit_tunnel_config(&self, args: ClientExitTunnelConfig) -> Result<(), Error> {
+    pub fn set_client_exit_tunnel_config(
+        &self,
+        args: ClientExitTunnelConfig,
+        local_mesh: Option<IpAddr>,
+    ) -> Result<(), Error> {
         self.run_command(
             "wg",
             &[
@@ -124,6 +128,26 @@ impl dyn KernelInterface {
                         "wg_exit",
                     ],
                 )?;
+            }
+        }
+
+        // If wg_exit does not have a link local addr, set one up
+        if self.get_link_local_device_ip("wg_exit").is_err() {
+            if let Some(mesh) = local_mesh {
+                if let Err(e) = self.run_command(
+                    "ip",
+                    &[
+                        "address",
+                        "add",
+                        &format!("{}/64", to_wg_local(&mesh)),
+                        "dev",
+                        "wg_exit",
+                    ],
+                ) {
+                    error!("IPV6 ERROR: Unable to set link local for wg_exit: {:?}", e);
+                }
+            } else {
+                error!("IPV6 ERRROR: No mesh ip, unable to set link local for wg_exit");
             }
         }
 
