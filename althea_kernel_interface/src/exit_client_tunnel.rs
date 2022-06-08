@@ -46,7 +46,7 @@ impl dyn KernelInterface {
                 "endpoint",
                 &format!("[{}]:{}", args.endpoint.ip(), args.endpoint.port()),
                 "allowed-ips",
-                "0.0.0.0/0",
+                "0.0.0.0/0, ::/0",
                 "persistent-keepalive",
                 "5",
             ],
