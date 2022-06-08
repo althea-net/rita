@@ -3,7 +3,7 @@ use althea_types::WgKey;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::Path;
 
-fn to_wg_local(ip: &IpAddr) -> IpAddr {
+pub fn to_wg_local(ip: &IpAddr) -> IpAddr {
     match *ip {
         IpAddr::V6(ip) => {
             let seg = ip.segments();
