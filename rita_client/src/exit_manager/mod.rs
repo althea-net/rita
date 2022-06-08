@@ -146,7 +146,7 @@ fn linux_setup_exit_tunnel(
 
     let args = ClientExitTunnelConfig {
         endpoint: SocketAddr::new(
-            get_selected_exit(exit).expect("There should be an exit ip here"),
+            get_selected_exit(exit.clone()).expect("There should be an exit ip here"),
             general_details.wg_exit_port,
         ),
         pubkey: current_exit.wg_public_key,
@@ -163,6 +163,7 @@ fn linux_setup_exit_tunnel(
 
     KI.set_client_exit_tunnel_config(args, local_mesh_ip)?;
     KI.set_route_to_tunnel(&general_details.server_internal_ip)?;
+    KI.set_ipv6_route_to_tunnel()?;
 
     KI.create_client_nat_rules()?;
 

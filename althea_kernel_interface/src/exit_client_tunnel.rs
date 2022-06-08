@@ -200,6 +200,34 @@ impl dyn KernelInterface {
         Ok(())
     }
 
+    pub fn set_ipv6_route_to_tunnel(&self) -> Result<(), Error> {
+
+        // Remove current default route
+        if let Err(e) = self.run_command("ip", &["-6", "route", "del", "default"]) {
+            warn!("Failed to delete default ip6 route {:?}", e);
+        }
+        // Set new default route
+        let output = self.run_command(
+            "ip",
+            &[
+                "-6",
+                "route",
+                "add",
+                "default",
+                "dev",
+                "wg_exit",
+            ],
+        )?;
+        if !output.stderr.is_empty() {
+            error!("IPV6 ERROR: Unable to set ip -6 default route");
+            return Err(Error::RuntimeError(format!(
+                "received error setting ip -6 route: {}",
+                String::from_utf8(output.stderr)?
+            )));
+        }
+        Ok(())
+    }
+
     /// Adds nat rules for lan client, these act within the structure
     /// of the openwrt rules which themselves create a few requirements
     /// (such as saying that zone-lan-forward shoul jump to the accept table)
