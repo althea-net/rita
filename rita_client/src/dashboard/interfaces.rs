@@ -10,9 +10,9 @@ use std::net::Ipv4Addr;
 use crate::RitaClientError;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct InterfaceToSet {
-    pub interface: Vec<String>,
-    pub mode: Vec<InterfaceMode>,
+pub struct InterfacesToSet {
+    pub interfaces: Vec<String>,
+    pub modes: Vec<InterfaceMode>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Copy)]
@@ -156,7 +156,35 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
     })
 }
 
-fn set_interface_mode(
+/// Set mode for an individual interface
+fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), RitaClientError> {
+    trace!("InterfaceToSet received");
+    let iface_name = iface_name;
+    let target_mode = mode;
+    let interfaces = get_interfaces()?;
+    let current_mode = get_current_interface_mode(&interfaces, iface_name);
+    if !interfaces.contains_key(iface_name) {
+        return Err(RitaClientError::InterfaceModeError(
+            "Attempted to configure non-existant or unavailable interface!".to_string(),
+        ));
+    } else if target_mode == InterfaceMode::Wan {
+        // we can only have one WAN interface, check for others
+        // StaticWAN entries are not identified seperately but if they ever are
+        // you'll have to handle them here
+        for entry in interfaces {
+            let mode = entry.1;
+            if mode == InterfaceMode::Wan {
+                return Err(RitaClientError::InterfaceModeError(
+                    "There can only be one WAN interface!".to_string(),
+                ));
+            }
+        }
+    }
+    ethernet_transform_mode(iface_name, current_mode, target_mode)
+}
+
+/// Handles the validation of new port settings from multi port toggle
+fn multiset_interfaces(
     iface_name: Vec<&str>,
     mode: Vec<InterfaceMode>,
 ) -> Result<(), RitaClientError> {
@@ -166,228 +194,194 @@ fn set_interface_mode(
             "Extra mode or iface found!".to_string(),
         ));
     }
-    let mut target_mode = mode.clone();
-    let interfaces = get_interfaces()?;
-    //let current_mode = get_current_interface_mode(&interfaces, iface_name);
-    let mut current_modes: Vec<InterfaceMode> = Vec::new();
+    // for each changed interface sent through, we set its interface mode
+    let mut target_modes = mode;
 
     for iface in iface_name.clone() {
-        let current_mode = target_mode.remove(0);
-        if !interfaces.contains_key(iface) {
-            return Err(RitaClientError::InterfaceModeError(
-                "Attempted to configure non-existant or unavailable interface!".to_string(),
-            ));
-        } else if current_mode == InterfaceMode::Wan {
-            // we can only have one WAN interface, check for others
-            // StaticWAN entries are not identified seperately but if they ever are
-            // you'll have to handle them here
-            for entry in &interfaces {
-                let mode = entry.1;
-                if mode == &InterfaceMode::Wan {
-                    return Err(RitaClientError::InterfaceModeError(
-                        "There can only be one WAN interface!".to_string(),
-                    ));
-                }
-            }
-            // we also need to make sure we have not been passed multiple WAN interfaces
-            // in the new config
-            for entry in &target_mode {
-                if entry == &InterfaceMode::Wan {
-                    return Err(RitaClientError::InterfaceModeError(
-                        "There can only be one WAN interface!".to_string(),
-                    ));
-                }
-            }
+        let mode = target_modes.remove(0);
+
+        let setter = set_interface_mode(iface, mode);
+        if setter.is_err() {
+            return Err(RitaClientError::InterfaceModeError(iface.to_string()));
         }
-        current_modes.push(get_current_interface_mode(&interfaces, iface));
     }
 
-    trace!("Transforming ethernet");
-    ethernet_transform_mode(iface_name, current_modes, mode)
+    trace!("Successfully transformed ethernet mode, rebooting");
+    // reboot has been moved here to avoid doing it after every interface
+    KI.run_command("reboot", &[])?;
+    Ok(())
 }
 
-/// Transform a wired inteface from mode A to mode B
+/// Transform a wired interface from mode A to mode B
 pub fn ethernet_transform_mode(
-    iface_names: Vec<&str>,
-    mut a: Vec<InterfaceMode>,
-    mut b: Vec<InterfaceMode>,
+    ifname: &str,
+    a: InterfaceMode,
+    b: InterfaceMode,
 ) -> Result<(), RitaClientError> {
-    if iface_names.len() != a.len() || a.len() != b.len() {
-        return Err(RitaClientError::MiscStringError(
-            "Extra mode or iface found!".to_string(),
+    trace!(
+        "Ethernet mode transform: ifname {:?}, a {:?}, b {:?}",
+        ifname,
+        a,
+        b,
+    );
+    if a == b {
+        // noop that was easy!
+        return Ok(());
+    } else if a == InterfaceMode::Unknown || b == InterfaceMode::Unknown {
+        return Err(RitaClientError::InterfaceModeError(
+            "We can't change Unknown interfaces!".to_string(),
         ));
     }
-
     let rita_client = settings::get_rita_client();
     let mut network = rita_client.network;
-    // in case of failure we revert to here
-    let old_network_settings = { network.clone() };
+
     // if we have edited UCI and it fails we set this var to handle cleanup later
     let mut return_codes = Vec::new();
+    // in case of failure we revert to here
+    let old_network_settings = { network.clone() };
+    let filtered_ifname = format!("network.rita_{}", ifname.replace('.', ""));
 
-    for ifname in iface_names {
-        let current = a.remove(0);
-        let target = b.remove(0);
-        trace!(
-            "Ethernet mode transform: ifname {:?}, a {:?}, b {:?}",
-            ifname,
-            current,
-            target,
-        );
-        if current == target {
-            // noop that was easy!
-            // return Ok(());
-            // TODO what are we returning?
-        } else if current == InterfaceMode::Unknown || target == InterfaceMode::Unknown {
-            return Err(RitaClientError::InterfaceModeError(
-                "We can't change Unknown interfaces!".to_string(),
-            ));
+    match a {
+        // Wan is very simple, just delete it
+        InterfaceMode::Wan | InterfaceMode::StaticWan { .. } => {
+            network.external_nic = None;
+
+            let ret = KI.del_uci_var("network.backhaul");
+            return_codes.push(ret);
         }
-
-        let filtered_ifname = format!("network.rita_{}", ifname.replace('.', ""));
-
-        match current {
-            // Wan is very simple, just delete it
-            InterfaceMode::Wan | InterfaceMode::StaticWan { .. } => {
-                network.external_nic = None;
-
-                let ret = KI.del_uci_var("network.backhaul");
-                return_codes.push(ret);
-            }
-            // LTE is even simpler
-            InterfaceMode::LTE => {
-                let ret = KI.del_uci_var("network.lte");
-                return_codes.push(ret);
-            }
-            // LAN is a bridge and the lan bridge must always remain because things
-            // like WiFi interfaces are attached to it. So we just remove the interface
-            // from the list
-            InterfaceMode::Lan => {
-                let list = KI.get_uci_var("network.lan.ifname")?;
-                let new_list = list_remove(&list, ifname);
-                let ret = KI.set_uci_var("network.lan.ifname", &new_list);
-                return_codes.push(ret);
-            }
-            // just like LAN we are adding and removing a device from the list just this time
-            // on pbs
-            InterfaceMode::Phone => {
-                let list = KI.get_uci_var("network.pbs.ifname")?;
-                let new_list = list_remove(&list, ifname);
-                let ret = KI.set_uci_var("network.pbs.ifname", &new_list);
-                return_codes.push(ret);
-            }
-            // for mesh we need to send an unlisten so that Rita stops
-            // listening then we can remove the section, we also need to remove it
-            // from the config
-            InterfaceMode::Mesh => {
-                unlisten_interface(ifname.to_string());
-                network.peer_interfaces.remove(ifname);
-
-                let ret = KI.del_uci_var(&filtered_ifname);
-                return_codes.push(ret);
-            }
-            InterfaceMode::Unknown => unimplemented!(),
+        // LTE is even simpler
+        InterfaceMode::LTE => {
+            let ret = KI.del_uci_var("network.lte");
+            return_codes.push(ret);
         }
+        // LAN is a bridge and the lan bridge must always remain because things
+        // like WiFi interfaces are attached to it. So we just remove the interface
+        // from the list
+        InterfaceMode::Lan => {
+            let list = KI.get_uci_var("network.lan.ifname")?;
+            let new_list = list_remove(&list, ifname);
+            let ret = KI.set_uci_var("network.lan.ifname", &new_list);
+            return_codes.push(ret);
+        }
+        // just like LAN we are adding and removing a device from the list just this time
+        // on pbs
+        InterfaceMode::Phone => {
+            let list = KI.get_uci_var("network.pbs.ifname")?;
+            let new_list = list_remove(&list, ifname);
+            let ret = KI.set_uci_var("network.pbs.ifname", &new_list);
+            return_codes.push(ret);
+        }
+        // for mesh we need to send an unlisten so that Rita stops
+        // listening then we can remove the section, we also need to remove it
+        // from the config
+        InterfaceMode::Mesh => {
+            unlisten_interface(ifname.to_string());
+            network.peer_interfaces.remove(ifname);
 
-        match target {
-            // here we add back all the properties of backhaul we removed
-            InterfaceMode::Wan => {
-                network.external_nic = Some(ifname.to_string());
+            let ret = KI.del_uci_var(&filtered_ifname);
+            return_codes.push(ret);
+        }
+        InterfaceMode::Unknown => unimplemented!(),
+    }
 
-                let ret = KI.set_uci_var("network.backhaul", "interface");
-                return_codes.push(ret);
-                let ret = KI.set_uci_var("network.backhaul.ifname", ifname);
-                return_codes.push(ret);
-                let ret = KI.set_uci_var("network.backhaul.proto", "dhcp");
-                return_codes.push(ret);
-            }
-            InterfaceMode::StaticWan {
-                netmask,
-                ipaddr,
-                gateway,
-            } => {
-                network.external_nic = Some(ifname.to_string());
+    match b {
+        // here we add back all the properties of backhaul we removed
+        InterfaceMode::Wan => {
+            network.external_nic = Some(ifname.to_string());
 
-                let ret = KI.set_uci_var("network.backhaul", "interface");
-                return_codes.push(ret);
-                let ret = KI.set_uci_var("network.backhaul.ifname", ifname);
-                return_codes.push(ret);
-                let ret = KI.set_uci_var("network.backhaul.proto", "static");
-                return_codes.push(ret);
-                let ret = KI.set_uci_var("network.backhaul.netmask", &format!("{}", netmask));
-                return_codes.push(ret);
-                let ret = KI.set_uci_var("network.backhaul.ipaddr", &format!("{}", ipaddr));
-                return_codes.push(ret);
-                let ret = KI.set_uci_var("network.backhaul.gateway", &format!("{}", gateway));
-                return_codes.push(ret);
-            }
-            InterfaceMode::LTE => {
-                let ret = KI.set_uci_var("network.lte", "interface");
-                return_codes.push(ret);
-                let ret = KI.set_uci_var("network.lte.ifname", ifname);
-                return_codes.push(ret);
-                let ret = KI.set_uci_var("network.lte.proto", "dhcp");
-                return_codes.push(ret);
-            }
-            // since we left lan mostly unmodified we just pop in the ifname
-            InterfaceMode::Lan => {
-                trace!("Converting interface to lan with ifname {:?}", ifname);
-                let ret = KI.get_uci_var("network.lan.ifname");
-                match ret {
-                    Ok(list) => {
-                        trace!("The existing LAN interfaces list is {:?}", list);
-                        let new_list = list_add(&list, ifname);
-                        trace!("Setting the new list {:?}", new_list);
-                        let ret = KI.set_uci_var("network.lan.ifname", &new_list);
+            let ret = KI.set_uci_var("network.backhaul", "interface");
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.backhaul.ifname", ifname);
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.backhaul.proto", "dhcp");
+            return_codes.push(ret);
+        }
+        InterfaceMode::StaticWan {
+            netmask,
+            ipaddr,
+            gateway,
+        } => {
+            network.external_nic = Some(ifname.to_string());
+
+            let ret = KI.set_uci_var("network.backhaul", "interface");
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.backhaul.ifname", ifname);
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.backhaul.proto", "static");
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.backhaul.netmask", &format!("{}", netmask));
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.backhaul.ipaddr", &format!("{}", ipaddr));
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.backhaul.gateway", &format!("{}", gateway));
+            return_codes.push(ret);
+        }
+        InterfaceMode::LTE => {
+            let ret = KI.set_uci_var("network.lte", "interface");
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.lte.ifname", ifname);
+            return_codes.push(ret);
+            let ret = KI.set_uci_var("network.lte.proto", "dhcp");
+            return_codes.push(ret);
+        }
+        // since we left lan mostly unmodified we just pop in the ifname
+        InterfaceMode::Lan => {
+            trace!("Converting interface to lan with ifname {:?}", ifname);
+            let ret = KI.get_uci_var("network.lan.ifname");
+            match ret {
+                Ok(list) => {
+                    trace!("The existing LAN interfaces list is {:?}", list);
+                    let new_list = list_add(&list, ifname);
+                    trace!("Setting the new list {:?}", new_list);
+                    let ret = KI.set_uci_var("network.lan.ifname", &new_list);
+                    return_codes.push(ret);
+                }
+                Err(e) => {
+                    if e.to_string().contains("Entry not found") {
+                        trace!("No LAN interfaces found, setting one now");
+                        let ret = KI.set_uci_var("network.lan.ifname", ifname);
                         return_codes.push(ret);
-                    }
-                    Err(e) => {
-                        if e.to_string().contains("Entry not found") {
-                            trace!("No LAN interfaces found, setting one now");
-                            let ret = KI.set_uci_var("network.lan.ifname", ifname);
-                            return_codes.push(ret);
-                        } else {
-                            warn!("Trying to read lan ifname returned {:?}", e);
-                            return_codes.push(Err(e));
-                        }
+                    } else {
+                        warn!("Trying to read lan ifname returned {:?}", e);
+                        return_codes.push(Err(e));
                     }
                 }
             }
-            InterfaceMode::Phone => {
-                trace!("Converting interface to Phone with ifname {:?}", ifname);
-                let ret = KI.get_uci_var("network.pbs.ifname");
-                match ret {
-                    Ok(list) => {
-                        trace!("The existing Phone interfaces list is {:?}", list);
-                        let new_list = list_add(&list, ifname);
-                        trace!("Setting the new list {:?}", new_list);
-                        let ret = KI.set_uci_var("network.pbs.ifname", &new_list);
+        }
+        InterfaceMode::Phone => {
+            trace!("Converting interface to Phone with ifname {:?}", ifname);
+            let ret = KI.get_uci_var("network.pbs.ifname");
+            match ret {
+                Ok(list) => {
+                    trace!("The existing Phone interfaces list is {:?}", list);
+                    let new_list = list_add(&list, ifname);
+                    trace!("Setting the new list {:?}", new_list);
+                    let ret = KI.set_uci_var("network.pbs.ifname", &new_list);
+                    return_codes.push(ret);
+                }
+                Err(e) => {
+                    if e.to_string().contains("Entry not found") {
+                        trace!("No Phone interfaces found, setting one now");
+                        let ret = KI.set_uci_var("network.pbs.ifname", ifname);
                         return_codes.push(ret);
-                    }
-                    Err(e) => {
-                        if e.to_string().contains("Entry not found") {
-                            trace!("No Phone interfaces found, setting one now");
-                            let ret = KI.set_uci_var("network.pbs.ifname", ifname);
-                            return_codes.push(ret);
-                        } else {
-                            warn!("Trying to read Phone ifname returned {:?}", e);
-                            return_codes.push(Err(e));
-                        }
+                    } else {
+                        warn!("Trying to read Phone ifname returned {:?}", e);
+                        return_codes.push(Err(e));
                     }
                 }
             }
-            InterfaceMode::Mesh => {
-                network.peer_interfaces.insert(ifname.to_string());
-
-                let ret = KI.set_uci_var(&filtered_ifname, "interface");
-                return_codes.push(ret);
-                let ret = KI.set_uci_var(&format!("{}.ifname", filtered_ifname), ifname);
-                return_codes.push(ret);
-                let ret = KI.set_uci_var(&format!("{}.proto", filtered_ifname), "static");
-                return_codes.push(ret);
-            }
-            InterfaceMode::Unknown => unimplemented!(),
         }
+        InterfaceMode::Mesh => {
+            network.peer_interfaces.insert(ifname.to_string());
+
+            let ret = KI.set_uci_var(&filtered_ifname, "interface");
+            return_codes.push(ret);
+            let ret = KI.set_uci_var(&format!("{}.ifname", filtered_ifname), ifname);
+            return_codes.push(ret);
+            let ret = KI.set_uci_var(&format!("{}.proto", filtered_ifname), "static");
+            return_codes.push(ret);
+        }
+        InterfaceMode::Unknown => unimplemented!(),
     }
 
     // check all of our return codes in order to handle any possible issue
@@ -427,11 +421,9 @@ pub fn ethernet_transform_mode(
         return Err(RitaCommonError::SettingsError(_e).into());
     }
 
+    trace!("Transforming ethernet");
     // We edited disk contents, force global sync
     KI.fs_sync()?;
-
-    trace!("Successsfully transformed ethernet mode, rebooting");
-    KI.run_command("reboot", &[])?;
 
     Ok(())
 }
@@ -674,12 +666,16 @@ pub async fn get_interfaces_endpoint(_req: HttpRequest) -> HttpResponse {
     }
 }
 
-pub async fn set_interfaces_endpoint(interface: Json<InterfaceToSet>) -> HttpResponse {
-    let interface = interface.into_inner();
+pub async fn set_interfaces_endpoint(interfaces: Json<InterfacesToSet>) -> HttpResponse {
+    let interface = interfaces.into_inner();
     debug!("set /interfaces hit");
 
-    let interfaces: Vec<&str> = interface.interface.iter().map(|str| str.as_ref()).collect();
-    match set_interface_mode(interfaces, interface.mode) {
+    let iface: Vec<&str> = interface
+        .interfaces
+        .iter()
+        .map(|str| str.as_ref())
+        .collect();
+    match multiset_interfaces(iface, interface.modes) {
         Ok(_) => HttpResponse::Ok().into(),
         Err(e) => {
             error!("Set interfaces failed with {:?}", e);
