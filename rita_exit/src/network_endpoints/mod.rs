@@ -16,7 +16,7 @@ use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Re
 use althea_types::Identity;
 use althea_types::WgKey;
 use althea_types::{
-    EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState,
+    EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState, ExitSystemTime,
 };
 use num256::Int256;
 use rita_common::blockchain_oracle::potential_payment_issues_detected;
@@ -27,6 +27,7 @@ use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::Nonce;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::PublicKey;
 use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::SecretKey;
 use std::net::SocketAddr;
+use std::time::SystemTime;
 
 use crate::{RitaExitError, EXIT_WG_PRIVATE_KEY};
 
@@ -228,6 +229,12 @@ pub async fn get_exit_info_http(_req: HttpRequest) -> HttpResponse {
     HttpResponse::Ok().json(ExitState::GotInfo {
         general_details: get_exit_info(),
         message: "Got info successfully".to_string(),
+    })
+}
+
+pub async fn get_exit_timestamp_http(_req: HttpRequest) -> HttpResponse {
+    HttpResponse::Ok().json(ExitSystemTime {
+        system_time: SystemTime::now(),
     })
 }
 

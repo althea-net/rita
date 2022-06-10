@@ -35,12 +35,13 @@ use ipnetwork::IpNetwork;
 use rita_common::blockchain_oracle::get_oracle_close_thresh;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::debt_keeper::DebtAction;
+use rita_common::utils::secs_since_unix_epoch;
 use settings::exit::ExitVerifSettings;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::IpAddr;
+use std::time::Duration;
 use std::time::Instant;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::EXIT_ALLOWED_COUNTRIES;
 use crate::EXIT_DESCRIPTION;
@@ -90,15 +91,6 @@ pub fn get_exit_info() -> ExitDetails {
             None => ExitVerifMode::Off,
         },
     }
-}
-
-// lossy conversion, but it won't matter until 2.9 * 10^8 millenia from now
-pub fn secs_since_unix_epoch() -> i64 {
-    let start = SystemTime::now();
-    let since_the_epoch = start
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
-    since_the_epoch.as_secs() as i64
 }
 
 /// Handles a new client registration api call. Performs a geoip lookup

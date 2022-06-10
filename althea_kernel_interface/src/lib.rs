@@ -47,6 +47,7 @@ pub mod opkg_feeds;
 mod ping_check;
 mod set_system_password;
 mod setup_wg_if;
+pub mod time;
 mod traffic_control;
 mod udp_socket_table;
 pub mod upgrade;

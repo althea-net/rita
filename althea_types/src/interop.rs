@@ -13,7 +13,7 @@ use std::hash::{Hash, Hasher};
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 /// This is how nodes are identified.
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -735,4 +735,12 @@ pub struct HeartbeatMessage {
     pub notify_balance: bool,
     /// The router version stored in semver format as found in the Cargo.toml
     pub version: String,
+}
+
+/// An exit's unix time stamp that can be queried by a downstream router
+/// Many routers have no built in clock and need to set their time at boot
+/// in order for wireguard tunnels to work correctly
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExitSystemTime {
+    pub system_time: SystemTime,
 }
