@@ -17,7 +17,9 @@
 //! Signup is complete and the user may use the connection
 
 mod exit_switcher;
+mod time_sync;
 
+use crate::exit_manager::time_sync::maybe_set_local_to_exit_time;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use crate::RitaClientError;
@@ -26,13 +28,12 @@ use actix_web_async::Result;
 use althea_kernel_interface::{
     exit_client_tunnel::ClientExitTunnelConfig, DefaultRoute, KernelInterfaceError,
 };
+use althea_types::ExitClientDetails;
 use althea_types::ExitDetails;
 use althea_types::Identity;
 use althea_types::WgKey;
 use althea_types::{EncryptedExitClientIdentity, EncryptedExitState};
-use althea_types::{ExitClientDetails, ExitSystemTime};
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState, ExitVerifMode};
-use awc::cookie::time::Duration;
 use exit_switcher::{get_babel_routes, set_best_exit};
 
 use rita_common::blockchain_oracle::low_balance;
@@ -45,16 +46,9 @@ use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::time::SystemTime;
 
 /// The number of times ExitSwitcher will try to connect to an unresponsive exit before blacklisting its ip
 const MAX_BLACKLIST_STRIKES: u16 = 100;
-
-/// The max time difference between the local router's time and the exit's before resetting the local time to the exit's
-const MAX_DIFF_LOCAL_EXIT_TIME: Duration = Duration::seconds(60);
-
-/// The max age of the exit tunnel before resetting the local time to the exit's
-const MAX_EXIT_TUNNEL_HANDSHAKE: Duration = Duration::minutes(10);
 
 lazy_static! {
     pub static ref EXIT_MANAGER: Arc<RwLock<ExitManager>> =
@@ -596,87 +590,6 @@ fn initialize_selected_exit_list(exit: String, server: ExitServer) {
         tracking_exit: None,
         selected_id_metric: None,
     });
-}
-
-/// Retrieve a unix timestamp from the exit's mesh IPv6
-pub async fn get_exit_time(exit: ExitServer) -> Option<SystemTime> {
-    info!("Getting the exit time");
-    let exit_ip = exit.subnet.ip();
-    let exit_port = exit.registration_port;
-    let url = format!("http://[{}]:{}/time", exit_ip, exit_port);
-
-    let client = awc::Client::default();
-    let response = match client.get(&url).send().await {
-        Ok(mut response) => {
-            trace!("Response is {:?}", response.status());
-            trace!("Response is {:?}", response.headers());
-            response.json().await
-        }
-        Err(e) => {
-            error!("Failed to get exit time stamp {:?}", e);
-            return None;
-        }
-    };
-
-    let exit_time: ExitSystemTime = match response {
-        Ok(a) => a,
-        Err(e) => {
-            error!("Failed to get exit time stamp {:?}", e);
-            return None;
-        }
-    };
-
-    Some(exit_time.system_time)
-}
-
-// try to get the latest handshake for the wg_exit tunnel
-pub fn get_latest_exit_handshake() -> Option<SystemTime> {
-    match KI.get_last_handshake_time("wg_exit") {
-        Ok(results) => results.first().map(|(_, time)| *time),
-        Err(_) => None,
-    }
-}
-
-/// Check for a handshake time for wg_exit. We might not get one if there's no tunnel
-/// if there's no handshake or the handshake is more than 10 mins old, then try to get the exit time
-/// if we do get the exit time and it's more than 60 secs different than local time, then set the local time to it
-pub async fn maybe_set_local_to_exit_time(exit: ExitServer) {
-    let now = SystemTime::now();
-
-    if let Some(last_handshake) = get_latest_exit_handshake() {
-        match now.duration_since(last_handshake) {
-            Ok(diff) => {
-                if diff < MAX_EXIT_TUNNEL_HANDSHAKE {
-                    // we got an existing wg_exit handshake of a reasonable age
-                    return;
-                }
-            }
-            Err(e) => {
-                info!(
-                    "The last exit handshake time \"was\" {} secs in the future",
-                    e.duration().as_secs()
-                );
-            }
-        }
-    }
-
-    // if we're here, then it means we didn't get a reasonable handshake
-    if let Some(exit_time) = get_exit_time(exit).await {
-        // if exit time is more than 60 secs later than our time, set ours to its
-        if let Ok(diff) = exit_time.duration_since(now) {
-            if diff > MAX_DIFF_LOCAL_EXIT_TIME {
-                // if we're here, then it's time to set our time
-                match KI.set_local_time(exit_time) {
-                    Ok(_) => {
-                        info!("Local time was reset to the exit's time: {:?}", exit_time);
-                    }
-                    Err(e) => {
-                        error!("Failed to set the local time because: {:?}", e);
-                    }
-                }
-            }
-        }
-    }
 }
 
 pub async fn exit_manager_tick() {
