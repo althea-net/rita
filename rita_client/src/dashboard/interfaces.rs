@@ -157,13 +157,12 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
 }
 
 /// Set mode for an individual interface
-fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), RitaClientError> {
-    trace!("InterfaceToSet received");
+fn set_interface_mode(iface_name: String, mode: InterfaceMode) -> Result<(), RitaClientError> {
     let iface_name = iface_name;
     let target_mode = mode;
     let interfaces = get_interfaces()?;
-    let current_mode = get_current_interface_mode(&interfaces, iface_name);
-    if !interfaces.contains_key(iface_name) {
+    let current_mode = get_current_interface_mode(&interfaces, &iface_name);
+    if !interfaces.contains_key(&iface_name) {
         return Err(RitaClientError::InterfaceModeError(
             "Attempted to configure non-existant or unavailable interface!".to_string(),
         ));
@@ -180,12 +179,12 @@ fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), RitaC
             }
         }
     }
-    ethernet_transform_mode(iface_name, current_mode, target_mode)
+    ethernet_transform_mode(&iface_name, current_mode, target_mode)
 }
 
 /// Handles the validation of new port settings from multi port toggle
 fn multiset_interfaces(
-    iface_name: Vec<&str>,
+    iface_name: Vec<String>,
     mode: Vec<InterfaceMode>,
 ) -> Result<(), RitaClientError> {
     trace!("InterfaceToSet received");
@@ -194,15 +193,29 @@ fn multiset_interfaces(
             "Extra mode or iface found!".to_string(),
         ));
     }
-    // for each changed interface sent through, we set its interface mode
-    let mut target_modes = mode;
+    // for each interface sent through, we set its interface mode
+    let mut target_modes = mode.clone();
 
-    for iface in iface_name.clone() {
+    // do not allow multiple WANs- this is checked for before we run through the setter so we do
+    // not waste time on obviously incorrect configs
+    let mut wan_count = 0;
+    for m in mode {
+        if matches!(m, InterfaceMode::Wan) || matches!(m, InterfaceMode::StaticWan { .. }) {
+            wan_count += 1;
+        }
+    }
+    if wan_count > 1 {
+        return Err(RitaClientError::MiscStringError(
+            "Only one WAN interface allowed!".to_string(),
+        ));
+    }
+
+    for iface in iface_name {
         let mode = target_modes.remove(0);
 
-        let setter = set_interface_mode(iface, mode);
+        let setter = set_interface_mode(iface.clone(), mode);
         if setter.is_err() {
-            return Err(RitaClientError::InterfaceModeError(iface.to_string()));
+            return Err(RitaClientError::InterfaceModeError(iface));
         }
     }
 
@@ -657,6 +670,7 @@ mod tests {
 
 pub async fn get_interfaces_endpoint(_req: HttpRequest) -> HttpResponse {
     debug!("get /interfaces hit");
+
     match get_interfaces() {
         Ok(val) => HttpResponse::Ok().json(val),
         Err(e) => {
@@ -670,12 +684,7 @@ pub async fn set_interfaces_endpoint(interfaces: Json<InterfacesToSet>) -> HttpR
     let interface = interfaces.into_inner();
     debug!("set /interfaces hit");
 
-    let iface: Vec<&str> = interface
-        .interfaces
-        .iter()
-        .map(|str| str.as_ref())
-        .collect();
-    match multiset_interfaces(iface, interface.modes) {
+    match multiset_interfaces(interface.interfaces, interface.modes) {
         Ok(_) => HttpResponse::Ok().into(),
         Err(e) => {
             error!("Set interfaces failed with {:?}", e);
