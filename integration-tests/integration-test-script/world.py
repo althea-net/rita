@@ -448,8 +448,12 @@ class World:
                         node.id, intended_debts[node][owed], owed.id))
                     continue
                 if not fuzzy_match(debts[node.id][owed.id], intended_debts[node][owed]):
-                    print("{} has a predicted debt of {} for {} but actual debt is {} {:.2%} accurate".format(
+                    if debts[node.id][owed.id] != 0:
+                        print("{} has a predicted debt of {} for {} but actual debt is {} {:.2%} accurate".format(
                         node.id, intended_debts[node][owed], owed.id, debts[node.id][owed.id], intended_debts[node][owed]/debts[node.id][owed.id]))
+                    else:
+                        print("{} has a predicted debt of {} for {} but actual debt is {}".format(
+                        node.id, intended_debts[node][owed], owed.id, debts[node.id][owed.id]))
                 # exit(1)
 
     def get_best_route(self, all_routes, from_node, target_node):
