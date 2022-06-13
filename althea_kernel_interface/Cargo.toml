@@ -14,6 +14,7 @@ log = "0.4"
 serde_derive = "1.0"
 serde = "1.0"
 althea_types = { path = "../althea_types" }
+ipnetwork = "0.18"
 
 [dependencies.regex]
 version = "1.4"
