@@ -229,6 +229,14 @@ fn setup_exit_wg_tunnel() {
             .own_internal_ip
             .into(),
         settings::get_rita_exit().exit_network.netmask,
+        settings::get_rita_exit()
+            .network
+            .mesh_ip
+            .expect("Expected a mesh ip for this exit"),
+        settings::get_rita_exit()
+            .network
+            .external_nic
+            .expect("Expected an external nic here"),
     )
     .expect("Failed to setup wg_exit!");
     KI.setup_nat(&settings::get_rita_exit().network.external_nic.unwrap())

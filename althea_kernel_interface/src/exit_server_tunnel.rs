@@ -1,14 +1,15 @@
+use crate::open_tunnel::to_wg_local;
+
 use super::{KernelInterface, KernelInterfaceError};
 use althea_types::WgKey;
-use ipnetwork::IpNetwork;
 use std::collections::HashSet;
 use std::net::IpAddr;
 use KernelInterfaceError as Error;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct ExitClient {
     pub internal_ip: IpAddr,
-    pub internet_ipv6_list: Option<IpNetwork>,
+    pub internet_ipv6_list: String,
     pub public_key: WgKey,
     pub mesh_ip: IpAddr,
     pub port: u16,
@@ -40,9 +41,9 @@ impl dyn KernelInterface {
             // internet_ipv6_list is already in the form of "<subnet1>,<subnet2>.."
             let i_ipv6 = &c.internet_ipv6_list;
             let mut allowed_ips = c.internal_ip.to_string().to_owned();
-            if let Some(ip6) = i_ipv6 {
-                allowed_ips.push_str(", ");
-                allowed_ips.push_str(&ip6.to_string());
+            if !i_ipv6.is_empty() {
+                allowed_ips.push(',');
+                allowed_ips.push_str(i_ipv6);
             }
 
             args.push("peer".into());
@@ -89,7 +90,13 @@ impl dyn KernelInterface {
     }
 
     /// Performs the one time startup tasks for the rita_exit clients loop
-    pub fn one_time_exit_setup(&self, local_ip: &IpAddr, netmask: u8) -> Result<(), Error> {
+    pub fn one_time_exit_setup(
+        &self,
+        local_ip: &IpAddr,
+        netmask: u8,
+        exit_mesh: IpAddr,
+        external_nic: String,
+    ) -> Result<(), Error> {
         let _output = self.run_command(
             "ip",
             &[
@@ -100,6 +107,59 @@ impl dyn KernelInterface {
                 "wg_exit",
             ],
         )?;
+
+        // Set up link local mesh ip in wg_exit as fe80 + rest of mesh ip of exit
+        let local_link = to_wg_local(&exit_mesh);
+
+        let _output = self.run_command(
+            "ip",
+            &[
+                "address",
+                "add",
+                &format!("{}/64", local_link),
+                "dev",
+                "wg_exit",
+            ],
+        )?;
+
+        // Add iptable routes between wg_exit and eth0
+        if self
+            .add_iptables_rule(
+                "ip6tables",
+                &[
+                    "-A",
+                    "FORWARD",
+                    "-i",
+                    "wg_exit",
+                    "-o",
+                    &external_nic,
+                    "-j",
+                    "ACCEPT",
+                ],
+            )
+            .is_err()
+        {
+            error!("IPV6 ERROR: uanble to set ip6table rules: wg_exit to ex_nic");
+        }
+
+        if self
+            .add_iptables_rule(
+                "ip6tables",
+                &[
+                    "-A",
+                    "FORWARD",
+                    "-i",
+                    &external_nic,
+                    "-o",
+                    "wg_exit",
+                    "-j",
+                    "ACCEPT",
+                ],
+            )
+            .is_err()
+        {
+            error!("IPV6 ERROR: uanble to set ip6table rules: ex_nic to wg_Exit");
+        }
 
         let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "mtu", "1340"])?;
         if !output.stderr.is_empty() {
