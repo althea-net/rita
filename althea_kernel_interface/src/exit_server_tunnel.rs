@@ -1,5 +1,6 @@
 use super::{KernelInterface, KernelInterfaceError};
 use althea_types::WgKey;
+use ipnetwork::IpNetwork;
 use std::collections::HashSet;
 use std::net::IpAddr;
 use KernelInterfaceError as Error;
@@ -7,6 +8,7 @@ use KernelInterfaceError as Error;
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct ExitClient {
     pub internal_ip: IpAddr,
+    pub internet_ipv6_list: Option<IpNetwork>,
     pub public_key: WgKey,
     pub mesh_ip: IpAddr,
     pub port: u16,
@@ -33,12 +35,22 @@ impl dyn KernelInterface {
         let mut client_pubkeys = HashSet::new();
 
         for c in clients.iter() {
+            // For the allowed IPs, we appends the clients internal ip as well
+            // as the client ipv6 assigned list and add this to wireguards allowed ips
+            // internet_ipv6_list is already in the form of "<subnet1>,<subnet2>.."
+            let i_ipv6 = &c.internet_ipv6_list;
+            let mut allowed_ips = c.internal_ip.to_string().to_owned();
+            if let Some(ip6) = i_ipv6 {
+                allowed_ips.push_str(", ");
+                allowed_ips.push_str(&ip6.to_string());
+            }
+
             args.push("peer".into());
             args.push(format!("{}", c.public_key));
             args.push("endpoint".into());
             args.push(format!("[{}]:{}", c.mesh_ip, c.port));
             args.push("allowed-ips".into());
-            args.push(format!("{}", c.internal_ip));
+            args.push(allowed_ips);
 
             client_pubkeys.insert(c.public_key);
         }
