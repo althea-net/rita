@@ -27,12 +27,7 @@ pub fn to_exit_client(client: Client) -> Result<ExitClient, RitaExitError> {
         internal_ip: client.internal_ip.parse()?,
         port: client.wg_port as u16,
         public_key: client.wg_pubkey.parse()?,
-        internet_ipv6_list: {
-            match client.internet_ipv6.parse() {
-                Ok(a) => Some(a),
-                Err(_) => None,
-            }
-        },
+        internet_ipv6_list: client.internet_ipv6,
     })
 }
 
