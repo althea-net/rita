@@ -874,9 +874,9 @@ Format:
 
 ## /interfaces
 
-Calling HTTP `POST` request on this endpoint with a json object specifying an interface and a mode
-will transform that interface to the specified mode. The provided interface must be available from
-the `GET` version of this same endpoint.
+Calling HTTP `POST` request on this endpoint with a json object specifying a list of the router's interfaces
+and one of their corresponding modes will transform each interface to its specified mode. The provided interface 
+must be available from the `GET` version of this same endpoint.
 
 - URL: `<rita ip>:<rita_dashboard_port>/interfaces`
 - Method: `POST`
@@ -888,7 +888,7 @@ the `GET` version of this same endpoint.
 - Error Response: `500 Server Error`
 - Sample Call
 
-`curl 127.0.0.1:<rita_dashboard_port>/interfaces -H 'Content-Type: application/json' -i -d '{"interface":"wlan0", "mode":"LAN"}'`
+`curl 127.0.0.1:<rita_dashboard_port>/interfaces -H 'Content-Type: application/json' -i -d '{"interfaces":["eth0.4","eth1","eth0.3"],"modes":["LTE","Phone","Lan"]}'`
 
 Format:
 
