@@ -10,9 +10,9 @@ use std::net::Ipv4Addr;
 use crate::RitaClientError;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct InterfaceToSet {
-    pub interface: String,
-    pub mode: InterfaceMode,
+pub struct InterfacesToSet {
+    pub interfaces: Vec<String>,
+    pub modes: Vec<InterfaceMode>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Copy)]
@@ -156,13 +156,13 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
     })
 }
 
-fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), RitaClientError> {
-    trace!("InterfaceToSet received");
+/// Set mode for an individual interface
+fn set_interface_mode(iface_name: String, mode: InterfaceMode) -> Result<(), RitaClientError> {
     let iface_name = iface_name;
     let target_mode = mode;
     let interfaces = get_interfaces()?;
-    let current_mode = get_current_interface_mode(&interfaces, iface_name);
-    if !interfaces.contains_key(iface_name) {
+    let current_mode = get_current_interface_mode(&interfaces, &iface_name);
+    if !interfaces.contains_key(&iface_name) {
         return Err(RitaClientError::InterfaceModeError(
             "Attempted to configure non-existant or unavailable interface!".to_string(),
         ));
@@ -179,12 +179,53 @@ fn set_interface_mode(iface_name: &str, mode: InterfaceMode) -> Result<(), RitaC
             }
         }
     }
-
-    trace!("Transforming ethernet");
-    ethernet_transform_mode(iface_name, current_mode, target_mode)
+    ethernet_transform_mode(&iface_name, current_mode, target_mode)
 }
 
-/// Transform a wired inteface from mode A to mode B
+/// Handles the validation of new port settings from multi port toggle
+fn multiset_interfaces(
+    iface_name: Vec<String>,
+    mode: Vec<InterfaceMode>,
+) -> Result<(), RitaClientError> {
+    trace!("InterfaceToSet received");
+    if iface_name.len() != mode.len() {
+        return Err(RitaClientError::MiscStringError(
+            "Extra mode or iface found!".to_string(),
+        ));
+    }
+    // for each interface sent through, we set its interface mode
+    let mut target_modes = mode.clone();
+
+    // do not allow multiple WANs- this is checked for before we run through the setter so we do
+    // not waste time on obviously incorrect configs
+    let mut wan_count = 0;
+    for m in mode {
+        if matches!(m, InterfaceMode::Wan) || matches!(m, InterfaceMode::StaticWan { .. }) {
+            wan_count += 1;
+        }
+    }
+    if wan_count > 1 {
+        return Err(RitaClientError::MiscStringError(
+            "Only one WAN interface allowed!".to_string(),
+        ));
+    }
+
+    for iface in iface_name {
+        let mode = target_modes.remove(0);
+
+        let setter = set_interface_mode(iface.clone(), mode);
+        if setter.is_err() {
+            return Err(RitaClientError::InterfaceModeError(iface));
+        }
+    }
+
+    trace!("Successfully transformed ethernet mode, rebooting");
+    // reboot has been moved here to avoid doing it after every interface
+    KI.run_command("reboot", &[])?;
+    Ok(())
+}
+
+/// Transform a wired interface from mode A to mode B
 pub fn ethernet_transform_mode(
     ifname: &str,
     a: InterfaceMode,
@@ -393,11 +434,9 @@ pub fn ethernet_transform_mode(
         return Err(RitaCommonError::SettingsError(_e).into());
     }
 
+    trace!("Transforming ethernet");
     // We edited disk contents, force global sync
     KI.fs_sync()?;
-
-    trace!("Successsfully transformed ethernet mode, rebooting");
-    KI.run_command("reboot", &[])?;
 
     Ok(())
 }
@@ -631,6 +670,7 @@ mod tests {
 
 pub async fn get_interfaces_endpoint(_req: HttpRequest) -> HttpResponse {
     debug!("get /interfaces hit");
+
     match get_interfaces() {
         Ok(val) => HttpResponse::Ok().json(val),
         Err(e) => {
@@ -640,11 +680,11 @@ pub async fn get_interfaces_endpoint(_req: HttpRequest) -> HttpResponse {
     }
 }
 
-pub async fn set_interfaces_endpoint(interface: Json<InterfaceToSet>) -> HttpResponse {
-    let interface = interface.into_inner();
+pub async fn set_interfaces_endpoint(interfaces: Json<InterfacesToSet>) -> HttpResponse {
+    let interface = interfaces.into_inner();
     debug!("set /interfaces hit");
 
-    match set_interface_mode(&interface.interface, interface.mode) {
+    match multiset_interfaces(interface.interfaces, interface.modes) {
         Ok(_) => HttpResponse::Ok().into(),
         Err(e) => {
             error!("Set interfaces failed with {:?}", e);
