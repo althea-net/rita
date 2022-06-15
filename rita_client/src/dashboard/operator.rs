@@ -92,6 +92,11 @@ pub async fn change_operator(path: Path<Address>) -> HttpResponse {
     rita_client.operator = operator;
     settings::set_rita_client(rita_client);
 
+    // save immediately
+    if let Err(_e) = settings::write_config() {
+        return HttpResponse::InternalServerError().finish();
+    }
+
     HttpResponse::Ok().finish()
 }
 
@@ -102,6 +107,12 @@ pub async fn remove_operator(_path: Path<Address>) -> HttpResponse {
 
     rita_client.operator = operator;
     settings::set_rita_client(rita_client);
+
+    // save immediately
+    if let Err(_e) = settings::write_config() {
+        return HttpResponse::InternalServerError().finish();
+    }
+
     HttpResponse::Ok().finish()
 }
 
