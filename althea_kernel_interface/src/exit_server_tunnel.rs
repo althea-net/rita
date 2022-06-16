@@ -2,6 +2,7 @@ use crate::open_tunnel::to_wg_local;
 
 use super::{KernelInterface, KernelInterfaceError};
 use althea_types::WgKey;
+use ipnetwork::IpNetwork;
 use std::collections::HashSet;
 use std::net::IpAddr;
 use KernelInterfaceError as Error;
@@ -87,6 +88,28 @@ impl dyn KernelInterface {
         }
 
         Ok(())
+    }
+
+    /// This function adds a route for each client subnet to the ipv6 routing table
+    /// through wg_exit
+    pub fn setup_client_routes(&self, client_ipv6_list: String, client_mesh: String) {
+        if client_ipv6_list.is_empty() {
+            return;
+        }
+
+        let ipv6_list: Vec<&str> = client_ipv6_list.split(',').collect();
+
+        for ip in ipv6_list {
+            // Verfiy its a valid subnet
+            if let Ok(ip_net) = ip.parse::<IpNetwork>() {
+                let _res = self.run_command(
+                    "ip",
+                    &["-6", "route", "add", &ip_net.to_string(), "dev", "wg_exit"],
+                );
+            } else {
+                error!("IPV6 Error: Invalid client database state. Client with mesh ip: {:?} has invalid database ipv6 list: {:?}", client_mesh, client_ipv6_list);
+            }
+        }
     }
 
     /// Performs the one time startup tasks for the rita_exit clients loop
@@ -243,5 +266,23 @@ impl dyn KernelInterface {
         )?;
 
         Ok(())
+    }
+}
+
+#[test]
+fn test_iproute_parsing() {
+    let str = "fbad::/64,feee::/64";
+
+    if str.is_empty() {
+        return;
+    }
+
+    let ipv6_list: Vec<&str> = str.split(',').collect();
+
+    for ip in ipv6_list {
+        // Verfiy its a valid subnet
+        if let Ok(ip_net) = ip.parse::<IpNetwork>() {
+            println!("debugging: {:?}", ip_net)
+        }
     }
 }

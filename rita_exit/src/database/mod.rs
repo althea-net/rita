@@ -363,6 +363,9 @@ pub fn setup_clients(
             (true, Err(e)) => warn!("Error converting {:?} to exit client {:?}", c, e),
             (false, _) => trace!("{:?} is not verified, not adding to wg_exit", c),
         }
+
+        // Setup or verify that an ipv6 route exists for each client
+        KI.setup_client_routes(c.internet_ipv6.clone(), c.mesh_ip.clone())
     }
 
     trace!("converted clients {:?}", wg_clients);
