@@ -128,7 +128,9 @@ impl FromStr for EncryptionModes {
             "none" | "NONE" => Ok(EncryptionModes::None),
             "sae" | "WPA3" => Ok(EncryptionModes::Sae),
             "sae-mixed" | "WPA2+WPA3" => Ok(EncryptionModes::SaeMixed),
-            "psk2+tkip+ccmp" | "psk2+ccmp" | "WPA2" => Ok(EncryptionModes::Psk2TkipCcmp),
+            "psk2+tkip+ccmp" | "psk2+ccmp" | "psk2+tkip+aes" | "WPA2" => {
+                Ok(EncryptionModes::Psk2TkipCcmp)
+            }
             "psk-mixed+tkip+ccmp" | "WPA+WPA2" => Ok(EncryptionModes::Psk2MixedTkipCcmp),
             _ => {
                 let e = RitaClientError::MiscStringError("Invalid encryption mode!".to_string());
