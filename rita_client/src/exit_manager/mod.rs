@@ -146,7 +146,7 @@ fn linux_setup_exit_tunnel(
 
     let args = ClientExitTunnelConfig {
         endpoint: SocketAddr::new(
-            get_selected_exit(exit.clone()).expect("There should be an exit ip here"),
+            get_selected_exit(exit).expect("There should be an exit ip here"),
             general_details.wg_exit_port,
         ),
         pubkey: current_exit.wg_public_key,
