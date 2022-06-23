@@ -136,6 +136,16 @@ impl dyn KernelInterface {
         }
     }
 
+    /// Gets the ifidx from an interface
+    pub fn get_ifidx(&self, if_name: &str) -> Result<usize, Error> {
+        let lines = get_lines(&format!("/sys/class/net/{}/ifindex", if_name))?;
+        if let Some(ifindex) = lines.get(0) {
+            Ok(ifindex.parse()?)
+        } else {
+            Err(Error::NoInterfaceError(if_name.to_string()))
+        }
+    }
+
     /// Sets the mtu of an interface
     pub fn set_mtu(&self, if_name: &str, mtu: usize) -> Result<(), Error> {
         let output = self.run_command(

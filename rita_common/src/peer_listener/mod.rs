@@ -171,7 +171,7 @@ impl ListenInterface {
         let link_ip = KI.get_link_local_device_ip(ifname)?;
 
         // Lookup interface index
-        let iface_index = KI.get_iface_index(ifname).unwrap_or(0);
+        let iface_index = KI.get_ifidx(ifname).unwrap_or(0) as u32;
         // Bond to multicast discovery address on each listen port
         let multicast_socketaddr = SocketAddrV6::new(disc_ip, port, 0, iface_index);
 

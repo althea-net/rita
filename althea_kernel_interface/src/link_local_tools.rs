@@ -120,24 +120,6 @@ impl dyn KernelInterface {
             ))
         }
     }
-    /// Returns the ifidx of the provided interface
-    pub fn get_iface_index(&self, name: &str) -> Result<u32, KernelInterfaceError> {
-        let links = String::from_utf8(self.run_command("ip", &["link"])?.stdout)?;
-
-        lazy_static! {
-            static ref RE: Regex =
-                Regex::new(r"([0-9]+): (.*?)(:|@)").expect("Unable to compile regular expression");
-        }
-
-        for caps in RE.captures_iter(&links) {
-            if name == &caps[2] {
-                return Ok(caps[1].parse()?);
-            }
-        }
-        Err(KernelInterfaceError::RuntimeError(
-            "Interface not found".to_string(),
-        ))
-    }
 }
 
 #[test]
