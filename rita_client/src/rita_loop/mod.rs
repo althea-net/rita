@@ -24,9 +24,17 @@ use rita_common::rita_loop::set_gateway;
 use rita_common::tunnel_manager::tm_get_neighbors;
 use rita_common::tunnel_manager::tm_get_tunnels;
 use settings::client::RitaClientSettings;
+use std::fs::File;
+use std::fs::OpenOptions;
+use std::io::Read;
+use std::io::Seek;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
+
+/// The maximum size in bytes an babel log is allowed to be, 5MB
+const MAX_LOG_SIZE: u64 = 5 * 1000 * 1000;
 
 lazy_static! {
     /// see the comment on check_for_gateway_client_billing_corner_case()
@@ -80,6 +88,8 @@ pub fn start_rita_loop() {
                 let runner = AsyncSystem::new();
                 runner.block_on(async move {
                     manage_gateway();
+
+                    manage_babeld_logs();
 
                     let exit_dest_price = get_exit_dest_price();
                     let tunnels = tm_get_tunnels().unwrap();
@@ -262,5 +272,65 @@ fn manage_gateway() {
             }
             Err(e) => warn!("Failed to add DNS routes with {:?}", e),
         }
+    }
+}
+
+/// This function truncates babeld.log and sends them over to graylog to prevent memory getting full
+fn manage_babeld_logs() {
+    info!("Running babel log truncation loop");
+
+    let log_file = "/tmp/log/babeld.log";
+    let path = Path::new(log_file);
+    let mut file = match File::open(path) {
+        Ok(a) => a,
+        Err(e) => {
+            error!("Unable to truncate babel logs: {:?}", e);
+            return;
+        }
+    };
+
+    // Read file and log data
+    let mut buf = String::new();
+    match file.read_to_string(&mut buf) {
+        Ok(_) => {
+            for line in buf.lines() {
+                info!("{} {}", log_file, line);
+            }
+        }
+        Err(e) => {
+            error!("Unable to truncate babel logs: {:?}", e);
+            return;
+        }
+    }
+
+    // truncating babeld logs
+    if let Ok(metadata) = file.metadata() {
+        // length of the file
+        if metadata.len() > MAX_LOG_SIZE {
+            info!(
+                "File {} has exceeded {} bytes, truncating",
+                log_file, MAX_LOG_SIZE
+            );
+            // our current file handle does not have write permissions, so we open a new
+            // one in 'truncate' mode which means it clears out the entire file on open
+            let mut options = OpenOptions::new();
+            let path = Path::new(log_file);
+            match options.write(true).truncate(true).open(path) {
+                Ok(_) => {
+                    // now that the file has been truncated we need to take our read only file
+                    // handle and rewind it's internal pointer to the start otherwise we'll be
+                    // trying to read at an offset longer than the file
+                    match file.rewind() {
+                        Ok(_) => info!("Log truncate {} successful!", log_file),
+                        Err(e) => {
+                            error!("Failed to truncate {} with {:?}", log_file, e)
+                        }
+                    }
+                }
+                Err(e) => error!("Failed to truncate {} logs with {:?}", log_file, e),
+            }
+        }
+    } else {
+        warn!("Failed to get metadata for log file {}", log_file)
     }
 }
