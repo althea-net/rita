@@ -24,6 +24,16 @@ impl dyn KernelInterface {
         Ok(vec)
     }
 
+    pub fn ifindex_to_interface_name(&self, ifindex: usize) -> Result<String, Error> {
+        for interface in self.get_interfaces()? {
+            let found_ifindex = self.get_ifindex(&interface)?;
+            if ifindex == found_ifindex {
+                return Ok(interface);
+            }
+        }
+        Err(Error::NoInterfaceError(ifindex.to_string()))
+    }
+
     /// Deletes an named interface
     pub fn del_interface(&self, name: &str) -> Result<(), Error> {
         self.run_command("ip", &["link", "del", "dev", name])?;
@@ -136,8 +146,8 @@ impl dyn KernelInterface {
         }
     }
 
-    /// Gets the ifidx from an interface
-    pub fn get_ifidx(&self, if_name: &str) -> Result<usize, Error> {
+    /// Gets the ifindex from an interface
+    pub fn get_ifindex(&self, if_name: &str) -> Result<usize, Error> {
         let lines = get_lines(&format!("/sys/class/net/{}/ifindex", if_name))?;
         if let Some(ifindex) = lines.get(0) {
             Ok(ifindex.parse()?)
@@ -146,8 +156,31 @@ impl dyn KernelInterface {
         }
     }
 
-    /// Sets the mtu of an interface
+    /// Gets the iflink value from an interface. Physical interfaces have an ifindex and iflink that are
+    /// identical but if you have a virtual (say DSA) interface then this will be the physical interface name
+    pub fn get_iflink(&self, if_name: &str) -> Result<usize, Error> {
+        let lines = get_lines(&format!("/sys/class/net/{}/iflink", if_name))?;
+        if let Some(iflink) = lines.get(0) {
+            Ok(iflink.parse()?)
+        } else {
+            Err(Error::NoInterfaceError(if_name.to_string()))
+        }
+    }
+
+    /// Sets the mtu of an interface, if this interface is a DSA interface the
+    /// parent interface will be located and it's mtu increased as appropriate
     pub fn set_mtu(&self, if_name: &str, mtu: usize) -> Result<(), Error> {
+        let ifindex = self.get_ifindex(if_name)?;
+        let iflink = self.get_iflink(if_name)?;
+        // dsa interface detected, this is an interface controlled by an internal switch
+        // the parent interface (which has the ifindex value represented in iflink for the child interface)
+        // needs to have whatever the mtu is, plus room for VLAN headers
+        const DSA_VLAN_HEADER_SIZE: usize = 8;
+        if ifindex != iflink {
+            let parent_if_name = self.ifindex_to_interface_name(iflink)?;
+            self.set_mtu(&parent_if_name, mtu + DSA_VLAN_HEADER_SIZE)?;
+        }
+
         let output = self.run_command(
             "ip",
             &["link", "set", "dev", if_name, "mtu", &mtu.to_string()],
