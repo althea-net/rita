@@ -104,7 +104,7 @@ impl TokenBridge {
         let own_address = self.own_address;
 
         let tokens_bought = match web3
-            .get_uniswap_price(
+            .get_uniswap_v3_price(
                 own_address,
                 *DAI_CONTRACT_ON_ETH,
                 *WETH_CONTRACT_ADDRESS,
@@ -128,7 +128,7 @@ impl TokenBridge {
         let own_address = self.own_address;
 
         let tokens_bought = match web3
-            .get_uniswap_price(
+            .get_uniswap_v3_price(
                 own_address,
                 *WETH_CONTRACT_ADDRESS,
                 *DAI_CONTRACT_ON_ETH,
@@ -168,7 +168,7 @@ impl TokenBridge {
 
         // initiate swap with no sqrtPriceLimit
         let tokens = match web3
-            .swap_uniswap_eth_in(
+            .swap_uniswap_v3_eth_in(
                 secret,
                 *DAI_CONTRACT_ON_ETH,
                 None,
