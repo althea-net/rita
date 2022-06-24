@@ -22,6 +22,7 @@ use std::{
 
 use std::str;
 
+mod babel;
 pub mod bridge_tools;
 mod check_cron;
 mod counter;

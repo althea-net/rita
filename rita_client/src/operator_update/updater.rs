@@ -32,9 +32,6 @@ pub fn update_system(instruction: UpdateType) -> Result<(), KernelInterfaceError
 
                 // Restart rita after opkg
                 let args = vec!["restart"];
-                if let Err(e) = KI.run_command("/etc/init.d/babeld", &args) {
-                    error!("Unable to restart babel after opkg update: {}", e);
-                }
                 if let Err(e) = KI.run_command("/etc/init.d/rita", &args) {
                     error!("Unable to restart rita after opkg update: {}", e)
                 }
