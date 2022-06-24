@@ -60,6 +60,12 @@ fn main() {
     })
     .expect("Error setting Ctrl-C handler");
 
+    // Because Rita clears and sets up new Wireguard Tunnels on every restart Babel, which was attached and listening to
+    // the old tunnels is now in an incorrect state. We must either restart babel or empty it's interfaces list so that the newly
+    // created wireguard tunnels can be re-added by this instance of Rita. Due to errors in babel (see git history there)
+    // restarting is the way to go as removing dead interfaces often does not work
+    KI.restart_babel();
+
     let args: Args = Docopt::new(get_client_usage(
         env!("CARGO_PKG_VERSION"),
         env!("GIT_HASH"),
