@@ -102,8 +102,8 @@ impl EncryptionModes {
             EncryptionModes::None => "none".to_string(),
             EncryptionModes::Sae => "sae".to_string(),
             EncryptionModes::SaeMixed => "sae-mixed".to_string(),
-            EncryptionModes::Psk2TkipCcmp => "psk2+tkip+ccmp".to_string(),
-            EncryptionModes::Psk2MixedTkipCcmp => "psk-mixed+tkip+ccmp".to_string(),
+            EncryptionModes::Psk2TkipCcmp => "psk2".to_string(),
+            EncryptionModes::Psk2MixedTkipCcmp => "psk-mixed".to_string(),
         }
     }
 }
@@ -128,10 +128,15 @@ impl FromStr for EncryptionModes {
             "none" | "NONE" => Ok(EncryptionModes::None),
             "sae" | "WPA3" => Ok(EncryptionModes::Sae),
             "sae-mixed" | "WPA2+WPA3" => Ok(EncryptionModes::SaeMixed),
-            "psk2+tkip+ccmp" | "psk2+ccmp" | "psk2+tkip+aes" | "WPA2" => {
-                Ok(EncryptionModes::Psk2TkipCcmp)
-            }
-            "psk-mixed+tkip+ccmp" | "WPA+WPA2" => Ok(EncryptionModes::Psk2MixedTkipCcmp),
+            "psk2+tkip+ccmp" | "psk2+tkip+aes" | "psk2+tkip" | "psk2+ccmp" | "psk2+aes"
+            | "psk2" | "WPA2" => Ok(EncryptionModes::Psk2TkipCcmp),
+            "psk-mixed+tkip+ccmp"
+            | "psk-mixed+tkip+aes"
+            | "psk-mixed+tkip"
+            | "psk-mixed+ccmp"
+            | "psk-mixed+aes"
+            | "psk-mixed"
+            | "WPA+WPA2" => Ok(EncryptionModes::Psk2MixedTkipCcmp),
             _ => {
                 let e = RitaClientError::MiscStringError("Invalid encryption mode!".to_string());
                 Err(e)
