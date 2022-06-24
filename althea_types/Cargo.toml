@@ -19,7 +19,7 @@ clarity = "0.5"
 arrayvec = {version= "0.7", features = ["serde"]}
 phonenumber = "0.3"
 lettre = {version = "0.9", features = ["serde"]}
-ipnetwork = "0.18"
+ipnetwork = "0.19"
 
 [dev-dependencies]
 rand = "0.8"

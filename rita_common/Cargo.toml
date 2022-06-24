@@ -6,7 +6,7 @@ license = "Apache-2.0"
 
 [dependencies]
 rand = "0.8.0"
-ipnetwork = "0.18"
+ipnetwork = "0.19"
 serde_derive = "1.0"
 hex-literal = "0.3"
 docopt = "1.1"
@@ -34,7 +34,7 @@ actix-web-httpauth-async = { package="actix-web-httpauth", version = "0.6.0"}
 actix-web-async = { package="actix-web", version = "4.0.1", default_features = false, features= ["openssl"]}
 awc = {version = "3.0.0-beta.21", default-features = false, features=["openssl", "compress-gzip", "compress-zstd"]}
 actix-service = "2.0.2"
-web30 = "0.18"
+web30 = "0.20"
 althea_types = { path = "../althea_types" }
 [dependencies.regex]
 version = "1.4"

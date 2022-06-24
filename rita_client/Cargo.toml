@@ -28,9 +28,9 @@ babel_monitor = { path = "../babel_monitor" }
 arrayvec = {version= "0.7", features = ["serde"]}
 sodiumoxide = "0.2"
 clu = { path = "../clu" }
-web30 = "0.18"
-awc = "3.0.0-beta.21"
-ipnetwork = "0.18"
+web30 = "0.20"
+awc = "3.0.0"
+ipnetwork = "0.19"
 actix-async = {package="actix", version = "0.13"}
 actix-web-async = { package="actix-web", version = "4.0.1", default_features = false, features= ["openssl"]}
 actix-web-httpauth-async = { package="actix-web-httpauth", version = "0.6.0"}
