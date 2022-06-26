@@ -2707,6 +2707,7 @@ dependencies = [
  "clarity",
  "compressed_log",
  "docopt",
+ "env_logger",
  "flate2",
  "futures 0.3.21",
  "hex-literal",

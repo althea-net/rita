@@ -4,6 +4,8 @@
 //! the handler updates the storage to reflect the new total. When a user would like to inspect
 //! or graph usage they query an endpoint which will request the data from this module.
 
+use crate::rita_loop::write_to_disk::is_router_storage_small;
+use crate::RitaCommonError;
 use althea_types::Identity;
 use althea_types::PaymentTx;
 use bincode::Error as BincodeError;
@@ -12,6 +14,8 @@ use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use num256::Uint256;
 use serde::{Deserialize, Serialize};
+use serde_json::Error as JsonError;
+use settings::set_rita_common;
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Error as IOError;
@@ -19,14 +23,12 @@ use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Write;
 use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 use std::usize;
-
-use crate::rita_loop::write_to_disk::is_router_storage_small;
-use crate::RitaCommonError;
 
 /// one year worth of usage storage
 const MAX_USAGE_ENTRIES: usize = 8_760;
@@ -35,6 +37,12 @@ const MAX_USAGE_ENTRIES: usize = 8_760;
 /// so we can store less, it's also less predictable for what values
 /// map to how much time in history, 2000 is hopefully enough
 const MAX_TX_ENTRIES: usize = 2_000;
+// the number of transactions which must have been sent for us to initiate a
+// unprompted save, saving may still occur on graceful shutdown, graceful shutdown
+// essentially only occurs when prompted for an upgrade, or a reboot command is sent
+// the most common form of restart, yanking the power cord, will not be graceful.
+pub const MINIMUM_NUMBER_OF_TRANSACTIONS_LARGE_STORAGE: usize = 5;
+pub const MINIMUM_NUMBER_OF_TRANSACTIONS_SMALL_STORAGE: usize = 75;
 
 lazy_static! {
     static ref USAGE_TRACKER: Arc<RwLock<UsageTracker>> =
@@ -117,7 +125,8 @@ pub struct UsageTracker {
 /// and if the amount used is not greater than 10gb than
 /// it will return false. Essentially, it's checking to make
 /// sure that there is usage within the router.
-fn check_usage_hour(input: &mut VecDeque<UsageHour>, last_save_hour: u64) -> bool {
+fn check_usage_hour(input: &VecDeque<UsageHour>, last_save_hour: u64) -> bool {
+    let mut input = input.clone();
     let number_of_bytes = 10000;
     let mut total_used_bytes = 0;
     while !input.is_empty() {
@@ -142,25 +151,33 @@ fn at_least_two(a: bool, b: bool, c: bool) -> bool {
     }
 }
 
-/// Writes the usage data to disk
-pub fn save_usage_to_disk(minimum_number_transactions: usize) {
-    match USAGE_TRACKER
-        .write()
-        .unwrap()
-        .save(minimum_number_transactions)
-    {
-        Ok(_val) => log::info!("Saved usage tracker successfully"),
+/// Utility function that grabs usage tracker from it's lock and
+/// saves it out. Should be called when we want to save anywhere outside this file
+pub fn save_usage_to_disk() {
+    match USAGE_TRACKER.write().unwrap().save() {
+        Ok(_val) => info!("Saved usage tracker successfully"),
         Err(e) => warn!("Unable to save usage tracker {:}", e),
     };
 }
 
 impl UsageTracker {
-    pub fn save(&mut self, minimum_number_of_transactions: usize) -> Result<(), RitaCommonError> {
+    pub fn save(&mut self) -> Result<(), RitaCommonError> {
+        let settings = settings::get_rita_common();
+        let minimum_number_of_transactions = if is_router_storage_small(
+            &settings
+                .network
+                .device
+                .unwrap_or_else(|| "x86_64".to_string()),
+        ) {
+            MINIMUM_NUMBER_OF_TRANSACTIONS_SMALL_STORAGE
+        } else {
+            MINIMUM_NUMBER_OF_TRANSACTIONS_LARGE_STORAGE
+        };
         if self.payments.len() < minimum_number_of_transactions
             || at_least_two(
-                check_usage_hour(&mut self.client_bandwidth, self.last_save_hour),
-                check_usage_hour(&mut self.exit_bandwidth, self.last_save_hour),
-                check_usage_hour(&mut self.relay_bandwidth, self.last_save_hour),
+                check_usage_hour(&self.client_bandwidth, self.last_save_hour),
+                check_usage_hour(&self.exit_bandwidth, self.last_save_hour),
+                check_usage_hour(&self.relay_bandwidth, self.last_save_hour),
             )
         {
             return Err(RitaCommonError::StdError(IOError::new(
@@ -170,7 +187,7 @@ impl UsageTracker {
         }
 
         let serialized = bincode::serialize(self)?;
-        let mut file = File::create(settings::get_rita_common().network.usage_tracker_file)?;
+        let mut file = File::create(settings.network.usage_tracker_file)?;
 
         let mut compressed_bytes = match compress_serialized(serialized) {
             Ok(bytes) => bytes,
@@ -178,6 +195,8 @@ impl UsageTracker {
         };
 
         let mut newsize = MAX_TX_ENTRIES;
+        // this loop handles if we run out of disk space while trying to save the usage tracker
+        // data, if this occurs we trim the data we store until it fits
         loop {
             match file.write_all(&compressed_bytes) {
                 Ok(save) => {
@@ -188,6 +207,7 @@ impl UsageTracker {
                     return Ok(save);
                 }
                 Err(e) => {
+                    warn!("Failed to save usage tracker data with {:?}", e);
                     // 500 tx min. Payment data is trimmed if out of space as it is larger than usage data
                     if newsize >= 1000 {
                         newsize /= 2;
@@ -210,7 +230,7 @@ impl UsageTracker {
     /// path from the configuration. If the file is not found or fails to be deserialized a default UsageTracker
     /// struct will be returned so data can be successfully collected from the present moment forward.
     ///
-    /// TODO remove in beta 20 migration code migrates json serialized data to bincode
+    /// TODO remove in beta 21 migration code migrates json serialized data to bincode
     fn load_from_disk() -> UsageTracker {
         // if the loading process goes wrong for any reason, we just start again
         let blank_usage_tracker = UsageTracker {
@@ -238,20 +258,59 @@ impl UsageTracker {
             Err(_e) => return blank_usage_tracker,
         };
 
-        match (file_exists, try_bincode(&unzipped_bytes)) {
+        match (
+            file_exists,
+            try_bincode(&unzipped_bytes),
+            try_json(&unzipped_bytes),
+        ) {
             // file exists and bincode deserialization was successful, in the case that somehow json deserialization of the same
             // data was also successful just ignore it and use bincode
-            (true, Ok(bincode_tracker)) => bincode_tracker,
+            (true, Ok(bincode_tracker), _) => bincode_tracker,
+            //file exists, but bincode deserialization failed -> load using serde (old), update settings and save file
+            (true, Err(_e), Ok(mut json_tracker)) => {
+                let mut settings = settings::get_rita_common();
+                // save with bincode regardless of result of serde deserialization in order to end reliance on json
+                let old_path = PathBuf::from(settings.network.usage_tracker_file);
+
+                let mut new_path = old_path.clone();
+                new_path.set_extension("bincode");
+
+                settings.network.usage_tracker_file =
+                    new_path.clone().into_os_string().into_string().unwrap();
+                set_rita_common(settings);
+
+                match json_tracker.save() {
+                    Ok(()) => {
+                        // delete the old file after successfully migrating, this may cause problems on routers with
+                        // low available storage space since we want to take up space for both the new and old file
+                        if !(old_path.eq(&new_path)) {
+                            // check that we would not be deleting the file just saved to
+                            let _r = std::fs::remove_file(old_path);
+                        } else {
+                            error!(
+                                "We are trying to save over {:?} with {:?}, how are they same?",
+                                old_path, new_path
+                            )
+                        }
+                        json_tracker
+                    }
+                    Err(e) => {
+                        error!("Failed to save UsageTracker to bincode {:?}", e);
+                        json_tracker
+                    }
+                }
+            }
+
             // file does not exist; no data to load, this is probably a new router
             // and we'll just generate a new file
-            (false, _) => blank_usage_tracker,
+            (false, _, _) => blank_usage_tracker,
             // the file exists but both encodings are invalid, we should log the error
             // and return a new file so that the module can continue operating after discard
             // the irrecoverable data.
-            (true, Err(e1)) => {
+            (true, Err(e1), Err(e2)) => {
                 error!(
-                    "Failed to deserialize UsageTracker at location {}  {:?}",
-                    file_path, e1
+                    "Failed to deserialize UsageTracker at location {}  {:?} {:?}",
+                    file_path, e1, e2
                 );
                 blank_usage_tracker
             }
@@ -264,7 +323,7 @@ impl UsageTracker {
 fn decompressed(mut file: File) -> Result<Vec<u8>, RitaCommonError> {
     let mut byte_contents = Vec::new();
     match file.read_to_end(&mut byte_contents) {
-        Ok(_bytes_read) => {
+        Ok(_) => {
             let mut decoder = ZlibDecoder::new(&byte_contents[..]);
             let mut bytes = Vec::<u8>::new();
             decoder.read_to_end(&mut bytes)?;
@@ -281,6 +340,12 @@ fn decompressed(mut file: File) -> Result<Vec<u8>, RitaCommonError> {
 /// Attempts to deserialize the provided array of bytes as a bincode encoded UsageTracker struct
 fn try_bincode(bytes: &[u8]) -> Result<UsageTracker, BincodeError> {
     let deserialized: Result<UsageTracker, _> = bincode::deserialize(bytes);
+    deserialized
+}
+
+/// Attempts to deserialize the provided array of bytes as a json encoded UsageTracker struct
+fn try_json(bytes: &[u8]) -> Result<UsageTracker, JsonError> {
+    let deserialized: Result<UsageTracker, _> = serde_json::from_slice(bytes);
     deserialized
 }
 
@@ -415,35 +480,20 @@ pub fn get_payments_data() -> VecDeque<PaymentHour> {
     usage_tracker_var.payments.clone()
 }
 
-/// On an interupt (SIGTERM), saving USAGE_TRACKER before exiting
+/// On an interupt (SIGTERM), saving USAGE_TRACKER before exiting, this is essentially
+/// a reboot or restart only, most common form of shutdown is power being pulled
 pub fn save_usage_on_shutdown() {
-    let current_hour = match get_current_hour() {
-        Ok(hour) => hour,
-        Err(e) => {
-            error!("System time is set earlier than unix epoch! {:?}", e);
-            return;
-        }
-    };
-
-    let history = &mut USAGE_TRACKER.write().unwrap();
-
-    let router_model = settings::get_rita_common().network.device;
-    if let Some(router_model_unwrapped) = router_model {
-        if !is_router_storage_small(&router_model_unwrapped) {
-            let res = history.save(75);
-            info!("Shutdown: saving usage data: {:?}", res);
-        }
-    }
-
-    history.last_save_hour = current_hour;
-    trim_payments(MAX_TX_ENTRIES, &mut history.payments);
+    save_usage_to_disk()
 }
 
 #[cfg(test)]
 mod tests {
 
-    use super::UsageTracker;
+    use super::MINIMUM_NUMBER_OF_TRANSACTIONS_LARGE_STORAGE;
+    use super::{get_current_hour, FormattedPaymentTx, PaymentHour, UsageHour, UsageTracker};
     use crate::usage_tracker::{self, IOError};
+    use althea_types::Identity;
+    use clarity::PrivateKey;
     use flate2::write::ZlibEncoder;
     use flate2::Compression;
     use settings::client::RitaClientSettings;
@@ -453,7 +503,7 @@ mod tests {
     use std::io::Write;
     impl UsageTracker {
         // previous implementation of save which uses serde_json to serialize
-        fn save2(&mut self) -> Result<(), IOError> {
+        fn save2(&self) -> Result<(), IOError> {
             let serialized = serde_json::to_vec(self)?;
             let mut file = File::create(settings::get_rita_common().network.usage_tracker_file)?;
             let buffer: Vec<u8> = Vec::new();
@@ -472,14 +522,8 @@ mod tests {
         newrc.network.usage_tracker_file = "/tmp/usage_tracker.bincode".to_string();
         set_rita_common(newrc);
 
-        let mut dummy_usage_tracker = UsageTracker {
-            last_save_hour: 0,
-            client_bandwidth: VecDeque::new(),
-            relay_bandwidth: VecDeque::new(),
-            exit_bandwidth: VecDeque::new(),
-            payments: VecDeque::new(),
-        };
-        let res = dummy_usage_tracker.save(75); // saving to bincode with the new method
+        let mut dummy_usage_tracker = generate_dummy_usage_tracker();
+        let res = dummy_usage_tracker.save(); // saving to bincode with the new method
         info!("Saving test  data: {:?}", res);
 
         let res2 = usage_tracker::UsageTracker::load_from_disk();
@@ -490,7 +534,8 @@ mod tests {
 
     #[test]
     fn convert_legacy_usage_tracker() {
-        // make a dummy ustage tracker instance
+        // env_logger::init();
+        // make a dummy usage tracker instance
         // save it as gzipped json ( pull code from the git history that you deleted and put it in this test)
         // makes sure the file exists
         // deserialize the file using the upgrade function
@@ -500,20 +545,17 @@ mod tests {
         let mut newrc = get_rita_common();
         newrc.network.usage_tracker_file = "/tmp/usage_tracker.json".to_string();
         set_rita_common(newrc);
-        let mut dummy_usage_tracker = UsageTracker {
-            last_save_hour: 0,
-            client_bandwidth: VecDeque::new(),
-            relay_bandwidth: VecDeque::new(),
-            exit_bandwidth: VecDeque::new(),
-            payments: VecDeque::new(),
-        };
-        let res = dummy_usage_tracker.save2();
-        info!("Saving test data as json: {:?}", res);
+        info!("Generating large usage tracker history");
+        let dummy_usage_tracker = generate_dummy_usage_tracker();
+
+        info!("Saving test data as json");
+        dummy_usage_tracker.save2().unwrap();
+
         // using load_from_disk() with usage_tracker_file set to a .json writes bincode
         // serialized data to a .json extended file, but because load_from_disk() deletes
         // the .json file, this test ends with no file left.
+        info!("Loading test data from json");
         let mut res2 = usage_tracker::UsageTracker::load_from_disk();
-        info!("Loading test data from json: {:?}", res2);
 
         // setting the usage_tracker_file to .bincode, which is what this upgrade expects
         let mut newrc2 = get_rita_common();
@@ -522,12 +564,102 @@ mod tests {
 
         // Saving res2 with the new save() and updated usage_tracker_file in order to end with
         // a .bincode file from the loaded json data saved to res2.
-        let res3 = res2.save(75);
-        info!("Saving test data as bincode: {:?}", res3);
+        res2.save().unwrap();
+        info!("Saving test data as bincode");
         let res4 = usage_tracker::UsageTracker::load_from_disk();
-        info!("Loading test data from bincode: {:?}", res4);
+        info!("Loading test data from bincode");
 
-        assert_eq!(dummy_usage_tracker, res2);
-        assert_eq!(res2, res4);
+        // use == to avoid printing out the compared data
+        // when it failed, as it is enormous
+        assert!(dummy_usage_tracker == res2);
+        assert!(res2 == res4);
+    }
+
+    // generates a nontrivial usage tracker struct for testing
+    fn generate_dummy_usage_tracker() -> UsageTracker {
+        let current_hour = get_current_hour().unwrap();
+        UsageTracker {
+            last_save_hour: current_hour,
+            client_bandwidth: generate_bandwidth(current_hour),
+            relay_bandwidth: generate_bandwidth(current_hour),
+            exit_bandwidth: generate_bandwidth(current_hour),
+            payments: generate_payments(current_hour),
+        }
+    }
+    // generates dummy usage hour data randomly
+    fn generate_bandwidth(starting_hour: u64) -> VecDeque<UsageHour> {
+        let num_to_generate: u16 = rand::random();
+        let mut output = VecDeque::new();
+        for i in 0..num_to_generate {
+            output.push_front(UsageHour {
+                index: starting_hour - i as u64,
+                up: rand::random(),
+                down: rand::random(),
+                price: rand::random(),
+            });
+        }
+        output
+    }
+    // generates dummy payment data randomly
+    fn generate_payments(starting_hour: u64) -> VecDeque<PaymentHour> {
+        let mut num_to_generate: u8 = rand::random();
+        while (num_to_generate as usize) < MINIMUM_NUMBER_OF_TRANSACTIONS_LARGE_STORAGE {
+            num_to_generate = rand::random();
+        }
+        let our_id = random_identity();
+        let neighbor_ids = get_neighbor_ids();
+        let mut output = VecDeque::new();
+        for i in 0..num_to_generate {
+            let num_payments_generate: u8 = rand::random();
+            let mut payments = Vec::new();
+            for _ in 0..num_payments_generate {
+                let neighbor_idx: u8 = rand::random();
+                let amount: u128 = rand::random();
+                let to_us: bool = rand::random();
+                let (to, from) = if to_us {
+                    (our_id, neighbor_ids[neighbor_idx as usize])
+                } else {
+                    (neighbor_ids[neighbor_idx as usize], our_id)
+                };
+                payments.push(FormattedPaymentTx {
+                    to,
+                    from,
+                    amount: amount.into(),
+                    txid: String::new(),
+                })
+            }
+            output.push_front(PaymentHour {
+                index: starting_hour - i as u64,
+                payments,
+            });
+        }
+        output
+    }
+
+    // gets a list of pregenerated neighbor id
+    fn get_neighbor_ids() -> Vec<Identity> {
+        let mut id = Vec::new();
+        for _ in 0..256 {
+            id.push(random_identity());
+        }
+        id
+    }
+
+    // generates a random identity, never use in production, your money will be stolen
+    fn random_identity() -> Identity {
+        let secret: [u8; 32] = rand::random();
+        let mut ip: [u8; 16] = [0; 16];
+        ip.copy_from_slice(&secret[0..16]);
+
+        // the starting location of the funds
+        let eth_key = PrivateKey::from_slice(&secret).unwrap();
+        let eth_address = eth_key.to_address();
+
+        Identity {
+            mesh_ip: ip.into(),
+            eth_address,
+            wg_public_key: secret.into(),
+            nickname: None,
+        }
     }
 }
