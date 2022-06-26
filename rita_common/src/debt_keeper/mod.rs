@@ -682,7 +682,9 @@ pub fn save_debt_to_disk(save_frequency: Duration) {
     dk.save_if_needed(save_frequency);
 }
 
-/// On an interupt (SIGTERM), saving debtkeeper before exiting
+/// On an interupt (SIGTERM), saving debtkeeper before exiting, this will only
+/// happen if a reboot command is sent or an update is sent. The most common
+/// form of reboot (pulling the power) will not call this
 pub fn save_debt_on_shutdown() {
     let mut dk = DEBT_DATA.write().unwrap();
 

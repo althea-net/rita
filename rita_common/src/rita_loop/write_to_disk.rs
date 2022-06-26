@@ -1,12 +1,11 @@
 use crate::{debt_keeper::save_debt_to_disk, usage_tracker::save_usage_to_disk};
-use std::{
-    thread,
-    time::{Duration, Instant},
-};
-
 use settings::{
     check_if_exit, client::RitaClientSettings, exit::RitaExitSettingsStruct, get_rita_client,
     get_rita_exit, save_client_settings, save_exit_settings,
+};
+use std::{
+    thread,
+    time::{Duration, Instant},
 };
 /// How often we save the nodes debt data, currently 48 minutes
 const SAVE_FREQUENCY_EXIT: Duration = Duration::from_secs(172800);
@@ -84,14 +83,13 @@ pub fn save_to_disk_loop(mut old_settings: SettingsOnDisk, file_path: &str) {
             }
         }
 
-        // debt keeper
+        // debt keeper, only saved on graceful shutdown
         if !router_storage_small {
             save_debt_to_disk(save_frequency);
         }
 
-        let minimum_number_transactions: usize = 75;
-        //usage tracker is invoked via trafficwatch/watch() and the block runner
-        save_usage_to_disk(minimum_number_transactions);
+        // usage tracker monitors and saves bandwidth usage info and payment metadata
+        save_usage_to_disk();
     });
 }
 /// If the router storage is small/16mb
@@ -116,4 +114,8 @@ pub fn is_router_storage_small(router_model: &str) -> bool {
 fn test_is_router_storage_small() {
     let router = "linksys_e5600";
     assert!(is_router_storage_small(router));
+    let router = "x86_64";
+    assert!(!is_router_storage_small(router));
+    let router = "test";
+    assert!(!is_router_storage_small(router));
 }
