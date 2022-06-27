@@ -35,6 +35,10 @@ pub fn update_system(instruction: UpdateType) -> Result<(), KernelInterfaceError
                 if let Err(e) = KI.run_command("/etc/init.d/rita", &args) {
                     error!("Unable to restart rita after opkg update: {}", e)
                 }
+                if let Err(e) = KI.run_command("/etc/init.d/rita_tower", &args) {
+                    error!("Unable to restart rita tower after opkg update: {}", e)
+                }
+
                 Ok(())
             }
         }
