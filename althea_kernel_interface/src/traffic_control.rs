@@ -324,11 +324,8 @@ impl dyn KernelInterface {
                 &format!("{}kbit", min_bw),
                 "ceil",
                 &format!("{}kbit", max_bw),
-                // 50 packets as mtu plus 14 bytes
                 "burst",
-                "70K",
-                "quantum",
-                "1354",
+                "1M",
             ],
         )?;
 
