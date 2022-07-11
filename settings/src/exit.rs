@@ -46,6 +46,8 @@ pub struct ExitNetworkSettings {
     pub wg_private_key_path: String,
     /// Magic phone number operators enter in order to register to exit without auth
     pub magic_phone_number: Option<String>,
+
+    pub unenforce: Option<bool>,
 }
 
 impl ExitNetworkSettings {
@@ -70,6 +72,7 @@ impl ExitNetworkSettings {
                 .unwrap(),
             wg_private_key_path: String::new(),
             magic_phone_number: None,
+            unenforce: None,
         }
     }
 }

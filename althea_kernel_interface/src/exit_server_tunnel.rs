@@ -73,20 +73,6 @@ impl dyn KernelInterface {
             }
         }
 
-        // setup traffic classes for enforcement with flow id's derived from the ip
-        // only get the flows list once
-        let flows = self.get_flows("wg_exit")?;
-        for c in clients.iter() {
-            match c.internal_ip {
-                IpAddr::V4(addr) => {
-                    if !self.has_flow_bulk(addr, &flows) {
-                        self.create_flow_by_ip("wg_exit", addr)?
-                    }
-                }
-                _ => panic!("Could not derive ipv4 addr for client! Corrupt DB!"),
-            }
-        }
-
         Ok(())
     }
 

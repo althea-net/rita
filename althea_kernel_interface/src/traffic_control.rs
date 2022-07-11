@@ -294,6 +294,70 @@ impl dyn KernelInterface {
         }
     }
 
+    pub fn delete_ip_flows(&self, iface_name: &str, ip: Ipv4Addr) -> Result<(), Error> {
+        let class_id = self.get_class_id(ip);
+
+        let output = self.run_command(
+            "tc",
+            &[
+                "filter",
+                "delete",
+                "dev",
+                iface_name,
+                "parent",
+                "1:",
+                "protocol",
+                "ip",
+                "u32",
+                "match",
+                "ip",
+                "dst",
+                &format!("{}/32", ip),
+                "flowid",
+                &format!("1:{}", class_id),
+            ],
+        )?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            let res = String::from_utf8(output.stderr)?;
+            Err(Error::TrafficControlError(format!(
+                "Failed to delete flow for ip! {:?}",
+                res
+            )))
+        }
+    }
+
+    pub fn delete_class_limit(&self, iface_name: &str, ip: Ipv4Addr) -> Result<(), Error> {
+        let class_id = self.get_class_id(ip);
+        if self.has_class(ip, iface_name)? {
+            let output = self.run_command(
+                "tc",
+                &[
+                    "class",
+                    "delete",
+                    "dev",
+                    iface_name,
+                    "parent",
+                    "1:",
+                    "classid",
+                    &format!("1:{}", class_id),
+                ],
+            )?;
+
+            if !output.status.success() {
+                let res = String::from_utf8(output.stderr)?;
+                return Err(Error::TrafficControlError(format!(
+                    "Failed to delete qdisc class limit! {:?}",
+                    res
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn set_class_limit(
         &self,
         iface_name: &str,

@@ -27,6 +27,7 @@ use crate::rita_loop::EXIT_LOOP_TIMEOUT;
 use crate::RitaExitError;
 
 use althea_kernel_interface::ExitClient;
+use althea_kernel_interface::KernelInterfaceError;
 use althea_types::Identity;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 use diesel::prelude::PgConnection;
@@ -403,6 +404,19 @@ pub fn setup_clients(
     Ok(wg_clients)
 }
 
+pub fn setup_client_flow(c: ExitClient, flows: String) -> Result<(), KernelInterfaceError> {
+    match c.internal_ip {
+        IpAddr::V4(addr) => {
+            if !KI.has_flow_bulk(addr, &flows) {
+                KI.create_flow_by_ip("wg_exit", addr)?
+            }
+        }
+        _ => panic!("Could not derive ipv4 addr for client! Corrupt DB!"),
+    }
+
+    Ok(())
+}
+
 /// Performs enforcement actions on clients by requesting a list of clients from debt keeper
 /// if they are also a exit client they are limited to the free tier level of bandwidth by
 /// setting the htb class they are assigned to to a maximum speed of the free tier value.
@@ -415,6 +429,7 @@ pub fn enforce_exit_clients(
     let start = Instant::now();
     let mut clients_by_id = HashMap::new();
     let free_tier_limit = settings::get_rita_exit().payment.free_tier_throughput;
+    let unenforce = settings::get_rita_exit().exit_network.unenforce;
     let close_threshold = get_oracle_close_thresh();
     for client in clients_list.iter() {
         if let Ok(id) = to_identity(client) {
@@ -440,23 +455,55 @@ pub fn enforce_exit_clients(
         .symmetric_difference(old_debt_actions)
         .count()
         == 0
+        && (unenforce.is_none() || !unenforce.unwrap())
     {
         info!("No change in enforcement list found, skipping tc calls");
         return Ok(new_debt_actions);
     }
+
+    let flows = KI.get_flows("wg_exit")?;
 
     for debt_entry in list.iter() {
         match clients_by_id.get(&debt_entry.identity) {
             Some(client) => {
                 match client.internal_ip.parse() {
                     Ok(IpAddr::V4(ip)) => {
-                        let res = if debt_entry.payment_details.action == DebtAction::SuspendTunnel
+                        let res = if (debt_entry.payment_details.action
+                            == DebtAction::SuspendTunnel)
+                            && (unenforce.is_none() || !unenforce.unwrap())
                         {
                             info!("Exit is enforcing on {} because their debt of {} is greater than the limit of {}", client.wg_pubkey, debt_entry.payment_details.debt, close_threshold);
+
+                            // Setup ip flows
+                            if let Ok(c) = to_exit_client((*client).clone()) {
+                                match setup_client_flow(c, flows.clone()) {
+                                    Ok(_) => {},
+                                    Err(e) => error!("ENFORCEMENT ERROR: Unable to setup flow for enforcement: {:?}", e),
+                                }
+                            } else {
+                                error!("ENFORCEMENT ERROR: Unable to setup flow for enforcement, to_exit_client error");
+                            }
+
+                            // Set enforcement limit
                             KI.set_class_limit("wg_exit", free_tier_limit, free_tier_limit, ip)
                         } else {
                             // 10gbit rate and ceil value's we don't want to limit this
-                            KI.set_class_limit("wg_exit", 10_000_000, 10_000_000, ip)
+                            //KI.set_class_limit("wg_exit", 10_000_000, 10_000_000, ip);
+
+                            if KI.has_flow_bulk(ip, &flows) {
+                                info!("About to delete TC classes and flows for enforcement");
+
+                                match KI.delete_ip_flows("wg_exit", ip) {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        error!(
+                                            "ENFOREMENT ERROR: Unable to delete ip flow: {:?}",
+                                            e
+                                        )
+                                    }
+                                }
+                            }
+                            KI.delete_class_limit("wg_exit", ip)
                         };
                         if res.is_err() {
                             error!("Failed to limit {} with {:?}", ip, res);
