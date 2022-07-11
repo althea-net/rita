@@ -20,6 +20,6 @@ clarity = "0.5"
 sodiumoxide = "0.2"
 
 [dependencies.regex]
-version = "1.4"
+version = "1.5"
 default-features = false
 features = ["std"]

@@ -20,4 +20,4 @@ lazy_static = "1.4"
 clarity = "0.5"
 arrayvec = {version= "0.7", features = ["serde"]}
 phonenumber = "0.3"
-ipnetwork = "0.19"
+ipnetwork = "0.20"
