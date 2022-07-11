@@ -31,6 +31,7 @@ use auto_bridge::{check_withdrawals, encode_relaytokens, get_relay_message_hash}
 use auto_bridge::{TokenBridge as TokenBridgeCore, TokenBridgeError};
 use clarity::utils::display_uint256_as_address;
 use clarity::Address;
+use futures::future::join3;
 use num256::Uint256;
 use num_traits::identities::Zero;
 use rand::{thread_rng, Rng};
@@ -174,14 +175,20 @@ async fn transfer_dai(
 /// on the xdai blockchain to find any withdrawals related to us, and if so we unlock these funds.
 /// We then rescue any stuck dai and send any eth that we have over to the xdai chain.
 async fn xdai_bridge(bridge: TokenBridgeCore) {
-    let eth_gas_price = match bridge.eth_web3.eth_gas_price().await {
+    let (eth_gas_price, wei_per_dollar, our_eth_balance) = join3(
+        bridge.eth_web3.eth_gas_price(),
+        bridge.dai_to_eth_price(eth_to_wei(1u8.into())),
+        bridge.eth_web3.eth_get_balance(bridge.own_address),
+    )
+    .await;
+    let eth_gas_price = match eth_gas_price {
         Ok(val) => val,
         Err(e) => {
             warn!("Failed to get eth gas price with {}", e);
             return;
         }
     };
-    let wei_per_dollar = match bridge.dai_to_eth_price(eth_to_wei(1u8.into())).await {
+    let wei_per_dollar = match wei_per_dollar {
         Ok(val) => val,
         Err(e) => {
             warn!("Failed to get eth price with {}", e);
@@ -189,7 +196,7 @@ async fn xdai_bridge(bridge: TokenBridgeCore) {
         }
     };
     let wei_per_cent = wei_per_dollar.clone() / 100u32.into();
-    let our_eth_balance = match bridge.eth_web3.eth_get_balance(bridge.own_address).await {
+    let our_eth_balance = match our_eth_balance {
         Ok(val) => val,
         Err(e) => {
             warn!("Failed to get eth balance {}", e);

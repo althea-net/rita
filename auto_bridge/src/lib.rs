@@ -100,10 +100,10 @@ impl TokenBridge {
 
     /// takes in 'amount' of dai and returns correspoding amount of eth
     pub async fn dai_to_eth_price(&self, amount: Uint256) -> Result<Uint256, TokenBridgeError> {
-        let web3 = self.eth_web3.clone();
         let own_address = self.own_address;
 
-        let tokens_bought = match web3
+        let tokens_bought = match self
+            .eth_web3
             .get_uniswap_v3_price(
                 own_address,
                 *DAI_CONTRACT_ON_ETH,
@@ -124,10 +124,10 @@ impl TokenBridge {
 
     /// takes in 'amount' of eth, and returns corresponding amount of dai
     pub async fn eth_to_dai_price(&self, amount: Uint256) -> Result<Uint256, TokenBridgeError> {
-        let web3 = self.eth_web3.clone();
         let own_address = self.own_address;
 
-        let tokens_bought = match web3
+        let tokens_bought = match self
+            .eth_web3
             .get_uniswap_v3_price(
                 own_address,
                 *WETH_CONTRACT_ADDRESS,
@@ -157,9 +157,8 @@ impl TokenBridge {
         timeout: Duration,
     ) -> Result<Uint256, TokenBridgeError> {
         let secret = self.eth_privatekey;
-        let web3 = self.eth_web3.clone();
 
-        let block = web3.eth_get_latest_block().await?;
+        let block = self.eth_web3.eth_get_latest_block().await?;
         let expected_dai = self.eth_to_dai_price(eth_amount.clone()).await?;
 
         // Equivalent to `amount * (1 - 0.025)` without using decimals
@@ -167,7 +166,8 @@ impl TokenBridge {
         let deadline = block.timestamp + timeout.as_secs().into();
 
         // initiate swap with no sqrtPriceLimit
-        let tokens = match web3
+        let tokens = match self
+            .eth_web3
             .swap_uniswap_v3_eth_in(
                 secret,
                 *DAI_CONTRACT_ON_ETH,
@@ -195,14 +195,14 @@ impl TokenBridge {
         dai_amount: Uint256,
         timeout: Duration,
     ) -> Result<Uint256, TokenBridgeError> {
-        let eth_web3 = self.eth_web3.clone();
         let own_address = self.own_address;
         let secret = self.eth_privatekey;
 
         // You basically just send it some dai to the bridge address and they show
         // up in the same address on the xdai side we have no idea when this has succeeded
         // since the events are not indexed
-        let tx_hash = eth_web3
+        let tx_hash = self
+            .eth_web3
             .send_transaction(
                 *DAI_CONTRACT_ON_ETH,
                 encode_call(
@@ -217,7 +217,7 @@ impl TokenBridge {
             )
             .await?;
 
-        eth_web3
+        self.eth_web3
             .wait_for_transaction(tx_hash, timeout, None)
             .await?;
 
@@ -225,9 +225,11 @@ impl TokenBridge {
     }
 
     pub async fn get_dai_balance(&self, address: Address) -> Result<Uint256, TokenBridgeError> {
-        let web3 = self.eth_web3.clone();
         let dai_address = *DAI_CONTRACT_ON_ETH;
-        Ok(web3.get_erc20_balance(dai_address, address).await?)
+        Ok(self
+            .eth_web3
+            .get_erc20_balance(dai_address, address)
+            .await?)
     }
 
     /// input is the packed signatures output from get_relay_message_hash
