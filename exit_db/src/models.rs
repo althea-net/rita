@@ -1,7 +1,8 @@
+#![allow(clippy::extra_unused_lifetimes)]
 use crate::schema::assigned_ips;
 use crate::schema::clients;
 
-#[derive(Queryable, Serialize, Deserialize, Debug, Insertable, Clone, AsChangeset, Default)]
+#[derive(Queryable, Serialize, Deserialize, Debug, Insertable, Clone, Default)]
 #[table_name = "clients"]
 pub struct Client {
     pub mesh_ip: String,
@@ -28,7 +29,7 @@ pub struct Client {
 /// The iterative index stores the index at which we assign a subnet to a client
 /// For example, if our exit subnet is fd00::1000/120 and our client subnets are /124, index 0 represents
 /// fd00::1000/124 index 1 represents fd00::1010/124, 2 is fd00::1120/124 etc...
-#[derive(Queryable, Serialize, Deserialize, Debug, Insertable, Clone, AsChangeset, Default)]
+#[derive(Queryable, Serialize, Deserialize, Debug, Insertable, Clone, Default)]
 #[table_name = "assigned_ips"]
 pub struct AssignedIps {
     pub subnet: String,

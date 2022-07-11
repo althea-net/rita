@@ -1,6 +1,7 @@
 use crate::KernelInterface;
 use crate::KernelInterfaceError as Error;
 use althea_types::FromStr;
+use std::fmt::Write as _;
 use std::net::IpAddr;
 
 /// Stores a default route of the format
@@ -178,11 +179,11 @@ impl ToString for IpRoute {
                     format!("{}/{} ", dst, subnet)
                 };
                 if let Some(via) = via {
-                    out += &format!("via {} ", via)
+                    write!(out, "via {} ", via).unwrap();
                 }
-                out += &format!("dev {} proto static ", nic);
+                write!(out, "dev {} proto static ", nic).unwrap();
                 if let Some(src) = src {
-                    out += &format!("src {} ", src)
+                    write!(out, "src {} ", src).unwrap();
                 }
                 out
             }

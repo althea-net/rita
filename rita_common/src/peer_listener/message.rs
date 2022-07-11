@@ -458,7 +458,7 @@ fn test_deserialize_with_wrong_serialization() {
     result[3] += 1;
 
     //decode should not work
-    let _decode = match PeerMessage::decode(&result) {
+    match PeerMessage::decode(&result) {
         Ok(_) => panic!("Expected error"),
         Err(MessageError::DeserializationError) => (),
         Err(_) => panic!("Wrong Error"),

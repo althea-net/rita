@@ -1,4 +1,5 @@
 use crate::KernelInterfaceError as Error;
+use std::fmt::Write as _;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -21,10 +22,10 @@ pub fn get_lines(filename: &str) -> Result<Vec<String>, Error> {
 pub fn write_out(filename: &str, content: Vec<String>) -> Result<(), Error> {
     // overwrite the old version
     let mut file = File::create(filename)?;
-    let mut final_ouput = String::new();
+    let mut final_output = String::new();
     for item in content {
-        final_ouput += &format!("{}\n", item);
+        writeln!(final_output, "{}", item).unwrap();
     }
-    file.write_all(final_ouput.as_bytes())?;
+    file.write_all(final_output.as_bytes())?;
     Ok(())
 }

@@ -7,6 +7,7 @@ use exit_db::models::Client;
 use ipnetwork::IpNetwork;
 use rand::Rng;
 use std::collections::HashSet;
+use std::fmt::Write as _;
 use std::net::IpAddr;
 
 use crate::RitaExitError;
@@ -58,7 +59,7 @@ pub fn texts_sent(client: &models::Client) -> i32 {
 pub fn display_hashset(input: &HashSet<String>) -> String {
     let mut out = String::new();
     for item in input.iter() {
-        out += &format!("{}, ", item);
+        write!(out, "{}, ", item).unwrap();
     }
     out
 }

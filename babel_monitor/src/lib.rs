@@ -348,7 +348,7 @@ pub fn run_command(stream: &mut TcpStream, cmd: &str) -> Result<String, BabelMon
         return Err(CommandFailed(cmd, format!("{:?}", out)));
     }
 
-    let _res = out.unwrap();
+    out.unwrap();
     info!("Command write succeeded, returning output");
     read_babel(stream, String::new(), 0)
 }

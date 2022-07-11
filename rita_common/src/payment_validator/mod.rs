@@ -18,6 +18,7 @@ use futures::future::join_all;
 use num256::Uint256;
 use std::collections::HashSet;
 use std::fmt;
+use std::fmt::Write as _;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
@@ -451,7 +452,7 @@ fn payment_is_old(chain_height: Uint256, tx_height: Option<Uint256>) -> bool {
 fn print_txids(list: &HashSet<ToValidate>) -> String {
     let mut output = String::new();
     for item in list.iter() {
-        output += &format!("{} ,", item);
+        write!(output, "{} ,", item).unwrap();
     }
     output
 }

@@ -12,11 +12,10 @@ use crate::database::database_tools::update_client;
 use crate::database::database_tools::verify_client;
 use crate::database::database_tools::verify_db_client;
 use crate::database::email::handle_email_registration;
-use crate::database::geoip::get_country_async;
+use crate::database::geoip::get_country;
 use crate::database::geoip::get_gateway_ip_bulk;
 use crate::database::geoip::get_gateway_ip_single;
 use crate::database::geoip::verify_ip;
-use crate::database::geoip::verify_ip_sync;
 use crate::database::sms::handle_sms_registration;
 use crate::database::struct_tools::display_hashset;
 use crate::database::struct_tools::to_exit_client;
@@ -104,7 +103,7 @@ pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Rita
     let verify_status = verify_ip(gateway_ip)?;
     info!("verified the ip country {:?}", client);
 
-    let user_country = get_country_async(gateway_ip)?;
+    let user_country = get_country(gateway_ip)?;
     info!("got the country  {:?}", client);
 
     let conn = get_database_connection()?;
@@ -253,7 +252,7 @@ pub fn validate_clients_region(
         Ok(val) => val,
     };
     for item in list.iter() {
-        let res = verify_ip_sync(item.gateway_ip);
+        let res = verify_ip(item.gateway_ip);
         match res {
             Ok(true) => trace!("{:?} is from an allowed ip", item),
             Ok(false) => {

@@ -136,13 +136,6 @@ struct CountryDetails {
     iso_code: String,
 }
 
-pub fn get_country_async(ip: IpAddr) -> Result<String, RitaExitError> {
-    match get_country(ip) {
-        Ok(res) => Ok(res),
-        Err(e) => Err(e),
-    }
-}
-
 /// get ISO country code from ip, consults a in memory cache
 pub fn get_country(ip: IpAddr) -> Result<String, RitaExitError> {
     trace!("get GeoIP country for {}", ip.to_string());
@@ -229,15 +222,6 @@ pub fn get_country(ip: IpAddr) -> Result<String, RitaExitError> {
 /// Returns true or false if an ip is confirmed to be inside or outside the region and error
 /// if an api error is encountered trying to figure that out.
 pub fn verify_ip(request_ip: IpAddr) -> Result<bool, RitaExitError> {
-    match verify_ip_sync(request_ip) {
-        Ok(item) => Ok(item),
-        Err(e) => Err(e),
-    }
-}
-
-/// Returns true or false if an ip is confirmed to be inside or outside the region and error
-/// if an api error is encountered trying to figure that out.
-pub fn verify_ip_sync(request_ip: IpAddr) -> Result<bool, RitaExitError> {
     // in this case we have a gateway directly attached to the exit, so our
     // peer address for them will be an fe80 linklocal ip address. When we
     // detect this we know that they are in the allowed countries list because
