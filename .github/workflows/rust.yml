@@ -40,6 +40,14 @@ jobs:
       - uses: Swatinem/rust-cache@v1
       - name: Check for Clippy lints
         run: rustup component add clippy && cargo clippy --all --all-targets --all-features -- -D warnings
+  audit:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v1
+      - name: Run Cargo Audit
+        run: cargo install cargo-audit && cargo audit
   cross-mips:
     needs: test
     runs-on: ubuntu-latest
