@@ -2,8 +2,7 @@ use crate::database::secs_since_unix_epoch;
 use crate::database::struct_tools::client_to_new_db_client;
 use crate::database::ONE_DAY;
 use exit_db::models::AssignedIps;
-use ipaddress::IPAddress;
-use ipnetwork::IpNetwork;
+use ipnetwork::{IpNetwork, Ipv6Network, NetworkSize};
 use rita_common::utils::ip_increment::increment;
 
 use crate::{RitaExitError, DB_POOL};
@@ -16,8 +15,8 @@ use diesel::r2d2::PooledConnection;
 use diesel::select;
 use exit_db::{models, schema};
 use std::convert::TryInto;
-use std::net::IpAddr;
 use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv6Addr};
 
 // Default Subnet size assigned to each client
 const DEFAULT_CLIENT_SUBNET_SIZE: u8 = 56;
@@ -600,8 +599,7 @@ pub fn get_client_subnet(
         index.unwrap(),
         settings::get_rita_exit()
             .get_client_subnet_size()
-            .unwrap_or(DEFAULT_CLIENT_SUBNET_SIZE)
-            .into(),
+            .unwrap_or(DEFAULT_CLIENT_SUBNET_SIZE),
     ) {
         Ok(addr) => {
             // increment iterative index
@@ -637,31 +635,47 @@ pub fn get_client_subnet(
 fn generate_iterative_client_subnet(
     exit_sub: IpNetwork,
     ind: u64,
-    subprefix: usize,
+    subprefix: u8,
 ) -> Result<IpNetwork, RitaExitError> {
-    // Convert IpNetwork into IPAdress type
-    let network: IPAddress = IPAddress::parse(exit_sub.to_string())
-        .expect("Paniced while parsing the exit subnet: IpNetwork -> IPAddress");
-    let mut net = network.network();
-    net.prefix = net.prefix.from(subprefix).unwrap();
+    let net;
 
-    if subprefix < network.prefix.num {
+    // Covert the subnet's ip address into a u128 integer to allow for easy iterative
+    // addition operations. To this u128, we add (interative_index * client_subnet_size)
+    // and convert this result into an ipv6 addr. This is the starting ip in the client subnet
+    //
+    // For example, if we have exit subnet: fbad::1000/120, client subnet size is 124, index is 1
+    // we do (fbad::1000).to_int() + (16 * 1) = fbad::1010/124 is the client subnet
+    let net_as_int: u128 = if let IpAddr::V6(addr) = exit_sub.network() {
+        net = Ipv6Network::new(addr, subprefix).unwrap();
+        addr.into()
+    } else {
+        return Err(RitaExitError::MiscStringError(
+            "Exit subnet expected to be ipv6!!".to_string(),
+        ));
+    };
+
+    if subprefix < exit_sub.prefix() {
         return Err(RitaExitError::MiscStringError(
             "Client subnet larger than exit subnet".to_string(),
         ));
     }
 
-    // This is the total number of client subnets available. We are checking that our iterative index
+    // This bitshifting is the total number of client subnets available. We are checking that our iterative index
     // is lower than this number. For example, exit subnet: fd00:1000/120, client subnet /124, number of subnets will be
     // 2^(124 - 120) => 2^4 => 16
-    if ind < (1 << (subprefix - network.prefix.num)) {
-        net = net.from(&net.host_address, &net.prefix);
-        let size = net.size();
-        net.host_address += ind * size;
-        let ret = net
-            .to_string()
-            .parse()
-            .expect("Paniced while parsing exit subnet: IPAdress -> IpNetwork");
+    if ind < (1 << (subprefix - exit_sub.prefix())) {
+        let ret = net_as_int + (ind as u128 * net.size());
+        let v6addr = Ipv6Addr::from(ret);
+        let ret = IpNetwork::from(match Ipv6Network::new(v6addr, subprefix) {
+            Ok(a) => a,
+            Err(e) => {
+                return Err(RitaExitError::MiscStringError(format!(
+                    "Unable to parse a valid client subnet: {:?}",
+                    e
+                )))
+            }
+        });
+
         Ok(ret)
     } else {
         error!(
@@ -677,24 +691,39 @@ fn generate_iterative_client_subnet(
 /// subnet within the larger subnet
 /// For exmaple fd00::1020/124 is the 3rd subnet in fd00::1000/120, so it generates the index '2'
 fn generate_index_from_subnet(exit_sub: IpNetwork, sub: IpNetwork) -> Result<u64, RitaExitError> {
-    let exit_sub_mig: IPAddress = IPAddress::parse(exit_sub.to_string())
-        .expect("Paniced while migrating IpNetwork -> IPAddress");
-    let sub_mig: IPAddress =
-        IPAddress::parse(sub.to_string()).expect("Paniced while parsing IpNetwork -> IPAddress");
-
-    if exit_sub_mig.size() < sub_mig.size() {
+    if exit_sub.size() < sub.size() {
         error!("Invalid subnet sizes");
         return Err(RitaExitError::MiscStringError(
             "Invalid subnet sizes provided to generate_index_from_subnet".to_string(),
         ));
     }
-    let size = sub_mig.size();
-    let ret = (sub_mig.host_address - exit_sub_mig.host_address) / size;
 
-    Ok(ret
-        .to_string()
-        .parse::<u64>()
-        .expect("Unalbe to parse biguint into u64"))
+    let size: u128 = if let NetworkSize::V6(a) = sub.size() {
+        a
+    } else {
+        return Err(RitaExitError::MiscStringError(
+            "Exit Subnet needs to be ipv6!!".to_string(),
+        ));
+    };
+    let exit_sub_int: u128 = if let IpAddr::V6(addr) = exit_sub.ip() {
+        addr.into()
+    } else {
+        return Err(RitaExitError::MiscStringError(
+            "Exit Subnet needs to be ipv6!!".to_string(),
+        ));
+    };
+
+    let sub_int: u128 = if let IpAddr::V6(addr) = sub.ip() {
+        addr.into()
+    } else {
+        return Err(RitaExitError::MiscStringError(
+            "Exit Subnet needs to be ipv6!!".to_string(),
+        ));
+    };
+
+    let ret: u128 = (sub_int - exit_sub_int) / size;
+
+    Ok(ret as u64)
 }
 
 /// This function run on startup initializes databases and other missing fields from the previous database schema
@@ -824,50 +853,6 @@ pub fn get_client_ipv6(their_record: &models::Client) -> Result<Option<IpNetwork
 mod tests {
     use super::*;
 
-    /// Test to strings conversions and parsing from IpNetwork -> IPAdress -> IpNetwork
-    #[test]
-    fn test_ipnetwork_tostring() {
-        let ip: IpNetwork = "2602:FBAD::/40".parse().unwrap();
-        let to_str = ip.to_string();
-        println!("network: {}", to_str);
-
-        let ip_ad: IPAddress = IPAddress::parse(to_str).unwrap();
-        println!("IPAdress network: {:?}", ip_ad);
-
-        let to_str = ip_ad.to_string();
-        println!("network: {}", to_str);
-
-        let ip: IpNetwork = to_str.parse().unwrap();
-        println!("IpNetwork network: {:?}", ip);
-    }
-
-    /// This checks the functionality of IPAddress 'subnet' function which divides a larger subnet
-    /// into individual smaller ones. Source code of this function is used
-    #[ignore]
-    #[test]
-    fn test_subnet_splitting() {
-        let ip = IPAddress::parse("2602:FBAD::/40").unwrap();
-        println!("we got: {:?}", ip);
-        let subnets = ip.subnet(42);
-        println!("subners: {:?}", subnets);
-
-        println!("Subnets custom: {:?}", test_subnet_aggregate(ip, 42));
-    }
-
-    #[allow(dead_code)]
-    fn test_subnet_aggregate(network: IPAddress, subprefix: usize) -> Vec<IPAddress> {
-        let mut ret = Vec::new();
-        let mut net = network.network();
-        for _ in 0..(1 << (subprefix - network.prefix.num)) {
-            ret.push(net.clone());
-            net = net.from(&net.host_address, &net.prefix);
-            let size = net.size();
-            net.host_address += size;
-        }
-
-        ret
-    }
-
     /// Test iterative subnet generation
     #[test]
     fn test_generate_iterative_subnet() {
@@ -933,22 +918,12 @@ mod tests {
 
     #[test]
     fn test_subnet_to_index() {
-        let exit_sub: IpNetwork = "fd00::1000/120".parse().unwrap();
         let sub: IpNetwork = "fd00::1000/124".parse().unwrap();
 
-        let exit_sub_mig: IPAddress = IPAddress::parse(exit_sub.to_string())
-            .expect("Paniced while migrating IpNetwork -> IPAddress");
-        let sub_mig: IPAddress = IPAddress::parse(sub.to_string())
-            .expect("Paniced while parsing IpNetwork -> IPAddress");
-
-        let net = sub_mig.network();
+        let net = sub.network();
         println!("net: {:?}", net);
-        let size = net.size();
+        let size = sub.size();
         println!("size: {:?}", size);
-
-        let test = (sub_mig.host_address - exit_sub_mig.host_address) / size;
-        let a: u64 = test.to_string().parse().unwrap();
-        println!("Res: {:?}", a);
 
         let exit_sub: IpNetwork = "fd00::1000/120".parse().unwrap();
         let sub: IpNetwork = "fd00::1060/124".parse().unwrap();
