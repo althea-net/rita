@@ -201,12 +201,7 @@ impl dyn KernelInterface {
         let output = self.run_command("tc", &cake_args)?;
 
         if !output.status.success() {
-            trace!(
-                "No support for the Cake qdisc is detected, falling back to fq_codel. Error: {}",
-                String::from_utf8(output.stderr)?
-            );
-            trace!("Command was tc {}", crate::print_str_array(&cake_args));
-            warn!("sch_cake is strongly recommended, you should install it");
+            warn!("Cake command failed.  Command: tc {}  Error: {}", crate::print_str_array(&cake_args), String::from_utf8(output.stderr)?);
             let output = self.run_command(
                 "tc",
                 &[
@@ -218,8 +213,9 @@ impl dyn KernelInterface {
             if !output.status.success() {
                 let res = String::from_utf8(output.stderr)?;
                 error!("Cake and fallback fq_codel have both failed!");
+
                 return Err(Error::TrafficControlError(format!(
-                    "Failed to create new qdisc limit! {:?}",
+                    "Failed to create new qdisc limit! (fq_codel) {:?}",
                     res
                 )));
             }
@@ -267,7 +263,7 @@ impl dyn KernelInterface {
         } else {
             let res = String::from_utf8(output.stderr)?;
             Err(Error::TrafficControlError(format!(
-                "Failed to create new qdisc limit! {:?}",
+                "Failed to create new qdisc limit! (set_classless_limit) {:?}",
                 res
             )))
         }
@@ -288,7 +284,7 @@ impl dyn KernelInterface {
         } else {
             let res = String::from_utf8(output.stderr)?;
             Err(Error::TrafficControlError(format!(
-                "Failed to create new qdisc limit! {:?}",
+                "Failed to create new qdisc limit! (root_classful_limit) {:?}",
                 res
             )))
         }
@@ -358,7 +354,7 @@ impl dyn KernelInterface {
 
         if !output.status.success() {
             let res = String::from_utf8(output.stderr)?;
-            trace!("Operating system does not support cake :( {:?}", res);
+            warn!("Operating system does not support cake :( {:?}", res);
         }
         Ok(())
     }
