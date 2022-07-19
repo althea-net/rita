@@ -19,9 +19,9 @@ pub enum RitaExitError {
     DieselError(diesel::result::Error),
     RitaCommonError(RitaCommonError),
     RenderError(RenderError),
-    EmailError(lettre_email::error::Error),
-    FileError(lettre::file::error::Error),
-    SmtpError(lettre::smtp::error::Error),
+    EmailError(lettre::error::Error),
+    FileError(lettre::transport::file::Error),
+    SmtpError(lettre::transport::smtp::Error),
     IpNetworkError(IpNetworkError),
     PhoneParseError(phonenumber::ParseError),
     ClarityError(clarity::error::Error),
@@ -49,18 +49,18 @@ impl From<RenderError> for RitaExitError {
         RitaExitError::RenderError(error)
     }
 }
-impl From<lettre_email::error::Error> for RitaExitError {
-    fn from(error: lettre_email::error::Error) -> Self {
+impl From<lettre::error::Error> for RitaExitError {
+    fn from(error: lettre::error::Error) -> Self {
         RitaExitError::EmailError(error)
     }
 }
-impl From<lettre::file::error::Error> for RitaExitError {
-    fn from(error: lettre::file::error::Error) -> Self {
+impl From<lettre::transport::file::Error> for RitaExitError {
+    fn from(error: lettre::transport::file::Error) -> Self {
         RitaExitError::FileError(error)
     }
 }
-impl From<lettre::smtp::error::Error> for RitaExitError {
-    fn from(error: lettre::smtp::error::Error) -> Self {
+impl From<lettre::transport::smtp::Error> for RitaExitError {
+    fn from(error: lettre::transport::smtp::Error) -> Self {
         RitaExitError::SmtpError(error)
     }
 }

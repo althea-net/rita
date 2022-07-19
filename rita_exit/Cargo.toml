@@ -25,8 +25,7 @@ clarity = "0.5"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
-lettre = "0.9"
-lettre_email = "0.9"
+lettre = { version = "0.10", features = ["file-transport"]}
 r2d2 = "0.8"
 phonenumber = "0.3"
 arrayvec = {version= "0.7", features = ["serde"]}

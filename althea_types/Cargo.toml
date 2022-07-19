@@ -18,7 +18,7 @@ sodiumoxide = "0.2"
 clarity = "0.5"
 arrayvec = {version= "0.7", features = ["serde"]}
 phonenumber = "0.3"
-lettre = {version = "0.9", features = ["serde"]}
+lettre = {version = "0.10", features = ["serde"]}
 ipnetwork = "0.20"
 
 [dev-dependencies]
