@@ -7,7 +7,7 @@ use rita_common::utils::option_convert;
 use actix_web_async::HttpRequest;
 use actix_web_async::HttpResponse;
 use althea_types::ContactType;
-use lettre::EmailAddress;
+use lettre::Address as EmailAddress;
 use phonenumber::PhoneNumber;
 
 fn clean_quotes(val: &str) -> String {
