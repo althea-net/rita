@@ -21,8 +21,7 @@ althea_kernel_interface = { path = "../althea_kernel_interface" }
 antenna_forwarding_client = { path = "../antenna_forwarding_client" }
 settings = { path = "../settings" }
 sha3 = "0.10"
-lettre = "0.9"
-lettre_email = "0.9"
+lettre = "0.10"
 phonenumber = "0.3"
 babel_monitor = { path = "../babel_monitor" }
 arrayvec = {version= "0.7", features = ["serde"]}

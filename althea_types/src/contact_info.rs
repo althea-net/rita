@@ -4,7 +4,7 @@
 //! to serialize enums with struct members. This file is all boilerplate conversion code for pretty small storage formats.
 
 use crate::ExitRegistrationDetails;
-use lettre::EmailAddress;
+use lettre::Address as EmailAddress;
 use phonenumber::PhoneNumber;
 
 /// Struct for submitting contact details to exits

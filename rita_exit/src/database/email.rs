@@ -10,12 +10,12 @@ use althea_types::{ExitClientDetails, ExitClientIdentity, ExitState};
 use diesel::prelude::PgConnection;
 use exit_db::models;
 use handlebars::Handlebars;
-use lettre::file::FileTransport;
-use lettre::smtp::authentication::{Credentials, Mechanism};
-use lettre::smtp::extension::ClientId;
-use lettre::smtp::ConnectionReuseParameters;
-use lettre::{SmtpClient, Transport};
-use lettre_email::EmailBuilder;
+use lettre::transport::smtp::authentication::Credentials;
+use lettre::transport::smtp::authentication::Mechanism;
+use lettre::transport::smtp::extension::ClientId;
+use lettre::transport::smtp::PoolConfig;
+use lettre::FileTransport;
+use lettre::{Message, SmtpTransport, Transport};
 use serde_json::json;
 use settings::exit::ExitVerifSettings;
 
@@ -38,30 +38,27 @@ pub fn send_mail(client: &models::Client) -> Result<(), RitaExitError> {
 
     let reg = Handlebars::new();
 
-    let email = EmailBuilder::new()
-        .to(client.email.clone())
-        .from(mailer.from_address)
+    let email = Message::builder()
+        .to(client.email.clone().parse().unwrap())
+        .from(mailer.from_address.parse().unwrap())
         .subject(mailer.signup_subject)
         // TODO: maybe have a proper templating engine
-        .text(reg.render_template(
+        .body(reg.render_template(
             &mailer.signup_body,
             &json!({"email_code": client.email_code.to_string()}),
-        )?)
-        .build()?;
+        )?)?;
 
     if mailer.test {
-        let mut mailer = FileTransport::new(&mailer.test_dir);
-        mailer.send(email.into())?;
+        let mailer = FileTransport::new(&mailer.test_dir);
+        mailer.send(&email)?;
     } else {
-        // TODO add serde to lettre
-        let mut mailer = SmtpClient::new_simple(&mailer.smtp_url)?
+        let mailer = SmtpTransport::relay(&mailer.smtp_url)?
             .hello_name(ClientId::Domain(mailer.smtp_domain))
             .credentials(Credentials::new(mailer.smtp_username, mailer.smtp_password))
-            .smtp_utf8(true)
-            .authentication_mechanism(Mechanism::Plain)
-            .connection_reuse(ConnectionReuseParameters::ReuseUnlimited)
-            .transport();
-        mailer.send(email.into())?;
+            .authentication(vec![Mechanism::Plain])
+            .pool_config(PoolConfig::new().max_size(20))
+            .build();
+        mailer.send(&email)?;
     }
 
     Ok(())
