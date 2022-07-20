@@ -1,3 +1,4 @@
+import email
 from pprint import pprint
 from termcolor import colored
 
@@ -93,9 +94,11 @@ def read_email(node):
     # TODO: this is O(n^2)
     for mail in os.listdir("mail"):
         with open(os.path.join("mail", mail)) as mail_file_handle:
-            mail = json.load(mail_file_handle)
-            if mail["envelope"]["forward_path"][0] == "{}@example.com".format(id):
-                message = ''.join(chr(i) for i in mail["message"])
+
+            mail = email.message_from_file(mail_file_handle)
+            to_value = mail.get("To")
+            if to_value == "{}@example.com".format(id):
+                message = mail.get_payload()
                 if "low balance" in message:
                     continue
                 return message
