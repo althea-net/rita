@@ -363,7 +363,8 @@ mod tests {
 
     #[test]
     fn test_settings_test() {
-        RitaClientSettings::new("test.toml").unwrap();
+        let ret = RitaClientSettings::new("test.toml").unwrap();
+        println!("{:?}", ret);
     }
 
     #[test]
