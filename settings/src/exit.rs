@@ -3,12 +3,12 @@ use crate::network::NetworkSettings;
 use crate::payment::PaymentSettings;
 use crate::{json_merge, set_rita_exit, SettingsError};
 use althea_types::{Identity, WgKey};
-use config::Config;
 use core::str::FromStr;
 use ipnetwork::IpNetwork;
 use phonenumber::PhoneNumber;
 use std::collections::HashSet;
 use std::net::Ipv4Addr;
+use std::path::Path;
 
 /// This is the network settings specific to rita_exit
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -251,19 +251,21 @@ impl RitaExitSettingsStruct {
     }
 
     pub fn new(file_name: &str) -> Result<Self, SettingsError> {
-        let mut s = Config::new();
-        s.merge(config::File::with_name(file_name).required(false))?;
-        let settings: Self = s.try_into()?;
-        Ok(settings)
+        assert!(Path::new(file_name).exists());
+
+        let config_toml = std::fs::read_to_string(file_name)?;
+        let ret: Self = toml::from_str(&config_toml)?;
+        Ok(ret)
     }
 
     pub fn new_watched(file_name: &str) -> Result<Self, SettingsError> {
-        let mut s = Config::new();
-        s.merge(config::File::with_name(file_name).required(false))?;
-        let settings: Self = s.try_into()?;
+        assert!(Path::new(file_name).exists());
 
-        set_rita_exit(settings.clone());
+        let config_toml = std::fs::read_to_string(file_name)?;
+        let ret: Self = toml::from_str(&config_toml)?;
 
-        Ok(settings)
+        set_rita_exit(ret.clone());
+
+        Ok(ret)
     }
 }

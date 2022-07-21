@@ -7,7 +7,6 @@ use crate::{json_merge, set_rita_client, SettingsError};
 use althea_types::wg_key::WgKey;
 use althea_types::{ContactStorage, ExitState, Identity};
 use clarity::Address;
-use config::Config;
 use ipnetwork::IpNetwork;
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
@@ -153,20 +152,22 @@ impl ExitClientSettings {
 
 impl RitaClientSettings {
     pub fn new(file_name: &str) -> Result<Self, SettingsError> {
-        let mut s = Config::new();
         assert!(Path::new(file_name).exists());
-        s.merge(config::File::with_name(file_name).required(false))?;
-        Ok(s.try_into()?)
+
+        let config_toml = std::fs::read_to_string(file_name)?;
+        let ret: Self = toml::from_str(&config_toml)?;
+        Ok(ret)
     }
 
     pub fn new_watched(file_name: &str) -> Result<Self, SettingsError> {
-        let mut s = Config::new();
-        s.merge(config::File::with_name(file_name).required(false))?;
-        let settings: RitaClientSettings = s.try_into()?;
+        assert!(Path::new(file_name).exists());
 
-        set_rita_client(settings.clone());
+        let config_toml = std::fs::read_to_string(file_name)?;
+        let ret: Self = toml::from_str(&config_toml)?;
 
-        Ok(settings)
+        set_rita_client(ret.clone());
+
+        Ok(ret)
     }
 }
 
