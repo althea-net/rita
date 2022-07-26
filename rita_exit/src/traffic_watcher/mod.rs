@@ -114,6 +114,7 @@ fn generate_helper_maps(our_id: &Identity, clients: &[Identity]) -> HelperMapRet
 
 fn counters_logging(
     counters: &HashMap<WgKey, WgUsage>,
+    new_counters: &HashMap<WgKey, WgUsage>,
     history: &HashMap<WgKey, WgUsage>,
     exit_fee: u32,
 ) {
@@ -130,10 +131,30 @@ fn counters_logging(
         }
     }
 
+    for entry in new_counters.iter() {
+        let key = entry.0;
+        let val = entry.1;
+        if let Some(history_val) = history.get(key) {
+            let moved_bytes = val.download - history_val.download;
+            trace!("Exit accounted {} uploaded {} bytes", key, moved_bytes,);
+            total_in += moved_bytes;
+        }
+    }
+
     info!("Total Exit input of {} bytes this round", total_in);
 
     let mut total_out: u64 = 0;
     for entry in counters.iter() {
+        let key = entry.0;
+        let val = entry.1;
+        if let Some(history_val) = history.get(key) {
+            let moved_bytes = val.upload - history_val.upload;
+            trace!("Exit accounted {} downloaded {} bytes", key, moved_bytes);
+            total_out += moved_bytes;
+        }
+    }
+
+    for entry in new_counters.iter() {
         let key = entry.0;
         let val = entry.1;
         if let Some(history_val) = history.get(key) {
@@ -163,8 +184,12 @@ fn debts_logging(debts: &HashMap<Identity, i128>) {
     }
     info!("Total exit income of {:?} Wei this round", total_income);
 
-    match KI.get_wg_exit_clients_online() {
-        Ok(users) => info!("Total of {} users online", users),
+    match KI.get_wg_exit_clients_online("wg_exit") {
+        Ok(users) => info!("Total of {} wg_exit users online", users),
+        Err(e) => warn!("Getting clients failed with {:?}", e),
+    }
+    match KI.get_wg_exit_clients_online("wg_exit_new") {
+        Ok(users) => info!("Total of {} wg_exit_new users online", users),
         Err(e) => warn!("Getting clients failed with {:?}", e),
     }
 }
@@ -202,10 +227,22 @@ pub fn watch(
         }
     };
 
+    let new_counters = match KI.read_wg_counters("wg_exit_new") {
+        Ok(res) => res,
+        Err(e) => {
+            warn!(
+                "Error getting input counters {:?} traffic has gone unaccounted!",
+                e
+            );
+            return Err(e.into());
+        }
+    };
+
     // creates new usage entires does not actualy update the values
     prepare_usage_history(&counters, usage_history);
+    prepare_usage_history(&new_counters, usage_history);
 
-    counters_logging(&counters, usage_history, our_price as u32);
+    counters_logging(&counters, &new_counters, usage_history, our_price as u32);
 
     let mut debts = HashMap::new();
 
@@ -213,6 +250,8 @@ pub fn watch(
     for (_, ident) in identities.clone() {
         debts.insert(ident, 0i128);
     }
+
+    let counters: HashMap<WgKey, WgUsage> = merge_counters(&counters, &new_counters);
 
     // accounting for 'input'
     for (wg_key, bytes) in counters.clone() {
@@ -285,4 +324,39 @@ pub fn watch(
     traffic_update(traffic_vec);
 
     Ok(())
+}
+
+/// This function merges two counter maps for wg_exit and wg_exit_new for combined accounting
+fn merge_counters(
+    old_counters: &HashMap<WgKey, WgUsage>,
+    new_counters: &HashMap<WgKey, WgUsage>,
+) -> HashMap<WgKey, WgUsage> {
+    let mut ret: HashMap<WgKey, WgUsage> = HashMap::new();
+    ret.extend(old_counters);
+    for (k, e) in new_counters {
+        if ret.contains_key(k) {
+            let mut usage = *ret.get(k).unwrap();
+            usage.upload += e.upload;
+            usage.download += e.download;
+            ret.insert(*k, usage);
+        } else {
+            ret.insert(*k, *e);
+        }
+    }
+    ret
+}
+
+#[test]
+fn test_merge_counters() {
+    let mut ret = HashMap::new();
+    let mut map1: HashMap<&str, &str> = HashMap::new();
+    map1.insert("a", "asdf");
+
+    let mut map2: HashMap<&str, &str> = HashMap::new();
+    map2.insert("b", "asdfasdf");
+
+    ret.extend(map1);
+    ret.extend(map2);
+
+    println!("{:?}", ret);
 }
