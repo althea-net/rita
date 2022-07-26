@@ -75,8 +75,8 @@ impl dyn KernelInterface {
     }
 
     /// Returns the number of clients that are active on the wg_exit tunnel
-    pub fn get_wg_exit_clients_online(&self) -> Result<u32, Error> {
-        let output = self.run_command("wg", &["show", "wg_exit", "latest-handshakes"])?;
+    pub fn get_wg_exit_clients_online(&self, interface: &str) -> Result<u32, Error> {
+        let output = self.run_command("wg", &["show", interface, "latest-handshakes"])?;
         let mut num: u32 = 0;
         let out = String::from_utf8(output.stdout)?;
         for line in out.lines() {
@@ -194,7 +194,7 @@ fn test_get_wg_exit_clients_online() {
         }
     }));
 
-    assert_eq!(KI.get_wg_exit_clients_online().unwrap(), 1);
+    assert_eq!(KI.get_wg_exit_clients_online("wg_exit").unwrap(), 1);
 }
 
 #[test]
