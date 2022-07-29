@@ -100,6 +100,9 @@ impl dyn KernelInterface {
             return;
         }
 
+        // Delete an older routes that exists if the router has recently switched
+        //let old_router; // TODO
+
         let ipv6_list: Vec<&str> = client_ipv6_list.split(',').collect();
 
         for ip in ipv6_list {

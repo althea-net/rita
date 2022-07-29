@@ -13,11 +13,11 @@ use actix::SystemService;
 #[cfg(feature = "development")]
 use actix_web::AsyncResponder;
 use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
-use althea_types::Identity;
 use althea_types::WgKey;
 use althea_types::{
     EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState, ExitSystemTime,
 };
+use althea_types::{EncryptedIpList, Identity};
 use num256::Int256;
 use rita_common::blockchain_oracle::potential_payment_issues_detected;
 use rita_common::debt_keeper::get_debts_list;
@@ -236,6 +236,27 @@ pub async fn get_exit_timestamp_http(_req: HttpRequest) -> HttpResponse {
     HttpResponse::Ok().json(ExitSystemTime {
         system_time: SystemTime::now(),
     })
+}
+
+/// This function takes a list of exit ips in a cluster from its config, signs the list and
+/// sends it to the client
+pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpResponse {
+    let our_secretkey: WgKey = *EXIT_WG_PRIVATE_KEY;
+    let our_secretkey = our_secretkey.into();
+
+    let their_nacl_pubkey = request.pubkey.into();
+
+    let ret = settings::get_rita_exit().exit_network.cluster_ips;
+
+    let plaintext = serde_json::to_string(&ret)
+        .expect("Failed to serialize Vec of ips!")
+        .into_bytes();
+    let nonce = box_::gen_nonce();
+    let ciphertext = box_::seal(&plaintext, &nonce, &their_nacl_pubkey, &our_secretkey);
+    HttpResponse::Ok().json(Json(EncryptedIpList {
+        nonce: nonce.0,
+        ip_list: ciphertext,
+    }))
 }
 
 /// Used by clients to get their debt from the exits. While it is in theory possible for the

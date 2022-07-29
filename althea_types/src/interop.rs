@@ -253,6 +253,13 @@ pub struct EncryptedExitState {
     pub encrypted_exit_state: Vec<u8>,
 }
 
+/// Wrapper for secure box containing a list of ips
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct EncryptedIpList {
+    pub nonce: [u8; 24],
+    pub ip_list: Vec<u8>,
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum ExitVerifMode {
     Phone,

@@ -354,6 +354,18 @@ pub fn setup_clients(
 
     trace!("got clients from db {:?} {:?}", clients_list, old_clients);
 
+    // Setup or verify that an ipv6 route exists for each client
+    let new_wg_exit_clients: HashMap<WgKey, SystemTime> = KI
+        .get_last_handshake_time("wg_exit_new")
+        .expect("There should be a new wg_exit interface")
+        .into_iter()
+        .collect();
+    let wg_exit_clients: HashMap<WgKey, SystemTime> = KI
+        .get_last_handshake_time("wg_exit")
+        .expect("There should be a wg_exit interface")
+        .into_iter()
+        .collect();
+
     for c in clients_list.iter() {
         match (c.verified, to_exit_client(c.clone())) {
             (true, Ok(exit_client_c)) => {
@@ -364,6 +376,17 @@ pub fn setup_clients(
             (true, Err(e)) => warn!("Error converting {:?} to exit client {:?}", c, e),
             (false, _) => trace!("{:?} is not verified, not adding to wg_exit", c),
         }
+
+        let interface =
+            match get_client_interface(c, new_wg_exit_clients.clone(), wg_exit_clients.clone()) {
+                Ok(a) => a,
+                Err(_) => {
+                    // There is no handshake on either wg_exit or wg_exit_new, which can happen during a restart
+                    // in this case the client will not have an ipv6 route until they initiate a handshake again
+                    continue;
+                }
+            };
+        KI.setup_client_routes(c.internet_ipv6.clone(), c.mesh_ip.clone(), &interface)
     }
 
     trace!("converted clients {:?}", wg_clients);
@@ -390,24 +413,6 @@ pub fn setup_clients(
         &settings::get_rita_exit().network.wg_private_key_path,
         "wg_exit_new",
     );
-
-    // Setup or verify that an ipv6 route exists for each client
-    let new_wg_exit_clients: HashMap<WgKey, SystemTime> = KI
-        .get_last_handshake_time("wg_exit_new")
-        .expect("There should be a new wg_exit interface")
-        .into_iter()
-        .collect();
-    let wg_exit_clients: HashMap<WgKey, SystemTime> = KI
-        .get_last_handshake_time("wg_exit")
-        .expect("There should be a wg_exit interface")
-        .into_iter()
-        .collect();
-
-    for c in clients_list.iter() {
-        let interface =
-            get_client_interface(c, new_wg_exit_clients.clone(), wg_exit_clients.clone())?;
-        KI.setup_client_routes(c.internet_ipv6.clone(), c.mesh_ip.clone(), &interface)
-    }
 
     match exit_status {
         Ok(_) => trace!("Successfully setup Exit WG!"),
@@ -456,7 +461,10 @@ pub fn get_client_interface(
             }
         }
         _ => {
-            error!("WG EXIT SETUP: Wg Exit not setup correctly. Client {}, does not have handshake with any wg exit interface", c.wg_pubkey);
+            error!(
+                "WG EXIT SETUP: Client {}, does not have handshake with any wg exit interface",
+                c.wg_pubkey
+            );
             Err(RitaExitError::MiscStringError(
                 "Unable to find client interface".to_string(),
             ))
