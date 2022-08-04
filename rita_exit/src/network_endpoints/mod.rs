@@ -13,11 +13,11 @@ use actix::SystemService;
 #[cfg(feature = "development")]
 use actix_web::AsyncResponder;
 use actix_web_async::{http::StatusCode, web::Json, HttpRequest, HttpResponse, Result};
-use althea_types::WgKey;
 use althea_types::{
     EncryptedExitClientIdentity, EncryptedExitState, ExitClientIdentity, ExitState, ExitSystemTime,
 };
-use althea_types::{EncryptedIpList, Identity};
+use althea_types::{EncryptedExitList, Identity};
+use althea_types::{ExitList, WgKey};
 use num256::Int256;
 use rita_common::blockchain_oracle::potential_payment_issues_detected;
 use rita_common::debt_keeper::get_debts_list;
@@ -246,16 +246,19 @@ pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpRe
 
     let their_nacl_pubkey = request.pubkey.into();
 
-    let ret = settings::get_rita_exit().exit_network.cluster_ips;
+    let ret: ExitList = ExitList {
+        exit_list: settings::get_rita_exit().exit_network.cluster_exits,
+        wg_exit_listen_port: settings::get_rita_exit().exit_network.wg_new_tunnel_port,
+    };
 
     let plaintext = serde_json::to_string(&ret)
         .expect("Failed to serialize Vec of ips!")
         .into_bytes();
     let nonce = box_::gen_nonce();
     let ciphertext = box_::seal(&plaintext, &nonce, &their_nacl_pubkey, &our_secretkey);
-    HttpResponse::Ok().json(Json(EncryptedIpList {
+    HttpResponse::Ok().json(Json(EncryptedExitList {
         nonce: nonce.0,
-        ip_list: ciphertext,
+        exit_list: ciphertext,
     }))
 }
 

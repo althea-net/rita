@@ -17,8 +17,8 @@ use crate::exit_manager::{
 };
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
+use althea_types::ExitList;
 use babel_monitor::{open_babel_stream, parse_routes, Route};
-use ipnetwork::IpNetwork;
 use rita_common::FAST_LOOP_SPEED;
 use settings::client::ExitSwitchingCode;
 use settings::client::SelectedExit;
@@ -193,8 +193,8 @@ impl From<ExitMetrics>
 /// Look at the enum 'ExitSwitchingCode' to see all state and function 'update_metric_value' to see when these are triggered.
 pub fn set_best_exit(
     exit_name: String,
-    exits: IpNetwork,
     routes: Vec<Route>,
+    exit_list: &ExitList,
 ) -> Result<IpAddr, RitaClientError> {
     if routes.is_empty() {
         return Err(RitaClientError::MiscStringError(
@@ -216,11 +216,11 @@ pub fn set_best_exit(
     // Parse all babel routes and find useful metrics
     let exit_metrics = get_exit_metrics(
         routes,
-        exits,
         current_exit_ip,
         tracking_exit,
         current_exit_ip,
         current_adjusted_metric,
+        exit_list,
         exit_map,
     );
 
@@ -423,11 +423,11 @@ fn set_exit_state(
 /// 7.) Metric of the best exit during this tick
 fn get_exit_metrics(
     routes: Vec<Route>,
-    exits: IpNetwork,
     current_exit_ip: Option<IpAddr>,
     tracking_exit: Option<IpAddr>,
     initial_best_exit: Option<IpAddr>,
     initial_best_metric: u16,
+    exit_list: &ExitList,
     exit_map: &mut HashMap<IpAddr, ExitTracker>,
 ) -> ExitMetrics {
     let mut best_exit = None;
@@ -454,7 +454,7 @@ fn get_exit_metrics(
         // All babel routes are advertised as /128, so we check if each 'single' ip is part of exit subnet
         let ip = route.prefix.ip();
 
-        if check_ip_in_subnet(ip, exits) && !blacklisted.contains(&ip) {
+        if check_if_ip_in_exit_list(ip, exit_list) && !blacklisted.contains(&ip) {
             // Not all exits in subnet are blacklisted, so set bool
             all_exits_blacklisted = false;
 
@@ -557,16 +557,6 @@ fn set_last_added_to_zero(exit_map: &mut HashMap<IpAddr, ExitTracker>) {
     for (_, v) in exit_map.iter_mut() {
         v.last_added_metric = 0;
     }
-}
-
-/// Helper function that checks if the provided ip address is within the subnet specified by the provided IpNetwork
-fn check_ip_in_subnet(ip: IpAddr, exits: IpNetwork) -> bool {
-    //check that both are either V4 or V6
-    if ip.is_ipv4() != exits.is_ipv4() {
-        return false;
-    }
-
-    exits.contains(ip)
 }
 
 /// Updates the current metric value during this tick in the global metric tracker. There can be several situations we can be in since there are
@@ -750,8 +740,22 @@ pub fn get_babel_routes(babel_port: u16) -> Result<Vec<Route>, RitaClientError> 
     Ok(routes)
 }
 
+fn check_if_ip_in_exit_list(ip: IpAddr, exit_list: &ExitList) -> bool {
+    for id in exit_list.exit_list.clone() {
+        if ip == id.mesh_ip {
+            return true;
+        }
+    }
+
+    false
+}
+
 #[cfg(test)]
 mod tests {
+
+    use althea_types::{FromStr, Identity, WgKey};
+    use clarity::Address;
+    use ipnetwork::IpNetwork;
 
     use super::*;
     use crate::exit_manager::{reset_blacklist_warnings, ExitBlacklist, MAX_BLACKLIST_STRIKES};
@@ -955,23 +959,17 @@ mod tests {
         assert_eq!(vec.capacity(), 10);
     }
 
-    #[test]
-    fn test_ip_in_subnet() {
-        let subnet = IpNetwork::new(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 20).unwrap();
-        let ip1 = IpAddr::V4(Ipv4Addr::new(1, 2, 1, 1));
-        let ip2 = IpAddr::V4(Ipv4Addr::new(1, 1, 7, 127));
-        let ip3 = IpAddr::V4(Ipv4Addr::new(1, 1, 20, 127));
-        let ip4 = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 12));
-
-        assert!(!check_ip_in_subnet(ip1, subnet));
-        assert!(check_ip_in_subnet(ip2, subnet));
-        assert!(!check_ip_in_subnet(ip3, subnet));
-        assert!(check_ip_in_subnet(ip4, subnet));
+    fn test_identity(ip: IpAddr) -> Identity {
+        Identity {
+            mesh_ip: ip,
+            eth_address: Address::from_str("0x5CC9aF89B1bf70565d75d0822027694Af38Ca017").unwrap(),
+            wg_public_key: WgKey::from_str("QkzYfnCeTp1iYKUyMjAVsmwPiemx4Yyqc83G17cebyM=").unwrap(),
+            nickname: None,
+        }
     }
 
     #[test]
     fn test_get_exit_metrics() {
-        let subnet = IpNetwork::new(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 20).unwrap();
         let ip1 = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1));
         let ip2 = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 2));
         let ip3 = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 3));
@@ -1039,11 +1037,14 @@ mod tests {
         // Nothing is setup yet
         let (exit_down, _, c_e_met, _, t_e_m, b_exit, b_e_m) = get_exit_metrics(
             routes.clone(),
-            subnet,
             None,
             None,
             None,
             u16::MAX,
+            &ExitList {
+                exit_list: vec![test_identity(ip1), test_identity(ip2), test_identity(ip3)],
+                wg_exit_listen_port: 0,
+            },
             &mut exit_map,
         )
         .into();
@@ -1056,11 +1057,14 @@ mod tests {
         // Only current exit is setup, not tracking yet
         let (exit_down, _, c_e_met, _, t_e_m, b_exit, b_e_m) = get_exit_metrics(
             routes.clone(),
-            subnet,
             Some(ip1),
             None,
             Some(ip1),
             400,
+            &ExitList {
+                exit_list: vec![test_identity(ip1), test_identity(ip2), test_identity(ip3)],
+                wg_exit_listen_port: 0,
+            },
             &mut exit_map,
         )
         .into();
@@ -1073,11 +1077,14 @@ mod tests {
         // current and tracking at setup and different from each other and best exit
         let (exit_down, _, c_e_met, _, t_e_m, b_exit, b_e_m) = get_exit_metrics(
             routes.clone(),
-            subnet,
             Some(ip1),
             Some(ip2),
             Some(ip1),
             500,
+            &ExitList {
+                exit_list: vec![test_identity(ip1), test_identity(ip2), test_identity(ip3)],
+                wg_exit_listen_port: 0,
+            },
             &mut exit_map,
         )
         .into();
@@ -1090,11 +1097,14 @@ mod tests {
         // Current and tracking are same but different from best exit
         let (exit_down, _, c_e_met, _, t_e_m, b_exit, b_e_m) = get_exit_metrics(
             routes.clone(),
-            subnet,
             Some(ip2),
             Some(ip2),
             Some(ip2),
             500,
+            &ExitList {
+                exit_list: vec![test_identity(ip1), test_identity(ip2), test_identity(ip3)],
+                wg_exit_listen_port: 0,
+            },
             &mut exit_map,
         )
         .into();
@@ -1107,11 +1117,14 @@ mod tests {
         // All three exits are the same
         let (exit_down, _, c_e_met, _, t_e_m, b_exit, b_e_m) = get_exit_metrics(
             routes,
-            subnet,
             Some(ip3),
             Some(ip3),
             Some(ip3),
             200,
+            &ExitList {
+                exit_list: vec![test_identity(ip1), test_identity(ip2), test_identity(ip3)],
+                wg_exit_listen_port: 0,
+            },
             &mut exit_map,
         )
         .into();

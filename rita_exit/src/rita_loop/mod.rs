@@ -275,7 +275,7 @@ pub fn start_rita_exit_endpoints(workers: usize) {
                     .route("/exit_info", web::get().to(get_exit_info_http))
                     .route("/client_debt", web::post().to(get_client_debt))
                     .route("/time", web::get().to(get_exit_timestamp_http))
-                    .route("/exit_list", web::get().to(get_exit_list))
+                    .route("/exit_list", web::post().to(get_exit_list))
             })
             .workers(workers)
             .bind(format!(
