@@ -7,7 +7,7 @@ use core::str::FromStr;
 use ipnetwork::IpNetwork;
 use phonenumber::PhoneNumber;
 use std::collections::HashSet;
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::Ipv4Addr;
 use std::path::Path;
 
 /// This is the network settings specific to rita_exit
@@ -48,7 +48,7 @@ pub struct ExitNetworkSettings {
     /// Magic phone number operators enter in order to register to exit without auth
     pub magic_phone_number: Option<String>,
     /// Lists of exit ip addrs in this cluster
-    pub cluster_ips: Vec<IpAddr>,
+    pub cluster_exits: Vec<Identity>,
 }
 
 impl ExitNetworkSettings {
@@ -74,7 +74,7 @@ impl ExitNetworkSettings {
                 .unwrap(),
             wg_private_key_path: String::new(),
             magic_phone_number: None,
-            cluster_ips: Vec::new(),
+            cluster_exits: Vec::new(),
         }
     }
 }
