@@ -100,8 +100,15 @@ impl dyn KernelInterface {
             return;
         }
 
-        // Delete an older routes that exists if the router has recently switched
-        //let old_router; // TODO
+        // Get all routes on our interface
+        let output = self.run_command("ip", &vec!["-6", "route", "show", "dev", interface]).expect("Fix command");
+        let existing_routes = String::from_utf8(output.stdout).unwrap();
+
+        // Turn into a vector of Vec<IpRoute>
+        //let routes = parse_iproute_string(existing_routes);
+        
+
+
 
         let ipv6_list: Vec<&str> = client_ipv6_list.split(',').collect();
 

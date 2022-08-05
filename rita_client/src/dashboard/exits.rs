@@ -126,7 +126,7 @@ pub async fn add_exits(new_exits: Json<HashMap<String, ExitServer>>) -> HttpResp
 
     // initialze all new exits for Exit manager to use
     for exit in new_copy {
-        let new_exit_ip = exit.1.subnet.ip();
+        let new_exit_ip = exit.1.root_ip;
         let new_selected_exit = SelectedExit {
             selected_id: Some(new_exit_ip),
             ..Default::default()

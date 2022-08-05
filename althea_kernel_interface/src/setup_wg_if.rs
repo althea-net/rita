@@ -60,6 +60,7 @@ impl dyn KernelInterface {
     /// calls iproute2 to set up a new interface with a given name.
     pub fn setup_wg_if_named(&self, name: &str) -> Result<(), KernelInterfaceError> {
         let output = self.run_command("ip", &["link", "add", name, "type", "wireguard"])?;
+        info!("Added the wg_exit interface");
         let stderr = String::from_utf8(output.stderr)?;
         if !stderr.is_empty() {
             if stderr.contains("exists") {
@@ -71,6 +72,7 @@ impl dyn KernelInterface {
                 )));
             }
         }
+        info!("wg_exit should be successfully setup");
         Ok(())
     }
 

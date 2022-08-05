@@ -3,6 +3,7 @@ use crate::{open_tunnel::to_wg_local, KernelInterfaceError as Error};
 use althea_types::WgKey;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
+#[derive(Debug)]
 pub struct ClientExitTunnelConfig {
     /// The mesh ip of the exit server and it's port
     pub endpoint: SocketAddr,

@@ -398,6 +398,7 @@ pub fn setup_clients(
         return Ok(wg_clients);
     }
 
+    info!("Setting up configs for wg_exit and wg_exit_new");
     // setup all the tunnels
     let exit_status = KI.set_exit_wg_config(
         &wg_clients,

@@ -193,10 +193,10 @@ impl From<ExitMetrics>
 /// Look at the enum 'ExitSwitchingCode' to see all state and function 'update_metric_value' to see when these are triggered.
 pub fn set_best_exit(
     exit_name: String,
-    routes: Vec<Route>,
     exit_list: &ExitList,
+    route_hashmap: HashMap<IpAddr, Route>,
 ) -> Result<IpAddr, RitaClientError> {
-    if routes.is_empty() {
+    if route_hashmap.is_empty() {
         return Err(RitaClientError::MiscStringError(
             "No routes are found".to_string(),
         ));
@@ -215,7 +215,7 @@ pub fn set_best_exit(
 
     // Parse all babel routes and find useful metrics
     let exit_metrics = get_exit_metrics(
-        routes,
+        route_hashmap,
         current_exit_ip,
         tracking_exit,
         current_exit_ip,
@@ -422,7 +422,7 @@ fn set_exit_state(
 ///
 /// 7.) Metric of the best exit during this tick
 fn get_exit_metrics(
-    routes: Vec<Route>,
+    route_hashmap: HashMap<IpAddr, Route>,
     current_exit_ip: Option<IpAddr>,
     tracking_exit: Option<IpAddr>,
     initial_best_exit: Option<IpAddr>,
@@ -450,11 +450,15 @@ fn get_exit_metrics(
         .blacklisted_exits
         .clone();
 
-    for route in routes {
+    for ip in exit_list.exit_list.clone() {
         // All babel routes are advertised as /128, so we check if each 'single' ip is part of exit subnet
+        info!("Route hashmap: {:?}\n, ip mesh: {:?}\n", route_hashmap, ip.mesh_ip);
+        let route = route_hashmap
+            .get(&ip.mesh_ip)
+            .expect("There should be an ip address for every route");
         let ip = route.prefix.ip();
 
-        if check_if_ip_in_exit_list(ip, exit_list) && !blacklisted.contains(&ip) {
+        if !blacklisted.contains(&ip) {
             // Not all exits in subnet are blacklisted, so set bool
             all_exits_blacklisted = false;
 
@@ -740,16 +744,6 @@ pub fn get_babel_routes(babel_port: u16) -> Result<Vec<Route>, RitaClientError> 
     Ok(routes)
 }
 
-fn check_if_ip_in_exit_list(ip: IpAddr, exit_list: &ExitList) -> bool {
-    for id in exit_list.exit_list.clone() {
-        if ip == id.mesh_ip {
-            return true;
-        }
-    }
-
-    false
-}
-
 #[cfg(test)]
 mod tests {
 
@@ -1031,12 +1025,18 @@ mod tests {
             fee: 10,
         };
 
-        let routes = vec![exit1, exit2, exit3, not_exit];
+        //let routes = vec![exit1, exit2, exit3, not_exit];
+        let mut route_hashmap = HashMap::new();
+        route_hashmap.insert(exit1.prefix.ip(), exit1);
+        route_hashmap.insert(exit2.prefix.ip(), exit2);
+        route_hashmap.insert(exit3.prefix.ip(), exit3);
+        route_hashmap.insert(not_exit.prefix.ip(), not_exit);
+
         let mut exit_map: HashMap<IpAddr, ExitTracker> = HashMap::new();
 
         // Nothing is setup yet
         let (exit_down, _, c_e_met, _, t_e_m, b_exit, b_e_m) = get_exit_metrics(
-            routes.clone(),
+            route_hashmap.clone(),
             None,
             None,
             None,
@@ -1056,7 +1056,7 @@ mod tests {
 
         // Only current exit is setup, not tracking yet
         let (exit_down, _, c_e_met, _, t_e_m, b_exit, b_e_m) = get_exit_metrics(
-            routes.clone(),
+            route_hashmap.clone(),
             Some(ip1),
             None,
             Some(ip1),
@@ -1076,7 +1076,7 @@ mod tests {
 
         // current and tracking at setup and different from each other and best exit
         let (exit_down, _, c_e_met, _, t_e_m, b_exit, b_e_m) = get_exit_metrics(
-            routes.clone(),
+            route_hashmap.clone(),
             Some(ip1),
             Some(ip2),
             Some(ip1),
@@ -1096,7 +1096,7 @@ mod tests {
 
         // Current and tracking are same but different from best exit
         let (exit_down, _, c_e_met, _, t_e_m, b_exit, b_e_m) = get_exit_metrics(
-            routes.clone(),
+            route_hashmap.clone(),
             Some(ip2),
             Some(ip2),
             Some(ip2),
@@ -1116,7 +1116,7 @@ mod tests {
 
         // All three exits are the same
         let (exit_down, _, c_e_met, _, t_e_m, b_exit, b_e_m) = get_exit_metrics(
-            routes,
+            route_hashmap,
             Some(ip3),
             Some(ip3),
             Some(ip3),
