@@ -12,14 +12,12 @@ eth_private_key = "0x05d97734fc8d75ecae60e1be43f57322365b9b73614a7cf5ec7bc98d123
 
 [network]
 mesh_ip = "fd00::1"
-bounty_ip = "fd00::3"
 discovery_ip = "ff02::1:8"
 babel_port = 6872
 rita_hello_port = 4876
 rita_contact_port = 4874
 rita_dashboard_port = 4877
 rita_tick_interval = 5
-bounty_port = 8888
 wg_public_key = "bvM10HW73yePrxdtCQQ4U20W5ogogdiZtUihrPc/oGY="
 wg_private_key = "OGzbcm6czrjOEAViK7ZzlWM8mtjCxp7UPbuLS/dATV4="
 wg_private_key_path = "/tmp/priv"

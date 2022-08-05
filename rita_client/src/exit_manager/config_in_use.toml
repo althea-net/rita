@@ -256,7 +256,6 @@ level = "INFO"
 [network]
 babel_port = 6872
 backup_created = false
-bounty_port = 8888
 device = "ubnt-erx"
 discovery_ip = "ff02::1:8"
 light_client_hello_port = 4878

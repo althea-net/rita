@@ -63,8 +63,6 @@ pub struct NetworkSettings {
     pub rita_dashboard_port: u16,
     /// The password for dashboard authentication
     pub rita_dashboard_password: Option<String>,
-    /// Port over which the bounty hunter will be contacted
-    pub bounty_port: u16,
     /// The tick interval in seconds between rita hellos, traffic watcher measurements and payments
     pub rita_tick_interval: u64,
     /// Our private key, encoded with Base64 (what the `wg` command outputs and takes by default)
@@ -131,7 +129,6 @@ impl Default for NetworkSettings {
             light_client_router_ip: None,
             rita_dashboard_port: 4877,
             rita_dashboard_password: None,
-            bounty_port: 8888,
             rita_tick_interval: 5,
             wg_private_key: None,
             wg_private_key_path: "/tmp/priv".to_string(),

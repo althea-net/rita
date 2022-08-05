@@ -453,8 +453,6 @@ application/json" -d '\{"url": "https://somewhere.safe"\}'
   },
   "network": {
     "babel_port": 6872,
-    "bounty_ip": "fd96::1337:e1f",
-    "bounty_port": 8888,
     "default_route": [],
     "manual_peers": [
       "test.altheamesh.com",
