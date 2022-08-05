@@ -7,7 +7,6 @@ use crate::{json_merge, set_rita_client, SettingsError};
 use althea_types::wg_key::WgKey;
 use althea_types::{ContactStorage, ExitState, Identity};
 use clarity::Address;
-use ipnetwork::IpNetwork;
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 use std::path::Path;
@@ -33,8 +32,8 @@ pub fn default_config_path() -> String {
 /// ip's within the provided subnet.
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitServer {
-    /// Subnet of exits in cluster
-    pub subnet: IpNetwork,
+    /// Ip of exit we first connect to when connected to this cluster
+    pub root_ip: IpAddr,
 
     /// eth address of this exit cluster
     pub eth_address: Address,

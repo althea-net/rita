@@ -34,6 +34,7 @@ use althea_types::WgKey;
 use althea_types::{EncryptedExitClientIdentity, EncryptedExitState};
 use althea_types::{EncryptedExitList, ExitDetails, ExitList};
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState, ExitVerifMode};
+use babel_monitor::Route;
 use exit_switcher::{get_babel_routes, set_best_exit};
 
 use rita_common::blockchain_oracle::low_balance;
@@ -154,6 +155,7 @@ fn linux_setup_exit_tunnel(
 
     // TODO this should be refactored to return a value
     KI.update_settings_route(&mut network.last_default_route);
+    info!("Updated settings route");
 
     if let Err(KernelInterfaceError::RuntimeError(v)) = KI.setup_wg_if_named("wg_exit") {
         return Err(RitaClientError::MiscStringError(v));
@@ -170,6 +172,8 @@ fn linux_setup_exit_tunnel(
         rita_hello_port: network.rita_hello_port,
         user_specified_speed: network.user_bandwidth_limit,
     };
+
+    info!("Args while setting up wg_exit on client are: {:?}", args);
 
     rita_client.network = network;
     settings::set_rita_client(rita_client);
@@ -217,6 +221,7 @@ pub async fn get_exit_info(to: &SocketAddr) -> Result<ExitState, RitaClientError
     };
     let response_json = response.json().await?;
 
+    info!("Received {:?} from endpoint {:?}", response_json, endpoint);
     Ok(response_json)
 }
 
@@ -462,7 +467,7 @@ pub async fn exit_setup_request(exit: String, code: Option<String>) -> Result<()
         None => {
             // set this ip in the lazy static
             initialize_selected_exit_list(exit.clone(), current_exit.clone());
-            current_exit.subnet.ip()
+            current_exit.root_ip
         }
     };
     let exit_pubkey = current_exit.wg_public_key;
@@ -719,15 +724,26 @@ fn initialize_selected_exit_list(exit: String, server: ExitServer) {
 
     info!(
         "Setting initialized IP for exit {} with ip: {}",
-        exit,
-        server.subnet.ip()
+        exit, server.root_ip
     );
     list.entry(exit).or_insert_with(|| SelectedExit {
-        selected_id: Some(server.subnet.ip()),
+        selected_id: Some(server.root_ip),
         selected_id_degradation: None,
         tracking_exit: None,
         selected_id_metric: None,
     });
+}
+
+/// This function takes a list of babel routes and uses this to insert ip -> route
+/// instances in the hashmap. This is an optimization that allows us to reduce route lookups from O(n * m ) to O(m + n)
+/// when trying to find exit ips in our cluster
+fn get_routes_hashmap(routes: Vec<Route>) -> HashMap<IpAddr, Route> {
+    let mut ret = HashMap::new();
+    for r in routes {
+        ret.insert(r.prefix.ip(), r);
+    }
+
+    ret
 }
 
 pub async fn exit_manager_tick() {
@@ -765,7 +781,7 @@ pub async fn exit_manager_tick() {
                 Ok(a) => a,
                 Err(_) => {
                     warn!("No babel routes present to setup an exit");
-                    return;
+                    Vec::new()
                 }
             };
 
@@ -790,21 +806,26 @@ pub async fn exit_manager_tick() {
             }
             set_exit_list(exit_list);
 
+            // Set all babel routes in a hashmap that we use to instantly get the route object of the exit we are trying to
+            // connect to
+            let ip_route_hashmap = get_routes_hashmap(routes);
+
             // Calling set best exit function, this looks though a list of exit in a cluster, does some math, and determines what exit we should connect to
             let exit_list = get_exit_list();
             info!("Exit_Switcher: Calling set best exit");
-            let selected_exit = match set_best_exit(current_exit.clone(), routes, &exit_list) {
-                Ok(a) => Some(a),
-                Err(e) => {
-                    warn!("Found no exit yet : {}", e);
-                    return;
-                }
-            };
+            let selected_exit =
+                match set_best_exit(current_exit.clone(), &exit_list, ip_route_hashmap) {
+                    Ok(a) => Some(a),
+                    Err(e) => {
+                        warn!("Found no exit yet : {}", e);
+                        return;
+                    }
+                };
 
             info!("Exit_Switcher: After selecting best exit this tick, we have selected_id: {:?}, selected_metric: {:?}, tracking_ip: {:?}", get_selected_exit(current_exit.clone()), get_selected_exit_metric(current_exit.clone()), get_selected_exit_tracking(current_exit.clone()));
 
             // check the exit's time and update locally if it's very different
-            maybe_set_local_to_exit_time(exit.clone()).await;
+            maybe_set_local_to_exit_time(exit.clone(), current_exit.clone()).await;
 
             // Determine states to setup tunnels
             let signed_up_for_exit = exit.info.our_details().is_some();
@@ -814,6 +835,7 @@ pub async fn exit_manager_tick() {
             let correct_default_route = correct_default_route(KI.get_default_route());
             let current_exit_id = selected_exit;
 
+            info!("Reaches this part of the code: signed_up: {:?}, exit_has_changed: {:?}, correct_default_route {:?}", signed_up_for_exit, exit_has_changed, correct_default_route);
             match (signed_up_for_exit, exit_has_changed, correct_default_route) {
                 (true, true, _) => {
                     trace!("Exit change, setting up exit tunnel");
@@ -911,18 +933,20 @@ pub async fn exit_manager_tick() {
 
     // code that manages requesting details to exits
     let servers = { settings::get_rita_client().exit_client.exits };
-
+    info!("Reaches the end of tick");
     for (k, s) in servers {
+        info!("looking at {:?} with s.info {:?}", k, s.info);
         match s.info {
             ExitState::Denied { .. } | ExitState::Disabled | ExitState::GotInfo { .. } => {}
 
             ExitState::New { .. } => {
+                info!("Looks at new for exit: {:?} with server {:?}", k, s);
                 match exit_general_details_request(k.clone()).await {
                     Ok(_) => {
-                        trace!("exit details request to {} was successful", k);
+                        info!("exit details request to {} was successful", k);
                     }
                     Err(e) => {
-                        trace!("exit details request to {} failed with {:?}", k, e);
+                        info!("exit details request to {} failed with {:?}", k, e);
                     }
                 };
             }
@@ -930,10 +954,10 @@ pub async fn exit_manager_tick() {
             ExitState::Registered { .. } => {
                 match exit_status_request(k.clone()).await {
                     Ok(_) => {
-                        trace!("exit status request to {} was successful", k);
+                        info!("exit status request to {} was successful", k);
                     }
                     Err(e) => {
-                        trace!("exit status request to {} failed with {:?}", k, e);
+                        info!("exit status request to {} failed with {:?}", k, e);
                     }
                 };
             }
