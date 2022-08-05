@@ -7,14 +7,12 @@ eth_address = "0x0101010101010101010101010101010101010101"
 
 [network]
 mesh_ip = "fd00::1"
-bounty_ip = "fd00::3"
 discovery_ip = "ff02::1:8"
 babel_port = 6872
 rita_hello_port = 4876
 rita_contact_port = 4874
 rita_dashboard_port = 4877
 rita_tick_interval = 5
-bounty_port = 8888
 wg_private_key_path = "/tmp/priv"
 wg_start_port = 60000
 tunnel_timeout_seconds = 900
