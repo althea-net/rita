@@ -173,10 +173,11 @@ where
                 }
             };
 
+            let auth_pass = auth.as_ref().password();
             // If the user is authenticated, convert request -> response and return, else return Authenticaiton error
             if auth.as_ref().user_id() == "rita"
-                && auth.as_ref().password().is_some()
-                && auth.as_ref().password().unwrap().clone() == password.unwrap()
+                && auth_pass.is_some()
+                && auth_pass.unwrap() == password.unwrap()
             {
                 let resp = fut.await?;
                 Ok(resp)
