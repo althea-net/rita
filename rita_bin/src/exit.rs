@@ -70,7 +70,7 @@ fn main() {
     // load the settings file, setup a thread to save it out every so often
     // and populate the memory cache of settings used throughout the program
     let settings = {
-        let settings_file = args.flag_config.clone();
+        let settings_file = args.flag_config;
         let settings = RitaExitSettingsStruct::new_watched(&settings_file).unwrap();
 
         settings::set_git_hash(env!("GIT_HASH").to_string());
@@ -132,10 +132,9 @@ fn main() {
 
     start_rita_common_loops();
     start_rita_exit_loop();
-    save_to_disk_loop(
-        SettingsOnDisk::RitaExitSettingsStruct(settings::get_rita_exit()),
-        &args.flag_config,
-    );
+    save_to_disk_loop(SettingsOnDisk::RitaExitSettingsStruct(
+        settings::get_rita_exit(),
+    ));
 
     let workers = settings.workers;
     start_core_rita_endpoints(workers as usize);

@@ -12,6 +12,7 @@ use babel_monitor::parse_routes;
 use rita_common::RitaCommonError;
 use rita_common::KI;
 use settings::client::ExitServer;
+use settings::write_config;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -149,6 +150,10 @@ pub async fn reset_exit(path: Path<String>) -> HttpResponse {
         };
         rita_client.exit_client.exits = exits;
         settings::set_rita_client(rita_client);
+        let res = write_config();
+        if let Err(e) = res {
+            error!("Failed to save exit reset! {:?}", e);
+        }
         HttpResponse::Ok().json(ret)
     } else {
         error!("Requested a reset on unknown exit {:?}", exit_name);
