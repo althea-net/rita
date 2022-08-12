@@ -138,10 +138,9 @@ fn main() {
 
     start_rita_common_loops();
     start_rita_client_loops();
-    save_to_disk_loop(
-        SettingsOnDisk::RitaClientSettings(settings::get_rita_client()),
-        &args.flag_config,
-    );
+    save_to_disk_loop(SettingsOnDisk::RitaClientSettings(
+        settings::get_rita_client(),
+    ));
     start_core_rita_endpoints(4);
     start_rita_client_endpoints(1);
     start_client_dashboard(settings.network.rita_dashboard_port);
