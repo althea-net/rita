@@ -6,6 +6,8 @@ use babel_monitor::Route as RouteLegacy;
 use clarity::Address;
 use ipnetwork::IpNetwork;
 use num256::Uint256;
+use serde::de::Error;
+use serde::{Deserialize, Deserializer, Serializer};
 use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::fmt::Display;
@@ -512,12 +514,39 @@ pub struct OperatorUpdateMessage {
     pub local_update_instruction: Option<UpdateTypeLegacy>,
     /// String that holds the download link to the latest firmware release
     /// When a user hits 'update router', it updates to this version
+    ///  #[serde(default = "default_shaper_settings")]
     pub local_update_instruction_v2: Option<UpdateType>,
     /// settings for the device bandwidth shaper
     #[serde(default = "default_shaper_settings")]
     pub shaper_settings: ShaperSettings,
-    /// Updated contact info from ops tools
+    // Updated contact info from ops tools
+    #[serde(
+        serialize_with = "data_serialize",
+        deserialize_with = "data_deserialize"
+    )]
     pub contact_info: Option<ContactType>,
+}
+
+/// Serializes a ContactType as a string
+pub fn data_serialize<S>(value: &Option<ContactType>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let string_value = serde_json::to_string(&value).unwrap_or_default();
+    serializer.serialize_str(&string_value)
+}
+
+/// Deserializes a string as a ContactType
+pub fn data_deserialize<'de, D>(deserializer: D) -> Result<Option<ContactType>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer).unwrap_or_default();
+    let value: Option<ContactType> = match serde_json::from_str(&s) {
+        Ok(value) => value,
+        Err(e) => return Err(e).map_err(D::Error::custom),
+    };
+    Ok(value)
 }
 
 /// Settings for the bandwidth shaper
@@ -743,4 +772,30 @@ pub struct HeartbeatMessage {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExitSystemTime {
     pub system_time: SystemTime,
+}
+#[cfg(test)]
+mod test {
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct DummyStruct {
+        #[serde(
+            serialize_with = "data_serialize",
+            deserialize_with = "data_deserialize"
+        )]
+        contact: Option<ContactType>,
+    }
+    use lettre::Address;
+
+    use crate::{data_deserialize, data_serialize, ContactType};
+    #[test]
+    fn test_operator_update_serialize() {
+        let entry: DummyStruct = DummyStruct {
+            contact: Some(ContactType::Email {
+                email: Address::new("something", "1.1.1.1").unwrap(),
+                sequence_number: Some(0),
+            }),
+        };
+        let data = bincode::serialize(&entry).unwrap();
+        let _try_bincode: DummyStruct = bincode::deserialize(&data).unwrap();
+    }
 }
