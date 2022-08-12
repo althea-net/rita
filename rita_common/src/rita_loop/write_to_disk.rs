@@ -1,7 +1,7 @@
 use crate::{debt_keeper::save_debt_to_disk, usage_tracker::save_usage_to_disk};
 use settings::{
     check_if_exit, client::RitaClientSettings, exit::RitaExitSettingsStruct, get_rita_client,
-    get_rita_exit, save_client_settings, save_exit_settings,
+    get_rita_exit, write_config,
 };
 use std::{
     thread,
@@ -26,8 +26,7 @@ pub enum SettingsOnDisk {
 /// is. There is also a consideration for the amount of storage the device
 /// has on disk since we don't want to save too often if the disk doesn't
 /// contain a lot of storage.
-pub fn save_to_disk_loop(mut old_settings: SettingsOnDisk, file_path: &str) {
-    let file_path = file_path.to_string();
+pub fn save_to_disk_loop(mut old_settings: SettingsOnDisk) {
     let router_storage_small;
     let saving_to_disk_frequency: Duration;
 
@@ -67,7 +66,10 @@ pub fn save_to_disk_loop(mut old_settings: SettingsOnDisk, file_path: &str) {
                 let new_settings = get_rita_client();
 
                 if old_settings_client != new_settings {
-                    save_client_settings(old_settings_client, file_path.clone());
+                    let res = write_config();
+                    if let Err(e) = res {
+                        error!("Error saving client settings! {:?}", e);
+                    }
                 }
 
                 old_settings = SettingsOnDisk::RitaClientSettings(new_settings);
@@ -76,7 +78,10 @@ pub fn save_to_disk_loop(mut old_settings: SettingsOnDisk, file_path: &str) {
                 let new_settings = get_rita_exit();
 
                 if old_settings_exit != new_settings {
-                    save_exit_settings(new_settings.clone(), file_path.clone());
+                    let res = write_config();
+                    if let Err(e) = res {
+                        error!("Error saving exit settings! {:?}", e);
+                    }
                 }
 
                 old_settings = SettingsOnDisk::RitaExitSettingsStruct(new_settings);

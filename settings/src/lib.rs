@@ -156,20 +156,6 @@ pub fn save_settings_on_shutdown() {
     info!("Shutdown: saving settings");
 }
 
-pub fn save_exit_settings(new_settings: RitaExitSettingsStruct, file_path: String) {
-    if let Err(e) = new_settings.write(&file_path) {
-        warn!("writing updated exit config failed {:?}", e);
-    }
-    log::info!("Exit Config/settings is being saved to");
-}
-
-pub fn save_client_settings(new_settings: RitaClientSettings, file_path: String) {
-    if let Err(e) = new_settings.write(&file_path) {
-        warn!("writing updated client config failed {:?}", e);
-    }
-    log::info!("Client Config/settings is being saved to");
-}
-
 /// get a JSON value of all settings
 pub fn get_config_json() -> Result<serde_json::Value, SettingsError> {
     match &*SETTINGS.read().unwrap() {
