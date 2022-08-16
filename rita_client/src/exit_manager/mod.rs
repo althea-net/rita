@@ -89,10 +89,12 @@ pub struct ExitManager {
 /// This functions sets the exit list ONLY IF the list arguments provived is not empty. This is need for the following edge case:
 /// When an exit goes down, the endpoint wont repsond, so we have no exits to switch to. By setting only when we have a length > 1
 /// we assure that we switch when an exit goes down
-pub fn set_exit_list(list: ExitList) {
+pub fn set_exit_list(list: ExitList) -> bool {
     if !list.exit_list.is_empty() {
         EXIT_MANAGER.write().unwrap().exit_list = list;
+        return true;
     }
+    false
 }
 
 pub fn get_exit_list() -> ExitList {
@@ -801,10 +803,13 @@ pub async fn exit_manager_tick() {
                 "Received a cluster exit list from the exit: {:?}",
                 exit_list
             );
-            if exit_list.exit_list.is_empty() {
-                error!("Exit_Switcher: Exit_list Error, it should not be empty");
+            let exit_wg_port = exit_list.wg_exit_listen_port;
+            let is_valid = set_exit_list(exit_list);
+            // When the list is empty or the port is 0, the exit services us
+            // an invalid struct or we made a bad request
+            if !is_valid || exit_wg_port == 0 {
+                error!("Received an invalid exit list!")
             }
-            set_exit_list(exit_list);
 
             // Set all babel routes in a hashmap that we use to instantly get the route object of the exit we are trying to
             // connect to
@@ -933,20 +938,17 @@ pub async fn exit_manager_tick() {
 
     // code that manages requesting details to exits
     let servers = { settings::get_rita_client().exit_client.exits };
-    info!("Reaches the end of tick");
     for (k, s) in servers {
-        info!("looking at {:?} with s.info {:?}", k, s.info);
         match s.info {
             ExitState::Denied { .. } | ExitState::Disabled | ExitState::GotInfo { .. } => {}
 
             ExitState::New { .. } => {
-                info!("Looks at new for exit: {:?} with server {:?}", k, s);
                 match exit_general_details_request(k.clone()).await {
                     Ok(_) => {
-                        info!("exit details request to {} was successful", k);
+                        trace!("exit details request to {} was successful", k);
                     }
                     Err(e) => {
-                        info!("exit details request to {} failed with {:?}", k, e);
+                        trace!("exit details request to {} failed with {:?}", k, e);
                     }
                 };
             }
@@ -954,10 +956,10 @@ pub async fn exit_manager_tick() {
             ExitState::Registered { .. } => {
                 match exit_status_request(k.clone()).await {
                     Ok(_) => {
-                        info!("exit status request to {} was successful", k);
+                        trace!("exit status request to {} was successful", k);
                     }
                     Err(e) => {
-                        info!("exit status request to {} failed with {:?}", k, e);
+                        trace!("exit status request to {} failed with {:?}", k, e);
                     }
                 };
             }

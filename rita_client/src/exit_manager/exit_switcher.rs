@@ -456,9 +456,13 @@ fn get_exit_metrics(
             "Route hashmap: {:?}\n, ip mesh: {:?}\n",
             route_hashmap, ip.mesh_ip
         );
-        let route = route_hashmap
-            .get(&ip.mesh_ip)
-            .expect("There should be an ip address for every route");
+        let route = match route_hashmap.get(&ip.mesh_ip) {
+            Some(a) => a,
+            None => {
+                error!("EXIT_SWITCHER: Invalid ip: {:?}", ip.mesh_ip);
+                continue;
+            }
+        };
         let ip = route.prefix.ip();
 
         if !blacklisted.contains(&ip) {

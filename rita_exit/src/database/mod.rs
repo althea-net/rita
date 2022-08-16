@@ -453,7 +453,10 @@ pub fn get_client_interface(
     new_wg_exit_clients: HashMap<WgKey, SystemTime>,
     wg_exit_clients: HashMap<WgKey, SystemTime>,
 ) -> Result<String, RitaExitError> {
-    info!("New list is {:?} \n Old list is {:?}", new_wg_exit_clients, wg_exit_clients);
+    info!(
+        "New list is {:?} \n Old list is {:?}",
+        new_wg_exit_clients, wg_exit_clients
+    );
     match (
         new_wg_exit_clients.get(&c.wg_pubkey.parse()?),
         wg_exit_clients.get(&c.wg_pubkey.parse()?),
@@ -469,12 +472,10 @@ pub fn get_client_interface(
         }
         _ => {
             error!(
-                "WG EXIT SETUP: Client {}, does not have handshake with any wg exit interface",
+                "WG EXIT SETUP: Client {}, does not have handshake with any wg exit interface. Setting up routes on wg_exit",
                 c.wg_pubkey
             );
-            Err(RitaExitError::MiscStringError(
-                "Unable to find client interface".to_string(),
-            ))
+            Ok("wg_exit".into())
         }
     }
 }
