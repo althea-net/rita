@@ -386,7 +386,12 @@ pub fn setup_clients(
                     continue;
                 }
             };
-        KI.setup_client_routes(c.internet_ipv6.clone(), c.mesh_ip.clone(), &interface)
+        KI.setup_client_routes(
+            c.internet_ipv6.clone(),
+            c.mesh_ip.clone(),
+            c.internal_ip.clone(),
+            &interface,
+        )
     }
 
     trace!("converted clients {:?}", wg_clients);
@@ -448,6 +453,7 @@ pub fn get_client_interface(
     new_wg_exit_clients: HashMap<WgKey, SystemTime>,
     wg_exit_clients: HashMap<WgKey, SystemTime>,
 ) -> Result<String, RitaExitError> {
+    info!("New list is {:?} \n Old list is {:?}", new_wg_exit_clients, wg_exit_clients);
     match (
         new_wg_exit_clients.get(&c.wg_pubkey.parse()?),
         wg_exit_clients.get(&c.wg_pubkey.parse()?),

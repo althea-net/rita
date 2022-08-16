@@ -129,6 +129,14 @@ impl dyn KernelInterface {
 }
 
 #[test]
+fn test_durations() {
+    let d = UNIX_EPOCH + Duration::from_secs(5);
+    let d2 = UNIX_EPOCH + Duration::from_secs(10);
+
+    println!("d: {:?}, d2: {:?}", d, d2);
+}
+
+#[test]
 fn test_setup_wg_if_linux() {
     use crate::KI;
 
