@@ -167,8 +167,8 @@ pub async fn secure_setup_request(
             )),
             Err(e) => {
                 error!("Signup client failed with {:?}", e);
-                return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-                    .json(format!("Signup client failed with {:?}", e));
+                HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+                    .json(format!("Signup client failed with {:?}", e))
             }
         }
     } else {
