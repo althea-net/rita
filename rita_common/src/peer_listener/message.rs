@@ -56,7 +56,7 @@ const MSG_HELLO: u8 = 0x6c;
 /**
  * An enum that contains all supported p2p packets
  */
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PeerMessage {
     ImHere(Ipv6Addr),
     /// This is the message sent over the udp socket. It contains the necessary information to set up a tunnel

@@ -42,20 +42,16 @@ pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Result<IpAddr, RitaExitError> {
                         None => Err(RitaExitError::IpAddrError(mesh_ip)),
                     }
                 }
-                Err(e) => {
-                    return Err(RitaExitError::MiscStringError(format!(
-                        "Parse routes babel monitor error, {:?}",
-                        e
-                    )))
-                }
+                Err(e) => Err(RitaExitError::MiscStringError(format!(
+                    "Parse routes babel monitor error, {:?}",
+                    e
+                ))),
             }
         }
-        Err(e) => {
-            return Err(RitaExitError::MiscStringError(format!(
-                "Error opening babel stream, {:?}",
-                e
-            )));
-        }
+        Err(e) => Err(RitaExitError::MiscStringError(format!(
+            "Error opening babel stream, {:?}",
+            e
+        ))),
     }
 }
 

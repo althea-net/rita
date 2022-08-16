@@ -83,12 +83,10 @@ async fn send_text(number: String, api_key: String) -> Result<(), RitaExitError>
         .await
     {
         Ok(_a) => Ok(()),
-        Err(e) => {
-            return Err(RitaExitError::MiscStringError(format!(
-                "Send text error: {:?}",
-                e
-            )))
-        }
+        Err(e) => Err(RitaExitError::MiscStringError(format!(
+            "Send text error: {:?}",
+            e
+        ))),
     }
 }
 
