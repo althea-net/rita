@@ -94,31 +94,61 @@ impl dyn KernelInterface {
         &self,
         client_ipv6_list: String,
         client_mesh: String,
+        client_internal_ip: String,
         interface: &str,
     ) {
+        // Setup ipv4 route
+        // 1.) Select all ipv4 routes with 'client_internal_ip'. This gives us all routes with wg_exit and wg_exit_new for the ip
+        //     THere should be only one route
+        // 2.) Does the route contain 'interface'? Yes? we continue
+        // 3.) No? That means either no route exists or there is a route with the other interface name
+        // 4.) Delete route, add new route with the correct interface
+        let output = self
+            .run_command("ip", &["route", "show", &client_internal_ip])
+            .expect("Fix command");
+        let route = String::from_utf8(output.stdout).unwrap();
+        if !route.contains(&interface) {
+            self.run_command("ip", &["route", "del", &client_internal_ip])
+                .expect("Fix command");
+
+            self.run_command(
+                "ip",
+                &["route", "add", &client_internal_ip, "dev", interface],
+            )
+            .expect("Fix command");
+        }
+
+        // Setup ipv6 routes
+        // 1.) Find all v6 routes with ip. There should be at most one, either on wg_exit or wg_exit_new
+        // 2.) Check if that route contains 'interface' Yes? route is already setup, we continue
+        // 3.) No? It means no route exists or route exists on wrong interface.
+        // 4.) We delete route and add the new route on correct interface
+        // 5.) Continue this for each ip in the database for the client
+
         if client_ipv6_list.is_empty() {
             return;
         }
-
-        // Get all routes on our interface
-        let output = self.run_command("ip", &vec!["-6", "route", "show", "dev", interface]).expect("Fix command");
-        let existing_routes = String::from_utf8(output.stdout).unwrap();
-
-        // Turn into a vector of Vec<IpRoute>
-        //let routes = parse_iproute_string(existing_routes);
-        
-
-
 
         let ipv6_list: Vec<&str> = client_ipv6_list.split(',').collect();
 
         for ip in ipv6_list {
             // Verfiy its a valid subnet
             if let Ok(ip_net) = ip.parse::<IpNetwork>() {
-                let _res = self.run_command(
-                    "ip",
-                    &["-6", "route", "add", &ip_net.to_string(), "dev", interface],
-                );
+                // Look for existing routes
+                let output = self
+                    .run_command("ip", &["-6", "route", "show", &ip_net.to_string()])
+                    .expect("Fix command");
+                let existing_routes = String::from_utf8(output.stdout).unwrap();
+                if !existing_routes.contains(interface) {
+                    self.run_command("ip", &["-6", "route", "del", &ip_net.to_string()])
+                        .expect("Fix command");
+
+                    self.run_command(
+                        "ip",
+                        &["-6", "route", "add", &ip_net.to_string(), "dev", interface],
+                    )
+                    .expect("Fix command");
+                }
             } else {
                 error!("IPV6 Error: Invalid client database state. Client with mesh ip: {:?} has invalid database ipv6 list: {:?}", client_mesh, client_ipv6_list);
             }
