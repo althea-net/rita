@@ -209,7 +209,6 @@ class World:
                                  verbose=verbose, global_fail=global_fail):
                 ret = False
         if global_fail and not ret:
-            time.sleep(400)
             exit(1)
         return ret
 
