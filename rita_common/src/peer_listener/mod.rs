@@ -117,7 +117,7 @@ fn set_contacting_neighbors(set: bool) {
 pub fn peerlistener_tick() {
     trace!("Starting PeerListener tick!");
 
-    let mut writer = PeerListener::new().unwrap();
+    let mut writer = PeerListener::default();
     set_contacting_neighbors(true); //PEER_LISTENER.write().unwrap();
     if !writer.contacting_neighbors {
         send_im_here(&mut writer.interfaces);

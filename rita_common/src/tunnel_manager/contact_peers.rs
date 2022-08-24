@@ -7,6 +7,7 @@
 use crate::hello_handler::handle_hello;
 use crate::hello_handler::Hello;
 use crate::peer_listener::Hello as NewHello;
+use crate::peer_listener::PeerListener;
 use crate::peer_listener::PEER_LISTENER;
 use crate::peer_listener::{send_hello, Peer};
 use crate::rita_loop::is_gateway;
@@ -73,7 +74,9 @@ pub async fn tm_neighbor_inquiry(peer: &Peer, is_manual_peer: bool) -> Result<()
     if is_manual_peer {
         contact_manual_peer(peer, our_port).await
     } else {
-        let peer_listener = &mut *PEER_LISTENER.write().unwrap();
+        let peer_listener = PeerListener::default(); //&mut *PEER_LISTENER.write().unwrap();
+        set_contacting_neighbors(true);
+
         let iface_name = match peer_listener.interface_map.get(&peer.contact_socket) {
             Some(a) => a,
             None => {
@@ -90,7 +93,7 @@ pub async fn tm_neighbor_inquiry(peer: &Peer, is_manual_peer: bool) -> Result<()
                 ))
             }
         };
-
+        set_contacting_neighbors(false);
         contact_neighbor(peer, our_port, udp_socket, peer.contact_socket)
     }
 }
