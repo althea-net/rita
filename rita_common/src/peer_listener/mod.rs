@@ -108,25 +108,32 @@ fn listen_to_available_ifaces(peer_listener: &mut PeerListener) {
         }
     }
 }
+fn set_contacting_neighbors(set: bool) {
+    PEER_LISTENER.write().unwrap().contacting_neighbors = set;
+}
 
 /// Ticks the peer listener module sending ImHere messages and receiving Hello messages from all
 /// peers over UDP
 pub fn peerlistener_tick() {
     trace!("Starting PeerListener tick!");
 
-    let mut writer = PEER_LISTENER.write().unwrap();
+    let mut writer = PeerListener::new().unwrap();
+    set_contacting_neighbors(true); //PEER_LISTENER.write().unwrap();
     if !writer.contacting_neighbors {
         send_im_here(&mut writer.interfaces);
 
         let (a, b) = receive_im_here(&mut writer.interfaces);
         {
             // Reset hashmaps only when not contacting peers
-            (*writer).peers = a;
-            (*writer).interface_map = b;
+            writer.peers = a;
+            writer.interface_map = b;
         }
         receive_hello(&mut writer);
 
         listen_to_available_ifaces(&mut writer);
+    } else {
+        info!("PeerListener contacting neighbors was false");
+        set_contacting_neighbors(false);
     }
 }
 
