@@ -211,10 +211,9 @@ fn send_im_here(interfaces: &mut HashMap<String, ListenInterface>) {
     trace!("About to send ImHere");
     for obj in interfaces.iter_mut() {
         let listen_interface = obj.1;
-        trace!(
+        info!(
             "Sending ImHere to {:?}, with ip {:?}",
-            listen_interface.ifname,
-            listen_interface.linklocal_ip
+            listen_interface.ifname, listen_interface.linklocal_ip
         );
         let message = PeerMessage::ImHere(listen_interface.linklocal_ip);
         let result = listen_interface
@@ -231,7 +230,7 @@ fn send_im_here(interfaces: &mut HashMap<String, ListenInterface>) {
 fn receive_im_here(
     interfaces: &mut HashMap<String, ListenInterface>,
 ) -> (HashMap<IpAddr, Peer>, HashMap<SocketAddr, String>) {
-    trace!("About to dequeue ImHere");
+    info!("About to dequeue ImHere");
     let mut output = HashMap::<IpAddr, Peer>::new();
     let mut interface_map = HashMap::<SocketAddr, String>::new();
     for obj in interfaces.iter_mut() {
@@ -244,16 +243,15 @@ fn receive_im_here(
                 match listen_interface.multicast_socket.recv_from(&mut datagram) {
                     Ok(b) => b,
                     Err(e) => {
-                        trace!("Could not recv ImHere: {:?}", e);
+                        error!("Could not recv ImHere: {:?}", e);
                         // TODO Consider we might want to remove interfaces that produce specific types
                         // of errors from the active list
                         break;
                     }
                 };
-            trace!(
+            info!(
                 "Received {} bytes on multicast socket from {:?}",
-                bytes_read,
-                sock_addr
+                bytes_read, sock_addr
             );
 
             let ipaddr = match PeerMessage::decode(datagram.as_ref()) {
@@ -269,12 +267,12 @@ fn receive_im_here(
             };
 
             if ipaddr == listen_interface.linklocal_ip {
-                trace!("Got ImHere from myself");
+                error!("Got ImHere from myself");
                 continue;
             }
 
             if output.contains_key(&ipaddr.into()) {
-                trace!(
+                info!(
                     "Discarding ImHere We already have a peer with {:?} for this cycle",
                     ipaddr
                 );
@@ -307,7 +305,7 @@ pub fn send_hello(msg: &Hello, socket: &UdpSocket, send_addr: SocketAddr, sender
 
 /// receive UDP hello messages over IPV6 link local ports
 pub fn receive_hello(writer: &mut PeerListener) {
-    trace!("Dequeing Hello");
+    info!("Dequeing Hello");
     for obj in writer.interfaces.iter_mut() {
         let listen_interface = obj.1;
 
@@ -330,10 +328,9 @@ pub fn receive_hello(writer: &mut PeerListener) {
                 );
                 continue;
             }
-            trace!(
+            info!(
                 "Received {} bytes on linklocal socket from {:?}",
-                bytes_read,
-                sock_addr
+                bytes_read, sock_addr
             );
             let peer_to_send = Peer {
                 contact_socket: sock_addr,
@@ -357,11 +354,9 @@ pub fn receive_hello(writer: &mut PeerListener) {
                 }) => {
                     //We received an initial hello contact message
                     if !response {
-                        trace!(
+                        info!(
                             "Received a PeerMessage with fields: {:?}, {:?}, {:?}",
-                            my_id,
-                            response,
-                            sender_wgport
+                            my_id, response, sender_wgport
                         );
 
                         let their_id = my_id;
@@ -402,7 +397,7 @@ pub fn receive_hello(writer: &mut PeerListener) {
 
                         //we received a hello response message
                     } else {
-                        trace!(
+                        info!(
                             "Received a hello response with id wgport and peer: {:?}",
                             my_id.wg_port
                         );
@@ -416,7 +411,7 @@ pub fn receive_hello(writer: &mut PeerListener) {
                     }
                 }
                 Err(e) => {
-                    warn!("Hello decode failed: {:?}", e);
+                    error!("Hello decode failed: {:?}", e);
                     continue;
                 }
             };

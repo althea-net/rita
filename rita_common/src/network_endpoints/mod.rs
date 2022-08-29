@@ -46,6 +46,7 @@ pub async fn make_payments(item: Json<PaymentTx>) -> HttpResponse {
 }
 
 pub async fn hello_response(item: Json<LocalIdentity>, req: HttpRequest) -> HttpResponse {
+    info!("In Hello response handler!!");
     let their_id = item.into_inner();
 
     let err_mesg = "Malformed hello tcp packet!";
@@ -54,7 +55,7 @@ pub async fn hello_response(item: Json<LocalIdentity>, req: HttpRequest) -> Http
         None => return HttpResponse::build(StatusCode::from_u16(400u16).unwrap()).json(err_mesg),
     };
 
-    trace!("Got Hello from {:?}", req.peer_addr());
+    info!("Got Hello from {:?}", req.peer_addr());
     trace!("opening tunnel in hello_response for {:?}", their_id);
 
     let peer = Peer {
