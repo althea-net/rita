@@ -98,6 +98,7 @@ pub async fn tm_neighbor_inquiry(peer: &Peer, is_manual_peer: bool) -> Result<()
 /// This sets a lock on th Peer Listener lazy static to prevent the peer listner tick from overwriting
 /// hashmap data (which contact_peers uses) with new data until the peer contacting process has been complete
 fn set_contacting_neighbors(set: bool) {
+    info!("Set contacting neighbors to {:?}", set);
     PEER_LISTENER.write().unwrap().contacting_neighbors = set;
 }
 
@@ -119,7 +120,7 @@ pub async fn tm_contact_peers(peers: HashMap<IpAddr, Peer>) {
         info!("contacting peer found by UDP {:?}", peer);
         let res = tm_neighbor_inquiry(peer, false).await;
         if res.is_err() {
-            warn!("Neighbor inqury for {:?} failed! with {:?}", peer, res);
+            error!("Neighbor inqury for {:?} failed! with {:?}", peer, res);
         }
     }
     for manual_peer in manual_peers.iter() {
@@ -135,7 +136,7 @@ pub async fn tm_contact_peers(peers: HashMap<IpAddr, Peer>) {
                 };
                 let res = tm_neighbor_inquiry(&man_peer, true).await;
                 if res.is_err() {
-                    warn!(
+                    error!(
                         "Neighbor inqury for {:?} failed with: {:?}",
                         manual_peer, res
                     );
@@ -149,7 +150,7 @@ pub async fn tm_contact_peers(peers: HashMap<IpAddr, Peer>) {
                 if is_gateway {
                     let res = tm_neighbor_inquiry_hostname(manual_peer.to_string()).await;
                     if res.is_err() {
-                        warn!(
+                        error!(
                             "Neighbor inqury for {:?} failed with: {:?}",
                             manual_peer, res
                         );

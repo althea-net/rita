@@ -165,13 +165,12 @@ pub fn peer_discovery_loop() {
             thread::spawn(move || loop {
                 let start = Instant::now();
                 trace!("Common peer discovery tick!");
-
                 let runner = AsyncSystem::new();
                 runner.block_on(async move {
                     trace!("Getting Peers from PeerListener to pass to TunnelManager");
 
                     let start = Instant::now();
-                    trace!("Starting PeerListener tick");
+                    info!("Starting PeerListener tick");
 
                     peerlistener_tick();
 
