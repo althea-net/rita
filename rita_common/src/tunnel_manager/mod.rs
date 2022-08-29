@@ -338,7 +338,10 @@ fn tm_get_port() -> u16 {
     loop {
         let port = match tunnel_manager.free_ports.pop_front() {
             Some(a) => a,
-            None => panic!("No elements present in the ports vecdeque"),
+            None => {
+                error!("No elements present in the ports vecdeque");
+                panic!("No elements present in the ports vecdeque")
+            }
         };
         tunnel_manager.free_ports.push_back(port);
         match (port, &udp_table) {
@@ -352,6 +355,8 @@ fn tm_get_port() -> u16 {
             (_p, Err(e)) => {
                 // better not to open an individual tunnel than it is to
                 // risk having a failed one
+                error!("Failed to check if port was in use! UdpTable from get_port returned error {:?}", e);
+
                 panic!("Failed to check if port was in use! UdpTable from get_port returned error {:?}", e);
             }
         }
@@ -412,7 +417,7 @@ impl TunnelManager {
         our_port: u16,
         light_client_details: Option<Ipv4Addr>,
     ) -> Result<(Tunnel, bool), RitaCommonError> {
-        trace!("getting existing tunnel or opening a new one");
+        info!("getting existing tunnel or opening a new one");
         // ifidx must be a part of the key so that we can open multiple tunnels
         // if we have more than one physical connection to the same peer
         let key = their_localid.global;
@@ -432,10 +437,16 @@ impl TunnelManager {
         if we_have_tunnel {
             // Scope the last_contact bump to let go of self.tunnels before next use
             {
-                let tunnels = self.tunnels.get_mut(&key).unwrap();
+                let tunnels = match self.tunnels.get_mut(&key) {
+                    Some(a) => a,
+                    None => {
+                        error!("Logic Error: Identity {:?} doesnt exist", key.clone());
+                        panic!("Identity not in hashmap");
+                    }
+                };
                 for tunnel in tunnels.iter_mut() {
                     if tunnel.listen_ifidx == peer.ifidx && tunnel.ip == peer.contact_socket.ip() {
-                        trace!("We already have a tunnel for {}", tunnel);
+                        info!("We already have a tunnel for {}", tunnel);
                         trace!(
                             "Bumping timestamp after {}s for tunnel: {}",
                             tunnel.last_contact.elapsed().as_secs(),
@@ -453,14 +464,17 @@ impl TunnelManager {
                 // Unwrap is safe because we confirm membership
                 let tunnels = &self.tunnels[&key];
                 // Filter by Tunnel::ifidx
-                trace!(
+                info!(
                     "Got tunnels by key {:?}: {:?}. Ifidx is {}",
-                    key,
-                    tunnels,
-                    peer.ifidx
+                    key, tunnels, peer.ifidx
                 );
-                let tunnel = get_tunnel_by_ifidx(peer.ifidx, tunnels)
-                    .expect("Unable to find tunnel by ifidx how did this happen?");
+                let tunnel = match get_tunnel_by_ifidx(peer.ifidx, tunnels) {
+                    Some(a) => a,
+                    _ => {
+                        error!("Unable to find tunnel by ifidx how did this happen?");
+                        panic!("Unable to find tunnel by ifidx how did this happen?");
+                    }
+                };
 
                 return Ok((tunnel.clone(), true));
             } else {
@@ -474,9 +488,21 @@ impl TunnelManager {
                 // in a separate scope to limit surface of borrow checker.
                 let (tunnel, size) = {
                     // Find tunnels by identity
-                    let tunnels = self.tunnels.get_mut(&key).unwrap();
+                    let tunnels = match self.tunnels.get_mut(&key) {
+                        Some(a) => a,
+                        None => {
+                            error!("LOGIC ERROR: Unable to find a tunnel that should exist, we already confirmed membership");
+                            panic!("Unable to find tunnel");
+                        }
+                    };
                     // Find tunnel by interface index
-                    let value = get_tunnel_by_ifidx(peer.ifidx, tunnels).unwrap().clone();
+                    let value = match get_tunnel_by_ifidx(peer.ifidx, tunnels) {
+                        Some(a) => a.clone(),
+                        None => {
+                            error!("LOGIC ERROR: Unable to find a tunnel with ifidx when membership is already confirmed");
+                            panic!("Uanble to find tunnel");
+                        }
+                    };
                     del_tunnel(&value, tunnels);
                     // Outer HashMap (self.tunnels) can contain empty HashMaps,
                     // so the resulting tuple will consist of the tunnel itself, and

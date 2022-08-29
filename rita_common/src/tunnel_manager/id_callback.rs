@@ -5,6 +5,7 @@ use std::net::Ipv4Addr;
 
 use super::{tm_get_port, TUNNEL_MANAGER};
 
+#[derive(Clone, Debug)]
 pub struct IdentityCallback {
     pub local_identity: LocalIdentity,
     pub peer: Peer,
@@ -35,6 +36,7 @@ impl IdentityCallback {
 /// we now must attach to their tunnel entry. If we also return a bool for if the tunnel already
 /// exists
 pub fn tm_identity_callback(msg: IdentityCallback) -> Option<(Tunnel, bool)> {
+    info!("Tm identity callback with msg: {:?}", msg);
     let our_port = match msg.our_port {
         Some(port) => port,
         _ => tm_get_port(),
@@ -50,7 +52,7 @@ pub fn tm_identity_callback(msg: IdentityCallback) -> Option<(Tunnel, bool)> {
     match res {
         Ok(res) => Some(res),
         Err(e) => {
-            warn!("Open Tunnel failed with {:?}", e);
+            error!("Open Tunnel failed with {:?}", e);
             None
         }
     }
