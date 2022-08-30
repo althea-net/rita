@@ -117,6 +117,8 @@ pub async fn set_installation_details(req: Json<InstallationDetailsPost>) -> Htt
             city: input.city,
             street: input.street,
         },
+        // initialize sequence with 1
+        sequence_number: 1,
     };
 
     let mut rita_client = settings::get_rita_client();
