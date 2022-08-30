@@ -8,6 +8,7 @@ use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::set_router_update_instruction;
 use althea_kernel_interface::hardware_info::get_hardware_info;
 use althea_types::get_sequence_num;
+use althea_types::BillingDetails;
 use althea_types::ContactStorage;
 use althea_types::ContactType;
 use althea_types::HardwareInfo;
@@ -228,7 +229,13 @@ async fn checkin() {
     rita_client.payment = payment;
     trace!("Done with payment");
 
-    let mut operator = rita_client.operator;
+    let mut operator = rita_client.operator.clone();
+    if check_billing_update(
+        rita_client.operator.billing_details.clone(),
+        new_settings.billing_details.clone(),
+    ) {
+        operator.billing_details = new_settings.billing_details.clone();
+    }
     let new_operator_fee = Uint256::from(new_settings.operator_fee);
     operator.operator_fee = new_operator_fee;
     operator.installation_details = None;
@@ -392,6 +399,22 @@ fn check_contacts_update(current: Option<ContactStorage>, incoming: Option<Conta
             } => sequence_number,
         };
         if seq.unwrap_or(0) > current_sequence {
+            return true;
+        }
+        // else the existing config is more recent, so do not update
+        return false;
+    }
+    false
+}
+
+fn check_billing_update(current: Option<BillingDetails>, incoming: Option<BillingDetails>) -> bool {
+    let current_sequence = match current {
+        Some(details) => details.sequence_number,
+        None => 0,
+    };
+    if let Some(details) = incoming {
+        let seq = details.sequence_number;
+        if seq > current_sequence {
             return true;
         }
         // else the existing config is more recent, so do not update
