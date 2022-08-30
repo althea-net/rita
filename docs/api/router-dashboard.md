@@ -116,7 +116,7 @@ This file documents the dashboard API found in Rita client.
 
 - URL: `<rita ip>:<rita_dashboard_port>/exits'
 - Comment: Merges a supplied exit list with the existing list; existing entries
-  are overwritten
+  are overwritten. Once client side subnet is removed, replace 'subnet' with 'root_ip'
 - Method: `POST`
 - URL Params: `None`
 - Data Params: A JSON object containing the exits we want to add, e.g.:
@@ -124,7 +124,6 @@ This file documents the dashboard API found in Rita client.
 ```json
 {
 	"exit_other": {
-		"auto_register": false,
 		"description": "",
 		"general_details": {
 			"description": "EDITEDITjust a normal althea exit",
@@ -132,21 +131,16 @@ This file documents the dashboard API found in Rita client.
 			"netmask": 24,
 			"server_internal_ip": "172.168.1.254",
 			"wg_exit_port": 59999
-
 		},
-		"id": {
-			"eth_address": "0x0101010101010101010101010101010101010101",
-			"mesh_ip": "fd00::5",
-			"wg_public_key": "KaTbsJ0Hur4D7Tcb+nc8ofs7n8tKL+wWG3H38KFCwlE="
-
-		},
+    "wg_public_key": "KaTbsJ0Hur4D7Tcb+nc8ofs7n8tKL+wWG3H38KFCwlE=",
+		"eth_address": "0x0101010101010101010101010101010101010101",
+    "subnet": "fd00::5/120",
 		"message": "Got info successfully",
 		"registration_port": 4875,
-		"state": "GotInfo"
+	  "state": "GotInfo"
 
 	},
 	"exit_yet_another": {
-		"auto_register": false,
 		"description": "",
 		"general_details": {
 			"description": "EDITEDITjust a normal althea exit",
@@ -155,14 +149,10 @@ This file documents the dashboard API found in Rita client.
                         "verif_mode": "Email"
 			"server_internal_ip": "172.168.1.254",
 			"wg_exit_port": 59999
-
 		},
-		"id": {
-			"eth_address": "0x0101010101010101010101010101010101010101",
-			"mesh_ip": "fd00::5",
-			"wg_public_key": "KaTbsJ0Hur4D7Tcb+nc8ofs7n8tKL+wWG3H38KFCwlE="
-
-		},
+    "wg_public_key": "KaTbsJ0Hur4D7Tcb+nc8ofs7n8tKL+wWG3H38KFCwlE=",
+		"eth_address": "0x0101010101010101010101010101010101010101",
+    "subnet": "fd00::5/120",
 		"message": "Got info successfully",
 		"registration_port": 4875,
 		"state": "GotInfo"
