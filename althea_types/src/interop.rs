@@ -525,6 +525,8 @@ pub struct OperatorUpdateMessage {
         deserialize_with = "data_deserialize"
     )]
     pub contact_info: Option<ContactType>,
+    /// Billing details from ops tools, so that we may sync changes
+    pub billing_details: Option<BillingDetails>,
 }
 
 /// Serializes a ContactType as a string

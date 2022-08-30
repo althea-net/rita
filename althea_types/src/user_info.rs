@@ -30,6 +30,8 @@ pub struct BillingDetails {
     /// format the local nation has for addresses. Optional as this install
     /// may not have a formal mailing address
     pub mailing_address: MailingAddress,
+    #[serde(default)]
+    pub sequence_number: u32,
 }
 
 /// Struct for storing details about this user installation. This particular
