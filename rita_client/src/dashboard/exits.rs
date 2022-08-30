@@ -1,6 +1,6 @@
 //! The Exit info endpoint gathers infromation about exit status and presents it to the dashbaord.
 
-use crate::exit_manager::{exit_setup_request, get_selected_exit};
+use crate::exit_manager::{exit_setup_request, get_selected_exit, set_selected_exit};
 use crate::RitaClientError;
 use actix_web_async::http::StatusCode;
 use actix_web_async::{web::Json, web::Path, HttpRequest, HttpResponse};
@@ -11,7 +11,7 @@ use babel_monitor::parse_routes;
 
 use rita_common::RitaCommonError;
 use rita_common::KI;
-use settings::client::ExitServer;
+use settings::client::{ExitServer, SelectedExit};
 use settings::write_config;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -112,12 +112,27 @@ pub async fn add_exits(new_exits: Json<HashMap<String, ExitServer>>) -> HttpResp
     debug!("/exits POST hit with {:?}", new_exits);
     let mut rita_client = settings::get_rita_client();
     let mut exits = rita_client.exit_client.exits;
+    let new_copy = new_exits.clone();
     exits.extend(new_exits.into_inner());
 
     let copy = exits.clone();
 
     rita_client.exit_client.exits = exits;
+    trace!("Rita settings looks like : {:?}", rita_client);
     settings::set_rita_client(rita_client);
+    if let Err(e) = write_config() {
+        error!("Failed to save new exits! {:?}", e);
+    }
+
+    // initialze all new exits for Exit manager to use
+    for exit in new_copy {
+        let new_exit_ip = exit.1.subnet.ip();
+        let new_selected_exit = SelectedExit {
+            selected_id: Some(new_exit_ip),
+            ..Default::default()
+        };
+        set_selected_exit(exit.0.clone(), new_selected_exit);
+    }
 
     HttpResponse::Ok().json(copy)
 }
