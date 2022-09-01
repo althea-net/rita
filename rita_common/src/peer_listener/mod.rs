@@ -26,7 +26,6 @@ lazy_static! {
 
 #[derive(Debug)]
 pub struct PeerListener {
-    pub contacting_neighbors: bool,
     pub interfaces: HashMap<String, ListenInterface>,
     pub peers: HashMap<IpAddr, Peer>,
 
@@ -83,11 +82,54 @@ impl Default for PeerListener {
 impl PeerListener {
     pub fn new() -> Result<PeerListener, RitaCommonError> {
         Ok(PeerListener {
-            contacting_neighbors: false,
             interfaces: HashMap::new(),
             peers: HashMap::new(),
             interface_map: HashMap::new(),
         })
+    }
+}
+
+impl Clone for PeerListener {
+    fn clone(&self) -> PeerListener {
+        let interfaces = &self.interfaces;
+        let mut clone_interfaces = HashMap::new();
+
+        for (name, inter) in interfaces {
+            let multi_udp = match inter.multicast_socket.try_clone() {
+                Ok(a) => a,
+                Err(e) => {
+                    error!(
+                        "PEER DISCOVERY ERROR: Unable to clone multicast udp, please fix: {:?}",
+                        e
+                    );
+                    continue;
+                }
+            };
+            let local_udp = match inter.linklocal_socket.try_clone() {
+                Ok(a) => a,
+                Err(e) => {
+                    error!(
+                        "PEER DISCOVERY ERROR: Unable to clone local udp, please fix: {:?}",
+                        e
+                    );
+                    continue;
+                }
+            };
+            let new_lis = ListenInterface {
+                ifname: inter.ifname.clone(),
+                ifidx: inter.ifidx,
+                multicast_socketaddr: inter.multicast_socketaddr,
+                multicast_socket: multi_udp,
+                linklocal_socket: local_udp,
+                linklocal_ip: inter.linklocal_ip,
+            };
+            clone_interfaces.insert(name.clone(), new_lis);
+        }
+        PeerListener {
+            interfaces: clone_interfaces,
+            peers: self.peers.clone(),
+            interface_map: self.interface_map.clone(),
+        }
     }
 }
 
@@ -103,36 +145,46 @@ fn listen_to_available_ifaces(peer_listener: &mut PeerListener) {
                         .interfaces
                         .insert(new_listen_interface.ifname.clone(), new_listen_interface);
                 }
-                Err(_e) => {}
+                Err(e) => {
+                    error!("Received an error while listening to interfaces: {:?}", e)
+                }
             }
         }
     }
 }
 
+/// Returns a copy of PL lazy static var
+fn get_pl_copy() -> PeerListener {
+    PEER_LISTENER.read().unwrap().clone()
+}
+
+/// Sets the PeerListener lazy static to the given value
+fn set_pl(pl: PeerListener) {
+    *PEER_LISTENER.write().unwrap() = pl;
+}
+
 /// Ticks the peer listener module sending ImHere messages and receiving Hello messages from all
 /// peers over UDP
-pub fn peerlistener_tick() {
+pub fn peerlistener_tick() -> PeerListener {
     trace!("Starting PeerListener tick!");
 
-    let mut writer = PEER_LISTENER.write().unwrap();
-    if !writer.contacting_neighbors {
-        send_im_here(&mut writer.interfaces);
-
-        let (a, b) = receive_im_here(&mut writer.interfaces);
-        {
-            // Reset hashmaps only when not contacting peers
-            (*writer).peers = a;
-            (*writer).interface_map = b;
-        }
-        receive_hello(&mut writer);
-
-        listen_to_available_ifaces(&mut writer);
+    let mut pl = get_pl_copy();
+    send_im_here(&mut pl.interfaces);
+    let (a, b) = receive_im_here(&mut pl.interfaces);
+    {
+        pl.peers = a;
+        pl.interface_map = b;
     }
+    receive_hello(&mut pl);
+    listen_to_available_ifaces(&mut pl);
+
+    set_pl(pl.clone());
+    pl
 }
 
 #[allow(dead_code)]
 pub fn unlisten_interface(interface: String) {
-    trace!("Peerlistener unlisten on {:?}", interface);
+    info!("Peerlistener unlisten on {:?}", interface);
     let ifname_to_delete = interface;
     let mut writer = PEER_LISTENER.write().unwrap();
     if writer.interfaces.contains_key(&ifname_to_delete) {
@@ -145,10 +197,6 @@ pub fn unlisten_interface(interface: String) {
     } else {
         error!("Tried to unlisten interface that's not present!")
     }
-}
-
-pub fn get_peers() -> HashMap<IpAddr, Peer> {
-    PEER_LISTENER.read().unwrap().peers.clone()
 }
 
 #[derive(Debug)]
@@ -177,8 +225,7 @@ impl ListenInterface {
 
         // try_link_ip should guard from non-existant interfaces and the network stack not being ready
         // so in theory we should never hit this expect or the panic below either.
-        let multicast_socket = UdpSocket::bind(multicast_socketaddr)
-            .expect("Failed to bind to peer discovery address!");
+        let multicast_socket = UdpSocket::bind(multicast_socketaddr)?;
         let res = multicast_socket.join_multicast_v6(&disc_ip, iface_index);
         trace!("ListenInterface init set multicast v6 with {:?}", res);
         let res = multicast_socket.set_nonblocking(true);
