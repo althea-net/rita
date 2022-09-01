@@ -107,6 +107,42 @@ pub enum ContactType {
     },
 }
 
+impl ContactType {
+    /// Gets the sequence of this contact type struct, if available
+    pub fn get_sequence(&self) -> Option<u32> {
+        match self {
+            ContactType::Phone {
+                sequence_number, ..
+            } => *sequence_number,
+            ContactType::Email {
+                sequence_number, ..
+            } => *sequence_number,
+            ContactType::Both {
+                sequence_number, ..
+            } => *sequence_number,
+            ContactType::Bad { .. } => None,
+        }
+    }
+    /// Gets the PhoneNumber of this contact type struct, if available
+    pub fn get_phone(&self) -> Option<PhoneNumber> {
+        match self {
+            ContactType::Phone { number, .. } => Some(number.clone()),
+            ContactType::Email { .. } => None,
+            ContactType::Both { number, .. } => Some(number.clone()),
+            ContactType::Bad { .. } => None,
+        }
+    }
+    /// Gets the PhoneNumber of this contact type struct, if available
+    pub fn get_email(&self) -> Option<EmailAddress> {
+        match self {
+            ContactType::Phone { .. } => None,
+            ContactType::Email { email, .. } => Some(email.clone()),
+            ContactType::Both { email, .. } => Some(email.clone()),
+            ContactType::Bad { .. } => None,
+        }
+    }
+}
+
 /// TOML compatible storage for contact type, all work done on this
 /// should be converted to ContactType, so don't make the fields public
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
