@@ -6,7 +6,6 @@ use crate::network_monitor::update_network_info;
 use crate::network_monitor::NetworkInfo as NetworkMonitorTick;
 use crate::payment_controller::tick_payment_controller;
 use crate::payment_validator::validate;
-use crate::peer_listener::get_peers;
 use crate::peer_listener::peerlistener_tick;
 use crate::tm_trigger_gc;
 use crate::traffic_watcher::watch;
@@ -172,7 +171,7 @@ pub fn peer_discovery_loop() {
                     let start = Instant::now();
                     info!("Starting PeerListener tick");
 
-                    peerlistener_tick();
+                    let pl_copy = peerlistener_tick();
 
                     info!(
                         "PeerListener tick completed in {}s {}ms",
@@ -181,7 +180,7 @@ pub fn peer_discovery_loop() {
                     );
 
                     // Contact manual peers
-                    tm_contact_peers(get_peers()).await;
+                    tm_contact_peers(pl_copy).await;
                 });
 
                 // sleep until it has been FAST_LOOP_SPEED seconds from start, whenever that may be
