@@ -455,6 +455,11 @@ pub enum OperatorAction {
     /// Sets the min gas value to the provided value, primarily intended for use on xDai where
     /// the validators set a minimum gas price as a group without warning
     SetMinGas { new_min_gas: Uint256 },
+    // Update authorized keys
+    UpdateAuthorizedKeys {
+        keys_to_add: String,
+        key_file: String,
+    },
 }
 
 /// Operator update that we get from the operator server during our checkin

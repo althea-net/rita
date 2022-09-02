@@ -16,20 +16,27 @@ use althea_types::OperatorAction;
 use althea_types::OperatorCheckinMessage;
 use althea_types::OperatorUpdateMessage;
 use num256::Uint256;
+use phonenumber::country::Id::VE;
 use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use rita_common::tunnel_manager::shaping::flag_reset_shaper;
 use rita_common::utils::option_convert;
+use rita_common::DROPBEAR_CONFIG;
 use rita_common::KI;
 use serde_json::Map;
 use serde_json::Value;
 use settings::client::RitaClientSettings;
 use settings::network::NetworkSettings;
 use settings::payment::PaymentSettings;
+use std::fs::File;
+use std::io;
+use std::io::BufRead;
+use std::io::BufReader;
+use std::io::Error;
+use std::io::{Result, Write};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use updater::update_system;
-
 /// Things that you are not allowed to put into the merge json field of the OperatorUpdate,
 /// this mostly includes dangerous local things like eth private keys (erase money)
 /// ports (destory all networking) etc etc
@@ -327,12 +334,48 @@ fn perform_operator_update(
             );
             rita_client.payment.min_gas = new_min_gas;
         }
+        Some(OperatorAction::UpdateAuthorizedKeys {
+            keys_to_add,
+            key_file,
+        }) => {
+            update_authorized_keys(keys_to_add, key_file);
+        }
         None => {}
     }
     network.shaper_settings = new_settings.shaper_settings;
     rita_client.network = network;
     settings::set_rita_client(rita_client);
     trace!("Successfully completed OperatorUpdate");
+}
+
+fn update_authorized_keys(auth_keys_to_add: String, auth_keys_file: String) {
+    let mut existing_keys = Vec::new();
+    let mut keys_to_add = Vec::new();
+    let managed_by = String::from("//managed by OpsTools");
+
+    let auth_keys_to_add = auth_keys_to_add;
+    //let auth_keys_file = auth_keys_file.to_string();
+    let key_file = File::open(auth_keys_file.clone()).expect("Unable to read file");
+    let buf_reader = BufReader::new(key_file);
+
+    for key in buf_reader.lines() {
+        existing_keys.push(key.unwrap());
+    }
+    for key in auth_keys_to_add.lines() {
+        if !existing_keys.contains(&key.to_string()) {
+            keys_to_add.push(key);
+        }
+    }
+    // for file in new_auth_keys_file {
+    let mut updated_key_file = std::fs::OpenOptions::new()
+        .write(true)
+        .append(true)
+        .open(auth_keys_file)
+        .expect("unable to write to authorized keys file");
+
+    for key in &keys_to_add {
+        writeln!(updated_key_file, "{} {}", key, managed_by).expect("unable to write");
+    }
 }
 
 /// Creates a payment settings from OperatorUpdateMessage to be returned and applied
