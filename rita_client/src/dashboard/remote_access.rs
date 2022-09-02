@@ -8,8 +8,7 @@ use rita_common::RitaCommonError;
 use rita_common::KI;
 
 use crate::RitaClientError;
-
-static DROPBEAR_CONFIG: &str = "/etc/config/dropbear";
+use rita_common::DROPBEAR_CONFIG;
 static FIREWALL_CONFIG: &str = "/etc/config/firewall";
 
 pub async fn get_remote_access_status(_req: HttpRequest) -> HttpResponse {
