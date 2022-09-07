@@ -16,7 +16,6 @@ use althea_types::OperatorAction;
 use althea_types::OperatorCheckinMessage;
 use althea_types::OperatorUpdateMessage;
 use num256::Uint256;
-use phonenumber::country::Id::VE;
 use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use rita_common::tunnel_manager::shaping::flag_reset_shaper;
@@ -29,11 +28,9 @@ use settings::client::RitaClientSettings;
 use settings::network::NetworkSettings;
 use settings::payment::PaymentSettings;
 use std::fs::File;
-use std::io;
 use std::io::BufRead;
 use std::io::BufReader;
-use std::io::Error;
-use std::io::{Result, Write};
+use std::io::Write;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use updater::update_system;
@@ -338,6 +335,8 @@ fn perform_operator_update(
             keys_to_add,
             key_file,
         }) => {
+            info!("Update authorized keys file {}", key_file);
+
             update_authorized_keys(keys_to_add, key_file);
         }
         None => {}
@@ -352,6 +351,7 @@ fn update_authorized_keys(auth_keys_to_add: String, auth_keys_file: String) {
     let mut existing_keys = Vec::new();
     let mut keys_to_add = Vec::new();
     let managed_by = String::from("//managed by OpsTools");
+    let ttl = Duration::as_secs(3600);
 
     let auth_keys_to_add = auth_keys_to_add;
     //let auth_keys_file = auth_keys_file.to_string();
@@ -541,4 +541,5 @@ mod tests {
             panic!("Not a json map!");
         }
     }
+    fn test_update_auth_keys() {}
 }
