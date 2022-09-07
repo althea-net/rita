@@ -541,5 +541,17 @@ mod tests {
             panic!("Not a json map!");
         }
     }
-    fn test_update_auth_keys() {}
+    fn test_update_auth_keys() {
+        let auth_keys_to_add = "ssh-rsa hashofkey user@althea".to_string();
+        let auth_keys_file = "local_auth_keys".to_string();
+        update_authorized_keys(auth_keys_to_add, auth_keys_file);
+        assert!(std::path::Path::new(&auth_keys_file).exists());
+
+        let key_file = File::open(auth_keys_file.clone()).expect("Unable to read file");
+        let buf_reader = BufReader::new(key_file);
+
+        for key in buf_reader.lines() {
+            assert_eq!(auth_keys_to_add, key.unwrap());
+        }
+    }
 }
