@@ -76,14 +76,6 @@ pub fn start_client_dashboard(rita_dashboard_port: u16) {
                         "/backup_created/{status}",
                         web::post().to(set_backup_created),
                     )
-                    .route("/dao_list", web::get().to(get_dao_list))
-                    .route("/dao_list/add/{address}", web::post().to(add_to_dao_list))
-                    .route(
-                        "/dao_list/remove/{address}",
-                        web::post().to(remove_from_dao_list),
-                    )
-                    .route("/dao_fee", web::get().to(get_dao_fee))
-                    .route("/dao_fee/{fee}", web::post().to(set_dao_fee))
                     .route("/operator", web::get().to(get_operator))
                     .route("/operator/{address}", web::post().to(change_operator))
                     .route("/operator/remove", web::post().to(remove_operator))
