@@ -95,7 +95,7 @@ pub fn update_client(
             );
             diesel::update(filtered_list.clone())
                 .set(email.eq(mail))
-                .execute(&*conn)?;
+                .execute(conn)?;
         }
     }
 
@@ -107,7 +107,7 @@ pub fn update_client(
             );
             diesel::update(filtered_list.clone())
                 .set(phone.eq(number))
-                .execute(&*conn)?;
+                .execute(conn)?;
         }
     }
 
@@ -118,7 +118,7 @@ pub fn update_client(
         info!("Bumping client timestamp for {}", their_record.wg_pubkey);
         diesel::update(filtered_list)
             .set(last_seen.eq(secs_since_unix_epoch() as i64))
-            .execute(&*conn)?;
+            .execute(conn)?;
     }
 
     Ok(())
@@ -180,7 +180,7 @@ pub fn verify_client(
 
     diesel::update(filtered_list)
         .set(verified.eq(client_verified))
-        .execute(&*conn)?;
+        .execute(conn)?;
 
     Ok(())
 }
@@ -202,7 +202,7 @@ pub fn verify_db_client(
 
     diesel::update(filtered_list)
         .set(verified.eq(client_verified))
-        .execute(&*conn)?;
+        .execute(conn)?;
 
     Ok(())
 }
@@ -224,7 +224,7 @@ pub fn text_sent(
 
     diesel::update(filtered_list)
         .set(text_sent.eq(val + 1))
-        .execute(&*conn)?;
+        .execute(conn)?;
 
     Ok(())
 }
@@ -239,7 +239,7 @@ fn client_exists(client: &ExitClientIdentity, conn: &PgConnection) -> Result<boo
         .filter(mesh_ip.eq(ip.to_string()))
         .filter(wg_pubkey.eq(wg.to_string()))
         .filter(eth_address.eq(key.to_string().to_lowercase()));
-    Ok(select(exists(filtered_list)).get_result(&*conn)?)
+    Ok(select(exists(filtered_list)).get_result(conn)?)
 }
 
 /// True if there is any client with the same eth address, wg key, or ip address already registered
@@ -261,9 +261,9 @@ pub fn client_conflict(
     let ip_match = clients.filter(mesh_ip.eq(ip.to_string()));
     let wg_key_match = clients.filter(wg_pubkey.eq(wg.to_string()));
     let eth_address_match = clients.filter(eth_address.eq(key.to_string().to_lowercase()));
-    let ip_exists = select(exists(ip_match)).get_result(&*conn)?;
-    let wg_exists = select(exists(wg_key_match)).get_result(&*conn)?;
-    let eth_exists = select(exists(eth_address_match)).get_result(&*conn)?;
+    let ip_exists = select(exists(ip_match)).get_result(conn)?;
+    let wg_exists = select(exists(wg_key_match)).get_result(conn)?;
+    let eth_exists = select(exists(eth_address_match)).get_result(conn)?;
     info!(
         "Signup conflict ip {} eth {} wg {}",
         ip_exists, eth_exists, wg_exists
@@ -406,7 +406,7 @@ pub fn update_mail_sent_time(
 
     diesel::update(clients.filter(email.eq(mail_addr)))
         .set(email_sent_time.eq(secs_since_unix_epoch()))
-        .execute(&*conn)?;
+        .execute(conn)?;
 
     Ok(())
 }
@@ -616,10 +616,10 @@ pub fn get_client_subnet(
                 Ok(addr)
             } else {
                 error!("Chosen subnet: {:?} is in use! Race condition hit", addr);
-                return Err(RitaExitError::MiscStringError(format!(
+                Err(RitaExitError::MiscStringError(format!(
                     "Unable to assign user ipv6 subnet. Chosen subnet {:?} is in use",
                     addr
-                )));
+                )))
             }
         }
         Err(e) => {

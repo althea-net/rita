@@ -84,7 +84,7 @@ async fn send_text(number: String, api_key: String) -> Result<(), RitaExitError>
     {
         Ok(_a) => Ok(()),
         Err(e) => {
-            return Err(RitaExitError::MiscStringError(format!(
+            Err(RitaExitError::MiscStringError(format!(
                 "Send text error: {:?}",
                 e
             )))
@@ -157,7 +157,7 @@ pub async fn handle_sms_registration(
         }),
         // user has attempts remaining and is requesting the code be resent
         (Some(number), None, false) => {
-            let _res = send_text(number, api_key).await?;
+            send_text(number, api_key).await?;
             let conn = get_database_connection()?;
             text_sent(&client, &conn, text_num)?;
             Ok(ExitState::Pending {

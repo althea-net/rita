@@ -43,7 +43,7 @@ pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Result<IpAddr, RitaExitError> {
                     }
                 }
                 Err(e) => {
-                    return Err(RitaExitError::MiscStringError(format!(
+                    Err(RitaExitError::MiscStringError(format!(
                         "Parse routes babel monitor error, {:?}",
                         e
                     )))
@@ -51,10 +51,10 @@ pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Result<IpAddr, RitaExitError> {
             }
         }
         Err(e) => {
-            return Err(RitaExitError::MiscStringError(format!(
+            Err(RitaExitError::MiscStringError(format!(
                 "Error opening babel stream, {:?}",
                 e
-            )));
+            )))
         }
     }
 }
@@ -137,10 +137,7 @@ struct CountryDetails {
 }
 
 pub fn get_country_async(ip: IpAddr) -> Result<String, RitaExitError> {
-    match get_country(ip) {
-        Ok(res) => Ok(res),
-        Err(e) => Err(e),
-    }
+    get_country(ip)
 }
 
 /// get ISO country code from ip, consults a in memory cache
@@ -229,10 +226,7 @@ pub fn get_country(ip: IpAddr) -> Result<String, RitaExitError> {
 /// Returns true or false if an ip is confirmed to be inside or outside the region and error
 /// if an api error is encountered trying to figure that out.
 pub fn verify_ip(request_ip: IpAddr) -> Result<bool, RitaExitError> {
-    match verify_ip_sync(request_ip) {
-        Ok(item) => Ok(item),
-        Err(e) => Err(e),
-    }
+    verify_ip_sync(request_ip)
 }
 
 /// Returns true or false if an ip is confirmed to be inside or outside the region and error

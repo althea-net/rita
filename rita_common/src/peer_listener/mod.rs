@@ -39,7 +39,7 @@ pub struct PeerListener {
 ///and when we receive a response to a hello we sent. 1 indicates we received a response hello message.
 ///This is the internal struct that carries information about local identity and which peer to send
 ///this message to, as well as whether this is a response or intial contact message.
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Hello {
     pub my_id: LocalIdentity,
     pub to: Peer,

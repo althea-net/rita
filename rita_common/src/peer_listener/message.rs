@@ -56,7 +56,7 @@ const MSG_HELLO: u8 = 0x6c;
 /**
  * An enum that contains all supported p2p packets
  */
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PeerMessage {
     ImHere(Ipv6Addr),
     /// This is the message sent over the udp socket. It contains the necessary information to set up a tunnel
@@ -458,7 +458,7 @@ fn test_deserialize_with_wrong_serialization() {
     result[3] += 1;
 
     //decode should not work
-    let _decode = match PeerMessage::decode(&result) {
+    match PeerMessage::decode(&result) {
         Ok(_) => panic!("Expected error"),
         Err(MessageError::DeserializationError) => (),
         Err(_) => panic!("Wrong Error"),

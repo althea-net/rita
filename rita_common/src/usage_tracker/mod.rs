@@ -61,7 +61,7 @@ pub enum UsageType {
 
 /// A struct for tracking each hour of usage, indexed by time in hours since
 /// the unix epoch
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UsageHour {
     index: u64,
     up: u64,
@@ -101,7 +101,7 @@ fn to_formatted_payment_tx(input: PaymentTx) -> FormattedPaymentTx {
 }
 
 /// A struct for tracking each hours of payments indexed in hours since unix epoch
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PaymentHour {
     index: u64,
     payments: Vec<FormattedPaymentTx>,
@@ -110,7 +110,7 @@ pub struct PaymentHour {
 /// The main actor that holds the usage state for the duration of operations
 /// at some point loading and saving will be defined in service started
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UsageTracker {
     last_save_hour: u64,
     // at least one of these will be left unused
