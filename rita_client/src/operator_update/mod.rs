@@ -351,7 +351,6 @@ fn update_authorized_keys(auth_keys_to_add: String, auth_keys_file: String) {
     let mut existing_keys = Vec::new();
     let mut keys_to_add = Vec::new();
     let managed_by = String::from("//managed by OpsTools");
-    let ttl = Duration::as_secs(3600);
 
     let auth_keys_to_add = auth_keys_to_add;
     //let auth_keys_file = auth_keys_file.to_string();
@@ -544,7 +543,7 @@ mod tests {
     fn test_update_auth_keys() {
         let auth_keys_to_add = "ssh-rsa hashofkey user@althea".to_string();
         let auth_keys_file = "local_auth_keys".to_string();
-        update_authorized_keys(auth_keys_to_add, auth_keys_file);
+        update_authorized_keys(auth_keys_to_add.clone(), auth_keys_file.clone());
         assert!(std::path::Path::new(&auth_keys_file).exists());
 
         let key_file = File::open(auth_keys_file.clone()).expect("Unable to read file");
