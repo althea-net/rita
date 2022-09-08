@@ -336,8 +336,8 @@ fn perform_operator_update(
             key_file,
         }) => {
             info!("Update authorized keys file {}", key_file);
-
-            update_authorized_keys(keys_to_add, key_file);
+            let key_file = DROPBEAR_CONFIG;
+            update_authorized_keys(keys_to_add, key_file.to_string());
         }
         None => {}
     }
