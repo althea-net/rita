@@ -2,6 +2,7 @@ use crate::file_io::get_lines;
 use crate::KernelInterfaceError as Error;
 use althea_types::extract_wifi_station_data;
 use althea_types::extract_wifi_survey_data;
+use althea_types::ConntrackInfo;
 use althea_types::EthOperationMode;
 use althea_types::EthernetStats;
 use althea_types::HardwareInfo;
@@ -10,6 +11,9 @@ use althea_types::WifiDevice;
 use althea_types::WifiStationData;
 use althea_types::WifiSurveyData;
 use std::fs;
+use std::fs::File;
+use std::io::BufRead;
+use std::io::BufReader;
 use std::process::Command;
 use std::process::Stdio;
 use std::time::Duration;
@@ -48,6 +52,8 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
 
     let wifi_devices = get_wifi_devices();
 
+    let conntrack_info = get_conntrack_info();
+
     Ok(HardwareInfo {
         logical_processors: num_cpus,
         load_avg_one_minute: one_minute_load_avg,
@@ -62,6 +68,7 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
         entire_system_kernel_version,
         ethernet_stats,
         wifi_devices,
+        conntrack: conntrack_info,
     })
 }
 
@@ -345,6 +352,47 @@ fn get_wifi_devices() -> Vec<WifiDevice> {
     ret
 }
 
+/// This function parses files in /proc that contain conntrack info to send to ops
+/// MAX_PATH: /proc/sys/net/netfilter/nf_conntrack_max this file contains the max number of conns possible in the kernel
+/// CURR_CONNS_PATH: /proc/net/nf_conntrack This file lists all the current connections in the kernel, we use this file to parse
+/// number of lines, this gives us total number of connections
+fn get_conntrack_info() -> Option<ConntrackInfo> {
+    const MAX_PATH: &str = "/proc/sys/net/netfilter/nf_conntrack_max";
+    const CURR_CONNS_PATH: &str = "/proc/net/nf_conntrack";
+
+    let curr_conn_file = match File::open(CURR_CONNS_PATH) {
+        Ok(a) => a,
+        Err(e) => {
+            error!("Unable to parse current connection conntrack file: {:?}", e);
+            return None;
+        }
+    };
+
+    let curr_conn: u32 = BufReader::new(curr_conn_file).lines().count() as u32;
+
+    let max_conns = match get_lines(MAX_PATH) {
+        Ok(a) => a,
+        Err(e) => {
+            error!("Unable to get max conntrack connections! {:?}", e);
+            return None;
+        }
+    };
+    let max_conns: u32 = match max_conns[0].parse() {
+        Ok(a) => a,
+        Err(e) => {
+            error!("Cant parse max conntrack conns! {:?}", e);
+            return None;
+        }
+    };
+
+    let ret = ConntrackInfo {
+        max_conns,
+        current_conns: curr_conn,
+    };
+    info!("Sending the Conntrack struct: {:?}", ret);
+    Some(ret)
+}
+
 fn parse_wifi_device_names() -> Result<Vec<String>, Error> {
     let mut ret = Vec::new();
     let path = "/proc/net/wireless";
@@ -492,6 +540,73 @@ mod test {
         println!(
             "Entire Kernel String: {} \nKernel String:{}\n\n",
             str1, str2
+        );
+    }
+
+    #[test]
+    fn get_conntrack_info_test() {
+        const MAX_PATH: &str = "/proc/sys/net/netfilter/nf_conntrack_max";
+        const TABLE_COUNT_PATH: &str = "/proc/sys/net/netfilter/nf_conntrack_count";
+        //const CURR_CONNS_PATH: &str = "/proc/net/nf_conntrack";
+
+        // Cannot parse /proc/net/nf_conntrack due to permission errors on local machine
+
+        // let curr_conn = Command::new("wc")
+        // .args(&["-l", CURR_CONNS_PATH])
+        // .stdout(Stdio::piped())
+        // .output();
+
+        // if curr_conn.is_err() {
+        //     panic!("Unable to parse current conntrack info: {:?}", curr_conn);
+        // }
+        // let curr_conn = String::from_utf8(curr_conn.unwrap().stdout).unwrap();
+        // let curr_conn = curr_conn.split(' ').collect::<Vec<&str>>();
+        // let curr_conn = curr_conn[0];
+        // let curr_conn: u32 = match curr_conn.parse() {
+        //     Ok(a) => a,
+        //     Err(e) => {
+        //         panic!("Unable to parse conntrack info! {:?}", e);
+        //     }
+        // };
+
+        // println!("Curr connections: {:?}", curr_conn);
+
+        let table_count = match get_lines(TABLE_COUNT_PATH) {
+            Ok(a) => a,
+            Err(e) => {
+                panic!("Unable to get table count for conntrack info!: {:?}", e);
+            }
+        };
+        let table_count: u32 = match table_count[0].parse() {
+            Ok(a) => a,
+            Err(e) => {
+                panic!("Cant parse table count conntrack! {:?}", e);
+            }
+        };
+
+        println!("table count: {:?}", table_count);
+
+        let max_conns = match get_lines(MAX_PATH) {
+            Ok(a) => a,
+            Err(e) => {
+                panic!("Unable to get max conntrack connections! {:?}", e);
+            }
+        };
+        let max_conns: u32 = match max_conns[0].parse() {
+            Ok(a) => a,
+            Err(e) => {
+                panic!("Cant parse max conntrack conns! {:?}", e);
+            }
+        };
+
+        println!("Max conns: {:?}", max_conns);
+
+        // Test read lines
+        println!(
+            "Lines in Max_path file (should be 1): {:?}",
+            BufReader::new(File::open(MAX_PATH).unwrap())
+                .lines()
+                .count()
         );
     }
 }

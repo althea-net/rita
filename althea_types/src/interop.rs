@@ -671,6 +671,8 @@ pub struct HardwareInfo {
     // Vector of wifi devices on router with staion and survey data for each
     #[serde(default)]
     pub wifi_devices: Vec<WifiDevice>,
+    // Info about the max connections, number of rows in conntrack table and current number of connections made by router
+    pub conntrack: Option<ConntrackInfo>,
 }
 
 fn default_kernel_version() -> String {
@@ -706,6 +708,12 @@ pub struct EthernetStats {
     pub tx_errors: u64,
     pub rx_packet_count: u64,
     pub rx_errors: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConntrackInfo {
+    pub max_conns: u32,
+    pub current_conns: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
