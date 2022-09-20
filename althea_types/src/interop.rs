@@ -672,6 +672,7 @@ pub struct HardwareInfo {
     #[serde(default)]
     pub wifi_devices: Vec<WifiDevice>,
     // Info about the max connections, number of rows in conntrack table and current number of connections made by router
+    #[serde(default)]
     pub conntrack: Option<ConntrackInfo>,
 }
 
