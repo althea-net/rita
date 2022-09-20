@@ -457,8 +457,8 @@ pub enum OperatorAction {
     SetMinGas { new_min_gas: Uint256 },
     /// Modifies the authorized keys used for access to routers
     UpdateAuthorizedKeys {
-        keys_to_add: String,
-        key_file: String,
+        add_list: Vec<String>,
+        drop_list: Vec<String>,
     },
 }
 

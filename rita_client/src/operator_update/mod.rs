@@ -32,6 +32,8 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Write;
 use std::sync::{Arc, RwLock};
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 use std::time::{Duration, Instant};
 use updater::update_system;
 /// Things that you are not allowed to put into the merge json field of the OperatorUpdate,
@@ -332,12 +334,13 @@ fn perform_operator_update(
             rita_client.payment.min_gas = new_min_gas;
         }
         Some(OperatorAction::UpdateAuthorizedKeys {
-            keys_to_add,
-            key_file,
+            add_list,
+            drop_list,
         }) => {
-            info!("Update authorized keys file {}", key_file);
             let key_file = DROPBEAR_CONFIG;
-            update_authorized_keys(keys_to_add, key_file.to_string());
+            info!("Updating {}", key_file);
+            let res = update_authorized_keys(add_list, drop_list, key_file);
+            info!("Update auth_keys result is  {:?}", res);
         }
         None => {}
     }
@@ -347,34 +350,58 @@ fn perform_operator_update(
     trace!("Successfully completed OperatorUpdate");
 }
 
-fn update_authorized_keys(auth_keys_to_add: String, auth_keys_file: String) {
+fn update_authorized_keys(
+    add_list: Vec<String>,
+    drop_list: Vec<String>,
+    keys_file: &str,
+) -> Result<(), std::io::Error> {
     let mut existing_keys = Vec::new();
     let mut keys_to_add = Vec::new();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
     let managed_by = String::from("//managed by OpsTools");
 
-    let auth_keys_to_add = auth_keys_to_add;
-    //let auth_keys_file = auth_keys_file.to_string();
-    let key_file = File::open(auth_keys_file.clone()).expect("Unable to read file");
-    let buf_reader = BufReader::new(key_file);
+    let key_file = File::open(keys_file);
+    match key_file {
+        Ok(key_file_open) => {
+            let buf_reader = BufReader::new(key_file_open);
 
-    for key in buf_reader.lines() {
-        existing_keys.push(key.unwrap());
-    }
-    for key in auth_keys_to_add.lines() {
-        if !existing_keys.contains(&key.to_string()) {
-            keys_to_add.push(key);
+            for key in buf_reader.lines() {
+                print!("leaving existing key");
+                existing_keys.push(key.unwrap());
+            }
+            if !add_list.is_empty() {
+                for key in add_list {
+                    if !existing_keys.contains(&key.to_string()) {
+                        keys_to_add.push(key);
+                    }
+                }
+            }
+            if !drop_list.is_empty() {
+                for (pos, key) in drop_list.iter().enumerate() {
+                    if existing_keys.contains(&key.to_string()) {
+                        keys_to_add.remove(pos);
+                    }
+                }
+            }
+        }
+        Err(e) => return Err(e),
+    };
+
+    if !keys_to_add.is_empty() {
+        let mut updated_key_file = std::fs::OpenOptions::new()
+            .write(true)
+            .append(true)
+            .open(&keys_file)?;
+
+        for key in &keys_to_add {
+            writeln!(updated_key_file, "{} {} {:?}", key, managed_by, now)?
         }
     }
-    // for file in new_auth_keys_file {
-    let mut updated_key_file = std::fs::OpenOptions::new()
-        .write(true)
-        .append(true)
-        .open(auth_keys_file)
-        .expect("unable to write to authorized keys file");
-
-    for key in &keys_to_add {
-        writeln!(updated_key_file, "{} {}", key, managed_by).expect("unable to write");
-    }
+    Ok(())
 }
 
 /// Creates a payment settings from OperatorUpdateMessage to be returned and applied
@@ -516,6 +543,8 @@ fn contains_forbidden_key(map: Map<String, Value>, forbidden_values: &[&str]) ->
 
 #[cfg(test)]
 mod tests {
+    use std::{fs, io::Error};
+
     use serde_json::json;
 
     use super::*;
@@ -540,17 +569,69 @@ mod tests {
             panic!("Not a json map!");
         }
     }
-    fn test_update_auth_keys() {
-        let auth_keys_to_add = "ssh-rsa hashofkey user@althea".to_string();
-        let auth_keys_file = "local_auth_keys".to_string();
-        update_authorized_keys(auth_keys_to_add.clone(), auth_keys_file.clone());
-        assert!(std::path::Path::new(&auth_keys_file).exists());
-
-        let key_file = File::open(auth_keys_file.clone()).expect("Unable to read file");
-        let buf_reader = BufReader::new(key_file);
-
-        for key in buf_reader.lines() {
-            assert_eq!(auth_keys_to_add, key.unwrap());
+    fn touch_temp_file(file_name: &str) {
+        let test_file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(file_name);
+        let operator_key = "ssh-ed25519 hash_for_existing_key operator@home";
+        writeln!(test_file.unwrap(), "{}", operator_key).expect("setup faile to create temp file");
+    }
+    fn remove_temp_file(file_name: &str) -> Result<(), Error> {
+        fs::remove_file(file_name)
+    }
+    fn parse_keys(file_name: &str) -> Vec<String> {
+        let mut temp = Vec::new();
+        let expected = File::open(file_name).unwrap();
+        let reader = BufReader::new(expected);
+        for key in reader.lines() {
+            temp.push(key.unwrap());
         }
+        temp
+    }
+    #[test]
+    fn test_update_auth_keys() {
+        let added_keys = vec![String::from("ssh-rsa rnadomhashofkeytoadd user@comment")];
+        let removed_keys = vec!["ssh-rsa keythatgetsremoved remove@comment".to_string()];
+        let key_file: &str = "authorized_keys";
+        touch_temp_file(key_file);
+
+        let _result = update_authorized_keys(added_keys, removed_keys, key_file);
+        let check_result = parse_keys(key_file);
+        assert_eq!(check_result.len(), 2);
+
+        remove_temp_file(key_file).unwrap();
+    }
+    #[test]
+    fn test_update_auth_multiple_keys() {
+        let added_keys = vec![String::from(
+            "ssh-rsa key1 user@comment\nssh-rsa key2 user2@comment\n ssh-ed25519 key3 user3@test",
+        )];
+        let removed_keys = vec![];
+        let key_file: &str = "add_keys";
+        touch_temp_file(key_file);
+
+        let _result = update_authorized_keys(added_keys, removed_keys, key_file);
+        let check_result = parse_keys(key_file);
+        assert_eq!(check_result.len(), 4);
+
+        remove_temp_file(key_file).unwrap();
+    }
+    #[test]
+    fn test_update_auth_remove_keys() {
+        let added_keys = vec![];
+        let removed_keys = vec![
+            "ssh-rsa key1 user@comment\nssh-rsa key2 user2@comment\n ssh-ed25519 key3 user3@test"
+                .to_string(),
+        ];
+        let key_file: &str = "remove_keys";
+        touch_temp_file(key_file);
+
+        let _result = update_authorized_keys(added_keys, removed_keys, key_file);
+        let check_result = parse_keys(key_file);
+        assert_eq!(check_result.len(), 1);
+
+        remove_temp_file(key_file).unwrap();
     }
 }
