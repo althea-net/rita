@@ -163,31 +163,37 @@ pub fn peer_discovery_loop() {
         while let Err(e) = {
             thread::spawn(move || loop {
                 let start = Instant::now();
-                trace!("Common peer discovery tick!");
+                info!("Common peer discovery tick!");
                 let runner = AsyncSystem::new();
                 runner.block_on(async move {
-                    trace!("Getting Peers from PeerListener to pass to TunnelManager");
-
-                    let start = Instant::now();
+                    let measure_tick = Instant::now();
                     info!("Starting PeerListener tick");
 
                     let pl_copy = peerlistener_tick();
 
                     info!(
                         "PeerListener tick completed in {}s {}ms",
-                        start.elapsed().as_secs(),
-                        start.elapsed().subsec_millis(),
+                        measure_tick.elapsed().as_secs(),
+                        measure_tick.elapsed().subsec_millis(),
                     );
 
+                    info!("Starting TM contact peers");
                     // Contact manual peers
                     tm_contact_peers(pl_copy).await;
+                    info!("Done contacting peers");
                 });
 
                 // sleep until it has been FAST_LOOP_SPEED seconds from start, whenever that may be
                 // if it has been more than FAST_LOOP_SPEED seconds from start, go right ahead
+                info!("Peer Listener loop elapsed in = {:?}", start.elapsed());
                 if start.elapsed() < FAST_LOOP_SPEED {
+                    info!(
+                        "Peer listener sleeping for {:?}",
+                        FAST_LOOP_SPEED - start.elapsed()
+                    );
                     thread::sleep(FAST_LOOP_SPEED - start.elapsed());
                 }
+                info!("Peer Listener sleeping Done!");
             })
             .join()
         } {
