@@ -49,18 +49,31 @@ impl dyn KernelInterface {
     /// to /etc/network/addr. SLAAC takes this ip and assigns a /64 to hosts that connect
     /// to the router
     pub fn setup_ipv6_slaac(&self, router_ipv6_str: IpNetwork) {
-        let output = self
-            .run_command("uci", &["get", "network.lan.ip6addr"])
-            .unwrap();
+        let output = match self.run_command("uci", &["get", "network.lan.ip6addr"]) {
+            Ok(a) => a,
+            Err(e) => {
+                error!("uci get network.lan.ip6addr failed. Unable to setup ipv6 subnet correctly: {:?}", e);
+                return;
+            }
+        };
 
         match String::from_utf8(output.stdout) {
             Ok(a) => {
-                if a.is_empty() || {
-                    router_ipv6_str
-                        != a.replace('\n', "")
-                            .parse::<IpNetwork>()
-                            .expect("This should be a valid network")
-                } {
+                if a.is_empty()
+                    || {
+                        router_ipv6_str
+                            != {
+                                let val = a.replace('\n', "").parse::<IpNetwork>();
+                                match val {
+                                    Ok(a) => a,
+                                    Err(e) => {
+                                        error!("This should be a valid network! Unable to setup ipv6 subnet correctly: {:?}", e);
+                                        return;
+                                    }
+                                }
+                            }
+                    }
+                {
                     let mut append_str = "network.lan.ip6addr=".to_owned();
                     append_str.push_str(&router_ipv6_str.to_string());
                     let res1 = self.run_command("uci", &["set", &append_str]);

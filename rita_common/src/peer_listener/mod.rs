@@ -135,12 +135,14 @@ impl Clone for PeerListener {
 
 /// Creates a listen interface on all interfaces in the peer_interfaces hashmap.
 fn listen_to_available_ifaces(peer_listener: &mut PeerListener) {
+    info!("PEER LISTENER: starting to listen to interfaces");
     let interfaces = settings::get_rita_common().network.peer_interfaces;
     let iface_list = interfaces;
     for iface in iface_list.iter() {
         if !peer_listener.interfaces.contains_key(iface) {
             match ListenInterface::new(iface) {
                 Ok(new_listen_interface) => {
+                    info!("Added interface: {:?} to interfaces list", iface);
                     peer_listener
                         .interfaces
                         .insert(new_listen_interface.ifname.clone(), new_listen_interface);
@@ -151,6 +153,11 @@ fn listen_to_available_ifaces(peer_listener: &mut PeerListener) {
             }
         }
     }
+
+    info!(
+        "PEER LISTENER: Done listening, Our interface list looks like : {:?}",
+        peer_listener.interfaces
+    );
 }
 
 /// Returns a copy of PL lazy static var
@@ -169,6 +176,7 @@ pub fn peerlistener_tick() -> PeerListener {
     trace!("Starting PeerListener tick!");
 
     let mut pl = get_pl_copy();
+    info!("Received the PL struct: {:?}", pl);
     send_im_here(&mut pl.interfaces);
     let (a, b) = receive_im_here(&mut pl.interfaces);
     {
@@ -179,6 +187,7 @@ pub fn peerlistener_tick() -> PeerListener {
     listen_to_available_ifaces(&mut pl);
 
     set_pl(pl.clone());
+    info!("We set the PL struct to : {:?}", pl);
     pl
 }
 
@@ -255,7 +264,7 @@ impl ListenInterface {
 
 /// send UDP ImHere messages over IPV6 link local
 fn send_im_here(interfaces: &mut HashMap<String, ListenInterface>) {
-    trace!("About to send ImHere");
+    info!("About to send ImHere messages");
     for obj in interfaces.iter_mut() {
         let listen_interface = obj.1;
         info!(
@@ -268,19 +277,24 @@ fn send_im_here(interfaces: &mut HashMap<String, ListenInterface>) {
             .send_to(&message.encode(), listen_interface.multicast_socketaddr);
         trace!("Sending ImHere to broadcast gets {:?}", result);
         if result.is_err() {
-            info!("Sending ImHere failed with {:?}", result);
+            info!(
+                "Sending ImHere to {:?} failed with {:?}",
+                listen_interface.ifname, result
+            );
         }
     }
+    info!("Done sending ImHere this tick");
 }
 
 /// receive UDP ImHere messages over IPV6 link local
 fn receive_im_here(
     interfaces: &mut HashMap<String, ListenInterface>,
 ) -> (HashMap<IpAddr, Peer>, HashMap<SocketAddr, String>) {
-    info!("About to dequeue ImHere");
+    info!("About to receive ImHere");
     let mut output = HashMap::<IpAddr, Peer>::new();
     let mut interface_map = HashMap::<SocketAddr, String>::new();
     for obj in interfaces.iter_mut() {
+        info!("PEER LISTENER: Looking at imHere on interface: {:?}", obj.0);
         let listen_interface = obj.1;
         // Since the only datagrams we are interested in are very small (22 bytes plus overhead)
         // this buffer is kept intentionally small to discard larger packets earlier rather than later
@@ -304,12 +318,12 @@ fn receive_im_here(
             let ipaddr = match PeerMessage::decode(datagram.as_ref()) {
                 Ok(PeerMessage::ImHere(ipaddr)) => ipaddr,
                 Err(e) => {
-                    warn!("ImHere decode failed: {:?}", e);
+                    error!("ImHere decode failed: {:?}", e);
                     continue;
                 }
                 _ => {
                     error!("Received Hello on multicast socket, Error");
-                    panic!("Should not receive Hello message on multicast socket");
+                    continue;
                 }
             };
 
@@ -331,6 +345,11 @@ fn receive_im_here(
             interface_map.insert(peer.contact_socket, listen_interface.ifname.clone());
         }
     }
+    info!("Done receiving im here messages");
+    info!(
+        "Setting Peers and interface map to : {:?}\n\n {:?}",
+        output, interface_map
+    );
     (output, interface_map)
 }
 
@@ -352,7 +371,7 @@ pub fn send_hello(msg: &Hello, socket: &UdpSocket, send_addr: SocketAddr, sender
 
 /// receive UDP hello messages over IPV6 link local ports
 pub fn receive_hello(writer: &mut PeerListener) {
-    info!("Dequeing Hello");
+    info!("Receiving Hellos");
     for obj in writer.interfaces.iter_mut() {
         let listen_interface = obj.1;
 
@@ -392,7 +411,7 @@ pub fn receive_hello(writer: &mut PeerListener) {
             match PeerMessage::decode(&encoded_msg) {
                 Ok(PeerMessage::ImHere(_ipaddr)) => {
                     error!("Should not revceive Im Here on linklocal socket, Error");
-                    panic!("Received an ImHere message on a linkLocal socket")
+                    continue;
                 }
                 Ok(PeerMessage::Hello {
                     my_id,
@@ -464,4 +483,5 @@ pub fn receive_hello(writer: &mut PeerListener) {
             };
         }
     }
+    info!("Done receiving hellos");
 }
