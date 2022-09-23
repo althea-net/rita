@@ -248,7 +248,7 @@ pub async fn get_exit_list(request: Json<EncryptedExitClientIdentity>) -> HttpRe
 
     let ret: ExitList = ExitList {
         exit_list: settings::get_rita_exit().exit_network.cluster_exits,
-        wg_exit_listen_port: settings::get_rita_exit().exit_network.wg_new_tunnel_port,
+        wg_exit_listen_port: settings::get_rita_exit().exit_network.wg_v2_tunnel_port,
     };
 
     let plaintext = serde_json::to_string(&ret)

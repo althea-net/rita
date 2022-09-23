@@ -356,7 +356,7 @@ pub fn setup_clients(
 
     // Setup or verify that an ipv6 route exists for each client
     let new_wg_exit_clients: HashMap<WgKey, SystemTime> = KI
-        .get_last_handshake_time("wg_exit_new")
+        .get_last_handshake_time("wg_exit_v2")
         .expect("There should be a new wg_exit interface")
         .into_iter()
         .collect();
@@ -381,7 +381,7 @@ pub fn setup_clients(
             match get_client_interface(c, new_wg_exit_clients.clone(), wg_exit_clients.clone()) {
                 Ok(a) => a,
                 Err(_) => {
-                    // There is no handshake on either wg_exit or wg_exit_new, which can happen during a restart
+                    // There is no handshake on either wg_exit or wg_exit_v2, which can happen during a restart
                     // in this case the client will not have an ipv6 route until they initiate a handshake again
                     continue;
                 }
@@ -403,7 +403,7 @@ pub fn setup_clients(
         return Ok(wg_clients);
     }
 
-    info!("Setting up configs for wg_exit and wg_exit_new");
+    info!("Setting up configs for wg_exit and wg_exit_v2");
     // setup all the tunnels
     let exit_status = KI.set_exit_wg_config(
         &wg_clients,
@@ -415,9 +415,9 @@ pub fn setup_clients(
     // Setup new tunnels
     let exit_status_new = KI.set_exit_wg_config(
         &wg_clients,
-        settings::get_rita_exit().exit_network.wg_new_tunnel_port,
+        settings::get_rita_exit().exit_network.wg_v2_tunnel_port,
         &settings::get_rita_exit().network.wg_private_key_path,
-        "wg_exit_new",
+        "wg_exit_v2",
     );
 
     match exit_status {
@@ -461,11 +461,11 @@ pub fn get_client_interface(
         new_wg_exit_clients.get(&c.wg_pubkey.parse()?),
         wg_exit_clients.get(&c.wg_pubkey.parse()?),
     ) {
-        (Some(_), None) => Ok("wg_exit_new".into()),
+        (Some(_), None) => Ok("wg_exit_v2".into()),
         (None, Some(_)) => Ok("wg_exit".into()),
         (Some(new), Some(old)) => {
             if new > old {
-                Ok("wg_exit_new".into())
+                Ok("wg_exit_v2".into())
             } else {
                 Ok("wg_exit".into())
             }
@@ -523,7 +523,7 @@ pub fn enforce_exit_clients(
     }
 
     let new_wg_exit_clients: HashMap<WgKey, SystemTime> = KI
-        .get_last_handshake_time("wg_exit_new")
+        .get_last_handshake_time("wg_exit_v2")
         .expect("There should be a new wg_exit interface")
         .into_iter()
         .collect();

@@ -188,8 +188,8 @@ fn debts_logging(debts: &HashMap<Identity, i128>) {
         Ok(users) => info!("Total of {} wg_exit users online", users),
         Err(e) => warn!("Getting clients failed with {:?}", e),
     }
-    match KI.get_wg_exit_clients_online("wg_exit_new") {
-        Ok(users) => info!("Total of {} wg_exit_new users online", users),
+    match KI.get_wg_exit_clients_online("wg_exit_v2") {
+        Ok(users) => info!("Total of {} wg_exit_v2 users online", users),
         Err(e) => warn!("Getting clients failed with {:?}", e),
     }
 }
@@ -227,7 +227,7 @@ pub fn watch(
         }
     };
 
-    let new_counters = match KI.read_wg_counters("wg_exit_new") {
+    let new_counters = match KI.read_wg_counters("wg_exit_v2") {
         Ok(res) => res,
         Err(e) => {
             warn!(
@@ -326,7 +326,7 @@ pub fn watch(
     Ok(())
 }
 
-/// This function merges two counter maps for wg_exit and wg_exit_new for combined accounting
+/// This function merges two counter maps for wg_exit and wg_exit_v2 for combined accounting
 fn merge_counters(
     old_counters: &HashMap<WgKey, WgUsage>,
     new_counters: &HashMap<WgKey, WgUsage>,

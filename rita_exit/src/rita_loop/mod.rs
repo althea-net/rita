@@ -225,7 +225,7 @@ fn setup_exit_wg_tunnel() {
         warn!("exit setup returned {}", e)
     }
     // Setup new wg_exit
-    if let Err(e) = KI.setup_wg_if_named("wg_exit_new") {
+    if let Err(e) = KI.setup_wg_if_named("wg_exit_v2") {
         warn!("new exit setup returned {}", e)
     }
 
@@ -248,8 +248,8 @@ fn setup_exit_wg_tunnel() {
         .expect("Failed to setup wg_exit!");
 
     // Setup new wg_exit
-    KI.one_time_exit_setup(local_ip, netmask, mesh_ip, ex_nic, "wg_exit_new")
-        .expect("Failed to setup wg_exit_new!");
+    KI.one_time_exit_setup(local_ip, netmask, mesh_ip, ex_nic, "wg_exit_v2")
+        .expect("Failed to setup wg_exit_v2!");
 
     KI.setup_nat(
         &settings::get_rita_exit().network.external_nic.unwrap(),
@@ -258,7 +258,7 @@ fn setup_exit_wg_tunnel() {
     .unwrap();
     KI.setup_nat(
         &settings::get_rita_exit().network.external_nic.unwrap(),
-        "wg_exit_new",
+        "wg_exit_v2",
     )
     .unwrap();
 }

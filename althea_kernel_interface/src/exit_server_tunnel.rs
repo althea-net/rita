@@ -98,7 +98,7 @@ impl dyn KernelInterface {
         interface: &str,
     ) {
         // Setup ipv4 route
-        // 1.) Select all ipv4 routes with 'client_internal_ip'. This gives us all routes with wg_exit and wg_exit_new for the ip
+        // 1.) Select all ipv4 routes with 'client_internal_ip'. This gives us all routes with wg_exit and wg_exit_v2 for the ip
         //     THere should be only one route
         // 2.) Does the route contain 'interface'? Yes? we continue
         // 3.) No? That means either no route exists or there is a route with the other interface name
@@ -119,7 +119,7 @@ impl dyn KernelInterface {
         }
 
         // Setup ipv6 routes
-        // 1.) Find all v6 routes with ip. There should be at most one, either on wg_exit or wg_exit_new
+        // 1.) Find all v6 routes with ip. There should be at most one, either on wg_exit or wg_exit_v2
         // 2.) Check if that route contains 'interface' Yes? route is already setup, we continue
         // 3.) No? It means no route exists or route exists on wrong interface.
         // 4.) We delete route and add the new route on correct interface
