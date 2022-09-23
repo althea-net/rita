@@ -373,7 +373,10 @@ fn update_authorized_keys(
 
             for key in buf_reader.lines() {
                 info!("Authorized keys collect existing");
-                existing_keys.push(key.unwrap());
+                let key_hash = split_to_key(&key.unwrap(), &managed_by);
+                if !drop_list.contains(&key_hash) {
+                    existing_keys.push(key_hash);
+                }
             }
         }
         Err(e) => return Err(e),
@@ -394,12 +397,6 @@ fn update_authorized_keys(
             existing_keys.remove(pos);
         }
     }
-    // for (pos, key) in existing_keys.iter().enumerate() {
-    //     let hash: Vec<String> = split_to_string(&key, &managed_by);
-    //     if drop_list.contains(&hash[0].trim().to_string()) {
-    //         existing_keys.remove(pos);
-    //     }
-    // }
 
     let mut updated_key_file = std::fs::OpenOptions::new()
         .write(true)
@@ -416,7 +413,10 @@ fn update_authorized_keys(
 
     Ok(())
 }
-
+fn split_to_key(line: &str, pattern: &str) -> String {
+    let key_hash: Vec<String> = line.split(&pattern).map(str::to_string).collect();
+    key_hash[0].trim().to_string()
+}
 /// Creates a payment settings from OperatorUpdateMessage to be returned and applied
 fn update_payment_settings(
     mut payment: PaymentSettings,
@@ -604,6 +604,7 @@ mod tests {
         }
         temp
     }
+
     #[test]
     fn test_update_auth_keys() {
         let added_keys = vec![String::from("ssh-rsa rnadomhashofkeytoadd user@comment")];
@@ -626,9 +627,17 @@ mod tests {
         }
         remove_temp_file(key_file).unwrap();
     }
-    fn split_to_string(line: &String, pattern: &str) -> Vec<String> {
-        line.split(&pattern).map(str::to_string).collect()
+    fn split_to_key(line: &str, pattern: &str) -> String {
+        let key_hash: Vec<String> = line.split(&pattern).map(str::to_string).collect();
+        key_hash[0].trim().to_string()
     }
+    #[test]
+    fn test_split_to_key() {
+        let pattern = "-pattern-";
+        let line: &str = "success-pattern-failure";
+        assert_eq!("success", split_to_key(line, pattern));
+    }
+
     #[test]
     fn test_update_auth_multiple_keys() {
         let added_keys = vec![
@@ -646,8 +655,8 @@ mod tests {
         let result = parse_keys(key_file);
         for (index, item) in result.iter().enumerate() {
             if item.contains(&managed_by) {
-                let hash: Vec<String> = split_to_string(item, &managed_by);
-                assert_eq!(added_keys[index - 1], hash[0].trim());
+                let hash: String = split_to_key(item, &managed_by);
+                assert_eq!(added_keys[index - 1], hash);
                 println!("{} {}", index, item);
             } else {
                 assert_eq!(item, operator_key);
@@ -674,8 +683,8 @@ mod tests {
         let result = parse_keys(key_file);
         for (index, item) in result.iter().enumerate() {
             if item.contains(&managed_by) {
-                let hash: Vec<String> = split_to_string(item, &managed_by);
-                assert_eq!(removed_keys[index - 1], hash[0].trim());
+                let hash: String = split_to_key(item, &managed_by);
+                assert_eq!(removed_keys[index - 1], hash);
                 println!("{} {}", index, item);
             } else {
                 assert_eq!(item, operator_key);
@@ -703,28 +712,29 @@ mod tests {
 
         remove_temp_file(key_file).unwrap();
     }
-    // #[test]
-    // fn test_removing_managed_key() {
-    //     let added_keys = vec![String::from("ssh-rsa key1 user@comment")];
-    //     let removed_keys = vec![String::from("ssh-rsa key1 user@comment")];
-    //     let key_file: &str = "remove_keys";
+    #[test]
+    fn test_removing_managed_key() {
+        let added_keys = vec![String::from("ssh-rsa key1 user@comment")];
+        let removed_keys = vec![String::from("ssh-rsa key1 user@comment")];
+        let key_file: &str = "remove_keys";
 
-    //     let _operator_key = touch_temp_file(key_file);
-    //     let _add_update = update_authorized_keys(added_keys, vec![], key_file);
-    //     let result = parse_keys(key_file);
-    //     for i in result {
-    //         println!("ADD Result: {}", i)
-    //     }
+        let _operator_key = touch_temp_file(key_file);
+        let _add_update = update_authorized_keys(added_keys, vec![], key_file);
+        let result = parse_keys(key_file);
+        for i in result {
+            println!("ADD Result: {}", i)
+        }
 
-    //     let _remove_mgmt_key = update_authorized_keys(vec![], removed_keys, key_file);
+        let _remove_mgmt_key = update_authorized_keys(vec![], removed_keys, key_file);
 
-    //     let result = parse_keys(key_file);
-    //     // assert_eq!(result.len(), 1);
+        let result = parse_keys(key_file);
+        assert_eq!(result.len(), 1);
 
-    //     for i in result {
-    //         println!("DROP result: {}", i)
-    //     }
+        for i in result {
+            println!("DROP result: {}", i);
+            assert_eq!(i, _operator_key);
+        }
 
-    //     remove_temp_file(key_file).unwrap();
-    // }
+        remove_temp_file(key_file).unwrap();
+    }
 }
