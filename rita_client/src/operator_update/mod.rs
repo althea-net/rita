@@ -355,6 +355,8 @@ fn update_authorized_keys(
     drop_list: Vec<String>,
     keys_file: &str,
 ) -> Result<(), std::io::Error> {
+    info!("Authorized keys update");
+
     let mut existing_keys = Vec::new();
     let mut keys_to_add = Vec::new();
     let now = SystemTime::now()
@@ -362,7 +364,7 @@ fn update_authorized_keys(
         .unwrap()
         .as_secs();
 
-    let managed_by = String::from("//managed by OpsTools");
+    let managed_by = String::from("//managed-by-OpsTools");
 
     let key_file = File::open(keys_file);
     match key_file {
@@ -370,37 +372,48 @@ fn update_authorized_keys(
             let buf_reader = BufReader::new(key_file_open);
 
             for key in buf_reader.lines() {
-                print!("leaving existing key");
+                info!("Authorized keys collect existing");
                 existing_keys.push(key.unwrap());
-            }
-            if !add_list.is_empty() {
-                for key in add_list {
-                    if !existing_keys.contains(&key.to_string()) {
-                        keys_to_add.push(key);
-                    }
-                }
-            }
-            if !drop_list.is_empty() {
-                for (pos, key) in drop_list.iter().enumerate() {
-                    if existing_keys.contains(&key.to_string()) {
-                        keys_to_add.remove(pos);
-                    }
-                }
             }
         }
         Err(e) => return Err(e),
     };
 
-    if !keys_to_add.is_empty() {
-        let mut updated_key_file = std::fs::OpenOptions::new()
-            .write(true)
-            .append(true)
-            .open(&keys_file)?;
-
-        for key in &keys_to_add {
-            writeln!(updated_key_file, "{} {} {:?}", key, managed_by, now)?
+    for key in add_list {
+        if !existing_keys.contains(&key.to_string()) {
+            keys_to_add.push(key);
         }
     }
+
+    for (pos, key) in drop_list.iter().enumerate() {
+        if keys_to_add.contains(&key.to_string()) {
+            keys_to_add.remove(pos);
+        }
+        if existing_keys.contains(&key.to_string()) {
+            debug!("Authorized keys existing key drop list {}", key);
+            existing_keys.remove(pos);
+        }
+    }
+    // for (pos, key) in existing_keys.iter().enumerate() {
+    //     let hash: Vec<String> = split_to_string(&key, &managed_by);
+    //     if drop_list.contains(&hash[0].trim().to_string()) {
+    //         existing_keys.remove(pos);
+    //     }
+    // }
+
+    let mut updated_key_file = std::fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(&keys_file)?;
+
+    for key in existing_keys {
+        debug!("Authorized keys existing key {}", key);
+        writeln!(updated_key_file, "{}", key)?
+    }
+    for key in &keys_to_add {
+        writeln!(updated_key_file, "{} {} {:?}", key, managed_by, now)?
+    }
+
     Ok(())
 }
 
@@ -569,14 +582,15 @@ mod tests {
             panic!("Not a json map!");
         }
     }
-    fn touch_temp_file(file_name: &str) {
+    fn touch_temp_file(file_name: &str) -> &str {
         let test_file = std::fs::OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
             .open(file_name);
         let operator_key = "ssh-ed25519 hash_for_existing_key operator@home";
-        writeln!(test_file.unwrap(), "{}", operator_key).expect("setup faile to create temp file");
+        writeln!(test_file.unwrap(), "{}", operator_key).expect("setup failed to create temp file");
+        operator_key
     }
     fn remove_temp_file(file_name: &str) -> Result<(), Error> {
         fs::remove_file(file_name)
@@ -593,45 +607,124 @@ mod tests {
     #[test]
     fn test_update_auth_keys() {
         let added_keys = vec![String::from("ssh-rsa rnadomhashofkeytoadd user@comment")];
-        let removed_keys = vec!["ssh-rsa keythatgetsremoved remove@comment".to_string()];
+        let removed_keys = vec![];
         let key_file: &str = "authorized_keys";
-        touch_temp_file(key_file);
+        let managed_by = String::from("//managed-by-OpsTools");
+        let operator_key = touch_temp_file(key_file);
 
-        let _result = update_authorized_keys(added_keys, removed_keys, key_file);
-        let check_result = parse_keys(key_file);
-        assert_eq!(check_result.len(), 2);
+        let _update = update_authorized_keys(added_keys, removed_keys, key_file);
+        let result = parse_keys(key_file);
+        assert_eq!(result.len(), 2);
 
+        for item in result {
+            if item.contains(&managed_by) {
+                let hash: Vec<&str> = item.split(&managed_by).collect();
+                println!("key {:?}", hash.first());
+            } else {
+                assert_eq!(item, operator_key);
+            }
+        }
         remove_temp_file(key_file).unwrap();
+    }
+    fn split_to_string(line: &String, pattern: &str) -> Vec<String> {
+        line.split(&pattern).map(str::to_string).collect()
     }
     #[test]
     fn test_update_auth_multiple_keys() {
-        let added_keys = vec![String::from(
-            "ssh-rsa key1 user@comment\nssh-rsa key2 user2@comment\n ssh-ed25519 key3 user3@test",
-        )];
+        let added_keys = vec![
+            String::from("ssh-rsa key1 user@comment"),
+            String::from("ssh-rsa key2 user2@comment"),
+            String::from("ssh-ed25519 key3 user3@test"),
+        ];
         let removed_keys = vec![];
         let key_file: &str = "add_keys";
-        touch_temp_file(key_file);
+        let managed_by = String::from("//managed-by-OpsTools");
 
-        let _result = update_authorized_keys(added_keys, removed_keys, key_file);
-        let check_result = parse_keys(key_file);
-        assert_eq!(check_result.len(), 4);
+        let operator_key = touch_temp_file(key_file);
 
+        let _update = update_authorized_keys(added_keys.clone(), removed_keys, key_file);
+        let result = parse_keys(key_file);
+        for (index, item) in result.iter().enumerate() {
+            if item.contains(&managed_by) {
+                let hash: Vec<String> = split_to_string(item, &managed_by);
+                assert_eq!(added_keys[index - 1], hash[0].trim());
+                println!("{} {}", index, item);
+            } else {
+                assert_eq!(item, operator_key);
+            }
+        }
+        assert_eq!(result.len(), 4);
         remove_temp_file(key_file).unwrap();
     }
+
     #[test]
     fn test_update_auth_remove_keys() {
         let added_keys = vec![];
         let removed_keys = vec![
-            "ssh-rsa key1 user@comment\nssh-rsa key2 user2@comment\n ssh-ed25519 key3 user3@test"
-                .to_string(),
+            String::from("ssh-rsa key1 user@comment"),
+            String::from("ssh-rsa key2 user2@comment"),
+            String::from("ssh-ed25519 key3 user3@test"),
         ];
-        let key_file: &str = "remove_keys";
-        touch_temp_file(key_file);
+        let managed_by = String::from("//managed-by-OpsTools");
+        let key_file: &str = "auth_remove_keys";
 
-        let _result = update_authorized_keys(added_keys, removed_keys, key_file);
-        let check_result = parse_keys(key_file);
-        assert_eq!(check_result.len(), 1);
+        let operator_key = touch_temp_file(key_file);
+
+        let _update = update_authorized_keys(added_keys, removed_keys.clone(), key_file);
+        let result = parse_keys(key_file);
+        for (index, item) in result.iter().enumerate() {
+            if item.contains(&managed_by) {
+                let hash: Vec<String> = split_to_string(item, &managed_by);
+                assert_eq!(removed_keys[index - 1], hash[0].trim());
+                println!("{} {}", index, item);
+            } else {
+                assert_eq!(item, operator_key);
+            }
+        }
+        assert_eq!(result.len(), 1);
 
         remove_temp_file(key_file).unwrap();
     }
+    #[test]
+    fn test_removing_existing_key() {
+        let added_keys = vec![];
+        let key_file: &str = "remove_keys";
+
+        let operator_key = touch_temp_file(key_file);
+        let removed_keys = vec![
+            operator_key.to_string(),
+            String::from("ssh-rsa key1 user@comment"),
+        ];
+        let _update = update_authorized_keys(added_keys, removed_keys, key_file);
+
+        let result = parse_keys(key_file);
+
+        assert_eq!(result.len(), 0);
+
+        remove_temp_file(key_file).unwrap();
+    }
+    // #[test]
+    // fn test_removing_managed_key() {
+    //     let added_keys = vec![String::from("ssh-rsa key1 user@comment")];
+    //     let removed_keys = vec![String::from("ssh-rsa key1 user@comment")];
+    //     let key_file: &str = "remove_keys";
+
+    //     let _operator_key = touch_temp_file(key_file);
+    //     let _add_update = update_authorized_keys(added_keys, vec![], key_file);
+    //     let result = parse_keys(key_file);
+    //     for i in result {
+    //         println!("ADD Result: {}", i)
+    //     }
+
+    //     let _remove_mgmt_key = update_authorized_keys(vec![], removed_keys, key_file);
+
+    //     let result = parse_keys(key_file);
+    //     // assert_eq!(result.len(), 1);
+
+    //     for i in result {
+    //         println!("DROP result: {}", i)
+    //     }
+
+    //     remove_temp_file(key_file).unwrap();
+    // }
 }
