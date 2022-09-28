@@ -88,6 +88,104 @@ impl dyn KernelInterface {
         Ok(())
     }
 
+    /// This function sets up the ip6table rules required to forward data from the internet to a client router
+    /// a rule forwarding traffic from wg_exit or wg_exit_v2 to external nic has been added in one_time_exit_setup()
+    /// This function adds the requred rule from external nic to either wg_exit or wg_exit_v2
+    /// 1.) Check the existance of the required rule
+    /// 2.) If not there, it either has an outdated rule or no rule. In that case we simply delete all rules for the particular subnet
+    /// 3.) Add the required rule
+    pub fn setup_client_rules(
+        &self,
+        client_ipv6_list: String,
+        client_mesh: String,
+        interface: &str,
+        external_nic: String,
+    ) -> Result<(), KernelInterfaceError> {
+        if client_ipv6_list.is_empty() {
+            return Ok(());
+        }
+
+        let ipv6_list: Vec<&str> = client_ipv6_list.split(',').collect();
+
+        for ip in ipv6_list {
+            // Verfiy its a valid subnet
+            if let Ok(ip_net) = ip.parse::<IpNetwork>() {
+                // Check if required rule exists
+                if self.check_iptable_rule(
+                    "ip6tables",
+                    &[
+                        "-C",
+                        "FORWARD",
+                        "-d",
+                        &ip_net.to_string(),
+                        "-i",
+                        &external_nic,
+                        "-o",
+                        interface,
+                        "-j",
+                        "ACCEPT",
+                    ],
+                )? {
+                    // This rule already exists, continue to client subnet
+                    continue;
+                } else {
+                    // Correct rule doesnt exist, either outdated rule exists or no rule exists. Either way, we del this rule on all interfaces and add a new one
+                    self.add_iptables_rule(
+                        "ip6tables",
+                        &[
+                            "-D",
+                            "FORWARD",
+                            "-d",
+                            &ip_net.to_string(),
+                            "-i",
+                            &external_nic,
+                            "-o",
+                            "wg_exit",
+                            "-j",
+                            "ACCEPT",
+                        ],
+                    )?;
+                    self.add_iptables_rule(
+                        "ip6tables",
+                        &[
+                            "-D",
+                            "FORWARD",
+                            "-d",
+                            &ip_net.to_string(),
+                            "-i",
+                            &external_nic,
+                            "-o",
+                            "wg_exit_v2",
+                            "-j",
+                            "ACCEPT",
+                        ],
+                    )?;
+
+                    // Add new correct rule
+                    self.add_iptables_rule(
+                        "ip6tables",
+                        &[
+                            "-A",
+                            "FORWARD",
+                            "-d",
+                            &ip_net.to_string(),
+                            "-i",
+                            &external_nic,
+                            "-o",
+                            interface,
+                            "-j",
+                            "ACCEPT",
+                        ],
+                    )?;
+                }
+            } else {
+                error!("IPV6 Error: Invalid client database state. Client with mesh ip: {:?} has invalid database ipv6 list: {:?}", client_mesh, client_ipv6_list);
+            }
+        }
+
+        Ok(())
+    }
+
     /// This function adds a route for each client subnet to the ipv6 routing table
     /// through wg_exit
     pub fn setup_client_routes(
@@ -208,28 +306,6 @@ impl dyn KernelInterface {
         {
             error!(
                 "IPV6 ERROR: uanble to set ip6table rules: {:?} to ex_nic",
-                interface
-            );
-        }
-
-        if self
-            .add_iptables_rule(
-                "ip6tables",
-                &[
-                    "-A",
-                    "FORWARD",
-                    "-i",
-                    &external_nic,
-                    "-o",
-                    interface,
-                    "-j",
-                    "ACCEPT",
-                ],
-            )
-            .is_err()
-        {
-            error!(
-                "IPV6 ERROR: uanble to set ip6table rules: ex_nic to {:?}",
                 interface
             );
         }

@@ -391,7 +391,21 @@ pub fn setup_clients(
             c.mesh_ip.clone(),
             c.internal_ip.clone(),
             &interface,
-        )
+        );
+
+        let ex_nic = settings::get_rita_exit()
+            .network
+            .external_nic
+            .expect("Expected an external nic here");
+
+        let res = KI.setup_client_rules(
+            c.internet_ipv6.clone(),
+            c.mesh_ip.clone(),
+            &interface,
+            ex_nic.clone(),
+        );
+
+        info!("IPV6: Setup client ip6tables rules with: {:?}", res);
     }
 
     trace!("converted clients {:?}", wg_clients);

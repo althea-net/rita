@@ -40,4 +40,15 @@ impl dyn KernelInterface {
 
         Ok(())
     }
+
+    pub fn check_iptable_rule(
+        &self,
+        command: &str,
+        rule: &[&str],
+    ) -> Result<bool, KernelInterfaceError> {
+        assert!(rule.contains(&"-C"));
+
+        let check = self.run_command(command, rule)?;
+        Ok(check.status.success())
+    }
 }
