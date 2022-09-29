@@ -116,7 +116,7 @@ This file documents the dashboard API found in Rita client.
 
 - URL: `<rita ip>:<rita_dashboard_port>/exits'
 - Comment: Merges a supplied exit list with the existing list; existing entries
-  are overwritten. Once client side subnet is removed, replace 'subnet' with 'root_ip'
+  are overwritten.
 - Method: `POST`
 - URL Params: `None`
 - Data Params: A JSON object containing the exits we want to add, e.g.:
@@ -134,7 +134,7 @@ This file documents the dashboard API found in Rita client.
 		},
     "wg_public_key": "KaTbsJ0Hur4D7Tcb+nc8ofs7n8tKL+wWG3H38KFCwlE=",
 		"eth_address": "0x0101010101010101010101010101010101010101",
-    "subnet": "fd00::5/120",
+    "root_ip": "fd00::5",
 		"message": "Got info successfully",
 		"registration_port": 4875,
 	  "state": "GotInfo"
@@ -152,7 +152,7 @@ This file documents the dashboard API found in Rita client.
 		},
     "wg_public_key": "KaTbsJ0Hur4D7Tcb+nc8ofs7n8tKL+wWG3H38KFCwlE=",
 		"eth_address": "0x0101010101010101010101010101010101010101",
-    "subnet": "fd00::5/120",
+    "root_ip": "fd00::5",
 		"message": "Got info successfully",
 		"registration_port": 4875,
 		"state": "GotInfo"
