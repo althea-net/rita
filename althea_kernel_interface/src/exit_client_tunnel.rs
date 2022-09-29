@@ -256,7 +256,23 @@ impl dyn KernelInterface {
                 "--clamp-mss-to-pmtu", //should be the same as --set-mss 1300
             ],
         )?;
-        //TODO ipv6 support
+
+        //ipv6 support
+        self.add_iptables_rule(
+            "ip6tables",
+            &[
+                "-I",
+                "FORWARD",
+                "-p",
+                "tcp",
+                "--tcp-flags",
+                "SYN,RST",
+                "SYN",
+                "-j",
+                "TCPMSS",
+                "--clamp-mss-to-pmtu", //should be the same as --set-mss 1300
+            ],
+        )?;
 
         Ok(())
     }
