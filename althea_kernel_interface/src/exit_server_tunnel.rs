@@ -195,6 +195,8 @@ impl dyn KernelInterface {
         client_internal_ip: String,
         interface: &str,
     ) {
+        let mut interface_cloned = interface.to_string();
+        interface_cloned.push(' ');
         // Setup ipv4 route
         // 1.) Select all ipv4 routes with 'client_internal_ip'. This gives us all routes with wg_exit and wg_exit_v2 for the ip
         //     THere should be only one route
@@ -205,7 +207,7 @@ impl dyn KernelInterface {
             .run_command("ip", &["route", "show", &client_internal_ip])
             .expect("Fix command");
         let route = String::from_utf8(output.stdout).unwrap();
-        if !route.contains(&interface) {
+        if !route.contains(&interface_cloned) {
             self.run_command("ip", &["route", "del", &client_internal_ip])
                 .expect("Fix command");
 
@@ -237,7 +239,7 @@ impl dyn KernelInterface {
                     .run_command("ip", &["-6", "route", "show", &ip_net.to_string()])
                     .expect("Fix command");
                 let existing_routes = String::from_utf8(output.stdout).unwrap();
-                if !existing_routes.contains(interface) {
+                if !existing_routes.contains(&interface_cloned) {
                     self.run_command("ip", &["-6", "route", "del", &ip_net.to_string()])
                         .expect("Fix command");
 
