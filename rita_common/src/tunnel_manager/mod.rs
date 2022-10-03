@@ -385,12 +385,7 @@ fn have_tunnel_by_ifidx(ifidx: u32, tunnels: &[Tunnel]) -> bool {
 
 /// gets the tunnel from the list with the given index
 fn get_tunnel_by_ifidx(ifidx: u32, tunnels: &[Tunnel]) -> Option<&Tunnel> {
-    for tunnel in tunnels.iter() {
-        if tunnel.listen_ifidx == ifidx {
-            return Some(tunnel);
-        }
-    }
-    None
+    tunnels.iter().find(|&tunnel| tunnel.listen_ifidx == ifidx)
 }
 
 /// deletes all instances of a given tunnel from the list

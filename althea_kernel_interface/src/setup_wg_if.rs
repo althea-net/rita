@@ -53,9 +53,7 @@ impl dyn KernelInterface {
             }
         }
 
-        if let Err(e) = res {
-            return Err(e);
-        }
+        res?;
         Ok(interface)
     }
 
