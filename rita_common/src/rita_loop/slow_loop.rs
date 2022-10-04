@@ -1,7 +1,9 @@
 use crate::simulated_txfee_manager::tick_simulated_tx;
 use crate::token_bridge::tick_token_bridge;
+use crate::tunnel_manager::tm_monitor_check;
 use actix_async::System as AsyncSystem;
 use babel_monitor::open_babel_stream;
+use babel_monitor::parse_interfaces;
 use babel_monitor::set_local_fee;
 use babel_monitor::set_metric_factor;
 use std::thread;
@@ -36,6 +38,13 @@ pub fn start_rita_slow_loop() {
                 // could catch the edge case where babel is restarted under us
                 set_babel_price();
                 info!("Common Slow tick completed!");
+
+                // This checks that all tunnels are attached to babel. This may not be the case when babel restarts
+                let babel_port = settings::get_rita_common().network.babel_port;
+                if let Ok(mut stream) = open_babel_stream(babel_port, SLOW_LOOP_TIMEOUT) {
+                    let babel_interfaces = parse_interfaces(&mut stream);
+                    tm_monitor_check(&babel_interfaces);
+                }
 
                 // sleep until it has been SLOW_LOOP_SPEED seconds from start, whenever that may be
                 // if it has been more than SLOW_LOOP_SPEED seconds from start, go right ahead
