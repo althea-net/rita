@@ -749,12 +749,9 @@ pub mod tests {
 
     /// gets a mutable reference tunnel from the list with the given index
     fn get_mut_tunnel_by_ifidx(ifidx: u32, tunnels: &mut [Tunnel]) -> Option<&mut Tunnel> {
-        for tunnel in tunnels.iter_mut() {
-            if tunnel.listen_ifidx == ifidx {
-                return Some(tunnel);
-            }
-        }
-        None
+        tunnels
+            .iter_mut()
+            .find(|tunnel| tunnel.listen_ifidx == ifidx)
     }
 
     #[test]
