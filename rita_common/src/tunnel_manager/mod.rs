@@ -22,7 +22,9 @@ use babel_monitor::monitor;
 use babel_monitor::open_babel_stream;
 use babel_monitor::unmonitor;
 use babel_monitor::BabelMonitorError;
+use babel_monitor::Interface;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::Display;
@@ -295,6 +297,36 @@ impl Neighbor {
             iface_name,
             tunnel_ip,
             speed_limit,
+        }
+    }
+}
+
+/// This function goes through all tunnels preset in rita memory and add them to babel is they are not present already
+pub fn tm_monitor_check(interface: &Result<Vec<Interface>, BabelMonitorError>) {
+    let empty = &vec![];
+    let interface_list: &Vec<Interface> = if interface.is_ok() {
+        interface.as_ref().unwrap()
+    } else {
+        empty
+    };
+
+    // Hashset of all interface names. This allows for an O(n) search instead of O(n^2)
+    let mut interface_map: HashSet<String> = HashSet::new();
+    for int in interface_list {
+        interface_map.insert(int.name.clone());
+    }
+
+    let rita_tunnels = &TUNNEL_MANAGER.read().unwrap().tunnels;
+    for (_, tunnels) in rita_tunnels.iter() {
+        for tun in tunnels.iter() {
+            if !interface_map.contains(&tun.iface_name) {
+                info!(
+                    "Babel was not monitored a tunnel, Readding the tunnel: {:?}",
+                    tun.iface_name
+                );
+                let res = tun.monitor();
+                error!("Unable to re-add tunnel to babel with: {:?}", res);
+            }
         }
     }
 }
