@@ -222,11 +222,8 @@ pub fn open_babel_stream(
 
     // Consumes the automated Preamble and validates configuration api version
     info!("Starting babel connection");
-    let result = read_babel(&mut stream, String::new(), 0);
-    if let Err(e) = result {
-        return Err(e);
-    }
-    let preamble = result.unwrap();
+    let result = read_babel(&mut stream, String::new(), 0)?;
+    let preamble = result;
     validate_preamble(preamble)?;
     Ok(stream)
 }
@@ -364,12 +361,9 @@ pub fn validate_preamble(preamble: String) -> Result<(), BabelMonitorError> {
 }
 
 pub fn parse_interfaces(stream: &mut TcpStream) -> Result<Vec<Interface>, BabelMonitorError> {
-    let output = run_command(stream, "dump");
+    let output = run_command(stream, "dump")?;
 
-    if let Err(e) = output {
-        return Err(e);
-    }
-    let babel_output = output.unwrap();
+    let babel_output = output;
     parse_interfaces_sync(babel_output)
 }
 
@@ -409,12 +403,9 @@ pub fn parse_interfaces_sync(output: String) -> Result<Vec<Interface>, BabelMoni
 }
 
 pub fn get_local_fee(stream: &mut TcpStream) -> Result<u32, BabelMonitorError> {
-    let output = run_command(stream, "dump");
+    let output = run_command(stream, "dump")?;
 
-    if let Err(e) = output {
-        return Err(e);
-    }
-    let babel_output = output.unwrap();
+    let babel_output = output;
     get_local_fee_sync(babel_output)
 }
 
@@ -435,22 +426,16 @@ pub fn get_local_fee_sync(babel_output: String) -> Result<u32, BabelMonitorError
 }
 
 pub fn set_local_fee(stream: &mut TcpStream, new_fee: u32) -> Result<(), BabelMonitorError> {
-    let result = run_command(stream, &format!("fee {}", new_fee));
+    let result = run_command(stream, &format!("fee {}", new_fee))?;
 
-    if let Err(e) = result {
-        return Err(e);
-    }
-    let _out = result.unwrap();
+    let _out = result;
     Ok(())
 }
 
 pub fn set_metric_factor(stream: &mut TcpStream, new_factor: u32) -> Result<(), BabelMonitorError> {
-    let result = run_command(stream, &format!("metric-factor {}", new_factor));
+    let result = run_command(stream, &format!("metric-factor {}", new_factor))?;
 
-    if let Err(e) = result {
-        return Err(e);
-    }
-    let _out = result.unwrap();
+    let _out = result;
     Ok(())
 }
 
@@ -460,13 +445,10 @@ pub fn monitor(stream: &mut TcpStream, iface: &str) -> Result<(), BabelMonitorEr
         iface
     );
     let iface = iface.to_string();
-    let result = run_command(stream, command);
+    let result = run_command(stream, command)?;
 
-    if let Err(e) = result {
-        return Err(e);
-    }
     trace!("Babel started monitoring: {}", iface);
-    let _out = result.unwrap();
+    let _out = result;
     Ok(())
 }
 
@@ -480,35 +462,26 @@ pub fn redistribute_ip(
         ip,
         if allow { "allow" } else { "deny" }
     );
-    let result = run_command(stream, &command);
+    let result = run_command(stream, &command)?;
 
-    if let Err(e) = result {
-        return Err(e);
-    }
-    let _out = result.unwrap();
+    let _out = result;
     read_babel(stream, String::new(), 0)
 }
 
 pub fn unmonitor(stream: &mut TcpStream, iface: &str) -> Result<(), BabelMonitorError> {
     let command = format!("flush interface {}", iface);
     let iface = iface.to_string();
-    let result = run_command(stream, &command);
+    let result = run_command(stream, &command)?;
 
-    if let Err(e) = result {
-        return Err(e);
-    }
     trace!("Babel stopped monitoring: {}", iface);
-    let _out = result.unwrap();
+    let _out = result;
     Ok(())
 }
 
 pub fn parse_neighs(stream: &mut TcpStream) -> Result<Vec<Neighbor>, BabelMonitorError> {
-    let result = run_command(stream, "dump");
+    let result = run_command(stream, "dump")?;
 
-    if let Err(e) = result {
-        return Err(e);
-    }
-    let output = result.unwrap();
+    let output = result;
     parse_neighs_sync(output)
 }
 
@@ -569,12 +542,9 @@ pub fn parse_neighs_sync(output: String) -> Result<Vec<Neighbor>, BabelMonitorEr
 }
 
 pub fn parse_routes(stream: &mut TcpStream) -> Result<Vec<Route>, BabelMonitorError> {
-    let result = run_command(stream, "dump");
+    let result = run_command(stream, "dump")?;
 
-    if let Err(e) = result {
-        return Err(e);
-    }
-    let babel_out = result.unwrap();
+    let babel_out = result;
     parse_routes_sync(babel_out)
 }
 
