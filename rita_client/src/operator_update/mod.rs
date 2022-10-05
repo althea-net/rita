@@ -8,7 +8,6 @@ use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::set_router_update_instruction;
 use althea_kernel_interface::hardware_info::get_hardware_info;
 use althea_types::get_sequence_num;
-use althea_types::AuthorizedKeys;
 use althea_types::BillingDetails;
 use althea_types::ContactStorage;
 use althea_types::ContactType;
@@ -357,9 +356,10 @@ fn update_authorized_keys(
     drop_list: Vec<String>,
     keys_file: &str,
 ) -> Result<(), std::io::Error> {
-    info!("Authorized keys update");
+    info!("Authorized keys update starting");
 
-    let mut updated_keys = HashSet::new();
+    let mut managed = HashSet::new();
+    let mut existing = HashSet::new();
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -367,8 +367,10 @@ fn update_authorized_keys(
 
     let managed_by = String::from("//managed-by-OpsTools");
 
-    let key_file = File::open(keys_file);
-    match key_file {
+    let auth_keys_file = File::open(keys_file);
+    info!("Authorized keys opening file");
+
+    match auth_keys_file {
         Ok(key_file_open) => {
             let buf_reader = BufReader::new(key_file_open);
 
@@ -376,17 +378,10 @@ fn update_authorized_keys(
                 match line {
                     Ok(line) => {
                         if line.contains(&managed_by) {
-                            updated_keys.insert(AuthorizedKeys {
-                                key: split_to_key(&line, &managed_by),
-                                managed: true,
-                                flush: false,
-                            });
+                            let key_hash = split_to_key(&line, &managed_by);
+                            managed.insert(key_hash);
                         } else {
-                            updated_keys.insert(AuthorizedKeys {
-                                key: line,
-                                managed: false,
-                                flush: false,
-                            });
+                            existing.insert(line);
                         }
                     }
                     Err(e) => {
@@ -396,34 +391,26 @@ fn update_authorized_keys(
                         )
                     }
                 }
-
-                // info!("Authorized keys collect existing {:?}", key);
             }
         }
         Err(e) => return Err(e),
     };
 
     for pubkey in add_list {
-        updated_keys.insert(AuthorizedKeys {
-            key: split_to_key(&pubkey, &managed_by),
-            managed: true,
-            flush: false,
-        });
+        info!("Authorized keys parse add_list");
+        managed.insert(pubkey);
     }
 
     for pubkey in drop_list {
-        if pubkey.contains(&managed_by) {
-            updated_keys.insert(AuthorizedKeys {
-                key: split_to_key(&pubkey, &managed_by),
-                managed: true,
-                flush: true,
-            });
-        } else {
-            updated_keys.insert(AuthorizedKeys {
-                key: pubkey,
-                managed: false,
-                flush: true,
-            });
+        info!("Authorized keys parse drop_list");
+        if managed.contains(&pubkey) {
+            info!("Authorized keys remove managed key");
+
+            managed.remove(&pubkey);
+        }
+        if existing.contains(&pubkey) {
+            info!("Authorized keys remove operator key");
+            existing.remove(&pubkey);
         }
     }
     let mut updated_key_file = std::fs::OpenOptions::new()
@@ -431,27 +418,11 @@ fn update_authorized_keys(
         .truncate(true)
         .open(&keys_file)?;
 
-    // println!("AuthKey: {:#?}", &updated_keys);
-    let mut managed = HashSet::new();
-    let mut existing = HashSet::new();
-
-    for key in &updated_keys {
-        if !key.flush {
-            if key.managed {
-                managed.insert(&key.key);
-            } else {
-                existing.insert(&key.key);
-            }
-        }
-    }
-    println!("AuthKey::Managed {:#?}", &managed);
-    println!("AuthKey::existing {:#?}", &existing);
-
     for key in managed {
         let write_managed = writeln!(updated_key_file, "{} {} {:?}", key, managed_by, now);
         match write_managed {
             Ok(()) => {
-                println!("Authorized key add managed key {:#?}", key);
+                info!("Authorized key adds managed key {:#?}", key);
             }
             Err(e) => {
                 info!("Authorized key failed to add managed key {:?}", e)
@@ -462,10 +433,10 @@ fn update_authorized_keys(
         let write_operator_key = writeln!(updated_key_file, "{}", key);
         match write_operator_key {
             Ok(()) => {
-                println!("Authorized key kept operator key {:#?}", key);
+                info!("Authorized key retains operator key {:#?}", key);
             }
             Err(e) => {
-                info!("Authorized key failed to keep operator key {:?}", e)
+                info!("Authorized key failed to retain operator key {:?}", e)
             }
         }
     }
@@ -673,14 +644,14 @@ mod tests {
         let managed_by = String::from("//managed-by-OpsTools");
         let operator_key = touch_temp_file(key_file);
 
-        let _update = update_authorized_keys(added_keys, removed_keys, key_file);
+        let _update = update_authorized_keys(added_keys.clone(), removed_keys, key_file);
         let result = parse_keys(key_file);
         assert_eq!(result.len(), 2);
 
         for item in result {
             if item.contains(&managed_by) {
-                let hash: Vec<&str> = item.split(&managed_by).collect();
-                println!("key {:?}", hash.first());
+                let hash: String = split_to_key(&item, &managed_by);
+                assert!(added_keys.contains(&hash));
             } else {
                 assert_eq!(item, operator_key);
             }
@@ -741,15 +712,14 @@ mod tests {
 
         let _update = update_authorized_keys(added_keys, removed_keys.clone(), key_file);
         let result = parse_keys(key_file);
-        // for (index, item) in result.iter().enumerate() {
-        //     if item.contains(&managed_by) {
-        //         let hash: String = split_to_key(item, &managed_by);
-        //         assert!(removed_keys.contains(&hash));
-        //         println!("{} {}", index, item);
-        //     } else {
-        //         assert_eq!(item, operator_key);
-        //     }
-        // }
+        for item in &result {
+            if item.contains(&managed_by) {
+                let hash: String = split_to_key(item, &managed_by);
+                assert!(removed_keys.contains(&hash));
+            } else {
+                assert_eq!(item, operator_key);
+            }
+        }
         assert_eq!(result.len(), 1);
 
         remove_temp_file(key_file).unwrap();
@@ -760,15 +730,13 @@ mod tests {
         let key_file: &str = "remove_keys";
 
         let operator_key = touch_temp_file(key_file);
-        let removed_keys = vec![
-            operator_key.to_string(),
-            String::from("ssh-rsa key1 user@comment"),
-        ];
-        let _update = update_authorized_keys(added_keys, removed_keys, key_file);
+        let removed_keys = vec![String::from(operator_key)];
+        let _update = update_authorized_keys(added_keys, removed_keys.clone(), key_file);
 
         let result = parse_keys(key_file);
-
-        assert_eq!(result.len(), 0);
+        for item in result {
+            assert_eq!(item, removed_keys[0].to_string());
+        }
 
         remove_temp_file(key_file).unwrap();
     }
@@ -778,12 +746,9 @@ mod tests {
         let removed_keys = vec![String::from("ssh-rsa key1 user@comment")];
         let key_file: &str = "remove_managed_keys";
 
-        let _operator_key = touch_temp_file(key_file);
+        let operator_key = touch_temp_file(key_file);
         let _add_update = update_authorized_keys(added_keys, vec![], key_file);
-        let result = parse_keys(key_file);
-        for i in result {
-            println!("ADD Result: {}", i)
-        }
+        let _result = parse_keys(key_file);
 
         let _remove_mgmt_key = update_authorized_keys(vec![], removed_keys, key_file);
 
@@ -791,8 +756,7 @@ mod tests {
         assert_eq!(result.len(), 1);
 
         for i in result {
-            println!("DROP result: {}", i);
-            assert_eq!(i, _operator_key);
+            assert_eq!(i, operator_key);
         }
 
         remove_temp_file(key_file).unwrap();
