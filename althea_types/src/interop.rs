@@ -789,6 +789,14 @@ pub struct HeartbeatMessage {
 pub struct ExitSystemTime {
     pub system_time: SystemTime,
 }
+
+#[derive(Hash, Eq, PartialEq, Debug)]
+pub struct AuthorizedKeys {
+    pub key: String,
+    pub managed: bool,
+    pub flush: bool,
+}
+
 #[cfg(test)]
 mod test {
 
