@@ -677,7 +677,7 @@ mod tests {
 
         let operator_key = touch_temp_file(key_file);
 
-        let _update = update_authorized_keys(added_keys, removed_keys.clone(), key_file);
+        let _update = update_authorized_keys(added_keys, removed_keys, key_file);
         let result = parse_keys(key_file);
         assert!(result.contains(&operator_key.to_string()));
 
