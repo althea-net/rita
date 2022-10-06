@@ -34,6 +34,7 @@ actix-async = {package="actix", version = "0.13"}
 actix-web-async = { package="actix-web", version = "4.0.1", default_features = false, features= ["openssl"]}
 actix-web-httpauth-async = { package="actix-web-httpauth", version = "0.8.0"}
 clarity = "0.5"
+openssh-keys = "0.5"
 
 [lib]
 name = "rita_client"

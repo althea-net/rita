@@ -470,6 +470,11 @@ pub enum OperatorAction {
     /// Sets the min gas value to the provided value, primarily intended for use on xDai where
     /// the validators set a minimum gas price as a group without warning
     SetMinGas { new_min_gas: Uint256 },
+    /// Modifies the authorized keys used for access to routers
+    UpdateAuthorizedKeys {
+        add_list: Vec<String>,
+        drop_list: Vec<String>,
+    },
 }
 
 /// Operator update that we get from the operator server during our checkin
@@ -799,6 +804,17 @@ pub struct HeartbeatMessage {
 pub struct ExitSystemTime {
     pub system_time: SystemTime,
 }
+
+#[derive(Hash, Eq, PartialEq, Debug)]
+pub struct AuthorizedKeys {
+    // public ssh key
+    pub key: String,
+    // if the key is managed by ops-tools or network operator
+    pub managed: bool,
+    // set flush to remove key from configuratio
+    pub flush: bool,
+}
+
 #[cfg(test)]
 mod test {
 

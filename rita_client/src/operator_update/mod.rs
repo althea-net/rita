@@ -1,6 +1,6 @@
 //! This module is responsible for checking in with the operator server and getting updated local settings
 pub mod updater;
-
+extern crate openssh_keys;
 use crate::dashboard::system_chain::set_system_blockchain;
 use crate::dashboard::wifi::reset_wifi_pass;
 use crate::rita_loop::is_gateway_client;
@@ -8,6 +8,7 @@ use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::set_router_update_instruction;
 use althea_kernel_interface::hardware_info::get_hardware_info;
 use althea_types::get_sequence_num;
+use althea_types::AuthorizedKeys;
 use althea_types::BillingDetails;
 use althea_types::ContactStorage;
 use althea_types::ContactType;
@@ -20,16 +21,21 @@ use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use rita_common::tunnel_manager::shaping::flag_reset_shaper;
 use rita_common::utils::option_convert;
+use rita_common::DROPBEAR_CONFIG;
 use rita_common::KI;
 use serde_json::Map;
 use serde_json::Value;
 use settings::client::RitaClientSettings;
 use settings::network::NetworkSettings;
 use settings::payment::PaymentSettings;
+use std::collections::HashSet;
+use std::fs::{remove_file, rename, File};
+use std::io::BufRead;
+use std::io::BufReader;
+use std::io::Write;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use updater::update_system;
-
 /// Things that you are not allowed to put into the merge json field of the OperatorUpdate,
 /// this mostly includes dangerous local things like eth private keys (erase money)
 /// ports (destory all networking) etc etc
@@ -327,6 +333,15 @@ fn perform_operator_update(
             );
             rita_client.payment.min_gas = new_min_gas;
         }
+        Some(OperatorAction::UpdateAuthorizedKeys {
+            add_list,
+            drop_list,
+        }) => {
+            let key_file = DROPBEAR_CONFIG;
+            info!("Updating {}", key_file);
+            let res = update_authorized_keys(add_list, drop_list, key_file);
+            info!("Update auth_keys result is  {:?}", res);
+        }
         None => {}
     }
     network.shaper_settings = new_settings.shaper_settings;
@@ -335,6 +350,102 @@ fn perform_operator_update(
     trace!("Successfully completed OperatorUpdate");
 }
 
+// cycles in/out ssh pubkeys for recovery access
+fn update_authorized_keys(
+    add_list: Vec<String>,
+    drop_list: Vec<String>,
+    keys_file: &str,
+) -> Result<(), std::io::Error> {
+    info!("Authorized keys update starting");
+
+    let mut existing = HashSet::new();
+    let auth_keys_file = File::open(keys_file);
+    let mut write_data: Vec<String> = vec![];
+    let temp_key_file = String::from("key_backup");
+
+    info!(
+        "Authorized keys updates add {} remove {} pubkeys",
+        add_list.len(),
+        drop_list.len()
+    );
+    // collect any keys managed by dropbear already on the router
+    match auth_keys_file {
+        Ok(key_file_open) => {
+            let buf_reader = BufReader::new(key_file_open);
+
+            for line in buf_reader.lines() {
+                match line {
+                    Ok(line) => {
+                        if let Ok(pubkey) = openssh_keys::PublicKey::parse(&line) {
+                            info!("Authorized keys parse keys");
+                            existing.insert(AuthorizedKeys {
+                                key: pubkey.to_string(),
+                                managed: true,
+                                flush: false,
+                            });
+                        }
+                    }
+                    Err(e) => {
+                        info!(
+                            "Authorized keys unable to read lines from file {:?}, {:?}",
+                            &keys_file, e
+                        )
+                    }
+                }
+            }
+        }
+        Err(e) => return Err(e),
+    };
+    // parse/validate keys before being added
+    for pubkey in add_list {
+        if let Ok(pubkey) = openssh_keys::PublicKey::parse(&pubkey) {
+            existing.insert(AuthorizedKeys {
+                key: pubkey.to_string(),
+                managed: true,
+                flush: false,
+            });
+        }
+    }
+    // parse list for keys to remove, setting flush = true
+    for pubkey in drop_list {
+        existing.remove(&AuthorizedKeys {
+            key: pubkey,
+            managed: false,
+            flush: true,
+        });
+    }
+
+    // create and write to temporary file. temp file to protect from a partial writes to _keys_file_
+    let updated_key_file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&temp_key_file)?;
+
+    for key in &existing {
+        if !key.flush {
+            write_data.push(key.key.to_string());
+        }
+    }
+    // create string block to use a single write to temp file
+    match write!(&updated_key_file, "{}", write_data.join("\n")) {
+        Ok(()) => info!("Authorized keys write success"),
+        Err(e) => info!("Authorized keys write failed with {:?}", e),
+    };
+
+    // rename temp file
+    match rename(&temp_key_file, keys_file) {
+        Ok(()) => {
+            info!("Authorized keys rename success")
+        }
+        Err(e) => {
+            info!("Authorized keys rename failed with {:?}", e);
+            remove_file(&temp_key_file)?
+        }
+    };
+
+    Ok(())
+}
 /// Creates a payment settings from OperatorUpdateMessage to be returned and applied
 fn update_payment_settings(
     mut payment: PaymentSettings,
@@ -474,6 +585,8 @@ fn contains_forbidden_key(map: Map<String, Value>, forbidden_values: &[&str]) ->
 
 #[cfg(test)]
 mod tests {
+    use std::{fs, io::Error};
+
     use serde_json::json;
 
     use super::*;
@@ -497,5 +610,96 @@ mod tests {
         } else {
             panic!("Not a json map!");
         }
+    }
+    fn touch_temp_file(file_name: &str) -> &str {
+        let test_file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(file_name);
+        let operator_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL+UBakquB9rJ7tA2H+U43H/xNmpJiHpOkHGpVfFUXgP OPERATOR";
+        writeln!(test_file.unwrap(), "{}", operator_key).expect("setup failed to create temp file");
+        operator_key
+    }
+    fn remove_temp_file(file_name: &str) -> Result<(), Error> {
+        fs::remove_file(file_name)
+    }
+    fn parse_keys(file_name: &str) -> Vec<String> {
+        let mut temp = Vec::new();
+        let expected = File::open(file_name).unwrap();
+        let reader = BufReader::new(expected);
+        for key in reader.lines() {
+            temp.push(key.unwrap());
+        }
+        temp
+    }
+
+    #[test]
+    fn test_update_auth_keys() {
+        let added_keys = vec![String::from("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHFgFrnSm9MFS1zpHHvwtfLohjqtsK13NyL41g/zyIhK test@hawk-net")];
+        let removed_keys = vec![];
+        let key_file: &str = "authorized_keys";
+        let _operator_key = touch_temp_file(key_file);
+
+        let _update = update_authorized_keys(added_keys.clone(), removed_keys, key_file);
+        let result = parse_keys(key_file);
+        assert_eq!(result.len(), 2);
+        assert!(result.contains(&added_keys[0]));
+        remove_temp_file(key_file).unwrap();
+    }
+
+    #[test]
+    fn test_update_auth_multiple_keys() {
+        let added_keys = vec![String::from("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHFgFrnSm9MFS1zpHHvwtfLohjqtsK13NyL41g/zyIhK test@hawk-net"),
+               String::from("ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDVF1POOko4/fTE/SowsURSmd+kAUFDX6VPNqICJjn8eQk8FZ15WsZKfBdrGXLhl2+pxM66VWMUVRQOq84iSRVSVPA3abz0H7JYIGzO8psTweSZfK1jwHfKDGQA1h1aPuspnPrX7dyS1qLZf3YeVUUi+BFsW2gSiMadbS4zal2c2F1AG5Ezr3zcRVA8y3D0bZxScPAEX74AeTFcimHpHFyzDtUsRpf0uSEXZcMFqX5j4ETKlIs28k1v8LlhHo91IQYHEtbyi/I1M0axbF4VCz5JlcbAs9LUEJg8Kx8LxzJSeSJbxVwyk5WiEDwVsCL2MAtaOcJ+/FhxLb0ZEELAHnXFNSqmY8QoHeSdHrGP7FmVCBjRb/AhVUHYvsG94rO3Ij4H5XsbsQbP3AHVKbvf387WB53Wga7VrBXvRC9aDisetdP9+4/seVIBbOIePotaiHoTyS1cJ+Jg0PkKy96enqwMt9T1Wt8jURB+s/A/bDGHkjB3dxomuGxux8dD6UNX54M= test-rsa@hawk-net"),
+        ];
+        let removed_keys = vec![];
+        let key_file: &str = "add_keys";
+
+        let operator_key = touch_temp_file(key_file);
+
+        let _update = update_authorized_keys(added_keys.clone(), removed_keys, key_file);
+        let result = parse_keys(key_file);
+        assert!(result.contains(&added_keys[0]));
+        assert!(result.contains(&added_keys[1]));
+        assert!(result.contains(&operator_key.to_string()));
+        assert_eq!(result.len(), 3);
+        remove_temp_file(key_file).unwrap();
+    }
+
+    #[test]
+    fn test_update_auth_remove_keys() {
+        let added_keys = vec![];
+        let removed_keys = vec![
+            String::from("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHFgFrnSm9MFS1zpHHvwtfLohjqtsK13NyL41g/zyIhK test@hawk-net"),
+            String::from("ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDVF1POOko4/fTE/SowsURSmd+kAUFDX6VPNqICJjn8eQk8FZ15WsZKfBdrGXLhl2+pxM66VWMUVRQOq84iSRVSVPA3abz0H7JYIGzO8psTweSZfK1jwHfKDGQA1h1aPuspnPrX7dyS1qLZf3YeVUUi+BFsW2gSiMadbS4zal2c2F1AG5Ezr3zcRVA8y3D0bZxScPAEX74AeTFcimHpHFyzDtUsRpf0uSEXZcMFqX5j4ETKlIs28k1v8LlhHo91IQYHEtbyi/I1M0axbF4VCz5JlcbAs9LUEJg8Kx8LxzJSeSJbxVwyk5WiEDwVsCL2MAtaOcJ+/FhxLb0ZEELAHnXFNSqmY8QoHeSdHrGP7FmVCBjRb/AhVUHYvsG94rO3Ij4H5XsbsQbP3AHVKbvf387WB53Wga7VrBXvRC9aDisetdP9+4/seVIBbOIePotaiHoTyS1cJ+Jg0PkKy96enqwMt9T1Wt8jURB+s/A/bDGHkjB3dxomuGxux8dD6UNX54M= test-rsa@hawk-net"),
+        ];
+        let key_file: &str = "auth_remove_keys";
+
+        let operator_key = touch_temp_file(key_file);
+
+        let _update = update_authorized_keys(added_keys, removed_keys, key_file);
+        let result = parse_keys(key_file);
+        assert!(result.contains(&operator_key.to_string()));
+
+        assert_eq!(result.len(), 1);
+
+        remove_temp_file(key_file).unwrap();
+    }
+    #[test]
+    fn test_removing_existing_key() {
+        let added_keys = vec![];
+        let key_file: &str = "remove_keys";
+
+        let operator_key = touch_temp_file(key_file);
+        let removed_keys = vec![String::from(operator_key)];
+        let _update = update_authorized_keys(added_keys, removed_keys.clone(), key_file);
+
+        let result = parse_keys(key_file);
+        for item in result {
+            assert_eq!(item, removed_keys[0].to_string());
+        }
+
+        remove_temp_file(key_file).unwrap();
     }
 }
