@@ -34,6 +34,7 @@ dao_addresses = []
 
 [exit_network]
 wg_tunnel_port = 59999
+wg_v2_tunnel_port = 59998
 exit_hello_port = 4875
 exit_price = 50
 own_internal_ip = "172.168.1.254"
@@ -44,6 +45,11 @@ entry_timeout = 7776000
 wg_public_key = "H/ABwzXk834OwGYU8CZGfFxNZOd+BAJEaVDHiEiWWhU="
 wg_private_key = "ALxcZm2r58gY0sB4vIfnjShc86qBoVK3f32H9VrwqWU="
 wg_private_key_path = "/tmp/exit-priv"
+
+[[exit_network.cluster_exits]]
+mesh_ip = "fd00::5"
+eth_address = "0x5AeE3Dff733F56cFe7E5390B9cC3A46a90cA1CfA"
+wg_public_key = "bvM10HW73yePrxdtCQQ4U20W5ogogdiZtUihrPc/oGY="
 
 [verif_settings]
 type = "Email"

@@ -29,11 +29,12 @@ use althea_kernel_interface::{
     exit_client_tunnel::ClientExitTunnelConfig, DefaultRoute, KernelInterfaceError,
 };
 use althea_types::ExitClientDetails;
-use althea_types::ExitDetails;
 use althea_types::Identity;
 use althea_types::WgKey;
 use althea_types::{EncryptedExitClientIdentity, EncryptedExitState};
+use althea_types::{EncryptedExitList, ExitDetails, ExitList};
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState, ExitVerifMode};
+use babel_monitor::Route;
 use exit_switcher::{get_babel_routes, set_best_exit};
 
 use rita_common::blockchain_oracle::low_balance;
@@ -81,6 +82,23 @@ pub struct ExitManager {
     /// It also holds information about metrics and degradation values. Look at doc comment on 'set_best_exit' for more
     /// information on what these mean
     pub selected_exit_list: HashMap<String, SelectedExit>,
+    /// Every tick we query an exit endpoint to get a list of exits in that cluster. We use this list for exit switching
+    pub exit_list: ExitList,
+}
+
+/// This functions sets the exit list ONLY IF the list arguments provived is not empty. This is need for the following edge case:
+/// When an exit goes down, the endpoint wont repsond, so we have no exits to switch to. By setting only when we have a length > 1
+/// we assure that we switch when an exit goes down
+pub fn set_exit_list(list: ExitList) -> bool {
+    if !list.exit_list.is_empty() {
+        EXIT_MANAGER.write().unwrap().exit_list = list;
+        return true;
+    }
+    false
+}
+
+pub fn get_exit_list() -> ExitList {
+    EXIT_MANAGER.read().unwrap().exit_list.clone()
 }
 
 pub fn get_selected_exit(exit: String) -> Option<IpAddr> {
@@ -129,9 +147,9 @@ pub fn get_em_nat() -> bool {
 
 fn linux_setup_exit_tunnel(
     exit: String,
-    current_exit: &ExitServer,
     general_details: &ExitDetails,
     our_details: &ExitClientDetails,
+    exit_list: &ExitList,
 ) -> Result<(), RitaClientError> {
     let mut rita_client = settings::get_rita_client();
     let mut network = rita_client.network;
@@ -139,17 +157,16 @@ fn linux_setup_exit_tunnel(
 
     // TODO this should be refactored to return a value
     KI.update_settings_route(&mut network.last_default_route);
+    info!("Updated settings route");
 
     if let Err(KernelInterfaceError::RuntimeError(v)) = KI.setup_wg_if_named("wg_exit") {
         return Err(RitaClientError::MiscStringError(v));
     }
 
+    let selected_ip = get_selected_exit(exit).expect("There should be an exit ip here");
     let args = ClientExitTunnelConfig {
-        endpoint: SocketAddr::new(
-            get_selected_exit(exit).expect("There should be an exit ip here"),
-            general_details.wg_exit_port,
-        ),
-        pubkey: current_exit.wg_public_key,
+        endpoint: SocketAddr::new(selected_ip, exit_list.wg_exit_listen_port),
+        pubkey: get_exit_pubkey(selected_ip, exit_list),
         private_key_path: network.wg_private_key_path.clone(),
         listen_port: rita_client.exit_client.wg_listen_port,
         local_ip: our_details.client_internal_ip,
@@ -157,6 +174,8 @@ fn linux_setup_exit_tunnel(
         rita_hello_port: network.rita_hello_port,
         user_specified_speed: network.user_bandwidth_limit,
     };
+
+    info!("Args while setting up wg_exit on client are: {:?}", args);
 
     rita_client.network = network;
     settings::set_rita_client(rita_client);
@@ -168,6 +187,18 @@ fn linux_setup_exit_tunnel(
     KI.create_client_nat_rules()?;
 
     Ok(())
+}
+
+/// From a exit list, find the corresponding wg public key of our current connected exit to
+/// set up wg tunnels
+fn get_exit_pubkey(ip: IpAddr, exit_list: &ExitList) -> WgKey {
+    for id in exit_list.exit_list.clone() {
+        if id.mesh_ip == ip {
+            return id.wg_public_key;
+        }
+    }
+
+    panic!("Unable to find a valid wg key for current exit, please check that all exit Identities are properly setup on the exit");
 }
 
 fn restore_nat() {
@@ -192,6 +223,7 @@ pub async fn get_exit_info(to: &SocketAddr) -> Result<ExitState, RitaClientError
     };
     let response_json = response.json().await?;
 
+    info!("Received {:?} from endpoint {:?}", response_json, endpoint);
     Ok(response_json)
 }
 
@@ -437,7 +469,7 @@ pub async fn exit_setup_request(exit: String, code: Option<String>) -> Result<()
         None => {
             // set this ip in the lazy static
             initialize_selected_exit_list(exit.clone(), current_exit.clone());
-            current_exit.subnet.ip()
+            current_exit.root_ip
         }
     };
     let exit_pubkey = current_exit.wg_public_key;
@@ -570,6 +602,115 @@ async fn exit_status_request(exit: String) -> Result<(), RitaClientError> {
     Ok(())
 }
 
+async fn get_cluster_ip_list(exit: String) -> Result<ExitList, RitaClientError> {
+    let current_exit_cluster = match settings::get_rita_client().exit_client.exits.get(&exit) {
+        Some(current_exit) => current_exit.clone(),
+        None => {
+            return Err(RitaClientError::NoExitError(exit));
+        }
+    };
+
+    let exit_pubkey = current_exit_cluster.wg_public_key;
+    let reg_details = match settings::get_rita_client().exit_client.contact_info {
+        Some(val) => val.into(),
+        None => {
+            return Err(RitaClientError::MiscStringError(
+                "No valid details".to_string(),
+            ))
+        }
+    };
+    let ident = ExitClientIdentity {
+        global: match settings::get_rita_client().get_identity() {
+            Some(id) => id,
+            None => {
+                return Err(RitaClientError::MiscStringError(
+                    "Identity has no mesh IP ready yet".to_string(),
+                ));
+            }
+        },
+        wg_port: settings::get_rita_client().exit_client.wg_listen_port,
+        reg_details,
+    };
+
+    let current_exit_ip = get_selected_exit(exit.clone());
+    let exit_server = current_exit_ip.expect("There should be an exit ip here");
+
+    let endpoint = format!(
+        "http://[{}]:{}/exit_list",
+        exit_server, current_exit_cluster.registration_port
+    );
+    let ident = encrypt_exit_client_id(&exit_pubkey.into(), ident);
+
+    let client = awc::Client::default();
+    let response = client
+        .post(&endpoint)
+        .timeout(CLIENT_LOOP_TIMEOUT)
+        .send_json(&ident)
+        .await;
+    let mut response = match response {
+        Ok(a) => {
+            reset_blacklist_warnings(exit_server);
+            a
+        }
+        Err(awc::error::SendRequestError::Timeout) => {
+            // Did not get a response, is it a rogue exit or some netork error?
+            blacklist_strike_ip(exit_server, WarningType::SoftWarning);
+            return Err(RitaClientError::SendRequestError(
+                awc::error::SendRequestError::Timeout.to_string(),
+            ));
+        }
+        Err(e) => return Err(RitaClientError::SendRequestError(e.to_string())),
+    };
+
+    let value = response.json().await?;
+
+    match decrypt_exit_list(value, exit_pubkey.into()) {
+        Err(e) => {
+            blacklist_strike_ip(exit_server, WarningType::HardWarning);
+            Err(e)
+        }
+        Ok(a) => {
+            reset_blacklist_warnings(exit_server);
+            Ok(a)
+        }
+    }
+}
+
+fn decrypt_exit_list(
+    exit_list: EncryptedExitList,
+    exit_pubkey: PublicKey,
+) -> Result<ExitList, RitaClientError> {
+    let rita_client = settings::get_rita_client();
+    let network_settings = rita_client.network;
+    let our_secretkey = network_settings
+        .wg_private_key
+        .expect("No private key?")
+        .into();
+    let ciphertext = exit_list.exit_list;
+    let nonce = Nonce(exit_list.nonce);
+    let ret: ExitList = match box_::open(&ciphertext, &nonce, &exit_pubkey, &our_secretkey) {
+        Ok(decrypted_bytes) => match String::from_utf8(decrypted_bytes) {
+            Ok(json_string) => match serde_json::from_str(&json_string) {
+                Ok(ip_list) => ip_list,
+                Err(e) => {
+                    return Err(e.into());
+                }
+            },
+            Err(e) => {
+                error!("Could not deserialize exit state with {:?}", e);
+                return Err(e.into());
+            }
+        },
+        Err(_) => {
+            error!("Could not decrypt exit state");
+            return Err(RitaClientError::MiscStringError(
+                "Could not decrypt exit state".to_string(),
+            ));
+        }
+    };
+    Ok(ret)
+}
+
 fn correct_default_route(input: Option<DefaultRoute>) -> bool {
     match input {
         Some(v) => v.is_althea_default_route(),
@@ -585,15 +726,26 @@ fn initialize_selected_exit_list(exit: String, server: ExitServer) {
 
     info!(
         "Setting initialized IP for exit {} with ip: {}",
-        exit,
-        server.subnet.ip()
+        exit, server.root_ip
     );
     list.entry(exit).or_insert_with(|| SelectedExit {
-        selected_id: Some(server.subnet.ip()),
+        selected_id: Some(server.root_ip),
         selected_id_degradation: None,
         tracking_exit: None,
         selected_id_metric: None,
     });
+}
+
+/// This function takes a list of babel routes and uses this to insert ip -> route
+/// instances in the hashmap. This is an optimization that allows us to reduce route lookups from O(n * m ) to O(m + n)
+/// when trying to find exit ips in our cluster
+fn get_routes_hashmap(routes: Vec<Route>) -> HashMap<IpAddr, Route> {
+    let mut ret = HashMap::new();
+    for r in routes {
+        ret.insert(r.prefix.ip(), r);
+    }
+
+    ret
 }
 
 pub async fn exit_manager_tick() {
@@ -606,6 +758,7 @@ pub async fn exit_manager_tick() {
         Some(a) => a,
         None => "".to_string(),
     };
+
     let last_exit = get_selected_exit(current_exit.clone());
     let mut exits = rita_client.exit_client.exits;
 
@@ -625,29 +778,59 @@ pub async fn exit_manager_tick() {
 
             // Logic to determnine what the best exit is and if we should switch
             let babel_port = settings::get_rita_client().network.babel_port;
-            let exit_subnet = exit.subnet;
 
             let routes = match get_babel_routes(babel_port) {
                 Ok(a) => a,
                 Err(_) => {
                     warn!("No babel routes present to setup an exit");
-                    return;
+                    Vec::new()
                 }
             };
 
-            info!("Exit_Switcher: Calling set best exit");
-            let selected_exit = match set_best_exit(current_exit.clone(), exit_subnet, routes) {
-                Ok(a) => Some(a),
+            // Get cluster exit list. This is saved locally and updated every tick depending on what exit we connect to.
+            // When it is empty, it means an exit we connected to went down, and we use the list from memory to connect to a new instance
+            let exit_list = match get_cluster_ip_list(current_exit.clone()).await {
+                Ok(a) => a,
                 Err(e) => {
-                    warn!("Found no exit yet : {}", e);
-                    return;
+                    error!("Exit_Switcher: Unable to get exit list: {:?}", e);
+                    ExitList {
+                        exit_list: Vec::new(),
+                        wg_exit_listen_port: 0,
+                    }
                 }
             };
+            info!(
+                "Received a cluster exit list from the exit: {:?}",
+                exit_list
+            );
+            let exit_wg_port = exit_list.wg_exit_listen_port;
+            let is_valid = set_exit_list(exit_list);
+            // When the list is empty or the port is 0, the exit services us
+            // an invalid struct or we made a bad request
+            if !is_valid || exit_wg_port == 0 {
+                error!("Received an invalid exit list!")
+            }
+
+            // Set all babel routes in a hashmap that we use to instantly get the route object of the exit we are trying to
+            // connect to
+            let ip_route_hashmap = get_routes_hashmap(routes);
+
+            // Calling set best exit function, this looks though a list of exit in a cluster, does some math, and determines what exit we should connect to
+            let exit_list = get_exit_list();
+            info!("Exit_Switcher: Calling set best exit");
+            let selected_exit =
+                match set_best_exit(current_exit.clone(), &exit_list, ip_route_hashmap) {
+                    Ok(a) => Some(a),
+                    Err(e) => {
+                        warn!("Found no exit yet : {}", e);
+                        return;
+                    }
+                };
 
             info!("Exit_Switcher: After selecting best exit this tick, we have selected_id: {:?}, selected_metric: {:?}, tracking_ip: {:?}", get_selected_exit(current_exit.clone()), get_selected_exit_metric(current_exit.clone()), get_selected_exit_tracking(current_exit.clone()));
 
             // check the exit's time and update locally if it's very different
-            maybe_set_local_to_exit_time(exit.clone()).await;
+            maybe_set_local_to_exit_time(exit.clone(), current_exit.clone()).await;
 
             // Determine states to setup tunnels
             let signed_up_for_exit = exit.info.our_details().is_some();
@@ -657,14 +840,15 @@ pub async fn exit_manager_tick() {
             let correct_default_route = correct_default_route(KI.get_default_route());
             let current_exit_id = selected_exit;
 
+            info!("Reaches this part of the code: signed_up: {:?}, exit_has_changed: {:?}, correct_default_route {:?}", signed_up_for_exit, exit_has_changed, correct_default_route);
             match (signed_up_for_exit, exit_has_changed, correct_default_route) {
                 (true, true, _) => {
                     trace!("Exit change, setting up exit tunnel");
                     linux_setup_exit_tunnel(
                         current_exit,
-                        exit,
                         &general_details.clone(),
                         exit.info.our_details().unwrap(),
+                        &exit_list,
                     )
                     .expect("failure setting up exit tunnel");
                     set_em_nat(true);
@@ -673,9 +857,9 @@ pub async fn exit_manager_tick() {
                     trace!("DHCP overwrite setup exit tunnel again");
                     linux_setup_exit_tunnel(
                         current_exit,
-                        exit,
                         &general_details.clone(),
                         exit.info.our_details().unwrap(),
+                        &exit_list,
                     )
                     .expect("failure setting up exit tunnel");
                     set_em_nat(true);
@@ -754,7 +938,6 @@ pub async fn exit_manager_tick() {
 
     // code that manages requesting details to exits
     let servers = { settings::get_rita_client().exit_client.exits };
-
     for (k, s) in servers {
         match s.info {
             ExitState::Denied { .. } | ExitState::Disabled | ExitState::GotInfo { .. } => {}

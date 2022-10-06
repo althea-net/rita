@@ -18,6 +18,7 @@ pub struct ExitNetworkSettings {
     pub exit_hello_port: u16,
     /// This is the port which the exit tunnel listens on
     pub wg_tunnel_port: u16,
+    pub wg_v2_tunnel_port: u16,
     /// Price in wei per byte which is charged to traffic both coming in and out over the internet
     pub exit_price: u64,
     /// This is the exit's own ip/gateway ip in the exit wireguard tunnel
@@ -46,6 +47,8 @@ pub struct ExitNetworkSettings {
     pub wg_private_key_path: String,
     /// Magic phone number operators enter in order to register to exit without auth
     pub magic_phone_number: Option<String>,
+    /// Lists of exit ip addrs in this cluster
+    pub cluster_exits: Vec<Identity>,
 }
 
 impl ExitNetworkSettings {
@@ -56,6 +59,7 @@ impl ExitNetworkSettings {
         ExitNetworkSettings {
             exit_hello_port: 4875,
             wg_tunnel_port: 59999,
+            wg_v2_tunnel_port: 59998,
             exit_price: 10,
             own_internal_ip: "172.16.255.254".parse().unwrap(),
             exit_start_ip: "172.16.0.0".parse().unwrap(),
@@ -70,6 +74,7 @@ impl ExitNetworkSettings {
                 .unwrap(),
             wg_private_key_path: String::new(),
             magic_phone_number: None,
+            cluster_exits: Vec::new(),
         }
     }
 }

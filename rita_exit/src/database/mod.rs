@@ -27,6 +27,7 @@ use crate::RitaExitError;
 
 use althea_kernel_interface::ExitClient;
 use althea_types::Identity;
+use althea_types::WgKey;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 use diesel::prelude::PgConnection;
 
@@ -41,6 +42,7 @@ use std::collections::HashSet;
 use std::net::IpAddr;
 use std::time::Duration;
 use std::time::Instant;
+use std::time::SystemTime;
 
 use crate::EXIT_ALLOWED_COUNTRIES;
 use crate::EXIT_DESCRIPTION;
@@ -352,6 +354,18 @@ pub fn setup_clients(
 
     trace!("got clients from db {:?} {:?}", clients_list, old_clients);
 
+    // Setup or verify that an ipv6 route exists for each client
+    let new_wg_exit_clients: HashMap<WgKey, SystemTime> = KI
+        .get_last_handshake_time("wg_exit_v2")
+        .expect("There should be a new wg_exit interface")
+        .into_iter()
+        .collect();
+    let wg_exit_clients: HashMap<WgKey, SystemTime> = KI
+        .get_last_handshake_time("wg_exit")
+        .expect("There should be a wg_exit interface")
+        .into_iter()
+        .collect();
+
     for c in clients_list.iter() {
         match (c.verified, to_exit_client(c.clone())) {
             (true, Ok(exit_client_c)) => {
@@ -363,8 +377,35 @@ pub fn setup_clients(
             (false, _) => trace!("{:?} is not verified, not adding to wg_exit", c),
         }
 
-        // Setup or verify that an ipv6 route exists for each client
-        KI.setup_client_routes(c.internet_ipv6.clone(), c.mesh_ip.clone())
+        let interface =
+            match get_client_interface(c, new_wg_exit_clients.clone(), wg_exit_clients.clone()) {
+                Ok(a) => a,
+                Err(_) => {
+                    // There is no handshake on either wg_exit or wg_exit_v2, which can happen during a restart
+                    // in this case the client will not have an ipv6 route until they initiate a handshake again
+                    continue;
+                }
+            };
+        KI.setup_client_routes(
+            c.internet_ipv6.clone(),
+            c.mesh_ip.clone(),
+            c.internal_ip.clone(),
+            &interface,
+        );
+
+        let ex_nic = settings::get_rita_exit()
+            .network
+            .external_nic
+            .expect("Expected an external nic here");
+
+        let res = KI.setup_client_rules(
+            c.internet_ipv6.clone(),
+            c.mesh_ip.clone(),
+            &interface,
+            ex_nic.clone(),
+        );
+
+        info!("IPV6: Setup client ip6tables rules with: {:?}", res);
     }
 
     trace!("converted clients {:?}", wg_clients);
@@ -376,17 +417,36 @@ pub fn setup_clients(
         return Ok(wg_clients);
     }
 
+    info!("Setting up configs for wg_exit and wg_exit_v2");
     // setup all the tunnels
     let exit_status = KI.set_exit_wg_config(
         &wg_clients,
         settings::get_rita_exit().exit_network.wg_tunnel_port,
         &settings::get_rita_exit().exit_network.wg_private_key_path,
+        "wg_exit",
+    );
+
+    // Setup new tunnels
+    let exit_status_new = KI.set_exit_wg_config(
+        &wg_clients,
+        settings::get_rita_exit().exit_network.wg_v2_tunnel_port,
+        &settings::get_rita_exit().network.wg_private_key_path,
+        "wg_exit_v2",
     );
 
     match exit_status {
         Ok(_) => trace!("Successfully setup Exit WG!"),
         Err(e) => warn!(
             "Error in Exit WG setup {:?}, 
+                        this usually happens when a Rita service is 
+                        trying to auto restart in the background",
+            e
+        ),
+    }
+    match exit_status_new {
+        Ok(_) => trace!("Successfully setup Exit WG NEW!"),
+        Err(e) => warn!(
+            "Error in Exit WG NEW setup {:?}, 
                         this usually happens when a Rita service is 
                         trying to auto restart in the background",
             e
@@ -400,6 +460,38 @@ pub fn setup_clients(
         wg_clients.len(),
     );
     Ok(wg_clients)
+}
+
+pub fn get_client_interface(
+    c: &exit_db::models::Client,
+    new_wg_exit_clients: HashMap<WgKey, SystemTime>,
+    wg_exit_clients: HashMap<WgKey, SystemTime>,
+) -> Result<String, RitaExitError> {
+    info!(
+        "New list is {:?} \n Old list is {:?}",
+        new_wg_exit_clients, wg_exit_clients
+    );
+    match (
+        new_wg_exit_clients.get(&c.wg_pubkey.parse()?),
+        wg_exit_clients.get(&c.wg_pubkey.parse()?),
+    ) {
+        (Some(_), None) => Ok("wg_exit_v2".into()),
+        (None, Some(_)) => Ok("wg_exit".into()),
+        (Some(new), Some(old)) => {
+            if new > old {
+                Ok("wg_exit_v2".into())
+            } else {
+                Ok("wg_exit".into())
+            }
+        }
+        _ => {
+            error!(
+                "WG EXIT SETUP: Client {}, does not have handshake with any wg exit interface. Setting up routes on wg_exit",
+                c.wg_pubkey
+            );
+            Ok("wg_exit".into())
+        }
+    }
 }
 
 /// Performs enforcement actions on clients by requesting a list of clients from debt keeper
@@ -444,6 +536,17 @@ pub fn enforce_exit_clients(
         return Ok(new_debt_actions);
     }
 
+    let new_wg_exit_clients: HashMap<WgKey, SystemTime> = KI
+        .get_last_handshake_time("wg_exit_v2")
+        .expect("There should be a new wg_exit interface")
+        .into_iter()
+        .collect();
+    let wg_exit_clients: HashMap<WgKey, SystemTime> = KI
+        .get_last_handshake_time("wg_exit")
+        .expect("There should be a new wg_exit interface")
+        .into_iter()
+        .collect();
+
     for debt_entry in list.iter() {
         match clients_by_id.get(&debt_entry.identity) {
             Some(client) => {
@@ -452,10 +555,20 @@ pub fn enforce_exit_clients(
                         let res = if debt_entry.payment_details.action == DebtAction::SuspendTunnel
                         {
                             info!("Exit is enforcing on {} because their debt of {} is greater than the limit of {}", client.wg_pubkey, debt_entry.payment_details.debt, close_threshold);
-                            KI.set_class_limit("wg_exit", free_tier_limit, free_tier_limit, ip)
+                            let interface = get_client_interface(
+                                client,
+                                new_wg_exit_clients.clone(),
+                                wg_exit_clients.clone(),
+                            )?;
+                            KI.set_class_limit(&interface, free_tier_limit, free_tier_limit, ip)
                         } else {
                             // 10gbit rate and ceil value's we don't want to limit this
-                            KI.set_class_limit("wg_exit", 10_000_000, 10_000_000, ip)
+                            let interface = get_client_interface(
+                                client,
+                                new_wg_exit_clients.clone(),
+                                wg_exit_clients.clone(),
+                            )?;
+                            KI.set_class_limit(&interface, 10_000_000, 10_000_000, ip)
                         };
                         if res.is_err() {
                             error!("Failed to limit {} with {:?}", ip, res);

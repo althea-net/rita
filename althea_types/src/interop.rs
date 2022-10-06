@@ -253,6 +253,21 @@ pub struct EncryptedExitState {
     pub encrypted_exit_state: Vec<u8>,
 }
 
+/// Wrapper for secure box containing a list of ips
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct EncryptedExitList {
+    pub nonce: [u8; 24],
+    pub exit_list: Vec<u8>,
+}
+
+/// Struct returned when hitting exit_list endpoint
+#[derive(Default, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct ExitList {
+    pub exit_list: Vec<Identity>,
+    // All exits in a cluster listen on same port
+    pub wg_exit_listen_port: u16,
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum ExitVerifMode {
     Phone,

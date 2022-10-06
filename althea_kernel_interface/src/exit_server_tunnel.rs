@@ -22,12 +22,13 @@ impl dyn KernelInterface {
         clients: &HashSet<ExitClient>,
         listen_port: u16,
         private_key_path: &str,
+        if_name: &str,
     ) -> Result<(), Error> {
         let command = "wg".to_string();
 
         let mut args = vec![
             "set".into(),
-            "wg_exit".into(),
+            if_name.into(),
             "listen-port".into(),
             format!("{}", listen_port),
             "private-key".into(),
@@ -61,26 +62,23 @@ impl dyn KernelInterface {
 
         self.run_command(&command, &arg_str[..])?;
 
-        let wg_peers = self.get_peers("wg_exit")?;
-        info!("wg_exit has {} peers", wg_peers.len());
+        let wg_peers = self.get_peers(if_name)?;
+        info!("{} has {} peers", if_name, wg_peers.len());
         for i in wg_peers {
             if !client_pubkeys.contains(&i) {
                 warn!("Removing no longer authorized peer {}", i);
-                self.run_command(
-                    "wg",
-                    &["set", "wg_exit", "peer", &format!("{}", i), "remove"],
-                )?;
+                self.run_command("wg", &["set", if_name, "peer", &format!("{}", i), "remove"])?;
             }
         }
 
         // setup traffic classes for enforcement with flow id's derived from the ip
         // only get the flows list once
-        let flows = self.get_flows("wg_exit")?;
+        let flows = self.get_flows(if_name)?;
         for c in clients.iter() {
             match c.internal_ip {
                 IpAddr::V4(addr) => {
                     if !self.has_flow_bulk(addr, &flows) {
-                        self.create_flow_by_ip("wg_exit", addr)?
+                        self.create_flow_by_ip(if_name, addr)?
                     }
                 }
                 _ => panic!("Could not derive ipv4 addr for client! Corrupt DB!"),
@@ -90,9 +88,143 @@ impl dyn KernelInterface {
         Ok(())
     }
 
+    /// This function sets up the ip6table rules required to forward data from the internet to a client router
+    /// a rule forwarding traffic from wg_exit or wg_exit_v2 to external nic has been added in one_time_exit_setup()
+    /// This function adds the requred rule from external nic to either wg_exit or wg_exit_v2
+    /// 1.) Check the existance of the required rule
+    /// 2.) If not there, it either has an outdated rule or no rule. In that case we simply delete all rules for the particular subnet
+    /// 3.) Add the required rule
+    pub fn setup_client_rules(
+        &self,
+        client_ipv6_list: String,
+        client_mesh: String,
+        interface: &str,
+        external_nic: String,
+    ) -> Result<(), KernelInterfaceError> {
+        if client_ipv6_list.is_empty() {
+            return Ok(());
+        }
+
+        let ipv6_list: Vec<&str> = client_ipv6_list.split(',').collect();
+
+        for ip in ipv6_list {
+            // Verfiy its a valid subnet
+            if let Ok(ip_net) = ip.parse::<IpNetwork>() {
+                // Check if required rule exists
+                if self.check_iptable_rule(
+                    "ip6tables",
+                    &[
+                        "-C",
+                        "FORWARD",
+                        "-d",
+                        &ip_net.to_string(),
+                        "-i",
+                        &external_nic,
+                        "-o",
+                        interface,
+                        "-j",
+                        "ACCEPT",
+                    ],
+                )? {
+                    // This rule already exists, continue to client subnet
+                    continue;
+                } else {
+                    // Correct rule doesnt exist, either outdated rule exists or no rule exists. Either way, we del this rule on all interfaces and add a new one
+                    self.add_iptables_rule(
+                        "ip6tables",
+                        &[
+                            "-D",
+                            "FORWARD",
+                            "-d",
+                            &ip_net.to_string(),
+                            "-i",
+                            &external_nic,
+                            "-o",
+                            "wg_exit",
+                            "-j",
+                            "ACCEPT",
+                        ],
+                    )?;
+                    self.add_iptables_rule(
+                        "ip6tables",
+                        &[
+                            "-D",
+                            "FORWARD",
+                            "-d",
+                            &ip_net.to_string(),
+                            "-i",
+                            &external_nic,
+                            "-o",
+                            "wg_exit_v2",
+                            "-j",
+                            "ACCEPT",
+                        ],
+                    )?;
+
+                    // Add new correct rule
+                    self.add_iptables_rule(
+                        "ip6tables",
+                        &[
+                            "-A",
+                            "FORWARD",
+                            "-d",
+                            &ip_net.to_string(),
+                            "-i",
+                            &external_nic,
+                            "-o",
+                            interface,
+                            "-j",
+                            "ACCEPT",
+                        ],
+                    )?;
+                }
+            } else {
+                error!("IPV6 Error: Invalid client database state. Client with mesh ip: {:?} has invalid database ipv6 list: {:?}", client_mesh, client_ipv6_list);
+            }
+        }
+
+        Ok(())
+    }
+
     /// This function adds a route for each client subnet to the ipv6 routing table
     /// through wg_exit
-    pub fn setup_client_routes(&self, client_ipv6_list: String, client_mesh: String) {
+    pub fn setup_client_routes(
+        &self,
+        client_ipv6_list: String,
+        client_mesh: String,
+        client_internal_ip: String,
+        interface: &str,
+    ) {
+        let mut interface_cloned = interface.to_string();
+        interface_cloned.push(' ');
+        // Setup ipv4 route
+        // 1.) Select all ipv4 routes with 'client_internal_ip'. This gives us all routes with wg_exit and wg_exit_v2 for the ip
+        //     THere should be only one route
+        // 2.) Does the route contain 'interface'? Yes? we continue
+        // 3.) No? That means either no route exists or there is a route with the other interface name
+        // 4.) Delete route, add new route with the correct interface
+        let output = self
+            .run_command("ip", &["route", "show", &client_internal_ip])
+            .expect("Fix command");
+        let route = String::from_utf8(output.stdout).unwrap();
+        if !route.contains(&interface_cloned) {
+            self.run_command("ip", &["route", "del", &client_internal_ip])
+                .expect("Fix command");
+
+            self.run_command(
+                "ip",
+                &["route", "add", &client_internal_ip, "dev", interface],
+            )
+            .expect("Fix command");
+        }
+
+        // Setup ipv6 routes
+        // 1.) Find all v6 routes with ip. There should be at most one, either on wg_exit or wg_exit_v2
+        // 2.) Check if that route contains 'interface' Yes? route is already setup, we continue
+        // 3.) No? It means no route exists or route exists on wrong interface.
+        // 4.) We delete route and add the new route on correct interface
+        // 5.) Continue this for each ip in the database for the client
+
         if client_ipv6_list.is_empty() {
             return;
         }
@@ -102,10 +234,21 @@ impl dyn KernelInterface {
         for ip in ipv6_list {
             // Verfiy its a valid subnet
             if let Ok(ip_net) = ip.parse::<IpNetwork>() {
-                let _res = self.run_command(
-                    "ip",
-                    &["-6", "route", "add", &ip_net.to_string(), "dev", "wg_exit"],
-                );
+                // Look for existing routes
+                let output = self
+                    .run_command("ip", &["-6", "route", "show", &ip_net.to_string()])
+                    .expect("Fix command");
+                let existing_routes = String::from_utf8(output.stdout).unwrap();
+                if !existing_routes.contains(&interface_cloned) {
+                    self.run_command("ip", &["-6", "route", "del", &ip_net.to_string()])
+                        .expect("Fix command");
+
+                    self.run_command(
+                        "ip",
+                        &["-6", "route", "add", &ip_net.to_string(), "dev", interface],
+                    )
+                    .expect("Fix command");
+                }
             } else {
                 error!("IPV6 Error: Invalid client database state. Client with mesh ip: {:?} has invalid database ipv6 list: {:?}", client_mesh, client_ipv6_list);
             }
@@ -119,6 +262,7 @@ impl dyn KernelInterface {
         netmask: u8,
         exit_mesh: IpAddr,
         external_nic: String,
+        interface: &str,
     ) -> Result<(), Error> {
         let _output = self.run_command(
             "ip",
@@ -127,7 +271,7 @@ impl dyn KernelInterface {
                 "add",
                 &format!("{}/{}", local_ip, netmask),
                 "dev",
-                "wg_exit",
+                interface,
             ],
         )?;
 
@@ -141,7 +285,7 @@ impl dyn KernelInterface {
                 "add",
                 &format!("{}/64", local_link),
                 "dev",
-                "wg_exit",
+                interface,
             ],
         )?;
 
@@ -153,7 +297,7 @@ impl dyn KernelInterface {
                     "-A",
                     "FORWARD",
                     "-i",
-                    "wg_exit",
+                    interface,
                     "-o",
                     &external_nic,
                     "-j",
@@ -162,29 +306,13 @@ impl dyn KernelInterface {
             )
             .is_err()
         {
-            error!("IPV6 ERROR: uanble to set ip6table rules: wg_exit to ex_nic");
+            error!(
+                "IPV6 ERROR: uanble to set ip6table rules: {:?} to ex_nic",
+                interface
+            );
         }
 
-        if self
-            .add_iptables_rule(
-                "ip6tables",
-                &[
-                    "-A",
-                    "FORWARD",
-                    "-i",
-                    &external_nic,
-                    "-o",
-                    "wg_exit",
-                    "-j",
-                    "ACCEPT",
-                ],
-            )
-            .is_err()
-        {
-            error!("IPV6 ERROR: uanble to set ip6table rules: ex_nic to wg_Exit");
-        }
-
-        let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "mtu", "1340"])?;
+        let output = self.run_command("ip", &["link", "set", "dev", interface, "mtu", "1340"])?;
         if !output.stderr.is_empty() {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error adding wg link: {}",
@@ -192,7 +320,7 @@ impl dyn KernelInterface {
             )));
         }
 
-        let output = self.run_command("ip", &["link", "set", "dev", "wg_exit", "up"])?;
+        let output = self.run_command("ip", &["link", "set", "dev", interface, "up"])?;
         if !output.stderr.is_empty() {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error setting wg interface up: {}",
@@ -202,16 +330,16 @@ impl dyn KernelInterface {
 
         // this creates the root classful htb limit for which we will make
         // subclasses to enforce payment
-        if !self.has_limit("wg_exit")? {
+        if !self.has_limit(interface)? {
             info!("Setting up root HTB qdisc, this should only run once");
-            self.create_root_classful_limit("wg_exit")
+            self.create_root_classful_limit(interface)
                 .expect("Failed to setup root HTB qdisc!");
         }
 
         Ok(())
     }
 
-    pub fn setup_nat(&self, external_interface: &str) -> Result<(), Error> {
+    pub fn setup_nat(&self, external_interface: &str, interface: &str) -> Result<(), Error> {
         self.add_iptables_rule(
             "iptables",
             &[
@@ -238,7 +366,7 @@ impl dyn KernelInterface {
                 "-o",
                 external_interface,
                 "-i",
-                "wg_exit",
+                interface,
                 "-j",
                 "ACCEPT",
             ],
@@ -253,7 +381,7 @@ impl dyn KernelInterface {
                 "-A",
                 "FORWARD",
                 "-o",
-                "wg_exit",
+                interface,
                 "-i",
                 external_interface,
                 "-m",

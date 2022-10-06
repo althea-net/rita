@@ -220,27 +220,47 @@ fn check_regions(start: Instant, clients_list: Vec<models::Client>, conn: &PgCon
 }
 
 fn setup_exit_wg_tunnel() {
+    // Setup legacy wg_exit
     if let Err(e) = KI.setup_wg_if_named("wg_exit") {
         warn!("exit setup returned {}", e)
     }
-    KI.one_time_exit_setup(
-        &settings::get_rita_exit()
-            .exit_network
-            .own_internal_ip
-            .into(),
-        settings::get_rita_exit().exit_network.netmask,
-        settings::get_rita_exit()
-            .network
-            .mesh_ip
-            .expect("Expected a mesh ip for this exit"),
-        settings::get_rita_exit()
-            .network
-            .external_nic
-            .expect("Expected an external nic here"),
+    // Setup new wg_exit
+    if let Err(e) = KI.setup_wg_if_named("wg_exit_v2") {
+        warn!("new exit setup returned {}", e)
+    }
+
+    let local_ip = &settings::get_rita_exit()
+        .exit_network
+        .own_internal_ip
+        .into();
+    let netmask = settings::get_rita_exit().exit_network.netmask;
+    let mesh_ip = settings::get_rita_exit()
+        .network
+        .mesh_ip
+        .expect("Expected a mesh ip for this exit");
+    let ex_nic = settings::get_rita_exit()
+        .network
+        .external_nic
+        .expect("Expected an external nic here");
+
+    // Setup legacy wg_exit
+    KI.one_time_exit_setup(local_ip, netmask, mesh_ip, ex_nic.clone(), "wg_exit")
+        .expect("Failed to setup wg_exit!");
+
+    // Setup new wg_exit
+    KI.one_time_exit_setup(local_ip, netmask, mesh_ip, ex_nic, "wg_exit_v2")
+        .expect("Failed to setup wg_exit_v2!");
+
+    KI.setup_nat(
+        &settings::get_rita_exit().network.external_nic.unwrap(),
+        "wg_exit",
     )
-    .expect("Failed to setup wg_exit!");
-    KI.setup_nat(&settings::get_rita_exit().network.external_nic.unwrap())
-        .unwrap();
+    .unwrap();
+    KI.setup_nat(
+        &settings::get_rita_exit().network.external_nic.unwrap(),
+        "wg_exit_v2",
+    )
+    .unwrap();
 }
 
 pub fn start_rita_exit_endpoints(workers: usize) {
@@ -255,6 +275,7 @@ pub fn start_rita_exit_endpoints(workers: usize) {
                     .route("/exit_info", web::get().to(get_exit_info_http))
                     .route("/client_debt", web::post().to(get_client_debt))
                     .route("/time", web::get().to(get_exit_timestamp_http))
+                    .route("/exit_list", web::post().to(get_exit_list))
             })
             .workers(workers)
             .bind(format!(
