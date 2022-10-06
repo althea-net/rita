@@ -359,7 +359,7 @@ fn update_authorized_keys(
 
     let mut existing = HashSet::new();
     let auth_keys_file = File::open(keys_file);
-    let mut write_data = vec![];
+    let mut write_data: Vec<String> = vec![];
 
     info!("Authorized keys opening file");
 
@@ -391,7 +391,6 @@ fn update_authorized_keys(
     };
 
     for pubkey in add_list {
-        println!("Authorized keys parse add_list");
         if let Ok(pubkey) = openssh_keys::PublicKey::parse(&pubkey) {
             existing.insert(AuthorizedKeys {
                 key: pubkey.to_string(),
@@ -400,7 +399,6 @@ fn update_authorized_keys(
             });
         }
     }
-
     for pubkey in drop_list {
         existing.remove(&AuthorizedKeys {
             key: pubkey,
@@ -410,20 +408,18 @@ fn update_authorized_keys(
     }
     let temp_key_file = String::from("key_backup");
     let updated_key_file = std::fs::OpenOptions::new()
+        .create(true)
         .write(true)
         .truncate(true)
         .open(&temp_key_file)?;
 
-    for key in existing {
+    for key in &existing {
         if !key.flush {
-            write_data.push(key.key);
-        } else {
-            println!("not adding");
+            write_data.push(key.key.to_string());
         }
     }
 
-    match write!(&updated_key_file, "{}", write_data.join("/n")) {
-        // match try_write {
+    match write!(&updated_key_file, "{}", write_data.join("\n")) {
         Ok(()) => info!("Authorized keys write success"),
         Err(e) => info!("Authorized keys write failed with {:?}", e),
     };
@@ -620,7 +616,7 @@ mod tests {
             .write(true)
             .truncate(true)
             .open(file_name);
-        let operator_key = "ssh-ed25519 hash_for_existing_key operator@home";
+        let operator_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL+UBakquB9rJ7tA2H+U43H/xNmpJiHpOkHGpVfFUXgP OPERATOR";
         writeln!(test_file.unwrap(), "{}", operator_key).expect("setup failed to create temp file");
         operator_key
     }
@@ -642,13 +638,12 @@ mod tests {
         let added_keys = vec![String::from("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHFgFrnSm9MFS1zpHHvwtfLohjqtsK13NyL41g/zyIhK test@hawk-net")];
         let removed_keys = vec![];
         let key_file: &str = "authorized_keys";
-        let operator_key = touch_temp_file(key_file);
+        let _operator_key = touch_temp_file(key_file);
 
         let _update = update_authorized_keys(added_keys.clone(), removed_keys, key_file);
         let result = parse_keys(key_file);
-        assert_eq!(result.len(), 1);
-        println!("{:#?}", result);
-        // assert!(result.contains(&added_keys[0]));
+        assert_eq!(result.len(), 2);
+        assert!(result.contains(&added_keys[0]));
         remove_temp_file(key_file).unwrap();
     }
 
@@ -659,21 +654,14 @@ mod tests {
         ];
         let removed_keys = vec![];
         let key_file: &str = "add_keys";
-        let managed_by = String::from("//managed-by-OpsTools");
 
         let operator_key = touch_temp_file(key_file);
 
         let _update = update_authorized_keys(added_keys.clone(), removed_keys, key_file);
         let result = parse_keys(key_file);
-        // for (index, item) in result.iter().enumerate() {
-        //     if item.contains(&managed_by) {
-        //         let hash: String = split_to_key(item, &managed_by);
-        //         assert!(added_keys.contains(&hash));
-        //         println!("{} {}", index, item);
-        //     } else {
-        //         assert_eq!(item, operator_key);
-        //     }
-        // }
+        assert!(result.contains(&added_keys[0]));
+        assert!(result.contains(&added_keys[1]));
+        assert!(result.contains(&operator_key.to_string()));
         assert_eq!(result.len(), 3);
         remove_temp_file(key_file).unwrap();
     }
@@ -682,25 +670,17 @@ mod tests {
     fn test_update_auth_remove_keys() {
         let added_keys = vec![];
         let removed_keys = vec![
-            String::from("ssh-rsa key1 user@comment"),
-            String::from("ssh-rsa key2 user2@comment"),
-            String::from("ssh-ed25519 key3 user3@test"),
+            String::from("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHFgFrnSm9MFS1zpHHvwtfLohjqtsK13NyL41g/zyIhK test@hawk-net"),
+            String::from("ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDVF1POOko4/fTE/SowsURSmd+kAUFDX6VPNqICJjn8eQk8FZ15WsZKfBdrGXLhl2+pxM66VWMUVRQOq84iSRVSVPA3abz0H7JYIGzO8psTweSZfK1jwHfKDGQA1h1aPuspnPrX7dyS1qLZf3YeVUUi+BFsW2gSiMadbS4zal2c2F1AG5Ezr3zcRVA8y3D0bZxScPAEX74AeTFcimHpHFyzDtUsRpf0uSEXZcMFqX5j4ETKlIs28k1v8LlhHo91IQYHEtbyi/I1M0axbF4VCz5JlcbAs9LUEJg8Kx8LxzJSeSJbxVwyk5WiEDwVsCL2MAtaOcJ+/FhxLb0ZEELAHnXFNSqmY8QoHeSdHrGP7FmVCBjRb/AhVUHYvsG94rO3Ij4H5XsbsQbP3AHVKbvf387WB53Wga7VrBXvRC9aDisetdP9+4/seVIBbOIePotaiHoTyS1cJ+Jg0PkKy96enqwMt9T1Wt8jURB+s/A/bDGHkjB3dxomuGxux8dD6UNX54M= test-rsa@hawk-net"),
         ];
-        let managed_by = String::from("//managed-by-OpsTools");
         let key_file: &str = "auth_remove_keys";
 
         let operator_key = touch_temp_file(key_file);
 
         let _update = update_authorized_keys(added_keys, removed_keys.clone(), key_file);
         let result = parse_keys(key_file);
-        // for item in &result {
-        //     if item.contains(&managed_by) {
-        //         let hash: String = split_to_key(item, &managed_by);
-        //         assert!(removed_keys.contains(&hash));
-        //     } else {
-        //         assert_eq!(item, operator_key);
-        //     }
-        // }
+        assert!(result.contains(&operator_key.to_string()));
+
         assert_eq!(result.len(), 1);
 
         remove_temp_file(key_file).unwrap();
@@ -717,27 +697,6 @@ mod tests {
         let result = parse_keys(key_file);
         for item in result {
             assert_eq!(item, removed_keys[0].to_string());
-        }
-
-        remove_temp_file(key_file).unwrap();
-    }
-    #[test]
-    fn test_removing_managed_key() {
-        let added_keys = vec![String::from("ssh-rsa key1 user@comment")];
-        let removed_keys = vec![String::from("ssh-rsa key1 user@comment")];
-        let key_file: &str = "remove_managed_keys";
-
-        let operator_key = touch_temp_file(key_file);
-        let _add_update = update_authorized_keys(added_keys, vec![], key_file);
-        let _result = parse_keys(key_file);
-
-        let _remove_mgmt_key = update_authorized_keys(vec![], removed_keys, key_file);
-
-        let result = parse_keys(key_file);
-        assert_eq!(result.len(), 1);
-
-        for i in result {
-            assert_eq!(i, operator_key);
         }
 
         remove_temp_file(key_file).unwrap();
