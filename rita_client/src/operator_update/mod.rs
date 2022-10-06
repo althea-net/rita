@@ -351,6 +351,8 @@ fn perform_operator_update(
 }
 
 fn update_authorized_keys(
+// cycles in/out ssh pubkeys for recovery access
+fn update_authorized_keys(
     add_list: Vec<String>,
     drop_list: Vec<String>,
     keys_file: &str,
@@ -367,6 +369,7 @@ fn update_authorized_keys(
         add_list.len(),
         drop_list.len()
     );
+    // collect any keys managed by dropbear already on the router
     match auth_keys_file {
         Ok(key_file_open) => {
             let buf_reader = BufReader::new(key_file_open);
@@ -394,7 +397,7 @@ fn update_authorized_keys(
         }
         Err(e) => return Err(e),
     };
-
+    // parse/validate keys before being added
     for pubkey in add_list {
         if let Ok(pubkey) = openssh_keys::PublicKey::parse(&pubkey) {
             existing.insert(AuthorizedKeys {
@@ -404,7 +407,7 @@ fn update_authorized_keys(
             });
         }
     }
-
+    // parse list for keys to remove, setting flush = true
     for pubkey in drop_list {
         existing.remove(&AuthorizedKeys {
             key: pubkey,
@@ -412,6 +415,8 @@ fn update_authorized_keys(
             flush: true,
         });
     }
+
+    // create and write to temporary file. temp file to protect from a partial writes to _keys_file_
     let updated_key_file = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
@@ -423,12 +428,13 @@ fn update_authorized_keys(
             write_data.push(key.key.to_string());
         }
     }
-
+    // create string block to use a single write to temp file
     match write!(&updated_key_file, "{}", write_data.join("\n")) {
         Ok(()) => info!("Authorized keys write success"),
         Err(e) => info!("Authorized keys write failed with {:?}", e),
     };
 
+    // rename temp file
     match rename(&temp_key_file, keys_file) {
         Ok(()) => {
             info!("Authorized keys rename success")
@@ -437,7 +443,7 @@ fn update_authorized_keys(
             info!("Authorized keys rename failed with {:?}", e)
         }
     };
-
+    // remove temp file
     match remove_file(&temp_key_file) {
         Ok(_) => {
             info!("Authorized keys remove temp-file")
@@ -449,7 +455,6 @@ fn update_authorized_keys(
 
     Ok(())
 }
-
 /// Creates a payment settings from OperatorUpdateMessage to be returned and applied
 fn update_payment_settings(
     mut payment: PaymentSettings,
