@@ -15,6 +15,7 @@ use althea_kernel_interface::LinuxCommandRunner;
 lazy_static! {
     pub static ref KI: Box<dyn KernelInterface> = Box::new(LinuxCommandRunner {});
 }
+pub static DROPBEAR_CONFIG: &str = "/etc/config/dropbear";
 
 pub mod blockchain_oracle;
 pub mod dashboard;
