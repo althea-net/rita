@@ -360,9 +360,13 @@ fn update_authorized_keys(
     let mut existing = HashSet::new();
     let auth_keys_file = File::open(keys_file);
     let mut write_data: Vec<String> = vec![];
+    let temp_key_file = String::from("key_backup");
 
-    info!("Authorized keys opening file");
-
+    info!(
+        "Authorized keys updates add {} remove {} pubkeys",
+        add_list.len(),
+        drop_list.len()
+    );
     match auth_keys_file {
         Ok(key_file_open) => {
             let buf_reader = BufReader::new(key_file_open);
@@ -371,6 +375,7 @@ fn update_authorized_keys(
                 match line {
                     Ok(line) => {
                         if let Ok(pubkey) = openssh_keys::PublicKey::parse(&line) {
+                            info!("Authorized keys parse keys");
                             existing.insert(AuthorizedKeys {
                                 key: pubkey.to_string(),
                                 managed: true,
@@ -399,6 +404,7 @@ fn update_authorized_keys(
             });
         }
     }
+
     for pubkey in drop_list {
         existing.remove(&AuthorizedKeys {
             key: pubkey,
@@ -406,7 +412,6 @@ fn update_authorized_keys(
             flush: true,
         });
     }
-    let temp_key_file = String::from("key_backup");
     let updated_key_file = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
@@ -426,7 +431,7 @@ fn update_authorized_keys(
 
     match rename(&temp_key_file, keys_file) {
         Ok(()) => {
-            info!("Authorized keys rename works")
+            info!("Authorized keys rename success")
         }
         Err(e) => {
             info!("Authorized keys rename failed with {:?}", e)
@@ -435,7 +440,7 @@ fn update_authorized_keys(
 
     match remove_file(&temp_key_file) {
         Ok(_) => {
-            info!("Authorized keys rename works")
+            info!("Authorized keys remove temp-file")
         }
         Err(e) => {
             info!("Authorized keys rename failed with {:?}", e)
