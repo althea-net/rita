@@ -439,16 +439,8 @@ fn update_authorized_keys(
             info!("Authorized keys rename success")
         }
         Err(e) => {
-            info!("Authorized keys rename failed with {:?}", e)
-        }
-    };
-    // remove temp file
-    match remove_file(&temp_key_file) {
-        Ok(_) => {
-            info!("Authorized keys remove temp-file")
-        }
-        Err(e) => {
-            info!("Authorized keys rename failed with {:?}", e)
+            info!("Authorized keys rename failed with {:?}", e);
+            remove_file(&temp_key_file)?
         }
     };
 
