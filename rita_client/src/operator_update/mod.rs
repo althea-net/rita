@@ -350,7 +350,6 @@ fn perform_operator_update(
     trace!("Successfully completed OperatorUpdate");
 }
 
-fn update_authorized_keys(
 // cycles in/out ssh pubkeys for recovery access
 fn update_authorized_keys(
     add_list: Vec<String>,
