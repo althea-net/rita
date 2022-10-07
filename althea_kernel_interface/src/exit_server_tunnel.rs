@@ -1,6 +1,5 @@
-use crate::open_tunnel::to_wg_local;
-
 use super::{KernelInterface, KernelInterfaceError};
+use crate::open_tunnel::to_wg_local;
 use althea_types::WgKey;
 use ipnetwork::IpNetwork;
 use std::collections::HashSet;
@@ -10,20 +9,22 @@ use KernelInterfaceError as Error;
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct ExitClient {
     pub internal_ip: IpAddr,
-    pub internet_ipv6_list: String,
+    pub internet_ipv6_list: Vec<IpNetwork>,
     pub public_key: WgKey,
     pub mesh_ip: IpAddr,
     pub port: u16,
 }
 
 impl dyn KernelInterface {
+    // This function sets up the exit config and returns the updated list of tc filter handles
     pub fn set_exit_wg_config(
         &self,
         clients: &HashSet<ExitClient>,
         listen_port: u16,
         private_key_path: &str,
         if_name: &str,
-    ) -> Result<(), Error> {
+        ipv6_filter_handles: HashSet<(String, u32)>,
+    ) -> Result<HashSet<(String, u32)>, Error> {
         let command = "wg".to_string();
 
         let mut args = vec![
@@ -44,8 +45,10 @@ impl dyn KernelInterface {
             let i_ipv6 = &c.internet_ipv6_list;
             let mut allowed_ips = c.internal_ip.to_string().to_owned();
             if !i_ipv6.is_empty() {
-                allowed_ips.push(',');
-                allowed_ips.push_str(i_ipv6);
+                for ip_net in i_ipv6 {
+                    allowed_ips.push(',');
+                    allowed_ips.push_str(&ip_net.to_string());
+                }
             }
 
             args.push("peer".into());
@@ -73,19 +76,34 @@ impl dyn KernelInterface {
 
         // setup traffic classes for enforcement with flow id's derived from the ip
         // only get the flows list once
+        let mut mut_handles = ipv6_filter_handles;
         let flows = self.get_flows(if_name)?;
         for c in clients.iter() {
+            // Add ipv4 flows
+            let ipv4;
             match c.internal_ip {
                 IpAddr::V4(addr) => {
+                    ipv4 = addr;
                     if !self.has_flow_bulk(addr, &flows) {
-                        self.create_flow_by_ip(if_name, addr)?
+                        self.create_flow_by_ip(if_name, addr)?;
                     }
                 }
                 _ => panic!("Could not derive ipv4 addr for client! Corrupt DB!"),
             }
+
+            // Add ipv6 flows
+            for ip_net in c.internet_ipv6_list.iter() {
+                if !self.has_flow_bulk_ipv6(ipv4, if_name, &mut mut_handles) {
+                    self.create_flow_by_ipv6(if_name, *ip_net, ipv4)?;
+                    // Add this ipv6 handle to TcDatastore
+                    let class_id = self.get_class_id(ipv4);
+                    let to_add = (if_name.to_string(), class_id);
+                    mut_handles.insert(to_add);
+                }
+            }
         }
 
-        Ok(())
+        Ok(mut_handles)
     }
 
     /// This function sets up the ip6table rules required to forward data from the internet to a client router
@@ -331,7 +349,10 @@ impl dyn KernelInterface {
         // this creates the root classful htb limit for which we will make
         // subclasses to enforce payment
         if !self.has_limit(interface)? {
-            info!("Setting up root HTB qdisc, this should only run once");
+            info!(
+                "Setting up root HTB qdisc for interface: {:?}, this should only run once",
+                interface
+            );
             self.create_root_classful_limit(interface)
                 .expect("Failed to setup root HTB qdisc!");
         }

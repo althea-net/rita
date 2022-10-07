@@ -40,6 +40,8 @@ use settings::exit::ExitVerifSettings;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::IpAddr;
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
@@ -59,6 +61,31 @@ pub mod email;
 pub mod geoip;
 pub mod sms;
 pub mod struct_tools;
+
+lazy_static! {
+    pub static ref TC_DATASTORE: Arc<RwLock<TcDatastore>> =
+        Arc::new(RwLock::new(TcDatastore::default()));
+}
+
+/// This struct holds all TC releated info needed for setting up qdiscs, classes and filters
+/// to set up enforcement on the exit
+#[derive(Default, Clone, Debug)]
+pub struct TcDatastore {
+    /// This stores all handles on a given interfaces that have a filter tc command setup to a particular class
+    /// Data is stored in the form of (Interface, class_id). This can be used to check for existing filters and prevent
+    /// adding duplicate ones
+    pub ipv6_filter_handles: HashSet<(String, u32)>,
+}
+
+// Lazy static getter
+pub fn get_tc_datastore() -> TcDatastore {
+    TC_DATASTORE.read().unwrap().clone()
+}
+
+// Lazy static setter
+pub fn set_tc_datastore(set: TcDatastore) {
+    *TC_DATASTORE.write().unwrap() = set;
+}
 
 /// one day in seconds
 pub const ONE_DAY: i64 = 86400;
@@ -418,24 +445,23 @@ pub fn setup_clients(
     }
 
     info!("Setting up configs for wg_exit and wg_exit_v2");
+    let mut tc_datastore = get_tc_datastore();
+    let ipv6_filter_handles = tc_datastore.ipv6_filter_handles;
     // setup all the tunnels
     let exit_status = KI.set_exit_wg_config(
         &wg_clients,
         settings::get_rita_exit().exit_network.wg_tunnel_port,
         &settings::get_rita_exit().exit_network.wg_private_key_path,
         "wg_exit",
-    );
-
-    // Setup new tunnels
-    let exit_status_new = KI.set_exit_wg_config(
-        &wg_clients,
-        settings::get_rita_exit().exit_network.wg_v2_tunnel_port,
-        &settings::get_rita_exit().network.wg_private_key_path,
-        "wg_exit_v2",
+        ipv6_filter_handles,
     );
 
     match exit_status {
-        Ok(_) => trace!("Successfully setup Exit WG!"),
+        Ok(a) => {
+            trace!("Successfully setup Exit WG!");
+            tc_datastore.ipv6_filter_handles = a;
+            set_tc_datastore(tc_datastore);
+        }
         Err(e) => warn!(
             "Error in Exit WG setup {:?}, 
                         this usually happens when a Rita service is 
@@ -443,8 +469,24 @@ pub fn setup_clients(
             e
         ),
     }
+
+    // Setup new tunnels
+    let mut tc_datastore = get_tc_datastore();
+    let ipv6_filter_handles = tc_datastore.ipv6_filter_handles;
+    let exit_status_new = KI.set_exit_wg_config(
+        &wg_clients,
+        settings::get_rita_exit().exit_network.wg_v2_tunnel_port,
+        &settings::get_rita_exit().network.wg_private_key_path,
+        "wg_exit_v2",
+        ipv6_filter_handles,
+    );
+
     match exit_status_new {
-        Ok(_) => trace!("Successfully setup Exit WG NEW!"),
+        Ok(a) => {
+            trace!("Successfully setup Exit WG NEW!");
+            tc_datastore.ipv6_filter_handles = a;
+            set_tc_datastore(tc_datastore);
+        }
         Err(e) => warn!(
             "Error in Exit WG NEW setup {:?}, 
                         this usually happens when a Rita service is 
@@ -536,17 +578,6 @@ pub fn enforce_exit_clients(
         return Ok(new_debt_actions);
     }
 
-    let new_wg_exit_clients: HashMap<WgKey, SystemTime> = KI
-        .get_last_handshake_time("wg_exit_v2")
-        .expect("There should be a new wg_exit interface")
-        .into_iter()
-        .collect();
-    let wg_exit_clients: HashMap<WgKey, SystemTime> = KI
-        .get_last_handshake_time("wg_exit")
-        .expect("There should be a new wg_exit interface")
-        .into_iter()
-        .collect();
-
     for debt_entry in list.iter() {
         match clients_by_id.get(&debt_entry.identity) {
             Some(client) => {
@@ -555,20 +586,23 @@ pub fn enforce_exit_clients(
                         let res = if debt_entry.payment_details.action == DebtAction::SuspendTunnel
                         {
                             info!("Exit is enforcing on {} because their debt of {} is greater than the limit of {}", client.wg_pubkey, debt_entry.payment_details.debt, close_threshold);
-                            let interface = get_client_interface(
-                                client,
-                                new_wg_exit_clients.clone(),
-                                wg_exit_clients.clone(),
-                            )?;
-                            KI.set_class_limit(&interface, free_tier_limit, free_tier_limit, ip)
+                            if let Err(e) =
+                                KI.set_class_limit("wg_exit", free_tier_limit, free_tier_limit, ip)
+                            {
+                                error!("Unable to setup enforcement class on wg_exit: {:?}", e);
+                            }
+                            KI.set_class_limit("wg_exit_v2", free_tier_limit, free_tier_limit, ip)
                         } else {
                             // 10gbit rate and ceil value's we don't want to limit this
-                            let interface = get_client_interface(
-                                client,
-                                new_wg_exit_clients.clone(),
-                                wg_exit_clients.clone(),
-                            )?;
-                            KI.set_class_limit(&interface, 10_000_000, 10_000_000, ip)
+                            if let Err(e) =
+                                KI.set_class_limit("wg_exit", 10_000_000, 10_000_000, ip)
+                            {
+                                error!(
+                                    "Unable to set client rate to 10GB rate on wg_exit: {:?}",
+                                    e
+                                );
+                            }
+                            KI.set_class_limit("wg_exit_v2", 10_000_000, 10_000_000, ip)
                         };
                         if res.is_err() {
                             error!("Failed to limit {} with {:?}", ip, res);

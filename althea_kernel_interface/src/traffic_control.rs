@@ -4,8 +4,11 @@
 //! Rita common in contrast is a simple limitation of the neighbors tunnel, which does not do
 //! any classful categorization. As a result one uses tbf and the other uses the clsssful htb
 
+use ipnetwork::IpNetwork;
+
 use crate::KernelInterface;
 use crate::KernelInterfaceError as Error;
+use std::collections::HashSet;
 use std::net::Ipv4Addr;
 
 impl dyn KernelInterface {
@@ -63,6 +66,21 @@ impl dyn KernelInterface {
     pub fn has_flow_bulk(&self, ip: Ipv4Addr, tc_out: &str) -> bool {
         let class_id = self.get_class_id(ip);
         tc_out.contains(&format!("1:{}", class_id))
+    }
+
+    /// This function is the ipv6 version of has_flow_bulk, but is different in how its implemented. Since we simply cant
+    /// check for a handle to verify an ipv6 handle, we use a datastore to store a mapping for (interface, class_id)
+    pub fn has_flow_bulk_ipv6(
+        &self,
+        ipv4: Ipv4Addr,
+        iface: &str,
+        ipv6_filter_handles: &mut HashSet<(String, u32)>,
+    ) -> bool {
+        let class_id = self.get_class_id(ipv4);
+        if ipv6_filter_handles.contains(&(iface.to_string(), class_id)) {
+            return true;
+        }
+        false
     }
 
     /// Determines if the provided flow is assigned
@@ -377,10 +395,52 @@ impl dyn KernelInterface {
             % 9999 //9999 is the maximum flow id value allowed
     }
 
+    /// Filters traffic from a given ipv6 address into the class that we are using
+    /// to shape that traffic on the exit side, uses the last two octets of the ip
+    /// to generate a class id.
+    pub fn create_flow_by_ipv6(
+        &self,
+        iface_name: &str,
+        ip_net: IpNetwork,
+        ip: Ipv4Addr,
+    ) -> Result<(), Error> {
+        let class_id = self.get_class_id(ip);
+
+        let output = self.run_command(
+            "tc",
+            &[
+                "filter",
+                "add",
+                "dev",
+                iface_name,
+                "parent",
+                "1:",
+                "protocol",
+                "ipv6",
+                "u32",
+                "match",
+                "ip6",
+                "dst",
+                &ip_net.to_string(),
+                "flowid",
+                &format!("1:{}", class_id),
+            ],
+        )?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            let res = String::from_utf8(output.stderr)?;
+            Err(Error::TrafficControlError(format!(
+                "Failed to create limit by ip! {:?}",
+                res
+            )))
+        }
+    }
+
     /// Filters traffic from a given ipv4 address into the class that we are using
     /// to shape that traffic on the exit side, uses the last two octets of the ip
     /// to generate a class id.
-    /// TODO when ipv6 exit support is added this will need to be revisited
     pub fn create_flow_by_ip(&self, iface_name: &str, ip: Ipv4Addr) -> Result<(), Error> {
         let class_id = self.get_class_id(ip);
 
