@@ -22,7 +22,9 @@ use babel_monitor::monitor;
 use babel_monitor::open_babel_stream;
 use babel_monitor::unmonitor;
 use babel_monitor::BabelMonitorError;
+use babel_monitor::Interface;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::Display;
@@ -299,6 +301,36 @@ impl Neighbor {
     }
 }
 
+/// This function goes through all tunnels preset in rita memory and add them to babel is they are not present already
+pub fn tm_monitor_check(interface: &Result<Vec<Interface>, BabelMonitorError>) {
+    let empty = &vec![];
+    let interface_list: &Vec<Interface> = if interface.is_ok() {
+        interface.as_ref().unwrap()
+    } else {
+        empty
+    };
+
+    // Hashset of all interface names. This allows for an O(n) search instead of O(n^2)
+    let mut interface_map: HashSet<String> = HashSet::new();
+    for int in interface_list {
+        interface_map.insert(int.name.clone());
+    }
+
+    let rita_tunnels = &TUNNEL_MANAGER.read().unwrap().tunnels;
+    for (_, tunnels) in rita_tunnels.iter() {
+        for tun in tunnels.iter() {
+            if !interface_map.contains(&tun.iface_name) {
+                info!(
+                    "Babel was not monitored a tunnel, Readding the tunnel: {:?}",
+                    tun.iface_name
+                );
+                let res = tun.monitor();
+                error!("Unable to re-add tunnel to babel with: {:?}", res);
+            }
+        }
+    }
+}
+
 pub fn tm_get_neighbors() -> Vec<Neighbor> {
     let tunnel_manager = get_tunnel_manager();
     let mut res = Vec::new();
@@ -385,12 +417,7 @@ fn have_tunnel_by_ifidx(ifidx: u32, tunnels: &[Tunnel]) -> bool {
 
 /// gets the tunnel from the list with the given index
 fn get_tunnel_by_ifidx(ifidx: u32, tunnels: &[Tunnel]) -> Option<&Tunnel> {
-    for tunnel in tunnels.iter() {
-        if tunnel.listen_ifidx == ifidx {
-            return Some(tunnel);
-        }
-    }
-    None
+    tunnels.iter().find(|&tunnel| tunnel.listen_ifidx == ifidx)
 }
 
 /// deletes all instances of a given tunnel from the list
@@ -754,12 +781,9 @@ pub mod tests {
 
     /// gets a mutable reference tunnel from the list with the given index
     fn get_mut_tunnel_by_ifidx(ifidx: u32, tunnels: &mut [Tunnel]) -> Option<&mut Tunnel> {
-        for tunnel in tunnels.iter_mut() {
-            if tunnel.listen_ifidx == ifidx {
-                return Some(tunnel);
-            }
-        }
-        None
+        tunnels
+            .iter_mut()
+            .find(|tunnel| tunnel.listen_ifidx == ifidx)
     }
 
     #[test]
