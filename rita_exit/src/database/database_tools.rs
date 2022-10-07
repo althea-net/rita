@@ -292,6 +292,10 @@ pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<()
     if let Some(client_sub) = client_sub.pop() {
         if !client_sub.is_empty() {
             let client_sub: Vec<&str> = client_sub.split(',').collect();
+            info!(
+                "For reclaiming subnets, exit subs are: {:?} and client subs are {:?}",
+                exit_sub, client_sub
+            );
             reclaim_all_ip_subnets(client_sub, exit_sub, connection)?;
         }
     }
@@ -349,7 +353,15 @@ fn reclaim_all_ip_subnets(
                             // if our index is '10', we need to append ",10" to the end
                             let mut new_str = ",".to_owned();
                             new_str.push_str(&index.to_string());
-                            avail_ips.push_str(&new_str);
+                            // If avail_ips does not contains '"," + "index"' and (avail ips has only one entry and does not contains 'index')
+                            if !(avail_ips.contains(&new_str)
+                                || (!avail_ips.contains(',')
+                                    && avail_ips.contains(&index.to_string())))
+                            {
+                                avail_ips.push_str(&new_str);
+                            } else {
+                                error!("IPV6 ERROR: We tried adding {:?} to string {:?}, how did we get in this position?", index, avail_ips);
+                            }
                         }
                         info!(
                             "We are updating database with reclaim string: {:?}",
@@ -610,7 +622,11 @@ pub fn get_client_subnet(
                     .execute(conn)?;
             }
 
-            if !ip_list.contains(&addr.to_string()) {
+            // ip_list is a vector of a list of ipaddrs, so we check each ipaddr to see if it is already used
+            if !ip_list
+                .iter()
+                .any(|ipv6_list| ipv6_list.contains(&addr.to_string()))
+            {
                 Ok(addr)
             } else {
                 error!("Chosen subnet: {:?} is in use! Race condition hit", addr);
@@ -1081,5 +1097,25 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_playground() {
+        let a = generate_index_from_subnet(
+            "2000:fbad:10::/45".parse().unwrap(),
+            "2000:fbad:10:1450::/60".parse().unwrap(),
+        );
+
+        println!("{:?}", a);
+
+        let client_ipv6 = "2602:fbad:0:2340::/60,2602:fbad:10:2500::/60";
+        let client_sub: Vec<&str> = client_ipv6.split(',').collect();
+        println!("{:?}", client_sub);
+        let exit_sub = vec![
+            "2602:fbad:10::/45".to_string(),
+            "2602:fbad::/45".to_string(),
+        ];
+
+        reclaim_all_subnets_helper(client_sub, exit_sub);
     }
 }
