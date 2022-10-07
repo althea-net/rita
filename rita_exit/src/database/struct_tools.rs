@@ -23,12 +23,25 @@ pub fn to_identity(client: &Client) -> Result<Identity, RitaExitError> {
 }
 
 pub fn to_exit_client(client: Client) -> Result<ExitClient, RitaExitError> {
+    let mut internet_ipv6_list = vec![];
+    let string_list: Vec<&str> = client.internet_ipv6.split(',').collect();
+    for ip_net in string_list {
+        // can we parse the ip net
+        match ip_net.parse::<IpNetwork>() {
+            Ok(ip_net) => internet_ipv6_list.push(ip_net),
+            Err(e) => error!(
+                "Unable to parse {:?}, Invalid database state? {:?}",
+                ip_net, e
+            ),
+        }
+    }
+
     Ok(ExitClient {
         mesh_ip: client.mesh_ip.parse()?,
         internal_ip: client.internal_ip.parse()?,
         port: client.wg_port as u16,
         public_key: client.wg_pubkey.parse()?,
-        internet_ipv6_list: client.internet_ipv6,
+        internet_ipv6_list,
     })
 }
 
