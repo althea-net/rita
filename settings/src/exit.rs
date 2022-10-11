@@ -49,6 +49,13 @@ pub struct ExitNetworkSettings {
     pub magic_phone_number: Option<String>,
     /// Lists of exit ip addrs in this cluster
     pub cluster_exits: Vec<Identity>,
+    /// when this is set, clear out all ipv6 entries from database
+    #[serde(default = "recompute_ipv6_default")]
+    pub recompute_ipv6: bool,
+}
+
+fn recompute_ipv6_default() -> bool {
+    false
 }
 
 impl ExitNetworkSettings {
@@ -75,6 +82,7 @@ impl ExitNetworkSettings {
             wg_private_key_path: String::new(),
             magic_phone_number: None,
             cluster_exits: Vec::new(),
+            recompute_ipv6: false,
         }
     }
 }
