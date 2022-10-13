@@ -692,7 +692,8 @@ fn get_wifi_config_internal() -> Result<Vec<WifiInterface>, RitaClientError> {
     for (k, v) in items {
         if v[".type"] == "wifi-device" {
             let mut device: WifiDevice = serde_json::from_value(v.clone())?;
-            device.section_name = k.clone();
+            device.section_name = str::replace(k, "'", "");
+            device.section_name = str::replace(k, "\"", "");
             let channel: String = serde_json::from_value(v["channel"].clone())?;
             let channel: u8 = channel.parse()?;
             if channel > 20 {
