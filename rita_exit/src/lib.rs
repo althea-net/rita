@@ -104,7 +104,7 @@ lazy_static! {
             r2d2::Pool::builder()
                 .max_size(settings::get_rita_exit().workers + 1)
                 .build(manager)
-                .expect("Failed to create pool."),
+                .expect("Failed to create pool. Check exit IP is trusted to access postgresql"),
         ))
     };
 }
