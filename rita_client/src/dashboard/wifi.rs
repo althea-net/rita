@@ -692,7 +692,7 @@ fn get_wifi_config_internal() -> Result<Vec<WifiInterface>, RitaClientError> {
     for (k, v) in items {
         if v[".type"] == "wifi-device" {
             let mut device: WifiDevice = serde_json::from_value(v.clone())?;
-            device.section_name = k.clone();
+            device.section_name = strip_string_quotes(k.clone());
             let channel: String = serde_json::from_value(v["channel"].clone())?;
             let channel: u8 = channel.parse()?;
             if channel > 20 {
@@ -707,11 +707,29 @@ fn get_wifi_config_internal() -> Result<Vec<WifiInterface>, RitaClientError> {
         if v[".type"] == "wifi-iface" && v["mode"] != "mesh" {
             let mut interface: WifiInterface = serde_json::from_value(v.clone())?;
             interface.mesh = interface.mode.contains("adhoc");
-            interface.section_name = k.clone();
+            interface.section_name = strip_string_quotes(k.clone());
             let device_name: String = serde_json::from_value(v["device"].clone())?;
             interface.device = devices[&device_name].clone();
             interfaces.push(interface);
         }
     }
     Ok(interfaces)
+}
+/// Function removes quotations and quotes from a string and returns it
+fn strip_string_quotes(mut name: String) -> String {
+    name = str::replace(&name, "'", "");
+    name = str::replace(&name, "\"", "");
+    name
+}
+
+#[cfg(test)]
+mod test {
+    use crate::dashboard::wifi::strip_string_quotes;
+
+    #[test]
+    pub fn unit_test_wifi_escape_name() {
+        let name_test = "hello \" ' \" world".to_string();
+        assert_eq!(None, strip_string_quotes(name_test.clone()).find('\''));
+        assert_eq!(None, strip_string_quotes(name_test).find('\"'));
+    }
 }
