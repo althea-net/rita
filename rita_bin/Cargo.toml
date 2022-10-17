@@ -46,6 +46,7 @@ jemallocator = {version = "0.5", optional = true}
 # an openssl implementation from the crate and not from the system, simplifying
 # our build process for a lot of cross-compile situations
 openssl = {version = "0.10", features = ["vendored"]}
+ipnetwork = "0.20"
 
 [features]
 jemalloc = ["jemallocator"]
