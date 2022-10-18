@@ -70,6 +70,10 @@ pub fn cleanup() -> Result<(), NewCluError> {
         trace!("Failed to delete wg_exit {:?}", e);
     }
 
+    if let Err(e) = KI.del_interface("wg_exit_v2") {
+        trace!("Failed to delete wg_exit_v2 {:?}", e);
+    }
+
     Ok(())
 }
 
