@@ -211,7 +211,9 @@ pub fn local_traffic_calculation(
             // then we toss the exit's wg key as we don't need it
             // create an iterator, take the last (and only) value, then grab the
             // counter and not the key from the hashmap entry
-            *res.iter().last().unwrap().1
+            let ret = *res.iter().last().unwrap().1;
+            info!("We determined local counters as: {:?}", ret);
+            ret
         }
         Err(e) => {
             warn!(

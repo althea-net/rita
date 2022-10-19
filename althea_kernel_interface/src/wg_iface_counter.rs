@@ -23,10 +23,12 @@ pub fn prepare_usage_history<S: ::std::hash::BuildHasher>(
             Some(history) => {
                 // tunnel has been reset somehow, reset usage
                 if history.download > bytes.download {
+                    trace!("Reseting usage history downloads");
                     history.download = 0;
                 }
                 if history.upload > bytes.upload {
-                    history.download = 0;
+                    trace!("Reseting usage history uploads");
+                    history.upload = 0;
                 }
             }
             None => {
