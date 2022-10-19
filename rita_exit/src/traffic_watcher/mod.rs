@@ -114,11 +114,10 @@ fn generate_helper_maps(our_id: &Identity, clients: &[Identity]) -> HelperMapRet
 
 fn counters_logging(
     counters: &HashMap<WgKey, WgUsage>,
-    new_counters: &HashMap<WgKey, WgUsage>,
     history: &HashMap<WgKey, WgUsage>,
     exit_fee: u32,
 ) {
-    trace!("exit counters: {:?}", counters);
+    trace!("wg counters: {:?}", counters);
 
     let mut total_in: u64 = 0;
     for entry in counters.iter() {
@@ -126,17 +125,7 @@ fn counters_logging(
         let val = entry.1;
         if let Some(history_val) = history.get(key) {
             let moved_bytes = val.download - history_val.download;
-            trace!("Exit accounted {} uploaded {} bytes", key, moved_bytes,);
-            total_in += moved_bytes;
-        }
-    }
-
-    for entry in new_counters.iter() {
-        let key = entry.0;
-        let val = entry.1;
-        if let Some(history_val) = history.get(key) {
-            let moved_bytes = val.download - history_val.download;
-            trace!("Exit accounted {} uploaded {} bytes", key, moved_bytes,);
+            trace!("wg accounted {} uploaded {} bytes", key, moved_bytes,);
             total_in += moved_bytes;
         }
     }
@@ -149,17 +138,7 @@ fn counters_logging(
         let val = entry.1;
         if let Some(history_val) = history.get(key) {
             let moved_bytes = val.upload - history_val.upload;
-            trace!("Exit accounted {} downloaded {} bytes", key, moved_bytes);
-            total_out += moved_bytes;
-        }
-    }
-
-    for entry in new_counters.iter() {
-        let key = entry.0;
-        let val = entry.1;
-        if let Some(history_val) = history.get(key) {
-            let moved_bytes = val.upload - history_val.upload;
-            trace!("Exit accounted {} downloaded {} bytes", key, moved_bytes);
+            trace!("wg accounted {} downloaded {} bytes", key, moved_bytes);
             total_out += moved_bytes;
         }
     }
@@ -238,12 +217,6 @@ pub fn watch(
         }
     };
 
-    // creates new usage entires does not actualy update the values
-    prepare_usage_history(&counters, usage_history);
-    prepare_usage_history(&new_counters, usage_history);
-
-    counters_logging(&counters, &new_counters, usage_history, our_price as u32);
-
     let mut debts = HashMap::new();
 
     // Setup the debts table
@@ -251,7 +224,15 @@ pub fn watch(
         debts.insert(ident, 0i128);
     }
 
+    trace!("Old counters are: {:?}", counters);
+    trace!("New counters are: {:?}", new_counters);
     let counters: HashMap<WgKey, WgUsage> = merge_counters(&counters, &new_counters);
+    trace!("merged counters are : {:?}", counters);
+
+    // creates new usage entires does not actualy update the values
+    prepare_usage_history(&counters, usage_history);
+
+    counters_logging(&counters, usage_history, our_price as u32);
 
     // accounting for 'input'
     for (wg_key, bytes) in counters.clone() {
