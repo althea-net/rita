@@ -6,8 +6,8 @@ RUN apt-get update && apt-get install -y sudo iputils-ping iproute2 jq vim netca
 RUN apt-get install -y -t unstable iperf3
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 ENV POSTGRES_USER=postgres
-ENV POSTGRES_BIN=/usr/lib/postgresql/14/bin/postgres
-ENV INITDB_BIN=/usr/lib/postgresql/14/bin/initdb
+ENV POSTGRES_BIN=/usr/lib/postgresql/15/bin/postgres
+ENV INITDB_BIN=/usr/lib/postgresql/15/bin/initdb
 RUN PATH=$PATH:$HOME/.cargo/bin cargo install diesel_cli --force
 ARG NODES
 ENV SPEEDTEST_THROUGHPUT=$SPEEDTEST_THROUGHPUT
