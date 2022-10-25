@@ -7,11 +7,14 @@ use crate::{json_merge, set_rita_client, SettingsError};
 use althea_types::wg_key::WgKey;
 use althea_types::{ContactStorage, ExitState, Identity};
 use clarity::Address;
+use ipnetwork::IpNetwork;
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 use std::path::Path;
 
 pub const APP_NAME: &str = "rita";
+
+pub const DUMMY_ROOT_IP: &str = "1.1.1.1";
 
 pub fn default_app_name() -> String {
     APP_NAME.to_string()
@@ -33,7 +36,12 @@ pub fn default_config_path() -> String {
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ExitServer {
     /// Ip of exit we first connect to when connected to this cluster
+    #[serde(default = "dummy_root_ip")]
     pub root_ip: IpAddr,
+
+    /// Subnet for backwards compatilibity
+    #[serde(default)]
+    pub subnet: Option<IpNetwork>,
 
     /// eth address of this exit cluster
     pub eth_address: Address,
@@ -55,6 +63,10 @@ pub struct ExitServer {
     /// The registration state and other data about the exit
     #[serde(default, flatten)]
     pub info: ExitState,
+}
+
+fn dummy_root_ip() -> IpAddr {
+    DUMMY_ROOT_IP.parse().unwrap()
 }
 
 /// Simple struct that keeps track of details related to the exit we are currently connected to, as well as the next potential exit to switch to
@@ -164,9 +176,33 @@ impl RitaClientSettings {
         let config_toml = std::fs::read_to_string(file_name)?;
         let ret: Self = toml::from_str(&config_toml)?;
 
+        let ret = Self::convert_subnet_to_root_ip(&ret);
+
         set_rita_client(ret.clone());
 
         Ok(ret)
+    }
+
+    pub fn convert_subnet_to_root_ip(&self) -> Self {
+        let mut ret = self.clone();
+        let exit_server = &self.exit_client.exits;
+        for (hash, ser) in exit_server.iter() {
+            match (ser.subnet.is_none(), ser.root_ip == dummy_root_ip()) {
+                (true, true) => panic!("Please setup config with correct root_ip value"),
+                (false, true) => {
+                    let exit_ser = ret
+                        .exit_client
+                        .exits
+                        .get_mut(hash)
+                        .expect("Why did this fail");
+                    exit_ser.root_ip = ser.subnet.unwrap().ip();
+                    exit_ser.subnet = None;
+                    continue;
+                }
+                _ => continue,
+            }
+        }
+        ret
     }
 }
 
