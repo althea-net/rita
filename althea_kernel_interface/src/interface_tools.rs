@@ -4,6 +4,7 @@ use crate::KernelInterfaceError as Error;
 use regex::Regex;
 use std::fs::read_dir;
 use std::net::IpAddr;
+use std::net::Ipv4Addr;
 use std::str::from_utf8;
 
 impl dyn KernelInterface {
@@ -93,7 +94,7 @@ impl dyn KernelInterface {
 
     /// Gets all the IPv4 addresses from an interface and returns the address and it's netmask
     /// as a tuple.
-    pub fn get_ip_from_iface(&self, name: &str) -> Result<Vec<(IpAddr, u8)>, Error> {
+    pub fn get_ip_from_iface(&self, name: &str) -> Result<Vec<(Ipv4Addr, u8)>, Error> {
         let output = self.run_command("ip", &["address", "show", "dev", name])?;
         let stdout = String::from_utf8(output.stdout)?;
 
