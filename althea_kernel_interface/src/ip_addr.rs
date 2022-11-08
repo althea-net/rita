@@ -1,6 +1,8 @@
+use crate::open_tunnel::is_link_local;
 use crate::KernelInterface;
 use crate::KernelInterfaceError as Error;
 use ipnetwork::IpNetwork;
+use std::net::IpAddr;
 use std::net::Ipv4Addr;
 
 impl dyn KernelInterface {
@@ -46,47 +48,51 @@ impl dyn KernelInterface {
     }
 
     /// After receiving an ipv6 addr from the exit, this function adds that ip
-    /// to /etc/network/addr. SLAAC takes this ip and assigns a /64 to hosts that connect
+    /// to br-lan SLAAC takes this ip and assigns a /64 to hosts that connect
     /// to the router
     pub fn setup_ipv6_slaac(&self, router_ipv6_str: IpNetwork) {
-        let output = match self.run_command("uci", &["get", "network.lan.ip6addr"]) {
-            Ok(a) => a,
+        // Get all the v6 addrs on interface
+        let v6_addrs = match self.get_ipv6_from_iface("br-lan") {
+            Ok(a) => {
+                trace!("Our ip list on brlan looks like {:?}", a);
+                a
+            }
             Err(e) => {
-                error!("uci get network.lan.ip6addr failed. Unable to setup ipv6 subnet correctly: {:?}", e);
+                error!("IPV6 ERROR: Unable to parse ips from interface br-lan, didnt not setup slaac: {:?}", e);
                 return;
             }
         };
 
-        match String::from_utf8(output.stdout) {
-            Ok(a) => {
-                if a.is_empty()
-                    || {
-                        router_ipv6_str
-                            != {
-                                let val = a.replace('\n', "").parse::<IpNetwork>();
-                                match val {
-                                    Ok(a) => a,
-                                    Err(e) => {
-                                        error!("This should be a valid network! Unable to setup ipv6 subnet correctly: {:?}", e);
-                                        return;
-                                    }
-                                }
-                            }
-                    }
-                {
-                    let mut append_str = "network.lan.ip6addr=".to_owned();
-                    append_str.push_str(&router_ipv6_str.to_string());
-                    let res1 = self.run_command("uci", &["set", &append_str]);
-                    let res2 = self.run_command("uci", &["commit", "network"]);
-                    let res3 = self.run_command("/etc/init.d/network", &["reload"]);
+        for (addr, netmask) in v6_addrs {
+            let net = IpNetwork::new(IpAddr::V6(addr), netmask)
+                .expect("Why did we get an invalid addr from kernel?");
+            // slaac addr is already set
+            if net == router_ipv6_str {
+                return;
+            }
 
-                    match (res1.clone(), res2.clone(), res3.clone()) {
-                        (Ok(_), Ok(_), Ok(_)) => {},
-                        _ => error!("Unable to set ipv6 subnet correctly. Following are the results of command: {:?}, {:?}, {:?}", res1, res2, res3),
-                    }
+            // Remove all previously set ipv6 addrs
+            if !is_link_local(IpAddr::V6(addr)) {
+                if let Err(e) =
+                    self.run_command("ip", &["addr", "del", &net.to_string(), "dev", "br-lan"])
+                {
+                    error!(
+                        "IPV6 Error: Why are not able to delete the addr {:?} Error {:?}",
+                        net, e
+                    );
                 }
             }
-            Err(e) => error!("Error setting ipv6: {:?}", e),
+        }
+
+        // Add the new ipv6 addr
+        if let Err(e) = self.run_command(
+            "ip",
+            &["addr", "add", &router_ipv6_str.to_string(), "dev", "br-lan"],
+        ) {
+            error!(
+                "IPV6 ERROR: WHy are we unalbe to add the new subnet {:?} Error: {:?}",
+                router_ipv6_str, e
+            );
         }
     }
 

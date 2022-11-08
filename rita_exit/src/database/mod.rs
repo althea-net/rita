@@ -511,7 +511,8 @@ pub fn get_client_interface(
 ) -> Result<String, RitaExitError> {
     trace!(
         "New list is {:?} \n Old list is {:?}",
-        new_wg_exit_clients, wg_exit_clients
+        new_wg_exit_clients,
+        wg_exit_clients
     );
     match (
         new_wg_exit_clients.get(&c.wg_pubkey.parse()?),

@@ -984,6 +984,7 @@ pub async fn exit_manager_tick() {
 
             if let ExitState::Registered { our_details, .. } = exit_info {
                 if let Some(ipv6_sub) = our_details.internet_ipv6_subnet {
+                    trace!("setting up slaac with {:?}", ipv6_sub);
                     KI.setup_ipv6_slaac(ipv6_sub)
                 }
             }

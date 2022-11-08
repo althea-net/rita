@@ -4,6 +4,8 @@ use crate::KernelInterfaceError as Error;
 use regex::Regex;
 use std::fs::read_dir;
 use std::net::IpAddr;
+use std::net::Ipv4Addr;
+use std::net::Ipv6Addr;
 use std::str::from_utf8;
 
 impl dyn KernelInterface {
@@ -93,7 +95,7 @@ impl dyn KernelInterface {
 
     /// Gets all the IPv4 addresses from an interface and returns the address and it's netmask
     /// as a tuple.
-    pub fn get_ip_from_iface(&self, name: &str) -> Result<Vec<(IpAddr, u8)>, Error> {
+    pub fn get_ip_from_iface(&self, name: &str) -> Result<Vec<(Ipv4Addr, u8)>, Error> {
         let output = self.run_command("ip", &["address", "show", "dev", name])?;
         let stdout = String::from_utf8(output.stdout)?;
 
@@ -101,6 +103,41 @@ impl dyn KernelInterface {
             static ref RE: Regex = Regex::new(r"((\d){1,3}\.){3}(\d){1,3}/(\d){1,3}")
                 .expect("Unable to compile regular expression");
         }
+
+        let mut ret = Vec::new();
+        for line in stdout.lines() {
+            let cap = RE.captures(line);
+            // we captured something on this line
+            if let Some(cap) = cap {
+                // flatten drops the 'none' values in this array
+                for ip_cap in cap.iter().flatten() {
+                    let mut split = ip_cap.as_str().split('/');
+                    let ip_str = split.next();
+                    let netmask = split.next();
+                    if let (Some(ip_str), Some(netmask)) = (ip_str, netmask) {
+                        if let (Ok(parsed_ip), Ok(parsed_netmask)) =
+                            (ip_str.parse(), netmask.parse())
+                        {
+                            ret.push((parsed_ip, parsed_netmask));
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(ret)
+    }
+
+    /// Gets all the IPv6 addresses from an interface and returns the address and it's netmask
+    /// as a tuple.
+    pub fn get_ipv6_from_iface(&self, name: &str) -> Result<Vec<(Ipv6Addr, u8)>, Error> {
+        let output = self.run_command("ip", &["address", "show", "dev", name])?;
+        let stdout = String::from_utf8(output.stdout)?;
+
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r"(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))/(\d){1,3}").expect("Unable to compile regular expression");
+        }
+
         let mut ret = Vec::new();
         for line in stdout.lines() {
             let cap = RE.captures(line);
