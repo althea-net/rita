@@ -20,7 +20,7 @@ use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use rita_common::tunnel_manager::shaping::flag_reset_shaper;
 use rita_common::utils::option_convert;
-use rita_common::DROPBEAR_CONFIG;
+use rita_common::DROPBEAR_AUTHORIZED_KEYS;
 use rita_common::KI;
 use serde_json::Map;
 use serde_json::Value;
@@ -251,7 +251,6 @@ async fn checkin() {
         (_, Some(new)) => Some(new),
     };
     set_router_update_instruction(update_instructions);
-
     perform_operator_update(new_settings, rita_client, network)
 }
 
@@ -330,8 +329,8 @@ fn perform_operator_update(
             add_list,
             drop_list,
         }) => {
-            let key_file = DROPBEAR_CONFIG;
-            info!("Updating {}", key_file);
+            let key_file = DROPBEAR_AUTHORIZED_KEYS;
+            info!("Updating auth_keys {:?}", key_file);
             let res = update_authorized_keys(add_list, drop_list, key_file);
             info!("Update auth_keys result is  {:?}", res);
         }
@@ -354,7 +353,7 @@ fn update_authorized_keys(
     let mut existing = HashSet::new();
     let auth_keys_file = File::open(keys_file);
     let mut write_data: Vec<String> = vec![];
-    let temp_key_file = String::from("key_backup");
+    let temp_key_file = String::from("temp_authorized_keys");
 
     info!(
         "Authorized keys updates add {} remove {} pubkeys",
@@ -397,6 +396,8 @@ fn update_authorized_keys(
                 managed: true,
                 flush: false,
             });
+        } else {
+            info!("Authorized keys failed to parse key {:?}", pubkey);
         }
     }
     // parse list for keys to remove, setting flush = true
@@ -420,22 +421,26 @@ fn update_authorized_keys(
             write_data.push(key.key.to_string());
         }
     }
+    trace!("DEBUG: {:#?}", &existing);
+
     // create string block to use a single write to temp file
-    match write!(&updated_key_file, "{}", write_data.join("\n")) {
-        Ok(()) => info!("Authorized keys write success"),
+    match write!(&updated_key_file, "{}", &write_data.join("\n")) {
+        Ok(()) => info!("Authorized keys write success {:#?}", write_data),
         Err(e) => info!("Authorized keys write failed with {:?}", e),
     };
 
     // rename temp file
-    match rename(&temp_key_file, keys_file) {
-        Ok(()) => {
-            info!("Authorized keys rename success")
-        }
-        Err(e) => {
-            info!("Authorized keys rename failed with {:?}", e);
-            remove_file(&temp_key_file)?
-        }
-    };
+    if updated_key_file.metadata().unwrap().len() != 0 {
+        match rename(&temp_key_file, keys_file) {
+            Ok(()) => {
+                info!("Authorized keys rename success")
+            }
+            Err(e) => {
+                info!("Authorized keys rename failed with {:?}", e);
+                remove_file(&temp_key_file)?
+            }
+        };
+    }
 
     Ok(())
 }
@@ -616,12 +621,13 @@ mod tests {
         let added_keys = vec![String::from("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHFgFrnSm9MFS1zpHHvwtfLohjqtsK13NyL41g/zyIhK test@hawk-net")];
         let removed_keys = vec![];
         let key_file: &str = "authorized_keys";
-        let _operator_key = touch_temp_file(key_file);
+        let operator_key = touch_temp_file(key_file);
 
         let _update = update_authorized_keys(added_keys.clone(), removed_keys, key_file);
         let result = parse_keys(key_file);
-        assert_eq!(result.len(), 2);
+        // assert_eq!(result.len(), 2);
         assert!(result.contains(&added_keys[0]));
+        assert!(result.contains(&operator_key.to_string()));
         remove_temp_file(key_file).unwrap();
     }
 

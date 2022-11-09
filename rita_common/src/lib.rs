@@ -16,6 +16,7 @@ lazy_static! {
     pub static ref KI: Box<dyn KernelInterface> = Box::new(LinuxCommandRunner {});
 }
 pub static DROPBEAR_CONFIG: &str = "/etc/config/dropbear";
+pub static DROPBEAR_AUTHORIZED_KEYS: &str = "/etc/dropbear/authorized_keys";
 
 pub mod blockchain_oracle;
 pub mod dashboard;
