@@ -255,7 +255,7 @@ fn encrypt_exit_client_id(
 /// blackhole attacks. Exits that cant be decrypted are immediately blacklisted and those exits that fail to respond after
 /// MAX_BLACKLIST_STRIKES warning strikes are blacklisted
 fn blacklist_strike_ip(ip: IpAddr, warning: WarningType) {
-    let writer = &mut (*EXIT_MANAGER.write().unwrap()).exit_blacklist;
+    let writer = &mut (EXIT_MANAGER.write().unwrap()).exit_blacklist;
 
     match warning {
         WarningType::SoftWarning => {
@@ -278,7 +278,7 @@ fn blacklist_strike_ip(ip: IpAddr, warning: WarningType) {
 
 /// Resets the the warnings from this ip in this blacklist. This function is called whenever we
 fn reset_blacklist_warnings(ip: IpAddr) {
-    let writer = &mut (*EXIT_MANAGER.write().unwrap()).exit_blacklist;
+    let writer = &mut (EXIT_MANAGER.write().unwrap()).exit_blacklist;
 
     // This condition should not be reached since if an exit is blacklisted, we should never sucessfully connect to it
     if writer.blacklisted_exits.contains(&ip) {
@@ -295,7 +295,7 @@ fn reset_blacklist_warnings(ip: IpAddr) {
 /// of false positives where exits that are not supposed to be blacklist have been blacklisted, perhaps for being unresposive for
 /// long periods of time
 fn reset_exit_blacklist() {
-    let writer = &mut (*EXIT_MANAGER.write().unwrap()).exit_blacklist;
+    let writer = &mut (EXIT_MANAGER.write().unwrap()).exit_blacklist;
 
     writer.blacklisted_exits.clear();
     writer.potential_blacklists.clear();

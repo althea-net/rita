@@ -8,6 +8,9 @@
 //!
 //! Also handles enforcement of nonpayment, since there's no need for a complicated TunnelManager for exits
 
+// Ignoring lint https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+#![allow(clippy::result_large_err)]
+
 use rita_common::debt_keeper::traffic_update;
 use rita_common::debt_keeper::Traffic;
 use rita_common::usage_tracker::update_usage_data;

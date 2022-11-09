@@ -339,7 +339,7 @@ fn send_udp_heartbeat_packet(
     // Senders address is dummy
     let local_socketaddr = SocketAddr::from(([0, 0, 0, 0], remote_port + 2));
 
-    let local_socket = match UdpSocket::bind(&local_socketaddr) {
+    let local_socket = match UdpSocket::bind(local_socketaddr) {
         Ok(s) => s,
         Err(e) => {
             error!(
@@ -384,7 +384,7 @@ fn send_udp_heartbeat_packet(
         return;
     }
 
-    match local_socket.send_to(&packet_contents, &remote) {
+    match local_socket.send_to(&packet_contents, remote) {
         Ok(bytes) => info!("Sent {} heartbeat bytes", bytes),
         Err(e) => error!("Failed to send heartbeat with {:?}", e),
     }

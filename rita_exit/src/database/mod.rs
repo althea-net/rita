@@ -2,6 +2,9 @@
 //! for the exit, which is most exit logic in general. Keep in mind database connections are remote
 //! and therefore synchronous database requests are quite expensive (on the order of tens of milliseconds)
 
+// Ignoring lint https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err
+#![allow(clippy::result_large_err)]
+
 use crate::create_or_update_user_record;
 use crate::database::database_tools::client_conflict;
 use crate::database::database_tools::delete_client;
@@ -148,7 +151,7 @@ pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Rita
             return Ok(ExitState::Denied {
                 message: format!(
                     "Partially changed registration details! Please reset your router and re-register with all new details. Backup your key first! {}",
-                    display_hashset(&*EXIT_ALLOWED_COUNTRIES),
+                    display_hashset(&EXIT_ALLOWED_COUNTRIES),
                 ),
             })
         },
@@ -194,7 +197,7 @@ pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Rita
         (false, _) => Ok(ExitState::Denied {
             message: format!(
                 "This exit only accepts connections from {}",
-                display_hashset(&*EXIT_ALLOWED_COUNTRIES),
+                display_hashset(&EXIT_ALLOWED_COUNTRIES),
             ),
         }),
     }

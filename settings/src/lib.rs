@@ -102,7 +102,7 @@ pub trait WrappedSettingsAdaptor {
 // Doing so will disable local reads/writes and instead call the adaptor's relevant fns
 // Can only be called once if no other settings exist in the SETTINGS global
 pub fn set_adaptor<T: 'static + WrappedSettingsAdaptor + Send + Sync>(adaptor: T) {
-    let settings_ref: &mut Option<Settings> = &mut *SETTINGS.write().unwrap();
+    let settings_ref: &mut Option<Settings> = &mut SETTINGS.write().unwrap();
     match settings_ref {
         // make sure this only gets called once on start
         Some(_) => panic!("Attempted to set settings adapter to a non-empty SETTINGS global"),
@@ -168,7 +168,7 @@ pub fn get_config_json() -> Result<serde_json::Value, SettingsError> {
 
 /// merge a json of a subset of settings into global settings
 pub fn merge_config_json(changed_settings: serde_json::Value) -> Result<(), SettingsError> {
-    let settings_ref: &mut Option<Settings> = &mut *SETTINGS.write().unwrap();
+    let settings_ref: &mut Option<Settings> = &mut SETTINGS.write().unwrap();
     match settings_ref {
         Some(Settings::Adaptor(adapt)) => adapt.adaptor.merge_client_json(changed_settings),
         Some(Settings::Client(client_settings)) => client_settings.merge(changed_settings),
@@ -181,7 +181,7 @@ pub fn merge_config_json(changed_settings: serde_json::Value) -> Result<(), Sett
 /// Does not currently save the identity paramater, as we don't
 /// need to modify that in a generic context.
 pub fn set_rita_common(input: RitaSettings) {
-    let settings_ref: &mut Option<Settings> = &mut *SETTINGS.write().unwrap();
+    let settings_ref: &mut Option<Settings> = &mut SETTINGS.write().unwrap();
     match settings_ref {
         Some(Settings::Adaptor(adapt)) => {
             let mut client_settings = adapt

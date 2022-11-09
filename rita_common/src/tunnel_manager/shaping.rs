@@ -53,7 +53,7 @@ pub fn handle_shaping() {
     if !bandwidth_limit_enabled || shaper.reset_flag {
         for (_id, tunnel_list) in tunnel_manager.tunnels.iter_mut() {
             for tunnel in tunnel_list {
-                if tunnel.speed_limit != None {
+                if tunnel.speed_limit.is_some() {
                     set_shaping_or_error(&tunnel.iface_name, None);
                     tunnel.speed_limit = None;
                 }
