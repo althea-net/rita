@@ -366,6 +366,6 @@ mod tests {
         assert_eq!(ip_a, ip_b);
         let mut map = HashMap::new();
         map.insert(ip_b, "test");
-        assert!(map.get(&ip_a) != None);
+        assert!(map.get(&ip_a).is_some());
     }
 }

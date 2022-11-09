@@ -46,13 +46,13 @@ impl From<[u8; 32]> for WgKey {
 
 impl fmt::Display for WgKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", base64::encode(&self))
+        write!(f, "{}", base64::encode(self))
     }
 }
 
 impl fmt::Debug for WgKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", base64::encode(&self))
+        write!(f, "{}", base64::encode(self))
     }
 }
 

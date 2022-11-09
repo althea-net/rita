@@ -148,7 +148,7 @@ pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Rita
             return Ok(ExitState::Denied {
                 message: format!(
                     "Partially changed registration details! Please reset your router and re-register with all new details. Backup your key first! {}",
-                    display_hashset(&*EXIT_ALLOWED_COUNTRIES),
+                    display_hashset(&EXIT_ALLOWED_COUNTRIES),
                 ),
             })
         },
@@ -194,7 +194,7 @@ pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Rita
         (false, _) => Ok(ExitState::Denied {
             message: format!(
                 "This exit only accepts connections from {}",
-                display_hashset(&*EXIT_ALLOWED_COUNTRIES),
+                display_hashset(&EXIT_ALLOWED_COUNTRIES),
             ),
         }),
     }

@@ -23,13 +23,13 @@ impl dyn KernelInterface {
 
     pub fn create_wg_keypair(&self) -> Result<WgKeypair, Error> {
         let genkey = Command::new("wg")
-            .args(&["genkey"])
+            .args(["genkey"])
             .stdout(Stdio::piped())
             .output()
             .expect("Are you sure wireguard is installed on this device?");
 
         let mut pubkey = Command::new("wg")
-            .args(&["pubkey"])
+            .args(["pubkey"])
             .stdout(Stdio::piped())
             .stdin(Stdio::piped())
             .spawn()
