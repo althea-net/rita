@@ -509,7 +509,7 @@ pub fn get_client_interface(
     new_wg_exit_clients: HashMap<WgKey, SystemTime>,
     wg_exit_clients: HashMap<WgKey, SystemTime>,
 ) -> Result<String, RitaExitError> {
-    info!(
+    trace!(
         "New list is {:?} \n Old list is {:?}",
         new_wg_exit_clients, wg_exit_clients
     );
