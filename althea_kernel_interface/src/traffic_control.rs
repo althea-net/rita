@@ -297,7 +297,20 @@ impl dyn KernelInterface {
         let output = self.run_command(
             "tc",
             &[
-                "qdisc", "add", "dev", iface_name, "root", "handle", "1:", "htb", "default", "0",
+                "qdisc",
+                "add",
+                "dev",
+                iface_name,
+                "root",
+                "handle",
+                "1:",
+                "htb",
+                "default",
+                "0",
+                "r2q",
+                "2",
+                "direct_qlen",
+                "100000",
             ],
         )?;
 
