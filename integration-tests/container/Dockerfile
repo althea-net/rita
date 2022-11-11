@@ -1,14 +1,11 @@
 FROM postgres
-RUN echo "deb http://deb.debian.org/debian/ unstable main" > /etc/apt/sources.list.d/unstable.list
-RUN printf 'Package: *\nPin: release a=unstable\nPin-Priority: 90\n' > /etc/apt/preferences.d/limit-unstable
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y sudo iputils-ping iproute2 jq vim netcat default-libmysqlclient-dev libsqlite3-dev postgresql-client-11 postgresql-server-dev-11 libpq-dev python3-pip bridge-utils wireguard linux-source curl git libssl-dev pkg-config build-essential ipset python3-setuptools python3-wheel dh-autoreconf procps
-RUN apt-get install -y -t unstable iperf3
+RUN apt-get update && apt-get install -y sudo iputils-ping iproute2 jq vim netcat default-libmysqlclient-dev libsqlite3-dev postgresql-client-11 postgresql-server-dev-11 libpq-dev python3-pip bridge-utils wireguard linux-source curl git libssl-dev pkg-config build-essential ipset python3-setuptools python3-wheel dh-autoreconf procps iperf3
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+RUN PATH=$PATH:$HOME/.cargo/bin cargo install diesel_cli --force
 ENV POSTGRES_USER=postgres
 ENV POSTGRES_BIN=/usr/lib/postgresql/15/bin/postgres
 ENV INITDB_BIN=/usr/lib/postgresql/15/bin/initdb
-RUN PATH=$PATH:$HOME/.cargo/bin cargo install diesel_cli --force
 ARG NODES
 ENV SPEEDTEST_THROUGHPUT=$SPEEDTEST_THROUGHPUT
 ENV SPEEDTEST_DURATION=$SPEEDTEST_DURATION
