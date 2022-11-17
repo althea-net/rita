@@ -8,6 +8,7 @@ pub mod auth;
 pub mod backup_created;
 pub mod bandwidth_limit;
 pub mod contact_info;
+pub mod devices_on_lan;
 pub mod eth_private_key;
 pub mod exits;
 pub mod installation_details;
@@ -62,6 +63,8 @@ use rita_common::dashboard::wg_key::*;
 use rita_common::middleware;
 use rita_common::network_endpoints::*;
 
+use self::devices_on_lan::get_devices_lan_endpoint;
+
 pub fn start_client_dashboard(rita_dashboard_port: u16) {
     // dashboard
     thread::spawn(move || {
@@ -92,6 +95,7 @@ pub fn start_client_dashboard(rita_dashboard_port: u16) {
                     .route("/local_fee/{fee}", web::post().to(set_local_fee))
                     .route("/metric_factor", web::get().to(get_metric_factor))
                     .route("/metric_factor/{factor}", web::post().to(set_metric_factor))
+                    .route("/lan_devices", web::get().to(get_devices_lan_endpoint))
                     .route(
                         "/exits/{name}/verify/{code}",
                         web::post().to(verify_on_exit_with_code),

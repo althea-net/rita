@@ -37,6 +37,7 @@ mod get_neighbors;
 pub mod hardware_info;
 mod interface_tools;
 mod ip_addr;
+pub mod ip_neigh;
 mod ip_route;
 mod iptables;
 mod is_openwrt;
