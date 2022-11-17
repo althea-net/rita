@@ -33,6 +33,7 @@ use std::fs::{remove_file, rename, File};
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use updater::update_system;
@@ -385,15 +386,22 @@ fn update_authorized_keys(
                         }
                     }
                     Err(e) => {
-                        info!(
-                            "Authorized keys unable to read lines from file {:?}, {:?}",
+                        let _create_keys_file = File::create(&keys_file)?;
+                        warn!(
+                            "Authorized keys did not exist, creating the file {:?} {:?}",
                             &keys_file, e
                         )
                     }
                 }
             }
         }
-        Err(e) => return Err(e),
+        Err(e) => {
+            let _create_keys_file = File::create(&keys_file)?;
+            warn!(
+                "Authorized keys did not exist, creating the file {:?} {:?}",
+                &keys_file, e
+            )
+        }
     };
     // parse/validate keys before being added
     for pubkey in add_list {
@@ -423,12 +431,26 @@ fn update_authorized_keys(
         .truncate(true)
         .open(&temp_key_file)?;
 
+    let metadata = updated_key_file.metadata();
+    match metadata {
+        Ok(metadata) => {
+            let mut perms = metadata.permissions();
+            perms.set_mode(0o600);
+            if let Err(e) = updated_key_file.set_permissions(perms) {
+                warn!("Authorized keys unable to set permissions {:?}", e);
+            }
+        }
+        Err(e) => {
+            warn!("Authorized keys unable to set permissions {:?}", e);
+            return Ok(());
+        }
+    }
+
     for key in &existing {
         if !key.flush {
             write_data.push(key.key.to_string());
         }
     }
-    trace!("DEBUG: {:#?}", &existing);
 
     // create string block to use a single write to temp file
     match write!(&updated_key_file, "{}", &write_data.join("\n")) {
@@ -437,17 +459,12 @@ fn update_authorized_keys(
     };
 
     // rename temp file
-    if updated_key_file.metadata().unwrap().len() != 0 {
-        match rename(&temp_key_file, keys_file) {
-            Ok(()) => {
-                info!("Authorized keys rename success")
-            }
-            Err(e) => {
-                info!("Authorized keys rename failed with {:?}", e);
-                remove_file(&temp_key_file)?
-            }
-        };
-    }
+    if let Err(e) = rename(&temp_key_file, keys_file) {
+        info!("Authorized keys rename failed with {:?}", e);
+        remove_file(&temp_key_file)?
+    } else {
+        info!("Authorized keys rename success")
+    };
 
     Ok(())
 }
@@ -590,7 +607,7 @@ fn contains_forbidden_key(map: Map<String, Value>, forbidden_values: &[&str]) ->
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, io::Error};
+    use std::{fs, io::Error, path::Path};
 
     use serde_json::json;
 
@@ -648,7 +665,7 @@ mod tests {
 
         let _update = update_authorized_keys(added_keys.clone(), removed_keys, key_file);
         let result = parse_keys(key_file);
-        // assert_eq!(result.len(), 2);
+        assert_eq!(result.len(), 2);
         assert!(result.contains(&added_keys[0]));
         assert!(result.contains(&operator_key.to_string()));
         remove_temp_file(key_file).unwrap();
@@ -707,5 +724,15 @@ mod tests {
         }
 
         remove_temp_file(key_file).unwrap();
+    }
+    #[test]
+    fn test_authorized_keys_create_if_missing() {
+        let added_keys = vec![
+            String::from("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHFgFrnSm9MFS1zpHHvwtfLohjqtsK13NyL41g/zyIhK test@hawk-net ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDVF1POOko4/fTE/SowsURSmd+kAUFDX6VPNqICJjn8eQk8FZ15WsZKfBdrGXLhl2+pxM66VWMUVRQOq84iSRVSVPA3abz0H7JYIGzO8psTweSZfK1jwHfKDGQA1h1aPuspnPrX7dyS1qLZf3YeVUUi+BFsW2gSiMadbS4zal2c2F1AG5Ezr3zcRVA8y3D0bZxScPAEX74AeTFcimHpHFyzDtUsRpf0uSEXZcMFqX5j4ETKlIs28k1v8LlhHo91IQYHEtbyi/I1M0axbF4VCz5JlcbAs9LUEJg8Kx8LxzJSeSJbxVwyk5WiEDwVsCL2MAtaOcJ+/FhxLb0ZEELAHnXFNSqmY8QoHeSdHrGP7FmVCBjRb/AhVUHYvsG94rO3Ij4H5XsbsQbP3AHVKbvf387WB53Wga7VrBXvRC9aDisetdP9+4/seVIBbOIePotaiHoTyS1cJ+Jg0PkKy96enqwMt9T1Wt8jURB+s/A/bDGHkjB3dxomuGxux8dD6UNX54M= test-rsa@hawk-net"),
+        ];
+        let removed_keys: Vec<String> = vec![];
+        let key_file: &str = "create_keys_file";
+        let _update = update_authorized_keys(added_keys, removed_keys, key_file);
+        assert!(Path::new(key_file).exists());
     }
 }
