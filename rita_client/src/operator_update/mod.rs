@@ -393,7 +393,13 @@ fn update_authorized_keys(
                 }
             }
         }
-        Err(e) => return Err(e),
+        Err(e) => {
+            let _create_keys_file = File::create(&keys_file)?;
+            info!(
+                "Authorized keys did not exist, creating the file {:?} {:?}",
+                &keys_file, e
+            )
+        }
     };
     // parse/validate keys before being added
     for pubkey in add_list {
@@ -428,7 +434,6 @@ fn update_authorized_keys(
             write_data.push(key.key.to_string());
         }
     }
-    trace!("DEBUG: {:#?}", &existing);
 
     // create string block to use a single write to temp file
     match write!(&updated_key_file, "{}", &write_data.join("\n")) {
@@ -590,7 +595,7 @@ fn contains_forbidden_key(map: Map<String, Value>, forbidden_values: &[&str]) ->
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, io::Error};
+    use std::{fs, io::Error, path::Path};
 
     use serde_json::json;
 
@@ -707,5 +712,15 @@ mod tests {
         }
 
         remove_temp_file(key_file).unwrap();
+    }
+    #[test]
+    fn test_split_key() {
+        let added_keys = vec![
+            String::from("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHFgFrnSm9MFS1zpHHvwtfLohjqtsK13NyL41g/zyIhK test@hawk-net ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDVF1POOko4/fTE/SowsURSmd+kAUFDX6VPNqICJjn8eQk8FZ15WsZKfBdrGXLhl2+pxM66VWMUVRQOq84iSRVSVPA3abz0H7JYIGzO8psTweSZfK1jwHfKDGQA1h1aPuspnPrX7dyS1qLZf3YeVUUi+BFsW2gSiMadbS4zal2c2F1AG5Ezr3zcRVA8y3D0bZxScPAEX74AeTFcimHpHFyzDtUsRpf0uSEXZcMFqX5j4ETKlIs28k1v8LlhHo91IQYHEtbyi/I1M0axbF4VCz5JlcbAs9LUEJg8Kx8LxzJSeSJbxVwyk5WiEDwVsCL2MAtaOcJ+/FhxLb0ZEELAHnXFNSqmY8QoHeSdHrGP7FmVCBjRb/AhVUHYvsG94rO3Ij4H5XsbsQbP3AHVKbvf387WB53Wga7VrBXvRC9aDisetdP9+4/seVIBbOIePotaiHoTyS1cJ+Jg0PkKy96enqwMt9T1Wt8jURB+s/A/bDGHkjB3dxomuGxux8dD6UNX54M= test-rsa@hawk-net"),
+        ];
+        let removed_keys: Vec<String> = vec![];
+        let key_file: &str = "create_keys_file";
+        let _update = update_authorized_keys(added_keys, removed_keys, key_file);
+        assert!(Path::new(key_file).exists());
     }
 }
