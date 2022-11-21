@@ -106,59 +106,6 @@ impl dyn KernelInterface {
         Ok(mut_handles)
     }
 
-    /// This function sets up the ip6table rules required to forward data from the internet to a client router
-    /// a rule forwarding traffic from wg_exit or wg_exit_v2 to external nic has been added in one_time_exit_setup()
-    /// This function adds the requred rule from external nic to either wg_exit or wg_exit_v2
-    /// 1.) Check the existance of the required rule
-    /// 2.) If not there, it either has an outdated rule or no rule. In that case we simply delete all rules for the particular subnet
-    /// 3.) Add the required rule
-    pub fn setup_client_rules(
-        &self,
-        client_ipv6_list: String,
-        client_mesh: String,
-        interface: &str,
-        external_nic: String,
-    ) -> Result<(), KernelInterfaceError> {
-        if client_ipv6_list.is_empty() {
-            return Ok(());
-        }
-
-        let ipv6_list: Vec<&str> = client_ipv6_list.split(',').collect();
-
-        for ip in ipv6_list {
-            // Verfiy its a valid subnet
-            if let Ok(ip_net) = ip.parse::<IpNetwork>() {
-                // Check if required rule exists
-                if self.check_iptable_rule(
-                    "ip6tables",
-                    &[
-                        "-C",
-                        "FORWARD",
-                        "-d",
-                        &ip_net.to_string(),
-                        "-i",
-                        &external_nic,
-                        "-o",
-                        interface,
-                        "-j",
-                        "ACCEPT",
-                    ],
-                )? {
-                    // This rule already exists, continue to client subnet
-                    continue;
-                } else {
-                    // Correct rule doesnt exist, either outdated rule exists or no rule exists. Either way, we del this rule on all interfaces and add a new one
-
-                    // Add new correct rule
-                }
-            } else {
-                error!("IPV6 Error: Invalid client database state. Client with mesh ip: {:?} has invalid database ipv6 list: {:?}", client_mesh, client_ipv6_list);
-            }
-        }
-
-        Ok(())
-    }
-
     /// This function adds a route for each client ipv4 subnet to the routing table
     /// this works on the premise of smallest prefix first routing meaning that we can assign
     /// ip route 172.168.0.1/16 to wg_exit_v2 and then individually add /32 routes to wg_exit_v1
@@ -221,7 +168,6 @@ impl dyn KernelInterface {
         local_v4: Option<(IpAddr, u8)>,
         external_v6: Option<(IpAddr, u8)>,
         exit_mesh: IpAddr,
-        external_nic: String,
         interface: &str,
         enable_enforcement: bool,
     ) -> Result<(), Error> {
@@ -256,37 +202,6 @@ impl dyn KernelInterface {
                     &format!("{external_ip_v6}/{netmask_v6}"),
                     "dev",
                     interface,
-                ],
-            )?;
-
-            // Add iptable routes between wg_exit and the external nic
-            self.add_iptables_rule(
-                "ip6tables",
-                &[
-                    "-A",
-                    "FORWARD",
-                    "-i",
-                    interface,
-                    "-o",
-                    &external_nic,
-                    "-j",
-                    "ACCEPT",
-                ],
-            )?;
-
-            self.add_iptables_rule(
-                "ip6tables",
-                &[
-                    "-A",
-                    "FORWARD",
-                    "-d",
-                    &format!("{}/{}", external_ip_v6, netmask_v6),
-                    "-i",
-                    &external_nic,
-                    "-o",
-                    interface,
-                    "-j",
-                    "ACCEPT",
                 ],
             )?;
         }
@@ -336,59 +251,109 @@ impl dyn KernelInterface {
     }
 
     /// Sets up the natting rules for forwarding ipv4 traffic
-    pub fn setup_nat(&self, external_interface: &str, interface: &str) -> Result<(), Error> {
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-w",
-                "-t",
-                "nat",
-                "-A",
-                "POSTROUTING",
-                "-o",
-                external_interface,
-                "-j",
-                "MASQUERADE",
-            ],
-        )?;
+    pub fn setup_nat(
+        &self,
+        external_interface: &str,
+        interface: &str,
+        external_v6: Option<(IpAddr, u8)>,
+    ) -> Result<(), Error> {
+        // nat masquerade on exit
+        if self.get_kernel_is_v4()? {
+            self.add_iptables_rule(
+                "iptables",
+                &[
+                    "-w",
+                    "-t",
+                    "nat",
+                    "-A",
+                    "POSTROUTING",
+                    "-o",
+                    external_interface,
+                    "-j",
+                    "MASQUERADE",
+                ],
+            )?;
+        } else {
+            self.init_nat_chain(external_interface)?;
+        }
 
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-w",
-                "-t",
-                "filter",
-                "-A",
-                "FORWARD",
-                "-o",
-                external_interface,
-                "-i",
-                interface,
-                "-j",
-                "ACCEPT",
-            ],
-        )?;
+        // Add v4 and v6 forward rules wg_exit <-> ex_nic
+        if self.get_kernel_is_v4()? {
+            // v4 wg_exit -> ex_nic
+            self.add_iptables_rule(
+                "iptables",
+                &[
+                    "-w",
+                    "-t",
+                    "filter",
+                    "-A",
+                    "FORWARD",
+                    "-o",
+                    external_interface,
+                    "-i",
+                    interface,
+                    "-j",
+                    "ACCEPT",
+                ],
+            )?;
 
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-w",
-                "-t",
-                "filter",
-                "-A",
-                "FORWARD",
-                "-o",
-                interface,
-                "-i",
-                external_interface,
-                "-m",
-                "state",
-                "--state",
-                "RELATED,ESTABLISHED",
-                "-j",
-                "ACCEPT",
-            ],
-        )?;
+            // v4 ex_nic -> interface
+            self.add_iptables_rule(
+                "iptables",
+                &[
+                    "-w",
+                    "-t",
+                    "filter",
+                    "-A",
+                    "FORWARD",
+                    "-o",
+                    interface,
+                    "-i",
+                    external_interface,
+                    "-m",
+                    "state",
+                    "--state",
+                    "RELATED,ESTABLISHED",
+                    "-j",
+                    "ACCEPT",
+                ],
+            )?;
+
+            // Add iptable routes between wg_exit and the external nic
+            self.add_iptables_rule(
+                "ip6tables",
+                &[
+                    "-A",
+                    "FORWARD",
+                    "-i",
+                    interface,
+                    "-o",
+                    external_interface,
+                    "-j",
+                    "ACCEPT",
+                ],
+            )?;
+
+            if let Some((external_ip_v6, netmask_v6)) = external_v6 {
+                self.add_iptables_rule(
+                    "ip6tables",
+                    &[
+                        "-A",
+                        "FORWARD",
+                        "-d",
+                        &format!("{}/{}", external_ip_v6, netmask_v6),
+                        "-i",
+                        external_interface,
+                        "-o",
+                        interface,
+                        "-j",
+                        "ACCEPT",
+                    ],
+                )?;
+            }
+        } else {
+            self.insert_nft_exit_forward_rules(interface, external_interface, external_v6)?;
+        }
 
         Ok(())
     }

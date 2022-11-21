@@ -334,12 +334,13 @@ fn update_exit_server_to_althea_addresses() {
                         deep_space::Address::from_slice(e.eth_address.as_bytes(), "althea")
                             .expect("This shouldnt be failing"),
                     );
+                    info!("Updated us west alteha address to {:?}", e.althea_address)
                 }
             }
             _ => {}
         }
     }
-    // Save into settings
+    // update rita client settings
     rita_client.exit_client.exits = exits;
     settings::set_rita_client(rita_client);
 }
