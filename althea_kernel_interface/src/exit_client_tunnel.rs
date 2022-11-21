@@ -1,4 +1,5 @@
 use super::KernelInterface;
+use crate::hardware_info::{get_kernel_version, parse_kernel_version};
 use crate::{open_tunnel::to_wg_local, KernelInterfaceError as Error};
 use althea_types::WgKey;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -32,6 +33,11 @@ pub struct ClientExitTunnelConfig {
 }
 
 impl dyn KernelInterface {
+    pub fn get_kernel_is_v4(&self) -> Result<bool, Error> {
+        let (_, system_kernel_version) = parse_kernel_version(get_kernel_version()?)?;
+        Ok(system_kernel_version.starts_with("4."))
+    }
+
     pub fn set_client_exit_tunnel_config(
         &self,
         args: ClientExitTunnelConfig,
@@ -66,25 +72,6 @@ impl dyn KernelInterface {
                 self.run_command("wg", &["set", "wg_exit", "peer", &format!("{i}"), "remove"])?;
             }
         }
-
-        // block rita hello port on the exit tunnel, this probably doesn't do anything
-        // useful these days as our peer discovery method no longer relies on interface
-        // indiscriminate broadcast.
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-I",
-                "OUTPUT",
-                "-o",
-                "wg_exit",
-                "-p",
-                "tcp",
-                "--dport",
-                &format!("{}", args.rita_hello_port),
-                "-j",
-                "DROP",
-            ],
-        )?;
 
         let prev_ip: Result<Ipv4Addr, Error> = self.get_global_device_ip_v4("wg_exit");
 
@@ -224,52 +211,63 @@ impl dyn KernelInterface {
     /// same rules. It may be advisable in the future to split them up into
     /// individual nat entires for each option
     pub fn create_client_nat_rules(&self) -> Result<(), Error> {
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-t",
-                "nat",
-                "-A",
-                "POSTROUTING",
-                "-o",
-                "wg_exit",
-                "-j",
-                "MASQUERADE",
-            ],
-        )?;
-        self.add_iptables_rule("iptables", &["-A", "zone_lan_forward", "-j", "ACCEPT"])?;
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-I",
-                "FORWARD",
-                "-p",
-                "tcp",
-                "--tcp-flags",
-                "SYN,RST",
-                "SYN",
-                "-j",
-                "TCPMSS",
-                "--clamp-mss-to-pmtu", //should be the same as --set-mss 1300
-            ],
-        )?;
+        let is_v4 = self.get_kernel_is_v4()?;
 
-        //ipv6 support
-        self.add_iptables_rule(
-            "ip6tables",
-            &[
-                "-I",
-                "FORWARD",
-                "-p",
-                "tcp",
-                "--tcp-flags",
-                "SYN,RST",
-                "SYN",
-                "-j",
-                "TCPMSS",
-                "--clamp-mss-to-pmtu", //should be the same as --set-mss 1300
-            ],
-        )?;
+        if is_v4 {
+            self.add_iptables_rule(
+                "iptables",
+                &[
+                    "-t",
+                    "nat",
+                    "-A",
+                    "POSTROUTING",
+                    "-o",
+                    "wg_exit",
+                    "-j",
+                    "MASQUERADE",
+                ],
+            )?;
+            self.add_iptables_rule("iptables", &["-A", "zone_lan_forward", "-j", "ACCEPT"])?;
+        } else {
+            self.init_nat_chain("wg_exit")?;
+            self.set_nft_lan_fwd_rule()?;
+        }
+
+        // Set mtu
+        if is_v4 {
+            self.add_iptables_rule(
+                "iptables",
+                &[
+                    "-I",
+                    "FORWARD",
+                    "-p",
+                    "tcp",
+                    "--tcp-flags",
+                    "SYN,RST",
+                    "SYN",
+                    "-j",
+                    "TCPMSS",
+                    "--clamp-mss-to-pmtu", //should be the same as --set-mss 1300
+                ],
+            )?;
+
+            //ipv6 support
+            self.add_iptables_rule(
+                "ip6tables",
+                &[
+                    "-I",
+                    "FORWARD",
+                    "-p",
+                    "tcp",
+                    "--tcp-flags",
+                    "SYN,RST",
+                    "SYN",
+                    "-j",
+                    "TCPMSS",
+                    "--clamp-mss-to-pmtu", //should be the same as --set-mss 1300
+                ],
+            )?;
+        }
 
         Ok(())
     }
@@ -277,13 +275,21 @@ impl dyn KernelInterface {
     /// blocks the client nat by inserting a blocker in the start of the special lan forwarding
     /// table created by openwrt.
     pub fn block_client_nat(&self) -> Result<(), Error> {
-        self.add_iptables_rule("iptables", &["-I", "zone_lan_forward", "-j", "REJECT"])?;
+        if self.get_kernel_is_v4()? {
+            self.add_iptables_rule("iptables", &["-I", "zone_lan_forward", "-j", "REJECT"])?;
+        } else {
+            self.insert_reject_rule()?;
+        }
         Ok(())
     }
 
     /// Removes the block created by block_client_nat() will fail if not run after that command
     pub fn restore_client_nat(&self) -> Result<(), Error> {
-        self.add_iptables_rule("iptables", &["-D", "zone_lan_forward", "-j", "REJECT"])?;
+        if self.get_kernel_is_v4()? {
+            self.add_iptables_rule("iptables", &["-D", "zone_lan_forward", "-j", "REJECT"])?;
+        } else {
+            self.delete_reject_rule()?;
+        }
         Ok(())
     }
 }

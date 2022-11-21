@@ -326,10 +326,6 @@ fn setup_exit_wg_tunnel() {
         .network
         .mesh_ip
         .expect("Expected a mesh ip for this exit");
-    let ex_nic = exit_settings
-        .network
-        .external_nic
-        .expect("Expected an external nic here");
     let enforcement_enabled = exit_settings.exit_network.enable_enforcement;
     let external_v6 = exit_settings
         .exit_network
@@ -337,22 +333,14 @@ fn setup_exit_wg_tunnel() {
         .map(|ipv6_subnet| (ipv6_subnet.ip(), ipv6_subnet.prefix()));
 
     // Setup legacy wg_exit
-    KI.one_time_exit_setup(
-        None,
-        None,
-        mesh_ip,
-        ex_nic.clone(),
-        "wg_exit",
-        enforcement_enabled,
-    )
-    .expect("Failed to setup wg_exit!");
+    KI.one_time_exit_setup(None, None, mesh_ip, "wg_exit", enforcement_enabled)
+        .expect("Failed to setup wg_exit!");
 
     // Setup wg_exit_v2. Local address added is same as that used by wg_exit
     KI.one_time_exit_setup(
         Some((local_ip, netmask)),
         external_v6,
         mesh_ip,
-        ex_nic,
         "wg_exit_v2",
         enforcement_enabled,
     )
@@ -361,11 +349,13 @@ fn setup_exit_wg_tunnel() {
     KI.setup_nat(
         &settings::get_rita_exit().network.external_nic.unwrap(),
         "wg_exit",
+        None,
     )
     .unwrap();
     KI.setup_nat(
         &settings::get_rita_exit().network.external_nic.unwrap(),
         "wg_exit_v2",
+        external_v6,
     )
     .unwrap();
 }
