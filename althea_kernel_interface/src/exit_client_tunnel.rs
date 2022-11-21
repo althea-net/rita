@@ -67,24 +67,24 @@ impl dyn KernelInterface {
             }
         }
 
-        // block rita hello port on the exit tunnel, this probably doesn't do anything
-        // useful these days as our peer discovery method no longer relies on interface
-        // indiscriminate broadcast.
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-I",
-                "OUTPUT",
-                "-o",
-                "wg_exit",
-                "-p",
-                "tcp",
-                "--dport",
-                &format!("{}", args.rita_hello_port),
-                "-j",
-                "DROP",
-            ],
-        )?;
+        // // block rita hello port on the exit tunnel, this probably doesn't do anything
+        // // useful these days as our peer discovery method no longer relies on interface
+        // // indiscriminate broadcast.
+        // self.add_iptables_rule(
+        //     "iptables",
+        //     &[
+        //         "-I",
+        //         "OUTPUT",
+        //         "-o",
+        //         "wg_exit",
+        //         "-p",
+        //         "tcp",
+        //         "--dport",
+        //         &format!("{}", args.rita_hello_port),
+        //         "-j",
+        //         "DROP",
+        //     ],
+        // )?;
 
         let prev_ip: Result<Ipv4Addr, Error> = self.get_global_device_ip_v4("wg_exit");
 
@@ -224,20 +224,26 @@ impl dyn KernelInterface {
     /// same rules. It may be advisable in the future to split them up into
     /// individual nat entires for each option
     pub fn create_client_nat_rules(&self) -> Result<(), Error> {
-        self.add_iptables_rule(
-            "iptables",
-            &[
-                "-t",
-                "nat",
-                "-A",
-                "POSTROUTING",
-                "-o",
-                "wg_exit",
-                "-j",
-                "MASQUERADE",
-            ],
-        )?;
-        self.add_iptables_rule("iptables", &["-A", "zone_lan_forward", "-j", "ACCEPT"])?;
+        self.init_nat_chain()?;
+
+        // self.add_iptables_rule(
+        //     "iptables",
+        //     &[
+        //         "-t",
+        //         "nat",
+        //         "-A",
+        //         "POSTROUTING",
+        //         "-o",
+        //         "wg_exit",
+        //         "-j",
+        //         "MASQUERADE",
+        //     ],
+        // )?;
+
+        // self.add_iptables_rule("iptables", &["-A", "zone_lan_forward", "-j", "ACCEPT"])?;
+
+        self.add_lan_forward()?;
+
         self.add_iptables_rule(
             "iptables",
             &[
@@ -277,13 +283,15 @@ impl dyn KernelInterface {
     /// blocks the client nat by inserting a blocker in the start of the special lan forwarding
     /// table created by openwrt.
     pub fn block_client_nat(&self) -> Result<(), Error> {
-        self.add_iptables_rule("iptables", &["-I", "zone_lan_forward", "-j", "REJECT"])?;
+        //self.add_iptables_rule("iptables", &["-I", "zone_lan_forward", "-j", "REJECT"])?;
+        self.delete_lan_forward()?;
         Ok(())
     }
 
     /// Removes the block created by block_client_nat() will fail if not run after that command
     pub fn restore_client_nat(&self) -> Result<(), Error> {
-        self.add_iptables_rule("iptables", &["-D", "zone_lan_forward", "-j", "REJECT"])?;
+        // self.add_iptables_rule("iptables", &["-D", "zone_lan_forward", "-j", "REJECT"])?;
+        self.add_lan_forward()?;
         Ok(())
     }
 }

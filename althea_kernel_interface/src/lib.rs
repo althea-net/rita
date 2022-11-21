@@ -43,6 +43,7 @@ mod iptables;
 mod is_openwrt;
 mod link_local_tools;
 mod manipulate_uci;
+mod nftables;
 pub mod open_tunnel;
 mod openwrt_ubus;
 pub mod opkg_feeds;
