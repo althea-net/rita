@@ -584,30 +584,31 @@ pub fn enforce_exit_clients(
             Some(client) => {
                 match client.internal_ip.parse() {
                     Ok(IpAddr::V4(ip)) => {
-                        let res = if debt_entry.payment_details.action == DebtAction::SuspendTunnel
-                        {
+                        if debt_entry.payment_details.action == DebtAction::SuspendTunnel {
                             info!("Exit is enforcing on {} because their debt of {} is greater than the limit of {}", client.wg_pubkey, debt_entry.payment_details.debt, close_threshold);
                             if let Err(e) =
                                 KI.set_class_limit("wg_exit", free_tier_limit, free_tier_limit, ip)
                             {
                                 error!("Unable to setup enforcement class on wg_exit: {:?}", e);
                             }
-                            KI.set_class_limit("wg_exit_v2", free_tier_limit, free_tier_limit, ip)
-                        } else {
-                            // 10gbit rate and ceil value's we don't want to limit this
-                            if let Err(e) =
-                                KI.set_class_limit("wg_exit", 10_000_000, 10_000_000, ip)
-                            {
-                                error!(
-                                    "Unable to set client rate to 10GB rate on wg_exit: {:?}",
-                                    e
-                                );
+                            if let Err(e) = KI.set_class_limit(
+                                "wg_exit_v2",
+                                free_tier_limit,
+                                free_tier_limit,
+                                ip,
+                            ) {
+                                error!("Unable to setup enforcement class on wg_exit_v2 {:?}", e);
                             }
-                            KI.set_class_limit("wg_exit_v2", 10_000_000, 10_000_000, ip)
+                        } else {
+                            // Delete exisiting enforcement class
+                            if let Err(e) = KI.delete_class("wg_exit", ip) {
+                                error!("Unable to delete class on wg_exit, is {} still enforced when they shouldnt be? {:?}", ip, e);
+                            }
+
+                            if let Err(e) = KI.delete_class("wg_exit_v2", ip) {
+                                error!("Unable to delete class on wg_exit_v2, is {} still enforced when they shouldnt be? {:?}", ip, e);
+                            }
                         };
-                        if res.is_err() {
-                            error!("Failed to limit {} with {:?}", ip, res);
-                        }
                     }
                     _ => warn!("Can't parse Ipv4Addr to create limit!"),
                 };

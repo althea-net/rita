@@ -325,6 +325,37 @@ impl dyn KernelInterface {
         }
     }
 
+    pub fn delete_class(&self, iface_name: &str, ip: Ipv4Addr) -> Result<(), Error> {
+        let class_id = self.get_class_id(ip);
+        match self.has_class(ip, iface_name) {
+            Ok(has_class) => {
+                if has_class {
+                    self.run_command(
+                        "tc",
+                        &[
+                            "class",
+                            "del",
+                            "dev",
+                            iface_name,
+                            "parent",
+                            "1:",
+                            "classid",
+                            &format!("1:{}", class_id),
+                        ],
+                    )?;
+                }
+                Ok(())
+            }
+            Err(e) => {
+                error!(
+                    "Unable to find class for ip {:?} on {:?} with {:?}",
+                    ip, iface_name, e
+                );
+                Err(e)
+            }
+        }
+    }
+
     pub fn set_class_limit(
         &self,
         iface_name: &str,
