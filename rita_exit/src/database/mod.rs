@@ -124,7 +124,7 @@ pub fn get_exit_info() -> ExitDetails {
 /// Handles a new client registration api call. Performs a geoip lookup
 /// on their registration ip to make sure that they are coming from a valid gateway
 /// ip and then sends out an email of phone message
-pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, RitaExitError> {
+pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Box<RitaExitError>> {
     info!("got setup request {:?}", client);
     let gateway_ip = get_gateway_ip_single(client.global.mesh_ip)?;
     info!("got gateway ip {:?}", client);
@@ -156,10 +156,7 @@ pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Rita
         Err(e) => return Err(e),
     }
 
-    let their_record = match create_or_update_user_record(&conn, &client, user_country) {
-        Ok(record) => record,
-        Err(e) => return Err(e),
-    };
+    let their_record = create_or_update_user_record(&conn, &client, user_country)?;
 
     // either update and grab an existing entry or create one
     match (verify_status, EXIT_VERIF_SETTINGS.clone()) {
@@ -170,18 +167,12 @@ pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Rita
             handle_sms_registration(client, their_record, phone.auth_api_key).await
         }
         (true, None) => {
-            match verify_client(&client, true, &conn) {
-                Ok(_) => (),
-                Err(e) => return Err(e),
-            }
+            verify_client(&client, true, &conn)?;
             let client_internal_ip = match their_record.internal_ip.parse() {
                 Ok(ip) => ip,
-                Err(e) => return Err(RitaExitError::AddrParseError(e)),
+                Err(e) => return Err(Box::new(RitaExitError::AddrParseError(e))),
             };
-            let client_internet_ipv6_subnet = match get_client_ipv6(&their_record) {
-                Ok(sub) => sub,
-                Err(e) => return Err(e),
-            };
+            let client_internet_ipv6_subnet = get_client_ipv6(&their_record)?;
             Ok(ExitState::Registered {
                 our_details: ExitClientDetails {
                     client_internal_ip,
@@ -204,7 +195,7 @@ pub async fn signup_client(client: ExitClientIdentity) -> Result<ExitState, Rita
 pub fn client_status(
     client: ExitClientIdentity,
     conn: &PgConnection,
-) -> Result<ExitState, RitaExitError> {
+) -> Result<ExitState, Box<RitaExitError>> {
     trace!("Checking if record exists for {:?}", client.global.mesh_ip);
 
     if let Some(their_record) = get_client(&client, conn)? {
@@ -219,12 +210,19 @@ pub fn client_status(
             });
         }
 
-        let current_ip = their_record.internal_ip.parse()?;
+        let current_ip: IpAddr = match their_record.internal_ip.parse() {
+            Ok(a) => a,
+            Err(e) => return Err(Box::new(e.into())),
+        };
+
         let current_internet_ipv6 = get_client_ipv6(&their_record)?;
 
         let exit_network = &*EXIT_NETWORK_SETTINGS;
         let current_subnet =
-            IpNetwork::new(exit_network.own_internal_ip.into(), exit_network.netmask)?;
+            match IpNetwork::new(exit_network.own_internal_ip.into(), exit_network.netmask) {
+                Ok(a) => a,
+                Err(e) => return Err(Box::new(e.into())),
+            };
 
         if !current_subnet.contains(current_ip) {
             return Ok(ExitState::Registering {
@@ -255,7 +253,7 @@ pub fn client_status(
 pub fn validate_clients_region(
     clients_list: Vec<exit_db::models::Client>,
     conn: &PgConnection,
-) -> Result<(), RitaExitError> {
+) -> Result<(), Box<RitaExitError>> {
     info!("Starting exit region validation");
     let start = Instant::now();
 
@@ -276,10 +274,7 @@ pub fn validate_clients_region(
             Err(_e) => error!("Database entry with invalid mesh ip! {:?}", item),
         }
     }
-    let list = match get_gateway_ip_bulk(ip_vec, EXIT_LOOP_TIMEOUT) {
-        Err(e) => return Err(e),
-        Ok(val) => val,
-    };
+    let list = get_gateway_ip_bulk(ip_vec, EXIT_LOOP_TIMEOUT)?;
     for item in list.iter() {
         let res = verify_ip(item.gateway_ip);
         match res {
@@ -314,7 +309,7 @@ pub fn validate_clients_region(
 pub fn cleanup_exit_clients(
     clients_list: &[exit_db::models::Client],
     conn: &PgConnection,
-) -> Result<(), RitaExitError> {
+) -> Result<(), Box<RitaExitError>> {
     trace!("Running exit client cleanup");
     let start = Instant::now();
 
@@ -373,7 +368,7 @@ pub fn cleanup_exit_clients(
 pub fn setup_clients(
     clients_list: &[exit_db::models::Client],
     old_clients: &HashSet<ExitClient>,
-) -> Result<HashSet<ExitClient>, RitaExitError> {
+) -> Result<HashSet<ExitClient>, Box<RitaExitError>> {
     let start = Instant::now();
 
     // use hashset to ensure uniqueness and check for duplicate db entries
@@ -508,15 +503,21 @@ pub fn get_client_interface(
     c: &exit_db::models::Client,
     new_wg_exit_clients: HashMap<WgKey, SystemTime>,
     wg_exit_clients: HashMap<WgKey, SystemTime>,
-) -> Result<String, RitaExitError> {
+) -> Result<String, Box<RitaExitError>> {
     trace!(
         "New list is {:?} \n Old list is {:?}",
         new_wg_exit_clients,
         wg_exit_clients
     );
     match (
-        new_wg_exit_clients.get(&c.wg_pubkey.parse()?),
-        wg_exit_clients.get(&c.wg_pubkey.parse()?),
+        new_wg_exit_clients.get(match &c.wg_pubkey.parse() {
+            Ok(a) => a,
+            Err(e) => return Err(Box::new(e.clone().into())),
+        }),
+        wg_exit_clients.get(match &c.wg_pubkey.parse() {
+            Ok(a) => a,
+            Err(e) => return Err(Box::new(e.clone().into())),
+        }),
     ) {
         (Some(_), None) => Ok("wg_exit_v2".into()),
         (None, Some(_)) => Ok("wg_exit".into()),
@@ -545,7 +546,7 @@ pub fn get_client_interface(
 pub fn enforce_exit_clients(
     clients_list: Vec<exit_db::models::Client>,
     old_debt_actions: &HashSet<(Identity, DebtAction)>,
-) -> Result<HashSet<(Identity, DebtAction)>, RitaExitError> {
+) -> Result<HashSet<(Identity, DebtAction)>, Box<RitaExitError>> {
     let start = Instant::now();
     let mut clients_by_id = HashMap::new();
     let free_tier_limit = settings::get_rita_exit().payment.free_tier_throughput;

@@ -39,7 +39,7 @@ fn get_internal_ips(clients: &[exit_db::models::Client]) -> Vec<Ipv4Addr> {
 
 /// Gets the next available client ip, takes about O(n) time, we could make it faster by
 /// sorting on the database side but I've left that optimization on the vine for now
-pub fn get_next_client_ip(conn: &PgConnection) -> Result<IpAddr, RitaExitError> {
+pub fn get_next_client_ip(conn: &PgConnection) -> Result<IpAddr, Box<RitaExitError>> {
     use self::schema::clients::dsl::clients;
     let rita_exit = settings::get_rita_exit();
     let exit_settings = rita_exit.exit_network;
@@ -49,15 +49,29 @@ pub fn get_next_client_ip(conn: &PgConnection) -> Result<IpAddr, RitaExitError> 
     // drop here to free up the settings lock, this codepath runs in parallel
     drop(exit_settings);
 
-    let clients_list = clients.load::<models::Client>(conn)?;
+    let clients_list = match clients.load::<models::Client>(conn) {
+        Ok(a) => a,
+        Err(e) => return Err(Box::new(e.into())),
+    };
     let ips_list = get_internal_ips(&clients_list);
     let mut new_ip: IpAddr = start_ip.into();
 
     // iterate until we find an open spot, yes converting to string and back is quite awkward
-    while ips_list.contains(&new_ip.to_string().parse()?) {
-        new_ip = increment(new_ip, netmask)?;
+    while ips_list.contains({
+        match &new_ip.to_string().parse() {
+            Ok(a) => a,
+            Err(e) => return Err(Box::new(e.clone().into())),
+        }
+    }) {
+        new_ip = match increment(new_ip, netmask) {
+            Ok(a) => a,
+            Err(e) => return Err(Box::new(e.into())),
+        };
         if new_ip == gateway_ip {
-            new_ip = increment(new_ip, netmask)?;
+            new_ip = match increment(new_ip, netmask) {
+                Ok(a) => a,
+                Err(e) => return Err(Box::new(e.into())),
+            }
         }
     }
     trace!(
@@ -74,7 +88,7 @@ pub fn update_client(
     client: &ExitClientIdentity,
     their_record: &models::Client,
     conn: &PgConnection,
-) -> Result<(), RitaExitError> {
+) -> Result<(), Box<RitaExitError>> {
     use self::schema::clients::dsl::{
         clients, email, eth_address, last_seen, mesh_ip, phone, wg_pubkey,
     };
@@ -92,9 +106,12 @@ pub fn update_client(
                 "Client {} email has changed from {} to {} updating",
                 their_record.wg_pubkey, their_record.email, mail
             );
-            diesel::update(filtered_list.clone())
+            if let Err(e) = diesel::update(filtered_list.clone())
                 .set(email.eq(mail))
-                .execute(conn)?;
+                .execute(conn)
+            {
+                return Err(Box::new(e.into()));
+            }
         }
     }
 
@@ -104,9 +121,12 @@ pub fn update_client(
                 "Client {} phonenumber has changed from {} to {} updating",
                 their_record.wg_pubkey, their_record.phone, number
             );
-            diesel::update(filtered_list.clone())
+            if let Err(e) = diesel::update(filtered_list.clone())
                 .set(phone.eq(number))
-                .execute(conn)?;
+                .execute(conn)
+            {
+                return Err(Box::new(e.into()));
+            }
         }
     }
 
@@ -115,9 +135,12 @@ pub fn update_client(
     // update every 12 hours, no entry timeouts less than a day allowed
     if time_since_last_update > ONE_DAY / 2 {
         info!("Bumping client timestamp for {}", their_record.wg_pubkey);
-        diesel::update(filtered_list)
+        if let Err(e) = diesel::update(filtered_list)
             .set(last_seen.eq(secs_since_unix_epoch() as i64))
-            .execute(conn)?;
+            .execute(conn)
+        {
+            return Err(Box::new(e.into()));
+        }
     }
 
     Ok(())
@@ -126,7 +149,7 @@ pub fn update_client(
 pub fn get_client(
     client: &ExitClientIdentity,
     conn: &PgConnection,
-) -> Result<Option<models::Client>, RitaExitError> {
+) -> Result<Option<models::Client>, Box<RitaExitError>> {
     use self::schema::clients::dsl::{clients, eth_address, mesh_ip, wg_pubkey};
     let ip = client.global.mesh_ip;
     let wg = client.global.wg_public_key;
@@ -155,9 +178,9 @@ pub fn get_client(
         }
         Err(e) => {
             error!("We failed to lookup the client {:?} with{:?}", mesh_ip, e);
-            Err(RitaExitError::MiscStringError(
+            Err(Box::new(RitaExitError::MiscStringError(
                 "We failed to lookup the client!".to_string(),
-            ))
+            )))
         }
     }
 }
@@ -167,7 +190,7 @@ pub fn verify_client(
     client: &ExitClientIdentity,
     client_verified: bool,
     conn: &PgConnection,
-) -> Result<(), RitaExitError> {
+) -> Result<(), Box<RitaExitError>> {
     use self::schema::clients::dsl::*;
     let ip = client.global.mesh_ip;
     let wg = client.global.wg_public_key;
@@ -177,9 +200,12 @@ pub fn verify_client(
         .filter(wg_pubkey.eq(wg.to_string()))
         .filter(eth_address.eq(key.to_string().to_lowercase()));
 
-    diesel::update(filtered_list)
+    if let Err(e) = diesel::update(filtered_list)
         .set(verified.eq(client_verified))
-        .execute(conn)?;
+        .execute(conn)
+    {
+        return Err(Box::new(e.into()));
+    }
 
     Ok(())
 }
@@ -189,7 +215,7 @@ pub fn verify_db_client(
     client: &models::Client,
     client_verified: bool,
     conn: &PgConnection,
-) -> Result<(), RitaExitError> {
+) -> Result<(), Box<RitaExitError>> {
     use self::schema::clients::dsl::*;
     let ip = &client.mesh_ip;
     let wg = &client.wg_pubkey;
@@ -199,9 +225,12 @@ pub fn verify_db_client(
         .filter(wg_pubkey.eq(wg.to_string()))
         .filter(eth_address.eq(key.to_string().to_lowercase()));
 
-    diesel::update(filtered_list)
+    if let Err(e) = diesel::update(filtered_list)
         .set(verified.eq(client_verified))
-        .execute(conn)?;
+        .execute(conn)
+    {
+        return Err(Box::new(e.into()));
+    }
 
     Ok(())
 }
@@ -211,7 +240,7 @@ pub fn text_sent(
     client: &ExitClientIdentity,
     conn: &PgConnection,
     val: i32,
-) -> Result<(), RitaExitError> {
+) -> Result<(), Box<RitaExitError>> {
     use self::schema::clients::dsl::*;
     let ip = client.global.mesh_ip;
     let wg = client.global.wg_public_key;
@@ -221,14 +250,20 @@ pub fn text_sent(
         .filter(wg_pubkey.eq(wg.to_string()))
         .filter(eth_address.eq(key.to_string().to_lowercase()));
 
-    diesel::update(filtered_list)
+    if let Err(e) = diesel::update(filtered_list)
         .set(text_sent.eq(val + 1))
-        .execute(conn)?;
+        .execute(conn)
+    {
+        return Err(Box::new(e.into()));
+    }
 
     Ok(())
 }
 
-fn client_exists(client: &ExitClientIdentity, conn: &PgConnection) -> Result<bool, RitaExitError> {
+fn client_exists(
+    client: &ExitClientIdentity,
+    conn: &PgConnection,
+) -> Result<bool, Box<RitaExitError>> {
     use self::schema::clients::dsl::*;
     trace!("Checking if client exists");
     let ip = client.global.mesh_ip;
@@ -238,14 +273,17 @@ fn client_exists(client: &ExitClientIdentity, conn: &PgConnection) -> Result<boo
         .filter(mesh_ip.eq(ip.to_string()))
         .filter(wg_pubkey.eq(wg.to_string()))
         .filter(eth_address.eq(key.to_string().to_lowercase()));
-    Ok(select(exists(filtered_list)).get_result(conn)?)
+    Ok(match select(exists(filtered_list)).get_result(conn) {
+        Ok(a) => a,
+        Err(e) => return Err(Box::new(e.into())),
+    })
 }
 
 /// True if there is any client with the same eth address, wg key, or ip address already registered
 pub fn client_conflict(
     client: &ExitClientIdentity,
     conn: &PgConnection,
-) -> Result<bool, RitaExitError> {
+) -> Result<bool, Box<RitaExitError>> {
     use self::schema::clients::dsl::*;
     // we can't possibly have a conflict if we have exactly this client already
     // since client exists checks all major details this is safe and will return false
@@ -260,9 +298,18 @@ pub fn client_conflict(
     let ip_match = clients.filter(mesh_ip.eq(ip.to_string()));
     let wg_key_match = clients.filter(wg_pubkey.eq(wg.to_string()));
     let eth_address_match = clients.filter(eth_address.eq(key.to_string().to_lowercase()));
-    let ip_exists = select(exists(ip_match)).get_result(conn)?;
-    let wg_exists = select(exists(wg_key_match)).get_result(conn)?;
-    let eth_exists = select(exists(eth_address_match)).get_result(conn)?;
+    let ip_exists = match select(exists(ip_match)).get_result(conn) {
+        Ok(a) => a,
+        Err(e) => return Err(Box::new(e.into())),
+    };
+    let wg_exists = match select(exists(wg_key_match)).get_result(conn) {
+        Ok(a) => a,
+        Err(e) => return Err(Box::new(e.into())),
+    };
+    let eth_exists = match select(exists(eth_address_match)).get_result(conn) {
+        Ok(a) => a,
+        Err(e) => return Err(Box::new(e.into())),
+    };
     info!(
         "Signup conflict ip {} eth {} wg {}",
         ip_exists, eth_exists, wg_exists
@@ -272,7 +319,10 @@ pub fn client_conflict(
 
 /// Delete a client from the Clients database. Retrieve the reclaimed subnet index and add it to
 /// available_subnets in assigned_ips database
-pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<(), RitaExitError> {
+pub fn delete_client(
+    client: ExitClient,
+    connection: &PgConnection,
+) -> Result<(), Box<RitaExitError>> {
     use self::schema::assigned_ips::dsl::{assigned_ips, subnet};
     use self::schema::clients::dsl::*;
     info!("Deleting clients {:?} in database", client);
@@ -284,10 +334,16 @@ pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<()
     let filtered_list = clients
         .select(internet_ipv6)
         .filter(mesh_ip.eq(&mesh_ip_string));
-    let mut client_sub = filtered_list.load::<String>(connection)?;
+    let mut client_sub = match filtered_list.load::<String>(connection) {
+        Ok(a) => a,
+        Err(e) => return Err(Box::new(e.into())),
+    };
 
     let filtered_list = assigned_ips.select(subnet);
-    let exit_sub = filtered_list.load::<String>(connection)?;
+    let exit_sub = match filtered_list.load::<String>(connection) {
+        Ok(a) => a,
+        Err(e) => return Err(Box::new(e.into())),
+    };
 
     if let Some(client_sub) = client_sub.pop() {
         if !client_sub.is_empty() {
@@ -300,7 +356,9 @@ pub fn delete_client(client: ExitClient, connection: &PgConnection) -> Result<()
         }
     }
 
-    delete(statement).execute(connection)?;
+    if let Err(e) = delete(statement).execute(connection) {
+        return Err(Box::new(e.into()));
+    };
     Ok(())
 }
 
@@ -314,7 +372,7 @@ fn reclaim_all_ip_subnets(
     client_sub: Vec<&str>,
     exit_sub: Vec<String>,
     conn: &PgConnection,
-) -> Result<(), RitaExitError> {
+) -> Result<(), Box<RitaExitError>> {
     use self::schema::assigned_ips::dsl::{assigned_ips, available_subnets, subnet};
 
     for client_ip in client_sub {
@@ -322,12 +380,7 @@ fn reclaim_all_ip_subnets(
             let c_net: IpNetwork = client_ip.parse().expect("Unable to parse client subnet");
             let e_net: IpNetwork = exit_ip.parse().expect("Unable to parse exit subnet");
             if e_net.contains(c_net.ip()) {
-                let index = match generate_index_from_subnet(e_net, c_net) {
-                    Ok(a) => a,
-                    Err(e) => {
-                        return Err(e);
-                    }
-                };
+                let index = generate_index_from_subnet(e_net, c_net)?;
                 info!("Reclaimed index is: {:?}", index);
 
                 let filtered_list = assigned_ips.filter(subnet.eq(exit_ip));
@@ -341,9 +394,9 @@ fn reclaim_all_ip_subnets(
                         let a_ip = match a.pop() {
                             Some(a) => a,
                             None => {
-                                return Err(RitaExitError::MiscStringError(
+                                return Err(Box::new(RitaExitError::MiscStringError(
                                     "Unable to retrive assigned ip database".to_string(),
-                                ))
+                                )))
                             }
                         };
                         let mut avail_ips = a_ip.available_subnets;
@@ -367,9 +420,12 @@ fn reclaim_all_ip_subnets(
                             "We are updating database with reclaim string: {:?}",
                             avail_ips
                         );
-                        diesel::update(assigned_ips.find(exit_ip))
+                        if let Err(e) = diesel::update(assigned_ips.find(exit_ip))
                             .set(available_subnets.eq(avail_ips))
-                            .execute(conn)?;
+                            .execute(conn)
+                        {
+                            return Err(Box::new(e.into()));
+                        };
                     }
                     Err(e) => {
                         error!(
@@ -393,13 +449,16 @@ fn reclaim_all_ip_subnets(
 pub fn set_client_timestamp(
     client: ExitClient,
     connection: &PgConnection,
-) -> Result<(), RitaExitError> {
+) -> Result<(), Box<RitaExitError>> {
     use self::schema::clients::dsl::*;
     info!("Setting timestamp for client {:?}", client);
 
-    diesel::update(clients.find(&client.mesh_ip.to_string()))
+    if let Err(e) = diesel::update(clients.find(&client.mesh_ip.to_string()))
         .set(last_seen.eq(secs_since_unix_epoch()))
-        .execute(connection)?;
+        .execute(connection)
+    {
+        return Err(Box::new(e.into()));
+    };
     Ok(())
 }
 
@@ -408,16 +467,19 @@ pub fn set_client_timestamp(
 pub fn update_mail_sent_time(
     client: &ExitClientIdentity,
     conn: &PgConnection,
-) -> Result<(), RitaExitError> {
+) -> Result<(), Box<RitaExitError>> {
     use self::schema::clients::dsl::{clients, email, email_sent_time};
     let mail_addr = match client.clone().reg_details.email {
         Some(mail) => mail,
-        None => return Err(RitaExitError::EmailNotFound(client.clone())),
+        None => return Err(Box::new(RitaExitError::EmailNotFound(client.clone()))),
     };
 
-    diesel::update(clients.filter(email.eq(mail_addr)))
+    if let Err(e) = diesel::update(clients.filter(email.eq(mail_addr)))
         .set(email_sent_time.eq(secs_since_unix_epoch()))
-        .execute(conn)?;
+        .execute(conn)
+    {
+        return Err(Box::new(e.into()));
+    };
 
     Ok(())
 }
@@ -425,14 +487,14 @@ pub fn update_mail_sent_time(
 /// Gets the Postgres database connection from the threadpool, since there are dedicated
 /// connections for each threadpool member error if non is available right away
 pub fn get_database_connection(
-) -> Result<PooledConnection<ConnectionManager<PgConnection>>, RitaExitError> {
+) -> Result<PooledConnection<ConnectionManager<PgConnection>>, Box<RitaExitError>> {
     match DB_POOL.read().unwrap().try_get() {
         Some(connection) => Ok(connection),
         None => {
             error!("No available db connection!");
-            Err(RitaExitError::MiscStringError(
+            Err(Box::new(RitaExitError::MiscStringError(
                 "No Database connection available!".to_string(),
-            ))
+            )))
         }
     }
 }
@@ -441,7 +503,7 @@ pub fn create_or_update_user_record(
     conn: &PgConnection,
     client: &ExitClientIdentity,
     user_country: String,
-) -> Result<models::Client, RitaExitError> {
+) -> Result<models::Client, Box<RitaExitError>> {
     use self::schema::clients::dsl::clients;
 
     // Retrieve exit subnet
@@ -480,7 +542,9 @@ pub fn create_or_update_user_record(
         let c = client_to_new_db_client(client, new_ip, user_country, internet_ip);
 
         info!("Inserting new client {}", client.global.wg_public_key);
-        diesel::insert_into(clients).values(&c).execute(conn)?;
+        if let Err(e) = diesel::insert_into(clients).values(&c).execute(conn) {
+            return Err(Box::new(e.into()));
+        }
 
         Ok(c)
     }
@@ -490,7 +554,7 @@ pub fn create_or_update_user_record(
 fn initialize_subnet_datastore(
     sub: IpNetwork,
     conn: &PgConnection,
-) -> Result<models::AssignedIps, RitaExitError> {
+) -> Result<models::AssignedIps, Box<RitaExitError>> {
     use self::schema::assigned_ips::dsl::{assigned_ips, subnet};
     let filtered_list = assigned_ips.filter(subnet.eq(sub.to_string()));
     match filtered_list.load::<models::AssignedIps>(conn) {
@@ -501,9 +565,12 @@ fn initialize_subnet_datastore(
                 available_subnets: "".to_string(),
                 iterative_index: 0,
             };
-            diesel::insert_into(assigned_ips)
+            if let Err(e) = diesel::insert_into(assigned_ips)
                 .values(&record)
-                .execute(conn)?;
+                .execute(conn)
+            {
+                return Err(Box::new(e.into()));
+            };
             Ok(record)
         }
         Ok(mut a) => {
@@ -518,9 +585,12 @@ fn initialize_subnet_datastore(
                     iterative_index: 0,
                 };
                 info!("Received an empty vector, adding new subnet entry");
-                diesel::insert_into(assigned_ips)
+                if let Err(e) = diesel::insert_into(assigned_ips)
                     .values(&record)
-                    .execute(conn)?;
+                    .execute(conn)
+                {
+                    return Err(Box::new(e.into()));
+                };
                 return Ok(record);
             }
             Ok(a.pop().unwrap())
@@ -540,7 +610,7 @@ pub fn get_client_subnet(
     sub: IpNetwork,
     ip_tracker: AssignedIps,
     conn: &PgConnection,
-) -> Result<IpNetwork, RitaExitError> {
+) -> Result<IpNetwork, Box<RitaExitError>> {
     use self::schema::assigned_ips::dsl::{assigned_ips, available_subnets, iterative_index};
     use self::schema::clients::dsl::{clients, internet_ipv6};
     // Get our assigned subnet
@@ -549,7 +619,10 @@ pub fn get_client_subnet(
     // Make sql query to get list of all client subnets in use
     // SELECT internet_ipv6 FROM <TABLE>
     let filtered_list = clients.select(internet_ipv6);
-    let ip_list = filtered_list.load::<String>(conn)?;
+    let ip_list = match filtered_list.load::<String>(conn) {
+        Ok(a) => a,
+        Err(e) => return Err(Box::new(e.into())),
+    };
 
     let mut index: Option<u64> = None;
 
@@ -558,33 +631,39 @@ pub fn get_client_subnet(
         // available ips are stored in the form of "1,2,5" etc
         if let Some((remaining, i)) = ip_tracker.available_subnets.rsplit_once(',') {
             // set database available subnets to remainging
-            diesel::update(assigned_ips.find(sub.to_string()))
+            if let Err(e) = diesel::update(assigned_ips.find(sub.to_string()))
                 .set(available_subnets.eq(remaining))
-                .execute(conn)?;
+                .execute(conn)
+            {
+                return Err(Box::new(e.into()));
+            };
 
             index = match i.parse() {
                 Ok(a) => Some(a),
                 Err(e) => {
-                    return Err(RitaExitError::MiscStringError(format!(
+                    return Err(Box::new(RitaExitError::MiscStringError(format!(
                         "Unable to assign user ipv6 subnet when parsing latest index: {}",
                         e
-                    )));
+                    ))));
                 }
             }
         } else {
             // This is case of singular entry in, for exmaple "2"
             // set database available subnets to ""
-            diesel::update(assigned_ips.find(sub.to_string()))
+            if let Err(e) = diesel::update(assigned_ips.find(sub.to_string()))
                 .set(available_subnets.eq(""))
-                .execute(conn)?;
+                .execute(conn)
+            {
+                return Err(Box::new(e.into()));
+            };
 
             index = match ip_tracker.available_subnets.parse() {
                 Ok(a) => Some(a),
                 Err(e) => {
-                    return Err(RitaExitError::MiscStringError(format!(
+                    return Err(Box::new(RitaExitError::MiscStringError(format!(
                         "Unable to assign user ipv6 subnet: {}",
                         e
-                    )));
+                    ))));
                 }
             }
         }
@@ -597,10 +676,10 @@ pub fn get_client_subnet(
         index = Some(match ip_tracker.iterative_index.try_into() {
             Ok(a) => a,
             Err(e) => {
-                return Err(RitaExitError::MiscStringError(format!(
+                return Err(Box::new(RitaExitError::MiscStringError(format!(
                     "Unable to assign user ipv6 subnet when parsing iterative index: {}",
                     e
-                )));
+                ))));
             }
         });
     }
@@ -617,9 +696,12 @@ pub fn get_client_subnet(
             // increment iterative index
             if used_iterative_index {
                 let new_ind = (index.unwrap() + 1) as i64;
-                diesel::update(assigned_ips.find(sub.to_string()))
+                if let Err(e) = diesel::update(assigned_ips.find(sub.to_string()))
                     .set(iterative_index.eq(new_ind))
-                    .execute(conn)?;
+                    .execute(conn)
+                {
+                    return Err(Box::new(e.into()));
+                };
             }
 
             // ip_list is a vector of a list of ipaddrs, so we check each ipaddr to see if it is already used
@@ -630,10 +712,10 @@ pub fn get_client_subnet(
                 Ok(addr)
             } else {
                 error!("Chosen subnet: {:?} is in use! Race condition hit", addr);
-                Err(RitaExitError::MiscStringError(format!(
+                Err(Box::new(RitaExitError::MiscStringError(format!(
                     "Unable to assign user ipv6 subnet. Chosen subnet {:?} is in use",
                     addr
-                )))
+                ))))
             }
         }
         Err(e) => {
@@ -652,7 +734,7 @@ fn generate_iterative_client_subnet(
     exit_sub: IpNetwork,
     ind: u64,
     subprefix: u8,
-) -> Result<IpNetwork, RitaExitError> {
+) -> Result<IpNetwork, Box<RitaExitError>> {
     let net;
 
     // Covert the subnet's ip address into a u128 integer to allow for easy iterative
@@ -665,15 +747,15 @@ fn generate_iterative_client_subnet(
         net = Ipv6Network::new(addr, subprefix).unwrap();
         addr.into()
     } else {
-        return Err(RitaExitError::MiscStringError(
+        return Err(Box::new(RitaExitError::MiscStringError(
             "Exit subnet expected to be ipv6!!".to_string(),
-        ));
+        )));
     };
 
     if subprefix < exit_sub.prefix() {
-        return Err(RitaExitError::MiscStringError(
+        return Err(Box::new(RitaExitError::MiscStringError(
             "Client subnet larger than exit subnet".to_string(),
-        ));
+        )));
     }
 
     // This bitshifting is the total number of client subnets available. We are checking that our iterative index
@@ -685,10 +767,10 @@ fn generate_iterative_client_subnet(
         let ret = IpNetwork::from(match Ipv6Network::new(v6addr, subprefix) {
             Ok(a) => a,
             Err(e) => {
-                return Err(RitaExitError::MiscStringError(format!(
+                return Err(Box::new(RitaExitError::MiscStringError(format!(
                     "Unable to parse a valid client subnet: {:?}",
                     e
-                )))
+                ))))
             }
         });
 
@@ -697,44 +779,47 @@ fn generate_iterative_client_subnet(
         error!(
             "Our index is larger than available subnets, either error in logic or no more subnets"
         );
-        Err(RitaExitError::MiscStringError(
+        Err(Box::new(RitaExitError::MiscStringError(
             "Index larger than available subnets".to_string(),
-        ))
+        )))
     }
 }
 
 /// This function takes a larger subnet and a smaller subnet and generates an iterative index of the smaller
 /// subnet within the larger subnet
 /// For exmaple fd00::1020/124 is the 3rd subnet in fd00::1000/120, so it generates the index '2'
-fn generate_index_from_subnet(exit_sub: IpNetwork, sub: IpNetwork) -> Result<u64, RitaExitError> {
+fn generate_index_from_subnet(
+    exit_sub: IpNetwork,
+    sub: IpNetwork,
+) -> Result<u64, Box<RitaExitError>> {
     if exit_sub.size() < sub.size() {
         error!("Invalid subnet sizes");
-        return Err(RitaExitError::MiscStringError(
+        return Err(Box::new(RitaExitError::MiscStringError(
             "Invalid subnet sizes provided to generate_index_from_subnet".to_string(),
-        ));
+        )));
     }
 
     let size: u128 = if let NetworkSize::V6(a) = sub.size() {
         a
     } else {
-        return Err(RitaExitError::MiscStringError(
+        return Err(Box::new(RitaExitError::MiscStringError(
             "Exit Subnet needs to be ipv6!!".to_string(),
-        ));
+        )));
     };
     let exit_sub_int: u128 = if let IpAddr::V6(addr) = exit_sub.ip() {
         addr.into()
     } else {
-        return Err(RitaExitError::MiscStringError(
+        return Err(Box::new(RitaExitError::MiscStringError(
             "Exit Subnet needs to be ipv6!!".to_string(),
-        ));
+        )));
     };
 
     let sub_int: u128 = if let IpAddr::V6(addr) = sub.ip() {
         addr.into()
     } else {
-        return Err(RitaExitError::MiscStringError(
+        return Err(Box::new(RitaExitError::MiscStringError(
             "Exit Subnet needs to be ipv6!!".to_string(),
-        ));
+        )));
     };
 
     let ret: u128 = (sub_int - exit_sub_int) / size;
@@ -745,7 +830,7 @@ fn generate_index_from_subnet(exit_sub: IpNetwork, sub: IpNetwork) -> Result<u64
 /// This function run on startup initializes databases and other missing fields from the previous database schema
 /// for ipv6 support. Existing clients in the previous schema will not have an ipv6 addr assigned, so every client is
 /// given one on startup
-pub fn initialize_exisitng_clients_ipv6() -> Result<(), RitaExitError> {
+pub fn initialize_exisitng_clients_ipv6() -> Result<(), Box<RitaExitError>> {
     use self::schema::clients::dsl::{clients, mesh_ip};
     let conn = get_database_connection()?;
 
@@ -763,7 +848,10 @@ pub fn initialize_exisitng_clients_ipv6() -> Result<(), RitaExitError> {
         // 1.) get list of mesh ips
         // 2.) for each ip, select ipv6 field, if empty set an ipv6, else continue
         let filtered_list = clients.select(mesh_ip);
-        let ip_list = filtered_list.load::<String>(&conn)?;
+        let ip_list = match filtered_list.load::<String>(&conn) {
+            Ok(a) => a,
+            Err(e) => return Err(Box::new(e.into())),
+        };
 
         for ip in ip_list {
             assign_ip_to_client(ip, subnet, &conn)?;
@@ -780,14 +868,17 @@ fn assign_ip_to_client(
     client_mesh_ip: String,
     exit_sub: IpNetwork,
     conn: &PgConnection,
-) -> Result<IpNetwork, RitaExitError> {
+) -> Result<IpNetwork, Box<RitaExitError>> {
     // check if ipv6 list already has an ip in its subnet
     use self::schema::clients::dsl::{clients, internet_ipv6, mesh_ip};
 
     let filtered_list = clients
         .select(internet_ipv6)
         .filter(mesh_ip.eq(&client_mesh_ip));
-    let mut sub = filtered_list.load::<String>(conn)?;
+    let mut sub = match filtered_list.load::<String>(conn) {
+        Ok(a) => a,
+        Err(e) => return Err(Box::new(e.into())),
+    };
 
     let client_ipv6_list = sub.pop();
 
@@ -809,18 +900,24 @@ fn assign_ip_to_client(
             new_str.push_str(&internet_ip.to_string());
             list_str.push_str(&new_str);
             info!("Initializing ipv6 addrs for existing clients, IP: {}, is given ip {:?}, subnet entry is {:?}", client_mesh_ip, list_str.clone(), subnet_entry);
-            diesel::update(clients.find(client_mesh_ip))
+            if let Err(e) = diesel::update(clients.find(client_mesh_ip))
                 .set(internet_ipv6.eq(list_str))
-                .execute(conn)?;
+                .execute(conn)
+            {
+                return Err(Box::new(e.into()));
+            };
             Ok(internet_ip)
         } else {
             // List is empty
             let subnet_entry = initialize_subnet_datastore(exit_sub, conn)?;
             let internet_ip = get_client_subnet(exit_sub, subnet_entry.clone(), conn)?;
             info!("Initializing ipv6 addrs for existing clients, IP: {}, is given ip {:?}, subnet entry is {:?}", client_mesh_ip, internet_ip.clone(), subnet_entry);
-            diesel::update(clients.find(client_mesh_ip))
+            if let Err(e) = diesel::update(clients.find(client_mesh_ip))
                 .set(internet_ipv6.eq(internet_ip.to_string()))
-                .execute(conn)?;
+                .execute(conn)
+            {
+                return Err(Box::new(e.into()));
+            };
             Ok(internet_ip)
         }
     } else {
@@ -828,15 +925,20 @@ fn assign_ip_to_client(
         let subnet_entry = initialize_subnet_datastore(exit_sub, conn)?;
         let internet_ip = get_client_subnet(exit_sub, subnet_entry.clone(), conn)?;
         info!("Initializing ipv6 addrs for existing clients, IP: {}, is given ip {:?}, subnet entry is {:?}", client_mesh_ip, internet_ip.clone(), subnet_entry);
-        diesel::update(clients.find(client_mesh_ip))
+        if let Err(e) = diesel::update(clients.find(client_mesh_ip))
             .set(internet_ipv6.eq(internet_ip.to_string()))
-            .execute(conn)?;
+            .execute(conn)
+        {
+            return Err(Box::new(e.into()));
+        };
         Ok(internet_ip)
     }
 }
 
 /// Given a database client entry, get ipnetwork string ("fd00::1337,f100:1400") find the correct ipv6 address to send back to client corresponding to our exit instance
-pub fn get_client_ipv6(their_record: &models::Client) -> Result<Option<IpNetwork>, RitaExitError> {
+pub fn get_client_ipv6(
+    their_record: &models::Client,
+) -> Result<Option<IpNetwork>, Box<RitaExitError>> {
     let client_subs = &their_record.internet_ipv6;
     let client_mesh_ip = &their_record.mesh_ip;
 

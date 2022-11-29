@@ -16,7 +16,7 @@ lazy_static! {
 }
 
 /// gets the gateway ip for a given mesh IP
-pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Result<IpAddr, RitaExitError> {
+pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Result<IpAddr, Box<RitaExitError>> {
     let babel_port = settings::get_rita_exit().network.babel_port;
 
     match open_babel_stream(babel_port, Duration::from_secs(5)) {
@@ -38,20 +38,23 @@ pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Result<IpAddr, RitaExitError> {
                     }
 
                     match route_to_des {
-                        Some(route) => Ok(KI.get_wg_remote_ip(&route.iface)?),
-                        None => Err(RitaExitError::IpAddrError(mesh_ip)),
+                        Some(route) => Ok(match KI.get_wg_remote_ip(&route.iface) {
+                            Ok(a) => a,
+                            Err(e) => return Err(Box::new(e.into())),
+                        }),
+                        None => Err(Box::new(RitaExitError::IpAddrError(mesh_ip))),
                     }
                 }
-                Err(e) => Err(RitaExitError::MiscStringError(format!(
+                Err(e) => Err(Box::new(RitaExitError::MiscStringError(format!(
                     "Parse routes babel monitor error, {:?}",
                     e
-                ))),
+                )))),
             }
         }
-        Err(e) => Err(RitaExitError::MiscStringError(format!(
+        Err(e) => Err(Box::new(RitaExitError::MiscStringError(format!(
             "Error opening babel stream, {:?}",
             e
-        ))),
+        )))),
     }
 }
 
@@ -66,7 +69,7 @@ pub struct IpPair {
 pub fn get_gateway_ip_bulk(
     mesh_ip_list: Vec<IpAddr>,
     timeout: Duration,
-) -> Result<Vec<IpPair>, RitaExitError> {
+) -> Result<Vec<IpPair>, Box<RitaExitError>> {
     let babel_port = settings::get_rita_exit().network.babel_port;
     trace!("getting gateway ip bulk");
 
@@ -115,10 +118,10 @@ pub fn get_gateway_ip_bulk(
 
                     Ok(results)
                 }
-                Err(e) => Err(e.into()),
+                Err(e) => Err(Box::new(e.into())),
             }
         }
-        Err(e) => Err(e.into()),
+        Err(e) => Err(Box::new(e.into())),
     }
 }
 
@@ -133,7 +136,7 @@ struct CountryDetails {
 }
 
 /// get ISO country code from ip, consults a in memory cache
-pub fn get_country(ip: IpAddr) -> Result<String, RitaExitError> {
+pub fn get_country(ip: IpAddr) -> Result<String, Box<RitaExitError>> {
     trace!("get GeoIP country for {}", ip.to_string());
 
     // if allowed countries is not configured we don't care and will insert
@@ -204,12 +207,14 @@ pub fn get_country(ip: IpAddr) -> Result<String, RitaExitError> {
                     trace!("Added to cache, returning");
                     Ok(code)
                 } else {
-                    Err(RitaExitError::MiscStringError(
+                    Err(Box::new(RitaExitError::MiscStringError(
                         "Failed to deserialize geoip response".to_string(),
-                    ))
+                    )))
                 }
             } else {
-                Err(RitaExitError::MiscStringError("Request failed".to_string()))
+                Err(Box::new(RitaExitError::MiscStringError(
+                    "Request failed".to_string(),
+                )))
             }
         }
     }
@@ -217,7 +222,7 @@ pub fn get_country(ip: IpAddr) -> Result<String, RitaExitError> {
 
 /// Returns true or false if an ip is confirmed to be inside or outside the region and error
 /// if an api error is encountered trying to figure that out.
-pub fn verify_ip(request_ip: IpAddr) -> Result<bool, RitaExitError> {
+pub fn verify_ip(request_ip: IpAddr) -> Result<bool, Box<RitaExitError>> {
     // in this case we have a gateway directly attached to the exit, so our
     // peer address for them will be an fe80 linklocal ip address. When we
     // detect this we know that they are in the allowed countries list because
