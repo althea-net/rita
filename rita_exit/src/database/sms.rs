@@ -95,7 +95,7 @@ pub async fn handle_sms_registration(
     client: ExitClientIdentity,
     their_record: exit_db::models::Client,
     api_key: String,
-) -> Result<ExitState, RitaExitError> {
+) -> Result<ExitState, Box<RitaExitError>> {
     info!(
         "Handling phone registration for {}",
         client.global.wg_public_key
@@ -131,7 +131,10 @@ pub async fn handle_sms_registration(
                 );
                 Ok(ExitState::Registered {
                     our_details: ExitClientDetails {
-                        client_internal_ip: their_record.internal_ip.parse()?,
+                        client_internal_ip: match their_record.internal_ip.parse() {
+                            Ok(a) => a,
+                            Err(e) => return Err(Box::new(e.into())),
+                        },
                         internet_ipv6_subnet: get_client_ipv6(&their_record)?,
                     },
                     general_details: get_exit_info(),
@@ -181,7 +184,10 @@ pub async fn handle_sms_registration(
                 );
                 Ok(ExitState::Registered {
                     our_details: ExitClientDetails {
-                        client_internal_ip: their_record.internal_ip.parse()?,
+                        client_internal_ip: match their_record.internal_ip.parse() {
+                            Ok(a) => a,
+                            Err(e) => return Err(Box::new(e.into())),
+                        },
                         internet_ipv6_subnet: get_client_ipv6(&their_record)?,
                     },
                     general_details: get_exit_info(),

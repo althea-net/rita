@@ -19,18 +19,18 @@ use lettre::{Message, SmtpTransport, Transport};
 use serde_json::json;
 use settings::exit::ExitVerifSettings;
 
-pub fn send_mail(client: &models::Client) -> Result<(), RitaExitError> {
+pub fn send_mail(client: &models::Client) -> Result<(), Box<RitaExitError>> {
     let mailer = match settings::get_rita_exit().verif_settings {
         Some(ExitVerifSettings::Email(mailer)) => mailer,
         Some(_) => {
-            return Err(RitaExitError::MiscStringError(
+            return Err(Box::new(RitaExitError::MiscStringError(
                 "Verification mode is not email!".to_string(),
-            ))
+            )))
         }
         None => {
-            return Err(RitaExitError::MiscStringError(
+            return Err(Box::new(RitaExitError::MiscStringError(
                 "No verification mode configured!".to_string(),
-            ))
+            )))
         }
     };
 
@@ -38,27 +38,42 @@ pub fn send_mail(client: &models::Client) -> Result<(), RitaExitError> {
 
     let reg = Handlebars::new();
 
-    let email = Message::builder()
+    let email = match Message::builder()
         .to(client.email.clone().parse().unwrap())
         .from(mailer.from_address.parse().unwrap())
         .subject(mailer.signup_subject)
         // TODO: maybe have a proper templating engine
-        .body(reg.render_template(
-            &mailer.signup_body,
-            &json!({"email_code": client.email_code.to_string()}),
-        )?)?;
+        .body(
+            match reg.render_template(
+                &mailer.signup_body,
+                &json!({"email_code": client.email_code.to_string()}),
+            ) {
+                Ok(a) => a,
+                Err(e) => return Err(Box::new(e.into())),
+            },
+        ) {
+        Ok(a) => a,
+        Err(e) => return Err(Box::new(e.into())),
+    };
 
     if mailer.test {
         let mailer = FileTransport::new(&mailer.test_dir);
-        mailer.send(&email)?;
+        if let Err(e) = mailer.send(&email) {
+            return Err(Box::new(e.into()));
+        };
     } else {
-        let mailer = SmtpTransport::relay(&mailer.smtp_url)?
-            .hello_name(ClientId::Domain(mailer.smtp_domain))
-            .credentials(Credentials::new(mailer.smtp_username, mailer.smtp_password))
-            .authentication(vec![Mechanism::Plain])
-            .pool_config(PoolConfig::new().max_size(20))
-            .build();
-        mailer.send(&email)?;
+        let mailer = match SmtpTransport::relay(&mailer.smtp_url) {
+            Ok(a) => a,
+            Err(e) => return Err(Box::new(e.into())),
+        }
+        .hello_name(ClientId::Domain(mailer.smtp_domain))
+        .credentials(Credentials::new(mailer.smtp_username, mailer.smtp_password))
+        .authentication(vec![Mechanism::Plain])
+        .pool_config(PoolConfig::new().max_size(20))
+        .build();
+        if let Err(e) = mailer.send(&email) {
+            return Err(Box::new(e.into()));
+        };
     }
 
     Ok(())
@@ -70,15 +85,12 @@ pub fn handle_email_registration(
     their_record: &exit_db::models::Client,
     conn: &PgConnection,
     cooldown: i64,
-) -> Result<ExitState, RitaExitError> {
+) -> Result<ExitState, Box<RitaExitError>> {
     let mut their_record = their_record.clone();
     if client.reg_details.email_code == Some(their_record.email_code.clone()) {
         info!("email verification complete for {:?}", client);
 
-        match verify_client(client, true, conn) {
-            Ok(_) => (),
-            Err(e) => return Err(e),
-        }
+        verify_client(client, true, conn)?;
         their_record.verified = true;
     }
 
@@ -87,12 +99,9 @@ pub fn handle_email_registration(
 
         let client_internal_ip = match their_record.internal_ip.parse() {
             Ok(ip) => ip,
-            Err(e) => return Err(RitaExitError::AddrParseError(e)),
+            Err(e) => return Err(Box::new(RitaExitError::AddrParseError(e))),
         };
-        let client_internet_ipv6_subnet = match get_client_ipv6(&their_record) {
-            Ok(sub) => sub,
-            Err(e) => return Err(e),
-        };
+        let client_internet_ipv6_subnet = get_client_ipv6(&their_record)?;
         Ok(ExitState::Registered {
             our_details: ExitClientDetails {
                 client_internal_ip,
@@ -113,14 +122,10 @@ pub fn handle_email_registration(
                 ),
             })
         } else {
-            match update_mail_sent_time(client, conn) {
-                Ok(_) => (),
-                Err(e) => return Err(e),
-            }
-            match send_mail(&their_record) {
-                Ok(_) => (),
-                Err(e) => return Err(e),
-            }
+            update_mail_sent_time(client, conn)?;
+
+            send_mail(&their_record)?;
+
             Ok(ExitState::Pending {
                 general_details: get_exit_info(),
                 message: "awaiting email verification".to_string(),

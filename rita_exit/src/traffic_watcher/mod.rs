@@ -43,7 +43,7 @@ pub struct Watch {
     pub routes: Vec<RouteLegacy>,
 }
 
-pub fn watch_exit_traffic(msg: Watch) -> Result<(), RitaExitError> {
+pub fn watch_exit_traffic(msg: Watch) -> Result<(), Box<RitaExitError>> {
     let traffic_watcher = &mut *TRAFFIC_WATCHER.write().unwrap();
     watch(
         &mut traffic_watcher.last_seen_bytes,
@@ -178,15 +178,15 @@ pub fn watch(
     usage_history: &mut HashMap<WgKey, WgUsage>,
     routes: &[RouteLegacy],
     clients: &[Identity],
-) -> Result<(), RitaExitError> {
+) -> Result<(), Box<RitaExitError>> {
     let our_price = settings::get_rita_exit().exit_network.exit_price;
     let our_id = match settings::get_rita_exit().get_identity() {
         Some(id) => id,
         None => {
             warn!("Our identity is not ready!");
-            return Err(RitaExitError::MiscStringError(
+            return Err(Box::new(RitaExitError::MiscStringError(
                 "Identity is not ready".to_string(),
-            ));
+            )));
         }
     };
 
@@ -202,7 +202,7 @@ pub fn watch(
                 "Error getting input counters {:?} traffic has gone unaccounted!",
                 e
             );
-            return Err(e.into());
+            return Err(Box::new(e.into()));
         }
     };
 
@@ -213,7 +213,7 @@ pub fn watch(
                 "Error getting input counters {:?} traffic has gone unaccounted!",
                 e
             );
-            return Err(e.into());
+            return Err(Box::new(e.into()));
         }
     };
 

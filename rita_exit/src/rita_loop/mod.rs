@@ -228,7 +228,7 @@ fn check_regions(start: Instant, clients_list: Vec<models::Client>, conn: &PgCon
 
 /// When the ipv6 database gets into an invalid state, we can have unexpected behaviors if rita exit doesnt
 /// crash. This function checks if a config variable is set; if it is, clear out ipv6 database and let it recompute
-fn recompute_ipv6_if_needed(conn: &PgConnection) -> Result<(), RitaExitError> {
+fn recompute_ipv6_if_needed(conn: &PgConnection) -> Result<(), Box<RitaExitError>> {
     use diesel::ExpressionMethods;
     use exit_db::schema::assigned_ips::dsl::assigned_ips;
     use exit_db::schema::clients::dsl::clients;
@@ -240,12 +240,17 @@ fn recompute_ipv6_if_needed(conn: &PgConnection) -> Result<(), RitaExitError> {
 
         // Reseting client ipv6 column
         let empty_str = "";
-        diesel::update(clients)
+        if let Err(e) = diesel::update(clients)
             .set(internet_ipv6.eq(empty_str))
-            .execute(conn)?;
+            .execute(conn)
+        {
+            return Err(Box::new(e.into()));
+        };
 
         // Reseting assigned_ips
-        diesel::delete(assigned_ips).execute(conn)?;
+        if let Err(e) = diesel::delete(assigned_ips).execute(conn) {
+            return Err(Box::new(e.into()));
+        };
 
         // Set recompute ipv6 to false
         rita_exit.exit_network.recompute_ipv6 = false;

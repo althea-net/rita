@@ -12,17 +12,26 @@ use std::net::IpAddr;
 
 use crate::RitaExitError;
 
-pub fn to_identity(client: &Client) -> Result<Identity, RitaExitError> {
+pub fn to_identity(client: &Client) -> Result<Identity, Box<RitaExitError>> {
     trace!("Converting client {:?}", client);
     Ok(Identity {
-        mesh_ip: client.mesh_ip.clone().parse()?,
-        eth_address: client.eth_address.clone().parse()?,
-        wg_public_key: client.wg_pubkey.clone().parse()?,
+        mesh_ip: match client.mesh_ip.clone().parse() {
+            Ok(a) => a,
+            Err(e) => return Err(Box::new(e.into())),
+        },
+        eth_address: match client.eth_address.clone().parse() {
+            Ok(a) => a,
+            Err(e) => return Err(Box::new(e.into())),
+        },
+        wg_public_key: match client.wg_pubkey.clone().parse() {
+            Ok(a) => a,
+            Err(e) => return Err(Box::new(e.into())),
+        },
         nickname: Some(ArrayString::<32>::from(&client.nickname).unwrap_or_default()),
     })
 }
 
-pub fn to_exit_client(client: Client) -> Result<ExitClient, RitaExitError> {
+pub fn to_exit_client(client: Client) -> Result<ExitClient, Box<RitaExitError>> {
     let mut internet_ipv6_list = vec![];
     let string_list: Vec<&str> = client.internet_ipv6.split(',').collect();
     for ip_net in string_list {
@@ -37,10 +46,19 @@ pub fn to_exit_client(client: Client) -> Result<ExitClient, RitaExitError> {
     }
 
     Ok(ExitClient {
-        mesh_ip: client.mesh_ip.parse()?,
-        internal_ip: client.internal_ip.parse()?,
+        mesh_ip: match client.mesh_ip.parse() {
+            Ok(a) => a,
+            Err(e) => return Err(Box::new(e.into())),
+        },
+        internal_ip: match client.internal_ip.parse() {
+            Ok(a) => a,
+            Err(e) => return Err(Box::new(e.into())),
+        },
         port: client.wg_port as u16,
-        public_key: client.wg_pubkey.parse()?,
+        public_key: match client.wg_pubkey.parse() {
+            Ok(a) => a,
+            Err(e) => return Err(Box::new(e.into())),
+        },
         internet_ipv6_list,
     })
 }
