@@ -1,4 +1,5 @@
 //! This module is responsible for checking in with the operator server and getting updated local settings
+pub mod update_loop;
 pub mod updater;
 extern crate openssh_keys;
 use crate::dashboard::system_chain::set_system_blockchain;

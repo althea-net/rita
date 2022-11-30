@@ -1,3 +1,7 @@
+//! There is a bit of naming conflict here, this file is about 'updating the rita software on the router'
+//! versus updating operator tools on the status of this router which is the context of 'update' in the rest
+//! of this module
+
 use althea_kernel_interface::KernelInterfaceError;
 use althea_types::UpdateType;
 use rita_common::KI;

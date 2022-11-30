@@ -12,7 +12,6 @@ use crate::light_client_manager::lcm_watch;
 use crate::light_client_manager::light_client_hello_response;
 use crate::light_client_manager::Watch;
 use crate::operator_fee_manager::tick_operator_payments;
-use crate::operator_update::operator_update;
 use crate::traffic_watcher::get_exit_dest_price;
 use actix_async::System as AsyncSystem;
 use actix_web_async::web;
@@ -96,8 +95,6 @@ pub fn start_rita_loop() {
                     exit_manager_tick().await;
                     // sends an operator payment if enough time has elapsed
                     tick_operator_payments().await;
-                    // Check in with Operator
-                    operator_update().await;
                 });
 
                 info!(
@@ -131,6 +128,7 @@ pub fn start_rita_client_loops() {
         send_heartbeat_loop();
     }
     crate::rita_loop::start_rita_loop();
+    crate::operator_update::update_loop::start_operator_update_loop();
 }
 
 /// There is a complicated corner case where the gateway is a client and a relay to
