@@ -71,6 +71,7 @@ impl dyn KernelInterface {
                 )));
             }
         }
+
         Ok(())
     }
 
