@@ -10,7 +10,7 @@ althea_kernel_interface = { path = "../althea_kernel_interface" }
 althea_types = { path = "../althea_types" }
 lazy_static = "1.4"
 log = "0.4"
-env_logger = "0.9.0"
+env_logger = "0.10.0"
 ipgen = "1.0.1"
 rand = "0.8"
 serde = "1.0"

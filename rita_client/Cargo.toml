@@ -1,6 +1,6 @@
 [package]
 name = "rita_client"
-version = "0.20.4"
+version = "0.20.5"
 edition = "2018"
 license = "Apache-2.0"
 
@@ -27,14 +27,14 @@ babel_monitor = { path = "../babel_monitor" }
 arrayvec = {version= "0.7", features = ["serde"]}
 sodiumoxide = "0.2"
 clu = { path = "../clu" }
-web30 = "0.19"
+web30 = "0.20"
 awc = "3.0.0"
 ipnetwork = "0.20"
 actix-async = {package="actix", version = "0.13"}
 actix-web-async = { package="actix-web", version = "4.0.1", default_features = false, features= ["openssl"]}
 actix-web-httpauth-async = { package="actix-web-httpauth", version = "0.8.0"}
 clarity = "0.5"
-openssh-keys = "0.5"
+openssh-keys = "0.6"
 
 [lib]
 name = "rita_client"

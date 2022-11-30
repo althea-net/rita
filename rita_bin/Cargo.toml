@@ -1,6 +1,6 @@
 [package]
 name = "rita_bin"
-version = "0.20.4"
+version = "0.20.5"
 edition = "2018"
 license = "Apache-2.0"
 build = "build.rs"
@@ -29,7 +29,7 @@ serde_json = "1.0"
 arrayvec = {version= "0.7", features = ["serde"]}
 hex-literal = "0.3"
 openssl-probe = "0.1"
-env_logger = "0.9"
+env_logger = "0.10"
 lazy_static = "1.4"
 phonenumber = "0.3"
 r2d2 = "0.8"
