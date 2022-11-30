@@ -376,18 +376,6 @@ pub fn setup_clients(
 
     trace!("got clients from db {:?} {:?}", clients_list, old_clients);
 
-    // Setup or verify that an ipv6 route exists for each client
-    let new_wg_exit_clients: HashMap<WgKey, SystemTime> = KI
-        .get_last_handshake_time("wg_exit_v2")
-        .expect("There should be a new wg_exit interface")
-        .into_iter()
-        .collect();
-    let wg_exit_clients: HashMap<WgKey, SystemTime> = KI
-        .get_last_handshake_time("wg_exit")
-        .expect("There should be a wg_exit interface")
-        .into_iter()
-        .collect();
-
     for c in clients_list.iter() {
         match (c.verified, to_exit_client(c.clone())) {
             (true, Ok(exit_client_c)) => {
@@ -398,7 +386,83 @@ pub fn setup_clients(
             (true, Err(e)) => warn!("Error converting {:?} to exit client {:?}", c, e),
             (false, _) => trace!("{:?} is not verified, not adding to wg_exit", c),
         }
+    }
 
+    trace!("converted clients {:?}", wg_clients);
+    // symetric difference is an iterator of all items in A but not in B
+    // or in B but not in A, in short if there's any difference between the two
+    // it must be nonzero, since all entires must be unique there can not be duplicates
+    if wg_clients.symmetric_difference(old_clients).count() != 0 {
+        info!("Setting up configs for wg_exit and wg_exit_v2");
+        let mut tc_datastore = get_tc_datastore();
+        let ipv6_filter_handles = tc_datastore.ipv6_filter_handles;
+        // setup all the tunnels
+        let exit_status = KI.set_exit_wg_config(
+            &wg_clients,
+            settings::get_rita_exit().exit_network.wg_tunnel_port,
+            &settings::get_rita_exit().exit_network.wg_private_key_path,
+            "wg_exit",
+            ipv6_filter_handles,
+        );
+
+        match exit_status {
+            Ok(a) => {
+                trace!("Successfully setup Exit WG!");
+                tc_datastore.ipv6_filter_handles = a;
+                set_tc_datastore(tc_datastore);
+            }
+            Err(e) => warn!(
+                "Error in Exit WG setup {:?}, 
+                        this usually happens when a Rita service is 
+                        trying to auto restart in the background",
+                e
+            ),
+        }
+
+        // Setup new tunnels
+        let mut tc_datastore = get_tc_datastore();
+        let ipv6_filter_handles = tc_datastore.ipv6_filter_handles;
+        let exit_status_new = KI.set_exit_wg_config(
+            &wg_clients,
+            settings::get_rita_exit().exit_network.wg_v2_tunnel_port,
+            &settings::get_rita_exit().network.wg_private_key_path,
+            "wg_exit_v2",
+            ipv6_filter_handles,
+        );
+
+        match exit_status_new {
+            Ok(a) => {
+                trace!("Successfully setup Exit WG NEW!");
+                tc_datastore.ipv6_filter_handles = a;
+                set_tc_datastore(tc_datastore);
+            }
+            Err(e) => warn!(
+                "Error in Exit WG NEW setup {:?}, 
+                        this usually happens when a Rita service is 
+                        trying to auto restart in the background",
+                e
+            ),
+        }
+        info!(
+            "exit setup loop completed in {}s {}ms with {} clients and {} wg_clients",
+            start.elapsed().as_secs(),
+            start.elapsed().subsec_millis(),
+            clients_list.len(),
+            wg_clients.len(),
+        );
+    }
+    // Setup ipv6 and v4 routes and rules for clients
+    let new_wg_exit_clients: HashMap<WgKey, SystemTime> = KI
+        .get_last_handshake_time("wg_exit_v2")
+        .expect("There should be a new wg_exit interface")
+        .into_iter()
+        .collect();
+    let wg_exit_clients: HashMap<WgKey, SystemTime> = KI
+        .get_last_handshake_time("wg_exit")
+        .expect("There should be a wg_exit interface")
+        .into_iter()
+        .collect();
+    for c in clients_list.iter() {
         let interface =
             match get_client_interface(c, new_wg_exit_clients.clone(), wg_exit_clients.clone()) {
                 Ok(a) => a,
@@ -430,72 +494,6 @@ pub fn setup_clients(
         info!("IPV6: Setup client ip6tables rules with: {:?}", res);
     }
 
-    trace!("converted clients {:?}", wg_clients);
-    // symetric difference is an iterator of all items in A but not in B
-    // or in B but not in A, in short if there's any difference between the two
-    // it must be nonzero, since all entires must be unique there can not be duplicates
-    if wg_clients.symmetric_difference(old_clients).count() == 0 {
-        info!("No change in wg_exit, skipping setup for this round");
-        return Ok(wg_clients);
-    }
-
-    info!("Setting up configs for wg_exit and wg_exit_v2");
-    let mut tc_datastore = get_tc_datastore();
-    let ipv6_filter_handles = tc_datastore.ipv6_filter_handles;
-    // setup all the tunnels
-    let exit_status = KI.set_exit_wg_config(
-        &wg_clients,
-        settings::get_rita_exit().exit_network.wg_tunnel_port,
-        &settings::get_rita_exit().exit_network.wg_private_key_path,
-        "wg_exit",
-        ipv6_filter_handles,
-    );
-
-    match exit_status {
-        Ok(a) => {
-            trace!("Successfully setup Exit WG!");
-            tc_datastore.ipv6_filter_handles = a;
-            set_tc_datastore(tc_datastore);
-        }
-        Err(e) => warn!(
-            "Error in Exit WG setup {:?}, 
-                        this usually happens when a Rita service is 
-                        trying to auto restart in the background",
-            e
-        ),
-    }
-
-    // Setup new tunnels
-    let mut tc_datastore = get_tc_datastore();
-    let ipv6_filter_handles = tc_datastore.ipv6_filter_handles;
-    let exit_status_new = KI.set_exit_wg_config(
-        &wg_clients,
-        settings::get_rita_exit().exit_network.wg_v2_tunnel_port,
-        &settings::get_rita_exit().network.wg_private_key_path,
-        "wg_exit_v2",
-        ipv6_filter_handles,
-    );
-
-    match exit_status_new {
-        Ok(a) => {
-            trace!("Successfully setup Exit WG NEW!");
-            tc_datastore.ipv6_filter_handles = a;
-            set_tc_datastore(tc_datastore);
-        }
-        Err(e) => warn!(
-            "Error in Exit WG NEW setup {:?}, 
-                        this usually happens when a Rita service is 
-                        trying to auto restart in the background",
-            e
-        ),
-    }
-    info!(
-        "exit setup loop completed in {}s {}ms with {} clients and {} wg_clients",
-        start.elapsed().as_secs(),
-        start.elapsed().subsec_millis(),
-        clients_list.len(),
-        wg_clients.len(),
-    );
     Ok(wg_clients)
 }
 
