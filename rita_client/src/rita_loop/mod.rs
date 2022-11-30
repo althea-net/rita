@@ -65,7 +65,7 @@ pub fn metrics_permitted() -> bool {
 }
 
 // the speed in seconds for the client loop
-pub const CLIENT_LOOP_SPEED: u64 = 5;
+pub const CLIENT_LOOP_SPEED: Duration = Duration::from_secs(5);
 pub const CLIENT_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
 
 /// Rita loop thread spawning function, there are currently two rita loops, one that
@@ -113,12 +113,7 @@ pub fn start_rita_loop() {
                     start.elapsed().subsec_millis()
                 );
 
-                // sleep until it has been CLIENT_LOOP_SPEED seconds from start, whenever that may be
-                // if it has been more than CLIENT_LOOP_SPEED seconds from start, go right ahead
-                let client_loop_speed = Duration::from_secs(CLIENT_LOOP_SPEED);
-                if start.elapsed() < client_loop_speed {
-                    thread::sleep(client_loop_speed - start.elapsed());
-                }
+                thread::sleep(CLIENT_LOOP_SPEED);
             })
             .join()
         } {

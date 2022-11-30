@@ -163,11 +163,7 @@ fn rita_exit_loop(
             }
         }
     }
-    // sleep until it has been 5 seconds from start, whenever that may be
-    // if it has been more than 5 seconds from start, go right ahead
-    if start.elapsed() < EXIT_LOOP_SPEED_DURATION {
-        thread::sleep(EXIT_LOOP_SPEED_DURATION - start.elapsed());
-    }
+    thread::sleep(EXIT_LOOP_SPEED_DURATION);
 }
 
 fn bill(babel_port: u16, start: Instant, ids: Vec<Identity>) {

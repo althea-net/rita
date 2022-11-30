@@ -21,7 +21,6 @@ pub fn start_rita_slow_loop() {
         // with some fancy destructuring
         while let Err(e) = {
             thread::spawn(move || loop {
-                let start = Instant::now();
                 info!("Common Slow tick!");
 
                 let runner = AsyncSystem::new();
@@ -37,7 +36,6 @@ pub fn start_rita_slow_loop() {
                 // we really only need to run this on startup, but doing so periodically
                 // could catch the edge case where babel is restarted under us
                 set_babel_price();
-                info!("Common Slow tick completed!");
 
                 // This checks that all tunnels are attached to babel. This may not be the case when babel restarts
                 let babel_port = settings::get_rita_common().network.babel_port;
@@ -46,11 +44,8 @@ pub fn start_rita_slow_loop() {
                     tm_monitor_check(&babel_interfaces);
                 }
 
-                // sleep until it has been SLOW_LOOP_SPEED seconds from start, whenever that may be
-                // if it has been more than SLOW_LOOP_SPEED seconds from start, go right ahead
-                if start.elapsed() < SLOW_LOOP_SPEED {
-                    thread::sleep(SLOW_LOOP_SPEED - start.elapsed());
-                }
+                thread::sleep(SLOW_LOOP_SPEED);
+                info!("Common Slow tick completed!");
             })
             .join()
         } {

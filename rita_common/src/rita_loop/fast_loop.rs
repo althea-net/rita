@@ -45,7 +45,6 @@ pub fn start_rita_fast_loop() {
         // with some fancy destructuring
         while let Err(e) = {
             thread::spawn(move || loop {
-                let start = Instant::now();
                 trace!("Common Fast tick!");
 
                 let runner = AsyncSystem::new();
@@ -133,11 +132,7 @@ pub fn start_rita_fast_loop() {
                     eth_compatible_withdraw().await;
                 });
 
-                // sleep until it has been FAST_LOOP_SPEED seconds from start, whenever that may be
-                // if it has been more than FAST_LOOP_SPEED seconds from start, go right ahead
-                if start.elapsed() < FAST_LOOP_SPEED {
-                    thread::sleep(FAST_LOOP_SPEED - start.elapsed());
-                }
+                thread::sleep(FAST_LOOP_SPEED);
             })
             .join()
         } {
