@@ -1,8 +1,7 @@
 //! Independent loop for operator updates, this prevents errors in the rita fast loop from causing the
 //! router to become unresponsive to updates or reboot instructions
 
-use crate::operator_update::operator_update;
-use crate::rita_loop::CLIENT_LOOP_SPEED;
+use crate::operator_update::{operator_update, UPDATE_FREQUENCY};
 use actix_async::System as AsyncSystem;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -33,12 +32,7 @@ pub fn start_operator_update_loop() {
                     start.elapsed().subsec_millis()
                 );
 
-                // sleep until it has been CLIENT_LOOP_SPEED seconds from start, whenever that may be
-                // if it has been more than CLIENT_LOOP_SPEED seconds from start, go right ahead
-                let update_loop_speed = Duration::from_secs(CLIENT_LOOP_SPEED);
-                if start.elapsed() < update_loop_speed {
-                    thread::sleep(update_loop_speed - start.elapsed());
-                }
+                thread::sleep(UPDATE_FREQUENCY);
             })
             .join()
         } {

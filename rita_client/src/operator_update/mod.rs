@@ -35,7 +35,6 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
-use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use updater::update_system;
 /// Things that you are not allowed to put into the merge json field of the OperatorUpdate,
@@ -78,10 +77,6 @@ impl UptimeStruct {
 lazy_static! {
     /// stores the startup time for Rita, used to compute uptime
     static ref RITA_UPTIME: Instant = Instant::now();
-    /// a timer of when we last ran an operator update, used to
-    /// keep from running updates too often
-    static ref OPERATOR_UPDATE: Arc<RwLock<Instant>> =
-        Arc::new(RwLock::new(Instant::now()));
 }
 
 /// Perform operator updates every UPDATE_FREQUENCY seconds,
@@ -93,28 +88,8 @@ const UPDATE_FREQUENCY: Duration = Duration::from_secs(60);
 /// in the rita_client loop
 pub const OPERATOR_UPDATE_TIMEOUT: Duration = CLIENT_LOOP_TIMEOUT;
 
-pub struct Update;
-
-fn get_operator_update() -> Instant {
-    *OPERATOR_UPDATE.write().unwrap()
-}
-
-fn set_operator_update(set: Instant) {
-    *OPERATOR_UPDATE.write().unwrap() = set;
-}
-
-pub async fn operator_update() {
-    let operator_update = get_operator_update();
-    let time_elapsed = Instant::now().checked_duration_since(operator_update);
-    if time_elapsed.is_some() && time_elapsed.unwrap() > UPDATE_FREQUENCY {
-        checkin().await;
-        let operator_update = Instant::now();
-        set_operator_update(operator_update);
-    }
-}
-
 /// Checks in with the operator server
-async fn checkin() {
+pub async fn operator_update() {
     let url: &str;
     if cfg!(feature = "dev_env") {
         url = "http://0.0.0.0:8080/checkin";
