@@ -1,5 +1,6 @@
 //! This module is responsible for checking in with the operator server and getting updated local settings
 pub mod updater;
+pub mod update_loop;
 extern crate openssh_keys;
 use crate::dashboard::system_chain::set_system_blockchain;
 use crate::dashboard::wifi::reset_wifi_pass;
