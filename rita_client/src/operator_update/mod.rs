@@ -8,6 +8,7 @@ use crate::rita_loop::is_gateway_client;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::set_router_update_instruction;
 use althea_kernel_interface::hardware_info::get_hardware_info;
+use althea_types::UsageHour;
 use althea_types::get_sequence_num;
 use althea_types::AuthorizedKeys;
 use althea_types::BillingDetails;
@@ -21,6 +22,9 @@ use num256::Uint256;
 use rita_common::rita_loop::is_gateway;
 use rita_common::tunnel_manager::neighbor_status::get_neighbor_status;
 use rita_common::tunnel_manager::shaping::flag_reset_shaper;
+use rita_common::usage_tracker::UsageType;
+use rita_common::usage_tracker::get_usage_data;
+use rita_common::usage_tracker::check_usage_hour;
 use rita_common::utils::option_convert;
 use rita_common::DROPBEAR_AUTHORIZED_KEYS;
 use rita_common::KI;
@@ -35,6 +39,8 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 use std::time::{Duration, Instant};
 use updater::update_system;
 /// Things that you are not allowed to put into the merge json field of the OperatorUpdate,
@@ -151,6 +157,25 @@ pub async fn operator_update() {
         false => None,
     };
 
+    let hour_usage: Option<UsageHour>;
+    // We use system time now since usage hour is based off system time and now utc time
+    if let Ok(val) = SystemTime::now().duration_since(UNIX_EPOCH) {
+        // taking seconds as hours which then check if it's within a minute of an hour
+        if (val.as_secs() as f64 / 60_f64).floor() as u64 % 60 <= 1 {
+            let mut usage = get_usage_data(UsageType::Client);
+            // clone to prevent grabbing a different hour
+            if check_usage_hour(&usage.clone(),val.as_secs()) {
+                hour_usage = usage.pop_front();
+            } else {
+                hour_usage = None;
+            }
+        } else {
+            hour_usage = None;
+        }
+    } else {
+        hour_usage = None;
+    }
+
     hardware_info_logs(&hardware_info);
 
     let client = awc::Client::default();
@@ -168,6 +193,7 @@ pub async fn operator_update() {
             hardware_info,
             user_bandwidth_limit,
             rita_uptime: RITA_UPTIME.elapsed(),
+            hour_usage,
         })
         .await;
 

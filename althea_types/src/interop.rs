@@ -635,7 +635,19 @@ pub struct OperatorCheckinMessage {
     /// fault value.
     #[serde(default)]
     pub rita_uptime: Duration,
+    pub hour_usage: Option<UsageHour>,
 }
+
+/// A struct for tracking each hour of usage, indexed by time in hours since
+/// the unix epoch. 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UsageHour {
+    pub index: u64,
+    pub up: u64,
+    pub down: u64,
+    pub price: u32,
+}
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// A set of info derived from /proc/ and /sys/ about the recent

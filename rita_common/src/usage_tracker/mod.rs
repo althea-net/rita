@@ -8,6 +8,7 @@ use crate::rita_loop::write_to_disk::is_router_storage_small;
 use crate::RitaCommonError;
 use althea_types::Identity;
 use althea_types::PaymentTx;
+use althea_types::UsageHour;
 use bincode::Error as BincodeError;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
@@ -57,16 +58,6 @@ pub enum UsageType {
     Client,
     Relay,
     Exit,
-}
-
-/// A struct for tracking each hour of usage, indexed by time in hours since
-/// the unix epoch
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct UsageHour {
-    index: u64,
-    up: u64,
-    down: u64,
-    price: u32,
 }
 
 /// A version of payment tx with a string txid so that the formatting is correct
@@ -125,7 +116,7 @@ pub struct UsageTracker {
 /// and if the amount used is not greater than 10gb than
 /// it will return false. Essentially, it's checking to make
 /// sure that there is usage within the router.
-fn check_usage_hour(input: &VecDeque<UsageHour>, last_save_hour: u64) -> bool {
+pub fn check_usage_hour(input: &VecDeque<UsageHour>, last_save_hour: u64) -> bool {
     let mut input = input.clone();
     let number_of_bytes = 10000;
     let mut total_used_bytes = 0;
