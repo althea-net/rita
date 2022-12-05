@@ -397,26 +397,6 @@ impl dyn KernelInterface {
             )));
         }
 
-        let output = self.run_command(
-            "tc",
-            &[
-                "qdisc",
-                modifier,
-                "dev",
-                iface_name,
-                "parent",
-                &format!("1:{}", class_id),
-                "handle",
-                &format!("{}:", class_id),
-                "cake",
-                "metro",
-            ],
-        )?;
-
-        if !output.status.success() {
-            let res = String::from_utf8(output.stderr)?;
-            trace!("Operating system does not support cake :( {:?}", res);
-        }
         Ok(())
     }
 
