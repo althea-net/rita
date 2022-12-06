@@ -41,6 +41,9 @@ pub struct NetworkSettings {
     /// The static IP used on mesh interfaces
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mesh_ip: Option<IpAddr>,
+    /// MeshIp used by new routers to allow for exit switching
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mesh_ip_v2: Option<IpAddr>,
     /// Broadcast ip address used for peer discovery (in ff02::/8)
     #[serde(default = "default_discovery_ip")]
     pub discovery_ip: Ipv6Addr,
@@ -121,6 +124,7 @@ impl Default for NetworkSettings {
             backup_created: false,
             metric_factor: default_metric_factor(),
             mesh_ip: None,
+            mesh_ip_v2: None,
             discovery_ip: default_discovery_ip(),
             babel_port: 6872,
             rita_contact_port: 4874,
