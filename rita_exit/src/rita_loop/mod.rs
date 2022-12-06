@@ -288,7 +288,7 @@ fn setup_exit_wg_tunnel() {
     KI.one_time_exit_setup(local_ip, netmask, mesh_ip, ex_nic.clone(), "wg_exit")
         .expect("Failed to setup wg_exit!");
 
-    // Setup new wg_exit
+    // Setup new wg_exit. Local address added is same as that used by wg_exit
     KI.one_time_exit_setup(local_ip, netmask, mesh_ip, ex_nic, "wg_exit_v2")
         .expect("Failed to setup wg_exit_v2!");
 

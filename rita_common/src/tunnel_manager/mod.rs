@@ -167,6 +167,7 @@ impl Tunnel {
                     ))
                 }
             },
+            own_ip_v2: network.mesh_ip_v2,
             external_nic: network.external_nic.clone(),
             settings_default_route: &mut network.last_default_route,
             allowed_ipv4_address: light_client_details,
