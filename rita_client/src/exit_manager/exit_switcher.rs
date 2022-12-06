@@ -31,6 +31,11 @@ use std::sync::RwLock;
 /// use an exit without swtiching is 15 mins, this values is 15 * 60/5
 const METRIC_ENTRIES: usize = (15 * 60) / (FAST_LOOP_SPEED.as_secs() as usize);
 
+/// This is the threshold we use to ensure that a tracking exit is worth switching to. The average
+/// metric of a tracking exit of a period of 15 mins needs be atleast 50% better than our current exit
+/// to be considered as an exit to switch to
+const FLAPPING_THRESH: f64 = 0.5;
+
 lazy_static! {
     /// This lazy static tracks metric values of the exit that we potentially consider switching to during every tick.
     /// To switch, this vector needs to be full of values from a single exit.
@@ -711,7 +716,8 @@ fn worth_switching_tracking_exit(
     if avg_tracking_metric < avg_best_metric || avg_best_metric == 0 {
         false
     } else {
-        (((avg_tracking_metric - avg_best_metric) as f64) / (avg_tracking_metric as f64)) > 0.1
+        (((avg_tracking_metric - avg_best_metric) as f64) / (avg_tracking_metric as f64))
+            > FLAPPING_THRESH
     }
 }
 
@@ -790,7 +796,7 @@ mod tests {
         assert!(!worth_switching_tracking_exit(&mut vec, ip, &mut exit_map));
 
         exit_map.insert(ip, ExitTracker::new(89, 89, 1));
-        assert!(worth_switching_tracking_exit(&mut vec, ip, &mut exit_map));
+        assert!(!worth_switching_tracking_exit(&mut vec, ip, &mut exit_map));
 
         //avg is 13.6 -> to u16 -> 13
         let mut vec = vec![10, 10, 12, 16, 20];
@@ -799,7 +805,7 @@ mod tests {
         assert!(!worth_switching_tracking_exit(&mut vec, ip, &mut exit_map));
 
         exit_map.insert(ip, ExitTracker::new(11, 11 * 5, 5));
-        assert!(worth_switching_tracking_exit(&mut vec, ip, &mut exit_map));
+        assert!(!worth_switching_tracking_exit(&mut vec, ip, &mut exit_map));
     }
 
     #[test]
