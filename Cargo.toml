@@ -8,4 +8,8 @@ edition = "2018"
 members = ["althea_kernel_interface", "settings", "clu", "exit_db", "antenna_forwarding_client", "antenna_forwarding_protocol", "auto_bridge","rita_common","rita_exit","rita_client", "rita_bin"]
 
 [profile.release]
-opt-level = 2
+opt-level = "z"
+strip = true
+lto = true
+codegen-units=1
+incremental = false
