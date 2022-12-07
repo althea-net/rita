@@ -2,8 +2,8 @@
 set -eux
 export TARGET=ipq40xx
 export TRIPLE=armv7-unknown-linux-musleabihf
-export ROUTER_IP=192.168.10.1
-bash scripts/openwrt_build_$TARGET.sh --features rita_bin/development
+export ROUTER_IP=lag-test-hap-st-helens
+bash scripts/openwrt_build_$TARGET.sh
 set +e
 ssh root@$ROUTER_IP killall -9 rita
 set -e
