@@ -4,6 +4,7 @@ pub mod updater;
 extern crate openssh_keys;
 use crate::dashboard::system_chain::set_system_blockchain;
 use crate::dashboard::wifi::reset_wifi_pass;
+use crate::exit_manager::get_selected_exit;
 use crate::rita_loop::is_gateway_client;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::set_router_update_instruction;
@@ -13,6 +14,7 @@ use althea_types::AuthorizedKeys;
 use althea_types::BillingDetails;
 use althea_types::ContactStorage;
 use althea_types::ContactType;
+use althea_types::CurExitInfo;
 use althea_types::HardwareInfo;
 use althea_types::OperatorAction;
 use althea_types::OperatorCheckinMessage;
@@ -153,6 +155,18 @@ pub async fn operator_update() {
 
     hardware_info_logs(&hardware_info);
 
+    // Get current exit info
+    let cur_cluster = settings::get_rita_client().exit_client.current_exit;
+    let cur_exit = Some(CurExitInfo {
+        cluster_name: cur_cluster.clone(),
+        // Hopefully ops fills this in
+        instance_name: None,
+        instance_ip: match cur_cluster {
+            Some(a) => get_selected_exit(a).map(|a| a.to_string()),
+            None => None,
+        },
+    });
+
     let client = awc::Client::default();
     let response = client
         .post(url)
@@ -161,6 +175,7 @@ pub async fn operator_update() {
             id,
             operator_address,
             system_chain,
+            cur_exit,
             neighbor_info,
             contact_info,
             install_details,
