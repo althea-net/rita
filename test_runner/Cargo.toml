@@ -1,0 +1,11 @@
+[package]
+name = "test_runner"
+version = "0.1.0"
+edition = "2018"
+build = "build.rs"
+
+[[bin]]
+name = "tester"
+path = "src/main.rs"
+
+[dependencies]
