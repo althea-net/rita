@@ -37,6 +37,7 @@ use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState, ExitV
 use babel_monitor::Route;
 use exit_switcher::{get_babel_routes, set_best_exit};
 
+use ipnetwork::IpNetwork;
 use rita_common::blockchain_oracle::low_balance;
 use rita_common::KI;
 use settings::client::{ExitServer, SelectedExit};
@@ -990,4 +991,20 @@ pub async fn exit_manager_tick() {
             }
         }
     }
+}
+
+pub fn get_client_pub_ipv6() -> Option<IpNetwork> {
+    let rita_settings = settings::get_rita_client();
+    let current_exit = rita_settings.exit_client.current_exit;
+    if let Some(exit) = current_exit {
+        let exit_ser = rita_settings.exit_client.exits.get(&exit);
+        if let Some(exit_ser) = exit_ser {
+            let exit_info = exit_ser.info.clone();
+
+            if let ExitState::Registered { our_details, .. } = exit_info {
+                return our_details.internet_ipv6_subnet;
+            }
+        }
+    }
+    None
 }

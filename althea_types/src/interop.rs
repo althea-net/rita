@@ -592,7 +592,15 @@ pub struct ShaperSettings {
 pub struct CurExitInfo {
     pub cluster_name: Option<String>,
     pub instance_name: Option<String>,
-    pub instance_ip: Option<String>,
+    pub instance_ip: Option<IpAddr>,
+}
+
+/// This struct is sent up to op to display info related to a current exit connection
+/// This includes exit deatails, client ipv6 address, etc
+#[derive(Default, Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
+pub struct ExitConnection {
+    pub cur_exit: Option<CurExitInfo>,
+    pub client_pub_ipv6: Option<IpNetwork>,
 }
 
 fn default_shaper_settings() -> ShaperSettings {
@@ -615,7 +623,7 @@ pub struct OperatorCheckinMessage {
     /// proxy for that is the system chain value
     pub system_chain: SystemChain,
     /// Infomation about current exit
-    pub cur_exit: Option<CurExitInfo>,
+    pub exit_con: Option<ExitConnection>,
     /// The status of this devices peers, this is data that we want to communicate
     /// with the operator server but don't really have space in the purely udp
     /// heartbeat packet, neither is it required that this data be sent very often
