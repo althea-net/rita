@@ -7,16 +7,12 @@ use crate::network_monitor::NetworkInfo as NetworkMonitorTick;
 use crate::payment_controller::tick_payment_controller;
 use crate::payment_validator::validate;
 use crate::peer_listener::peerlistener_tick;
-use crate::tm_trigger_gc;
 use crate::traffic_watcher::watch;
 use crate::tunnel_manager::contact_peers::tm_contact_peers;
-use crate::tunnel_manager::gc::TriggerGc;
 use crate::tunnel_manager::tm_get_neighbors;
 use crate::update_neighbor_status;
-
 use actix_async::System as AsyncSystem;
 use babel_monitor::open_babel_stream;
-use babel_monitor::parse_interfaces;
 use babel_monitor::parse_neighs;
 use babel_monitor::parse_routes;
 
@@ -84,7 +80,6 @@ pub fn start_rita_fast_loop() {
                     let rita_neighbors = tm_get_neighbors();
                     if let Ok(mut stream) = open_babel_stream(babel_port, FAST_LOOP_TIMEOUT) {
                         let babel_neighbors = parse_neighs(&mut stream);
-                        let babel_interfaces = parse_interfaces(&mut stream);
                         let babel_routes = parse_routes(&mut stream);
                         if let (Ok(babel_neighbors), Ok(babel_routes)) =
                             (babel_neighbors, babel_routes)
@@ -94,15 +89,6 @@ pub fn start_rita_fast_loop() {
                                 babel_neighbors,
                                 babel_routes,
                                 rita_neighbors,
-                            });
-                        }
-
-                        if let Ok(babel_interfaces) = babel_interfaces {
-                            trace!("Sending tunnel GC");
-                            let _res = tm_trigger_gc(TriggerGc {
-                                tunnel_timeout: TUNNEL_TIMEOUT,
-                                tunnel_handshake_timeout: TUNNEL_HANDSHAKE_TIMEOUT,
-                                babel_interfaces,
                             });
                         }
                     }
