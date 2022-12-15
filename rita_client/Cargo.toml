@@ -27,7 +27,7 @@ babel_monitor = { path = "../babel_monitor" }
 arrayvec = {version= "0.7", features = ["serde"]}
 sodiumoxide = "0.2"
 clu = { path = "../clu" }
-web30 = "0.20"
+web30 = "0.21"
 awc = "3.0.0"
 ipnetwork = "0.20"
 actix-async = {package="actix", version = "0.13"}
