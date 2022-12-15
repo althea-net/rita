@@ -302,14 +302,7 @@ impl Neighbor {
 }
 
 /// This function goes through all tunnels preset in rita memory and add them to babel is they are not present already
-pub fn tm_monitor_check(interface: &Result<Vec<Interface>, BabelMonitorError>) {
-    let empty = &vec![];
-    let interface_list: &Vec<Interface> = if interface.is_ok() {
-        interface.as_ref().unwrap()
-    } else {
-        empty
-    };
-
+pub fn tm_monitor_check(interface_list: &[Interface]) {
     // Hashset of all interface names. This allows for an O(n) search instead of O(n^2)
     let mut interface_map: HashSet<String> = HashSet::new();
     for int in interface_list {

@@ -3,61 +3,31 @@ use crate::tunnel_manager::TUNNEL_MANAGER;
 use crate::RitaCommonError;
 use crate::KI;
 use althea_types::Identity;
-use babel_monitor::Interface as InterfaceLegacy;
+use babel_monitor::Interface;
 use std::{collections::HashMap, time::Instant};
-use std::{sync::Arc, sync::RwLock, time::Duration};
+use std::{time::Duration};
 
-/// We will not run TunnelGC more frequently than this duration. This lets us call TunnelGC in the fast loop
-/// once ever 5 seconds but run it as little as we like. We must run TunnelGC in the fast loop, at least until
-/// tunnels are async/await refactored, then it can be moved back to the slow loop.
-const GC_FREQUENCY: Duration = Duration::from_secs(60);
-
-lazy_static! {
-    /// for lack of a better way to do it until we move TunnelManager to a lock format this keeps
-    /// track of when we last ran GC
-    static ref LAST_GC: Arc<RwLock<Instant>> = Arc::new(RwLock::new(Instant::now()));
-}
-
-/// gets the last GC instant
-fn get_last_gc() -> Instant {
-    *LAST_GC.read().unwrap()
-}
-
-/// sets the last GC time to the current instant
-fn set_last_gc() {
-    let mut last_gc = LAST_GC.write().unwrap();
-    *last_gc = Instant::now();
-}
-
-/// A message type for deleting all tunnels we haven't heard from for more than the duration.
-pub struct TriggerGc {
-    /// if we do not receive a hello within this many seconds we attempt to gc the tunnel
-    /// this garbage collection can be avoided if the tunnel has seen a handshake within
-    /// tunnel_handshake_timeout time
-    pub tunnel_timeout: Duration,
-    /// The backup value that prevents us from deleting an active tunnel. We check the last
-    /// handshake on the tunnel and if it's within this amount of time we don't GC it.
-    pub tunnel_handshake_timeout: Duration,
-    /// a vector of babel interfaces, if we find an interface that babel doesn't classify as
-    /// 'up' we will gc it for recreation via the normal hello/ihu process, this prevents us
-    /// from having tunnels that don't work for babel peers
-    pub babel_interfaces: Vec<InterfaceLegacy>,
-}
-
-pub fn tm_trigger_gc(msg: TriggerGc) -> Result<(), RitaCommonError> {
+/// Performs a cleanup of all babel tunnels that we have not heard from in the configured time
+/// tunnel_timeout:
+///
+/// if we do not receive a hello within this many seconds we attempt to gc the tunnel
+/// this garbage collection can be avoided if the tunnel has seen a handshake within
+/// tunnel_handshake_timeout time
+///
+/// tunnel_handshake_timeout
+///
+/// The backup value that prevents us from deleting an active tunnel. We check the last
+/// handshake on the tunnel and if it's within this amount of time we don't GC it.
+///
+/// babel_interfaces
+/// a vector of babel interfaces, if we find an interface that babel doesn't classify as
+/// 'up' we will gc it for recreation via the normal hello/ihu process, this prevents us
+/// from having tunnels that don't work for babel peers
+pub fn tm_trigger_gc(
+    tunnel_timeout: Duration, tunnel_handshake_timeout: Duration, babel_interfaces: Vec<Interface>) -> Result<(), RitaCommonError> {
     let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
-    let time_since = Instant::now().checked_duration_since(get_last_gc());
-    match time_since {
-        Some(time) => {
-            if time < GC_FREQUENCY {
-                return Ok(());
-            }
-        }
-        None => return Ok(()),
-    }
-    set_last_gc();
 
-    let interfaces = into_interfaces_hashmap(&msg.babel_interfaces);
+    let interfaces = into_interfaces_hashmap(&babel_interfaces);
     trace!("Starting tunnel gc {:?}", interfaces);
     let mut good: HashMap<Identity, Vec<Tunnel>> = HashMap::new();
     let mut to_delete: HashMap<Identity, Vec<Tunnel>> = HashMap::new();
@@ -66,7 +36,7 @@ pub fn tm_trigger_gc(msg: TriggerGc) -> Result<(), RitaCommonError> {
     // checker issues, we should consider a method that does modify in place
     for (_identity, tunnels) in tunnel_manager.tunnels.iter() {
         for tunnel in tunnels.iter() {
-            if tunnel_should_be_kept(tunnel, &msg, &interfaces) {
+            if tunnel_should_be_kept(tunnel, tunnel_handshake_timeout, tunnel_timeout, &interfaces) {
                 insert_into_tunnel_list(tunnel, &mut good);
             } else {
                 insert_into_tunnel_list(tunnel, &mut to_delete)
@@ -152,7 +122,8 @@ pub fn tm_trigger_gc(msg: TriggerGc) -> Result<(), RitaCommonError> {
 ///   table and solve both this and the previous complication at once. So that's a possible improvement to this routine.
 fn tunnel_should_be_kept(
     tunnel: &Tunnel,
-    msg: &TriggerGc,
+    tunnel_handshake_timeout: Duration,
+    tunnel_timeout: Duration,
     interfaces: &HashMap<String, bool>,
 ) -> bool {
     let since_created = Instant::now().checked_duration_since(tunnel.created());
@@ -161,10 +132,10 @@ fn tunnel_should_be_kept(
     // for the next gc round in that case.
     if let (Some(since_created), Some(since_last_contact)) = (since_created, since_last_contact) {
         let handshake_timeout =
-            !check_handshake_time(msg.tunnel_handshake_timeout, &tunnel.iface_name);
-        let created_recently = since_created < msg.tunnel_timeout;
+            !check_handshake_time(tunnel_handshake_timeout, &tunnel.iface_name);
+        let created_recently = since_created < tunnel_timeout;
         let tunnel_up = tunnel_up(interfaces, &tunnel.iface_name);
-        let contact_timeout = since_last_contact > msg.tunnel_timeout;
+        let contact_timeout = since_last_contact > tunnel_timeout;
 
         match (
             created_recently,
@@ -237,7 +208,7 @@ fn check_handshake_time(handshake_timeout: Duration, ifname: &str) -> bool {
 }
 
 /// sorts the interfaces vector into a hashmap of interface name to up status
-fn into_interfaces_hashmap(interfaces: &[InterfaceLegacy]) -> HashMap<String, bool> {
+fn into_interfaces_hashmap(interfaces: &[Interface]) -> HashMap<String, bool> {
     let mut ret = HashMap::new();
     for interface in interfaces {
         ret.insert(interface.name.clone(), interface.up);
@@ -248,8 +219,8 @@ fn into_interfaces_hashmap(interfaces: &[InterfaceLegacy]) -> HashMap<String, bo
 /// Searches the list of Babel tunnels for a given tunnel, if the tunnel is found
 /// and it is down (not up in this case) we return false, indicating that this tunnel
 /// needs to be deleted. If we do not find the tunnel return true. Because it is possible
-/// that during a tunnel monitor failure we may encounter such a tunnel. We log this case
-/// for later inspection to determine if this ever actually happens.
+/// that during a tunnel monitor failure we may encounter such a tunnel, this happens with
+/// some frequency
 fn tunnel_up(interfaces: &HashMap<String, bool>, tunnel_name: &str) -> bool {
     trace!("Checking if {} is up", tunnel_name);
     if let Some(up) = interfaces.get(tunnel_name) {
