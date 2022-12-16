@@ -2291,6 +2291,7 @@ dependencies = [
  "clarity",
  "clu",
  "compressed_log",
+ "futures 0.3.25",
  "hex-literal",
  "ipnetwork",
  "lazy_static",

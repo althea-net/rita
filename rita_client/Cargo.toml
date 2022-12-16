@@ -36,6 +36,7 @@ actix-web-httpauth-async = { package="actix-web-httpauth", version = "0.8.0"}
 clarity = "0.5"
 openssh-keys = "0.6"
 mac_address = "1.1.4"
+futures = { version = "0.3", features = ["compat"] }
 
 [lib]
 name = "rita_client"

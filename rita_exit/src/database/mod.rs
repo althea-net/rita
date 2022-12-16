@@ -24,18 +24,22 @@ use crate::database::struct_tools::verif_done;
 use crate::get_client_ipv6;
 use crate::rita_loop::EXIT_LOOP_TIMEOUT;
 use crate::RitaExitError;
-
+use crate::EXIT_ALLOWED_COUNTRIES;
+use crate::EXIT_DESCRIPTION;
+use crate::EXIT_NETWORK_SETTINGS;
+use crate::EXIT_PRICE;
+use crate::EXIT_SYSTEM_CHAIN;
+use crate::EXIT_VERIF_SETTINGS;
 use althea_kernel_interface::ExitClient;
 use althea_types::Identity;
 use althea_types::WgKey;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 use diesel::prelude::PgConnection;
-
-use ipnetwork::IpNetwork;
 use rita_common::blockchain_oracle::get_oracle_close_thresh;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::debt_keeper::DebtAction;
 use rita_common::utils::secs_since_unix_epoch;
+use rita_common::KI;
 use settings::exit::ExitVerifSettings;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -45,15 +49,6 @@ use std::sync::RwLock;
 use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
-
-use crate::EXIT_ALLOWED_COUNTRIES;
-use crate::EXIT_DESCRIPTION;
-use crate::EXIT_NETWORK_SETTINGS;
-use crate::EXIT_PRICE;
-use crate::EXIT_SYSTEM_CHAIN;
-use crate::EXIT_VERIF_SETTINGS;
-
-use rita_common::KI;
 
 pub mod database_tools;
 pub mod db_client;
@@ -216,20 +211,6 @@ pub fn client_status(
         };
 
         let current_internet_ipv6 = get_client_ipv6(&their_record)?;
-
-        let exit_network = &*EXIT_NETWORK_SETTINGS;
-        let current_subnet =
-            match IpNetwork::new(exit_network.own_internal_ip.into(), exit_network.netmask) {
-                Ok(a) => a,
-                Err(e) => return Err(Box::new(e.into())),
-            };
-
-        if !current_subnet.contains(current_ip) {
-            return Ok(ExitState::Registering {
-                general_details: get_exit_info(),
-                message: "Registration reset because of IP range change".to_string(),
-            });
-        }
 
         update_client(&client, &their_record, conn)?;
 

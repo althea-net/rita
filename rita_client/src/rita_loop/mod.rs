@@ -87,11 +87,26 @@ pub fn start_rita_loop() {
                 let runner = AsyncSystem::new();
                 runner.block_on(async move {
                     manage_gateway();
+                    info!(
+                        "Rita Client loop manage gateway in {}s {}ms",
+                        start.elapsed().as_secs(),
+                        start.elapsed().subsec_millis()
+                    );
 
                     manage_babeld_logs();
+                    info!(
+                        "Rita Client loop manage babeld in {}s {}ms",
+                        start.elapsed().as_secs(),
+                        start.elapsed().subsec_millis()
+                    );
 
                     let exit_dest_price = get_exit_dest_price();
                     let tunnels = tm_get_tunnels().unwrap();
+                    info!(
+                        "Rita Client loop get tunnels in {}s {}ms",
+                        start.elapsed().as_secs(),
+                        start.elapsed().subsec_millis()
+                    );
 
                     lcm_watch(Watch {
                         tunnels,
@@ -99,12 +114,27 @@ pub fn start_rita_loop() {
                     });
 
                     check_for_gateway_client_billing_corner_case();
+                    info!(
+                        "Rita Client loop corner case in {}s {}ms",
+                        start.elapsed().as_secs(),
+                        start.elapsed().subsec_millis()
+                    );
                     // update the client exit manager, which handles exit registrations
                     // and manages the exit state machine in general. This includes
                     // updates to the local ip and description from the exit side
                     exit_manager_tick().await;
+                    info!(
+                        "Rita Client loop exit manager completed in {}s {}ms",
+                        start.elapsed().as_secs(),
+                        start.elapsed().subsec_millis()
+                    );
                     // sends an operator payment if enough time has elapsed
                     tick_operator_payments().await;
+                    info!(
+                        "Rita Client loop operator payments completed in {}s {}ms",
+                        start.elapsed().as_secs(),
+                        start.elapsed().subsec_millis()
+                    );
                 });
 
                 info!(

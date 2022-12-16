@@ -152,15 +152,14 @@ pub struct ExitRegistrationDetails {
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 #[serde(tag = "state")]
 pub enum ExitState {
+    /// the default state of the struct in the config
     New,
+    /// we have successfully contacted the exit and gotten basic info
     GotInfo {
         general_details: ExitDetails,
         message: String,
     },
-    Registering {
-        general_details: ExitDetails,
-        message: String,
-    },
+    /// We are awaiting user action to enter the phone or email code
     Pending {
         general_details: ExitDetails,
         message: String,
@@ -168,15 +167,17 @@ pub enum ExitState {
         email_code: Option<String>,
         phone_code: Option<String>,
     },
+    /// we are currently registered and operating, update this state
+    /// incase the exit for example wants to assign us a new ip
     Registered {
         general_details: ExitDetails,
         our_details: ExitClientDetails,
         message: String,
     },
+    /// we have been denied
     Denied {
         message: String,
     },
-    Disabled,
 }
 
 impl Default for ExitState {
@@ -189,10 +190,6 @@ impl ExitState {
     pub fn general_details(&self) -> Option<&ExitDetails> {
         match *self {
             ExitState::GotInfo {
-                ref general_details,
-                ..
-            } => Some(general_details),
-            ExitState::Registering {
                 ref general_details,
                 ..
             } => Some(general_details),
@@ -221,11 +218,9 @@ impl ExitState {
         match *self {
             ExitState::New => "New exit".to_string(),
             ExitState::GotInfo { ref message, .. } => message.clone(),
-            ExitState::Registering { ref message, .. } => message.clone(),
             ExitState::Pending { ref message, .. } => message.clone(),
             ExitState::Registered { ref message, .. } => message.clone(),
             ExitState::Denied { ref message, .. } => message.clone(),
-            ExitState::Disabled => "Exit disabled".to_string(),
         }
     }
 }

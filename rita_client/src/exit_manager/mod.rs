@@ -23,7 +23,6 @@ use crate::exit_manager::time_sync::maybe_set_local_to_exit_time;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::traffic_watcher::{query_exit_debts, QueryExitDebts};
 use crate::RitaClientError;
-
 use actix_web_async::Result;
 use althea_kernel_interface::{
     exit_client_tunnel::ClientExitTunnelConfig, DefaultRoute, KernelInterfaceError,
@@ -36,8 +35,9 @@ use althea_types::{EncryptedExitList, ExitDetails, ExitList};
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState, ExitVerifMode};
 use babel_monitor::structs::Route;
 use exit_switcher::{get_babel_routes, set_best_exit};
-
 use ipnetwork::IpNetwork;
+use futures::future::join_all;
+use futures::join;
 use rita_common::blockchain_oracle::low_balance;
 use rita_common::KI;
 use settings::client::{ExitServer, SelectedExit};
@@ -749,8 +749,11 @@ fn get_routes_hashmap(routes: Vec<Route>) -> HashMap<IpAddr, Route> {
     ret
 }
 
+/// This function is run every iteraton of the client fast loop in order to setup exit connections
+/// process billing and make the decision to potentially switch exits
 pub async fn exit_manager_tick() {
     info!("Exit_Switcher: exit manager tick");
+
     let client_can_use_free_tier = { settings::get_rita_client().payment.client_can_use_free_tier };
 
     //  Get mut rita client to setup exits
@@ -937,39 +940,18 @@ pub async fn exit_manager_tick() {
         }
     }
 
-    // code that manages requesting details to exits
+    // code that manages requesting details to exits, run in parallel becuse they respond slowly
+    let mut general_requests = Vec::new();
+    let mut status_requests = Vec::new();
     let servers = { settings::get_rita_client().exit_client.exits };
     for (k, s) in servers {
         match s.info {
-            ExitState::Denied { .. } | ExitState::Disabled | ExitState::GotInfo { .. } => {}
-
-            ExitState::New { .. } => {
-                match exit_general_details_request(k.clone()).await {
-                    Ok(_) => {
-                        trace!("exit details request to {} was successful", k);
-                    }
-                    Err(e) => {
-                        trace!("exit details request to {} failed with {:?}", k, e);
-                    }
-                };
-            }
-
-            ExitState::Registered { .. } => {
-                match exit_status_request(k.clone()).await {
-                    Ok(_) => {
-                        trace!("exit status request to {} was successful", k);
-                    }
-                    Err(e) => {
-                        trace!("exit status request to {} failed with {:?}", k, e);
-                    }
-                };
-            }
-
-            state => {
-                trace!("Waiting on exit state {:?} for {}", state, k);
-            }
+            ExitState::New { .. } => general_requests.push(exit_general_details_request(k.clone())),
+            ExitState::Registered { .. } => status_requests.push(exit_status_request(k.clone())),
+            _ => {}
         }
     }
+    join!(join_all(general_requests), join_all(status_requests));
 
     // This block runs after an exit manager tick (an exit is selected),
     // and looks at the ipv6 subnet assigned to our router in the ExitState struct
