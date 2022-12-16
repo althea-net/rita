@@ -26,7 +26,7 @@ pub fn tm_trigger_gc(
     tunnel_timeout: Duration,
     tunnel_handshake_timeout: Duration,
     babel_interfaces: Vec<Interface>,
-) -> () {
+) {
     let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
 
     let interfaces = into_interfaces_hashmap(&babel_interfaces);
@@ -66,7 +66,6 @@ pub fn tm_trigger_gc(
     // The former would be a mere performance bug while inconsistent-with-reality Rita state
     // would lead to nasty bugs in case del_interface() goes wrong for whatever reason.
     tunnel_manager.tunnels = good;
-    drop(tunnel_manager);
 
     unmonitor_tunnels(to_delete);
 }

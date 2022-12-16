@@ -52,7 +52,8 @@ pub fn start_rita_slow_loop() {
                     Ok(mut stream) => {
                         // we really only need to run this on startup, but doing so periodically
                         // could catch the edge case where babel is restarted under us
-                        if let Err(_) = set_babel_price(&mut stream) {
+                        if let Err(e) = set_babel_price(&mut stream) {
+                            warn!("Failed to set babel price with {:?}", e);
                             num_babel_failures += 1;
                         }
 
@@ -139,5 +140,5 @@ fn set_babel_price(stream: &mut TcpStream) -> Result<(), BabelMonitorError> {
         );
         return Err(e);
     }
-    return Ok(());
+    Ok(())
 }

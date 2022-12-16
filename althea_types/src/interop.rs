@@ -175,9 +175,7 @@ pub enum ExitState {
         message: String,
     },
     /// we have been denied
-    Denied {
-        message: String,
-    },
+    Denied { message: String },
 }
 
 impl Default for ExitState {
