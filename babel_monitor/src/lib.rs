@@ -26,6 +26,7 @@ use std::net::{AddrParseError, IpAddr};
 use std::num::{ParseFloatError, ParseIntError};
 use std::str::FromStr;
 use std::str::{self, ParseBoolError};
+use std::string::FromUtf8Error;
 use std::thread;
 use std::time::Duration;
 
@@ -57,6 +58,7 @@ pub enum BabelMonitorError {
     TokioError(String),
     NoRoute(String),
     MiscStringError(String),
+    FromUtf8Error(FromUtf8Error),
 }
 
 use crate::BabelMonitorError::{
@@ -92,6 +94,11 @@ impl From<ParseFloatError> for BabelMonitorError {
 impl From<IpNetworkError> for BabelMonitorError {
     fn from(error: IpNetworkError) -> Self {
         BabelMonitorError::NetworkError(error)
+    }
+}
+impl From<FromUtf8Error> for BabelMonitorError {
+    fn from(error: FromUtf8Error) -> Self {
+        BabelMonitorError::FromUtf8Error(error)
     }
 }
 
@@ -130,6 +137,7 @@ impl Display for BabelMonitorError {
                 a,
             ),
             BabelMonitorError::MiscStringError(a) => write!(f, "{}", a,),
+            BabelMonitorError::FromUtf8Error(a) => write!(f, "{}", a,),
         }
     }
 }
@@ -212,13 +220,9 @@ pub fn open_babel_stream(
     let socket_string = format!("[::1]:{}", babel_port);
     trace!("About to open Babel socket using {}", socket_string);
     let socket: SocketAddr = socket_string.parse().unwrap();
-    let mut stream = TcpStream::connect_timeout(&socket, timeout).expect("connect_timeout error");
-    stream
-        .set_read_timeout(Some(timeout))
-        .expect("set_read_timeout failed");
-    stream
-        .set_write_timeout(Some(timeout))
-        .expect("set_write_timeout failed");
+    let mut stream = TcpStream::connect_timeout(&socket, timeout)?;
+    stream.set_read_timeout(Some(timeout))?;
+    stream.set_write_timeout(Some(timeout))?;
 
     // Consumes the automated Preamble and validates configuration api version
     info!("Starting babel connection");
@@ -264,7 +268,7 @@ fn read_babel(
     if let Err(e) = output {
         return Err(TcpError(format!("{:?}", e)));
     }
-    let output = output.unwrap();
+    let output = output?;
     let output = output.trim_matches(char::from(0));
     trace!(
         "Babel monitor got {} bytes with the message {}",
@@ -300,7 +304,7 @@ fn read_babel(
         warn!("Babel read failed! {} {:?}", output, e);
         return Err(ReadFailed(format!("{:?}", e)));
     }
-    let babel_data = babel_data.unwrap();
+    let babel_data = babel_data?;
 
     Ok(babel_data)
 }
@@ -341,13 +345,13 @@ pub fn run_command(stream: &mut TcpStream, cmd: &str) -> Result<String, BabelMon
     let bytes = cmd.as_bytes().to_vec();
     let out = stream.write_all(&bytes);
 
-    if out.is_err() {
-        return Err(CommandFailed(cmd, format!("{:?}", out)));
+    match out {
+        Ok(_) => {
+            info!("Command write succeeded, returning output");
+            read_babel(stream, String::new(), 0)
+        }
+        Err(e) => Err(CommandFailed(cmd, format!("{:?}", e))),
     }
-
-    out.unwrap();
-    info!("Command write succeeded, returning output");
-    read_babel(stream, String::new(), 0)
 }
 
 pub fn validate_preamble(preamble: String) -> Result<(), BabelMonitorError> {
@@ -675,12 +679,14 @@ pub fn get_installed_route(mesh_ip: &IpAddr, routes: &[Route]) -> Result<Route, 
             }
         }
     }
-    if exit_route.is_none() {
-        return Err(BabelMonitorError::NoRoute(
-            "No installed route to that destination!".to_string(),
-        ));
+    match exit_route {
+        Some(v) => Ok(v.clone()),
+        None => {
+            return Err(BabelMonitorError::NoRoute(
+                "No installed route to that destination!".to_string(),
+            ))
+        }
     }
-    Ok(exit_route.unwrap().clone())
 }
 #[cfg(test)]
 mod tests {
