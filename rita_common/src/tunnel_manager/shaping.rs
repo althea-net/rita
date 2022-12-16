@@ -40,7 +40,6 @@ pub enum ShapingAdjustAction {
 }
 
 pub fn handle_shaping() {
-    let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
     let network_settings = settings::get_rita_common().network;
     let minimum_bandwidth_limit = network_settings.shaper_settings.min_speed;
     let starting_bandwidth_limit = network_settings.shaper_settings.max_speed;
@@ -51,6 +50,7 @@ pub fn handle_shaping() {
     // removes shaping without requiring a restart if the flag is set or
     // if it's set in the settings
     if !bandwidth_limit_enabled || shaper.reset_flag {
+        let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
         for (_id, tunnel_list) in tunnel_manager.tunnels.iter_mut() {
             for tunnel in tunnel_list {
                 if tunnel.speed_limit.is_some() {
@@ -66,6 +66,7 @@ pub fn handle_shaping() {
     for shaping_command in &shaper.to_shape {
         let action = shaping_command.action;
         let iface = &shaping_command.iface;
+        let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
         for (id, tunnel_list) in tunnel_manager.tunnels.iter_mut() {
             for tunnel in tunnel_list {
                 if &tunnel.iface_name == iface {

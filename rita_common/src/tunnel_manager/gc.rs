@@ -67,18 +67,26 @@ pub fn tm_trigger_gc(
     // The former would be a mere performance bug while inconsistent-with-reality Rita state
     // would lead to nasty bugs in case del_interface() goes wrong for whatever reason.
     tunnel_manager.tunnels = good;
+    drop(tunnel_manager);
 
+    unmonitor_tunnels(to_delete);
+
+    Ok(())
+}
+
+fn unmonitor_tunnels(to_delete: HashMap<Identity, Vec<Tunnel>>) {
     for (_ident, tunnels) in to_delete {
         for tunnel in tunnels {
             match tunnel.light_client_details {
                 None => {
                     // In the same spirit, we return the port to the free port pool only after tunnel
                     // deletion goes well.
-                    let res = tunnel.unmonitor();
-                    error!(
-                        "Tunnel unmonitor failed during gc, garbage idle tunnel! {:?}",
-                        res
-                    );
+                    if let Err(e) = tunnel.unmonitor() {
+                        error!(
+                            "Tunnel unmonitor failed during gc, garbage idle tunnel! {:?}",
+                            e
+                        );
+                    }
                 }
                 Some(_) => {
                     tunnel.close_light_client_tunnel();
@@ -86,8 +94,6 @@ pub fn tm_trigger_gc(
             }
         }
     }
-
-    Ok(())
 }
 
 /// This routine has two independent purposes, first is to clear out tunnels
@@ -179,10 +185,12 @@ fn tunnel_should_be_kept(
 fn insert_into_tunnel_list(input: &Tunnel, tunnels_list: &mut HashMap<Identity, Vec<Tunnel>>) {
     let identity = &input.neigh_id.global;
     let input = input.clone();
-    if !tunnels_list.contains_key(identity) {
-        tunnels_list.insert(*identity, Vec::new());
+    match tunnels_list.get_mut(identity) {
+        None => {
+            tunnels_list.insert(*identity, vec![input]);
+        }
+        Some(v) => v.push(input),
     }
-    tunnels_list.get_mut(identity).unwrap().push(input);
 }
 
 /// This function checks the handshake time of a tunnel when compared to the handshake timeout,
