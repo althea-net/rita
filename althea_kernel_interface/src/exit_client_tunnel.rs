@@ -1,4 +1,5 @@
 use super::KernelInterface;
+use crate::hardware_info::{get_kernel_version, parse_kernel_version};
 use crate::{open_tunnel::to_wg_local, KernelInterfaceError as Error};
 use althea_types::WgKey;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -32,6 +33,11 @@ pub struct ClientExitTunnelConfig {
 }
 
 impl dyn KernelInterface {
+    fn get_kernel_is_v4(&self) -> Result<bool, Error> {
+        let (_, system_kernel_version) = parse_kernel_version(get_kernel_version()?)?;
+        Ok(system_kernel_version.starts_with("4."))
+    }
+
     pub fn set_client_exit_tunnel_config(
         &self,
         args: ClientExitTunnelConfig,
@@ -228,25 +234,26 @@ impl dyn KernelInterface {
     /// same rules. It may be advisable in the future to split them up into
     /// individual nat entires for each option
     pub fn create_client_nat_rules(&self) -> Result<(), Error> {
-        self.init_nat_chain()?;
+        let is_v4 = self.get_kernel_is_v4()?;
 
-        // self.add_iptables_rule(
-        //     "iptables",
-        //     &[
-        //         "-t",
-        //         "nat",
-        //         "-A",
-        //         "POSTROUTING",
-        //         "-o",
-        //         "wg_exit",
-        //         "-j",
-        //         "MASQUERADE",
-        //     ],
-        // )?;
-
-        // self.add_iptables_rule("iptables", &["-A", "zone_lan_forward", "-j", "ACCEPT"])?;
-
-        self.add_lan_forward()?;
+        if is_v4 {
+            self.add_iptables_rule(
+                "iptables",
+                &[
+                    "-t",
+                    "nat",
+                    "-A",
+                    "POSTROUTING",
+                    "-o",
+                    "wg_exit",
+                    "-j",
+                    "MASQUERADE",
+                ],
+            )?;
+            self.add_iptables_rule("iptables", &["-A", "zone_lan_forward", "-j", "ACCEPT"])?;
+        } else {
+            self.init_nat_chain()?;
+        }
 
         self.add_iptables_rule(
             "iptables",
@@ -287,15 +294,21 @@ impl dyn KernelInterface {
     /// blocks the client nat by inserting a blocker in the start of the special lan forwarding
     /// table created by openwrt.
     pub fn block_client_nat(&self) -> Result<(), Error> {
-        //self.add_iptables_rule("iptables", &["-I", "zone_lan_forward", "-j", "REJECT"])?;
-        self.delete_lan_forward()?;
+        if self.get_kernel_is_v4()? {
+            self.add_iptables_rule("iptables", &["-I", "zone_lan_forward", "-j", "REJECT"])?;
+        } else {
+            self.insert_reject_rule()?;
+        }
         Ok(())
     }
 
     /// Removes the block created by block_client_nat() will fail if not run after that command
     pub fn restore_client_nat(&self) -> Result<(), Error> {
-        // self.add_iptables_rule("iptables", &["-D", "zone_lan_forward", "-j", "REJECT"])?;
-        self.add_lan_forward()?;
+        if self.get_kernel_is_v4()? {
+            self.add_iptables_rule("iptables", &["-D", "zone_lan_forward", "-j", "REJECT"])?;
+        } else {
+            self.delete_reject_rule()?;
+        }
         Ok(())
     }
 }
