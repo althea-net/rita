@@ -16,6 +16,7 @@ serde = "1.0"
 althea_types = { path = "../althea_types" }
 ipnetwork = "0.20"
 mac_address = "1.1.4"
+nftables = { git = "https://github.com/thosmos/nftables-rs", branch = "fix-insert" } # "0.2.0"
 
 [dependencies.regex]
 version = "1.6"

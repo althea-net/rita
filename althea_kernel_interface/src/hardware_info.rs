@@ -77,7 +77,7 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
     })
 }
 
-fn get_kernel_version() -> Result<String, Error> {
+pub fn get_kernel_version() -> Result<String, Error> {
     let sys_kernel_ver_error = Err(Error::FailedToGetSystemKernelVersion);
 
     let lines = get_lines("/proc/version")?;
@@ -88,7 +88,7 @@ fn get_kernel_version() -> Result<String, Error> {
     Ok(line.to_string())
 }
 
-fn parse_kernel_version(line: String) -> Result<(String, String), Error> {
+pub fn parse_kernel_version(line: String) -> Result<(String, String), Error> {
     let mut times = line.split_whitespace().peekable();
 
     let mut kernel_ver = "".to_string();
