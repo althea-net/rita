@@ -1215,7 +1215,7 @@ mod tests {
 
     /// This is set as separate function to avoid deadlocks
     fn get_exit_blacklist() -> ExitBlacklist {
-        let reader = (*EXIT_MANAGER.read().unwrap()).exit_blacklist.clone();
+        let reader = EXIT_MANAGER.read().unwrap().exit_blacklist.clone();
         reader
     }
 

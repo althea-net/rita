@@ -114,7 +114,7 @@ pub fn get_stats() -> Stats {
 pub struct GetNetworkInfo;
 
 pub fn get_network_info(_msg: GetNetworkInfo) -> Result<NetworkInfo, RitaCommonError> {
-    match (*(NETWORK_MONITOR.read().unwrap())).last_babel_dump.clone() {
+    match (NETWORK_MONITOR.read().unwrap()).last_babel_dump.clone() {
         Some(dump) => Ok(dump),
         None => Err(RitaCommonError::MiscStringError(
             "No babel info ready!".to_string(),

@@ -11,7 +11,7 @@ impl dyn KernelInterface {
         password_with_newline.push(b'\n');
 
         let mut passwd = Command::new("passwd")
-            .args(&["-a sha512"])
+            .args(["-a sha512"])
             .stdout(Stdio::piped())
             .stdin(Stdio::piped())
             .spawn()

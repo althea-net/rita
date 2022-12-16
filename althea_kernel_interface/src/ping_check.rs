@@ -10,7 +10,7 @@ impl dyn KernelInterface {
         trace!("starting ping");
         let mut ping = Ping::new();
         ping.add_host(&ip.to_string())?;
-        ping.set_timeout((timeout.as_millis() as f64 / 1000f64) as f64)?;
+        ping.set_timeout(timeout.as_millis() as f64 / 1000f64)?;
         trace!("sending ping");
         let mut response = ping.send()?;
         trace!("sent ping");

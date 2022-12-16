@@ -22,6 +22,7 @@ use std::{
 
 use std::str;
 
+pub mod babel;
 pub mod bridge_tools;
 mod check_cron;
 mod counter;
@@ -52,7 +53,6 @@ mod traffic_control;
 mod udp_socket_table;
 pub mod upgrade;
 pub mod wg_iface_counter;
-pub mod babel;
 
 use althea_types::error::AltheaTypesError;
 use oping::PingError;

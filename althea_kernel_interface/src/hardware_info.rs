@@ -362,7 +362,7 @@ fn parse_wifi_device_names() -> Result<Vec<String>, Error> {
 
 fn get_wifi_survey_info(dev: &str) -> Vec<WifiSurveyData> {
     let res = Command::new("iw")
-        .args(&[dev, "survey", "dump"])
+        .args([dev, "survey", "dump"])
         .stdout(Stdio::piped())
         .output();
 
@@ -376,7 +376,7 @@ fn get_wifi_survey_info(dev: &str) -> Vec<WifiSurveyData> {
 
 fn get_wifi_station_info(dev: &str) -> Vec<WifiStationData> {
     let res = Command::new("iw")
-        .args(&[dev, "station", "dump"])
+        .args([dev, "station", "dump"])
         .stdout(Stdio::piped())
         .output();
 

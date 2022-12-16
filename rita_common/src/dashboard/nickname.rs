@@ -37,12 +37,10 @@ pub async fn set_nickname(nickname: Json<Nickname>) -> HttpResponse {
 
             HttpResponse::Ok().json(())
         }
-        Err(_e) => {
-            HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!(
-                "{}",
-                RitaCommonError::CapacityError("Insufficient capacity for string!".to_string())
-            ))
-        }
+        Err(_e) => HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!(
+            "{}",
+            RitaCommonError::CapacityError("Insufficient capacity for string!".to_string())
+        )),
     }
 }
 

@@ -682,7 +682,7 @@ pub fn get_installed_route(mesh_ip: &IpAddr, routes: &[Route]) -> Result<Route, 
     match exit_route {
         Some(v) => Ok(v.clone()),
         None => {
-            return Err(BabelMonitorError::NoRoute(
+            Err(BabelMonitorError::NoRoute(
                 "No installed route to that destination!".to_string(),
             ))
         }

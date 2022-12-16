@@ -92,7 +92,6 @@ const UPDATE_FREQUENCY: Duration = Duration::from_secs(60);
 /// in the rita_client loop
 pub const OPERATOR_UPDATE_TIMEOUT: Duration = CLIENT_LOOP_TIMEOUT;
 
-
 /// Checks in with the operator server
 async fn operator_update() {
     let url: &str;
@@ -361,7 +360,7 @@ fn update_authorized_keys(
                         }
                     }
                     Err(e) => {
-                        let _create_keys_file = File::create(&keys_file)?;
+                        let _create_keys_file = File::create(keys_file)?;
                         warn!(
                             "Authorized keys did not exist, creating the file {:?} {:?}",
                             &keys_file, e
@@ -371,7 +370,7 @@ fn update_authorized_keys(
             }
         }
         Err(e) => {
-            let _create_keys_file = File::create(&keys_file)?;
+            let _create_keys_file = File::create(keys_file)?;
             warn!(
                 "Authorized keys did not exist, creating the file {:?} {:?}",
                 &keys_file, e

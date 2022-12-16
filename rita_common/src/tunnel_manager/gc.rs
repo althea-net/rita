@@ -3,8 +3,8 @@ use crate::tunnel_manager::TUNNEL_MANAGER;
 use crate::KI;
 use althea_types::Identity;
 use babel_monitor::Interface;
+use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
-use std::{time::Duration};
 
 /// Performs a cleanup of all babel tunnels that we have not heard from in the configured time
 /// tunnel_timeout:
@@ -26,7 +26,7 @@ pub fn tm_trigger_gc(
     tunnel_timeout: Duration,
     tunnel_handshake_timeout: Duration,
     babel_interfaces: Vec<Interface>,
-) -> () {
+) {
     let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
 
     let interfaces = into_interfaces_hashmap(&babel_interfaces);
@@ -38,7 +38,12 @@ pub fn tm_trigger_gc(
     // checker issues, we should consider a method that does modify in place
     for (_identity, tunnels) in tunnel_manager.tunnels.iter() {
         for tunnel in tunnels.iter() {
-            if tunnel_should_be_kept(tunnel, tunnel_handshake_timeout, tunnel_timeout, &interfaces) {
+            if tunnel_should_be_kept(
+                tunnel,
+                tunnel_handshake_timeout,
+                tunnel_timeout,
+                &interfaces,
+            ) {
                 insert_into_tunnel_list(tunnel, &mut good);
             } else {
                 insert_into_tunnel_list(tunnel, &mut to_delete)
@@ -135,8 +140,7 @@ fn tunnel_should_be_kept(
     // this is almost always true, unless one of the two is in the future versus 'now' it's safe to just skip this
     // for the next gc round in that case.
     if let (Some(since_created), Some(since_last_contact)) = (since_created, since_last_contact) {
-        let handshake_timeout =
-            !check_handshake_time(tunnel_handshake_timeout, &tunnel.iface_name);
+        let handshake_timeout = !check_handshake_time(tunnel_handshake_timeout, &tunnel.iface_name);
         let created_recently = since_created < tunnel_timeout;
         let tunnel_up = tunnel_up(interfaces, &tunnel.iface_name);
         let contact_timeout = since_last_contact > tunnel_timeout;

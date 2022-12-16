@@ -383,7 +383,7 @@ pub fn update_usage_data(msg: UpdateUsage) {
         }
     };
 
-    process_usage_update(curr_hour, msg, &mut *(USAGE_TRACKER.write().unwrap()));
+    process_usage_update(curr_hour, msg, &mut (USAGE_TRACKER.write().unwrap()));
 }
 
 fn process_usage_update(current_hour: u64, msg: UpdateUsage, data: &mut UsageTracker) {
@@ -429,7 +429,7 @@ fn trim_payments(size: usize, history: &mut VecDeque<PaymentHour>) {
 }
 
 pub fn update_payments(payment: PaymentTx) {
-    handle_payments(&mut *(USAGE_TRACKER.write().unwrap()), &payment);
+    handle_payments(&mut (USAGE_TRACKER.write().unwrap()), &payment);
 }
 
 /// Internal handler function that deals with adding a payment to the list

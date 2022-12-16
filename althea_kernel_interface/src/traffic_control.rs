@@ -143,14 +143,14 @@ impl dyn KernelInterface {
         match speed {
             Some(val) => {
                 mbit = format!("{}mbit", val);
-                cake_args.extend(&["bandwidth", &mbit])
+                cake_args.extend(["bandwidth", &mbit])
             }
-            None => cake_args.extend(&["unlimited"]),
+            None => cake_args.extend(["unlimited"]),
         }
 
         if exit_tunnel {
             // cake arguments for the *client side* of the wg_exit tunnel
-            cake_args.extend(&[
+            cake_args.extend([
                 // we want to use the 'internet' parameter here because the total rtt
                 // of the path from endpoint to endpoint is what this value cares about
                 // not neighbor to neighbor
@@ -178,7 +178,7 @@ impl dyn KernelInterface {
             ]);
         } else {
             // cake arguments for per hop tunnels only
-            cake_args.extend(&[
+            cake_args.extend([
                 // we want to use the 'internet' parameter here because the total rtt
                 // of the path from endpoint to endpoint is what this value cares about
                 // not neighbor to neighbor

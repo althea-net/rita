@@ -139,5 +139,5 @@ fn set_babel_price(stream: &mut TcpStream) -> Result<(), BabelMonitorError> {
         );
         return Err(e);
     }
-    return Ok(());
+    Ok(())
 }
