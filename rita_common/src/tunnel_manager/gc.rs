@@ -1,6 +1,5 @@
 use super::Tunnel;
 use crate::tunnel_manager::TUNNEL_MANAGER;
-use crate::RitaCommonError;
 use crate::KI;
 use althea_types::Identity;
 use babel_monitor::Interface;
@@ -24,7 +23,10 @@ use std::{time::Duration};
 /// 'up' we will gc it for recreation via the normal hello/ihu process, this prevents us
 /// from having tunnels that don't work for babel peers
 pub fn tm_trigger_gc(
-    tunnel_timeout: Duration, tunnel_handshake_timeout: Duration, babel_interfaces: Vec<Interface>) -> Result<(), RitaCommonError> {
+    tunnel_timeout: Duration,
+    tunnel_handshake_timeout: Duration,
+    babel_interfaces: Vec<Interface>,
+) -> () {
     let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
 
     let interfaces = into_interfaces_hashmap(&babel_interfaces);
@@ -60,6 +62,10 @@ pub fn tm_trigger_gc(
     // would lead to nasty bugs in case del_interface() goes wrong for whatever reason.
     tunnel_manager.tunnels = good;
 
+    unmonitor_tunnels(to_delete);
+}
+
+fn unmonitor_tunnels(to_delete: HashMap<Identity, Vec<Tunnel>>) {
     for (_ident, tunnels) in to_delete {
         for tunnel in tunnels {
             match tunnel.light_client_details {
@@ -78,8 +84,6 @@ pub fn tm_trigger_gc(
             }
         }
     }
-
-    Ok(())
 }
 
 /// This routine has two independent purposes, first is to clear out tunnels

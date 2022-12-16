@@ -52,6 +52,7 @@ mod traffic_control;
 mod udp_socket_table;
 pub mod upgrade;
 pub mod wg_iface_counter;
+pub mod babel;
 
 use althea_types::error::AltheaTypesError;
 use oping::PingError;
