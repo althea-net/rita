@@ -235,7 +235,7 @@ pub fn send_admin_notification_sms(message: &str) {
         for number in phone.operator_notification_number {
             let client = reqwest::blocking::Client::new();
             match client
-                .post(&url)
+                .post(url.clone())
                 .basic_auth(
                     phone.twillio_account_id.clone(),
                     Some(phone.twillio_auth_token.clone()),

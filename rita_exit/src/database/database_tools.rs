@@ -43,7 +43,7 @@ pub fn get_next_client_ip(conn: &PgConnection) -> Result<IpAddr, Box<RitaExitErr
     use self::schema::clients::dsl::clients;
     let rita_exit = settings::get_rita_exit();
     let exit_settings = rita_exit.exit_network;
-    let netmask = exit_settings.netmask as u8;
+    let netmask = exit_settings.netmask;
     let start_ip = exit_settings.exit_start_ip;
     let gateway_ip = exit_settings.own_internal_ip;
     // drop here to free up the settings lock, this codepath runs in parallel
@@ -136,7 +136,7 @@ pub fn update_client(
     if time_since_last_update > ONE_DAY / 2 {
         info!("Bumping client timestamp for {}", their_record.wg_pubkey);
         if let Err(e) = diesel::update(filtered_list)
-            .set(last_seen.eq(secs_since_unix_epoch() as i64))
+            .set(last_seen.eq(secs_since_unix_epoch()))
             .execute(conn)
         {
             return Err(Box::new(e.into()));

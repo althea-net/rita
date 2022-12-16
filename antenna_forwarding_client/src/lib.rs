@@ -364,7 +364,7 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
             }
         }
         let mut pinger = Ping::new();
-        pinger.set_timeout((PING_TIMEOUT.as_millis() as f64 / 1000f64) as f64)?;
+        pinger.set_timeout(PING_TIMEOUT.as_millis() as f64 / 1000f64)?;
         pinger.add_host(&target_ip.to_string())?;
         let mut response = match pinger.send() {
             Ok(res) => res,
