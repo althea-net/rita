@@ -28,16 +28,11 @@ use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::Display;
-use std::fmt::{Formatter, Result as FmtResult};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Instant;
-
-/// Holds messages from NetworkMonitor that need to be processed by TunnelManager
-#[derive(Debug, Default)]
-struct NetworkMonitorQueue {}
 
 lazy_static! {
     static ref TUNNEL_MANAGER: Arc<RwLock<TunnelManager>> =
@@ -46,18 +41,6 @@ lazy_static! {
 
 pub fn get_tunnel_manager() -> TunnelManager {
     TUNNEL_MANAGER.read().unwrap().clone()
-}
-
-#[derive(Debug)]
-pub enum TunnelManagerError {
-    _InvalidStateError,
-}
-impl Display for TunnelManagerError {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        match self {
-            TunnelManagerError::_InvalidStateError => write!(f, "Invalid state"),
-        }
-    }
 }
 
 /// Used to trigger the enforcement handler
