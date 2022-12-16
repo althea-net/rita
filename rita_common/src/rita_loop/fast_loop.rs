@@ -15,6 +15,7 @@ use actix_async::System as AsyncSystem;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_neighs;
 use babel_monitor::parse_routes;
+use futures::future::join4;
 
 use std::thread;
 use std::time::{Duration, Instant};
@@ -42,6 +43,7 @@ pub fn start_rita_fast_loop() {
         while let Err(e) = {
             thread::spawn(move || loop {
                 trace!("Common Fast tick!");
+                let start = Instant::now();
 
                 let runner = AsyncSystem::new();
                 runner.block_on(async move {
@@ -55,7 +57,7 @@ pub fn start_rita_fast_loop() {
 
                     if let Ok(mut stream) = open_babel_stream(babel_port, FAST_LOOP_TIMEOUT) {
                         if let Ok(babel_routes) = parse_routes(&mut stream) {
-                            if let Err(e) = watch(babel_routes, &neighbors) {
+                            if let Err(e) = watch(babel_routes.clone(), &neighbors) {
                                 error!("Error for Rita common traffic watcher {}", e);
                             }
                             info!(
@@ -63,26 +65,17 @@ pub fn start_rita_fast_loop() {
                                 neigh.elapsed().as_secs(),
                                 neigh.elapsed().subsec_millis()
                             );
-                        }
-                    }
 
-                    // Observe the dataplane for status and problems. Tunnel GC checks for specific issues
-                    // (tunnels that are installed but not active) and cleans up cruft. We put these together
-                    // because both can fail without anything truly bad happening and we get a slight efficiency
-                    // bonus running them together (fewer babel socket connections per loop iteration)
-                    let rita_neighbors = tm_get_neighbors();
-                    if let Ok(mut stream) = open_babel_stream(babel_port, FAST_LOOP_TIMEOUT) {
-                        let babel_neighbors = parse_neighs(&mut stream);
-                        let babel_routes = parse_routes(&mut stream);
-                        if let (Ok(babel_neighbors), Ok(babel_routes)) =
-                            (babel_neighbors, babel_routes)
-                        {
-                            trace!("Sending network monitor tick");
-                            update_network_info(NetworkMonitorTick {
-                                babel_neighbors,
-                                babel_routes,
-                                rita_neighbors,
-                            });
+                            // Observe the dataplane for status and problems.
+                            if let Ok(babel_neighbors) = parse_neighs(&mut stream) {
+                                let rita_neighbors = tm_get_neighbors();
+                                trace!("Sending network monitor tick");
+                                update_network_info(NetworkMonitorTick {
+                                    babel_neighbors,
+                                    babel_routes,
+                                    rita_neighbors,
+                                });
+                            }
                         }
                     }
 
@@ -97,19 +90,26 @@ pub fn start_rita_fast_loop() {
                     // updating blockchain info often is easier than dealing with edge cases
                     // like out of date nonces or balances, also users really really want fast
                     // balance updates, think very long and very hard before running this more slowly
-                    BlockchainOracleUpdate().await;
+                    let bou = BlockchainOracleUpdate();
                     // Check on payments, only really needs to be run this quickly
                     // on large nodes where very high variation in throughput can result
                     // in blowing through the entire grace in less than a minute
-                    validate().await;
+                    let val = validate();
                     // Process payments queued for sending, needs to be run often for
                     // the same reason as the validate code, during high throughput periods
                     // payments must be sent quickly to avoid enforcement
-                    tick_payment_controller().await;
+                    let tpc = tick_payment_controller();
                     // processes user withdraw requests from the dashboard, only needed until we
                     // migrate our endpoints to async/await
-                    eth_compatible_withdraw().await;
+                    let ecw = eth_compatible_withdraw();
+                    // execute the above in parallel
+                    join4(bou, val, tpc, ecw).await;
                 });
+                info!(
+                    "Common Fast tick completed in {}s {}ms",
+                    start.elapsed().as_secs(),
+                    start.elapsed().subsec_millis()
+                );
 
                 thread::sleep(FAST_LOOP_SPEED);
             })
