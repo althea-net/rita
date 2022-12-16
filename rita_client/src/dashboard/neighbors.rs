@@ -2,9 +2,10 @@ use actix_web_async::http::StatusCode;
 use actix_web_async::{HttpRequest, HttpResponse};
 use althea_types::Identity;
 use arrayvec::ArrayString;
-use babel_monitor::{
-    get_installed_route, get_route_via_neigh, open_babel_stream, parse_routes, Route as RouteLegacy,
-};
+use babel_monitor::parsing::get_installed_route;
+use babel_monitor::parsing::get_route_via_neigh;
+use babel_monitor::structs::Route;
+use babel_monitor::{open_babel_stream, parse_routes};
 
 use num256::{Int256, Uint256};
 use rita_common::debt_keeper::{dump, NodeDebtData};
@@ -83,7 +84,7 @@ pub async fn get_neighbor_info(_req: HttpRequest) -> HttpResponse {
 /// generates a list of neighbors coorelated with the quality of the route to the exit they provide
 fn generate_neighbors_list(
     stats: Stats,
-    route_table_sample: Vec<RouteLegacy>,
+    route_table_sample: Vec<Route>,
     debts: HashMap<Identity, (NodeDebtData, Neighbor)>,
 ) -> Vec<NodeInfo> {
     let mut output = Vec::new();

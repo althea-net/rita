@@ -5,9 +5,9 @@ use crate::RitaClientError;
 use actix_web_async::http::StatusCode;
 use actix_web_async::{web::Json, web::Path, HttpRequest, HttpResponse};
 use althea_types::ExitState;
-use babel_monitor::do_we_have_route;
 use babel_monitor::open_babel_stream;
 use babel_monitor::parse_routes;
+use babel_monitor::parsing::do_we_have_route;
 
 use rita_common::RitaCommonError;
 use rita_common::KI;

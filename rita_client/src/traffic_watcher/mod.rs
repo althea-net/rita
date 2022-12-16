@@ -24,9 +24,9 @@
 use crate::rita_loop::is_gateway_client;
 use crate::RitaClientError;
 use althea_types::Identity;
-use babel_monitor::get_installed_route;
-use babel_monitor::BabelMonitorError;
-use babel_monitor::Route as RouteLegacy;
+use babel_monitor::parsing::get_installed_route;
+use babel_monitor::structs::BabelMonitorError;
+use babel_monitor::structs::Route;
 use num256::Int256;
 use num_traits::identities::Zero;
 use rita_common::debt_keeper::{
@@ -76,7 +76,7 @@ pub struct QueryExitDebts {
     pub exit_port: u16,
     pub exit_id: Identity,
     pub exit_price: u64,
-    pub routes: Vec<RouteLegacy>,
+    pub routes: Vec<Route>,
 }
 
 pub async fn query_exit_debts(msg: QueryExitDebts) {
@@ -176,8 +176,8 @@ pub async fn query_exit_debts(msg: QueryExitDebts) {
 /// Returns the babel route to a given mesh ip with the properly capped price
 fn find_exit_route_capped(
     exit_mesh_ip: IpAddr,
-    routes: Vec<RouteLegacy>,
-) -> Result<RouteLegacy, BabelMonitorError> {
+    routes: Vec<Route>,
+) -> Result<Route, BabelMonitorError> {
     let max_fee = settings::get_rita_client().payment.max_fee;
     let mut exit_route = get_installed_route(&exit_mesh_ip, &routes)?;
     if exit_route.price > max_fee {
@@ -192,7 +192,7 @@ pub fn local_traffic_calculation(
     history: &mut TrafficWatcher,
     exit: &Identity,
     exit_price: u64,
-    routes: Vec<RouteLegacy>,
+    routes: Vec<Route>,
 ) -> Result<i128, RitaClientError> {
     let exit_route = find_exit_route_capped(exit.mesh_ip, routes)?;
     info!("Exit metric: {}", exit_route.metric);

@@ -1,6 +1,6 @@
 use althea_kernel_interface::KernelInterfaceError;
 use althea_types::{error::AltheaTypesError, ExitClientIdentity};
-use babel_monitor::BabelMonitorError;
+use babel_monitor::structs::BabelMonitorError;
 use handlebars::RenderError;
 use ipnetwork::IpNetworkError;
 use rita_common::RitaCommonError;

@@ -13,7 +13,7 @@ use crate::KI;
 use althea_kernel_interface::open_tunnel::is_link_local;
 use althea_kernel_interface::FilterTarget;
 use althea_types::Identity;
-use babel_monitor::Route as RouteLegacy;
+use babel_monitor::structs::Route;
 use ipnetwork::IpNetwork;
 
 use std::collections::HashMap;
@@ -25,11 +25,11 @@ pub struct TrafficWatcher;
 pub struct Watch {
     /// List of neighbors to watch
     pub neighbors: Vec<Neighbor>,
-    pub routes: Vec<RouteLegacy>,
+    pub routes: Vec<Route>,
 }
 
 impl Watch {
-    pub fn new(neighbors: Vec<Neighbor>, routes: Vec<RouteLegacy>) -> Watch {
+    pub fn new(neighbors: Vec<Neighbor>, routes: Vec<Route>) -> Watch {
         Watch { neighbors, routes }
     }
 }
@@ -62,9 +62,7 @@ pub fn prepare_helper_maps(
     (identities, if_to_id)
 }
 
-pub fn get_babel_info(
-    routes: Vec<RouteLegacy>,
-) -> Result<(HashMap<IpAddr, i128>, u32), RitaCommonError> {
+pub fn get_babel_info(routes: Vec<Route>) -> Result<(HashMap<IpAddr, i128>, u32), RitaCommonError> {
     trace!("Got {} routes: {:?}", routes.len(), routes);
     let mut destinations = HashMap::new();
     let common = settings::get_rita_common();
@@ -253,7 +251,7 @@ fn update_usage(
 ///
 /// This first time this is run, it will create the rules and then immediately read and zero them.
 /// (should return 0)
-pub fn watch(routes: Vec<RouteLegacy>, neighbors: &[Neighbor]) -> Result<(), RitaCommonError> {
+pub fn watch(routes: Vec<Route>, neighbors: &[Neighbor]) -> Result<(), RitaCommonError> {
     let (identities, if_to_id) = prepare_helper_maps(neighbors);
 
     let (destinations, local_fee) = get_babel_info(routes)?;

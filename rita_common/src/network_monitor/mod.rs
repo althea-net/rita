@@ -20,8 +20,8 @@ use althea_types::monitoring::SAMPLE_PERIOD;
 use althea_types::RunningLatencyStats;
 use althea_types::RunningPacketLossStats;
 use althea_types::WgKey;
-use babel_monitor::Neighbor as BabelNeighborLegacy;
-use babel_monitor::Route as BabelRouteLegacy;
+use babel_monitor::structs::Neighbor as BabelNeighbor;
+use babel_monitor::structs::Route as BabelRoute;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -124,8 +124,8 @@ pub fn get_network_info(_msg: GetNetworkInfo) -> Result<NetworkInfo, RitaCommonE
 
 #[derive(Clone)]
 pub struct NetworkInfo {
-    pub babel_neighbors: Vec<BabelNeighborLegacy>,
-    pub babel_routes: Vec<BabelRouteLegacy>,
+    pub babel_neighbors: Vec<BabelNeighbor>,
+    pub babel_routes: Vec<BabelRoute>,
     pub rita_neighbors: Vec<RitaNeighbor>,
 }
 
@@ -147,7 +147,7 @@ pub fn update_network_info(msg: NetworkInfo) {
 
 /// Attempts to detect bufferbloat by looking at neighbor latency over time
 fn observe_network(
-    babel_neighbors: &[BabelNeighborLegacy],
+    babel_neighbors: &[BabelNeighbor],
     rita_neighbors: &[RitaNeighbor],
     latency_history: &mut HashMap<String, RunningLatencyStats>,
     packet_loss_history: &mut HashMap<String, RunningPacketLossStats>,
@@ -259,10 +259,7 @@ fn observe_network(
     set_to_shape(to_shape);
 }
 
-fn get_wg_key_by_ifname(
-    neigh: &BabelNeighborLegacy,
-    rita_neighbors: &[RitaNeighbor],
-) -> Option<WgKey> {
+fn get_wg_key_by_ifname(neigh: &BabelNeighbor, rita_neighbors: &[RitaNeighbor]) -> Option<WgKey> {
     for rita_neigh in rita_neighbors.iter() {
         if rita_neigh.iface_name.contains(&neigh.iface) {
             return Some(rita_neigh.identity.global.wg_public_key);
@@ -272,7 +269,7 @@ fn get_wg_key_by_ifname(
 }
 
 /// Gathers interesting network info
-fn network_stats(babel_routes: &[BabelRouteLegacy], babel_neighbors: &[BabelNeighborLegacy]) {
+fn network_stats(babel_routes: &[BabelRoute], babel_neighbors: &[BabelNeighbor]) {
     if let Some(avg_neigh_rtt) = mean(&extract_rtt(babel_neighbors)) {
         let num_neighs = babel_neighbors.len();
         info!(
@@ -290,12 +287,12 @@ fn network_stats(babel_routes: &[BabelRouteLegacy], babel_neighbors: &[BabelNeig
 }
 
 /// Extracts the full path rtt for Neighbors
-fn extract_rtt(neighbors: &[BabelNeighborLegacy]) -> Vec<f32> {
+fn extract_rtt(neighbors: &[BabelNeighbor]) -> Vec<f32> {
     neighbors.iter().map(|neigh| neigh.rtt).collect()
 }
 
 /// Extracts the full path rtt for installed routes
-fn extract_fp_rtt(routes: &[BabelRouteLegacy]) -> Vec<f32> {
+fn extract_fp_rtt(routes: &[BabelRoute]) -> Vec<f32> {
     routes
         .iter()
         .filter(|route| route.installed)

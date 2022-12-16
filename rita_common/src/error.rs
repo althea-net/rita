@@ -5,7 +5,7 @@ use std::{
 };
 
 use althea_kernel_interface::KernelInterfaceError;
-use babel_monitor::BabelMonitorError;
+use babel_monitor::structs::BabelMonitorError;
 use compressed_log::builder::LoggerError;
 use log::SetLoggerError;
 use settings::SettingsError;

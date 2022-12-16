@@ -18,7 +18,7 @@ use crate::exit_manager::{
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
 use althea_types::ExitList;
-use babel_monitor::{open_babel_stream, parse_routes, Route};
+use babel_monitor::{open_babel_stream, parse_routes, structs::Route};
 use rita_common::FAST_LOOP_SPEED;
 use settings::client::ExitSwitchingCode;
 use settings::client::SelectedExit;

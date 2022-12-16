@@ -34,7 +34,7 @@ use althea_types::WgKey;
 use althea_types::{EncryptedExitClientIdentity, EncryptedExitState};
 use althea_types::{EncryptedExitList, ExitDetails, ExitList};
 use althea_types::{ExitClientIdentity, ExitRegistrationDetails, ExitState, ExitVerifMode};
-use babel_monitor::Route;
+use babel_monitor::structs::Route;
 use exit_switcher::{get_babel_routes, set_best_exit};
 
 use ipnetwork::IpNetwork;

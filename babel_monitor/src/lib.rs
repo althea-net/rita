@@ -11,24 +11,26 @@ extern crate serde_derive;
 #[macro_use]
 extern crate log;
 
-use ipnetwork::{IpNetwork, IpNetworkError};
+pub mod parsing;
+pub mod structs;
+
+use crate::parsing::{read_babel_sync, validate_preamble};
+use crate::structs::{BabelMonitorError, Route};
+use parsing::{get_local_fee_sync, parse_interfaces_sync, parse_neighs_sync, parse_routes_sync};
 use std::error::Error as ErrorTrait;
-use std::f32;
 use std::fmt::Debug;
-use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Write;
 use std::iter::Iterator;
+use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::net::TcpStream;
-use std::net::{AddrParseError, IpAddr};
-use std::num::{ParseFloatError, ParseIntError};
 use std::str::FromStr;
-use std::str::{self, ParseBoolError};
-use std::string::FromUtf8Error;
+use std::str::{self};
 use std::thread;
 use std::time::Duration;
+use structs::{Interface, Neighbor};
 
 /// we want to ceed the cpu just long enough for Babel
 /// to finish what it's doing and warp up it's write
@@ -37,112 +39,6 @@ use std::time::Duration;
 /// are pre-empted by the scheduler to allow Babel to finish the
 /// job
 const SLEEP_TIME: Duration = Duration::from_millis(10);
-
-#[derive(Debug)]
-pub enum BabelMonitorError {
-    VariableNotFound(String, String),
-    InvalidPreamble(String),
-    LocalFeeNotFound(String),
-    CommandFailed(String, String),
-    ReadFailed(String),
-    NoTerminator(String),
-    NoNeighbor(String),
-    TcpError(String),
-    BabelParseError(String),
-    ReadFunctionError(std::io::Error),
-    BoolParseError(ParseBoolError),
-    ParseAddrError(AddrParseError),
-    IntParseError(ParseIntError),
-    FloatParseError(ParseFloatError),
-    NetworkError(IpNetworkError),
-    TokioError(String),
-    NoRoute(String),
-    MiscStringError(String),
-    FromUtf8Error(FromUtf8Error),
-}
-
-use crate::BabelMonitorError::{
-    CommandFailed, InvalidPreamble, LocalFeeNotFound, NoNeighbor, NoTerminator, ReadFailed,
-    TcpError, VariableNotFound,
-};
-
-impl From<std::io::Error> for BabelMonitorError {
-    fn from(error: std::io::Error) -> Self {
-        BabelMonitorError::ReadFunctionError(error)
-    }
-}
-impl From<ParseBoolError> for BabelMonitorError {
-    fn from(error: ParseBoolError) -> Self {
-        BabelMonitorError::BoolParseError(error)
-    }
-}
-impl From<AddrParseError> for BabelMonitorError {
-    fn from(error: AddrParseError) -> Self {
-        BabelMonitorError::ParseAddrError(error)
-    }
-}
-impl From<ParseIntError> for BabelMonitorError {
-    fn from(error: ParseIntError) -> Self {
-        BabelMonitorError::IntParseError(error)
-    }
-}
-impl From<ParseFloatError> for BabelMonitorError {
-    fn from(error: ParseFloatError) -> Self {
-        BabelMonitorError::FloatParseError(error)
-    }
-}
-impl From<IpNetworkError> for BabelMonitorError {
-    fn from(error: IpNetworkError) -> Self {
-        BabelMonitorError::NetworkError(error)
-    }
-}
-impl From<FromUtf8Error> for BabelMonitorError {
-    fn from(error: FromUtf8Error) -> Self {
-        BabelMonitorError::FromUtf8Error(error)
-    }
-}
-
-impl Display for BabelMonitorError {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        match self {
-            BabelMonitorError::VariableNotFound(a, b) => {
-                write!(f, "variable '{}' not found in '{}'", a, b,)
-            }
-            BabelMonitorError::InvalidPreamble(a) => write!(f, "Invalid preamble: {}", a,),
-            BabelMonitorError::LocalFeeNotFound(a) => {
-                write!(f, "Could not find local fee in '{}'", a,)
-            }
-            BabelMonitorError::CommandFailed(a, b) => write!(f, "Command '{}' failed. {}", a, b,),
-            BabelMonitorError::ReadFailed(a) => write!(f, "Erroneous Babel output:\n{}", a,),
-            BabelMonitorError::NoTerminator(a) => {
-                write!(f, "No terminator after Babel output:\n{}", a,)
-            }
-            BabelMonitorError::NoNeighbor(a) => {
-                write!(f, "No Neighbor was found matching address:\n{}", a,)
-            }
-            BabelMonitorError::TcpError(a) => {
-                write!(f, "Tcp connection failure while talking to babel:\n{}", a,)
-            }
-            BabelMonitorError::BabelParseError(a) => write!(f, "Babel parsing failed:\n{}", a,),
-            BabelMonitorError::ReadFunctionError(e) => write!(f, "{}", e),
-            BabelMonitorError::BoolParseError(e) => write!(f, "{}", e),
-            BabelMonitorError::ParseAddrError(e) => write!(f, "{}", e),
-            BabelMonitorError::IntParseError(e) => write!(f, "{}", e),
-            BabelMonitorError::FloatParseError(e) => write!(f, "{}", e),
-            BabelMonitorError::NetworkError(e) => write!(f, "{}", e),
-            BabelMonitorError::NoRoute(a) => write!(f, "Route not found:\n{}", a,),
-            BabelMonitorError::TokioError(a) => write!(
-                f,
-                "Tokio had a failure while it was talking to babel:\n{}",
-                a,
-            ),
-            BabelMonitorError::MiscStringError(a) => write!(f, "{}", a,),
-            BabelMonitorError::FromUtf8Error(a) => write!(f, "{}", a,),
-        }
-    }
-}
-
-impl std::error::Error for BabelMonitorError {}
 
 pub fn find_babel_val(val: &str, line: &str) -> Result<String, BabelMonitorError> {
     let mut iter = line.split(' ');
@@ -155,7 +51,10 @@ pub fn find_babel_val(val: &str, line: &str) -> Result<String, BabelMonitorError
         }
     }
     trace!("find_babel_val warn! Can not find {} in {}", val, line);
-    Err(VariableNotFound(String::from(val), String::from(line)))
+    Err(BabelMonitorError::VariableNotFound(
+        String::from(val),
+        String::from(line),
+    ))
 }
 
 pub fn find_and_parse_babel_val<T: FromStr>(val: &str, line: &str) -> Result<T, BabelMonitorError>
@@ -173,42 +72,6 @@ where
         },
         Err(e) => Err(e),
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Interface {
-    pub name: String,
-    pub up: bool,
-    pub ipv6: Option<IpAddr>,
-    pub ipv4: Option<IpAddr>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Route {
-    pub id: String,
-    pub iface: String,
-    pub xroute: bool,
-    pub installed: bool,
-    pub neigh_ip: IpAddr,
-    pub prefix: IpNetwork,
-    pub metric: u16,
-    pub refmetric: u16,
-    pub full_path_rtt: f32,
-    pub price: u32,
-    pub fee: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Neighbor {
-    pub id: String,
-    pub address: IpAddr,
-    pub iface: String,
-    pub reach: u16,
-    pub txcost: u16,
-    pub rxcost: u16,
-    pub rtt: f32,
-    pub rttcost: u16,
-    pub cost: u16,
 }
 
 /// Opens a tcpstream to the babel management socket using a standard timeout
@@ -266,7 +129,7 @@ fn read_babel(
 
     let output = String::from_utf8(buffer.to_vec());
     if let Err(e) = output {
-        return Err(TcpError(format!("{:?}", e)));
+        return Err(BabelMonitorError::TcpError(format!("{:?}", e)));
     }
     let output = output?;
     let output = output.trim_matches(char::from(0));
@@ -287,12 +150,14 @@ fn read_babel(
     if depth > 50 {
         // prevent infinite recursion in error cases
         warn!("Babel read timed out! {}", output);
-        return Err(ReadFailed("Babel read timed out!".to_string()));
+        return Err(BabelMonitorError::ReadFailed(
+            "Babel read timed out!".to_string(),
+        ));
     } else if full_buffer {
         // our buffer is full, we should recurse right away
         warn!("Babel read larger than buffer! Consider increasing it's size");
         return read_babel(stream, full_message, depth);
-    } else if let Err(NoTerminator(_)) = babel_data {
+    } else if let Err(BabelMonitorError::NoTerminator(_)) = babel_data {
         // our buffer was not full but we also did not find a terminator,
         // we must have caught babel while it was interrupted (only really happens
         // in single cpu situations)
@@ -302,41 +167,11 @@ fn read_babel(
     } else if let Err(e) = babel_data {
         // some other error
         warn!("Babel read failed! {} {:?}", output, e);
-        return Err(ReadFailed(format!("{:?}", e)));
+        return Err(BabelMonitorError::ReadFailed(format!("{:?}", e)));
     }
     let babel_data = babel_data?;
 
     Ok(babel_data)
-}
-
-fn read_babel_sync(output: &str) -> Result<String, BabelMonitorError> {
-    let mut ret = String::new();
-    for line in output.lines() {
-        ret.push_str(line);
-        ret.push('\n');
-        match line.trim() {
-            "ok" => {
-                trace!(
-                    "Babel returned ok; full output:\n{}\nEND OF BABEL OUTPUT",
-                    ret
-                );
-                return Ok(ret);
-            }
-            "bad" | "no" => {
-                warn!(
-                    "Babel returned bad/no; full output:\n{}\nEND OF BABEL OUTPUT",
-                    ret
-                );
-                return Err(ReadFailed(ret));
-            }
-            _ => continue,
-        }
-    }
-    trace!(
-        "Terminator was never found; full output:\n{:?}\nEND OF BABEL OUTPUT",
-        ret
-    );
-    Err(NoTerminator(ret))
 }
 
 pub fn run_command(stream: &mut TcpStream, cmd: &str) -> Result<String, BabelMonitorError> {
@@ -350,17 +185,7 @@ pub fn run_command(stream: &mut TcpStream, cmd: &str) -> Result<String, BabelMon
             info!("Command write succeeded, returning output");
             read_babel(stream, String::new(), 0)
         }
-        Err(e) => Err(CommandFailed(cmd, format!("{:?}", e))),
-    }
-}
-
-pub fn validate_preamble(preamble: String) -> Result<(), BabelMonitorError> {
-    // Note you have changed the config interface, bump to 1.1 in babel
-    if preamble.contains("ALTHEA 0.1") {
-        trace!("Attached OK to Babel with preamble: {}", preamble);
-        Ok(())
-    } else {
-        Err(InvalidPreamble(preamble))
+        Err(e) => Err(BabelMonitorError::CommandFailed(cmd, format!("{:?}", e))),
     }
 }
 
@@ -371,62 +196,11 @@ pub fn parse_interfaces(stream: &mut TcpStream) -> Result<Vec<Interface>, BabelM
     parse_interfaces_sync(babel_output)
 }
 
-pub fn parse_interfaces_sync(output: String) -> Result<Vec<Interface>, BabelMonitorError> {
-    let mut vector: Vec<Interface> = Vec::new();
-    let mut found_interface = false;
-    for entry in output.split('\n') {
-        if entry.contains("add interface") {
-            found_interface = true;
-            let interface = Interface {
-                name: match find_babel_val("interface", entry) {
-                    Ok(val) => val,
-                    Err(_) => continue,
-                },
-                up: match find_and_parse_babel_val("up", entry) {
-                    Ok(val) => val,
-                    Err(_) => continue,
-                },
-                ipv4: match find_and_parse_babel_val("ipv4", entry) {
-                    Ok(val) => Some(val),
-                    Err(_) => None,
-                },
-                ipv6: match find_and_parse_babel_val("ipv6", entry) {
-                    Ok(val) => Some(val),
-                    Err(_) => None,
-                },
-            };
-            vector.push(interface);
-        }
-    }
-    if vector.is_empty() && found_interface {
-        return Err(BabelMonitorError::BabelParseError(
-            "All Babel Interface parsing failed!".to_string(),
-        ));
-    }
-    Ok(vector)
-}
-
 pub fn get_local_fee(stream: &mut TcpStream) -> Result<u32, BabelMonitorError> {
     let output = run_command(stream, "dump")?;
 
     let babel_output = output;
     get_local_fee_sync(babel_output)
-}
-
-pub fn get_local_fee_sync(babel_output: String) -> Result<u32, BabelMonitorError> {
-    let fee_entry = match babel_output.split('\n').next() {
-        Some(entry) => entry,
-        // Even an empty string wouldn't yield None
-        None => return Err(LocalFeeNotFound(String::from("<Babel output is None>"))),
-    };
-
-    if fee_entry.contains("local fee") {
-        let fee = find_babel_val("fee", fee_entry)?.parse()?;
-        trace!("Retrieved a local fee of {}", fee);
-        return Ok(fee);
-    }
-
-    Err(LocalFeeNotFound(String::from(fee_entry)))
 }
 
 pub fn set_local_fee(stream: &mut TcpStream, new_fee: u32) -> Result<(), BabelMonitorError> {
@@ -489,62 +263,6 @@ pub fn parse_neighs(stream: &mut TcpStream) -> Result<Vec<Neighbor>, BabelMonito
     parse_neighs_sync(output)
 }
 
-pub fn parse_neighs_sync(output: String) -> Result<Vec<Neighbor>, BabelMonitorError> {
-    let mut vector: Vec<Neighbor> = Vec::with_capacity(5);
-    let mut found_neigh = false;
-    for entry in output.split('\n') {
-        if entry.contains("add neighbour") {
-            found_neigh = true;
-            let neigh = Neighbor {
-                id: match find_babel_val("neighbour", entry) {
-                    Ok(val) => val,
-                    Err(_) => continue,
-                },
-                address: match find_and_parse_babel_val("address", entry) {
-                    Ok(entry) => entry,
-                    Err(_) => continue,
-                },
-                iface: match find_babel_val("if", entry) {
-                    Ok(val) => val,
-                    Err(_) => continue,
-                },
-                reach: match find_babel_val("reach", entry) {
-                    Ok(val) => match u16::from_str_radix(&val, 16) {
-                        Ok(val) => val,
-                        Err(e) => {
-                            warn!("Failed to convert reach {:?} {}", e, entry);
-                            continue;
-                        }
-                    },
-                    Err(_) => continue,
-                },
-                txcost: match find_and_parse_babel_val("txcost", entry) {
-                    Ok(entry) => entry,
-                    Err(_) => continue,
-                },
-                rxcost: match find_and_parse_babel_val("rxcost", entry) {
-                    Ok(entry) => entry,
-                    Err(_) => continue,
-                },
-                // it's possible that the neighbor does not have rtt enabled
-                rtt: find_and_parse_babel_val("rtt", entry).unwrap_or(0.0),
-                rttcost: find_and_parse_babel_val("rttcost", entry).unwrap_or(0),
-                cost: match find_and_parse_babel_val("cost", entry) {
-                    Ok(entry) => entry,
-                    Err(_) => continue,
-                },
-            };
-            vector.push(neigh);
-        }
-    }
-    if vector.is_empty() && found_neigh {
-        return Err(BabelMonitorError::BabelParseError(
-            "All Babel neigh parsing failed!".to_string(),
-        ));
-    }
-    Ok(vector)
-}
-
 pub fn parse_routes(stream: &mut TcpStream) -> Result<Vec<Route>, BabelMonitorError> {
     let result = run_command(stream, "dump")?;
 
@@ -552,142 +270,6 @@ pub fn parse_routes(stream: &mut TcpStream) -> Result<Vec<Route>, BabelMonitorEr
     parse_routes_sync(babel_out)
 }
 
-pub fn parse_routes_sync(babel_out: String) -> Result<Vec<Route>, BabelMonitorError> {
-    let mut vector: Vec<Route> = Vec::with_capacity(20);
-    let mut found_route = false;
-    trace!("Got from babel dump: {}", babel_out);
-
-    for entry in babel_out.split('\n') {
-        if entry.contains("add route") {
-            trace!("Parsing 'add route' entry: {}", entry);
-            found_route = true;
-            let route = Route {
-                id: match find_babel_val("route", entry) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                },
-                iface: match find_babel_val("if", entry) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                },
-                xroute: false,
-                installed: match find_babel_val("installed", entry) {
-                    Ok(value) => value.contains("yes"),
-                    Err(_) => continue,
-                },
-                neigh_ip: match find_and_parse_babel_val("via", entry) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                },
-                prefix: match find_and_parse_babel_val("prefix", entry) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                },
-                metric: match find_and_parse_babel_val("metric", entry) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                },
-                refmetric: match find_and_parse_babel_val("refmetric", entry) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                },
-                full_path_rtt: match find_and_parse_babel_val("full-path-rtt", entry) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                },
-                price: match find_and_parse_babel_val("price", entry) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                },
-                fee: match find_and_parse_babel_val("fee", entry) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                },
-            };
-
-            vector.push(route);
-        }
-    }
-    if vector.is_empty() && found_route {
-        return Err(BabelMonitorError::BabelParseError(
-            "All Babel route parsing failed!".to_string(),
-        ));
-    }
-    Ok(vector)
-}
-
-/// In this function we take a route snapshot then loop over the routes list twice
-/// to find the neighbor local address and then the route to the destination
-/// via that neighbor. This could be dramatically more efficient if we had the neighbors
-/// local ip lying around somewhere.
-pub fn get_route_via_neigh(
-    neigh_mesh_ip: IpAddr,
-    dest_mesh_ip: IpAddr,
-    routes: &[Route],
-) -> Result<Route, BabelMonitorError> {
-    // First find the neighbors route to itself to get the local address
-    for neigh_route in routes.iter() {
-        // This will fail on v4 babel routes etc
-        if let IpNetwork::V6(ref ip) = neigh_route.prefix {
-            if ip.ip() == neigh_mesh_ip {
-                let neigh_local_ip = neigh_route.neigh_ip;
-                // Now we take the neigh_local_ip and search for a route via that
-                for route in routes.iter() {
-                    if let IpNetwork::V6(ref ip) = route.prefix {
-                        if ip.ip() == dest_mesh_ip && route.neigh_ip == neigh_local_ip {
-                            return Ok(route.clone());
-                        }
-                    }
-                }
-            }
-        }
-    }
-    Err(NoNeighbor(neigh_mesh_ip.to_string()))
-}
-
-/// Very simple utility function to get a neighbor given a route that traverses that neighbor
-pub fn get_neigh_given_route(route: &Route, neighs: &[Neighbor]) -> Option<Neighbor> {
-    for neigh in neighs.iter() {
-        if route.neigh_ip == neigh.address {
-            return Some(neigh.clone());
-        }
-    }
-    None
-}
-
-/// Checks if Babel has an installed route to the given destination
-pub fn do_we_have_route(mesh_ip: &IpAddr, routes: &[Route]) -> Result<bool, BabelMonitorError> {
-    for route in routes.iter() {
-        if let IpNetwork::V6(ref ip) = route.prefix {
-            if ip.ip() == *mesh_ip && route.installed {
-                return Ok(true);
-            }
-        }
-    }
-    Ok(false)
-}
-/// Returns the installed route to a given destination
-pub fn get_installed_route(mesh_ip: &IpAddr, routes: &[Route]) -> Result<Route, BabelMonitorError> {
-    let mut exit_route = None;
-    for route in routes.iter() {
-        // Only ip6
-        if let IpNetwork::V6(ref ip) = route.prefix {
-            // Only host addresses and installed routes
-            if ip.prefix() == 128 && route.installed && IpAddr::V6(ip.ip()) == *mesh_ip {
-                exit_route = Some(route);
-                break;
-            }
-        }
-    }
-    match exit_route {
-        Some(v) => Ok(v.clone()),
-        None => {
-            return Err(BabelMonitorError::NoRoute(
-                "No installed route to that destination!".to_string(),
-            ))
-        }
-    }
-}
 #[cfg(test)]
 mod tests {
     use super::*;

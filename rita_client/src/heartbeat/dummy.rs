@@ -5,8 +5,8 @@ use althea_types::FromStr;
 use althea_types::Identity;
 use althea_types::LocalIdentity;
 use althea_types::WgKey;
-use babel_monitor::Neighbor as NeighborLegacy;
-use babel_monitor::Route as RouteLegacy;
+use babel_monitor::structs::Neighbor;
+use babel_monitor::structs::Route;
 use clarity::Address;
 use ipnetwork::IpNetwork;
 use rita_common::tunnel_manager::Neighbor as RitaNeighbor;
@@ -15,8 +15,8 @@ use std::net::Ipv4Addr;
 
 /// Creates a dummy babel monitor route
 #[allow(dead_code)]
-pub fn dummy_route() -> RouteLegacy {
-    RouteLegacy {
+pub fn dummy_route() -> Route {
+    Route {
         id: "dummy".to_string(),
         iface: "dummy_if".to_string(),
         xroute: false,
@@ -33,8 +33,8 @@ pub fn dummy_route() -> RouteLegacy {
 
 /// Creates a dummy babel monitor neighbor
 #[allow(dead_code)]
-pub fn dummy_neigh_babel() -> NeighborLegacy {
-    NeighborLegacy {
+pub fn dummy_neigh_babel() -> Neighbor {
+    Neighbor {
         id: "dummy_nei".to_string(),
         address: IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)),
         iface: "dummy_iface".to_string(),

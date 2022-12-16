@@ -19,7 +19,7 @@ use althea_kernel_interface::wg_iface_counter::WgUsage;
 use althea_kernel_interface::KI;
 use althea_types::Identity;
 use althea_types::WgKey;
-use babel_monitor::Route as RouteLegacy;
+use babel_monitor::structs::Route;
 use ipnetwork::IpNetwork;
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -40,7 +40,7 @@ pub struct TrafficWatcher {
 
 pub struct Watch {
     pub users: Vec<Identity>,
-    pub routes: Vec<RouteLegacy>,
+    pub routes: Vec<Route>,
 }
 
 pub fn watch_exit_traffic(msg: Watch) -> Result<(), Box<RitaExitError>> {
@@ -53,7 +53,7 @@ pub fn watch_exit_traffic(msg: Watch) -> Result<(), Box<RitaExitError>> {
 }
 
 fn get_babel_info(
-    routes: &[RouteLegacy],
+    routes: &[Route],
     our_id: Identity,
     id_from_ip: HashMap<IpAddr, Identity>,
 ) -> HashMap<WgKey, u64> {
@@ -176,7 +176,7 @@ fn debts_logging(debts: &HashMap<Identity, i128>) {
 /// This traffic watcher watches how much traffic each we send and receive from each client.
 pub fn watch(
     usage_history: &mut HashMap<WgKey, WgUsage>,
-    routes: &[RouteLegacy],
+    routes: &[Route],
     clients: &[Identity],
 ) -> Result<(), Box<RitaExitError>> {
     let our_price = settings::get_rita_exit().exit_network.exit_price;
