@@ -1,6 +1,5 @@
 use super::Tunnel;
 use crate::tunnel_manager::TUNNEL_MANAGER;
-use crate::RitaCommonError;
 use crate::KI;
 use althea_types::Identity;
 use babel_monitor::structs::Interface;
@@ -27,7 +26,7 @@ pub fn tm_trigger_gc(
     tunnel_timeout: Duration,
     tunnel_handshake_timeout: Duration,
     babel_interfaces: Vec<Interface>,
-) -> Result<(), RitaCommonError> {
+) -> () {
     let tunnel_manager = &mut *TUNNEL_MANAGER.write().unwrap();
 
     let interfaces = into_interfaces_hashmap(&babel_interfaces);
@@ -70,8 +69,6 @@ pub fn tm_trigger_gc(
     drop(tunnel_manager);
 
     unmonitor_tunnels(to_delete);
-
-    Ok(())
 }
 
 fn unmonitor_tunnels(to_delete: HashMap<Identity, Vec<Tunnel>>) {
