@@ -48,17 +48,10 @@ pub fn start_rita_fast_loop() {
                     let babel_port = settings::get_rita_common().network.babel_port;
                     trace!("Common tick!");
 
-                    let start = Instant::now();
-
                     let res = tm_get_neighbors();
                     trace!("Currently open tunnels: {:?}", res);
                     let neighbors = res;
                     let neigh = Instant::now();
-                    info!(
-                        "GetNeighbors completed in {}s {}ms",
-                        start.elapsed().as_secs(),
-                        start.elapsed().subsec_millis()
-                    );
 
                     if let Ok(mut stream) = open_babel_stream(babel_port, FAST_LOOP_TIMEOUT) {
                         if let Ok(babel_routes) = parse_routes(&mut stream) {

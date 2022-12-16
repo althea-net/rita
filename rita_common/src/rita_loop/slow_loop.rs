@@ -33,6 +33,7 @@ pub fn start_rita_slow_loop() {
         while let Err(e) = {
             thread::spawn(move || loop {
                 info!("Common Slow tick!");
+                let start = Instant::now();
 
                 let runner = AsyncSystem::new();
                 runner.block_on(async move {
@@ -97,7 +98,10 @@ pub fn start_rita_slow_loop() {
                 }
 
                 thread::sleep(SLOW_LOOP_SPEED);
-                info!("Common Slow tick completed!");
+                info!("Common Slow tick completed in {}s {}ms", 
+                                start.elapsed().as_secs(),
+                                start.elapsed().subsec_millis()
+                );
             })
             .join()
         } {
