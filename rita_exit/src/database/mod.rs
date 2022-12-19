@@ -472,7 +472,12 @@ pub fn setup_clients(
             ex_nic.clone(),
         );
 
-        info!("IPV6: Setup client ip6tables rules with: {:?}", res);
+        if res.is_err() {
+            error!(
+                "IPV6 Error: Setup client ip6tables rules failed with: {:?}",
+                res
+            );
+        }
     }
 
     Ok(wg_clients)
@@ -583,6 +588,7 @@ pub fn enforce_exit_clients(
                         } else {
                             // Delete exisiting enforcement class, users who are not enforced are unclassifed becuase
                             // leaving the class in place reduces their speeds.
+                            info!("Deleting enforcement classes for {}", client.wg_pubkey);
                             if let Err(e) = KI.delete_class("wg_exit", ip) {
                                 error!("Unable to delete class on wg_exit, is {} still enforced when they shouldnt be? {:?}", ip, e);
                             }
