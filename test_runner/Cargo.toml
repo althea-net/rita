@@ -9,3 +9,5 @@ name = "tester"
 path = "src/main.rs"
 
 [dependencies]
+althea_kernel_interface = { path = "../althea_kernel_interface" }
+

@@ -14,4 +14,7 @@ rm rita.tar.gz
 
 popd
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 48aecd88 (Add namespaces to new integration test container)

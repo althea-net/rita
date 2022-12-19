@@ -2649,6 +2649,9 @@ dependencies = [
 [[package]]
 name = "test_runner"
 version = "0.1.0"
+dependencies = [
+ "althea_kernel_interface",
+]
 
 [[package]]
 name = "thiserror"
