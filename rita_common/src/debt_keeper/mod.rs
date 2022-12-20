@@ -574,6 +574,7 @@ impl DebtKeeper {
         let pay_threshold = get_pay_thresh();
         let debt_limit_enabled = payment_settings.debt_limit_enabled;
         let apply_incoming_credit_immediately = payment_settings.apply_incoming_credit_immediately;
+        let enable_enforcement = payment_settings.enable_enforcement;
 
         trace!(
             "Debt is {} and close is {}",
@@ -602,12 +603,17 @@ impl DebtKeeper {
                     return Ok(DebtAction::OpenTunnel);
                 }
 
-                info!(
-                    "debt {} is below close threshold {} for {}. suspending forwarding",
-                    debt_data.debt, close_threshold, ident.wg_public_key
-                );
-                debt_data.action = DebtAction::SuspendTunnel;
-                Ok(DebtAction::SuspendTunnel)
+                if enable_enforcement {
+                    info!(
+                        "debt {} is below close threshold {} for {}. suspending forwarding",
+                        debt_data.debt, close_threshold, ident.wg_public_key
+                    );
+                    debt_data.action = DebtAction::SuspendTunnel;
+                    Ok(DebtAction::SuspendTunnel)
+                } else {
+                    debt_data.action = DebtAction::OpenTunnel;
+                    Ok(DebtAction::OpenTunnel)
+                }
             }
             (false, true, false) => {
                 let to_pay: Uint256 = debt_data.debt.to_uint256().ok_or_else(|| {

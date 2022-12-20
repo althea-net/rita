@@ -75,6 +75,10 @@ pub fn default_payment_threshold() -> Int256 {
     300_000_000_000_000_000i64.into()
 }
 
+fn default_enable_enforcement() -> bool {
+    true
+}
+
 /// This struct is used by both rita and rita_exit to configure the dummy payment controller and
 /// debt keeper
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -103,6 +107,9 @@ pub struct PaymentSettings {
     /// to determine when a router needs to be enforced
     #[serde(default = "default_payment_threshold")]
     pub payment_threshold: Int256,
+    /// When this flag is false, no client is enforced
+    #[serde(default = "default_enable_enforcement")]
+    pub enable_enforcement: bool,
     /// Our own eth private key we do not store address, instead it is derived from here
     pub eth_private_key: Option<PrivateKey>,
     // Our own eth Address, derived from the private key on startup and not stored
@@ -168,6 +175,7 @@ impl Default for PaymentSettings {
             client_can_use_free_tier: default_client_can_use_free_tier(),
             balance_warning_level: default_balance_warning_level(),
             payment_threshold: default_payment_threshold(),
+            enable_enforcement: true,
             eth_private_key: None,
             eth_address: None,
             node_list: default_node_list(),
