@@ -35,6 +35,11 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use std::time::Instant;
 
+/// We set the debt limit of a client by multiplying the close thresh by this fraction
+/// This is needed in the case of a high variance gas value, close thresh vary a lot, causing the
+/// router that should be enforced to have bursts of enforcemnt / non enforcement periods
+pub const DEBT_LIMIT_INVERSE_MULTIPLIER: u8 = 2;
+
 lazy_static! {
     /// A locked global ref containing the state for this module. Note that the default implementation
     /// loads saved data from teh disk if it exists.
@@ -139,20 +144,23 @@ fn ser_to_debt_data(input: DebtDataSer) -> DebtData {
 
 /// used to prevent debts from growing higher than the enforcement limit in either direction
 /// if the debt is more negative or more positive than the ABS of close_threshold we set it to
-/// one more than that value
+/// a fraction more than that value
 fn debt_limit(debt: Int256, close_threshold: Int256) -> Int256 {
-    if debt < close_threshold {
+    let debt_limit_mutiplier = Int256::from(DEBT_LIMIT_INVERSE_MULTIPLIER);
+    let debt_limit = close_threshold.clone() + (close_threshold / debt_limit_mutiplier);
+
+    if debt < debt_limit {
         info!(
             "Forgiving {} wei to enforce debt limit",
-            debt - close_threshold.clone()
+            debt - debt_limit.clone()
         );
-        close_threshold - 1u8.into()
-    } else if debt > close_threshold.abs() {
+        debt_limit
+    } else if debt > debt_limit.abs() {
         info!(
             "Not paying {} wei to enforce debt limit",
-            debt - close_threshold.clone()
+            debt - debt_limit.clone()
         );
-        close_threshold.abs() + 1u8.into()
+        debt_limit.abs()
     } else {
         debt
     }
