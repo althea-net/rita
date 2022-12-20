@@ -2,20 +2,14 @@ use althea_types::SystemChain;
 use auto_bridge::default_bridge_addresses;
 use auto_bridge::TokenBridgeAddresses;
 use clarity::{Address, PrivateKey};
+use num256::Int256;
 use num256::Uint256;
-
-pub const XDAI_FEE_MULTIPLIER: u32 = 6000;
-pub const ETH_FEE_MULTIPLIER: u32 = 20;
 
 fn default_local_fee() -> u32 {
     0u32 // updated by oracle, denominated in wei/byte
 }
 fn default_max_fee() -> u32 {
     200_000_000u32 // updated by oracle denominated in wei
-}
-
-fn default_dynamic_fee_multiplier() -> u32 {
-    XDAI_FEE_MULTIPLIER
 }
 
 fn default_free_tier_throughput() -> u32 {
@@ -75,6 +69,12 @@ fn default_min_gas() -> Uint256 {
     2_000_000_000u128.into()
 }
 
+pub fn default_payment_threshold() -> Int256 {
+    // This value is set to 1 eth constant (1e^18) * 0.3
+    // 1 eth constant is 1 dollar, so this is 30 cents
+    300_000_000_000_000_000i64.into()
+}
+
 /// This struct is used by both rita and rita_exit to configure the dummy payment controller and
 /// debt keeper
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -89,10 +89,6 @@ pub struct PaymentSettings {
     /// A price limit, we will not pay more than this
     #[serde(default = "default_max_fee")]
     pub max_fee: u32,
-    /// For non-channel payments only, determines how much to multiply the nominal gas price
-    /// to get the pay_threshold values and then again for the close_threshold
-    #[serde(default = "default_dynamic_fee_multiplier")]
-    pub dynamic_fee_multiplier: u32,
     /// Throughput of the free tier that this node provides in kbit/s
     #[serde(default = "default_free_tier_throughput")]
     pub free_tier_throughput: u32,
@@ -103,6 +99,10 @@ pub struct PaymentSettings {
     /// The level of balance which will trigger a warning
     #[serde(default = "default_balance_warning_level")]
     pub balance_warning_level: Uint256,
+    /// Default payment threshold used, which is used to calculate close thresh, which is used
+    /// to determine when a router needs to be enforced
+    #[serde(default = "default_payment_threshold")]
+    pub payment_threshold: Int256,
     /// Our own eth private key we do not store address, instead it is derived from here
     pub eth_private_key: Option<PrivateKey>,
     // Our own eth Address, derived from the private key on startup and not stored
@@ -164,10 +164,10 @@ impl Default for PaymentSettings {
             local_fee: default_local_fee(),
             light_client_fee: default_local_fee(),
             max_fee: default_max_fee(),
-            dynamic_fee_multiplier: default_dynamic_fee_multiplier(),
             free_tier_throughput: default_free_tier_throughput(),
             client_can_use_free_tier: default_client_can_use_free_tier(),
             balance_warning_level: default_balance_warning_level(),
+            payment_threshold: default_payment_threshold(),
             eth_private_key: None,
             eth_address: None,
             node_list: default_node_list(),

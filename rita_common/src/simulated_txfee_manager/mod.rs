@@ -2,7 +2,7 @@
 
 use crate::blockchain_oracle::get_oracle_latest_gas_price;
 use crate::blockchain_oracle::get_oracle_nonce;
-use crate::blockchain_oracle::get_oracle_pay_thresh;
+use crate::blockchain_oracle::get_pay_thresh;
 use crate::payment_controller::TRANSACTION_SUBMISSION_TIMEOUT;
 use crate::rita_loop::get_web3_server;
 use crate::usage_tracker::update_payments;
@@ -44,7 +44,7 @@ pub async fn tick_simulated_tx() {
     };
     let gas_price = get_oracle_latest_gas_price();
     let nonce = get_oracle_nonce();
-    let pay_threshold = get_oracle_pay_thresh();
+    let pay_threshold = get_pay_thresh();
     let simulated_transaction_fee_address = payment_settings.simulated_transaction_fee_address;
     let simulated_transaction_fee = payment_settings.simulated_transaction_fee;
     let amount_to_pay = AMOUNT_OWED.read().unwrap().clone();
