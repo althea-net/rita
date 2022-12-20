@@ -84,7 +84,9 @@ lazy_static! {
 pub struct BlockchainOracle {
     pub nonce: Uint256,
     pub net_version: u64,
-    pub gas_info: GasInfo,
+    /// latest gas price value. Note that due to routers taking different times to run a loop, different routers
+    ///  may have different values for this field. Post EIP1559, the max price change per block is 12.5% of the previous block
+    pub gas_price: Uint256,
     /// The latest balance for this router, none if not yet set
     pub balance: Option<Uint256>,
     /// The last seen block, if this goes backwards we will
@@ -93,39 +95,31 @@ pub struct BlockchainOracle {
     pub last_updated: Option<Instant>,
 }
 
-/// This struct contains important information to determine when a router should be paying and when it should be enforcing on
-/// other routers
-///
-/// 1.) gas_price : latest gas price value. Note that due to routers taking different times to run a loop, different routers
-///     may have different values for this field. Post EIP1559, the max price change per block is 12.5% of the previous block
-///
-/// 2.) payment_threshold : This is the ammount at which a router will make a payment. Below this value, the router will not may a payment since
-///     a large portion of the payment will be eaten in fees which is not desirable. This is caluculated by
-///     gas_price * gas_required * dynamic_fee_multiplier, where dynamic fee multiplier determines how much larger the payment is
-///     compared to the fees (fees are essentially gas_price * gas_required). When this is larger, the router pays less often and
-///     vice versa
-///
-/// 3.) close_threshold : This is a multiple of payment_threshold and determines how many payments a router can miss before enforcing it.
-///     For ex. if close_thres is 3 * pay_thres, another router may miss upto 3 payments before it gets enforced upon. Another way to think of this
-///     is if a router owes more than the close_thresh, it will get enforced upon.
-#[derive(Debug, Clone)]
-pub struct GasInfo {
-    pub payment_threshold: Int256,
-    pub close_threshold: Int256,
-    pub gas_price: Uint256,
-}
-
-fn default_close_threshold() -> Int256 {
-    Int256::from(-1) * default_pay_threshold() * CLOSE_THRESH_MULT.into()
-}
-
-fn default_pay_threshold() -> Int256 {
-    500_000_000_000_000_000i64.into()
-}
-
 // Set Xdai default
 fn default_net_version() -> u64 {
     100u64
+}
+
+/// payment_threshold : This is the amount at which a router will make a payment. Below this value, the router will not may a payment since
+/// a large portion of the payment will be eaten in fees which is not desirable. This is calculated by a constant
+/// in the config, currently the default value is set to 0.3 * 1eth constant (1 dollar), which is 30 cents. When this is larger, the router pays less often and
+/// vice versa.
+pub fn get_pay_thresh() -> Int256 {
+    let payment = settings::get_rita_common().payment;
+    payment.payment_threshold
+}
+
+/// close_threshold : This is a multiple of payment_threshold and determines how many payments a router can miss before enforcing it.
+/// For ex. if close_thres is 3 * pay_thres, another router may miss upto 3 payments before it gets enforced upon. Another way to think of this
+/// is if a router owes more than the close_thresh, it will get enforced upon.
+/// Since this depends on pay_thresh, pay_thresh needs to be reasonably stable to ensure router that need to be enforced, stay enforced
+pub fn calculate_close_thresh() -> Int256 {
+    let pay_thresh = get_pay_thresh();
+
+    // A negative debt value indicates that a neighbor owes us, and vice versa
+    let neg_one = -1i32;
+    let sign_flip: Int256 = neg_one.into();
+    sign_flip * CLOSE_THRESH_MULT.into() * pay_thresh
 }
 
 impl BlockchainOracle {
@@ -134,20 +128,10 @@ impl BlockchainOracle {
             nonce: 0u64.into(),
             //xdai by default
             net_version: default_net_version(),
-            gas_info: GasInfo::default(),
+            gas_price: 0u32.into(),
             balance: None,
             last_seen_block: None,
             last_updated: None,
-        }
-    }
-}
-
-impl Default for GasInfo {
-    fn default() -> Self {
-        GasInfo {
-            payment_threshold: default_pay_threshold(),
-            close_threshold: default_close_threshold(),
-            gas_price: 0u32.into(),
         }
     }
 }
@@ -160,15 +144,7 @@ impl Default for BlockchainOracle {
 
 // Oracle Getters
 pub fn get_oracle_latest_gas_price() -> Uint256 {
-    ORACLE.read().unwrap().gas_info.gas_price.clone()
-}
-
-pub fn get_oracle_pay_thresh() -> Int256 {
-    ORACLE.read().unwrap().gas_info.payment_threshold.clone()
-}
-
-pub fn get_oracle_close_thresh() -> Int256 {
-    ORACLE.read().unwrap().gas_info.close_threshold.clone()
+    ORACLE.read().unwrap().gas_price.clone()
 }
 
 pub fn get_oracle_nonce() -> Uint256 {
@@ -192,8 +168,8 @@ pub fn get_oracle_last_updated() -> Option<Instant> {
 }
 
 // Oracle setters
-pub fn set_oracle_gas_info(info: GasInfo) {
-    ORACLE.write().unwrap().gas_info = info;
+pub fn set_oracle_gas_price(price: Uint256) {
+    ORACLE.write().unwrap().gas_price = price;
 }
 
 pub fn set_oracle_nonce(n: Uint256) {
@@ -361,8 +337,6 @@ fn update_gas_price(
     new_gas_price: Uint256,
     payment_settings: &mut PaymentSettings,
 ) {
-    //local variables to be set
-    let mut oracle_pay_thresh: Int256 = 0u128.into();
     // Minimum gas price. When gas is below this, we set gasprice to this value, which is then used to
     // calculate pay and close thresh
     let min_gas = payment_settings.min_gas.clone();
@@ -384,28 +358,8 @@ fn update_gas_price(
         oracle_gas_price
     };
 
-    let dynamic_fee_factor: Int256 = payment_settings.dynamic_fee_multiplier.into();
-    let transaction_gas: Int256 = 21000.into();
-    let neg_one = -1i32;
-    let sign_flip: Int256 = neg_one.into();
-
-    if let Some(gas_price) = oracle_gas_price.to_int256() {
-        oracle_pay_thresh = transaction_gas * gas_price * dynamic_fee_factor;
-    }
-    trace!("Dynamically set pay threshold to {:?}", oracle_pay_thresh);
-
-    let oracle_close_thresh = sign_flip * CLOSE_THRESH_MULT.into() * oracle_pay_thresh.clone();
-    trace!(
-        "Dynamically set close threshold to {:?}",
-        oracle_close_thresh
-    );
-
     //set local values in lazy static
-    set_oracle_gas_info(GasInfo {
-        gas_price: oracle_gas_price,
-        payment_threshold: oracle_pay_thresh,
-        close_threshold: oracle_close_thresh,
-    })
+    set_oracle_gas_price(oracle_gas_price)
 }
 
 /// A very simple function placed here for convinence that indicates
@@ -427,11 +381,7 @@ mod tests {
 
     /// Helper function to prevent race conditions when running these test due to parallel test environment
     fn clear_gas_oracle() {
-        set_oracle_gas_info(GasInfo {
-            payment_threshold: default_pay_threshold(),
-            close_threshold: default_close_threshold(),
-            gas_price: 0u32.into(),
-        });
+        set_oracle_gas_price(0u32.into());
     }
 
     #[test]
@@ -439,21 +389,13 @@ mod tests {
         clear_gas_oracle();
 
         let or = ORACLE.read().unwrap();
-        assert_eq!(or.gas_info.gas_price, 0u128.into());
-        assert_eq!(or.gas_info.payment_threshold, default_pay_threshold());
-        assert_eq!(or.gas_info.close_threshold, default_close_threshold());
+        assert_eq!(or.gas_price, 0u128.into());
         drop(or);
 
-        set_oracle_gas_info(GasInfo {
-            gas_price: 10u128.into(),
-            payment_threshold: 100u128.into(),
-            close_threshold: Int256::from(-130),
-        });
+        set_oracle_gas_price(10u128.into());
 
         let or = ORACLE.read().unwrap();
-        assert_eq!(or.gas_info.gas_price, 10u128.into());
-        assert_eq!(or.gas_info.payment_threshold, 100u128.into());
-        assert_eq!(or.gas_info.close_threshold, Int256::from(-130));
+        assert_eq!(or.gas_price, 10u128.into());
         drop(or);
         clear_gas_oracle();
     }

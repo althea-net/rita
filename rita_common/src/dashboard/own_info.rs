@@ -1,5 +1,6 @@
-use crate::blockchain_oracle::{get_oracle_balance, low_balance};
-use crate::blockchain_oracle::{get_oracle_close_thresh, get_oracle_pay_thresh};
+use crate::blockchain_oracle::{
+    calculate_close_thresh, get_oracle_balance, get_pay_thresh, low_balance,
+};
 use crate::rita_loop::is_gateway;
 use actix_web_async::HttpRequest;
 use actix_web_async::HttpResponse;
@@ -29,8 +30,8 @@ pub async fn get_own_info(_req: HttpRequest) -> HttpResponse {
     let payment_settings = settings::get_rita_common().payment;
     let eth_address = payment_settings.eth_address.unwrap();
     let balance = get_oracle_balance();
-    let pay_threshold = get_oracle_pay_thresh();
-    let close_threshold = get_oracle_close_thresh();
+    let pay_threshold = get_pay_thresh();
+    let close_threshold = calculate_close_thresh();
     let local_fee = payment_settings.local_fee;
     let client_can_use_free_tier = payment_settings.client_can_use_free_tier;
 

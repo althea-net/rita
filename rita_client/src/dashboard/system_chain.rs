@@ -4,8 +4,6 @@ use actix_web_async::{HttpRequest, HttpResponse};
 use althea_types::SystemChain;
 use rita_common::blockchain_oracle::{set_oracle_balance, set_oracle_net_version};
 use settings::payment::PaymentSettings;
-use settings::payment::ETH_FEE_MULTIPLIER;
-use settings::payment::XDAI_FEE_MULTIPLIER;
 
 /// Changes the full node configuration value between test/prod and other networks
 pub async fn set_system_blockchain_endpoint(path: Path<String>) -> HttpResponse {
@@ -49,7 +47,6 @@ pub fn set_system_blockchain(id: SystemChain, payment: &mut PaymentSettings) {
             payment.withdraw_chain = SystemChain::Ethereum;
             // reset balance so that things take effect immediatley in the UI
             set_oracle_balance(Some(0u32.into()));
-            payment.dynamic_fee_multiplier = ETH_FEE_MULTIPLIER;
         }
         SystemChain::Xdai => {
             payment.node_list = vec!["https://dai.althea.org/".to_string()];
@@ -58,8 +55,6 @@ pub fn set_system_blockchain(id: SystemChain, payment: &mut PaymentSettings) {
             payment.withdraw_chain = SystemChain::Xdai;
             // reset balance so that things take effect immediatley in the UI
             set_oracle_balance(Some(0u32.into()));
-
-            payment.dynamic_fee_multiplier = XDAI_FEE_MULTIPLIER;
         }
         SystemChain::Rinkeby => {
             payment.node_list =
@@ -69,7 +64,6 @@ pub fn set_system_blockchain(id: SystemChain, payment: &mut PaymentSettings) {
             payment.withdraw_chain = SystemChain::Rinkeby;
             // reset balance so that things take effect immediatley in the UI
             set_oracle_balance(Some(0u32.into()));
-            payment.dynamic_fee_multiplier = ETH_FEE_MULTIPLIER;
         }
     }
 }

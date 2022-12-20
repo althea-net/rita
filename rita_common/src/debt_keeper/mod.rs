@@ -8,8 +8,8 @@
 //! increase the amount we owe Bob? That's probably a vulnerability rabbit hole at the very least.
 //! Hence we need an incoming payments parameter to take money out of. This of course implies half
 //! of the excess complexity you see, managing an incoming payments pool versus a incoming debts pool
-use crate::blockchain_oracle::get_oracle_close_thresh;
-use crate::blockchain_oracle::get_oracle_pay_thresh;
+use crate::blockchain_oracle::calculate_close_thresh;
+use crate::blockchain_oracle::get_pay_thresh;
 use crate::blockchain_oracle::potential_payment_issues_detected;
 use crate::payment_controller::queue_payment;
 use crate::payment_validator::PAYMENT_SEND_TIMEOUT;
@@ -339,8 +339,8 @@ fn deserialize_from_json(file_path: String) -> Option<DebtDataSer> {
 
 impl Default for DebtKeeper {
     fn default() -> DebtKeeper {
-        assert!(get_oracle_pay_thresh() >= Int256::zero());
-        assert!(get_oracle_close_thresh() <= Int256::zero());
+        assert!(get_pay_thresh() >= Int256::zero());
+        assert!(calculate_close_thresh() <= Int256::zero());
         // if the loading process goes wrong for any reason, we just start again
         let blank_debt_keeper = DebtKeeper {
             last_save: None,
@@ -378,8 +378,8 @@ impl Default for DebtKeeper {
 impl DebtKeeper {
     #[cfg(test)]
     pub fn new() -> Self {
-        assert!(get_oracle_pay_thresh() >= Int256::zero());
-        assert!(get_oracle_close_thresh() <= Int256::zero());
+        assert!(get_pay_thresh() >= Int256::zero());
+        assert!(calculate_close_thresh() <= Int256::zero());
 
         DebtKeeper {
             last_save: None,
@@ -570,8 +570,8 @@ impl DebtKeeper {
         }
 
         let payment_settings = settings::get_rita_common().payment;
-        let close_threshold = get_oracle_close_thresh();
-        let pay_threshold = get_oracle_pay_thresh();
+        let close_threshold = calculate_close_thresh();
+        let pay_threshold = get_pay_thresh();
         let debt_limit_enabled = payment_settings.debt_limit_enabled;
         let apply_incoming_credit_immediately = payment_settings.apply_incoming_credit_immediately;
 
@@ -726,7 +726,7 @@ mod tests {
     use rand::Rng;
     use settings::client::RitaClientSettings;
 
-    use crate::blockchain_oracle::{set_oracle_gas_info, GasInfo};
+    use crate::blockchain_oracle::set_oracle_gas_price;
 
     use super::*;
 
@@ -765,11 +765,7 @@ mod tests {
     #[test]
     fn test_single_suspend() {
         settings::set_rita_client(RitaClientSettings::default());
-        set_oracle_gas_info(GasInfo {
-            gas_price: 0u32.into(),
-            payment_threshold: Int256::from(5),
-            close_threshold: Int256::from(-10),
-        });
+        set_oracle_gas_price(0u32.into());
 
         let mut d = DebtKeeper::new();
 
@@ -783,11 +779,7 @@ mod tests {
     #[test]
     fn test_single_overpay() {
         settings::set_rita_client(RitaClientSettings::default());
-        set_oracle_gas_info(GasInfo {
-            gas_price: 0u32.into(),
-            payment_threshold: Int256::from(5),
-            close_threshold: Int256::from(-10),
-        });
+        set_oracle_gas_price(0u32.into());
 
         let mut d = DebtKeeper::new();
 
@@ -803,11 +795,8 @@ mod tests {
     fn test_single_pay() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
-        set_oracle_gas_info(GasInfo {
-            gas_price: 0u32.into(),
-            payment_threshold: Int256::from(5),
-            close_threshold: Int256::from(-10),
-        });
+        set_oracle_gas_price(0u32.into());
+
         common.payment.debt_limit_enabled = false;
         settings::set_rita_common(common);
 
@@ -829,11 +818,8 @@ mod tests {
     fn test_single_pay_limited() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
-        set_oracle_gas_info(GasInfo {
-            gas_price: 0u32.into(),
-            payment_threshold: Int256::from(5),
-            close_threshold: Int256::from(-10),
-        });
+        set_oracle_gas_price(0u32.into());
+
         common.payment.debt_limit_enabled = true;
         settings::set_rita_common(common);
 
@@ -854,11 +840,7 @@ mod tests {
     #[test]
     fn test_single_reopen() {
         settings::set_rita_client(RitaClientSettings::default());
-        set_oracle_gas_info(GasInfo {
-            gas_price: 0u32.into(),
-            payment_threshold: Int256::from(5),
-            close_threshold: Int256::from(-10),
-        });
+        set_oracle_gas_price(0u32.into());
 
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
@@ -876,11 +858,8 @@ mod tests {
     fn test_multi_pay() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
-        set_oracle_gas_info(GasInfo {
-            gas_price: 0u32.into(),
-            payment_threshold: Int256::from(5),
-            close_threshold: Int256::from(-10),
-        });
+        set_oracle_gas_price(0u32.into());
+
         common.payment.debt_limit_enabled = false;
         settings::set_rita_common(common);
 
@@ -904,11 +883,8 @@ mod tests {
     fn test_multi_pay_lmited() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
-        set_oracle_gas_info(GasInfo {
-            gas_price: 0u32.into(),
-            payment_threshold: Int256::from(5),
-            close_threshold: Int256::from(-10),
-        });
+        set_oracle_gas_price(0u32.into());
+
         common.payment.debt_limit_enabled = true;
         settings::set_rita_common(common);
 
@@ -931,11 +907,7 @@ mod tests {
     #[test]
     fn test_multi_fail() {
         settings::set_rita_client(RitaClientSettings::default());
-        set_oracle_gas_info(GasInfo {
-            gas_price: 0u32.into(),
-            payment_threshold: Int256::from(5),
-            close_threshold: Int256::from(-10),
-        });
+        set_oracle_gas_price(0u32.into());
 
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
@@ -953,11 +925,7 @@ mod tests {
     #[test]
     fn test_multi_reopen() {
         settings::set_rita_client(RitaClientSettings::default());
-        set_oracle_gas_info(GasInfo {
-            gas_price: 0u32.into(),
-            payment_threshold: Int256::from(5),
-            close_threshold: Int256::from(-10),
-        });
+        set_oracle_gas_price(0u32.into());
 
         let mut d = DebtKeeper::new();
         let ident = get_test_identity();
@@ -979,11 +947,8 @@ mod tests {
     fn test_credit_reopen() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
-        set_oracle_gas_info(GasInfo {
-            gas_price: 0u32.into(),
-            payment_threshold: Int256::from(5),
-            close_threshold: Int256::from(-10),
-        });
+        set_oracle_gas_price(0u32.into());
+
         common.payment.debt_limit_enabled = false;
         settings::set_rita_common(common);
 
@@ -1010,11 +975,8 @@ mod tests {
     #[test]
     fn test_credit_reopen_limited() {
         let mut common = settings::get_rita_common();
-        set_oracle_gas_info(GasInfo {
-            gas_price: 0u32.into(),
-            payment_threshold: Int256::from(10),
-            close_threshold: Int256::from(-100),
-        });
+        set_oracle_gas_price(0u32.into());
+
         common.payment.debt_limit_enabled = true;
         settings::set_rita_common(common);
 
@@ -1045,11 +1007,8 @@ mod tests {
     fn test_payment_fail() {
         settings::set_rita_client(RitaClientSettings::default());
         let mut common = settings::get_rita_common();
-        set_oracle_gas_info(GasInfo {
-            gas_price: 0u32.into(),
-            payment_threshold: Int256::from(5),
-            close_threshold: Int256::from(-10),
-        });
+        set_oracle_gas_price(0u32.into());
+
         common.payment.debt_limit_enabled = false;
         settings::set_rita_common(common);
 
@@ -1128,11 +1087,8 @@ mod tests {
         settings::set_rita_client(RitaClientSettings::default());
 
         let mut common = settings::get_rita_common();
-        set_oracle_gas_info(GasInfo {
-            gas_price: 0u32.into(),
-            payment_threshold: Int256::from(5),
-            close_threshold: Int256::from(-10),
-        });
+        set_oracle_gas_price(0u32.into());
+
         common.payment.debt_limit_enabled = true;
         settings::set_rita_common(common);
 

@@ -35,7 +35,7 @@ use althea_types::Identity;
 use althea_types::WgKey;
 use althea_types::{ExitClientDetails, ExitClientIdentity, ExitDetails, ExitState, ExitVerifMode};
 use diesel::prelude::PgConnection;
-use rita_common::blockchain_oracle::get_oracle_close_thresh;
+use rita_common::blockchain_oracle::calculate_close_thresh;
 use rita_common::debt_keeper::get_debts_list;
 use rita_common::debt_keeper::DebtAction;
 use rita_common::utils::secs_since_unix_epoch;
@@ -534,7 +534,7 @@ pub fn enforce_exit_clients(
     let start = Instant::now();
     let mut clients_by_id = HashMap::new();
     let free_tier_limit = settings::get_rita_exit().payment.free_tier_throughput;
-    let close_threshold = get_oracle_close_thresh();
+    let close_threshold = calculate_close_thresh();
     for client in clients_list.iter() {
         if let Ok(id) = to_identity(client) {
             clients_by_id.insert(id, client);
