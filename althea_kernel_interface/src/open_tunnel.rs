@@ -123,6 +123,15 @@ impl dyn KernelInterface {
                 String::from_utf8(output.stderr)?
             )));
         }
+
+        // Add second ip to tunnel for roaming
+        if let Some(ip) = args.own_ip_v2 {
+            let _output = self.run_command(
+                "ip",
+                &["address", "add", &ip.to_string(), "dev", &args.interface],
+            )?;
+        }
+
         let _output = self.run_command(
             "ip",
             &[
@@ -133,14 +142,6 @@ impl dyn KernelInterface {
                 &args.interface,
             ],
         )?;
-
-        // Add second ip to tunnel for roaming
-        if let Some(ip) = args.own_ip_v2 {
-            let _output = self.run_command(
-                "ip",
-                &["address", "add", &ip.to_string(), "dev", &args.interface],
-            )?;
-        }
 
         self.run_command(
             "ip",
