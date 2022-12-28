@@ -96,14 +96,13 @@ pub async fn query_exit_debts(msg: QueryExitDebts) {
     }
     let gateway_exit_client = is_gateway_client();
     let start = Instant::now();
-    let exit_addr = msg.exit_internal_addr;
     let exit_id = msg.exit_id;
     let exit_port = msg.exit_port;
     // actix client behaves badly if you build a request the default way but don't give it
     // a domain name, so in order to do peer to peer requests we use with_connection and our own
     // socket specification
     let our_id = settings::get_rita_client().get_identity();
-    let request = format!("http://{}:{}/client_debt", exit_addr, exit_port);
+    let request = format!("http://[{}]:{}/client_debt", exit_id.mesh_ip, exit_port);
     // it's an ipaddr appended to a u16, there's no real way for this to fail
     // unless of course it's an ipv6 address and you don't do the []
 
