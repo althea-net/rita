@@ -9,5 +9,15 @@ name = "tester"
 path = "src/main.rs"
 
 [dependencies]
+env_logger = "0.10"
+log = "0.4"
+docopt = "1.1"
+actix-async = {package="actix", version = "0.13"}
+nix = "0.26.1"
+
 althea_kernel_interface = { path = "../althea_kernel_interface" }
+clu = { path = "../clu" }
+settings = { path = "../settings" }
+rita_client = { path = "../rita_client",  default-features = false }
+rita_common = { path = "../rita_common", default-features = false }
 
