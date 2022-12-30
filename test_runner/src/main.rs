@@ -1,7 +1,30 @@
-//use core::time;
-//use std::thread;
+extern crate log;
+// Uncomment for manual debugging
+// use core::time;
+use std::{
+    collections::{HashMap, HashSet},
+    convert::TryInto,
+    fs,
+    net::{IpAddr, Ipv6Addr},
+    thread,
+};
 
 use althea_kernel_interface::{KernelInterfaceError, KI};
+use log::info;
+use nix::{
+    fcntl::{open, OFlag},
+    sched::{setns, CloneFlags},
+    sys::stat::Mode,
+};
+use rita_client::{
+    dashboard::start_client_dashboard,
+    rita_loop::{start_antenna_forwarder, start_rita_client_loops},
+};
+use rita_common::rita_loop::{
+    start_core_rita_endpoints, start_rita_common_loops,
+    write_to_disk::{save_to_disk_loop, SettingsOnDisk},
+};
+use settings::client::RitaClientSettings;
 
 /// This struct holds the setup instructions for namespaces
 #[derive(Clone, Eq, PartialEq)]
@@ -16,15 +39,19 @@ pub struct NamespaceInfo {
 }
 
 fn main() {
-    // uncomment this for manual debugging
+    // uncomment these 2 lines for manual debugging
     // let ten_mins = time::Duration::from_secs(600);
+    // env_logger::init();
 
     let namespaces = five_node_config();
 
     validate_connections(namespaces.clone());
 
-    let res = setup_ns(namespaces);
+    let res = setup_ns(namespaces.clone());
     println!("Namespaces setup: {:?}", res);
+
+    let res = thread_spawner(namespaces);
+    println!("Thread Spawner: {:?}", res);
     // this sleep is for debugging so that the container can be accessed to poke around in
     // thread::sleep(ten_mins);
 }
@@ -44,10 +71,10 @@ fn five_node_config() -> NamespaceInfo {
      /       \|
     D---------C
     */
-    let testa = ("nA".to_string(), 0);
-    let testb = ("nB".to_string(), 1);
-    let testc = ("nC".to_string(), 2);
-    let testd = ("nD".to_string(), 3);
+    let testa = ("n-0".to_string(), 0);
+    let testb = ("n-1".to_string(), 1);
+    let testc = ("n-2".to_string(), 2);
+    let testd = ("n-3".to_string(), 3);
 
     NamespaceInfo {
         names: vec![
@@ -163,9 +190,46 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
     Ok(())
 }
 
+/// Spawn a rita and babel thread for each namespace, then assign those threads to said namespace
+fn thread_spawner(namespaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
+    let babeld_path = "/var/babeld/babeld/babeld".to_string();
+    let babelconf_path = "/var/babeld/config".to_string();
+    let ritasettings = RitaClientSettings::new("/althea_rs/settings/test.toml").unwrap();
+    let babelconf_data = "default enable-timestamps true\ndefault update-interval 1";
+    // pass the config arguments for babel to a config file as they cannot be successfully passed as arguments via run_command()
+    fs::write(babelconf_path.clone(), babelconf_data).unwrap();
+    for ns in namespaces.names.clone() {
+        let veth_interfaces = get_veth_interfaces(namespaces.clone());
+        let veth_interfaces = veth_interfaces.get(&ns).unwrap().clone();
+        let rcsettings = ritasettings.clone();
+        let nspath = format!("/var/run/netns/{}", ns);
+        let nsfd = open(nspath.as_str(), OFlag::O_RDONLY, Mode::empty())
+            .unwrap_or_else(|_| panic!("Could not open netns file: {}", nspath));
+
+        spawn_rita(ns.clone(), veth_interfaces, rcsettings, nsfd);
+
+        spawn_babel(ns, babelconf_path.clone(), babeld_path.clone(), nsfd);
+    }
+    Ok(())
+}
+
 /// Validate the list of linked namespaces
 fn validate_connections(namespaces: NamespaceInfo) {
     for link in namespaces.linked {
+        let s = "Namespace names must follow naming convention: xyz-123 (ex. A-0):";
+        let name1: Vec<&str> = link.0 .0.split('-').collect();
+        let _num1: u32 = name1
+            .get(1)
+            .expect(&format!("{} {}", s, link.0 .0))
+            .parse()
+            .expect(&format!("{} {}", s, link.0 .0));
+        let name2: Vec<&str> = link.1 .0.split('-').collect();
+        let _num2: u32 = name2
+            .get(1)
+            .expect(&format!("{} {}", s, link.0 .0))
+            .parse()
+            .expect(&format!("{} {}", s, link.0 .0));
+
         if !namespaces.names.contains(&link.0 .0) || !namespaces.names.contains(&link.1 .0) {
             panic!(
                 "One or both of these names is not in the given namespace list: {}, {}",
@@ -182,4 +246,114 @@ fn validate_connections(namespaces: NamespaceInfo) {
             panic!("Cannot link namespace to itself!")
         }
     }
+}
+
+/// get veth interfaces in a given namespace
+fn get_veth_interfaces(nsinfo: NamespaceInfo) -> HashMap<String, HashSet<String>> {
+    let mut res: HashMap<String, HashSet<String>> = HashMap::new();
+    for name in nsinfo.names {
+        res.insert(name, HashSet::new());
+    }
+    for link in nsinfo.linked {
+        let veth_ab = format!("veth-{}-{}", link.0 .0, link.1 .0);
+        let veth_ba = format!("veth-{}-{}", link.1 .0, link.0 .0);
+        res.entry(link.0 .0).or_default().insert(veth_ab);
+        res.entry(link.1 .0).or_default().insert(veth_ba);
+    }
+    res
+}
+
+/// Spawn a thread for rita given a NamespaceInfo which will be assigned to the namespace given
+fn spawn_rita(
+    ns: String,
+    veth_interfaces: HashSet<String>,
+    mut rcsettings: RitaClientSettings,
+    nsfd: i32,
+) {
+    let wg_keypath = format!("/var/tmp/{}", ns);
+    //let settings_file = format!("/var/tmp/settings_{}", ns);
+    let _rita_handler = thread::spawn(move || {
+        // set the host of this thread to the ns
+        setns(nsfd, CloneFlags::CLONE_NEWNET).expect("Couldn't set network namespace");
+
+        // NOTE: this is why the names for the namespaces must include a number identifier, as it is used in
+        // their mesh ip assignment
+        let nameclone = ns.clone();
+        let nsname: Vec<&str> = nameclone.split('-').collect();
+        let id: u32 = nsname.get(1).unwrap().parse().unwrap();
+
+        rcsettings.network.mesh_ip = Some(IpAddr::V6(Ipv6Addr::new(
+            0xfd00,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            id.try_into().unwrap(),
+        )));
+        rcsettings.network.wg_private_key_path = wg_keypath;
+        rcsettings.network.peer_interfaces = veth_interfaces;
+        rcsettings.payment.local_fee = 10; //arbitrary for now
+
+        // mirrored from rita_bin/src/client.rs
+        let s = clu::init("linux", rcsettings);
+        // s.write(&settings_file).unwrap();
+        settings::set_rita_client(s.clone());
+
+        let system = actix_async::System::new();
+
+        start_rita_common_loops();
+        start_rita_client_loops();
+        save_to_disk_loop(SettingsOnDisk::RitaClientSettings(
+            settings::get_rita_client(),
+        ));
+        start_core_rita_endpoints(4);
+        start_client_dashboard(s.network.rita_dashboard_port);
+        start_antenna_forwarder(s);
+        println!("Started rita loops");
+
+        if let Err(e) = system.run() {
+            panic!("Starting client failed with {}", e);
+        }
+
+        info!("Started Rita Client!");
+    });
+}
+
+/// Spawn a thread for rita given a NamespaceInfo which will be assigned to the namespace given
+fn spawn_babel(ns: String, babelconf_path: String, babeld_path: String, nsfd: i32) {
+    let _babel_handler = thread::spawn(move || {
+        let babeld_pid = format!("/var/run/babeld-{}.pid", ns);
+        let babeld_log = format!("/var/log/babeld-{}.log", ns);
+        // 1 here is for log
+        let res = KI.run_command(
+            "ip",
+            &[
+                "netns",
+                "exec",
+                &ns,
+                &babeld_path,
+                "-I",
+                &babeld_pid,
+                "-d",
+                "1",
+                "-r",
+                "-L",
+                &babeld_log,
+                "-H",
+                "1",
+                "-G",
+                "6872",
+                "-w",
+                "lo",
+                "-c",
+                &babelconf_path,
+                "-D",
+            ],
+        );
+        println!("res of babel {:?}", res);
+        // set the host of this thread to the ns
+        setns(nsfd, CloneFlags::CLONE_NEWNET).expect("Couldn't set network namespace");
+    });
 }

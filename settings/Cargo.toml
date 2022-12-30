@@ -19,3 +19,6 @@ clarity = "0.5"
 arrayvec = {version= "0.7", features = ["serde"]}
 phonenumber = "0.3"
 ipnetwork = "0.20"
+
+[features]
+load_from_disk = []
