@@ -39,6 +39,7 @@ use futures::future::join_all;
 use futures::join;
 use ipnetwork::IpNetwork;
 use rita_common::blockchain_oracle::low_balance;
+use rita_common::payment_controller::set_payment_exit_list;
 use rita_common::KI;
 use settings::client::{ExitServer, SelectedExit};
 use sodiumoxide::crypto::box_;
@@ -808,7 +809,8 @@ pub async fn exit_manager_tick() {
                 exit_list
             );
             let exit_wg_port = exit_list.wg_exit_listen_port;
-            let is_valid = set_exit_list(exit_list);
+            let is_valid = set_exit_list(exit_list.clone());
+            set_payment_exit_list(exit_list.exit_list);
             // When the list is empty or the port is 0, the exit services us
             // an invalid struct or we made a bad request
             if !is_valid || exit_wg_port == 0 {

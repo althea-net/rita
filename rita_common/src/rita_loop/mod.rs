@@ -78,7 +78,9 @@ pub fn start_core_rita_endpoints(workers: usize) {
 
             // Rita accept payment function, on a different port
             let res = HttpServer::new(|| {
-                App::new().route("/make_payment", web::post().to(make_payments))
+                App::new()
+                    .route("/make_payment", web::post().to(make_payments))
+                    .route("/make_payment_v2", web::post().to(make_payments_v2))
             })
             .workers(workers)
             .bind(format!("[::0]:{}", common.network.rita_contact_port))

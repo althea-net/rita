@@ -9,6 +9,8 @@
 
 use crate::debt_keeper::payment_received;
 use crate::debt_keeper::payment_succeeded;
+use crate::payment_controller::remove_invalid_payment;
+use crate::payment_controller::store_payment;
 use crate::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
 use crate::rita_loop::get_web3_server;
 use crate::usage_tracker::update_payments;
@@ -151,6 +153,9 @@ fn remove(msg: Remove, history: &mut PaymentValidator) {
             .successful_transactions
             .insert(msg.tx.payment.clone().txid.unwrap());
     }
+    if !msg.success {
+        remove_invalid_payment(msg.tx.payment.clone());
+    }
     if was_present {
         info!("Transaction {} was removed", msg.tx);
     } else {
@@ -246,6 +251,7 @@ pub async fn validate() {
     let mut history = HISTORY.write().unwrap();
     for item in to_delete.iter() {
         history.unvalidated_transactions.remove(item);
+        remove_invalid_payment(item.payment.clone())
     }
 }
 
@@ -371,7 +377,10 @@ fn handle_tx_messaging(
             let _ = payment_received(pmt.from, pmt.amount.clone());
 
             // update the usage tracker with the details of this payment
-            update_payments(pmt);
+            update_payments(pmt.clone());
+
+            // Update our local list of pmts received from this node
+            store_payment(pmt, false);
         }
         // we successfully paid someone
         (false, true, true) => {
