@@ -10,38 +10,45 @@ use actix_web_async::web::Json;
 
 use actix_web_async::{HttpRequest, HttpResponse};
 use althea_types::{LocalIdentity, PaymentTx};
+use std::collections::HashSet;
 use std::time::Instant;
 
 /// The recieve side of the make payments call
 pub async fn make_payments(item: Json<PaymentTx>) -> HttpResponse {
     let pmt = item.into_inner();
-    let txid = pmt.txid.clone();
-    let our_address = settings::get_rita_common().payment.eth_address.unwrap();
 
-    // we didn't get a txid, probably an old client.
-    // why don't we need an Either up here? Because the types ultimately match?
-    if txid.is_none() {
-        error!("Did not find txid, payment failed!");
-        return HttpResponse::build(StatusCode::from_u16(400u16).unwrap())
-            .json("txid not provided! Invalid payment!");
-    } else if pmt.to.eth_address != our_address {
-        return HttpResponse::build(StatusCode::from_u16(400u16).unwrap()).json(format!(
-            "We are not {} our address is {}! Invalid payment",
-            pmt.to.eth_address, our_address
-        ));
-    }
-    let txid = txid.unwrap();
-    info!(
-        "Got Payment from {} for {} with txid {:#066x}",
-        pmt.from.wg_public_key, pmt.amount, txid,
-    );
     let ts = ToValidate {
         payment: pmt,
         received: Instant::now(),
         checked: false,
     };
-    validate_later(ts);
+    if let Err(e) = validate_later(ts) {
+        return HttpResponse::build(StatusCode::from_u16(400u16).unwrap()).json(&format!("{}", e));
+    }
 
+    HttpResponse::Ok().json("Payment Received!")
+}
+
+/// The recieve side of the make payments v2 call. This processes a list of payments instead of a single payment
+pub async fn make_payments_v2(item: Json<HashSet<PaymentTx>>) -> HttpResponse {
+    let pmt_list = item.into_inner();
+    let mut build_err = String::new();
+    for pmt in pmt_list {
+        let ts = ToValidate {
+            payment: pmt.clone(),
+            received: Instant::now(),
+            checked: false,
+        };
+
+        // Duplicates will be removed here
+        if let Err(e) = validate_later(ts) {
+            build_err.push_str(&format!("{}\n", e));
+        }
+    }
+
+    if !build_err.is_empty() {
+        return HttpResponse::build(StatusCode::from_u16(400u16).unwrap()).json(&build_err);
+    }
     HttpResponse::Ok().json("Payment Received!")
 }
 

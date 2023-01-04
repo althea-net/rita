@@ -12,10 +12,12 @@ use crate::debt_keeper::payment_succeeded;
 use crate::rita_loop::fast_loop::FAST_LOOP_TIMEOUT;
 use crate::rita_loop::get_web3_server;
 use crate::usage_tracker::update_payments;
+use crate::RitaCommonError;
 use althea_types::Identity;
 use althea_types::PaymentTx;
 use futures::future::join_all;
 use num256::Uint256;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
 use std::fmt::Write as _;
@@ -74,6 +76,9 @@ impl fmt::Display for ToValidate {
 
 pub struct PaymentValidator {
     unvalidated_transactions: HashSet<ToValidate>,
+    /// All successful transactions sent FROM this router, mapped To Address-> list of PaymentTx
+    successful_transactions_sent: HashMap<Identity, HashSet<PaymentTx>>,
+    /// All successful txids this router has verified, used to check for duplicate payments
     successful_transactions: HashSet<Uint256>,
 }
 
@@ -81,6 +86,7 @@ impl PaymentValidator {
     pub fn new() -> Self {
         PaymentValidator {
             unvalidated_transactions: HashSet::new(),
+            successful_transactions_sent: HashMap::new(),
             successful_transactions: HashSet::new(),
         }
     }
@@ -90,6 +96,35 @@ impl Default for PaymentValidator {
     fn default() -> PaymentValidator {
         PaymentValidator::new()
     }
+}
+
+/// This stores payments of all tx that we sent to different nodes.
+pub fn store_payment(pmt: PaymentTx) {
+    let data = &mut HISTORY.write().unwrap().successful_transactions_sent;
+    let neighbor = pmt.to;
+
+    if let std::collections::hash_map::Entry::Vacant(e) = data.entry(neighbor) {
+        let mut set = HashSet::new();
+        set.insert(pmt);
+        e.insert(set);
+    } else {
+        let set = data
+            .get_mut(&neighbor)
+            .expect("This key should have an initialized set");
+        set.insert(pmt);
+    }
+}
+
+/// Given an id, get all payments made to that id
+pub fn get_payment_txids(id: Identity) -> HashSet<PaymentTx> {
+    let data: HashSet<PaymentTx> = HashSet::new();
+    HISTORY
+        .read()
+        .unwrap()
+        .successful_transactions_sent
+        .get(&id)
+        .unwrap_or(&data)
+        .clone()
 }
 
 /// Function to compute the total amount of all unverified payments
@@ -114,8 +149,9 @@ pub fn calculate_unverified_payments(router: Identity) -> Uint256 {
 /// by using a history of successful transactions.
 /// This endpoint specifically (and only this one) is fully idempotent so that we can retry
 /// txid transmissions
-pub fn validate_later(ts: ToValidate) {
+pub fn validate_later(ts: ToValidate) -> Result<(), RitaCommonError> {
     let mut history = HISTORY.write().unwrap();
+
     if let Some(txid) = ts.payment.txid.clone() {
         if !history.successful_transactions.contains(&txid) {
             // insert is safe to run multiple times just so long as we check successful tx's for duplicates
@@ -131,8 +167,14 @@ pub fn validate_later(ts: ToValidate) {
         panic!(
             "Someone tried to insert an unpublished transaction to validate!? {:?}",
             ts
-        )
+        );
+        return Err(RitaCommonError::MiscStringError(format!(
+            "Did not find txid for {:?}, payment failed!",
+            ts.payment
+        )));
     }
+
+    Ok(())
 }
 
 struct Remove {
@@ -353,7 +395,7 @@ fn handle_tx_messaging(
     }
 
     match (to_us, from_us, is_in_chain) {
-        // we where successfully paid
+        // we were successfully paid
         (true, false, true) => {
             // remove this transaction from our storage
             remove(
@@ -391,7 +433,10 @@ fn handle_tx_messaging(
             let _ = payment_succeeded(pmt.to, pmt.amount.clone());
 
             // update the usage tracker with the details of this payment
-            update_payments(pmt);
+            update_payments(pmt.clone());
+
+            // Store this payment as a receipt to send in the future if this receiver doesnt see the payment
+            store_payment(pmt);
         }
         (true, true, _) => {
             error!("Transaction to ourselves!");
@@ -455,4 +500,65 @@ fn print_txids(list: &HashSet<ToValidate>) -> String {
         write!(output, "{} ,", item).unwrap();
     }
     output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_payment_txid_datastore() {
+        let client_id = Identity {
+            mesh_ip: "fd00::1".parse().unwrap(),
+            eth_address: "0xE39bDB2e345ACf7B0C7B1A28dFA26288C3094A6A"
+                .parse()
+                .unwrap(),
+            wg_public_key: "NZnbEv9w5lC3JG3hacwh5cq8C5NnsAUJLrNKYL91fS0="
+                .parse()
+                .unwrap(),
+            nickname: None,
+        };
+
+        let exit_id = Identity {
+            mesh_ip: "fd00::1337".parse().unwrap(),
+            eth_address: "0xE39bDB2e345ACf7B0C7B1A28dFA26288C3094A6A"
+                .parse()
+                .unwrap(),
+            wg_public_key: "PiMD6fCsgyNKwz9AVqP/GRT3+o6h6e9Y0KPEdFct/yw="
+                .parse()
+                .unwrap(),
+            nickname: None,
+        };
+
+        let mut sent_hashset = HashSet::new();
+
+        let pmt1 = PaymentTx {
+            to: exit_id,
+            from: client_id,
+            amount: 10u8.into(),
+            txid: Some(1u8.into()),
+        };
+        store_payment(pmt1.clone());
+        sent_hashset.insert(pmt1.clone());
+        assert_eq!(get_payment_txids(pmt1.to), sent_hashset);
+
+        let pmt2 = PaymentTx {
+            to: exit_id,
+            from: client_id,
+            amount: 100u8.into(),
+            txid: Some(2u8.into()),
+        };
+        store_payment(pmt2.clone());
+        sent_hashset.insert(pmt2.clone());
+        assert_eq!(get_payment_txids(pmt2.to), sent_hashset);
+
+        let pmt3 = PaymentTx {
+            to: exit_id,
+            from: client_id,
+            amount: 100u8.into(),
+            txid: Some(2u8.into()),
+        };
+        store_payment(pmt3.clone());
+        assert_eq!(get_payment_txids(pmt3.to), sent_hashset);
+    }
 }
