@@ -5,7 +5,7 @@
 
 use althea_types::PaymentTx;
 use awc;
-use futures::future::join_all;
+use futures::future::{join, join_all};
 use num256::Uint256;
 use std::error::Error;
 use std::fmt::Result as DisplayResult;
@@ -20,7 +20,7 @@ use crate::blockchain_oracle::{
     get_oracle_balance, get_oracle_latest_gas_price, get_oracle_nonce, set_oracle_nonce,
 };
 use crate::debt_keeper::payment_failed;
-use crate::payment_validator::{validate_later, ToValidate};
+use crate::payment_validator::{get_payment_txids, validate_later, ToValidate};
 use crate::rita_loop::get_web3_server;
 
 pub const TRANSACTION_SUBMISSION_TIMEOUT: Duration = Duration::from_secs(15);
@@ -197,6 +197,16 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
         String::from("http://127.0.0.1:1234/make_payment")
     };
 
+    // v2 version, this takes a list of pmts instead of one
+    let neighbor_url_v2 = if cfg!(not(test)) {
+        format!(
+            "http://[{}]:{}/make_payment_v2",
+            pmt.to.mesh_ip, network_settings.rita_contact_port,
+        )
+    } else {
+        String::from("http://127.0.0.1:1234/make_payment_v2")
+    };
+
     let full_node = get_web3_server();
     let web3 = Web3::new(&full_node, TRANSACTION_SUBMISSION_TIMEOUT);
 
@@ -238,12 +248,21 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
     // add published txid to submission
     pmt.txid = Some(tx_id.clone());
 
+    // Get all txids to this client. Temporary add new payment to a copy of a list to send up to endpoint
+    // this pmt is actually recorded in memory after validator confirms it
+    let mut txid_history = get_payment_txids(pmt.to);
+    txid_history.insert(pmt.clone());
+
     let actix_client = awc::Client::new();
     let neigh_ack = actix_client
         .post(neighbor_url.clone())
         .timeout(TRANSACTION_SUBMISSION_TIMEOUT)
-        .send_json(&pmt)
-        .await;
+        .send_json(&pmt);
+
+    let neigh_ack_v2 = actix_client
+        .post(neighbor_url_v2.clone())
+        .timeout(TRANSACTION_SUBMISSION_TIMEOUT)
+        .send_json(&txid_history);
 
     let resend_info = ResendInfo {
         txid: tx_id.clone(),
@@ -252,11 +271,54 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
         attempt: 0u8,
     };
 
-    match neigh_ack {
-        Ok(mut val) => {
+    // Hit both endpoints, in the case of a node having both endpoints, validator will simply get a duplicate transaction txid and discard it.
+    let (neigh_ack_v2, neigh_ack) = join(neigh_ack_v2, neigh_ack).await;
+
+    match (neigh_ack_v2, neigh_ack) {
+        (Ok(mut val2), Ok(mut val)) => {
+            // THis is probably a b20 router
+            match (val2.status().is_success(), val.status().is_success()) {
+                (true, _) => {
+                    info!(
+                        "Payment pmt with txid: {:#066x} is sent to our neighbor with status {:?} and body {:?} via url {}, using full node {} and amount {}",
+                        tx_id,
+                        val2.status(),
+                        val2.body().await,
+                        neighbor_url_v2,
+                        full_node,
+                        pmt.amount
+                    );
+                }
+                (false, true) => {
+                    error!(
+                        "Make_payment_v2 with txid {:#066x} failed with status {:?} and body {:?}",
+                        tx_id,
+                        val2.status(),
+                        val2.body().await
+                    );
+                    info!(
+                        "Payment pmt with txid: {:#066x} is sent to our neighbor with status {:?} and body {:?} via url {}, using full node {} and amount {}",
+                        tx_id,
+                        val.status(),
+                        val.body().await,
+                        neighbor_url,
+                        full_node,
+                        pmt.amount
+                    );
+                }
+                _ => {
+                    error!(
+                        "We published txid: {:#066x} to url {} but our neighbor responded with status {:?} and body {:?}, will retry",
+                        tx_id, neighbor_url, val.status(), val.body().await);
+                    queue_resend(resend_info);
+                }
+            }
+        }
+        (Err(_), Ok(mut val)) => {
+            // probably a b19 router
             if val.status().is_success() {
                 info!(
-                    "Payment pmt with txid: {:#066x} is sent to our neighbor with status {:?} and body {:?} via url {}, using full node {} and amount {:?}",
+                    "Payment pmt with txid: {:#066x} is sent to our neighbor with status {:?} and body {:?} via url {}, using full node {} and amount {}",
                     tx_id,
                     val.status(),
                     val.body().await,
@@ -266,16 +328,41 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
                 );
             } else {
                 error!(
-            "We published txid: {:#066x} but our neighbor responded with status {:?} and body {:?}, will retry",
-            tx_id, val.status(), val.body().await);
-                queue_resend(resend_info);
+                    "Make_payment with txid {:#066x} failed with status {:?} and body {:?}",
+                    tx_id,
+                    val.status(),
+                    val.body().await
+                );
             }
         }
-        Err(e) => {
+        (Ok(mut val2), Err(_)) => {
+            // We shouldnt reach this case unless some network error or make_payment has been removed. If make_payment
+            // has been removed, all this legacy code can be removed also
+            if val2.status().is_success() {
+                info!(
+                    "Payment pmt with txid: {:#066x} is sent to our neighbor with status {:?} and body {:?} via url {}, using full node {} and amount {}",
+                    tx_id,
+                    val2.status(),
+                    val2.body().await,
+                    neighbor_url_v2,
+                    full_node,
+                    pmt.amount
+                );
+            } else {
+                error!(
+                    "Make_payment_v2 with txid {:#066x} failed with status {:?} and body {:?}",
+                    tx_id,
+                    val2.status(),
+                    val2.body().await
+                );
+            }
+        }
+        (Err(_), Err(e)) => {
+            // Why is make payment failing here? Call a resend
             error!(
-            "We published txid: {:#066x} but failed to notify our neighbor with {:?}, will retry",
-            tx_id, e
-        );
+                "We published txid: {:#066x} but failed to notify our neighbor with {:?}, will retry",
+                tx_id, e
+            );
             queue_resend(resend_info)
         }
     }
@@ -287,7 +374,9 @@ async fn make_payment(mut pmt: PaymentTx) -> Result<(), PaymentControllerError> 
         checked: false,
     };
 
-    validate_later(ts);
+    if let Err(e) = validate_later(ts.clone()) {
+        error!("Received error trying to validate {:?} Error: {:?}", ts, e);
+    }
 
     Ok(())
 }
