@@ -168,8 +168,7 @@ impl dyn KernelInterface {
             )));
         }
 
-        let _res = self.set_codel_shaping("wg_exit", args.user_specified_speed, true);
-        let _res = self.set_codel_shaping("br-lan", args.user_specified_speed, false);
+        let _res = self.set_codel_shaping("br-lan", args.user_specified_speed);
 
         Ok(())
     }

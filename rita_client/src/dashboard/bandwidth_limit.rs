@@ -23,8 +23,7 @@ pub async fn set_bandwidth_limit(path: Path<String>) -> HttpResponse {
     } else {
         return HttpResponse::BadRequest().finish();
     }
-    let _res = KI.set_codel_shaping("wg_exit", network.user_bandwidth_limit, true);
-    let _res = KI.set_codel_shaping("br-lan", network.user_bandwidth_limit, false);
+    let _res = KI.set_codel_shaping("br-lan", network.user_bandwidth_limit);
     rita_client.network = network;
     settings::set_rita_client(rita_client);
 
