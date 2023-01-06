@@ -157,7 +157,7 @@ impl Tunnel {
         };
 
         KI.open_tunnel(args)?;
-        KI.set_codel_shaping(&iface_name, speed_limit, false)?;
+        KI.set_codel_shaping(&iface_name, speed_limit)?;
 
         let now = Instant::now();
         let t = Tunnel {
@@ -708,7 +708,7 @@ fn tunnel_bw_limit_update(tunnels: &HashMap<Identity, Vec<Tunnel>>) -> Result<()
             if *payment_state == PaymentState::Overdue {
                 KI.set_classless_limit(iface_name, bw_per_iface)?;
             } else if *payment_state == PaymentState::Paid && has_limit {
-                KI.set_codel_shaping(iface_name, None, false)?;
+                KI.set_codel_shaping(iface_name, None)?;
             }
         }
     }
