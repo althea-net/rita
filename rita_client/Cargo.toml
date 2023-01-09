@@ -1,6 +1,6 @@
 [package]
 name = "rita_client"
-version = "0.20.7"
+version = "0.20.8"
 edition = "2018"
 license = "Apache-2.0"
 
@@ -27,7 +27,7 @@ babel_monitor = { path = "../babel_monitor" }
 arrayvec = {version= "0.7", features = ["serde"]}
 sodiumoxide = "0.2"
 clu = { path = "../clu" }
-web30 = "0.21"
+web30 = "0.22"
 awc = "3.0.0"
 ipnetwork = "0.20"
 actix-async = {package="actix", version = "0.13"}

@@ -5,7 +5,7 @@ authors = ["Jehan <jehan.tremback@gmail.com>, Justin <justin@althea.net>"]
 edition = "2018"
 
 [dependencies]
-web30 = "0.21"
+web30 = "0.22"
 num256 = "0.3"
 clarity = "0.5"
 rand = "0.8"
@@ -13,7 +13,7 @@ num = "0.4"
 log = "0.4"
 serde_derive = "1.0"
 serde = "1.0"
-tokio = "1.0"
+tokio = "1.2"
 futures = {version="0.3", features = ["thread-pool"]}
 
 [dev-dependencies]
