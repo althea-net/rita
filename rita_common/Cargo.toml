@@ -36,6 +36,7 @@ awc = {version = "3.0.0-beta.21", default-features = false, features=["openssl",
 actix-service = "2.0.2"
 web30 = "0.22"
 althea_types = { path = "../althea_types" }
+
 [dependencies.regex]
 version = "1.6"
 default-features = false

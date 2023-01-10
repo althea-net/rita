@@ -9,6 +9,7 @@ extern crate serde_derive;
 
 pub mod dashboard;
 pub mod exit_manager;
+pub mod extender;
 pub mod heartbeat;
 pub mod logging;
 pub mod operator_fee_manager;
@@ -28,6 +29,7 @@ pub use crate::dashboard::contact_info::*;
 pub use crate::dashboard::contact_info::*;
 pub use crate::dashboard::eth_private_key::*;
 pub use crate::dashboard::exits::*;
+pub use crate::dashboard::extender_checkin::*;
 pub use crate::dashboard::installation_details::*;
 pub use crate::dashboard::interfaces::*;
 pub use crate::dashboard::localization::*;

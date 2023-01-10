@@ -56,6 +56,7 @@ impl From<std::io::Error> for RitaCommonError {
         RitaCommonError::StdError(error)
     }
 }
+
 impl From<BabelMonitorError> for RitaCommonError {
     fn from(error: BabelMonitorError) -> Self {
         RitaCommonError::BabelMonitorError(error)

@@ -11,6 +11,8 @@ use mac_address::MacAddress;
 use rita_common::KI;
 use serde::Serializer;
 
+use crate::extend_hardware_info;
+
 /// Devices can have multiple ip addresses but mac addresses on a wlan should be unique to each device
 fn consolidate_wlan_arp_table(
     arp_table: Vec<(IpAddr, MacAddress)>,
@@ -217,7 +219,7 @@ pub async fn get_devices_lan_endpoint(_req: HttpRequest) -> HttpResponse {
 
             let rita_client = settings::get_rita_client();
             let hardware_to_check = match get_hardware_info(rita_client.network.device) {
-                Ok(info) => info,
+                Ok(info) => extend_hardware_info(info),
                 Err(e) => {
                     return HttpResponse::InternalServerError().json(format!(
                         "Unable to grab rita client hardware information. Failed with error {e:?}"

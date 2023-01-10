@@ -53,6 +53,9 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
 
     let wifi_devices = get_wifi_devices();
 
+    // This get populated later
+    let extender_list = None;
+
     let conntrack_info = get_conntrack_info();
 
     Ok(HardwareInfo {
@@ -69,6 +72,7 @@ pub fn get_hardware_info(device_name: Option<String>) -> Result<HardwareInfo, Er
         entire_system_kernel_version,
         ethernet_stats,
         wifi_devices,
+        extender_list,
         conntrack: conntrack_info,
     })
 }
@@ -251,7 +255,7 @@ fn maybe_get_single_line_u64(path: &str) -> Option<u64> {
     }
 }
 
-fn maybe_get_single_line_string(path: &str) -> Option<String> {
+pub fn maybe_get_single_line_string(path: &str) -> Option<String> {
     match get_lines(path) {
         Ok(line) => line.get(0).map(|val| val.to_string()),
         Err(_e) => None,

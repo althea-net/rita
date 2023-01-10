@@ -642,7 +642,7 @@ pub async fn get_wifi_config(_req: HttpRequest) -> HttpResponse {
     HttpResponse::Ok().json(config)
 }
 
-fn get_wifi_config_internal() -> Result<Vec<WifiInterface>, RitaClientError> {
+pub fn get_wifi_config_internal() -> Result<Vec<WifiInterface>, RitaClientError> {
     let mut interfaces = Vec::new();
     let mut devices = HashMap::new();
     let config = KI.ubus_call("uci", "get", "{ \"config\": \"wireless\"}")?;
