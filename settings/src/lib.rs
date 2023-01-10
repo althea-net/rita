@@ -36,7 +36,6 @@ pub mod logging;
 pub mod network;
 pub mod operator;
 pub mod payment;
-// pub mod tower;
 
 mod error;
 pub use error::SettingsError;

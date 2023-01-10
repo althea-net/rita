@@ -1,5 +1,5 @@
-use crate::WifiDevice;
 use crate::{contact_info::ContactType, wg_key::WgKey, BillingDetails, InstallationDetails};
+use crate::{ClientExtender, WifiDevice};
 use arrayvec::ArrayString;
 use babel_monitor::structs::Neighbor;
 use babel_monitor::structs::Route;
@@ -755,6 +755,9 @@ pub struct HardwareInfo {
     // Vector of wifi devices on router with staion and survey data for each
     #[serde(default)]
     pub wifi_devices: Vec<WifiDevice>,
+    // List of extenders connected to our router
+    #[serde(default)]
+    pub extender_list: Option<Vec<ClientExtender>>,
     // Info about the max connections, number of rows in conntrack table and current number of connections made by router
     #[serde(default)]
     pub conntrack: Option<ConntrackInfo>,

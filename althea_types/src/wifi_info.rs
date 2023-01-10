@@ -47,6 +47,12 @@ pub struct WifiStationData {
     pub current_time_ms: Option<u64>,
 }
 
+/// Format client uses to send to optools and frontend
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ClientExtender {
+    pub mac_addr: u64,
+}
+
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct WifiDevice {
     pub name: String,

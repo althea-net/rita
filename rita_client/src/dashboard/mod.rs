@@ -11,6 +11,7 @@ pub mod contact_info;
 pub mod devices_on_lan;
 pub mod eth_private_key;
 pub mod exits;
+pub mod extender_checkin;
 pub mod installation_details;
 pub mod interfaces;
 pub mod localization;
@@ -34,6 +35,7 @@ use crate::dashboard::bandwidth_limit::*;
 use crate::dashboard::contact_info::*;
 use crate::dashboard::eth_private_key::*;
 use crate::dashboard::exits::*;
+use crate::dashboard::extender_checkin::*;
 use crate::dashboard::installation_details::*;
 use crate::dashboard::interfaces::*;
 use crate::dashboard::localization::*;
@@ -92,6 +94,10 @@ pub fn start_client_dashboard(rita_dashboard_port: u16) {
                     .route("/exits/{name}/register", web::post().to(register_to_exit))
                     .route("/exits/{name}/reset", web::post().to(reset_exit))
                     .route("/exits/{name}/select", web::post().to(select_exit))
+                    .route(
+                        "/extender_checkin",
+                        web::post().to(extender_checkin_handler),
+                    )
                     .route("/local_fee", web::get().to(get_local_fee))
                     .route("/local_fee/{fee}", web::post().to(set_local_fee))
                     .route("/metric_factor", web::get().to(get_metric_factor))

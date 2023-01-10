@@ -1,0 +1,19 @@
+[package]
+name = "rita_extender"
+version = "0.20.8"
+edition = "2018"
+license = "Apache-2.0"
+
+
+[dependencies]
+compressed_log = "0.5"
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
+lazy_static = "1.4"
+rita_common = { path = "../rita_common" }
+rita_client = { path = "../rita_client" }
+log = { version = "0.4", features = ["release_max_level_info"] }
+settings = { path = "../settings" }
+awc = "3.0.0"
+actix-async = {package="actix", version = "0.13"}
