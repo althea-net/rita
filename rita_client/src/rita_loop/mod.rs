@@ -8,20 +8,13 @@ use crate::exit_manager::exit_manager_tick;
 use crate::exit_manager::get_selected_exit;
 use crate::heartbeat::send_heartbeat_loop;
 use crate::heartbeat::HEARTBEAT_SERVER_KEY;
-use crate::light_client_manager::lcm_watch;
-use crate::light_client_manager::light_client_hello_response;
-use crate::light_client_manager::Watch;
 use crate::operator_fee_manager::tick_operator_payments;
-use crate::traffic_watcher::get_exit_dest_price;
 use actix_async::System as AsyncSystem;
-use actix_web_async::web;
-use actix_web_async::{App, HttpServer};
 use althea_kernel_interface::KI;
 use althea_types::ExitState;
 use antenna_forwarding_client::start_antenna_forwarding_proxy;
 use rita_common::rita_loop::set_gateway;
 use rita_common::tunnel_manager::tm_get_neighbors;
-use rita_common::tunnel_manager::tm_get_tunnels;
 use settings::client::RitaClientSettings;
 use std::fs::File;
 use std::fs::OpenOptions;
@@ -99,19 +92,6 @@ pub fn start_rita_loop() {
                         start.elapsed().as_secs(),
                         start.elapsed().subsec_millis()
                     );
-
-                    let exit_dest_price = get_exit_dest_price();
-                    let tunnels = tm_get_tunnels().unwrap();
-                    info!(
-                        "Rita Client loop get tunnels in {}s {}ms",
-                        start.elapsed().as_secs(),
-                        start.elapsed().subsec_millis()
-                    );
-
-                    lcm_watch(Watch {
-                        tunnels,
-                        exit_dest_price,
-                    });
 
                     check_for_gateway_client_billing_corner_case();
                     info!(
@@ -210,36 +190,6 @@ fn check_for_gateway_client_billing_corner_case() {
     }
 }
 
-pub fn start_rita_client_endpoints(workers: usize) {
-    // listen on the light client gateway ip if it's not none
-    thread::spawn(move || {
-        let runner = AsyncSystem::new();
-        runner.block_on(async move {
-            if let Some(gateway_ip) = settings::get_rita_client().network.light_client_router_ip {
-                trace!("Listening for light client hellos on {}", gateway_ip);
-                let unstarted_server = HttpServer::new(|| {
-                    App::new().route(
-                        "/light_client_hello",
-                        web::post().to(light_client_hello_response),
-                    )
-                })
-                .workers(workers)
-                .bind(format!(
-                    "{}:{}",
-                    gateway_ip,
-                    settings::get_rita_client().network.light_client_hello_port
-                ));
-                if let Ok(val) = unstarted_server {
-                    info!("Starting client endpoint: light client");
-                    let _res = val.shutdown_timeout(0).run().await;
-                } else {
-                    trace!("Failed to bind to light client ip, probably toggled off!")
-                }
-            }
-        });
-    });
-}
-
 pub fn start_antenna_forwarder(settings: RitaClientSettings) {
     if metrics_permitted() {
         let url: &str;
@@ -253,8 +203,7 @@ pub fn start_antenna_forwarder(settings: RitaClientSettings) {
 
         let our_id = settings.get_identity().unwrap();
         let network = settings.network;
-        let mut interfaces = network.peer_interfaces.clone();
-        interfaces.insert("br-pbs".to_string());
+        let interfaces = network.peer_interfaces.clone();
         start_antenna_forwarding_proxy(
             url.to_string(),
             our_id,

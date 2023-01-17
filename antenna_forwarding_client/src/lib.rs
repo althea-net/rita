@@ -301,7 +301,7 @@ fn setup_networking<S: ::std::hash::BuildHasher>(
 /// Finds the antenna on the appropriate physical interface by iterating
 /// over the list of provided interfaces, attempting a ping
 /// and repeating until the appropriate interface is located
-/// TODO handle overlapping edge cases for gateway ip, lan ip, br-pbs etc
+/// TODO handle overlapping edge cases for gateway ip, lan ip, etc
 fn find_antenna<S: ::std::hash::BuildHasher>(
     target_ip: IpAddr,
     interfaces: &HashSet<String, S>,

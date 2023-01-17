@@ -28,7 +28,6 @@ use docopt::Docopt;
 use rita_client::dashboard::start_client_dashboard;
 use rita_client::get_client_usage;
 use rita_client::rita_loop::start_antenna_forwarder;
-use rita_client::rita_loop::start_rita_client_endpoints;
 use rita_client::rita_loop::start_rita_client_loops;
 use rita_client::Args;
 use rita_common::debt_keeper::save_debt_on_shutdown;
@@ -148,7 +147,6 @@ fn main() {
         settings::get_rita_client(),
     ));
     start_core_rita_endpoints(4);
-    start_rita_client_endpoints(1);
     start_client_dashboard(settings.network.rita_dashboard_port);
     start_antenna_forwarder(settings);
 

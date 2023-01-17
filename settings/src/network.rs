@@ -1,7 +1,7 @@
 use althea_kernel_interface::DefaultRoute;
 use althea_types::ShaperSettings;
 use std::collections::HashSet;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv6Addr};
 
 use althea_types::WgKey;
 
@@ -27,10 +27,6 @@ fn default_shaper_settings() -> ShaperSettings {
     }
 }
 
-fn default_light_client_hello_port() -> u16 {
-    4878
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct NetworkSettings {
     /// How much non-financial metrics matter compared to a route's cost. By default a 2x more
@@ -52,13 +48,6 @@ pub struct NetworkSettings {
     /// Port on which rita starts the per hop tunnel handshake on (needs to be constant across an
     /// entire althea deployment)
     pub rita_hello_port: u16,
-    /// Port on which phones will contact Rita, this SHOULD be firewalled from the rest of the mesh
-    /// network
-    #[serde(default = "default_light_client_hello_port")]
-    pub light_client_hello_port: u16,
-    /// This devices address on the inside of the AltheaPhone network, this is set by the firmware builder. If it's
-    /// none it was never set by the firmware builder and light client operations simply aren't enabled
-    pub light_client_router_ip: Option<Ipv4Addr>,
     /// Port on which rita contacts other althea nodes over the mesh (needs to be constant across an
     /// entire althea deployment)
     pub rita_contact_port: u16,
@@ -129,8 +118,6 @@ impl Default for NetworkSettings {
             babel_port: 6872,
             rita_contact_port: 4874,
             rita_hello_port: 4876,
-            light_client_hello_port: default_light_client_hello_port(),
-            light_client_router_ip: None,
             rita_dashboard_port: 4877,
             rita_dashboard_password: None,
             rita_tick_interval: 5,

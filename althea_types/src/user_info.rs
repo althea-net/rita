@@ -51,9 +51,6 @@ pub struct InstallationDetails {
     /// point to point links going downstream. If the vec is empty there are no
     /// relay antennas
     pub relay_antennas: Vec<Ipv4Addr>,
-    /// A list of addresses for light client antennas. The vec can of course
-    /// be empty representing no phone client antennas.
-    pub phone_client_antennas: Vec<Ipv4Addr>,
     /// The address of this installation, this has no structure and should
     /// simply be displayed. Depending on the country address formats will
     /// be very different and we might even only have GPS points

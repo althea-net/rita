@@ -61,7 +61,6 @@ pub async fn set_installation_details(req: Json<InstallationDetailsPost>) -> Htt
     // take a common separated string and parse it into the correct
     // values
     let mut parsed_relay_antenna_ips = Vec::new();
-    let mut parsed_phone_client_anntenna_ips = Vec::new();
     if let Some(val) = input.relay_antennas {
         for ip_str in val.split(',') {
             if let Ok(ip) = ip_str.parse() {
@@ -70,16 +69,6 @@ pub async fn set_installation_details(req: Json<InstallationDetailsPost>) -> Htt
                 trace!("false to parse {}", ip_str);
                 // it's permissible to have nothing but it's not permissable to have improperly
                 // formatted data
-                return HttpResponse::BadRequest().finish();
-            }
-        }
-    }
-    if let Some(val) = input.phone_client_antennas {
-        for ip_str in val.split(',') {
-            if let Ok(ip) = ip_str.parse() {
-                parsed_phone_client_anntenna_ips.push(ip);
-            } else {
-                trace!("false to parse {}", ip_str);
                 return HttpResponse::BadRequest().finish();
             }
         }
@@ -102,7 +91,6 @@ pub async fn set_installation_details(req: Json<InstallationDetailsPost>) -> Htt
     let new_installation_details = InstallationDetails {
         client_antenna_ip: parsed_client_antenna_ip,
         relay_antennas: parsed_relay_antenna_ips,
-        phone_client_antennas: parsed_phone_client_anntenna_ips,
         physical_address: input.physical_address,
         equipment_details: input.equipment_details,
         install_date: None,

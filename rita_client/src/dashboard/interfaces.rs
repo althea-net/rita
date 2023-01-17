@@ -42,10 +42,6 @@ pub enum InterfaceMode {
     },
     /// Similar to WAN, but not a gateway, so no static DNS routes and only IP peers (10.45.0.1)
     LTE,
-    /// This represents a port dedicated to phone network extending antennas. This is an extension of the
-    /// AltheaMobile SSID and can be boiled down to attaching the port to br-pbs over which devices will
-    /// then be assigned phone network DHCP and IPs
-    Phone,
     /// Ambiguous wireless modes like monitor, or promiscuous show up here, but other things that might also
     /// be unknown are various forms of malformed configs. Take for example a StaticWAN missing a config param
     Unknown,
@@ -58,7 +54,6 @@ impl ToString for InterfaceMode {
             InterfaceMode::Lan => "LAN".to_owned(),
             InterfaceMode::Wan => "WAN".to_owned(),
             InterfaceMode::StaticWan { .. } => "StaticWAN".to_owned(),
-            InterfaceMode::Phone => "Phone".to_owned(),
             InterfaceMode::Unknown => "unknown".to_owned(),
             InterfaceMode::LTE => "LTE".to_owned(),
         }
@@ -76,18 +71,12 @@ pub fn get_interfaces() -> Result<HashMap<String, InterfaceMode>, RitaClientErro
             // it's a list and we need to handle that
             if value.contains(' ') {
                 for list_member in value.split(' ') {
-                    if list_member.contains("pbs-wlan") {
-                        continue;
-                    }
                     retval.insert(
                         list_member.replace(' ', "").to_string(),
                         ethernet2mode(&value, &setting_name)?,
                     );
                 }
             } else {
-                if value.contains("pbs-wlan") {
-                    continue;
-                }
                 retval.insert(value.clone(), ethernet2mode(&value, &setting_name)?);
             }
         }
@@ -108,7 +97,6 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
     Ok(match &setting_name.replace(".ifname", "") {
         s if s.contains("rita_") => InterfaceMode::Mesh,
         s if s.contains("lan") => InterfaceMode::Lan,
-        s if s.contains("pbs") => InterfaceMode::Phone,
         s if s.contains("lte") => InterfaceMode::LTE,
         s if s.contains("backhaul") => {
             let prefix = "network.backhaul";
@@ -276,14 +264,6 @@ pub fn ethernet_transform_mode(
             let ret = KI.set_uci_var("network.lan.ifname", &new_list);
             return_codes.push(ret);
         }
-        // just like LAN we are adding and removing a device from the list just this time
-        // on pbs
-        InterfaceMode::Phone => {
-            let list = KI.get_uci_var("network.pbs.ifname")?;
-            let new_list = list_remove(&list, ifname);
-            let ret = KI.set_uci_var("network.pbs.ifname", &new_list);
-            return_codes.push(ret);
-        }
         // for mesh we need to send an unlisten so that Rita stops
         // listening then we can remove the section, we also need to remove it
         // from the config
@@ -356,29 +336,6 @@ pub fn ethernet_transform_mode(
                         return_codes.push(ret);
                     } else {
                         warn!("Trying to read lan ifname returned {:?}", e);
-                        return_codes.push(Err(e));
-                    }
-                }
-            }
-        }
-        InterfaceMode::Phone => {
-            trace!("Converting interface to Phone with ifname {:?}", ifname);
-            let ret = KI.get_uci_var("network.pbs.ifname");
-            match ret {
-                Ok(list) => {
-                    trace!("The existing Phone interfaces list is {:?}", list);
-                    let new_list = list_add(&list, ifname);
-                    trace!("Setting the new list {:?}", new_list);
-                    let ret = KI.set_uci_var("network.pbs.ifname", &new_list);
-                    return_codes.push(ret);
-                }
-                Err(e) => {
-                    if e.to_string().contains("Entry not found") {
-                        trace!("No Phone interfaces found, setting one now");
-                        let ret = KI.set_uci_var("network.pbs.ifname", ifname);
-                        return_codes.push(ret);
-                    } else {
-                        warn!("Trying to read Phone ifname returned {:?}", e);
                         return_codes.push(Err(e));
                     }
                 }
