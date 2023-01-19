@@ -16,6 +16,7 @@ pub struct ExtenderUpdate {
 pub struct ExtenderAdditionalSettings {
     pub wg_key: Option<WgKey>,
     pub operator_addr: Option<clarity::Address>,
+    pub rita_dashboard_port: u16,
 }
 
 /// This is the list of settings rita extender stores internally
