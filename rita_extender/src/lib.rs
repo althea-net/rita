@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate log;
 
+pub mod dashboard;
 mod error;
 
 use actix_async::System as AsyncSystem;

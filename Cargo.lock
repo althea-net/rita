@@ -2355,6 +2355,7 @@ name = "rita_extender"
 version = "0.20.8"
 dependencies = [
  "actix 0.13.0",
+ "actix-web",
  "awc",
  "compressed_log",
  "lazy_static",

@@ -14,10 +14,13 @@ use rita_client::extender::get_device_mac;
 use rita_client::extender::ExtenderUpdate;
 use rita_common::logging::enable_remote_logging;
 use rita_common::utils::env_vars_contains;
+use rita_extender::dashboard::start_extender_dashboard;
 use rita_extender::extender_checkin;
 use rita_extender::get_checkin_message;
 use rita_extender::start_rita_extender_loop;
 use rita_extender::DEFAULT_UPSTREAM_ENDPOINT;
+
+const DEFAULT_DASHBOARD_PORT: u16 = 4877;
 
 fn main() {
     // On Linux static builds we need to probe ssl certs path to be able to
@@ -33,6 +36,7 @@ fn main() {
     let mut logging_url: String = "https://stats.altheamesh.com:9999/compressed_sink".into();
     let mut level: String = "INFO".to_string();
     let mut wgkey: String = format!("{:x}", get_device_mac());
+    let mut dashboard_port = DEFAULT_DASHBOARD_PORT;
 
     let should_remote_log = if let Some(setting) = setting {
         logging_url = setting.logging_settings.dest_url;
@@ -40,6 +44,7 @@ fn main() {
         if let Some(key) = setting.additional_settings.wg_key {
             wgkey = key.to_string();
         }
+        dashboard_port = setting.additional_settings.rita_dashboard_port;
         setting.logging_settings.enabled || setting.additional_settings.operator_addr.is_some()
     } else {
         false
@@ -64,6 +69,7 @@ fn main() {
     let system = actix_async::System::new();
 
     start_rita_extender_loop();
+    start_extender_dashboard(dashboard_port);
 
     if let Err(e) = system.run() {
         error!("Starting extender failed with {}", e);

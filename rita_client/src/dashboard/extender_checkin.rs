@@ -38,6 +38,7 @@ pub async fn extender_checkin_handler(extender: Json<ExtenderCheckin>) -> HttpRe
         additional_settings: ExtenderAdditionalSettings {
             operator_addr: rita_client.operator.operator_address,
             wg_key: rita_client.network.wg_public_key,
+            rita_dashboard_port: rita_client.network.rita_dashboard_port,
         },
     };
     HttpResponse::Ok().json(ret)
