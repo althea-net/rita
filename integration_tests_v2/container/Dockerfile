@@ -10,4 +10,4 @@ RUN cd /var/babeld/babeld && make install
 # note that changes have to be checked in to be pulled in and tested! we pull this in near
 # the bottom to maximize caching of earlier containers
 ADD rita.tar.gz /
-CMD RUST_LOG=INFO RUST_BACKTRACE=FULL PATH=$PATH:$HOME/.cargo/bin cargo run --manifest-path /althea_rs/test_runner/Cargo.toml
+CMD RUST_LOG=INFO RUST_BACKTRACE=FULL PATH=$PATH:$HOME/.cargo/bin cargo run --manifest-path /althea_rs/test_runner/Cargo.toml --features "load_from_disk"

@@ -17,6 +17,7 @@ extern crate serde_derive;
 extern crate log;
 extern crate arrayvec;
 
+use althea_kernel_interface::KI;
 use althea_types::Identity;
 use network::NetworkSettings;
 use payment::PaymentSettings;
@@ -132,6 +133,10 @@ impl RitaSettings {
 
 /// write the current SETTINGS from memory to file
 pub fn write_config() -> Result<(), SettingsError> {
+    if cfg!(feature = "load_from_disk") {
+        // settings already saved in any set step
+        return Ok(());
+    }
     match &*SETTINGS.read().unwrap() {
         Some(Settings::Adaptor(adapt)) => adapt.adaptor.write_config(),
         Some(Settings::Client(settings)) => {
@@ -181,6 +186,16 @@ pub fn merge_config_json(changed_settings: serde_json::Value) -> Result<(), Sett
 /// Does not currently save the identity paramater, as we don't
 /// need to modify that in a generic context.
 pub fn set_rita_common(input: RitaSettings) {
+    if cfg!(feature = "load_from_disk") {
+        let settings_file = get_settings_file_from_ns();
+        // load settings data from the settings file
+        let mut ritasettings = RitaClientSettings::new(&settings_file).unwrap();
+        ritasettings.network = input.network;
+        ritasettings.payment = input.payment;
+        // save to file
+        set_rita_client(ritasettings);
+        return;
+    }
     let settings_ref: &mut Option<Settings> = &mut SETTINGS.write().unwrap();
     match settings_ref {
         Some(Settings::Adaptor(adapt)) => {
@@ -212,6 +227,17 @@ pub fn set_rita_common(input: RitaSettings) {
 
 /// get the current settings and extract generic RitaSettings from it
 pub fn get_rita_common() -> RitaSettings {
+    if cfg!(feature = "load_from_disk") {
+        let settings_file = get_settings_file_from_ns();
+        // load settings data from the settings file
+        let ritasettings = RitaClientSettings::new(&settings_file).unwrap();
+        let commonsettings = RitaSettings {
+            payment: ritasettings.payment.clone(),
+            network: ritasettings.network.clone(),
+            identity: ritasettings.get_identity(),
+        };
+        return commonsettings;
+    }
     match &*SETTINGS.read().unwrap() {
         Some(Settings::Adaptor(adapt)) => {
             let settings = adapt.adaptor.get_client().unwrap();
@@ -256,6 +282,12 @@ pub fn get_flag_config() -> String {
 /// set client settings into local or adaptor memory
 /// panics if called on exit settings
 pub fn set_rita_client(client_setting: RitaClientSettings) {
+    if cfg!(feature = "load_from_disk") {
+        let settings_file = get_settings_file_from_ns();
+        // save new data to the settings file
+        client_setting.write(&settings_file).unwrap();
+        return;
+    }
     let settings_ref = &mut *SETTINGS.write().unwrap();
     match settings_ref {
         // if there's an adaptor already saved, then use it to set there
@@ -272,6 +304,12 @@ pub fn set_rita_client(client_setting: RitaClientSettings) {
 /// get client settings from local or adaptor memory
 /// panics if called on exit settings
 pub fn get_rita_client() -> RitaClientSettings {
+    if cfg!(feature = "load_from_disk") {
+        let settings_file = get_settings_file_from_ns();
+        // load settings data from the settings file
+        let ritasettings = RitaClientSettings::new(&settings_file).unwrap();
+        return ritasettings;
+    }
     match &*SETTINGS.read().unwrap() {
         Some(Settings::Adaptor(adapt)) => adapt.adaptor.get_client().unwrap(),
         Some(Settings::Client(settings)) => settings.clone(),
@@ -317,6 +355,18 @@ pub fn json_merge(a: &mut Value, b: &Value) {
             *a = b.clone();
         }
     }
+}
+
+/// Gets the current namespace that rita is executing in and returns the name of the
+/// settings file associated with this instance of rita. ONLY FOR INTEGRATION TEST V2
+fn get_settings_file_from_ns() -> String {
+    let ns = KI.run_command("ip", &["netns", "identify"]).unwrap();
+    let ns = match String::from_utf8(ns.stdout) {
+        Ok(s) => s,
+        Err(_) => panic!("Could not get netns name!"),
+    };
+    let settings_file = format!("/var/tmp/settings_{}", ns);
+    settings_file
 }
 
 /// FileWrite does the actual write of settings to disk.

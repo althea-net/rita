@@ -21,3 +21,6 @@ settings = { path = "../settings" }
 rita_client = { path = "../rita_client",  default-features = false }
 rita_common = { path = "../rita_common", default-features = false }
 
+[features]
+load_from_disk = ["settings/load_from_disk"]
+

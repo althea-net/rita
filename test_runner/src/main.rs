@@ -216,19 +216,19 @@ fn thread_spawner(namespaces: NamespaceInfo) -> Result<(), KernelInterfaceError>
 /// Validate the list of linked namespaces
 fn validate_connections(namespaces: NamespaceInfo) {
     for link in namespaces.linked {
-        let s = "Namespace names must follow naming convention: xyz-123 (ex. A-0):";
+        let s = "Namespace names must follow naming convention: abc-123 (ex. A-0):";
         let name1: Vec<&str> = link.0 .0.split('-').collect();
         let _num1: u32 = name1
             .get(1)
-            .expect(&format!("{} {}", s, link.0 .0))
+            .unwrap_or_else(|| panic!("{} {}", s, link.0 .0))
             .parse()
-            .expect(&format!("{} {}", s, link.0 .0));
+            .unwrap_or_else(|_| panic!("{} {}", s, link.0 .0));
         let name2: Vec<&str> = link.1 .0.split('-').collect();
         let _num2: u32 = name2
             .get(1)
-            .expect(&format!("{} {}", s, link.0 .0))
+            .unwrap_or_else(|| panic!("{} {}", s, link.0 .0))
             .parse()
-            .expect(&format!("{} {}", s, link.0 .0));
+            .unwrap_or_else(|_| panic!("{} {}", s, link.0 .0));
 
         if !namespaces.names.contains(&link.0 .0) || !namespaces.names.contains(&link.1 .0) {
             panic!(
