@@ -5,7 +5,7 @@ use std::{
 
 use awc::error::JsonPayloadError;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum RitaExtenderError {
     MiscStringError(String),
     JsonPayloadError(String),

@@ -14,6 +14,7 @@ pub struct ExtenderUpdate {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtenderAdditionalSettings {
+    pub router_version: String,
     pub wg_key: Option<WgKey>,
     pub operator_addr: Option<clarity::Address>,
     pub rita_dashboard_port: u16,

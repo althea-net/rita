@@ -18,3 +18,6 @@ settings = { path = "../settings" }
 awc = "3.0.0"
 actix-async = {package="actix", version = "0.13"}
 actix-web-async = { package="actix-web", version = "4.0.1", default_features = false, features= ["openssl"]}
+althea_types = {path = "../althea_types"}
+althea_kernel_interface = { path = "../althea_kernel_interface" }
+

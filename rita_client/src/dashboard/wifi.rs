@@ -200,7 +200,7 @@ impl Display for ValidationError {
     }
 }
 
-fn set_ssid(wifi_ssid: &WifiSsid) -> Result<(), RitaClientError> {
+pub fn set_ssid(wifi_ssid: &WifiSsid) -> Result<(), RitaClientError> {
     if let Err(e) = validate_config_value(&wifi_ssid.ssid) {
         info!("Setting of invalid SSID was requested: {}", e);
         return Err(e.into());
