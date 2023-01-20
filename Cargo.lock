@@ -2356,6 +2356,8 @@ version = "0.20.8"
 dependencies = [
  "actix 0.13.0",
  "actix-web",
+ "althea_kernel_interface",
+ "althea_types",
  "awc",
  "compressed_log",
  "lazy_static",

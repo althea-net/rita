@@ -5,8 +5,8 @@ extern crate openssh_keys;
 use crate::dashboard::system_chain::set_system_blockchain;
 use crate::exit_manager::get_client_pub_ipv6;
 use crate::exit_manager::get_selected_exit_ip;
-use crate::reset_wifi_pass;
 use crate::extend_hardware_info;
+use crate::reset_wifi_pass;
 use crate::rita_loop::is_gateway_client;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::set_router_update_instruction;
@@ -145,7 +145,7 @@ pub async fn operator_update() {
 
     // disable hardware info sending if logging is disabled
     let hardware_info = match logging_enabled {
-        true => match get_hardware_info(rita_client.network.device) {
+        true => match get_hardware_info(rita_client.network.device.clone()) {
             Ok(info) => Some(extend_hardware_info(info)),
             Err(e) => {
                 error!("Failed to get hardware info with {:?}", e);

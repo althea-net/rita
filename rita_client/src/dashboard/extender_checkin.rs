@@ -36,6 +36,7 @@ pub async fn extender_checkin_handler(extender: Json<ExtenderCheckin>) -> HttpRe
         },
         logging_settings: rita_client.log,
         additional_settings: ExtenderAdditionalSettings {
+            router_version: env!("CARGO_PKG_VERSION").to_string(),
             operator_addr: rita_client.operator.operator_address,
             wg_key: rita_client.network.wg_public_key,
             rita_dashboard_port: rita_client.network.rita_dashboard_port,

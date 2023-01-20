@@ -5,13 +5,15 @@ pub mod dashboard;
 mod error;
 
 use actix_async::System as AsyncSystem;
+use althea_types::OpkgCommand;
+use althea_types::WifiSsid;
 use error::RitaExtenderError;
 use rita_client::dashboard::wifi::WifiInterface;
 use rita_client::extender::get_device_mac;
 use rita_client::extender::ExtenderCheckin;
 use rita_client::get_wifi_config_internal;
 use rita_client::set_ssid;
-use rita_client::WifiSsid;
+use rita_common::KI;
 
 use std::thread;
 use std::time::Duration;
@@ -126,9 +128,15 @@ async fn rita_extender_loop() {
         }
     };
 
-    let current_settings = get_checkin_message();
+    let our_settings = get_checkin_message();
 
-    apply_wifi_settings(settings.wifi_info, current_settings.wifi_info);
+    apply_wifi_settings(settings.wifi_info, our_settings.wifi_info);
+
+    // If there is a discrepency with version number, call an opkg update
+    apply_opkg_update_if_needed(
+        settings.additional_settings.router_version,
+        env!("CARGO_PKG_VERSION").to_string(),
+    );
 }
 
 /// Find the first 5Ghz channel from router interfaces and apply its ssid to all 5Ghz channels on extender
@@ -187,4 +195,118 @@ fn apply_wifi_settings(router_settings: Vec<WifiInterface>, our_settings: Vec<Wi
             }
         }
     }
+}
+
+fn apply_opkg_update_if_needed(router_version: String, extender_version: String) {
+    // Inequal version should imply the router version > extender version . This would be problematic if
+    // extender version > router version, but such a case should not come about and implies a problem somewhere else
+    if router_version != extender_version {
+        let common_args = vec!["-V0".to_string(), "--no-check-certificate".to_string()];
+        // common args plus the force maintainer argument which will grab the maintainers version of any
+        // config files, absolutely do not use this on rita or rita-exit
+        let force_maintainer = {
+            let mut tmp = common_args.clone();
+            tmp.extend(vec!["--force-maintainer".to_string()]);
+            tmp
+        };
+
+        // Perfrom an opkg update
+        let opkg_update = OpkgCommand::Update {
+            feed: match get_opkg_feed(router_version) {
+                Ok(a) => a,
+                Err(e) => {
+                    error!("{:?}", e);
+                    return;
+                }
+            },
+            feed_name: "althea_extender".to_string(),
+            arguments: common_args,
+        };
+        let res = KI.perform_opkg(opkg_update);
+        match res {
+            Ok(o) => match o.status.code() {
+                Some(0) => info!("opkg update completed successfully! {:?}", o),
+                Some(_) => {
+                    let err = format!("opkg update has failed! {:?}", o);
+                    error!("{}", err);
+                    return;
+                }
+                None => warn!("No return code form opkg update? {:?}", o),
+            },
+            Err(e) => {
+                error!("Unable to perform opkg with error: {:?}", e);
+                return;
+            }
+        }
+
+        // Install the necessary opkg packages
+        let opkg_install = OpkgCommand::Install {
+            packages: vec!["rita_extender".to_string()],
+            arguments: force_maintainer,
+        };
+        let res = KI.perform_opkg(opkg_install);
+        match res {
+            Ok(o) => match o.status.code() {
+                Some(0) => info!("opkg update completed successfully! {:?}", o),
+                Some(_) => {
+                    let err = format!("opkg update has failed! {:?}", o);
+                    error!("{}", err);
+                    return;
+                }
+                None => warn!("No return code form opkg update? {:?}", o),
+            },
+            Err(e) => {
+                error!("Unable to perform opkg with error: {:?}", e);
+                return;
+            }
+        }
+
+        // Restart after opkg is complete
+        if let Err(e) = KI.run_command("/etc/init.d/rita_extender", &["restart"]) {
+            error!("Unable to restart rita extender after opkg update: {}", e)
+        }
+    }
+}
+
+/// Convert router version to its human readable string to insert into opkg feed
+/// We receive router string in form of 0.18.8 and conver to beta18rc8
+fn get_opkg_feed(router_ver: String) -> Result<String, RitaExtenderError> {
+    let mut version: Vec<&str> = router_ver.split('.').collect();
+    version.remove(0);
+    let router_beta: u16 = match version[0].parse() {
+        Ok(v) => v,
+        Err(_) => {
+            return Err(RitaExtenderError::MiscStringError(format!(
+                "Cannot parse router version beta {:?}",
+                version[0]
+            )));
+        }
+    };
+    let router_rc: u16 = match version[1].parse() {
+        Ok(v) => v,
+        Err(_) => {
+            return Err(RitaExtenderError::MiscStringError(format!(
+                "Cannot parse router version rc {:?}",
+                version[1]
+            )));
+        }
+    };
+
+    let mut ret = "beta".to_string();
+    ret.push_str(&router_beta.to_string());
+    ret.push_str("rc");
+    ret.push_str(&router_rc.to_string());
+
+    Ok(format!(
+        "https://updates.altheamesh.com/{}/packages/mipsel_24kc/althea",
+        ret
+    ))
+}
+
+#[test]
+fn test_get_opkg_feed() {
+    assert_eq!(
+        Ok("https://updates.altheamesh.com/beta18rc9/packages/mipsel_24kc/althea".to_string()),
+        get_opkg_feed("0.18.9".to_string())
+    )
 }
