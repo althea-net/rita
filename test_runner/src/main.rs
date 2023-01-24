@@ -194,7 +194,7 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
 fn thread_spawner(namespaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
     let babeld_path = "/var/babeld/babeld/babeld".to_string();
     let babelconf_path = "/var/babeld/config".to_string();
-    let ritasettings = RitaClientSettings::new("/althea_rs/settings/test.toml").unwrap();
+    let ritasettings = RitaClientSettings::new("/althea_rs/scripts/rita-test.toml").unwrap();
     let babelconf_data = "default enable-timestamps true\ndefault update-interval 1";
     // pass the config arguments for babel to a config file as they cannot be successfully passed as arguments via run_command()
     fs::write(babelconf_path.clone(), babelconf_data).unwrap();
@@ -271,7 +271,6 @@ fn spawn_rita(
     nsfd: i32,
 ) {
     let wg_keypath = format!("/var/tmp/{}", ns);
-    //let settings_file = format!("/var/tmp/settings_{}", ns);
     let _rita_handler = thread::spawn(move || {
         // set the host of this thread to the ns
         setns(nsfd, CloneFlags::CLONE_NEWNET).expect("Couldn't set network namespace");
@@ -298,7 +297,6 @@ fn spawn_rita(
 
         // mirrored from rita_bin/src/client.rs
         let s = clu::init("linux", rcsettings);
-        // s.write(&settings_file).unwrap();
         settings::set_rita_client(s.clone());
 
         let system = actix_async::System::new();
