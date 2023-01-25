@@ -99,8 +99,8 @@ impl Default for PaymentValidator {
 }
 
 /// This stores payments of all tx that we sent to different nodes.
-pub fn store_payment(pmt: PaymentTx) {
-    let data = &mut HISTORY.write().unwrap().successful_transactions_sent;
+pub fn store_payment(pmt: PaymentTx, history: &mut PaymentValidator) {
+    let data = &mut history.successful_transactions_sent;
     let neighbor = pmt.to;
 
     if let std::collections::hash_map::Entry::Vacant(e) = data.entry(neighbor) {
@@ -436,7 +436,7 @@ fn handle_tx_messaging(
             update_payments(pmt.clone());
 
             // Store this payment as a receipt to send in the future if this receiver doesnt see the payment
-            store_payment(pmt);
+            store_payment(pmt, history);
         }
         (true, true, _) => {
             error!("Transaction to ourselves!");
@@ -538,7 +538,8 @@ mod tests {
             amount: 10u8.into(),
             txid: Some(1u8.into()),
         };
-        store_payment(pmt1.clone());
+
+        store_payment(pmt1.clone(), &mut HISTORY.write().unwrap());
         sent_hashset.insert(pmt1.clone());
         assert_eq!(get_payment_txids(pmt1.to), sent_hashset);
 
@@ -548,7 +549,8 @@ mod tests {
             amount: 100u8.into(),
             txid: Some(2u8.into()),
         };
-        store_payment(pmt2.clone());
+        store_payment(pmt2.clone(), &mut HISTORY.write().unwrap());
+
         sent_hashset.insert(pmt2.clone());
         assert_eq!(get_payment_txids(pmt2.to), sent_hashset);
 
@@ -558,7 +560,9 @@ mod tests {
             amount: 100u8.into(),
             txid: Some(2u8.into()),
         };
-        store_payment(pmt3.clone());
+
+        store_payment(pmt3.clone(), &mut HISTORY.write().unwrap());
+
         assert_eq!(get_payment_txids(pmt3.to), sent_hashset);
     }
 }
