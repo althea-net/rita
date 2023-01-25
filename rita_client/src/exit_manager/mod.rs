@@ -85,6 +85,16 @@ pub struct ExitManager {
     pub selected_exit_list: HashMap<String, SelectedExit>,
     /// Every tick we query an exit endpoint to get a list of exits in that cluster. We use this list for exit switching
     pub exit_list: ExitList,
+    /// Store last exit here, when we see an exit change, we reset wg tunnels
+    pub last_exit: Option<IpAddr>,
+}
+
+pub fn set_last_exit(e: Option<IpAddr>) {
+    EXIT_MANAGER.write().unwrap().last_exit = e;
+}
+
+pub fn get_last_exit() -> Option<IpAddr> {
+    EXIT_MANAGER.read().unwrap().last_exit
 }
 
 /// This functions sets the exit list ONLY IF the list arguments provived is not empty. This is need for the following edge case:
@@ -763,7 +773,7 @@ pub async fn exit_manager_tick() {
         None => "".to_string(),
     };
 
-    let last_exit = get_selected_exit(current_exit.clone());
+    let last_exit = get_last_exit();
     let mut exits = rita_client.exit_client.exits;
 
     // Initialize all exits ip addrs in local lazy static if they havent been set already
@@ -832,6 +842,7 @@ pub async fn exit_manager_tick() {
                 };
 
             info!("Exit_Switcher: After selecting best exit this tick, we have selected_id: {:?}, selected_metric: {:?}, tracking_ip: {:?}", get_selected_exit(current_exit.clone()), get_selected_exit_metric(current_exit.clone()), get_selected_exit_tracking(current_exit.clone()));
+            set_last_exit(selected_exit);
 
             // check the exit's time and update locally if it's very different
             maybe_set_local_to_exit_time(exit.clone(), current_exit.clone()).await;
