@@ -26,7 +26,7 @@ use rita_common::network_monitor::get_network_info;
 use rita_common::network_monitor::GetNetworkInfo;
 use rita_common::tunnel_manager::Neighbor as RitaNeighbor;
 
-use crate::exit_manager::get_selected_exit as get_selected_exit_em;
+use crate::exit_manager::get_selected_exit_ip as get_selected_exit_em;
 
 use althea_types::HeartbeatMessage;
 use althea_types::Identity;

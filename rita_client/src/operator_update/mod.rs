@@ -5,7 +5,7 @@ extern crate openssh_keys;
 use crate::dashboard::system_chain::set_system_blockchain;
 use crate::dashboard::wifi::reset_wifi_pass;
 use crate::exit_manager::get_client_pub_ipv6;
-use crate::exit_manager::get_selected_exit;
+use crate::exit_manager::get_selected_exit_ip;
 use crate::rita_loop::is_gateway_client;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::set_router_update_instruction;
@@ -164,7 +164,7 @@ pub async fn operator_update() {
         // Hopefully ops fills this in
         instance_name: None,
         instance_ip: match cur_cluster {
-            Some(a) => get_selected_exit(a),
+            Some(a) => get_selected_exit_ip(a),
             None => None,
         },
     });

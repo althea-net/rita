@@ -12,8 +12,7 @@
 //!
 //! See doc comment for 'set_best_exit' for a more detailed description of workflow
 use crate::exit_manager::{
-    get_selected_exit, get_selected_exit_degradation, get_selected_exit_metric,
-    get_selected_exit_tracking, reset_exit_blacklist, set_selected_exit, EXIT_MANAGER,
+    get_full_selected_exit, get_selected_exit_ip, reset_exit_blacklist, set_selected_exit,
 };
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::RitaClientError;
@@ -26,6 +25,8 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::sync::RwLock;
+
+use super::get_exit_blacklist;
 
 /// This is the number of metric entries we collect for exit data. Since every tick is 5 sec, and the minimum time we
 /// use an exit without swtiching is 15 mins, this values is 15 * 60/5
@@ -209,12 +210,12 @@ pub fn set_best_exit(
 
     // Metric that we advertise which is differnt from babel's advertised metric. Babel_metric - SomeConstant that measures how much our connection degrades the route
     // (ignores the degradation of metric value due to current traffic, unlike the babel Route metric, which smoothens the value)
-    let current_adjusted_metric: u16 =
-        get_selected_exit_metric(exit_name.clone()).unwrap_or(u16::MAX);
+    let full_selected_exit = get_full_selected_exit(exit_name.clone()).unwrap_or_default();
+    let current_adjusted_metric: u16 = full_selected_exit.selected_id_metric.unwrap_or(u16::MAX);
     // Ip of exit we are currently tracking in lazy static, if present
-    let tracking_exit = get_selected_exit_tracking(exit_name.clone());
+    let tracking_exit = full_selected_exit.tracking_exit;
     // Retrieve current exit ip, if connected
-    let current_exit_ip: Option<IpAddr> = get_selected_exit(exit_name.clone());
+    let current_exit_ip: Option<IpAddr> = get_selected_exit_ip(exit_name.clone());
 
     let exit_map = &mut *EXIT_TRACKER.write().unwrap();
 
@@ -252,7 +253,7 @@ pub fn set_best_exit(
         metric_vec.len(),
         current_adjusted_metric,
         exit_metrics.cur_exit_babel_met,
-        get_selected_exit_degradation(exit_name.clone())
+        full_selected_exit.selected_id_degradation
     );
 
     info!(
@@ -298,6 +299,7 @@ fn set_exit_state(
     exit_metrics: ExitMetrics,
     metric_vec: &mut [u16],
 ) -> Result<IpAddr, RitaClientError> {
+    let full_selected_exit = get_full_selected_exit(exit_name.clone()).unwrap_or_default();
     match exit_code {
         // we get this code when the exit is not setup, meaning it should not reach this else statement in the first place.
         ExitSwitchingCode::InitialExitSetup => panic!("Should not reach this statement"),
@@ -306,15 +308,16 @@ fn set_exit_state(
             // Degradation is a measure of how much the route metric degrades after connecting to it
             // We set the degradation value = RelU(babel_metric - our_advertised_metric).
             set_selected_exit(
-                exit_name.clone(),
+                exit_name,
                 SelectedExit {
-                    selected_id: get_selected_exit(exit_name.clone()),
-                    selected_id_metric: get_selected_exit_metric(exit_name.clone()),
+                    selected_id: full_selected_exit.selected_id,
+                    selected_id_metric: full_selected_exit.selected_id_metric,
                     selected_id_degradation: exit_metrics.cur_exit_babel_met.checked_sub(
-                        get_selected_exit_metric(exit_name.clone())
+                        full_selected_exit
+                            .selected_id_metric
                             .expect("No selected Ip metric where there should be one"),
                     ),
-                    tracking_exit: get_selected_exit_tracking(exit_name),
+                    tracking_exit: full_selected_exit.tracking_exit,
                 },
             );
             Ok(exit_metrics
@@ -323,41 +326,40 @@ fn set_exit_state(
         }
         ExitSwitchingCode::ContinueCurrent => {
             // set a degradation values if none, else update the current exit advertised values
-            if get_selected_exit_degradation(exit_name.clone()).is_none() {
+            if full_selected_exit.selected_id_degradation.is_none() {
                 let average_metric = calculate_average(metric_vec.to_vec());
                 // We set degradation value = RelU(average_metric val - our_advertised_metric). Since we know tracking_exit == current_exit,
                 // We can use values in the vector.
                 set_selected_exit(
-                    exit_name.clone(),
+                    exit_name,
                     SelectedExit {
-                        selected_id: get_selected_exit(exit_name.clone()),
-                        selected_id_metric: get_selected_exit_metric(exit_name.clone()),
+                        selected_id: full_selected_exit.selected_id,
+                        selected_id_metric: full_selected_exit.selected_id_metric,
                         selected_id_degradation: average_metric.checked_sub(
-                            get_selected_exit_metric(exit_name.clone())
+                            full_selected_exit
+                                .selected_id_metric
                                 .expect("No selected Ip metric where there should be one"),
                         ),
-                        tracking_exit: get_selected_exit_tracking(exit_name),
+                        tracking_exit: full_selected_exit.tracking_exit,
                     },
                 );
             } else {
                 // We have already set a degradation value, so we continue using the same value until the clock reset
                 let res = exit_metrics
                     .cur_exit_babel_met
-                    .checked_sub(get_selected_exit_degradation(exit_name.clone()).unwrap());
+                    .checked_sub(full_selected_exit.selected_id_degradation.unwrap());
 
                 // We should not be setting 'selected_id_metric' as None. If we do, that means degradation > current_metric, meaning an error with logic somewhere
                 if res.is_none() {
                     error!("Setting selected_id_metric as none during ExitSwitchingCode::ContinueCurrent. Error with degradation logic");
                 } else {
                     set_selected_exit(
-                        exit_name.clone(),
+                        exit_name,
                         SelectedExit {
-                            selected_id: get_selected_exit(exit_name.clone()),
+                            selected_id: full_selected_exit.selected_id,
                             selected_id_metric: res,
-                            selected_id_degradation: get_selected_exit_degradation(
-                                exit_name.clone(),
-                            ),
-                            tracking_exit: get_selected_exit_tracking(exit_name),
+                            selected_id_degradation: full_selected_exit.selected_id_degradation,
+                            tracking_exit: full_selected_exit.tracking_exit,
                         },
                     );
                 }
@@ -387,11 +389,11 @@ fn set_exit_state(
         ExitSwitchingCode::ResetTracking => {
             // selected id is still the same, we dont change exit, just change what we track
             set_selected_exit(
-                exit_name.clone(),
+                exit_name,
                 SelectedExit {
-                    selected_id: get_selected_exit(exit_name.clone()),
-                    selected_id_metric: get_selected_exit_metric(exit_name.clone()),
-                    selected_id_degradation: get_selected_exit_degradation(exit_name),
+                    selected_id: full_selected_exit.selected_id,
+                    selected_id_metric: full_selected_exit.selected_id_metric,
+                    selected_id_degradation: full_selected_exit.selected_id_degradation,
                     tracking_exit: exit_metrics.best_exit,
                 },
             );
@@ -448,12 +450,7 @@ fn get_exit_metrics(
     // connect to it thereby breaking the exit switching mechanism. When we detect this to be the case, we simply clear the entire black list and allow
     // the rogue ip addrs to be added back into the blacklist
     let mut all_exits_blacklisted = true;
-    let blacklisted = EXIT_MANAGER
-        .read()
-        .unwrap()
-        .exit_blacklist
-        .blacklisted_exits
-        .clone();
+    let blacklisted = get_exit_blacklist();
 
     for ip in exit_list.exit_list.clone() {
         // All babel routes are advertised as /128, so we check if each 'single' ip is part of exit subnet
@@ -765,7 +762,9 @@ mod tests {
     use ipnetwork::IpNetwork;
 
     use super::*;
-    use crate::exit_manager::{reset_blacklist_warnings, ExitBlacklist, MAX_BLACKLIST_STRIKES};
+    use crate::exit_manager::{
+        reset_blacklist_warnings, ExitBlacklist, MAX_BLACKLIST_STRIKES, SELECTED_EXIT_LIST,
+    };
     use std::net::{IpAddr, Ipv4Addr};
 
     #[test]
@@ -1165,23 +1164,23 @@ mod tests {
         use crate::exit_manager::WarningType;
 
         let dummy = IpAddr::V4(Ipv4Addr::new(10, 1, 1, 1));
-        let list = get_exit_blacklist();
+        let list = get_exit_blacklist_test();
         assert!(list.blacklisted_exits.is_empty());
 
         blacklist_strike_ip(dummy, WarningType::HardWarning);
-        let list = get_exit_blacklist();
+        let list = get_exit_blacklist_test();
         assert_eq!(list.blacklisted_exits.len(), 1);
         assert!(list.potential_blacklists.is_empty());
 
         let dummy = IpAddr::V4(Ipv4Addr::new(10, 2, 1, 1));
         blacklist_strike_ip(dummy, WarningType::HardWarning);
-        let list = get_exit_blacklist();
+        let list = get_exit_blacklist_test();
         assert_eq!(list.blacklisted_exits.len(), 2);
         assert!(list.potential_blacklists.is_empty());
 
         let dummy = IpAddr::V4(Ipv4Addr::new(10, 2, 4, 1));
         blacklist_strike_ip(dummy, WarningType::SoftWarning);
-        let list = get_exit_blacklist();
+        let list = get_exit_blacklist_test();
         assert_eq!(list.blacklisted_exits.len(), 2);
         assert_eq!(list.potential_blacklists.len(), 1);
         assert_eq!(list.potential_blacklists.get(&dummy).cloned().unwrap(), 1);
@@ -1190,7 +1189,7 @@ mod tests {
             blacklist_strike_ip(dummy, WarningType::SoftWarning);
         }
 
-        let list = get_exit_blacklist();
+        let list = get_exit_blacklist_test();
         assert_eq!(list.blacklisted_exits.len(), 2);
         assert_eq!(list.potential_blacklists.len(), 1);
         assert_eq!(
@@ -1199,7 +1198,7 @@ mod tests {
         );
 
         blacklist_strike_ip(dummy, WarningType::SoftWarning);
-        let list = get_exit_blacklist();
+        let list = get_exit_blacklist_test();
         assert_eq!(list.blacklisted_exits.len(), 3);
         assert!(list.potential_blacklists.is_empty());
 
@@ -1207,57 +1206,42 @@ mod tests {
         let dummy = IpAddr::V4(Ipv4Addr::new(10, 2, 2, 10));
         blacklist_strike_ip(dummy, WarningType::SoftWarning);
         blacklist_strike_ip(dummy, WarningType::SoftWarning);
-        let list = get_exit_blacklist();
+        let list = get_exit_blacklist_test();
         assert_eq!(list.blacklisted_exits.len(), 3);
         assert_eq!(list.potential_blacklists.len(), 1);
         assert_eq!(list.potential_blacklists.get(&dummy).cloned().unwrap(), 2);
 
         reset_blacklist_warnings(dummy);
-        let list = get_exit_blacklist();
+        let list = get_exit_blacklist_test();
         assert_eq!(list.blacklisted_exits.len(), 3);
         assert!(list.potential_blacklists.is_empty());
 
         blacklist_strike_ip(dummy, WarningType::HardWarning);
-        let list = get_exit_blacklist();
+        let list = get_exit_blacklist_test();
         assert_eq!(list.blacklisted_exits.len(), 4);
 
         reset_blacklist_warnings(dummy);
-        let list = get_exit_blacklist();
+        let list = get_exit_blacklist_test();
         assert_eq!(list.blacklisted_exits.len(), 3);
         assert!(list.potential_blacklists.is_empty());
 
         // Test reset complete blacklist
         blacklist_strike_ip(dummy, WarningType::SoftWarning);
         blacklist_strike_ip(dummy, WarningType::SoftWarning);
-        let list = get_exit_blacklist();
+        let list = get_exit_blacklist_test();
         assert_eq!(list.blacklisted_exits.len(), 3);
         assert_eq!(list.potential_blacklists.len(), 1);
 
         reset_exit_blacklist();
-        let list = get_exit_blacklist();
+        let list = get_exit_blacklist_test();
         assert!(list.blacklisted_exits.is_empty());
         assert!(list.potential_blacklists.is_empty());
     }
 
     /// This is set as separate function to avoid deadlocks
-    fn get_exit_blacklist() -> ExitBlacklist {
-        let reader = (EXIT_MANAGER.read().unwrap()).exit_blacklist.clone();
+    fn get_exit_blacklist_test() -> ExitBlacklist {
+        let reader = (SELECTED_EXIT_LIST.read().unwrap()).exit_blacklist.clone();
         reader
-    }
-
-    // This test just makes sure that we dont deadlock
-    #[test]
-    fn test_drop() {
-        let writer = EXIT_MANAGER
-            .read()
-            .unwrap()
-            .exit_blacklist
-            .blacklisted_exits
-            .clone();
-
-        drop(writer);
-
-        reset_exit_blacklist();
     }
 
     /// Test that IpNetwork ip() function doesnt mask out non prefix bits
