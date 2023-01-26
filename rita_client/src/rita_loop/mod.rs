@@ -4,8 +4,7 @@
 //! This loop manages exit signup based on the settings configuration state and deploys an exit vpn
 //! tunnel if the signup was successful on the selected exit.
 
-use crate::exit_manager::exit_manager_tick;
-use crate::exit_manager::get_selected_exit;
+use crate::exit_manager::get_selected_exit_ip;
 use crate::heartbeat::send_heartbeat_loop;
 use crate::heartbeat::HEARTBEAT_SERVER_KEY;
 use crate::operator_fee_manager::tick_operator_payments;
@@ -27,6 +26,10 @@ use std::time::{Duration, Instant};
 
 /// The maximum size in bytes an babel log is allowed to be, 5MB
 const MAX_LOG_SIZE: u64 = 5 * 1000 * 1000;
+
+// the speed in seconds for the client loop
+pub const CLIENT_LOOP_SPEED: Duration = Duration::from_secs(5);
+pub const CLIENT_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
 
 lazy_static! {
     /// see the comment on check_for_gateway_client_billing_corner_case()
@@ -56,10 +59,6 @@ pub fn metrics_permitted() -> bool {
             .operator_address
             .is_some()
 }
-
-// the speed in seconds for the client loop
-pub const CLIENT_LOOP_SPEED: Duration = Duration::from_secs(5);
-pub const CLIENT_LOOP_TIMEOUT: Duration = Duration::from_secs(4);
 
 /// Rita loop thread spawning function, there are currently two rita loops, one that
 /// runs as a thread with async/await support and one that runs as a actor using old futures
@@ -99,15 +98,7 @@ pub fn start_rita_loop() {
                         start.elapsed().as_secs(),
                         start.elapsed().subsec_millis()
                     );
-                    // update the client exit manager, which handles exit registrations
-                    // and manages the exit state machine in general. This includes
-                    // updates to the local ip and description from the exit side
-                    exit_manager_tick().await;
-                    info!(
-                        "Rita Client loop exit manager completed in {}s {}ms",
-                        start.elapsed().as_secs(),
-                        start.elapsed().subsec_millis()
-                    );
+
                     // sends an operator payment if enough time has elapsed
                     tick_operator_payments().await;
                     info!(
@@ -142,6 +133,7 @@ pub fn start_rita_client_loops() {
     if metrics_permitted() {
         send_heartbeat_loop();
     }
+    crate::exit_manager::exit_loop::start_exit_manager_loop();
     crate::rita_loop::start_rita_loop();
     crate::operator_update::update_loop::start_operator_update_loop();
 }
@@ -174,7 +166,7 @@ fn check_for_gateway_client_billing_corner_case() {
                 info!("Neighbor is {:?}", neigh);
                 // we have a neighbor who is also our selected exit!
                 // wg_key excluded due to multihomed exits having a different one
-                let current_ip = get_selected_exit(current_exit.clone())
+                let current_ip = get_selected_exit_ip(current_exit.clone())
                     .expect("If registered, there should be an exit ip here");
                 if neigh.identity.global.mesh_ip == current_ip
                     && neigh.identity.global.eth_address == exit.eth_address

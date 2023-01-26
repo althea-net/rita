@@ -1,6 +1,6 @@
 //! The Exit info endpoint gathers infromation about exit status and presents it to the dashbaord.
 
-use crate::exit_manager::{exit_setup_request, get_selected_exit, set_selected_exit};
+use crate::exit_manager::{exit_setup_request, get_selected_exit_ip, set_selected_exit};
 use crate::RitaClientError;
 use actix_web_async::http::StatusCode;
 use actix_web_async::{web::Json, web::Path, HttpRequest, HttpResponse};
@@ -67,7 +67,7 @@ pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
                     for exit in exit_client.exits.clone().into_iter() {
                         let selected = is_selected(&exit.1, current_exit);
                         info!("Trying to get exit: {}", exit.0.clone());
-                        let route_ip = match get_selected_exit(exit.0.clone()) {
+                        let route_ip = match get_selected_exit_ip(exit.0.clone()) {
                             Some(a) => a,
                             None => {
                                 error!("Found no exit ip where one was expected!");

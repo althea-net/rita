@@ -3,7 +3,7 @@ use althea_types::ExitSystemTime;
 use settings::client::ExitServer;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::exit_manager::get_selected_exit;
+use crate::exit_manager::get_selected_exit_ip;
 
 /// The max time difference between the local router's time and the exit's before resetting the local time to the exit's
 const MAX_DIFF_LOCAL_EXIT_TIME: Duration = Duration::from_secs(60);
@@ -15,7 +15,7 @@ const MAX_EXIT_TUNNEL_HANDSHAKE: Duration = Duration::from_secs(60 * 3);
 /// Retrieve a unix timestamp from the exit's mesh IPv6
 pub async fn get_exit_time(exit: ExitServer, exit_name: String) -> Option<SystemTime> {
     info!("Getting the exit time");
-    let exit_ip = get_selected_exit(exit_name).expect("There should be an exit ip here");
+    let exit_ip = get_selected_exit_ip(exit_name).expect("There should be an exit ip here");
     let exit_port = exit.registration_port;
     let url = format!("http://[{}]:{}/time", exit_ip, exit_port);
 
