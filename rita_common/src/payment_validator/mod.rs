@@ -82,6 +82,43 @@ pub struct PaymentValidator {
     successful_transactions: HashSet<Uint256>,
 }
 
+// Setters and getters HISTORY lazy static
+pub fn add_unvalidated_transaction(tx: ToValidate) {
+    HISTORY.write().unwrap().unvalidated_transactions.insert(tx);
+}
+
+pub fn remove_unvalidated_transaction(tx: ToValidate) -> bool {
+    HISTORY
+        .write()
+        .unwrap()
+        .unvalidated_transactions
+        .remove(&tx)
+}
+
+pub fn get_unvalidated_transactions() -> HashSet<ToValidate> {
+    HISTORY.read().unwrap().unvalidated_transactions.clone()
+}
+
+pub fn get_successful_tx_sent() -> HashMap<Identity, HashSet<PaymentTx>> {
+    HISTORY
+        .write()
+        .unwrap()
+        .successful_transactions_sent
+        .clone()
+}
+
+pub fn set_successful_tx_sent(v: HashMap<Identity, HashSet<PaymentTx>>) {
+    HISTORY.write().unwrap().successful_transactions_sent = v;
+}
+
+pub fn get_all_successful_tx() -> HashSet<Uint256> {
+    HISTORY.read().unwrap().successful_transactions.clone()
+}
+
+pub fn add_successful_tx(v: Uint256) {
+    HISTORY.write().unwrap().successful_transactions.insert(v);
+}
+
 impl PaymentValidator {
     pub fn new() -> Self {
         PaymentValidator {
@@ -99,8 +136,8 @@ impl Default for PaymentValidator {
 }
 
 /// This stores payments of all tx that we sent to different nodes.
-pub fn store_payment(pmt: PaymentTx, history: &mut PaymentValidator) {
-    let data = &mut history.successful_transactions_sent;
+pub fn store_payment(pmt: PaymentTx) {
+    let mut data = get_successful_tx_sent();
     let neighbor = pmt.to;
 
     if let std::collections::hash_map::Entry::Vacant(e) = data.entry(neighbor) {
@@ -113,6 +150,8 @@ pub fn store_payment(pmt: PaymentTx, history: &mut PaymentValidator) {
             .expect("This key should have an initialized set");
         set.insert(pmt);
     }
+
+    set_successful_tx_sent(data);
 }
 
 /// Given an id, get all payments made to that id
@@ -131,9 +170,7 @@ pub fn get_payment_txids(id: Identity) -> HashSet<PaymentTx> {
 /// Input: takes in an identity which represents the router we are
 /// going to exclude from the total amount of all unverified payments.
 pub fn calculate_unverified_payments(router: Identity) -> Uint256 {
-    let history = HISTORY.read().unwrap();
-    let payments_to_process = history.unvalidated_transactions.clone();
-    drop(history);
+    let payments_to_process = get_unvalidated_transactions();
     let mut total_unverified_payment: Uint256 = Uint256::from(0u32);
     for iterate in payments_to_process.iter() {
         if iterate.payment.from == router && iterate.payment.to != router {
@@ -150,12 +187,10 @@ pub fn calculate_unverified_payments(router: Identity) -> Uint256 {
 /// This endpoint specifically (and only this one) is fully idempotent so that we can retry
 /// txid transmissions
 pub fn validate_later(ts: ToValidate) -> Result<(), RitaCommonError> {
-    let mut history = HISTORY.write().unwrap();
-
     if let Some(txid) = ts.payment.txid.clone() {
-        if !history.successful_transactions.contains(&txid) {
+        if !get_all_successful_tx().contains(&txid) {
             // insert is safe to run multiple times just so long as we check successful tx's for duplicates
-            history.unvalidated_transactions.insert(ts);
+            add_unvalidated_transaction(ts);
         }
     } else {
         error!(
@@ -184,14 +219,12 @@ struct Remove {
 
 /// Removes a transaction from the pending validation queue, it may either
 /// have been discovered to be invalid or have been successfully accepted
-fn remove(msg: Remove, history: &mut PaymentValidator) {
-    let was_present = history.unvalidated_transactions.remove(&msg.tx);
+fn remove(msg: Remove) {
+    let was_present = remove_unvalidated_transaction(msg.tx.clone());
     // store successful transactions so that they can't be played back to us, at least
     // during this session
     if msg.success && was_present {
-        history
-            .successful_transactions
-            .insert(msg.tx.payment.clone().txid.unwrap());
+        add_successful_tx(msg.tx.payment.clone().txid.unwrap());
     }
     if was_present {
         info!("Transaction {} was removed", msg.tx);
@@ -206,12 +239,12 @@ fn remove(msg: Remove, history: &mut PaymentValidator) {
 /// Marks a transaction as 'checked' in that we have talked to a full node about it
 /// if we fail to talk to a full node about a transaction for the full duration of
 /// the timeout we attempt to restart our node.
-fn checked(msg: ToValidate, history: &mut PaymentValidator) {
-    if history.unvalidated_transactions.take(&msg).is_some() {
+fn checked(msg: ToValidate) {
+    if remove_unvalidated_transaction(msg.clone()) {
         let mut checked_tx = msg;
         checked_tx.checked = true;
         info!("We successfully checked tx {:?}", checked_tx);
-        history.unvalidated_transactions.insert(checked_tx);
+        add_unvalidated_transaction(checked_tx);
     } else {
         error!("Tried to mark a tx {:?} we don't have as checked!", msg);
 
@@ -227,17 +260,13 @@ pub async fn validate() {
 
     let our_address = settings::get_rita_common().payment.eth_address.unwrap();
     let mut to_delete = Vec::new();
-    let unvalidated_transactions: HashSet<ToValidate>;
 
-    {
-        let history = HISTORY.read().unwrap();
-        unvalidated_transactions = history.unvalidated_transactions.clone();
-        info!(
-            "Attempting to validate {} transactions {}",
-            history.unvalidated_transactions.len(),
-            print_txids(&history.unvalidated_transactions)
-        );
-    }
+    let unvalidated_transactions = get_unvalidated_transactions();
+    info!(
+        "Attempting to validate {} transactions {}",
+        unvalidated_transactions.len(),
+        print_txids(&unvalidated_transactions)
+    );
 
     let mut futs = Vec::new();
     for item in unvalidated_transactions {
@@ -285,9 +314,8 @@ pub async fn validate() {
     // execute all of the above verification operations in parallel
     join_all(futs).await;
 
-    let mut history = HISTORY.write().unwrap();
     for item in to_delete.iter() {
-        history.unvalidated_transactions.remove(item);
+        remove_unvalidated_transaction(item.clone());
     }
 }
 
@@ -303,26 +331,25 @@ pub async fn validate_transaction(ts: ToValidate) {
     let block_num = web3.eth_block_number().await;
     let transaction = web3.eth_get_transaction_by_hash(txid.clone()).await;
 
-    let mut history = HISTORY.write().unwrap();
     match (transaction, block_num) {
         (Ok(Some(transaction)), Ok(block_num)) => {
             if !ts.checked {
-                checked(ts.clone(), &mut history);
+                checked(ts.clone());
             }
-            handle_tx_messaging(txid, transaction, ts.clone(), block_num, &mut history);
+            handle_tx_messaging(txid, transaction, ts.clone(), block_num);
         }
         (Ok(None), _) => {
             // we have a response back from the full node that this tx is not in the mempool this
             // satisfies our checked requirement
             if !ts.checked {
-                checked(ts.clone(), &mut history);
+                checked(ts.clone());
             }
         }
         (Err(_), Ok(_)) => {
             // we get an error from the full node but a successful block request, clearly we can contact
             // the full node so the transaction check has been attempted
             if !ts.checked {
-                checked(ts.clone(), &mut history);
+                checked(ts.clone());
             }
         }
         (Ok(Some(_)), Err(_)) => trace!("Failed to check transaction {:#066x}", txid),
@@ -337,7 +364,6 @@ fn handle_tx_messaging(
     transaction: TransactionResponse,
     ts: ToValidate,
     current_block: Uint256,
-    history: &mut PaymentValidator,
 ) {
     let from_address = ts.payment.from.eth_address;
     let amount = ts.payment.amount.clone();
@@ -350,13 +376,10 @@ fn handle_tx_messaging(
         Some(val) => val,
         None => {
             error!("Invalid TX! No destination!");
-            remove(
-                Remove {
-                    tx: ts,
-                    success: false,
-                },
-                history,
-            );
+            remove(Remove {
+                tx: ts,
+                success: false,
+            });
             return;
         }
     };
@@ -372,25 +395,19 @@ fn handle_tx_messaging(
 
     if !value_correct {
         error!("Transaction with invalid amount!");
-        remove(
-            Remove {
-                tx: ts,
-                success: false,
-            },
-            history,
-        );
+        remove(Remove {
+            tx: ts,
+            success: false,
+        });
         return;
     }
 
     if is_old {
         error!("Transaction is more than 6 hours old! {:#066x}", txid);
-        remove(
-            Remove {
-                tx: ts,
-                success: false,
-            },
-            history,
-        );
+        remove(Remove {
+            tx: ts,
+            success: false,
+        });
         return;
     }
 
@@ -398,13 +415,10 @@ fn handle_tx_messaging(
         // we were successfully paid
         (true, false, true) => {
             // remove this transaction from our storage
-            remove(
-                Remove {
-                    tx: ts,
-                    success: true,
-                },
-                history,
-            );
+            remove(Remove {
+                tx: ts,
+                success: true,
+            });
             info!(
                 "payment {:#066x} from {} for {} wei successfully validated!",
                 txid, from_address, amount
@@ -422,13 +436,10 @@ fn handle_tx_messaging(
                 txid, from_address, amount
             );
             // remove this transaction from our storage
-            remove(
-                Remove {
-                    tx: ts,
-                    success: true,
-                },
-                history,
-            );
+            remove(Remove {
+                tx: ts,
+                success: true,
+            });
             // update debt keeper with the details of this payment
             let _ = payment_succeeded(pmt.to, pmt.amount.clone());
 
@@ -436,27 +447,21 @@ fn handle_tx_messaging(
             update_payments(pmt.clone());
 
             // Store this payment as a receipt to send in the future if this receiver doesnt see the payment
-            store_payment(pmt, history);
+            store_payment(pmt);
         }
         (true, true, _) => {
             error!("Transaction to ourselves!");
-            remove(
-                Remove {
-                    tx: ts,
-                    success: false,
-                },
-                history,
-            );
+            remove(Remove {
+                tx: ts,
+                success: false,
+            });
         }
         (false, false, _) => {
             error!("Transaction has nothing to do with us?");
-            remove(
-                Remove {
-                    tx: ts,
-                    success: false,
-                },
-                history,
-            );
+            remove(Remove {
+                tx: ts,
+                success: false,
+            });
         }
         (_, _, false) => {
             //transaction waiting for validation, do nothing
@@ -539,7 +544,7 @@ mod tests {
             txid: Some(1u8.into()),
         };
 
-        store_payment(pmt1.clone(), &mut HISTORY.write().unwrap());
+        store_payment(pmt1.clone());
         sent_hashset.insert(pmt1.clone());
         assert_eq!(get_payment_txids(pmt1.to), sent_hashset);
 
@@ -549,7 +554,7 @@ mod tests {
             amount: 100u8.into(),
             txid: Some(2u8.into()),
         };
-        store_payment(pmt2.clone(), &mut HISTORY.write().unwrap());
+        store_payment(pmt2.clone());
 
         sent_hashset.insert(pmt2.clone());
         assert_eq!(get_payment_txids(pmt2.to), sent_hashset);
@@ -561,7 +566,7 @@ mod tests {
             txid: Some(2u8.into()),
         };
 
-        store_payment(pmt3.clone(), &mut HISTORY.write().unwrap());
+        store_payment(pmt3.clone());
 
         assert_eq!(get_payment_txids(pmt3.to), sent_hashset);
     }
