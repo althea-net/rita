@@ -1,6 +1,6 @@
 extern crate log;
 // Uncomment for manual debugging
-// use core::time;
+//use core::time;
 use std::{
     collections::{HashMap, HashSet},
     convert::TryInto,
@@ -26,11 +26,16 @@ use rita_common::rita_loop::{
 };
 use settings::client::RitaClientSettings;
 
+use crate::tests::test_reach_all;
+
+pub mod tests;
+
 /// This struct holds the setup instructions for namespaces
 #[derive(Clone, Eq, PartialEq)]
 pub struct NamespaceInfo {
-    /// the names of the namespaces
-    pub names: Vec<String>,
+    /// Namespace names and corresponding numbers for ip assignment to avoid having to string
+    /// parse every time we want its number for ips
+    pub names: Vec<(String, u32)>,
     /// Linked nodes written as tuple pairs
     /// The string is for the namespace name(NOTE: names must be <=4 characters as interfaces
     /// cannot be more than 15 char, and we input as veth-{}-{})
@@ -39,9 +44,9 @@ pub struct NamespaceInfo {
 }
 
 fn main() {
-    // uncomment these 2 lines for manual debugging
-    // let ten_mins = time::Duration::from_secs(600);
-    // env_logger::init();
+    // uncomment these 2 lines for manual debugging 600
+    //let ten_mins = time::Duration::from_secs(300);
+    //env_logger::init();
 
     let namespaces = five_node_config();
 
@@ -50,10 +55,14 @@ fn main() {
     let res = setup_ns(namespaces.clone());
     println!("Namespaces setup: {res:?}");
 
-    let res = thread_spawner(namespaces);
-    println!("Thread Spawner: {res:?}");
+    let res = thread_spawner(namespaces.clone());
+    println!("Thread Spawner: {:?}", res);
+
     // this sleep is for debugging so that the container can be accessed to poke around in
-    // thread::sleep(ten_mins);
+    //thread::sleep(ten_mins);
+
+    let res = test_reach_all(namespaces).expect("Could not reach all namespaces!");
+    println!("Reachability Test: {:?}", res);
 }
 
 fn five_node_config() -> NamespaceInfo {
@@ -71,18 +80,13 @@ fn five_node_config() -> NamespaceInfo {
      /       \|
     D---------C
     */
-    let testa = ("n-0".to_string(), 0);
-    let testb = ("n-1".to_string(), 1);
-    let testc = ("n-2".to_string(), 2);
-    let testd = ("n-3".to_string(), 3);
+    let testa = ("n-1".to_string(), 1);
+    let testb = ("n-2".to_string(), 2);
+    let testc = ("n-3".to_string(), 3);
+    let testd = ("n-4".to_string(), 4);
 
     NamespaceInfo {
-        names: vec![
-            testa.clone().0,
-            testb.clone().0,
-            testc.clone().0,
-            testd.clone().0,
-        ],
+        names: vec![testa.clone(), testb.clone(), testc.clone(), testd.clone()],
         linked: vec![
             // arbitrary connections
             (testa.clone(), testb.clone()),
@@ -101,13 +105,13 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
     KI.run_command("ip", &["-all", "netns", "delete", "||", "true"])?;
     // add namespaces
     for name in spaces.names {
-        let res = KI.run_command("ip", &["netns", "add", &name]);
-        println!("{res:?}");
+        let res = KI.run_command("ip", &["netns", "add", &name.0]);
+        println!("{:?}", res);
         // ip netns exec nB ip link set dev lo up
         let res = KI.run_command(
             "ip",
             &[
-                "netns", "exec", &name, "ip", "link", "set", "dev", "lo", "up",
+                "netns", "exec", &name.0, "ip", "link", "set", "dev", "lo", "up",
             ],
         );
         println!("{res:?}");
@@ -200,15 +204,15 @@ fn thread_spawner(namespaces: NamespaceInfo) -> Result<(), KernelInterfaceError>
     fs::write(babelconf_path.clone(), babelconf_data).unwrap();
     for ns in namespaces.names.clone() {
         let veth_interfaces = get_veth_interfaces(namespaces.clone());
-        let veth_interfaces = veth_interfaces.get(&ns).unwrap().clone();
+        let veth_interfaces = veth_interfaces.get(&ns.0).unwrap().clone();
         let rcsettings = ritasettings.clone();
-        let nspath = format!("/var/run/netns/{ns}");
+        let nspath = format!("/var/run/netns/{}", ns.0);
         let nsfd = open(nspath.as_str(), OFlag::O_RDONLY, Mode::empty())
             .unwrap_or_else(|_| panic!("Could not open netns file: {}", nspath));
 
-        spawn_rita(ns.clone(), veth_interfaces, rcsettings, nsfd);
+        spawn_rita(ns.clone().0, veth_interfaces, rcsettings, nsfd);
 
-        spawn_babel(ns, babelconf_path.clone(), babeld_path.clone(), nsfd);
+        spawn_babel(ns.0, babelconf_path.clone(), babeld_path.clone(), nsfd);
     }
     Ok(())
 }
@@ -216,21 +220,7 @@ fn thread_spawner(namespaces: NamespaceInfo) -> Result<(), KernelInterfaceError>
 /// Validate the list of linked namespaces
 fn validate_connections(namespaces: NamespaceInfo) {
     for link in namespaces.linked {
-        let s = "Namespace names must follow naming convention: abc-123 (ex. A-0):";
-        let name1: Vec<&str> = link.0 .0.split('-').collect();
-        let _num1: u32 = name1
-            .get(1)
-            .unwrap_or_else(|| panic!("{} {}", s, link.0 .0))
-            .parse()
-            .unwrap_or_else(|_| panic!("{} {}", s, link.0 .0));
-        let name2: Vec<&str> = link.1 .0.split('-').collect();
-        let _num2: u32 = name2
-            .get(1)
-            .unwrap_or_else(|| panic!("{} {}", s, link.0 .0))
-            .parse()
-            .unwrap_or_else(|_| panic!("{} {}", s, link.0 .0));
-
-        if !namespaces.names.contains(&link.0 .0) || !namespaces.names.contains(&link.1 .0) {
+        if !namespaces.names.contains(&link.0) || !namespaces.names.contains(&link.1) {
             panic!(
                 "One or both of these names is not in the given namespace list: {}, {}",
                 link.0 .0, link.1 .0
@@ -252,7 +242,7 @@ fn validate_connections(namespaces: NamespaceInfo) {
 fn get_veth_interfaces(nsinfo: NamespaceInfo) -> HashMap<String, HashSet<String>> {
     let mut res: HashMap<String, HashSet<String>> = HashMap::new();
     for name in nsinfo.names {
-        res.insert(name, HashSet::new());
+        res.insert(name.0, HashSet::new());
     }
     for link in nsinfo.linked {
         let veth_ab = format!("veth-{}-{}", link.0 .0, link.1 .0);

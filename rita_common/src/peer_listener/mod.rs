@@ -20,8 +20,11 @@ use std::sync::Arc;
 use std::sync::RwLock;
 
 lazy_static! {
-    pub static ref PEER_LISTENER: Arc<RwLock<PeerListener>> =
-        Arc::new(RwLock::new(PeerListener::default()));
+    pub static ref PEER_LISTENER: Arc<RwLock<HashMap<String, PeerListener>>> =
+        Arc::new(RwLock::new(HashMap::from([(
+            "default".to_string(),
+            PeerListener::default()
+        )])));
 }
 
 #[derive(Debug)]
@@ -161,13 +164,17 @@ fn listen_to_available_ifaces(peer_listener: &mut PeerListener) {
 }
 
 /// Returns a copy of PL lazy static var
-fn get_pl_copy() -> PeerListener {
-    PEER_LISTENER.read().unwrap().clone()
+fn get_pl_copy(key: String) -> Option<PeerListener> {
+    let pl = PEER_LISTENER.read().unwrap().clone();
+    let tmp = pl.get(&key);
+    tmp.cloned()
 }
 
 /// Sets the PeerListener lazy static to the given value
-fn set_pl(pl: PeerListener) {
-    *PEER_LISTENER.write().unwrap() = pl;
+fn set_pl(key: String, pl: PeerListener) {
+    let mut map = PEER_LISTENER.read().unwrap().clone();
+    map.insert(key, pl);
+    *PEER_LISTENER.write().unwrap() = map;
 }
 
 /// Ticks the peer listener module sending ImHere messages and receiving Hello messages from all
@@ -175,7 +182,16 @@ fn set_pl(pl: PeerListener) {
 pub fn peerlistener_tick() -> PeerListener {
     trace!("Starting PeerListener tick!");
 
-    let mut pl = get_pl_copy();
+    let key = if cfg!(feature = "integration_test_v2") {
+        KI.get_namespace().unwrap()
+    } else {
+        "default".to_string()
+    };
+    let mut pl = match get_pl_copy(key.clone()) {
+        Some(pl) => pl,
+        // we should never get here in prod as the default is created in the initialization, but this is a failsafe either way...
+        None => PeerListener::default(),
+    };
     info!("Received the PL struct: {:?}", pl);
     send_im_here(&mut pl.interfaces);
     let (a, b) = receive_im_here(&mut pl.interfaces);
@@ -186,7 +202,7 @@ pub fn peerlistener_tick() -> PeerListener {
     receive_hello(&mut pl);
     listen_to_available_ifaces(&mut pl);
 
-    set_pl(pl.clone());
+    set_pl(key, pl.clone());
     info!("We set the PL struct to : {:?}", pl);
     pl
 }
@@ -195,13 +211,22 @@ pub fn peerlistener_tick() -> PeerListener {
 pub fn unlisten_interface(interface: String) {
     info!("Peerlistener unlisten on {:?}", interface);
     let ifname_to_delete = interface;
-    let mut writer = PEER_LISTENER.write().unwrap();
-    if writer.interfaces.contains_key(&ifname_to_delete) {
-        writer.interfaces.remove(&ifname_to_delete);
+    let key = if cfg!(feature = "integration_test_v2") {
+        KI.get_namespace().unwrap()
+    } else {
+        "default".to_string()
+    };
+    let mut pl = match get_pl_copy(key.clone()) {
+        Some(pl) => pl,
+        // we should never get here in prod as the default is created in the initialization, but this is a failsafe either way...
+        None => PeerListener::default(),
+    };
+    if pl.interfaces.contains_key(&ifname_to_delete) {
+        pl.interfaces.remove(&ifname_to_delete);
         let mut common = settings::get_rita_common();
 
         common.network.peer_interfaces.remove(&ifname_to_delete);
-
+        set_pl(key, pl);
         settings::set_rita_common(common);
     } else {
         error!("Tried to unlisten interface that's not present!")
@@ -228,12 +253,30 @@ impl ListenInterface {
         let link_ip = KI.get_link_local_device_ip(ifname)?;
 
         // Lookup interface index
-        let iface_index = KI.get_ifindex(ifname).unwrap_or(0) as u32;
+        let iface_index: u32 = if cfg!(feature = "integration_test_v2") {
+            // ip netns exec n-1 cat /sys/class/net/veth-n-1-n-2/iflink
+            let ns = KI.get_namespace().unwrap();
+            let location = format!("/sys/class/net/{}/ifindex", ifname);
+            let index = KI
+                .run_command("ip", &["netns", "exec", &ns, "cat", &location])
+                .unwrap();
+
+            let index = match String::from_utf8(index.stdout) {
+                Ok(mut s) => {
+                    //this outputs with an extra newline \n on the end which was messing up the next command
+                    s.truncate(s.len() - 1);
+                    s
+                }
+                Err(_) => panic!("Could not get index number!"),
+            };
+            info!("location: {:?}, index {:?}", location, index);
+
+            index.parse().unwrap()
+        } else {
+            KI.get_ifindex(ifname).unwrap_or(0) as u32
+        };
         // Bond to multicast discovery address on each listen port
         let multicast_socketaddr = SocketAddrV6::new(disc_ip, port, 0, iface_index);
-
-        // try_link_ip should guard from non-existant interfaces and the network stack not being ready
-        // so in theory we should never hit this expect or the panic below either.
         let multicast_socket = UdpSocket::bind(multicast_socketaddr)?;
         let res = multicast_socket.join_multicast_v6(&disc_ip, iface_index);
         trace!("ListenInterface init set multicast v6 with {:?}", res);

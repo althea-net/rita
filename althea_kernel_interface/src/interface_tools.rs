@@ -231,6 +231,19 @@ impl dyn KernelInterface {
             Ok(())
         }
     }
+
+    /// Gets the network namespace name that holds the thread this function was called from
+    pub fn get_namespace(&self) -> Result<String, Error> {
+        let output = self.run_command("ip", &["netns", "identify"]).unwrap();
+        match String::from_utf8(output.stdout) {
+            Ok(mut s) => {
+                //this outputs with an extra newline \n on the end which was messing up the next command
+                s.truncate(s.len() - 1);
+                Ok(s)
+            }
+            Err(_) => Err(Error::RuntimeError("Could not get netns name!".to_string())),
+        }
+    }
 }
 
 #[test]
