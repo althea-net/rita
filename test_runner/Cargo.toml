@@ -22,5 +22,5 @@ rita_client = { path = "../rita_client",  default-features = false }
 rita_common = { path = "../rita_common", default-features = false }
 
 [features]
-load_from_disk = ["settings/load_from_disk"]
+load_from_disk = ["settings/load_from_disk","rita_common/integration_test_v2"]
 
