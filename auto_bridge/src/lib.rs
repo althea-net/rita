@@ -9,7 +9,7 @@ use clarity::{Address, PrivateKey};
 use num256::Uint256;
 use std::collections::HashSet;
 use std::time::Duration;
-use web30::amm::{DAI_CONTRACT_ADDRESS as DAI_CONTRACT_ON_ETH, WETH_CONTRACT_ADDRESS};
+use web30::amm::{DAI_CONTRACT_ADDRESS as DAI_CONTRACT_ON_ETH, USDC_CONTRACT_ADDRESS};
 use web30::client::Web3;
 use web30::jsonrpc::error::Web3Error;
 use web30::types::Log;
@@ -23,6 +23,10 @@ pub use error::TokenBridgeError;
 pub static UNISWAP_GAS_LIMIT: u128 = 150_000;
 pub static ERC20_GAS_LIMIT: u128 = 40_000;
 pub static XDAI_FUNDS_UNLOCK_GAS: u128 = 180_000;
+/// Minimum transfer is $5 dai which has 18 decimal precision
+pub static MINIMUM_DAI_TO_SEND: u128 = 10_000_000_000_000_000_000;
+/// Minimum transfer is $15 USDC which has 6 decimal precision
+pub static MINIMUM_USDC_TO_CONVERT: u128 = 15_000_000;
 
 fn default_helper_on_xdai_address() -> Address {
     default_bridge_addresses().helper_on_xdai
@@ -46,6 +50,12 @@ pub struct TokenBridgeAddresses {
     pub xdai_bridge_on_xdai: Address,
     pub eth_full_node_url: String,
     pub xdai_full_node_url: String,
+}
+
+pub fn get_usdt_address() -> Address {
+    "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+        .parse()
+        .unwrap()
 }
 
 /// Just a little helper struct to keep us from getting
@@ -98,97 +108,6 @@ impl TokenBridge {
         }
     }
 
-    /// takes in 'amount' of dai and returns correspoding amount of eth
-    pub async fn dai_to_eth_price(&self, amount: Uint256) -> Result<Uint256, TokenBridgeError> {
-        let own_address = self.own_address;
-
-        let tokens_bought = match self
-            .eth_web3
-            .get_uniswap_v3_price(
-                own_address,
-                *DAI_CONTRACT_ON_ETH,
-                *WETH_CONTRACT_ADDRESS,
-                None,
-                amount,
-                None,
-                None,
-            )
-            .await
-        {
-            Ok(a) => a,
-            Err(e) => return Err(TokenBridgeError::Web3Error(e)),
-        };
-
-        Ok(tokens_bought)
-    }
-
-    /// takes in 'amount' of eth, and returns corresponding amount of dai
-    pub async fn eth_to_dai_price(&self, amount: Uint256) -> Result<Uint256, TokenBridgeError> {
-        let own_address = self.own_address;
-
-        let tokens_bought = match self
-            .eth_web3
-            .get_uniswap_v3_price(
-                own_address,
-                *WETH_CONTRACT_ADDRESS,
-                *DAI_CONTRACT_ON_ETH,
-                None,
-                amount,
-                None,
-                None,
-            )
-            .await
-        {
-            Ok(a) => a,
-            Err(e) => return Err(TokenBridgeError::Web3Error(e)),
-        };
-
-        Ok(tokens_bought)
-    }
-
-    /// Sell `eth_amount` ETH for Dai.
-    /// This function will error out if it takes longer than 'timeout' and the transaction is guaranteed not
-    /// to be executed on the blockchain after this time. The transaction will be accepted and some gas
-    /// will be paid but the actual exchange will not complete as the contract will throw if the timeout time
-    /// has elapsed
-    pub async fn eth_to_dai_swap(
-        &self,
-        eth_amount: Uint256,
-        timeout: Duration,
-    ) -> Result<Uint256, TokenBridgeError> {
-        let secret = self.eth_privatekey;
-
-        let block = self.eth_web3.eth_get_latest_block().await?;
-        let expected_dai = self.eth_to_dai_price(eth_amount.clone()).await?;
-
-        // Equivalent to `amount * (1 - 0.025)` without using decimals
-        let expected_dai = (expected_dai / 40u64.into()) * 39u64.into();
-        let deadline = block.timestamp + timeout.as_secs().into();
-
-        // initiate swap with no sqrtPriceLimit
-        let tokens = match self
-            .eth_web3
-            .swap_uniswap_v3_eth_in(
-                secret,
-                *DAI_CONTRACT_ON_ETH,
-                None,
-                eth_amount,
-                Some(deadline),
-                Some(expected_dai),
-                None,
-                None,
-                None,
-                Some(timeout),
-            )
-            .await
-        {
-            Ok(a) => a,
-            Err(e) => return Err(TokenBridgeError::Web3Error(e)),
-        };
-
-        Ok(tokens)
-    }
-
     /// Bridge `dai_amount` dai to xdai
     pub async fn dai_to_xdai_bridge(
         &self,
@@ -224,11 +143,27 @@ impl TokenBridge {
         Ok(dai_amount)
     }
 
-    pub async fn get_dai_balance(&self, address: Address) -> Result<Uint256, TokenBridgeError> {
+    pub async fn get_dai_balance(&self) -> Result<Uint256, TokenBridgeError> {
         let dai_address = *DAI_CONTRACT_ON_ETH;
         Ok(self
             .eth_web3
-            .get_erc20_balance(dai_address, address)
+            .get_erc20_balance(dai_address, self.own_address)
+            .await?)
+    }
+
+    pub async fn get_usdc_balance(&self) -> Result<Uint256, TokenBridgeError> {
+        let usdc_address = *USDC_CONTRACT_ADDRESS;
+        Ok(self
+            .eth_web3
+            .get_erc20_balance(usdc_address, self.own_address)
+            .await?)
+    }
+
+    pub async fn get_usdt_balance(&self) -> Result<Uint256, TokenBridgeError> {
+        let usdt_address = get_usdt_address();
+        Ok(self
+            .eth_web3
+            .get_erc20_balance(usdt_address, self.own_address)
             .await?)
     }
 
@@ -754,25 +689,6 @@ mod tests {
                 bytes_to_hex_str(&correct_payload_2)
             );
             actix::System::current().stop();
-        });
-    }
-
-    #[test]
-    #[ignore]
-    fn test_eth_to_dai_swap() {
-        let runner = actix::System::new();
-
-        let token_bridge = new_token_bridge();
-
-        runner.block_on(async move {
-            let one_cent_in_eth = token_bridge
-                .dai_to_eth_price(eth_to_wei(0.01f64))
-                .await
-                .unwrap();
-            token_bridge
-                .eth_to_dai_swap(one_cent_in_eth, TIMEOUT)
-                .await
-                .unwrap();
         });
     }
 
