@@ -56,7 +56,7 @@ pub struct NodeDebtData {
     /// The last thing we did, this value is updated but does not actual affect controll flow
     /// do not use it to affect control flow!
     pub action: DebtAction,
-    #[serde(skip_deserializing)]
+    #[serde(skip_serializing, skip_deserializing)]
     /// If we have an outgoing payment to a node in flight
     pub payment_in_flight: bool,
     #[serde(skip_serializing, skip_deserializing)]
@@ -729,6 +729,8 @@ pub fn get_debts_list() -> Vec<GetDebtsResult> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::remove_file;
+
     use rand::Rng;
     use settings::client::RitaClientSettings;
 
@@ -1243,5 +1245,94 @@ mod tests {
         assert!(dd.len() == 4);
         assert!(one_pos_credit);
         assert!(one_pos_debt);
+    }
+
+    #[test]
+    fn test_saving_debts_to_file() {
+        let mut debt_data: DebtData = HashMap::new();
+        let id = Identity {
+            mesh_ip: "fd00::1447:1eff".parse().unwrap(),
+            eth_address: "0x5AeE3Dff733F56cFe7E5390B9cC3A46a90cA1CfA"
+                .parse()
+                .unwrap(),
+            wg_public_key: "zgAlhyOQy8crB0ewrsWt3ES9SvFguwx5mq9i2KiknmA="
+                .parse()
+                .unwrap(),
+            nickname: None,
+        };
+
+        let node_debts = NodeDebtData {
+            total_payment_received: Uint256::from(8u8),
+            total_payment_sent: Uint256::from(35u8),
+            debt: Int256::from(34634u64),
+            incoming_payments: Uint256::from(0u8),
+            action: DebtAction::OpenTunnel,
+            payment_in_flight: false,
+            payment_in_flight_start: None,
+            last_successful_payment: None,
+        };
+
+        let id2 = Identity {
+            mesh_ip: "fd00::1337:e2f".parse().unwrap(),
+            eth_address: "0x5AeE3Dff733F56cFe7E5390B9cC3A46a90cA1CfA"
+                .parse()
+                .unwrap(),
+            wg_public_key: "uNu3IMSgt3SY2+MvtEwjEpx45lOk7q/7sWC3ff80GXE="
+                .parse()
+                .unwrap(),
+            nickname: None,
+        };
+
+        let node_debts2 = NodeDebtData {
+            total_payment_received: Uint256::from(9u8),
+            total_payment_sent: Uint256::from(5u8),
+            debt: Int256::from(3460u64),
+            incoming_payments: Uint256::from(0u8),
+            action: DebtAction::OpenTunnel,
+            payment_in_flight: false,
+            payment_in_flight_start: None,
+            last_successful_payment: None,
+        };
+
+        debt_data.insert(id, node_debts);
+        debt_data.insert(id2, node_debts2);
+
+        let file_path = "testing_debt_saving.bincode";
+
+        let serialized = bincode::serialize(&debt_data_to_ser(debt_data.clone())).unwrap();
+        let mut file = File::create(file_path).expect("Why fail");
+        if let Err(e) = file.write_all(&serialized) {
+            println!("{:?}", e);
+        }
+
+        match deserialize_from_binary(file_path.to_string()) {
+            Some(a) => println!("{:?}", a),
+            None => print!("Unable to deserial"),
+        }
+
+        if let Err(e) = remove_file(file_path) {
+            println!("Remove the file: {:?}", e);
+        }
+
+        // TEST USING BufReader / BufWriter
+
+        // use std::{
+        //     io::{BufReader, BufWriter},
+        //     net::IpAddr,
+        // };
+
+        // use bincode::{deserialize_from, serialize_into};
+
+        // {
+        //     let serialized = debt_data_to_ser(debt_data.clone());
+        //     // let serialized = debt_data.clone();
+        //     let mut f = BufWriter::new(File::create(file_path).unwrap());
+        //     serialize_into(&mut f, &serialized).unwrap();
+        // }
+
+        // let file_path = "testing_debt_saving.bincode";
+        // let reader = BufReader::new(File::open(file_path).unwrap());
+        // let mut x: Vec<(Identity, NodeDebtData)> = deserialize_from(reader).unwrap();
+        // println!("{:?}", x);
     }
 }
