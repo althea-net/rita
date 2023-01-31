@@ -70,38 +70,36 @@ impl Display for BabelMonitorError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
             BabelMonitorError::VariableNotFound(a, b) => {
-                write!(f, "variable '{}' not found in '{}'", a, b,)
+                write!(f, "variable '{a}' not found in '{b}'",)
             }
-            BabelMonitorError::InvalidPreamble(a) => write!(f, "Invalid preamble: {}", a,),
+            BabelMonitorError::InvalidPreamble(a) => write!(f, "Invalid preamble: {a}",),
             BabelMonitorError::LocalFeeNotFound(a) => {
-                write!(f, "Could not find local fee in '{}'", a,)
+                write!(f, "Could not find local fee in '{a}'",)
             }
-            BabelMonitorError::CommandFailed(a, b) => write!(f, "Command '{}' failed. {}", a, b,),
-            BabelMonitorError::ReadFailed(a) => write!(f, "Erroneous Babel output:\n{}", a,),
+            BabelMonitorError::CommandFailed(a, b) => write!(f, "Command '{a}' failed. {b}",),
+            BabelMonitorError::ReadFailed(a) => write!(f, "Erroneous Babel output:\n{a}",),
             BabelMonitorError::NoTerminator(a) => {
-                write!(f, "No terminator after Babel output:\n{}", a,)
+                write!(f, "No terminator after Babel output:\n{a}",)
             }
             BabelMonitorError::NoNeighbor(a) => {
-                write!(f, "No Neighbor was found matching address:\n{}", a,)
+                write!(f, "No Neighbor was found matching address:\n{a}",)
             }
             BabelMonitorError::TcpError(a) => {
-                write!(f, "Tcp connection failure while talking to babel:\n{}", a,)
+                write!(f, "Tcp connection failure while talking to babel:\n{a}",)
             }
-            BabelMonitorError::BabelParseError(a) => write!(f, "Babel parsing failed:\n{}", a,),
-            BabelMonitorError::ReadFunctionError(e) => write!(f, "{}", e),
-            BabelMonitorError::BoolParseError(e) => write!(f, "{}", e),
-            BabelMonitorError::ParseAddrError(e) => write!(f, "{}", e),
-            BabelMonitorError::IntParseError(e) => write!(f, "{}", e),
-            BabelMonitorError::FloatParseError(e) => write!(f, "{}", e),
-            BabelMonitorError::NetworkError(e) => write!(f, "{}", e),
-            BabelMonitorError::NoRoute(a) => write!(f, "Route not found:\n{}", a,),
-            BabelMonitorError::TokioError(a) => write!(
-                f,
-                "Tokio had a failure while it was talking to babel:\n{}",
-                a,
-            ),
-            BabelMonitorError::MiscStringError(a) => write!(f, "{}", a,),
-            BabelMonitorError::FromUtf8Error(a) => write!(f, "{}", a,),
+            BabelMonitorError::BabelParseError(a) => write!(f, "Babel parsing failed:\n{a}",),
+            BabelMonitorError::ReadFunctionError(e) => write!(f, "{e}"),
+            BabelMonitorError::BoolParseError(e) => write!(f, "{e}"),
+            BabelMonitorError::ParseAddrError(e) => write!(f, "{e}"),
+            BabelMonitorError::IntParseError(e) => write!(f, "{e}"),
+            BabelMonitorError::FloatParseError(e) => write!(f, "{e}"),
+            BabelMonitorError::NetworkError(e) => write!(f, "{e}"),
+            BabelMonitorError::NoRoute(a) => write!(f, "Route not found:\n{a}",),
+            BabelMonitorError::TokioError(a) => {
+                write!(f, "Tokio had a failure while it was talking to babel:\n{a}",)
+            }
+            BabelMonitorError::MiscStringError(a) => write!(f, "{a}",),
+            BabelMonitorError::FromUtf8Error(a) => write!(f, "{a}",),
         }
     }
 }

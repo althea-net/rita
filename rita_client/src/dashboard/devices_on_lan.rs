@@ -220,8 +220,7 @@ pub async fn get_devices_lan_endpoint(_req: HttpRequest) -> HttpResponse {
                 Ok(info) => info,
                 Err(e) => {
                     return HttpResponse::InternalServerError().json(format!(
-                        "Unable to grab rita client hardware information. Failed with error {:?}",
-                        e
+                        "Unable to grab rita client hardware information. Failed with error {e:?}"
                     ));
                 }
             };

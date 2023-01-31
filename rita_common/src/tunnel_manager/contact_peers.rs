@@ -29,10 +29,10 @@ pub async fn tm_neighbor_inquiry_hostname(their_hostname: String) -> Result<(), 
 
     // note this may block and should only be called in the peer discovery loop where blocking is accounted for
     // note we add the hello port to make this a valid socket address which must include one, any port could be used here
-    let res = format!("{}:{}", their_hostname, rita_hello_port).to_socket_addrs();
+    let res = format!("{their_hostname}:{rita_hello_port}").to_socket_addrs();
     match res {
         Ok(dnsresult) => {
-            let url = format!("http://[{}]:{}/hello", their_hostname, rita_hello_port);
+            let url = format!("http://[{their_hostname}]:{rita_hello_port}/hello");
             info!("Saying hostname hello to: {:?} at ip {:?}", url, dnsresult);
             if dnsresult.clone().next().is_some() && is_gateway {
                 // dns records may have many ip's if we get multiple it's a load

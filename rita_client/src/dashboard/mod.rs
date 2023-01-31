@@ -208,7 +208,7 @@ pub fn start_client_dashboard(rita_dashboard_port: u16) {
                     .route("/email", web::post().to(set_email))
             })
             .workers(1)
-            .bind(format!("[::0]:{}", rita_dashboard_port))
+            .bind(format!("[::0]:{rita_dashboard_port}"))
             .unwrap()
             .shutdown_timeout(0)
             .run()

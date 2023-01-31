@@ -102,7 +102,7 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
             let prefix = "network.backhaul";
             let backhaul = KI.uci_show(Some(prefix))?;
             trace!("{:?}", backhaul);
-            let proto = if let Some(val) = backhaul.get(&format!("{}.proto", prefix)) {
+            let proto = if let Some(val) = backhaul.get(&format!("{prefix}.proto")) {
                 val
             } else {
                 return Err(RitaClientError::InterfaceModeError(
@@ -114,9 +114,9 @@ pub fn ethernet2mode(ifname: &str, setting_name: &str) -> Result<InterfaceMode, 
                 return Ok(InterfaceMode::Wan);
             } else if proto.contains("static") {
                 let opt_tuple = (
-                    backhaul.get(&format!("{}.netmask", prefix)),
-                    backhaul.get(&format!("{}.ipaddr", prefix)),
-                    backhaul.get(&format!("{}.gateway", prefix)),
+                    backhaul.get(&format!("{prefix}.netmask")),
+                    backhaul.get(&format!("{prefix}.ipaddr")),
+                    backhaul.get(&format!("{prefix}.gateway")),
                 );
                 if let (Some(netmask), Some(ipaddr), Some(gateway)) = opt_tuple {
                     return Ok(InterfaceMode::StaticWan {
@@ -302,11 +302,11 @@ pub fn ethernet_transform_mode(
             return_codes.push(ret);
             let ret = KI.set_uci_var("network.backhaul.proto", "static");
             return_codes.push(ret);
-            let ret = KI.set_uci_var("network.backhaul.netmask", &format!("{}", netmask));
+            let ret = KI.set_uci_var("network.backhaul.netmask", &format!("{netmask}"));
             return_codes.push(ret);
-            let ret = KI.set_uci_var("network.backhaul.ipaddr", &format!("{}", ipaddr));
+            let ret = KI.set_uci_var("network.backhaul.ipaddr", &format!("{ipaddr}"));
             return_codes.push(ret);
-            let ret = KI.set_uci_var("network.backhaul.gateway", &format!("{}", gateway));
+            let ret = KI.set_uci_var("network.backhaul.gateway", &format!("{gateway}"));
             return_codes.push(ret);
         }
         InterfaceMode::LTE => {
@@ -346,9 +346,9 @@ pub fn ethernet_transform_mode(
 
             let ret = KI.set_uci_var(&filtered_ifname, "interface");
             return_codes.push(ret);
-            let ret = KI.set_uci_var(&format!("{}.ifname", filtered_ifname), ifname);
+            let ret = KI.set_uci_var(&format!("{filtered_ifname}.ifname"), ifname);
             return_codes.push(ret);
-            let ret = KI.set_uci_var(&format!("{}.proto", filtered_ifname), "static");
+            let ret = KI.set_uci_var(&format!("{filtered_ifname}.proto"), "static");
             return_codes.push(ret);
         }
         InterfaceMode::Unknown => unimplemented!(),
@@ -541,7 +541,7 @@ pub async fn wlan_lightclient_set(enabled: Path<bool>) -> HttpResponse {
 /// A helper function for adding entries to a list
 pub fn list_add(list: &str, entry: &str) -> String {
     if !list.is_empty() {
-        format!("{} {}", list, entry)
+        format!("{list} {entry}")
     } else {
         entry.to_string()
     }
@@ -562,7 +562,7 @@ pub fn list_remove(list: &str, entry: &str) -> String {
                     new_list = tmp_list + filtered_item;
                     first = false;
                 } else {
-                    new_list = tmp_list + &format!(" {}", filtered_item);
+                    new_list = tmp_list + &format!(" {filtered_item}");
                 }
             }
         }
@@ -632,7 +632,7 @@ pub async fn get_interfaces_endpoint(_req: HttpRequest) -> HttpResponse {
         Ok(val) => HttpResponse::Ok().json(val),
         Err(e) => {
             error!("get_interfaces failed with {:?}", e);
-            HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{:?}", e))
+            HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{e:?}"))
         }
     }
 }

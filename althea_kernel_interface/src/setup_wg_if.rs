@@ -36,16 +36,16 @@ impl dyn KernelInterface {
         let links = String::from_utf8(self.run_command("ip", &["link"])?.stdout)?;
         let mut if_num = 0;
         //loop through the output of "ip links" until we find a wg suffix that isn't taken (e.g. "wg3")
-        while links.contains(format!("wg{}", if_num).as_str()) {
+        while links.contains(format!("wg{if_num}").as_str()) {
             if_num += 1;
         }
 
         let mut count = 0;
-        let mut interface = format!("wg{}", if_num);
+        let mut interface = format!("wg{if_num}");
         let mut res = self.setup_wg_if_named(&interface);
         while let Err(KernelInterfaceError::WgExistsError) = res {
             if_num += 1;
-            interface = format!("wg{}", if_num);
+            interface = format!("wg{if_num}");
             res = self.setup_wg_if_named(&interface);
             count += 1;
             if count > MAX_RETRY {
@@ -66,8 +66,7 @@ impl dyn KernelInterface {
                 return Err(KernelInterfaceError::WgExistsError);
             } else {
                 return Err(KernelInterfaceError::RuntimeError(format!(
-                    "received error adding wg link: {}",
-                    stderr
+                    "received error adding wg link: {stderr}"
                 )));
             }
         }
@@ -132,7 +131,7 @@ fn test_durations() {
     let d = UNIX_EPOCH + Duration::from_secs(5);
     let d2 = UNIX_EPOCH + Duration::from_secs(10);
 
-    println!("d: {:?}, d2: {:?}", d, d2);
+    println!("d: {d:?}, d2: {d2:?}");
 }
 
 #[test]

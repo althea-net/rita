@@ -45,7 +45,7 @@ pub async fn set_local_fee(path: Path<u32>) -> HttpResponse {
                     // try and save the config and fail if we can't
                     if let Err(e) = settings::write_config() {
                         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-                            .json(format!("{:?}", e));
+                            .json(format!("{e:?}"));
                     }
                     HttpResponse::Ok().json(())
                 }
@@ -82,7 +82,7 @@ pub async fn set_metric_factor(path: Path<u32>) -> HttpResponse {
                     // try and save the config and fail if we can't
                     if let Err(e) = settings::write_config() {
                         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-                            .json(format!("{}", e));
+                            .json(format!("{e}"));
                     }
 
                     HttpResponse::Ok().json(())

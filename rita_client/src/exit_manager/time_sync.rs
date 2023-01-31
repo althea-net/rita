@@ -17,7 +17,7 @@ pub async fn get_exit_time(exit: ExitServer, exit_name: String) -> Option<System
     info!("Getting the exit time");
     let exit_ip = get_selected_exit_ip(exit_name).expect("There should be an exit ip here");
     let exit_port = exit.registration_port;
-    let url = format!("http://[{}]:{}/time", exit_ip, exit_port);
+    let url = format!("http://[{exit_ip}]:{exit_port}/time");
 
     let client = awc::Client::default();
     let response = match client.get(&url).send().await {

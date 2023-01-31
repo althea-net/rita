@@ -73,15 +73,14 @@ impl Display for ForwardingProtocolError {
         match self {
             ForwardingProtocolError::SliceTooSmall { expected, actual } => write!(
                 f,
-                "SliceTooSmall expected {} bytes, got {} bytes",
-                expected, actual
+                "SliceTooSmall expected {expected} bytes, got {actual} bytes"
             ),
             ForwardingProtocolError::BadMagic => write!(f, "BadMagic"),
             ForwardingProtocolError::InvalidLen => write!(f, "InvalidLen"),
             ForwardingProtocolError::WrongPacketType => write!(f, "WrongPacketType"),
             ForwardingProtocolError::UnknownPacketType => write!(f, "UnknownPacketType"),
             ForwardingProtocolError::DecryptionFailed => write!(f, "DecryptionFailed"),
-            ForwardingProtocolError::SerdeError { message } => write!(f, "SerdeError {}", message),
+            ForwardingProtocolError::SerdeError { message } => write!(f, "SerdeError {message}"),
         }
     }
 }

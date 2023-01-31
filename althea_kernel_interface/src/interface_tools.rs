@@ -46,7 +46,7 @@ impl dyn KernelInterface {
 
     pub fn iface_status(&self, iface: &str) -> Result<String, Error> {
         // cat so we can mock
-        let output = self.run_command("cat", &[&format!("/sys/class/net/{}/operstate", iface)])?;
+        let output = self.run_command("cat", &[&format!("/sys/class/net/{iface}/operstate")])?;
 
         let output = from_utf8(&output.stdout)?;
 
@@ -76,8 +76,7 @@ impl dyn KernelInterface {
                             }
                             None => {
                                 return Err(Error::RuntimeError(format!(
-                                "Cannot parse `wg show {} endpoints` output, got {}, captured {:?}",
-                                name, stdout, cap
+                                "Cannot parse `wg show {name} endpoints` output, got {stdout}, captured {cap:?}"
                             )))
                             }
                         }
@@ -87,8 +86,7 @@ impl dyn KernelInterface {
                 Ok(ip_str.parse()?)
             }
             None => Err(Error::RuntimeError(format!(
-                "Cannot parse `wg show {} endpoints` output, got {}, nothing captured",
-                name, stdout
+                "Cannot parse `wg show {name} endpoints` output, got {stdout}, nothing captured"
             ))),
         }
     }
@@ -177,7 +175,7 @@ impl dyn KernelInterface {
 
     /// Gets the mtu from an interface
     pub fn get_mtu(&self, if_name: &str) -> Result<usize, Error> {
-        let lines = get_lines(&format!("/sys/class/net/{}/mtu", if_name))?;
+        let lines = get_lines(&format!("/sys/class/net/{if_name}/mtu"))?;
         if let Some(mtu) = lines.get(0) {
             Ok(mtu.parse()?)
         } else {
@@ -187,7 +185,7 @@ impl dyn KernelInterface {
 
     /// Gets the ifindex from an interface
     pub fn get_ifindex(&self, if_name: &str) -> Result<usize, Error> {
-        let lines = get_lines(&format!("/sys/class/net/{}/ifindex", if_name))?;
+        let lines = get_lines(&format!("/sys/class/net/{if_name}/ifindex"))?;
         if let Some(ifindex) = lines.get(0) {
             Ok(ifindex.parse()?)
         } else {
@@ -198,7 +196,7 @@ impl dyn KernelInterface {
     /// Gets the iflink value from an interface. Physical interfaces have an ifindex and iflink that are
     /// identical but if you have a virtual (say DSA) interface then this will be the physical interface name
     pub fn get_iflink(&self, if_name: &str) -> Result<usize, Error> {
-        let lines = get_lines(&format!("/sys/class/net/{}/iflink", if_name))?;
+        let lines = get_lines(&format!("/sys/class/net/{if_name}/iflink"))?;
         if let Some(iflink) = lines.get(0) {
             Ok(iflink.parse()?)
         } else {

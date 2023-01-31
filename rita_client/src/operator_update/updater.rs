@@ -21,7 +21,7 @@ pub fn update_system(instruction: UpdateType) -> Result<(), KernelInterfaceError
                         Ok(o) => match o.status.code() {
                             Some(0) => info!("opkg completed successfully! {:?}", o),
                             Some(_) => {
-                                let err = format!("opkg has failed! {:?}", o);
+                                let err = format!("opkg has failed! {o:?}");
                                 error!("{}", err);
                             }
                             None => warn!("No return code form opkg update? {:?}", o),

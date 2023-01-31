@@ -46,6 +46,6 @@ pub fn enable_remote_logging(
     }
     log::set_max_level(level);
 
-    println!("Remote compressed logging enabled with target {}", log_url);
+    println!("Remote compressed logging enabled with target {log_url}");
     Ok(())
 }

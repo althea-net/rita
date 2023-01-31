@@ -13,7 +13,7 @@ pub async fn reboot_router(_req: HttpRequest) -> HttpResponse {
     if KI.is_openwrt() {
         if let Err(e) = KI.run_command("reboot", &[]) {
             return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-                .json(format!("Cannot run reboot: {}", e));
+                .json(format!("Cannot run reboot: {e}"));
         }
         HttpResponse::Ok().json(())
     } else {
@@ -31,8 +31,7 @@ pub async fn update_router(_req: HttpRequest) -> HttpResponse {
             return HttpResponse::Ok().json("No update instructions set, doing nothing");
         }
         if let Err(e) = update_system(reader.as_ref().unwrap().clone()) {
-            return HttpResponse::Ok()
-                .json(format!("Retrieved Error while performing update {}", e));
+            return HttpResponse::Ok().json(format!("Retrieved Error while performing update {e}"));
         }
         HttpResponse::Ok().json(())
     } else {

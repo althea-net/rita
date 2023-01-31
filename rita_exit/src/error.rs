@@ -98,21 +98,21 @@ impl From<BabelMonitorError> for RitaExitError {
 impl Display for RitaExitError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            RitaExitError::MiscStringError(a) => write!(f, "{}", a,),
-            RitaExitError::EmailNotFound(a) => write!(f, "Could not find email for {:?}", a),
-            RitaExitError::AddrParseError(a) => write!(f, "{:?}", a,),
-            RitaExitError::IpAddrError(a) => write!(f, "No route found for mesh ip: {:?}", a,),
-            RitaExitError::DieselError(a) => write!(f, "{}", a,),
-            RitaExitError::RitaCommonError(a) => write!(f, "{}", a,),
-            RitaExitError::RenderError(a) => write!(f, "{}", a,),
-            RitaExitError::EmailError(a) => write!(f, "{}", a,),
-            RitaExitError::FileError(a) => write!(f, "{}", a,),
-            RitaExitError::SmtpError(a) => write!(f, "{}", a,),
-            RitaExitError::IpNetworkError(a) => write!(f, "{}", a,),
-            RitaExitError::PhoneParseError(a) => write!(f, "{}", a,),
-            RitaExitError::ClarityError(a) => write!(f, "{}", a,),
-            RitaExitError::AltheaTypesError(a) => write!(f, "{}", a,),
-            RitaExitError::KernelInterfaceError(a) => write!(f, "{}", a,),
+            RitaExitError::MiscStringError(a) => write!(f, "{a}",),
+            RitaExitError::EmailNotFound(a) => write!(f, "Could not find email for {a:?}"),
+            RitaExitError::AddrParseError(a) => write!(f, "{a:?}",),
+            RitaExitError::IpAddrError(a) => write!(f, "No route found for mesh ip: {a:?}",),
+            RitaExitError::DieselError(a) => write!(f, "{a}",),
+            RitaExitError::RitaCommonError(a) => write!(f, "{a}",),
+            RitaExitError::RenderError(a) => write!(f, "{a}",),
+            RitaExitError::EmailError(a) => write!(f, "{a}",),
+            RitaExitError::FileError(a) => write!(f, "{a}",),
+            RitaExitError::SmtpError(a) => write!(f, "{a}",),
+            RitaExitError::IpNetworkError(a) => write!(f, "{a}",),
+            RitaExitError::PhoneParseError(a) => write!(f, "{a}",),
+            RitaExitError::ClarityError(a) => write!(f, "{a}",),
+            RitaExitError::AltheaTypesError(a) => write!(f, "{a}",),
+            RitaExitError::KernelInterfaceError(a) => write!(f, "{a}",),
         }
     }
 }

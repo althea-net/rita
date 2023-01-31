@@ -94,12 +94,12 @@ pub enum KernelInterfaceError {
 impl fmt::Display for KernelInterfaceError {
     fn fmt(&self, f: &mut fmt::Formatter) -> FormatResult {
         match self {
-            KernelInterfaceError::RuntimeError(val) => write!(f, "Runtime Error: {}", val),
+            KernelInterfaceError::RuntimeError(val) => write!(f, "Runtime Error: {val}"),
             KernelInterfaceError::NoInterfaceError(val) => {
-                write!(f, "No interface by the name: {}", val)
+                write!(f, "No interface by the name: {val}")
             }
             KernelInterfaceError::AddressNotReadyError(val) => {
-                write!(f, "Address isn't ready yet: {}", val)
+                write!(f, "Address isn't ready yet: {val}")
             }
             KernelInterfaceError::WgExistsError => write!(f, "Wireguard Interface Already exists"),
             KernelInterfaceError::FailedToGetMemoryUsage => {
@@ -113,16 +113,16 @@ impl fmt::Display for KernelInterfaceError {
                 write!(f, "Could not pares /etc/opkg/customfeeds.conf")
             }
             KernelInterfaceError::TrafficControlError(val) => {
-                write!(f, "TrafficControl error {}", val)
+                write!(f, "TrafficControl error {val}")
             }
             KernelInterfaceError::EmptyRouteString => {
                 write!(f, "Can't parse an empty string into a route!")
             }
             KernelInterfaceError::InvalidRouteString(val) => {
-                write!(f, "InvalidRouteString {}", val)
+                write!(f, "InvalidRouteString {val}")
             }
             KernelInterfaceError::InvalidArchString(val) => {
-                write!(f, "InvalidArchString {}", val)
+                write!(f, "InvalidArchString {val}")
             }
             KernelInterfaceError::FailedToGetSystemTime => {
                 write!(f, "Failed to get system time!")
@@ -138,55 +138,55 @@ impl Error for KernelInterfaceError {}
 
 impl From<FromUtf8Error> for KernelInterfaceError {
     fn from(e: FromUtf8Error) -> Self {
-        KernelInterfaceError::RuntimeError(format!("{}", e))
+        KernelInterfaceError::RuntimeError(format!("{e}"))
     }
 }
 
 impl From<IoError> for KernelInterfaceError {
     fn from(e: IoError) -> Self {
-        KernelInterfaceError::RuntimeError(format!("{}", e))
+        KernelInterfaceError::RuntimeError(format!("{e}"))
     }
 }
 
 impl From<AddrParseError> for KernelInterfaceError {
     fn from(e: AddrParseError) -> Self {
-        KernelInterfaceError::RuntimeError(format!("{}", e))
+        KernelInterfaceError::RuntimeError(format!("{e}"))
     }
 }
 
 impl From<ParseIntError> for KernelInterfaceError {
     fn from(e: ParseIntError) -> Self {
-        KernelInterfaceError::RuntimeError(format!("{}", e))
+        KernelInterfaceError::RuntimeError(format!("{e}"))
     }
 }
 
 impl From<ParseFloatError> for KernelInterfaceError {
     fn from(e: ParseFloatError) -> Self {
-        KernelInterfaceError::RuntimeError(format!("{}", e))
+        KernelInterfaceError::RuntimeError(format!("{e}"))
     }
 }
 
 impl From<AltheaTypesError> for KernelInterfaceError {
     fn from(e: AltheaTypesError) -> Self {
-        KernelInterfaceError::RuntimeError(format!("{}", e))
+        KernelInterfaceError::RuntimeError(format!("{e}"))
     }
 }
 
 impl From<Utf8Error> for KernelInterfaceError {
     fn from(e: Utf8Error) -> Self {
-        KernelInterfaceError::RuntimeError(format!("{}", e))
+        KernelInterfaceError::RuntimeError(format!("{e}"))
     }
 }
 
 impl From<SystemTimeError> for KernelInterfaceError {
     fn from(e: SystemTimeError) -> Self {
-        KernelInterfaceError::RuntimeError(format!("{}", e))
+        KernelInterfaceError::RuntimeError(format!("{e}"))
     }
 }
 
 impl From<PingError> for KernelInterfaceError {
     fn from(e: PingError) -> Self {
-        KernelInterfaceError::RuntimeError(format!("{}", e))
+        KernelInterfaceError::RuntimeError(format!("{e}"))
     }
 }
 

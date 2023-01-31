@@ -19,6 +19,7 @@
 // simulate these, and those that pass are unlocked on the eth side. Funds are sent to their final
 // destination in dai
 
+#[cfg(test)]
 mod tests;
 pub mod xdai_bridge;
 

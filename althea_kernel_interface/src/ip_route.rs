@@ -112,8 +112,7 @@ impl FromStr for IpRoute {
                     }))
                 } else {
                     Err(Error::InvalidRouteString(format!(
-                        "{} does not contain via, nic",
-                        s,
+                        "{s} does not contain via, nic",
                     )))
                 }
             } else {
@@ -143,8 +142,7 @@ impl FromStr for IpRoute {
                     }))
                 } else {
                     Err(Error::InvalidRouteString(format!(
-                        "{} does not contain nic",
-                        s,
+                        "{s} does not contain nic",
                     )))
                 }
             }
@@ -159,9 +157,9 @@ impl ToString for IpRoute {
         match self.clone() {
             IpRoute::DefaultRoute(DefaultRoute { via, nic, src, .. }) => {
                 if let Some(src) = src {
-                    format!("default via {} dev {} proto static src {}", via, nic, src)
+                    format!("default via {via} dev {nic} proto static src {src}")
                 } else {
-                    format!("default via {} dev {} proto static", via, nic)
+                    format!("default via {via} dev {nic} proto static")
                 }
             }
 
@@ -174,16 +172,16 @@ impl ToString for IpRoute {
                 ..
             }) => {
                 let mut out = if subnet == 32 {
-                    format!("{} ", dst)
+                    format!("{dst} ")
                 } else {
-                    format!("{}/{} ", dst, subnet)
+                    format!("{dst}/{subnet} ")
                 };
                 if let Some(via) = via {
-                    write!(out, "via {} ", via).unwrap();
+                    write!(out, "via {via} ").unwrap();
                 }
-                write!(out, "dev {} proto static ", nic).unwrap();
+                write!(out, "dev {nic} proto static ").unwrap();
                 if let Some(src) = src {
-                    write!(out, "src {} ", src).unwrap();
+                    write!(out, "src {src} ").unwrap();
                 }
                 out
             }

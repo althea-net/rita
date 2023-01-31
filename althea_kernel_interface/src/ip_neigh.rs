@@ -23,10 +23,7 @@ impl dyn KernelInterface {
             }
             Err(e) => Err(Error::new(
                 ErrorKind::Other,
-                format!(
-                    "Unable to grab ip neigh from router. Failed with error {:?}",
-                    e
-                ),
+                format!("Unable to grab ip neigh from router. Failed with error {e:?}"),
             )),
         }
     }

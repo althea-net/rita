@@ -261,23 +261,23 @@ fn get_sensor_readings() -> Option<Vec<SensorReading>> {
     // sensors are zero indexed and there will never be gaps
     let mut sensor_num = 0;
     let mut ret = Vec::new();
-    let mut path = format!("/sys/class/hwmon/hwmon{}", sensor_num);
+    let mut path = format!("/sys/class/hwmon/hwmon{sensor_num}");
     while fs::metadata(path.clone()).is_ok() {
         if let (Some(reading), Some(name)) = (
-            maybe_get_single_line_u64(&format!("{}/temp1_input", path)),
-            maybe_get_single_line_string(&format!("{}/name", path)),
+            maybe_get_single_line_u64(&format!("{path}/temp1_input")),
+            maybe_get_single_line_string(&format!("{path}/name")),
         ) {
             ret.push(SensorReading {
                 name,
                 reading,
-                min: maybe_get_single_line_u64(&format!("{}/temp1_min", path)),
-                crit: maybe_get_single_line_u64(&format!("{}/temp1_crit", path)),
-                max: maybe_get_single_line_u64(&format!("{}/temp1_max", path)),
+                min: maybe_get_single_line_u64(&format!("{path}/temp1_min")),
+                crit: maybe_get_single_line_u64(&format!("{path}/temp1_crit")),
+                max: maybe_get_single_line_u64(&format!("{path}/temp1_max")),
             });
         }
 
         sensor_num += 1;
-        path = format!("/sys/class/hwmon/hwmon{}", sensor_num);
+        path = format!("/sys/class/hwmon/hwmon{sensor_num}");
     }
     if ret.is_empty() {
         None
@@ -289,13 +289,13 @@ fn get_sensor_readings() -> Option<Vec<SensorReading>> {
 fn get_ethernet_stats() -> Option<Vec<EthernetStats>> {
     let mut eth = 0;
     let mut ret = Vec::new();
-    let mut path = format!("/sys/class/net/eth{}", eth);
+    let mut path = format!("/sys/class/net/eth{eth}");
     while fs::metadata(path.clone()).is_ok() {
-        if let Some(is_up) = maybe_get_single_line_string(&format!("{}/operstate", path)) {
+        if let Some(is_up) = maybe_get_single_line_string(&format!("{path}/operstate")) {
             let is_up = is_up.contains("up");
             if let (Some(speed), Some(duplex)) = (
-                maybe_get_single_line_u64(&format!("{}/speed", path)),
-                maybe_get_single_line_string(&format!("{}/duplex", path)),
+                maybe_get_single_line_u64(&format!("{path}/speed")),
+                maybe_get_single_line_string(&format!("{path}/duplex")),
             ) {
                 if let (
                     Some(tx_errors),
@@ -303,10 +303,10 @@ fn get_ethernet_stats() -> Option<Vec<EthernetStats>> {
                     Some(tx_packet_count),
                     Some(rx_packet_count),
                 ) = (
-                    maybe_get_single_line_u64(&format!("{}/statistics/tx_errors", path)),
-                    maybe_get_single_line_u64(&format!("{}/statistics/rx_errors", path)),
-                    maybe_get_single_line_u64(&format!("{}/statistics/tx_packets", path)),
-                    maybe_get_single_line_u64(&format!("{}/statistics/rx_packets", path)),
+                    maybe_get_single_line_u64(&format!("{path}/statistics/tx_errors")),
+                    maybe_get_single_line_u64(&format!("{path}/statistics/rx_errors")),
+                    maybe_get_single_line_u64(&format!("{path}/statistics/tx_packets")),
+                    maybe_get_single_line_u64(&format!("{path}/statistics/rx_packets")),
                 ) {
                     ret.push(EthernetStats {
                         is_up,
@@ -320,7 +320,7 @@ fn get_ethernet_stats() -> Option<Vec<EthernetStats>> {
             }
         }
         eth += 1;
-        path = format!("/sys/class/net/eth{}", eth);
+        path = format!("/sys/class/net/eth{eth}");
     }
 
     if ret.is_empty() {
@@ -477,13 +477,13 @@ mod test {
     #[test]
     fn test_sensors() {
         let res = get_sensor_readings();
-        println!("{:?}", res);
+        println!("{res:?}");
     }
 
     #[test]
     fn test_ethernet_stats() {
         let res = get_ethernet_stats();
-        println!("{:?}", res);
+        println!("{res:?}");
     }
 
     #[test]
@@ -506,41 +506,26 @@ mod test {
     fn test_kernel_version_temp() {
         let res = parse_kernel_version("Linux version 4.19.78-coreos (jenkins@ip-10-7-32-103) (gcc version 8.3.0 (Gentoo Hardened 8.3.0-r1 p1.1)) #1 SMP Mon Oct 14 22:56:39 -00 2019".to_string());
         let (str1, str2) = res.unwrap();
-        println!(
-            "Entire Kernel String: {} \nKernel String:{}\n\n",
-            str1, str2
-        );
+        println!("Entire Kernel String: {str1} \nKernel String:{str2}\n\n");
 
         let res = parse_kernel_version("".to_string());
         let (str1, str2) = res.unwrap();
-        println!(
-            "Entire Kernel String: {} \nKernel String:{}\n\n",
-            str1, str2
-        );
+        println!("Entire Kernel String: {str1} \nKernel String:{str2}\n\n");
 
         let res = parse_kernel_version("Hello world".to_string());
         let (str1, str2) = res.unwrap();
-        println!(
-            "Entire Kernel String: {} \nKernel String:{}\n\n",
-            str1, str2
-        );
+        println!("Entire Kernel String: {str1} \nKernel String:{str2}\n\n");
 
         let res = parse_kernel_version("ã̸͙̪̖̮͖̘̼̯̱̙̮̩̝͐ḁ̶̛̘̼̥͙̰̂͆̋̓͗́͑́͛̔̏̉̈́͌̇̓͂͊̉̄̕̕͝͝ͅş̴̢͎͕̲̙̮̻̝͔̗̥̰̝͍̳͉̗̈́̅̋́ͅͅf̴̢̡̙͙̭̪̗̯͆̊̏̒͊͋̄̂͋́͌͂̃̆̽̂͛̓̌̽̒̒̐͂͘͘͘͝͝ą̷̭̬̪̀̆̇͋̂̒̅ď̵̢̢̧̛͓̜̦̻̻̜͈͎̼͇͈̖͔̼̫̻̗͉͍̻̟̙̇̉̈͐̀̈͜͜".to_string());
         let (str1, str2) = res.unwrap();
 
-        println!(
-            "Entire Kernel String: {} \nKernel String:{}\n\n",
-            str1, str2
-        );
+        println!("Entire Kernel String: {str1} \nKernel String:{str2}\n\n");
 
         let line = get_kernel_version().unwrap();
         let res = parse_kernel_version(line);
         let (str1, str2) = res.unwrap();
 
-        println!(
-            "Entire Kernel String: {} \nKernel String:{}\n\n",
-            str1, str2
-        );
+        println!("Entire Kernel String: {str1} \nKernel String:{str2}\n\n");
     }
 
     #[test]
@@ -584,7 +569,7 @@ mod test {
             }
         };
 
-        println!("table count: {:?}", table_count);
+        println!("table count: {table_count:?}");
 
         let max_conns = match get_lines(MAX_PATH) {
             Ok(a) => a,
@@ -599,7 +584,7 @@ mod test {
             }
         };
 
-        println!("Max conns: {:?}", max_conns);
+        println!("Max conns: {max_conns:?}");
 
         // Test read lines
         println!(

@@ -502,7 +502,7 @@ fn payment_is_old(chain_height: Uint256, tx_height: Option<Uint256>) -> bool {
 fn print_txids(list: &HashSet<ToValidate>) -> String {
     let mut output = String::new();
     for item in list.iter() {
-        write!(output, "{} ,", item).unwrap();
+        write!(output, "{item} ,").unwrap();
     }
     output
 }

@@ -92,7 +92,7 @@ where
                 #[cfg(not(feature = "dash_debug"))]
                 resp.headers_mut().insert(
                     ACCESS_CONTROL_ALLOW_ORIGIN,
-                    header::HeaderValue::from_str(&format!("http://{}", origin)).unwrap(),
+                    header::HeaderValue::from_str(&format!("http://{origin}")).unwrap(),
                 );
                 #[cfg(feature = "dash_debug")]
                 resp.headers_mut().insert(

@@ -30,12 +30,12 @@ pub async fn set_pass(router_pass: Json<RouterPassword>) -> HttpResponse {
 
     if KI.is_openwrt() {
         if let Err(e) = KI.set_system_password(router_pass.password) {
-            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{}", e));
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{e}"));
         }
 
         // We edited disk contents, force global sync
         if let Err(e) = KI.fs_sync() {
-            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{}", e));
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{e}"));
         }
     }
 

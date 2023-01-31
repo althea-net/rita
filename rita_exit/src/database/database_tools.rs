@@ -165,10 +165,8 @@ pub fn get_client(
     match filtered_list.load::<models::Client>(conn) {
         Ok(entry) => {
             if entry.len() > 1 {
-                let err_msg = format!(
-                    "More than one exact match with wg: {} eth: {} ip: {}",
-                    wg, key, ip
-                );
+                let err_msg =
+                    format!("More than one exact match with wg: {wg} eth: {key} ip: {ip}");
                 error!("{}", err_msg);
                 panic!("{}", err_msg);
             } else if entry.is_empty() {
@@ -642,8 +640,7 @@ pub fn get_client_subnet(
                 Ok(a) => Some(a),
                 Err(e) => {
                     return Err(Box::new(RitaExitError::MiscStringError(format!(
-                        "Unable to assign user ipv6 subnet when parsing latest index: {}",
-                        e
+                        "Unable to assign user ipv6 subnet when parsing latest index: {e}"
                     ))));
                 }
             }
@@ -661,8 +658,7 @@ pub fn get_client_subnet(
                 Ok(a) => Some(a),
                 Err(e) => {
                     return Err(Box::new(RitaExitError::MiscStringError(format!(
-                        "Unable to assign user ipv6 subnet: {}",
-                        e
+                        "Unable to assign user ipv6 subnet: {e}"
                     ))));
                 }
             }
@@ -677,8 +673,7 @@ pub fn get_client_subnet(
             Ok(a) => a,
             Err(e) => {
                 return Err(Box::new(RitaExitError::MiscStringError(format!(
-                    "Unable to assign user ipv6 subnet when parsing iterative index: {}",
-                    e
+                    "Unable to assign user ipv6 subnet when parsing iterative index: {e}"
                 ))));
             }
         });
@@ -713,8 +708,7 @@ pub fn get_client_subnet(
             } else {
                 error!("Chosen subnet: {:?} is in use! Race condition hit", addr);
                 Err(Box::new(RitaExitError::MiscStringError(format!(
-                    "Unable to assign user ipv6 subnet. Chosen subnet {:?} is in use",
-                    addr
+                    "Unable to assign user ipv6 subnet. Chosen subnet {addr:?} is in use"
                 ))))
             }
         }
@@ -768,8 +762,7 @@ fn generate_iterative_client_subnet(
             Ok(a) => a,
             Err(e) => {
                 return Err(Box::new(RitaExitError::MiscStringError(format!(
-                    "Unable to parse a valid client subnet: {:?}",
-                    e
+                    "Unable to parse a valid client subnet: {e:?}"
                 ))))
             }
         });
@@ -1025,13 +1018,13 @@ mod tests {
         let str2 = "2";
         let str3 = "1,2,5,10,92";
         let vec = str.rsplit_once(',');
-        println!("{:?}", vec);
+        println!("{vec:?}");
 
         let vec = str2.rsplit_once(',');
-        println!("{:?}", vec);
+        println!("{vec:?}");
 
         let vec = str3.rsplit_once(',');
-        println!("{:?}", vec);
+        println!("{vec:?}");
     }
 
     #[test]
@@ -1039,9 +1032,9 @@ mod tests {
         let sub: IpNetwork = "fd00::1000/124".parse().unwrap();
 
         let net = sub.network();
-        println!("net: {:?}", net);
+        println!("net: {net:?}");
         let size = sub.size();
-        println!("size: {:?}", size);
+        println!("size: {size:?}");
 
         let exit_sub: IpNetwork = "fd00::1000/120".parse().unwrap();
         let sub: IpNetwork = "fd00::1060/124".parse().unwrap();
@@ -1077,7 +1070,7 @@ mod tests {
         if let Some(mut list_str) = client_ipv6_list {
             if !list_str.is_empty() {
                 let list: Vec<&str> = list_str.split(',').collect();
-                println!("List looks like: {:?}", list);
+                println!("List looks like: {list:?}");
                 for ipv6_str in list {
                     let ipv6_sub: IpNetwork =
                         ipv6_str.parse().expect("Unable to parse ipnetwork subnet");
@@ -1092,7 +1085,7 @@ mod tests {
                 let mut new_str = ",".to_owned();
                 new_str.push_str(&internet_ip.to_string());
                 list_str.push_str(&new_str);
-                println!("list_str looks like: {:?}", list_str);
+                println!("list_str looks like: {list_str:?}");
                 println!("hit test case 2");
             } else {
                 // List is empty
@@ -1192,7 +1185,7 @@ mod tests {
                 let c_net: IpNetwork = client_ip.parse().expect("Unable to parse client subnet");
                 let e_net: IpNetwork = exit_ip.parse().expect("Unable to parse exit subnet");
                 if e_net.contains(c_net.ip()) {
-                    println!("reclaiming client {:?} to exit sub {:?}", c_net, e_net);
+                    println!("reclaiming client {c_net:?} to exit sub {e_net:?}");
 
                     // After we reclaim an index, we break from the loop. The prevents duplicate reclaiming when two instances have the same subnet
                     break;
@@ -1208,11 +1201,11 @@ mod tests {
             "2000:fbad:10:1450::/60".parse().unwrap(),
         );
 
-        println!("{:?}", a);
+        println!("{a:?}");
 
         let client_ipv6 = "2602:fbad:0:2340::/60,2602:fbad:10:2500::/60";
         let client_sub: Vec<&str> = client_ipv6.split(',').collect();
-        println!("{:?}", client_sub);
+        println!("{client_sub:?}");
         let exit_sub = vec![
             "2602:fbad:10::/45".to_string(),
             "2602:fbad::/45".to_string(),

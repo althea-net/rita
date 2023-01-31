@@ -80,7 +80,7 @@ pub fn open_babel_stream(
     babel_port: u16,
     timeout: Duration,
 ) -> Result<TcpStream, BabelMonitorError> {
-    let socket_string = format!("[::1]:{}", babel_port);
+    let socket_string = format!("[::1]:{babel_port}");
     trace!("About to open Babel socket using {}", socket_string);
     let socket: SocketAddr = socket_string.parse().unwrap();
     let mut stream = TcpStream::connect_timeout(&socket, timeout)?;
@@ -129,7 +129,7 @@ fn read_babel(
 
     let output = String::from_utf8(buffer.to_vec());
     if let Err(e) = output {
-        return Err(BabelMonitorError::TcpError(format!("{:?}", e)));
+        return Err(BabelMonitorError::TcpError(format!("{e:?}")));
     }
     let output = output?;
     let output = output.trim_matches(char::from(0));
@@ -167,7 +167,7 @@ fn read_babel(
     } else if let Err(e) = babel_data {
         // some other error
         warn!("Babel read failed! {} {:?}", output, e);
-        return Err(BabelMonitorError::ReadFailed(format!("{:?}", e)));
+        return Err(BabelMonitorError::ReadFailed(format!("{e:?}")));
     }
     let babel_data = babel_data?;
 
@@ -176,7 +176,7 @@ fn read_babel(
 
 pub fn run_command(stream: &mut TcpStream, cmd: &str) -> Result<String, BabelMonitorError> {
     info!("Running babel command {}", cmd);
-    let cmd = format!("{}\n", cmd);
+    let cmd = format!("{cmd}\n");
     let bytes = cmd.as_bytes().to_vec();
     let out = stream.write_all(&bytes);
 
@@ -185,7 +185,7 @@ pub fn run_command(stream: &mut TcpStream, cmd: &str) -> Result<String, BabelMon
             info!("Command write succeeded, returning output");
             read_babel(stream, String::new(), 0)
         }
-        Err(e) => Err(BabelMonitorError::CommandFailed(cmd, format!("{:?}", e))),
+        Err(e) => Err(BabelMonitorError::CommandFailed(cmd, format!("{e:?}"))),
     }
 }
 
@@ -204,24 +204,21 @@ pub fn get_local_fee(stream: &mut TcpStream) -> Result<u32, BabelMonitorError> {
 }
 
 pub fn set_local_fee(stream: &mut TcpStream, new_fee: u32) -> Result<(), BabelMonitorError> {
-    let result = run_command(stream, &format!("fee {}", new_fee))?;
+    let result = run_command(stream, &format!("fee {new_fee}"))?;
 
     let _out = result;
     Ok(())
 }
 
 pub fn set_metric_factor(stream: &mut TcpStream, new_factor: u32) -> Result<(), BabelMonitorError> {
-    let result = run_command(stream, &format!("metric-factor {}", new_factor))?;
+    let result = run_command(stream, &format!("metric-factor {new_factor}"))?;
 
     let _out = result;
     Ok(())
 }
 
 pub fn monitor(stream: &mut TcpStream, iface: &str) -> Result<(), BabelMonitorError> {
-    let command = &format!(
-        "interface {} max-rtt-penalty 500 enable-timestamps true",
-        iface
-    );
+    let command = &format!("interface {iface} max-rtt-penalty 500 enable-timestamps true");
     let iface = iface.to_string();
     let result = run_command(stream, command)?;
 
@@ -247,7 +244,7 @@ pub fn redistribute_ip(
 }
 
 pub fn unmonitor(stream: &mut TcpStream, iface: &str) -> Result<(), BabelMonitorError> {
-    let command = format!("flush interface {}", iface);
+    let command = format!("flush interface {iface}");
     let iface = iface.to_string();
     let result = run_command(stream, &command)?;
 

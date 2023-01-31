@@ -19,8 +19,7 @@ impl dyn KernelInterface {
         if !result.status.success() {
             let res = String::from_utf8(result.stderr)?;
             return Err(Error::TrafficControlError(format!(
-                "Failed to check qdisc for {}! {:?}",
-                iface_name, res
+                "Failed to check qdisc for {iface_name}! {res:?}"
             )));
         }
 
@@ -38,13 +37,12 @@ impl dyn KernelInterface {
         if !result.status.success() {
             let res = String::from_utf8(result.stderr)?;
             return Err(Error::TrafficControlError(format!(
-                "Failed to check filter for {}! {:?}",
-                class_id, res
+                "Failed to check filter for {class_id}! {res:?}"
             )));
         }
 
         let stdout = &String::from_utf8(result.stdout)?;
-        Ok(stdout.contains(&format!("1:{}", class_id)))
+        Ok(stdout.contains(&format!("1:{class_id}")))
     }
 
     /// Gets the full flows list to pass to bulk functions
@@ -54,8 +52,7 @@ impl dyn KernelInterface {
         if !result.status.success() {
             let res = String::from_utf8(result.stderr)?;
             return Err(Error::TrafficControlError(format!(
-                "Failed to get flows {:?}",
-                res
+                "Failed to get flows {res:?}"
             )));
         }
         Ok(String::from_utf8(result.stdout)?)
@@ -65,7 +62,7 @@ impl dyn KernelInterface {
     /// in the exit setup loop than running the same command several hundred times
     pub fn has_flow_bulk(&self, ip: Ipv4Addr, tc_out: &str) -> bool {
         let class_id = self.get_class_id(ip);
-        tc_out.contains(&format!("1:{}", class_id))
+        tc_out.contains(&format!("1:{class_id}"))
     }
 
     /// This function is the ipv6 version of has_flow_bulk, but is different in how its implemented. Since we simply cant
@@ -91,13 +88,12 @@ impl dyn KernelInterface {
         if !result.status.success() {
             let res = String::from_utf8(result.stderr)?;
             return Err(Error::TrafficControlError(format!(
-                "Failed to check filter for {}! {:?}",
-                class_id, res
+                "Failed to check filter for {class_id}! {res:?}"
             )));
         }
 
         let stdout = &String::from_utf8(result.stdout)?;
-        Ok(stdout.contains(&format!("1:{}", class_id)))
+        Ok(stdout.contains(&format!("1:{class_id}")))
     }
 
     /// Determines if the provided interface has a configured qdisc
@@ -107,8 +103,7 @@ impl dyn KernelInterface {
         if !result.status.success() {
             let res = String::from_utf8(result.stderr)?;
             return Err(Error::TrafficControlError(format!(
-                "Failed to check limit for {}! {:?}",
-                iface_name, res
+                "Failed to check limit for {iface_name}! {res:?}"
             )));
         }
 
@@ -126,8 +121,7 @@ impl dyn KernelInterface {
         if !result.status.success() {
             let res = String::from_utf8(result.stderr)?;
             return Err(Error::TrafficControlError(format!(
-                "Failed to check limit for {}! {:?}",
-                iface_name, res
+                "Failed to check limit for {iface_name}! {res:?}"
             )));
         }
 
@@ -155,7 +149,7 @@ impl dyn KernelInterface {
 
         match speed {
             Some(val) => {
-                mbit = format!("{}mbit", val);
+                mbit = format!("{val}mbit");
                 cake_args.extend(["bandwidth", &mbit])
             }
             None => cake_args.extend(["unlimited"]),
@@ -194,8 +188,7 @@ impl dyn KernelInterface {
                 let res = String::from_utf8(output.stderr)?;
                 error!("Cake and fallback fq_codel have both failed!");
                 return Err(Error::TrafficControlError(format!(
-                    "Failed to create new qdisc limit! {:?}",
-                    res
+                    "Failed to create new qdisc limit! {res:?}"
                 )));
             }
         }
@@ -229,11 +222,11 @@ impl dyn KernelInterface {
                 "1:",
                 "tbf",
                 "latency",
-                &format!("{}ms", latency),
+                &format!("{latency}ms"),
                 "burst",
-                &format!("{}", burst),
+                &format!("{burst}"),
                 "rate",
-                &format!("{}kbit", bw),
+                &format!("{bw}kbit"),
             ],
         )?;
 
@@ -242,8 +235,7 @@ impl dyn KernelInterface {
         } else {
             let res = String::from_utf8(output.stderr)?;
             Err(Error::TrafficControlError(format!(
-                "Failed to create new qdisc limit! {:?}",
-                res
+                "Failed to create new qdisc limit! {res:?}"
             )))
         }
     }
@@ -276,8 +268,7 @@ impl dyn KernelInterface {
         } else {
             let res = String::from_utf8(output.stderr)?;
             Err(Error::TrafficControlError(format!(
-                "Failed to create new qdisc limit! {:?}",
-                res
+                "Failed to create new qdisc limit! {res:?}"
             )))
         }
     }
@@ -297,7 +288,7 @@ impl dyn KernelInterface {
                             "parent",
                             "1:",
                             "classid",
-                            &format!("1:{}", class_id),
+                            &format!("1:{class_id}"),
                         ],
                     )?;
                 }
@@ -337,20 +328,19 @@ impl dyn KernelInterface {
                 "parent",
                 "1:",
                 "classid",
-                &format!("1:{}", class_id),
+                &format!("1:{class_id}"),
                 "htb",
                 "rate",
-                &format!("{}kbit", min_bw),
+                &format!("{min_bw}kbit"),
                 "ceil",
-                &format!("{}kbit", max_bw),
+                &format!("{max_bw}kbit"),
             ],
         )?;
 
         if !output.status.success() {
             let res = String::from_utf8(output.stderr)?;
             return Err(Error::TrafficControlError(format!(
-                "Failed to update qdisc class limit! {:?}",
-                res
+                "Failed to update qdisc class limit! {res:?}"
             )));
         }
 
@@ -399,7 +389,7 @@ impl dyn KernelInterface {
                 "dst",
                 &ip_net.to_string(),
                 "flowid",
-                &format!("1:{}", class_id),
+                &format!("1:{class_id}"),
             ],
         )?;
 
@@ -408,8 +398,7 @@ impl dyn KernelInterface {
         } else {
             let res = String::from_utf8(output.stderr)?;
             Err(Error::TrafficControlError(format!(
-                "Failed to create limit by ip! {:?}",
-                res
+                "Failed to create limit by ip! {res:?}"
             )))
         }
     }
@@ -435,9 +424,9 @@ impl dyn KernelInterface {
                 "match",
                 "ip",
                 "dst",
-                &format!("{}/32", ip),
+                &format!("{ip}/32"),
                 "flowid",
-                &format!("1:{}", class_id),
+                &format!("1:{class_id}"),
             ],
         )?;
 
@@ -446,8 +435,7 @@ impl dyn KernelInterface {
         } else {
             let res = String::from_utf8(output.stderr)?;
             Err(Error::TrafficControlError(format!(
-                "Failed to create limit by ip! {:?}",
-                res
+                "Failed to create limit by ip! {res:?}"
             )))
         }
     }

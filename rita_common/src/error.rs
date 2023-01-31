@@ -76,31 +76,31 @@ impl Display for RitaCommonError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
             RitaCommonError::ConversionError(a) => write!(
-                f, "Conversion Error: {}", a,
+                f, "Conversion Error: {a}",
             ),
-            RitaCommonError::LoggerError(e) => write!(f, "{}", e),
-            RitaCommonError::SetLoggerError(e) => write!(f, "{}", e),
-            RitaCommonError::UCIError(a) => write!(f, "{}", a,),
+            RitaCommonError::LoggerError(e) => write!(f, "{e}"),
+            RitaCommonError::SetLoggerError(e) => write!(f, "{e}"),
+            RitaCommonError::UCIError(a) => write!(f, "{a}",),
             RitaCommonError::ToggleError(a) => write!(
-                f, "Toggle Error: {}", a,
+                f, "Toggle Error: {a}",
             ),
             RitaCommonError::NicknameError(a) => write!(
-                f, "Nickname Error: {}", a,
+                f, "Nickname Error: {a}",
             ),
-            RitaCommonError::SettingsError(a) => write!(f, "{}", a,),
+            RitaCommonError::SettingsError(a) => write!(f, "{a}",),
             RitaCommonError::CapacityError(a) => write!(
-                f, "Capacity Error: {}", a,
+                f, "Capacity Error: {a}",
             ),
-            RitaCommonError::MiscStringError(a) => write!(f, "{}", a,),
-            RitaCommonError::KernelInterfaceError(a) => write!(f, "{}", a,),
-            RitaCommonError::StdError(a) => write!(f, "{}", a,),
+            RitaCommonError::MiscStringError(a) => write!(f, "{a}",),
+            RitaCommonError::KernelInterfaceError(a) => write!(f, "{a}",),
+            RitaCommonError::StdError(a) => write!(f, "{a}",),
             RitaCommonError::Lowest20Error(a) => write!(
-                f, "There is no entry at index {}, should not reach this condition, error with GAS_PRICES vecDeque logic", a,
+                f, "There is no entry at index {a}, should not reach this condition, error with GAS_PRICES vecDeque logic",
             ),
-            RitaCommonError::BabelMonitorError(a) => write!(f, "{}", a,),
-            RitaCommonError::SysTimeError(a) => write!(f, "{}", a,),
-            RitaCommonError::OldSendRequestError(e) => write!(f, "{}", e),
-            RitaCommonError::BincodeError(e) => write!(f, "{}", e),
+            RitaCommonError::BabelMonitorError(a) => write!(f, "{a}",),
+            RitaCommonError::SysTimeError(a) => write!(f, "{a}",),
+            RitaCommonError::OldSendRequestError(e) => write!(f, "{e}"),
+            RitaCommonError::BincodeError(e) => write!(f, "{e}"),
 
         }
     }

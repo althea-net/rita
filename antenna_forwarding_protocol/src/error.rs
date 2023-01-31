@@ -39,7 +39,7 @@ impl Display for AntennaForwardingError {
                 write!(f, "Never found the end of the message",)
             }
             AntennaForwardingError::DoubleReadFailure { a, b } => {
-                write!(f, "Double read failure {:?} {:?}", a, b)
+                write!(f, "Double read failure {a:?} {b:?}")
             }
             AntennaForwardingError::ImpossibleError => write!(f, "Impossible error",),
             AntennaForwardingError::UnparsedBytesError {
@@ -48,11 +48,10 @@ impl Display for AntennaForwardingError {
             } => {
                 write!(
                     f,
-                    "Unparsed bytes! Messages {:#X?} Remaining bytes {:#X?}",
-                    messages, remaining_bytes
+                    "Unparsed bytes! Messages {messages:#X?} Remaining bytes {remaining_bytes:#X?}"
                 )
             }
-            AntennaForwardingError::MessageWriteError(e) => write!(f, "{}", e),
+            AntennaForwardingError::MessageWriteError(e) => write!(f, "{e}"),
         }
     }
 }

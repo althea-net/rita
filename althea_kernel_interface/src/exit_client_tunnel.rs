@@ -63,10 +63,7 @@ impl dyn KernelInterface {
         // tunnel
         for i in self.get_peers("wg_exit")? {
             if i != args.pubkey {
-                self.run_command(
-                    "wg",
-                    &["set", "wg_exit", "peer", &format!("{}", i), "remove"],
-                )?;
+                self.run_command("wg", &["set", "wg_exit", "peer", &format!("{i}"), "remove"])?;
             }
         }
 

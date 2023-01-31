@@ -121,9 +121,8 @@ Options:
     -c, --config=<settings>   Name of config file
     --future                    Enable B side of A/B releases
 About:
-    Version {} - {}
-    git hash {}",
-        READABLE_VERSION, version, git_hash
+    Version {READABLE_VERSION} - {version}
+    git hash {git_hash}"
     )
 }
 

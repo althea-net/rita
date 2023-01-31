@@ -81,7 +81,7 @@ pub async fn get_wyre_reservation(amount: Json<AmountRequest>) -> HttpResponse {
     let mut response = match response {
         Ok(a) => a,
         Err(e) => {
-            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{}", e));
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{e}"));
         }
     };
 

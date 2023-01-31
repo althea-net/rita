@@ -8,7 +8,7 @@ pub async fn get_mesh_ip(_req: HttpRequest) -> HttpResponse {
 
     match settings::get_rita_client().network.mesh_ip {
         Some(ip) => {
-            ret.insert("mesh_ip".to_owned(), format!("{}", ip));
+            ret.insert("mesh_ip".to_owned(), format!("{ip}"));
         }
         None => {
             let error_msg = "No mesh IP configured yet";

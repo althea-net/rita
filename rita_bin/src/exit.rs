@@ -106,7 +106,7 @@ fn main() {
         let settings = clu::exit_init("linux", settings);
         settings::set_rita_exit(settings.clone());
         sanity_check_config();
-        println!("Look the exit settings! {:?}", settings);
+        println!("Look the exit settings! {settings:?}");
         settings
     };
 
@@ -132,7 +132,7 @@ fn main() {
 
         let res =
             enable_remote_logging("rita_exit".to_string(), logging_url, level, key.to_string());
-        println!("logging status {:?}", res);
+        println!("logging status {res:?}");
     }
 
     if cfg!(feature = "development") {

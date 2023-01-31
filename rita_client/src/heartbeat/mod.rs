@@ -396,7 +396,7 @@ mod tests {
     #[test]
     fn check_resolver() {
         let heartbeat_url = "dai.althea.net:33333";
-        println!("heartbeat url set to {}", heartbeat_url);
+        println!("heartbeat url set to {heartbeat_url}");
         //let mut length = false;
         let dns_request = heartbeat_url.to_socket_addrs();
         println!("dns_req set");
@@ -407,6 +407,6 @@ mod tests {
                 false
             }
         };
-        println!("{}", res)
+        println!("{res}")
     }
 }

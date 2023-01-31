@@ -18,7 +18,7 @@ pub async fn get_remote_access_status(_req: HttpRequest) -> HttpResponse {
     HttpResponse::Ok().json(match check_dropbear_config() {
         Ok(a) => a,
         Err(e) => {
-            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{}", e));
+            return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{e}"));
         }
     })
 }
@@ -62,7 +62,7 @@ fn check_dropbear_config() -> Result<bool, RitaClientError> {
 pub async fn set_remote_access_status(path: Path<bool>) -> HttpResponse {
     let remote_access = path.into_inner();
     if let Err(e) = set_remote_access_internal(remote_access) {
-        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{}", e));
+        return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{e}"));
     }
     HttpResponse::Ok().json(())
 }

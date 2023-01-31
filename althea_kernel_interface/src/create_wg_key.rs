@@ -17,7 +17,7 @@ impl dyn KernelInterface {
     pub fn create_wg_key(&self, path: &Path, private_key: &WgKey) -> Result<(), Error> {
         trace!("Overwriting old private key file");
         let mut priv_key_file = File::create(path)?;
-        write!(priv_key_file, "{}", private_key)?;
+        write!(priv_key_file, "{private_key}")?;
         Ok(())
     }
 

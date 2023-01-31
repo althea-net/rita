@@ -34,8 +34,8 @@ impl Display for AntennaForwardingError {
             AntennaForwardingError::AntennaNotFound => write!(f, "Failed to find Antenna!",),
             AntennaForwardingError::IPNotSupported => write!(f, "Not supported!",),
             AntennaForwardingError::BlacklistedAddress => write!(f, "Blacklisted address!",),
-            AntennaForwardingError::KernelInterfaceError(e) => write!(f, "{}", e),
-            AntennaForwardingError::PingError(e) => write!(f, "{}", e),
+            AntennaForwardingError::KernelInterfaceError(e) => write!(f, "{e}"),
+            AntennaForwardingError::PingError(e) => write!(f, "{e}"),
         }
     }
 }

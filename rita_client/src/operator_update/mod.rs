@@ -638,7 +638,7 @@ mod tests {
             .truncate(true)
             .open(file_name);
         let operator_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL+UBakquB9rJ7tA2H+U43H/xNmpJiHpOkHGpVfFUXgP OPERATOR";
-        writeln!(test_file.unwrap(), "{}", operator_key).expect("setup failed to create temp file");
+        writeln!(test_file.unwrap(), "{operator_key}").expect("setup failed to create temp file");
         operator_key
     }
     fn remove_temp_file(file_name: &str) -> Result<(), Error> {

@@ -13,7 +13,7 @@ pub async fn get_eth_private_key(_req: HttpRequest) -> HttpResponse {
 
     match settings::get_rita_client().payment.eth_private_key {
         Some(pk) => {
-            ret.insert("eth_private_key".to_owned(), format!("{:x}", pk));
+            ret.insert("eth_private_key".to_owned(), format!("{pk:x}"));
         }
         None => {
             let error_msg = "No eth key configured yet";

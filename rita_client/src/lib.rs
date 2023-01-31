@@ -67,14 +67,13 @@ impl Default for Args {
 /// and does not need to be specified.
 pub fn get_client_usage(version: &str, git_hash: &str) -> String {
     format!(
-        "Usage: {} [--config=<settings>] [--platform=<platform>] [--future]
+        "Usage: {APP_NAME} [--config=<settings>] [--platform=<platform>] [--future]
 Options:
     -c, --config=<settings>     Name of config file
     -p, --platform=<platform>   Platform (linux or OpenWrt)
     --future                    Enable B side of A/B releases
 About:
-    Version {} - {}
-    git hash {}",
-        APP_NAME, READABLE_VERSION, version, git_hash
+    Version {READABLE_VERSION} - {version}
+    git hash {git_hash}"
     )
 }

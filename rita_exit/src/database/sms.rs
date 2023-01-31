@@ -44,8 +44,7 @@ async fn check_text(number: String, code: String, api_key: String) -> Result<boo
         Ok(a) => a,
         Err(e) => {
             return Err(RitaExitError::MiscStringError(format!(
-                "Send request error: {:?}",
-                e
+                "Send request error: {e:?}"
             )))
         }
     };
@@ -84,8 +83,7 @@ async fn send_text(number: String, api_key: String) -> Result<(), RitaExitError>
     {
         Ok(_a) => Ok(()),
         Err(e) => Err(RitaExitError::MiscStringError(format!(
-            "Send text error: {:?}",
-            e
+            "Send text error: {e:?}"
         ))),
     }
 }

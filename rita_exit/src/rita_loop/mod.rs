@@ -153,8 +153,7 @@ fn rita_exit_loop(
             if !*successful_setup {
                 let db_uri = settings::get_rita_exit().db_uri;
                 let message = format!(
-                    "Failed to get database connection to {} on first setup loop, the exit can not operate without the ability to get the clients list from the database exiting",
-                    db_uri
+                    "Failed to get database connection to {db_uri} on first setup loop, the exit can not operate without the ability to get the clients list from the database exiting"
                 );
                 error!("{}", message);
                 let sys = AsyncSystem::current();

@@ -26,7 +26,7 @@ impl dyn KernelInterface {
     pub fn add_ipv4(&self, ip: Ipv4Addr, dev: &str) -> Result<bool, Error> {
         // upwrap here because it's ok if we panic when the system does not have 'ip' installed
         let output = self
-            .run_command("ip", &["addr", "add", &format!("{}/32", ip), "dev", dev])
+            .run_command("ip", &["addr", "add", &format!("{ip}/32"), "dev", dev])
             .unwrap();
         // Get the first line, check if it has "file exists"
         match String::from_utf8(output.stderr) {
@@ -35,14 +35,13 @@ impl dyn KernelInterface {
                     if line.contains("File exists") {
                         Ok(false)
                     } else {
-                        Err(Error::RuntimeError(format!("Error setting ip {}", line)))
+                        Err(Error::RuntimeError(format!("Error setting ip {line}")))
                     }
                 }
                 None => Ok(true),
             },
             Err(e) => Err(Error::RuntimeError(format!(
-                "Could not decode stderr from ip with {:?}",
-                e
+                "Could not decode stderr from ip with {e:?}"
             ))),
         }
     }
@@ -102,10 +101,7 @@ impl dyn KernelInterface {
     pub fn add_ipv4_mask(&self, ip: Ipv4Addr, mask: u32, dev: &str) -> Result<bool, Error> {
         // upwrap here because it's ok if we panic when the system does not have 'ip' installed
         let output = self
-            .run_command(
-                "ip",
-                &["addr", "add", &format!("{}/{}", ip, mask), "dev", dev],
-            )
+            .run_command("ip", &["addr", "add", &format!("{ip}/{mask}"), "dev", dev])
             .unwrap();
         // Get the first line, check if it has "file exists"
         match String::from_utf8(output.stderr) {
@@ -114,14 +110,13 @@ impl dyn KernelInterface {
                     if line.contains("File exists") {
                         Ok(false)
                     } else {
-                        Err(Error::RuntimeError(format!("Error setting ip {}", line)))
+                        Err(Error::RuntimeError(format!("Error setting ip {line}")))
                     }
                 }
                 None => Ok(true),
             },
             Err(e) => Err(Error::RuntimeError(format!(
-                "Could not decode stderr from ip with {:?}",
-                e
+                "Could not decode stderr from ip with {e:?}"
             ))),
         }
     }

@@ -28,7 +28,7 @@ pub enum CluError {
 impl Display for CluError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            CluError::RuntimeError(a) => write!(f, "Runtime Error:\n{:?}", a,),
+            CluError::RuntimeError(a) => write!(f, "Runtime Error:\n{a:?}",),
         }
     }
 }
@@ -341,7 +341,7 @@ mod tests {
         let libsodium_secret: SecretKey = wg_gen_secret.into();
         let libsodium_pub = libsodium_secret.public_key();
         let libsodium_generated_public_key: WgKey = libsodium_pub.0.into();
-        println!("{} vs {}", wg_gen_pub, libsodium_generated_public_key);
+        println!("{wg_gen_pub} vs {libsodium_generated_public_key}");
         assert_eq!(libsodium_generated_public_key, wg_gen_pub);
     }
 }

@@ -21,8 +21,8 @@ impl From<Web3Error> for TokenBridgeError {
 impl Display for TokenBridgeError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            TokenBridgeError::Web3Error(e) => write!(f, "{}", e),
-            TokenBridgeError::BadUniswapOutput(e) => write!(f, "{}", e),
+            TokenBridgeError::Web3Error(e) => write!(f, "{e}"),
+            TokenBridgeError::BadUniswapOutput(e) => write!(f, "{e}"),
             TokenBridgeError::HelperMessageNotReady => write!(
                 f,
                 "xDai validators are not finished preparing this withdraw",

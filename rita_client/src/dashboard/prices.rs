@@ -24,7 +24,7 @@ pub async fn set_auto_pricing(path: Path<bool>) -> HttpResponse {
     // try and save the config and fail if we can't
     if let Err(e) = settings::write_config() {
         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-            .json(format!("Error writing config: {}", e));
+            .json(format!("Error writing config: {e}"));
     }
 
     HttpResponse::Ok().json(())

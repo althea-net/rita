@@ -16,7 +16,7 @@ impl dyn KernelInterface {
 
     //Sets an arbitrary UCI variable on OpenWRT
     pub fn set_uci_var(&self, key: &str, value: &str) -> Result<(), KernelInterfaceError> {
-        self.run_uci("uci", &["set", &format!("{}={}", key, value)])?;
+        self.run_uci("uci", &["set", &format!("{key}={value}")])?;
         Ok(())
     }
 
@@ -82,7 +82,7 @@ impl dyn KernelInterface {
     }
 
     pub fn refresh_initd(&self, program: &str) -> Result<(), KernelInterfaceError> {
-        let output = self.run_command(&format!("/etc/init.d/{}", program), &["reload"])?;
+        let output = self.run_command(&format!("/etc/init.d/{program}"), &["reload"])?;
         if !output.status.success() {
             return Err(KernelInterfaceError::RuntimeError(format!(
                 "received error while refreshing {}: {}",

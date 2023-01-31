@@ -90,7 +90,7 @@ pub fn texts_sent(client: &models::Client) -> i32 {
 pub fn display_hashset(input: &HashSet<String>) -> String {
     let mut out = String::new();
     for item in input.iter() {
-        write!(out, "{}, ", item).unwrap();
+        write!(out, "{item}, ").unwrap();
     }
     out
 }
@@ -120,7 +120,7 @@ pub fn client_to_new_db_client(
         email: client.reg_details.email.clone().unwrap_or_default(),
         phone: client.reg_details.phone.clone().unwrap_or_default(),
         country,
-        email_code: format!("{:06}", rand_code),
+        email_code: format!("{rand_code:06}"),
         text_sent: 0,
         verified: false,
         email_sent_time: 0,

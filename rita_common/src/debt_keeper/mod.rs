@@ -1302,16 +1302,16 @@ mod tests {
         let serialized = bincode::serialize(&debt_data_to_ser(debt_data.clone())).unwrap();
         let mut file = File::create(file_path).expect("Why fail");
         if let Err(e) = file.write_all(&serialized) {
-            println!("{:?}", e);
+            println!("{e:?}");
         }
 
         match deserialize_from_binary(file_path.to_string()) {
-            Some(a) => println!("{:?}", a),
+            Some(a) => println!("{a:?}"),
             None => print!("Unable to deserial"),
         }
 
         if let Err(e) = remove_file(file_path) {
-            println!("Remove the file: {:?}", e);
+            println!("Remove the file: {e:?}");
         }
 
         // TEST USING BufReader / BufWriter

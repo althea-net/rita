@@ -130,9 +130,7 @@ pub fn start_antenna_forwarding_proxy<S: 'static + std::marker::Send + ::std::ha
                                 Ok(antenna_sockaddr) => {
                                     forward_connections(antenna_sockaddr, server_stream, slice);
                                 }
-                                Err(e) => {
-                                    send_error_message(&mut server_stream, format!("{:?}", e))
-                                }
+                                Err(e) => send_error_message(&mut server_stream, format!("{e:?}")),
                             }
                         }
                         Some(ForwardingProtocolMessage::ForwardingCloseMessage) => {}
@@ -316,7 +314,7 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
         trace!("Trying interface {}, with test ip {}", iface, our_ip);
         // this acts as a wildcard deletion across all interfaces, which is frankly really
         // dangerous if our default route overlaps, or if you enter an exit route ip
-        let _ = KI.run_command("ip", &["route", "del", &format!("{}/32", target_ip)]);
+        let _ = KI.run_command("ip", &["route", "del", &format!("{target_ip}/32")]);
         for iface in interfaces {
             // cleans up all previous forwarding ip's in some way this is more dangerous than the previous
             // solution, which only cleaned up the target and destination ip's. But the more through cleanup
@@ -328,7 +326,7 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
         }
         let res = KI.run_command(
             "ip",
-            &["addr", "add", &format!("{}/32", our_ip), "dev", iface],
+            &["addr", "add", &format!("{our_ip}/32"), "dev", iface],
         );
         trace!("Added our own test ip with {:?}", res);
         // you need to use src here to disambiguate the sending address
@@ -339,7 +337,7 @@ fn find_antenna<S: ::std::hash::BuildHasher>(
             &[
                 "route",
                 "add",
-                &format!("{}/32", target_ip),
+                &format!("{target_ip}/32"),
                 "dev",
                 iface,
                 "src",
@@ -442,7 +440,7 @@ fn cleanup_interface(iface: &str) -> Result<(), AntennaForwardingError> {
         // we only clean up very specific routes, this doesn't prevent us from causing problems
         // but it does help prevent us from doing things like removing the default route.
         if netmask == 32 {
-            let _ = KI.run_command("ip", &["addr", "del", &format!("{}/32", ip), "dev", iface]);
+            let _ = KI.run_command("ip", &["addr", "del", &format!("{ip}/32"), "dev", iface]);
         }
     }
     Ok(())

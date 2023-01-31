@@ -46,14 +46,12 @@ pub fn get_gateway_ip_single(mesh_ip: IpAddr) -> Result<IpAddr, Box<RitaExitErro
                     }
                 }
                 Err(e) => Err(Box::new(RitaExitError::MiscStringError(format!(
-                    "Parse routes babel monitor error, {:?}",
-                    e
+                    "Parse routes babel monitor error, {e:?}"
                 )))),
             }
         }
         Err(e) => Err(Box::new(RitaExitError::MiscStringError(format!(
-            "Error opening babel stream, {:?}",
-            e
+            "Error opening babel stream, {e:?}"
         )))),
     }
 }
@@ -185,7 +183,7 @@ pub fn get_country(ip: IpAddr) -> Result<String, Box<RitaExitError>> {
     match cache_result {
         Some(code) => Ok(code),
         None => {
-            let geo_ip_url = format!("https://geoip.maxmind.com/geoip/v2.1/country/{}", ip);
+            let geo_ip_url = format!("https://geoip.maxmind.com/geoip/v2.1/country/{ip}");
             info!(
                 "making GeoIP request to {} for {}",
                 geo_ip_url,

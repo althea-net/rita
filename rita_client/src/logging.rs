@@ -48,9 +48,6 @@ pub fn enable_remote_logging() -> Result<(), RitaClientError> {
     }
     log::set_max_level(level);
 
-    println!(
-        "Remote compressed logging enabled with target {}",
-        logging_url
-    );
+    println!("Remote compressed logging enabled with target {logging_url}");
     Ok(())
 }

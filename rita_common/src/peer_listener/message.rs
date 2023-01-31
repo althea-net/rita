@@ -34,7 +34,7 @@ impl Display for MessageError {
             MessageError::InvalidPayloadError => write!(f, "Invalid payload detected"),
             MessageError::InvalidMagic => write!(f, "Invalid magic value received"),
             MessageError::BufferUnderflow => write!(f, "Buffer underflow while reading message"),
-            MessageError::IoError(ref e) => write!(f, "{}", e),
+            MessageError::IoError(ref e) => write!(f, "{e}"),
             MessageError::InvalidIpAddress => write!(f, "Received ImHere with invalid IP address"),
             MessageError::DeserializationError => {
                 write!(f, "Error when Deserializing Hello Message")

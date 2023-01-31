@@ -48,10 +48,10 @@ fn main() {
     validate_connections(namespaces.clone());
 
     let res = setup_ns(namespaces.clone());
-    println!("Namespaces setup: {:?}", res);
+    println!("Namespaces setup: {res:?}");
 
     let res = thread_spawner(namespaces);
-    println!("Thread Spawner: {:?}", res);
+    println!("Thread Spawner: {res:?}");
     // this sleep is for debugging so that the container can be accessed to poke around in
     // thread::sleep(ten_mins);
 }
@@ -102,7 +102,7 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
     // add namespaces
     for name in spaces.names {
         let res = KI.run_command("ip", &["netns", "add", &name]);
-        println!("{:?}", res);
+        println!("{res:?}");
         // ip netns exec nB ip link set dev lo up
         let res = KI.run_command(
             "ip",
@@ -110,7 +110,7 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
                 "netns", "exec", &name, "ip", "link", "set", "dev", "lo", "up",
             ],
         );
-        println!("{:?}", res);
+        println!("{res:?}");
     }
     for link in spaces.linked {
         let veth_ab = format!("veth-{}-{}", link.0 .0, link.1 .0);
@@ -128,12 +128,12 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
                 "link", "add", &veth_ab, "type", "veth", "peer", "name", &veth_ba,
             ],
         );
-        println!("{:?}", res);
+        println!("{res:?}");
         // assign each side of the veth to one of the nodes namespaces
         let res = KI.run_command("ip", &["link", "set", &veth_ab, "netns", &link.0 .0]);
-        println!("{:?}", res);
+        println!("{res:?}");
         let res = KI.run_command("ip", &["link", "set", &veth_ba, "netns", &link.1 .0]);
-        println!("{:?}", res);
+        println!("{res:?}");
 
         // add ip addresses on each side
         let res = KI.run_command(
@@ -142,7 +142,7 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
                 "netns", "exec", &link.0 .0, "ip", "addr", "add", &ip_ab, "dev", &veth_ab,
             ],
         );
-        println!("{:?}", res);
+        println!("{res:?}");
 
         let res = KI.run_command(
             "ip",
@@ -150,7 +150,7 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
                 "netns", "exec", &link.1 .0, "ip", "addr", "add", &ip_ba, "dev", &veth_ba,
             ],
         );
-        println!("{:?}", res);
+        println!("{res:?}");
 
         // bring the interfaces up
         let res = KI.run_command(
@@ -159,7 +159,7 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
                 "netns", "exec", &link.0 .0, "ip", "link", "set", "dev", &veth_ab, "up",
             ],
         );
-        println!("{:?}", res);
+        println!("{res:?}");
 
         let res = KI.run_command(
             "ip",
@@ -167,7 +167,7 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
                 "netns", "exec", &link.1 .0, "ip", "link", "set", "dev", &veth_ba, "up",
             ],
         );
-        println!("{:?}", res);
+        println!("{res:?}");
 
         //  ip netns exec nC ip route add 192.168.0.0/24 dev veth-nC-nA
         // add routes to each other's subnets
@@ -177,14 +177,14 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
                 "netns", "exec", &link.0 .0, "ip", "route", "add", &subnet_b, "dev", &veth_ab,
             ],
         );
-        println!("{:?}", res);
+        println!("{res:?}");
         let res = KI.run_command(
             "ip",
             &[
                 "netns", "exec", &link.1 .0, "ip", "route", "add", &subnet_a, "dev", &veth_ba,
             ],
         );
-        println!("{:?}", res);
+        println!("{res:?}");
     }
 
     Ok(())
@@ -202,7 +202,7 @@ fn thread_spawner(namespaces: NamespaceInfo) -> Result<(), KernelInterfaceError>
         let veth_interfaces = get_veth_interfaces(namespaces.clone());
         let veth_interfaces = veth_interfaces.get(&ns).unwrap().clone();
         let rcsettings = ritasettings.clone();
-        let nspath = format!("/var/run/netns/{}", ns);
+        let nspath = format!("/var/run/netns/{ns}");
         let nsfd = open(nspath.as_str(), OFlag::O_RDONLY, Mode::empty())
             .unwrap_or_else(|_| panic!("Could not open netns file: {}", nspath));
 
@@ -270,7 +270,7 @@ fn spawn_rita(
     mut rcsettings: RitaClientSettings,
     nsfd: i32,
 ) {
-    let wg_keypath = format!("/var/tmp/{}", ns);
+    let wg_keypath = format!("/var/tmp/{ns}");
     let _rita_handler = thread::spawn(move || {
         // set the host of this thread to the ns
         setns(nsfd, CloneFlags::CLONE_NEWNET).expect("Couldn't set network namespace");
@@ -322,8 +322,8 @@ fn spawn_rita(
 /// Spawn a thread for rita given a NamespaceInfo which will be assigned to the namespace given
 fn spawn_babel(ns: String, babelconf_path: String, babeld_path: String, nsfd: i32) {
     let _babel_handler = thread::spawn(move || {
-        let babeld_pid = format!("/var/run/babeld-{}.pid", ns);
-        let babeld_log = format!("/var/log/babeld-{}.log", ns);
+        let babeld_pid = format!("/var/run/babeld-{ns}.pid");
+        let babeld_log = format!("/var/log/babeld-{ns}.log");
         // 1 here is for log
         let res = KI.run_command(
             "ip",
@@ -350,7 +350,7 @@ fn spawn_babel(ns: String, babelconf_path: String, babeld_path: String, nsfd: i3
                 "-D",
             ],
         );
-        println!("res of babel {:?}", res);
+        println!("res of babel {res:?}");
         // set the host of this thread to the ns
         setns(nsfd, CloneFlags::CLONE_NEWNET).expect("Couldn't set network namespace");
     });

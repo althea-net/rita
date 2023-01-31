@@ -25,7 +25,7 @@ pub fn default_save_interval() -> u64 {
 }
 
 pub fn default_config_path() -> String {
-    format!("/etc/{}.toml", APP_NAME)
+    format!("/etc/{APP_NAME}.toml")
 }
 
 /// This struct represents an exit server cluster, meaning

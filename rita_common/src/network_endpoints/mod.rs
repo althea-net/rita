@@ -23,7 +23,7 @@ pub async fn make_payments(item: Json<PaymentTx>) -> HttpResponse {
         checked: false,
     };
     if let Err(e) = validate_later(ts) {
-        return HttpResponse::build(StatusCode::from_u16(400u16).unwrap()).json(&format!("{}", e));
+        return HttpResponse::build(StatusCode::from_u16(400u16).unwrap()).json(&format!("{e}"));
     }
 
     HttpResponse::Ok().json("Payment Received!")
@@ -42,7 +42,7 @@ pub async fn make_payments_v2(item: Json<HashSet<PaymentTx>>) -> HttpResponse {
 
         // Duplicates will be removed here
         if let Err(e) = validate_later(ts) {
-            build_err.push_str(&format!("{}\n", e));
+            build_err.push_str(&format!("{e}\n"));
         }
     }
 

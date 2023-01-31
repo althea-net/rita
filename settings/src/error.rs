@@ -41,11 +41,11 @@ impl From<serde_json::Error> for SettingsError {
 impl Display for SettingsError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            SettingsError::TomlSeError(e) => write!(f, "{}", e),
-            SettingsError::TomlDeError(e) => write!(f, "{}", e),
-            SettingsError::IOError(e) => write!(f, "{}", e),
-            SettingsError::IpNetworkError(e) => write!(f, "{}", e),
-            SettingsError::SerdeJsonError(e) => write!(f, "{}", e),
+            SettingsError::TomlSeError(e) => write!(f, "{e}"),
+            SettingsError::TomlDeError(e) => write!(f, "{e}"),
+            SettingsError::IOError(e) => write!(f, "{e}"),
+            SettingsError::IpNetworkError(e) => write!(f, "{e}"),
+            SettingsError::SerdeJsonError(e) => write!(f, "{e}"),
         }
     }
 }

@@ -101,10 +101,10 @@ pub fn dashboard_get_exit_info() -> Result<Vec<ExitInfo>, RitaClientError> {
                     Ok(output)
                 }
 
-                Err(e) => Err(RitaClientError::MiscStringError(format!("{}", e))),
+                Err(e) => Err(RitaClientError::MiscStringError(format!("{e}"))),
             }
         }
-        Err(e) => Err(RitaClientError::MiscStringError(format!("{}", e))),
+        Err(e) => Err(RitaClientError::MiscStringError(format!("{e}"))),
     }
 }
 
@@ -141,7 +141,7 @@ pub async fn get_exit_info(_req: HttpRequest) -> HttpResponse {
     debug!("Exit endpoint hit!");
     match dashboard_get_exit_info() {
         Ok(a) => HttpResponse::Ok().json(a),
-        Err(e) => HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{:?}", e)),
+        Err(e) => HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!("{e:?}")),
     }
 }
 
@@ -174,7 +174,7 @@ pub async fn reset_exit(path: Path<String>) -> HttpResponse {
         error!("Requested a reset on unknown exit {:?}", exit_name);
         ret.insert(
             "error".to_owned(),
-            format!("Requested reset on unknown exit {:?}", exit_name),
+            format!("Requested reset on unknown exit {exit_name:?}"),
         );
 
         HttpResponse::build(StatusCode::BAD_REQUEST).json(ret)
@@ -206,7 +206,7 @@ pub async fn select_exit(path: Path<String>) -> HttpResponse {
         error!("Requested selection of an unknown exit {:?}", exit_name);
         ret.insert(
             "error".to_owned(),
-            format!("Requested selection of an unknown exit {:?}", exit_name),
+            format!("Requested selection of an unknown exit {exit_name:?}"),
         );
         HttpResponse::build(StatusCode::BAD_REQUEST).json(ret)
     }
@@ -222,7 +222,7 @@ pub async fn register_to_exit(path: Path<String>) -> HttpResponse {
     if let Err(e) = exit_setup_request(exit_name, None).await {
         error!("exit_setup_request() failed with: {:?}", e);
         ret.insert("error".to_owned(), "Exit setup request failed".to_owned());
-        ret.insert("rust_error".to_owned(), format!("{:?}", e));
+        ret.insert("rust_error".to_owned(), format!("{e:?}"));
         return HttpResponse::build(StatusCode::BAD_REQUEST).json(ret);
     }
     HttpResponse::Ok().json(ret)
@@ -236,7 +236,7 @@ pub async fn verify_on_exit_with_code(path: Path<(String, String)>) -> HttpRespo
     if let Err(e) = exit_setup_request(exit_name, Some(code)).await {
         error!("exit_setup_request() failed with: {:?}", e);
         ret.insert("error".to_owned(), "Exit setup request failed".to_owned());
-        ret.insert("rust_error".to_owned(), format!("{:?}", e));
+        ret.insert("rust_error".to_owned(), format!("{e:?}"));
         return HttpResponse::build(StatusCode::BAD_REQUEST).json(ret);
     }
     HttpResponse::Ok().json(ret)

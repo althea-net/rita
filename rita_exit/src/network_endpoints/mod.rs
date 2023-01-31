@@ -147,8 +147,7 @@ pub async fn secure_setup_request(
                 their_wg_pubkey,
             );
             return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!(
-                "Error in exit setup for {} malformed packet header!",
-                their_wg_pubkey
+                "Error in exit setup for {their_wg_pubkey} malformed packet header!"
             ));
         }
     };
@@ -168,7 +167,7 @@ pub async fn secure_setup_request(
             Err(e) => {
                 error!("Signup client failed with {:?}", e);
                 HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-                    .json(format!("Signup client failed with {:?}", e))
+                    .json(format!("Signup client failed with {e:?}"))
             }
         }
     } else {
@@ -202,7 +201,7 @@ pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -
         Ok(conn) => conn,
         Err(e) => {
             return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-                .json(format!("Error getting database connection: {:?}", e))
+                .json(format!("Error getting database connection: {e:?}"))
         }
     };
     let state = match client_status(decrypted_id, &conn) {
@@ -213,8 +212,7 @@ pub async fn secure_status_request(request: Json<EncryptedExitClientIdentity>) -
                 their_wg_pubkey, e
             );
             return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).json(format!(
-                "Internal error in client status for {} with {:?}",
-                their_wg_pubkey, e
+                "Internal error in client status for {their_wg_pubkey} with {e:?}"
             ));
         }
     };

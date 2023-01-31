@@ -73,7 +73,7 @@ fn main() {
     .unwrap_or_else(|e| e.exit());
 
     let settings_file = args.flag_config.clone();
-    println!("Settings file {}", settings_file);
+    println!("Settings file {settings_file}");
 
     // load the settings file, setup a thread to save it out every so often
     // and populate the memory cache of settings used throughout the program
@@ -93,7 +93,7 @@ fn main() {
 
         s.write(&settings_file).unwrap();
         settings::set_rita_client(s.clone());
-        println!("Look the client settings! {:?}", s);
+        println!("Look the client settings! {s:?}");
         s
     };
 
@@ -118,7 +118,7 @@ fn main() {
         let res =
             enable_remote_logging("rita".to_string(), log.dest_url, log.level, key.to_string());
 
-        println!("logging status {:?}", res);
+        println!("logging status {res:?}");
     }
 
     if cfg!(feature = "development") {

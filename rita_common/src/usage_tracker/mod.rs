@@ -89,7 +89,7 @@ fn to_formatted_payment_tx(input: PaymentTx) -> FormattedPaymentTx {
             to: input.to,
             from: input.from,
             amount: input.amount,
-            txid: format!("{:#066x}", txid),
+            txid: format!("{txid:#066x}"),
         },
         None => FormattedPaymentTx {
             to: input.to,

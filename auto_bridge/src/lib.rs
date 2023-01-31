@@ -227,8 +227,7 @@ pub async fn get_relay_message_hash(
         Ok(a) => a,
         Err(e) => {
             return Err(TokenBridgeError::Web3Error(Web3Error::BadInput(format!(
-                "Error: {}",
-                e
+                "Error: {e}"
             ))))
         }
     };
@@ -241,8 +240,7 @@ pub async fn get_relay_message_hash(
         Ok(a) => a,
         Err(e) => {
             return Err(TokenBridgeError::Web3Error(Web3Error::BadInput(format!(
-                "Error: {}",
-                e
+                "Error: {e}"
             ))))
         }
     };
@@ -258,8 +256,7 @@ pub async fn get_relay_message_hash(
         Ok(a) => a,
         Err(e) => {
             return Err(TokenBridgeError::Web3Error(Web3Error::BadInput(format!(
-                "Error: {}",
-                e
+                "Error: {e}"
             ))))
         }
     };
@@ -337,7 +334,7 @@ pub async fn check_relayed_message(
 ) -> Result<bool, Web3Error> {
     let payload = match encode_call("relayedMessages(bytes32)", &[tx_hash.into()]) {
         Ok(a) => a,
-        Err(e) => return Err(Web3Error::BadInput(format!("Error: {}", e))),
+        Err(e) => return Err(Web3Error::BadInput(format!("Error: {e}"))),
     };
 
     let res = web3
@@ -729,7 +726,7 @@ mod tests {
             )
             .await
             .unwrap();
-            println!("{:?}", res);
+            println!("{res:?}");
         });
     }
 

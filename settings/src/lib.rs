@@ -346,7 +346,7 @@ pub fn check_if_exit() -> bool {
 /// This merges 2 json objects, overwriting conflicting values in `a`
 pub fn json_merge(a: &mut Value, b: &Value) {
     match (a, b) {
-        (&mut Value::Object(ref mut a), &Value::Object(ref b)) => {
+        (&mut Value::Object(ref mut a), Value::Object(b)) => {
             for (k, v) in b {
                 json_merge(a.entry(k.clone()).or_insert(Value::Null), v);
             }
@@ -365,7 +365,7 @@ fn get_settings_file_from_ns() -> String {
         Ok(s) => s,
         Err(_) => panic!("Could not get netns name!"),
     };
-    let settings_file = format!("/var/tmp/settings_{}", ns);
+    let settings_file = format!("/var/tmp/settings_{ns}");
     settings_file
 }
 
@@ -400,7 +400,7 @@ mod tests {
     #[test]
     fn test_settings_test() {
         let ret = RitaClientSettings::new("test.toml").unwrap();
-        println!("{:?}", ret);
+        println!("{ret:?}");
     }
 
     #[test]

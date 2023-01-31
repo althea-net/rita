@@ -31,7 +31,7 @@ impl dyn KernelInterface {
             "set".into(),
             if_name.into(),
             "listen-port".into(),
-            format!("{}", listen_port),
+            format!("{listen_port}"),
             "private-key".into(),
             private_key_path.to_string(),
         ];
@@ -70,7 +70,7 @@ impl dyn KernelInterface {
         for i in wg_peers {
             if !client_pubkeys.contains(&i) {
                 warn!("Removing no longer authorized peer {}", i);
-                self.run_command("wg", &["set", if_name, "peer", &format!("{}", i), "remove"])?;
+                self.run_command("wg", &["set", if_name, "peer", &format!("{i}"), "remove"])?;
             }
         }
 
@@ -287,7 +287,7 @@ impl dyn KernelInterface {
             &[
                 "address",
                 "add",
-                &format!("{}/{}", local_ip, netmask),
+                &format!("{local_ip}/{netmask}"),
                 "dev",
                 interface,
             ],
@@ -301,7 +301,7 @@ impl dyn KernelInterface {
             &[
                 "address",
                 "add",
-                &format!("{}/64", local_link),
+                &format!("{local_link}/64"),
                 "dev",
                 interface,
             ],
@@ -431,7 +431,7 @@ fn test_iproute_parsing() {
     for ip in ipv6_list {
         // Verfiy its a valid subnet
         if let Ok(ip_net) = ip.parse::<IpNetwork>() {
-            println!("debugging: {:?}", ip_net)
+            println!("debugging: {ip_net:?}")
         }
     }
 }

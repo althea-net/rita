@@ -11,7 +11,7 @@ pub enum AltheaTypesError {
 impl fmt::Display for AltheaTypesError {
     fn fmt(&self, f: &mut fmt::Formatter) -> FormatResult {
         match self {
-            AltheaTypesError::WgParseError(val) => write!(f, "Failed to parse WgKey with {}", val),
+            AltheaTypesError::WgParseError(val) => write!(f, "Failed to parse WgKey with {val}"),
         }
     }
 }

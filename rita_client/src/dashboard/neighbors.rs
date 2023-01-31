@@ -41,10 +41,10 @@ pub async fn get_routes(_req: HttpRequest) -> HttpResponse {
         Ok(mut stream) => match parse_routes(&mut stream) {
             Ok(routes) => HttpResponse::Ok().json(routes),
             Err(e) => HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-                .json(format!("Unable to parse babel routes: {}", e)),
+                .json(format!("Unable to parse babel routes: {e}")),
         },
         Err(e) => HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-            .json(format!("Unable to open babel stream to get routes: {}", e)),
+            .json(format!("Unable to open babel stream to get routes: {e}")),
     }
 }
 

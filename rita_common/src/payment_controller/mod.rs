@@ -88,7 +88,7 @@ impl Display for PaymentControllerError {
         match self {
             Self::ResendFailed => write!(f, "Failed to resend txid after all attempts!"),
             Self::InsufficientFunds { amount, balance } => {
-                write!(f, "Can not send amount {} with balance {}", amount, balance)
+                write!(f, "Can not send amount {amount} with balance {balance}")
             }
             Self::ZeroPayment => write!(f, "Attempted to send zero value payment!"),
             Self::FailedToSendPayment => write!(f, "Failed to send payment!"),

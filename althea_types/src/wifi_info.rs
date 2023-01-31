@@ -369,7 +369,7 @@ Survey data from wlan0
 
     let ret = extract_wifi_survey_data(str, "wlan0");
 
-    println!("{:?}", ret);
+    println!("{ret:?}");
 }
 
 #[test]
@@ -466,7 +466,7 @@ Station 54:88:0e:ab:fb:81 (on wlan1)
     current time:    1645656582646 ms";
 
     let ret = extract_wifi_station_data(str);
-    println!("{:?}", ret);
+    println!("{ret:?}");
 
     let old_str = "Station <mac removed> (on wlan1)
 	inactive time:	10 ms
@@ -496,7 +496,7 @@ Station 54:88:0e:ab:fb:81 (on wlan1)
 	connected time:	26651 seconds";
 
     let ret = extract_wifi_station_data(old_str);
-    println!("\n\n{:?}", ret);
+    println!("\n\n{ret:?}");
 }
 
 #[test]
@@ -518,5 +518,5 @@ fn test_extract_wifi_names() {
         }
     }
 
-    println!("{:?}", ret);
+    println!("{ret:?}");
 }

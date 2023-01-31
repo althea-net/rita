@@ -22,12 +22,12 @@ pub async fn remote_logging(path: Path<bool>) -> HttpResponse {
 
     if let Err(e) = settings::write_config() {
         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-            .json(format!("Failed to write config {:?}", e));
+            .json(format!("Failed to write config {e:?}"));
     }
 
     if let Err(e) = KI.run_command(service_path.as_str(), &["restart"]) {
         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-            .json(format!("Failed to restart service {:?}", e));
+            .json(format!("Failed to restart service {e:?}"));
     }
 
     HttpResponse::Ok().json(())
@@ -47,7 +47,7 @@ pub async fn remote_logging_level(path: Path<String>) -> HttpResponse {
         Ok(level) => level,
         Err(e) => {
             return HttpResponse::build(StatusCode::BAD_REQUEST)
-                .json(format!("Could not parse loglevel {:?}", e));
+                .json(format!("Could not parse loglevel {e:?}"));
         }
     };
 
@@ -61,12 +61,12 @@ pub async fn remote_logging_level(path: Path<String>) -> HttpResponse {
 
     if let Err(e) = settings::write_config() {
         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-            .json(format!("Failed to write config {:?}", e));
+            .json(format!("Failed to write config {e:?}"));
     }
 
     if let Err(e) = KI.run_command(service_path.as_str(), &["restart"]) {
         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-            .json(format!("Failed to restart service {:?}", e));
+            .json(format!("Failed to restart service {e:?}"));
     }
 
     HttpResponse::Ok().json(())

@@ -339,5 +339,5 @@ fn test_merge_counters() {
     ret.extend(map1);
     ret.extend(map2);
 
-    println!("{:?}", ret);
+    println!("{ret:?}");
 }

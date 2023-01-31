@@ -11,7 +11,7 @@ pub async fn set_system_blockchain_endpoint(path: Path<String>) -> HttpResponse 
     let id: Result<SystemChain, ()> = path.into_inner().parse();
     if id.is_err() {
         return HttpResponse::build(StatusCode::BAD_REQUEST)
-            .json(format!("Could not parse {:?} into a SystemChain enum!", id));
+            .json(format!("Could not parse {id:?} into a SystemChain enum!"));
     }
     let id = id.unwrap();
 
@@ -23,7 +23,7 @@ pub async fn set_system_blockchain_endpoint(path: Path<String>) -> HttpResponse 
 
     if let Err(e) = settings::write_config() {
         return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
-            .json(format!("Error while writing config: {:?}", e));
+            .json(format!("Error while writing config: {e:?}"));
     }
 
     HttpResponse::Ok().json(())

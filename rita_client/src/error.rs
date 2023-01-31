@@ -112,37 +112,36 @@ impl From<std::io::Error> for RitaClientError {
 impl Display for RitaClientError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            RitaClientError::InterfaceModeError(a) => write!(f, "{}", a,),
+            RitaClientError::InterfaceModeError(a) => write!(f, "{a}",),
             RitaClientError::InterfaceToggleError {
                 main_error,
                 revert_status,
             } => {
                 write!(
                     f,
-                    "Error running UCI commands! {:?} \nRevert attempted: {:?}",
-                    main_error, revert_status
+                    "Error running UCI commands! {main_error:?} \nRevert attempted: {revert_status:?}"
                 )
             }
-            RitaClientError::AddrParseError(a) => write!(f, "{}", a,),
-            RitaClientError::MiscStringError(e) => write!(f, "{}", e),
-            RitaClientError::ValidationError(e) => write!(f, "{}", e),
+            RitaClientError::AddrParseError(a) => write!(f, "{a}",),
+            RitaClientError::MiscStringError(e) => write!(f, "{e}"),
+            RitaClientError::ValidationError(e) => write!(f, "{e}"),
             RitaClientError::SendRequestError(e) => {
-                write!(f, "Error with get request for exit info: {}", e)
+                write!(f, "Error with get request for exit info: {e}")
             }
-            RitaClientError::JsonPayloadError(e) => write!(f, "{}", e),
-            RitaClientError::OldJsonPayloadError(e) => write!(f, "{}", e),
-            RitaClientError::SerdeJsonError(e) => write!(f, "{}", e),
-            RitaClientError::FromUtf8Error(e) => write!(f, "{}", e),
+            RitaClientError::JsonPayloadError(e) => write!(f, "{e}"),
+            RitaClientError::OldJsonPayloadError(e) => write!(f, "{e}"),
+            RitaClientError::SerdeJsonError(e) => write!(f, "{e}"),
+            RitaClientError::FromUtf8Error(e) => write!(f, "{e}"),
             RitaClientError::TimeoutError(e) => {
-                write!(f, "Error with post request for exit status: {}", e)
+                write!(f, "Error with post request for exit status: {e}")
             }
-            RitaClientError::NoExitError(e) => write!(f, "No valid exit for {}", e),
-            RitaClientError::ExitNotFound(e) => write!(f, "Could not find exit {:?}", e),
+            RitaClientError::NoExitError(e) => write!(f, "No valid exit for {e}"),
+            RitaClientError::ExitNotFound(e) => write!(f, "Could not find exit {e:?}"),
             RitaClientError::NoExitIPError(e) => {
-                write!(f, "Found exitServer: {:?}, but no exit ip", e)
+                write!(f, "Found exitServer: {e:?}, but no exit ip")
             }
-            RitaClientError::RitaCommonError(e) => write!(f, "{}", e),
-            RitaClientError::ParseIntError(e) => write!(f, "{}", e),
+            RitaClientError::RitaCommonError(e) => write!(f, "{e}"),
+            RitaClientError::ParseIntError(e) => write!(f, "{e}"),
         }
     }
 }

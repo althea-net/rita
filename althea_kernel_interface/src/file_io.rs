@@ -24,7 +24,7 @@ pub fn write_out(filename: &str, content: Vec<String>) -> Result<(), Error> {
     let mut file = File::create(filename)?;
     let mut final_output = String::new();
     for item in content {
-        writeln!(final_output, "{}", item).unwrap();
+        writeln!(final_output, "{item}").unwrap();
     }
     file.write_all(final_output.as_bytes())?;
     Ok(())

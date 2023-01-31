@@ -77,8 +77,7 @@ fn withdraw_handler(address: Address, amount: Option<Uint256>) -> HttpResponse {
         (SystemChain::Xdai, SystemChain::Xdai) => queue_eth_compatible_withdraw(address, amount),
         (SystemChain::Xdai, SystemChain::Ethereum) => xdai_to_eth_withdraw(address, amount),
         (_, _) => HttpResponse::build(StatusCode::from_u16(500u16).unwrap()).json(format!(
-            "System chain is {} but withdraw chain is {}, withdraw impossible!",
-            system_chain, withdraw_chain
+            "System chain is {system_chain} but withdraw chain is {withdraw_chain}, withdraw impossible!"
         )),
     }
 }
@@ -151,8 +150,6 @@ fn xdai_to_eth_withdraw(address: Address, amount: Uint256) -> HttpResponse {
         amount,
     }) {
         Ok(_) => HttpResponse::Ok().json("View endpoints for progress"),
-        Err(e) => {
-            HttpResponse::build(StatusCode::from_u16(500u16).unwrap()).json(format!("{:?}", e))
-        }
+        Err(e) => HttpResponse::build(StatusCode::from_u16(500u16).unwrap()).json(format!("{e:?}")),
     }
 }
