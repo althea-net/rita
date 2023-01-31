@@ -19,11 +19,10 @@ pub fn update_system(instruction: UpdateType) -> Result<(), KernelInterfaceError
                     let res = KI.perform_opkg(cmd);
                     match res {
                         Ok(o) => match o.status.code() {
-                            Some(0) => info!("opkg update completed successfully! {:?}", o),
+                            Some(0) => info!("opkg completed successfully! {:?}", o),
                             Some(_) => {
-                                let err = format!("opkg update has failed! {:?}", o);
+                                let err = format!("opkg has failed! {:?}", o);
                                 error!("{}", err);
-                                return Err(KernelInterfaceError::RuntimeError(err));
                             }
                             None => warn!("No return code form opkg update? {:?}", o),
                         },
