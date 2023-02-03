@@ -71,12 +71,22 @@ pub fn get_interfaces() -> Result<HashMap<String, InterfaceMode>, RitaClientErro
             // it's a list and we need to handle that
             if value.contains(' ') {
                 for list_member in value.split(' ') {
+                    // legacy filter for phone light clients a removed feature
+                    // this may be removable some day when all router configs have turned over
+                    if list_member.contains("pbs-wlan") {
+                        continue;
+                    }
                     retval.insert(
                         list_member.replace(' ', "").to_string(),
                         ethernet2mode(&value, &setting_name)?,
                     );
                 }
             } else {
+                // legacy filter for phone light clients a removed feature
+                // this may be removable some day when all router configs have turned over
+                if value.contains("pbs-wlan") {
+                    continue;
+                }
                 retval.insert(value.clone(), ethernet2mode(&value, &setting_name)?);
             }
         }
