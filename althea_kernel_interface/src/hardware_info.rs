@@ -1,5 +1,6 @@
 use crate::file_io::get_lines;
 use crate::KernelInterfaceError as Error;
+use crate::KI;
 use althea_types::extract_wifi_station_data;
 use althea_types::extract_wifi_survey_data;
 use althea_types::ConntrackInfo;
@@ -344,6 +345,9 @@ fn get_wifi_devices() -> Vec<WifiDevice> {
             name: dev.clone(),
             survey_data: get_wifi_survey_info(&dev),
             station_data: get_wifi_station_info(&dev),
+            ssid: get_radio_ssid(&dev),
+            channel: get_radio_channel(&dev),
+            enabled: get_radio_enabled(&dev),
         };
         info!("Created the following wifi struct: {:?}", device.clone());
         ret.push(device);
@@ -435,6 +439,70 @@ fn get_wifi_station_info(dev: &str) -> Vec<WifiStationData> {
 
     let res = String::from_utf8(res.unwrap().stdout).unwrap();
     extract_wifi_station_data(&res)
+}
+
+/// Expected input wlan0, wlan1, etc
+/// map this to radio0, radio1 etc
+/// Append default_ to the beginning and query /etc/config/wireless for ssid
+/// In the case of an unexpected input, we simply print an error and return None
+pub fn get_radio_ssid(radio: &str) -> Option<String> {
+    let radio = radio.replace("wlan", "radio");
+    let path = format!("wireless.default_{radio}.ssid");
+    match KI.get_uci_var(&path) {
+        Ok(a) => Some(a),
+        Err(e) => {
+            error!("Unable to get radio ssid for radio: {} with {:?}", radio, e);
+            None
+        }
+    }
+}
+
+/// Expected input wlan0, wlan1, etc
+/// map this to radio0, radio1 etc
+/// query /etc/config/wireless for disabled flag
+/// In the case of an unexpected input, we simply print an error and return None
+pub fn get_radio_enabled(radio: &str) -> Option<bool> {
+    let radio = radio.replace("wlan", "radio");
+    let path = format!("wireless.{radio}.disabled");
+    match KI.get_uci_var(&path) {
+        // if disabled flag is set to '0' in config, radio is enabled so we return true and vice versa
+        Ok(a) => Some(a.contains('0')),
+        Err(e) => {
+            error!(
+                "Unable to get radio channel for radio: {} with {:?}",
+                radio, e
+            );
+            None
+        }
+    }
+}
+
+/// Expected input wlan0, wlan1, etc
+/// map this to radio0, radio1 etc
+/// query /etc/config/wireless for channel
+/// In the case of an unexpected input, we simply print an error and return None
+pub fn get_radio_channel(radio: &str) -> Option<u16> {
+    let radio = radio.replace("wlan", "radio");
+    let path = format!("wireless.{radio}.channel");
+    match KI.get_uci_var(&path) {
+        Ok(a) => match a.parse::<u16>() {
+            Ok(a) => Some(a),
+            Err(e) => {
+                error!(
+                    "Unable to get radio channel for radio: {} with {:?}",
+                    radio, e
+                );
+                None
+            }
+        },
+        Err(e) => {
+            error!(
+                "Unable to get radio channel for radio: {} with {:?}",
+                radio, e
+            );
+            None
+        }
+    }
 }
 
 /// Take eth speed and duplex mode and create an enum

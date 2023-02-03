@@ -429,6 +429,47 @@ pub enum ReleaseStatus {
     GeneralAvailability,
 }
 
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct WifiChannel {
+    pub radio: String,
+    pub channel: u16,
+}
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct WifiSsid {
+    pub radio: String,
+    pub ssid: String,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct WifiPass {
+    pub radio: String,
+    pub pass: String,
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct WifiSecurity {
+    pub radio: String,
+    pub encryption: String,
+}
+#[derive(Clone, Debug)]
+pub struct WifiDisabledReturn {
+    pub needs_reboot: bool,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct WifiDisabled {
+    pub radio: String,
+    pub disabled: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum WifiToken {
+    WifiChannel(WifiChannel),
+    WifiSsid(WifiSsid),
+    WifiPass(WifiPass),
+    WifiDisabled(WifiDisabled),
+    WifiSecurity(WifiSecurity),
+}
+
 /// Something the operator may want to do to a router under their control
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub enum OperatorAction {
@@ -441,6 +482,10 @@ pub enum OperatorAction {
     /// This resets the WiFi password to the default 'ChangeMe' and restarts the wifi
     /// subsystem (without restarting the router).
     ResetWiFiPassword,
+    // Given a vector of wifitoken, apply these changes to the router
+    SetWifi {
+        token: Vec<WifiToken>,
+    },
     /// This resets the traffic shaper to 'unlimited' speed for all connections. It can
     /// be useful when the shaper is showing obviously incorrect values for some peer
     /// usually caused by bad network transients. While the shaper will eventually recover
@@ -452,17 +497,25 @@ pub enum OperatorAction {
     Reboot,
     /// Sends instructions from op tools about the type of update to perform, either a sysupgrade
     /// or an opkg update
-    UpdateV2 { instruction: UpdateType },
+    UpdateV2 {
+        instruction: UpdateType,
+    },
     /// Sends instructions from op tools about the type of update to perform, either a sysupgrade
     /// or an opkg update, to be removed after all routers >= beta 19 rc9
-    Update { instruction: UpdateTypeLegacy },
+    Update {
+        instruction: UpdateTypeLegacy,
+    },
     /// Changes the operator address of a given router in order to support Beta 15 and below
     /// this has it's own logic in the operator tools that will later be removed for the logic
     /// you see in Althea_rs
-    ChangeOperatorAddress { new_address: Option<Address> },
+    ChangeOperatorAddress {
+        new_address: Option<Address>,
+    },
     /// Sets the min gas value to the provided value, primarily intended for use on xDai where
     /// the validators set a minimum gas price as a group without warning
-    SetMinGas { new_min_gas: Uint256 },
+    SetMinGas {
+        new_min_gas: Uint256,
+    },
     /// Modifies the authorized keys used for access to routers
     UpdateAuthorizedKeys {
         add_list: Vec<String>,

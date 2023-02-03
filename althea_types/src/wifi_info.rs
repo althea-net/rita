@@ -52,6 +52,12 @@ pub struct WifiDevice {
     pub name: String,
     pub survey_data: Vec<WifiSurveyData>,
     pub station_data: Vec<WifiStationData>,
+    #[serde(default)]
+    pub ssid: Option<String>,
+    #[serde(default)]
+    pub channel: Option<u16>,
+    #[serde(default)]
+    pub enabled: Option<bool>,
 }
 
 impl From<Vec<&str>> for WifiSurveyData {
