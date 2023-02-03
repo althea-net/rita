@@ -33,7 +33,7 @@ pub async fn set_auto_pricing(path: Path<bool>) -> HttpResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Prices {
     exit_dest_price: u128,
-    dao_fee: Uint256,
+    operator_fee: Uint256,
     simulated_tx_fee: u8,
 }
 
@@ -46,7 +46,7 @@ pub async fn get_prices(_req: HttpRequest) -> HttpResponse {
     let operator_fee = settings::get_rita_client().operator.operator_fee;
     let p = Prices {
         exit_dest_price,
-        dao_fee: operator_fee,
+        operator_fee,
         simulated_tx_fee,
     };
     HttpResponse::Ok().json(p)
