@@ -106,11 +106,9 @@ pub async fn operator_update() {
     let rita_client = settings::get_rita_client();
     let id = rita_client.get_identity().unwrap();
     let logging_enabled = rita_client.log.enabled;
-    let operator_settings = rita_client.operator;
+    let operator_settings = rita_client.operator.clone();
     let system_chain = rita_client.payment.system_chain;
     let operator_address = operator_settings.operator_address;
-    let use_operator_price =
-        operator_settings.use_operator_price || operator_settings.force_use_operator_price;
     // a node is logically a gateway from a users perspective if it is directly connected to the
     // exit as a mesh client, even if the is_gateway var mostly governs things related to WAN use.
     // So we accept either of these conditions being true.
@@ -145,7 +143,7 @@ pub async fn operator_update() {
 
     // disable hardware info sending if logging is disabled
     let hardware_info = match logging_enabled {
-        true => match get_hardware_info(rita_client.network.device) {
+        true => match get_hardware_info(rita_client.network.device.clone()) {
             Ok(info) => Some(info),
             Err(e) => {
                 error!("Failed to get hardware info with {:?}", e);
@@ -158,7 +156,7 @@ pub async fn operator_update() {
     hardware_info_logs(&hardware_info);
 
     // Get current exit info
-    let cur_cluster = settings::get_rita_client().exit_client.current_exit;
+    let cur_cluster = rita_client.exit_client.current_exit.clone();
     let cur_exit = Some(CurExitInfo {
         cluster_name: cur_cluster.clone(),
         // Hopefully ops fills this in
@@ -213,7 +211,7 @@ pub async fn operator_update() {
         }
     };
 
-    let mut rita_client = settings::get_rita_client();
+    let mut rita_client = rita_client;
 
     let update = check_contacts_update(
         rita_client.exit_client.contact_info.clone(),
@@ -222,6 +220,23 @@ pub async fn operator_update() {
     if update {
         rita_client.exit_client.contact_info = option_convert(new_settings.contact_info.clone());
     }
+
+    let mut operator = rita_client.operator.clone();
+    if check_billing_update(
+        rita_client.operator.billing_details.clone(),
+        new_settings.billing_details.clone(),
+    ) {
+        operator.billing_details = new_settings.billing_details.clone();
+    }
+
+    let use_operator_price = operator.use_operator_price || operator.force_use_operator_price;
+    let current_operator_fee = operator_settings.operator_fee.clone();
+    let new_operator_fee = Uint256::from(new_settings.operator_fee);
+    if use_operator_price || new_operator_fee > current_operator_fee {
+        operator.operator_fee = new_operator_fee;
+    }
+    operator.installation_details = None;
+    rita_client.operator = operator;
 
     let network = rita_client.network.clone();
     trace!("Updating from operator settings");
@@ -233,18 +248,6 @@ pub async fn operator_update() {
     );
     rita_client.payment = payment;
     trace!("Done with payment");
-
-    let mut operator = rita_client.operator.clone();
-    if check_billing_update(
-        rita_client.operator.billing_details.clone(),
-        new_settings.billing_details.clone(),
-    ) {
-        operator.billing_details = new_settings.billing_details.clone();
-    }
-    let new_operator_fee = Uint256::from(new_settings.operator_fee);
-    operator.operator_fee = new_operator_fee;
-    operator.installation_details = None;
-    rita_client.operator = operator;
 
     // merge the new settings into the local settings
     merge_settings_safely(&mut rita_client, new_settings.merge_json.clone());

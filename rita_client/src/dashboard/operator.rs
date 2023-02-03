@@ -1,7 +1,7 @@
 use crate::operator_fee_manager::get_operator_fee_debt;
 use actix_web_async::web::Path;
 use actix_web_async::{HttpRequest, HttpResponse};
-use clarity::Address;
+use clarity::{Address, Uint256};
 
 pub async fn get_operator(_req: HttpRequest) -> HttpResponse {
     trace!("get operator address: Hit");
@@ -51,7 +51,30 @@ pub async fn remove_operator(_path: Path<Address>) -> HttpResponse {
 }
 
 pub async fn get_operator_fee(_req: HttpRequest) -> HttpResponse {
-    debug!("get operator GET hit");
+    debug!("get_operator_fee GET hit");
+    HttpResponse::Ok().json(settings::get_rita_client().operator.operator_fee)
+}
+
+pub async fn set_operator_fee(fee: Path<Uint256>) -> HttpResponse {
+    let op_fee = fee.into_inner();
+    debug!("set_operator_fee POST hit {:?}", op_fee);
+
+    let mut rita_client = settings::get_rita_client();
+    rita_client.operator.operator_fee = op_fee.clone();
+
+    if op_fee == 0_u8.into() {
+        rita_client.operator.use_operator_price = true
+    } else {
+        rita_client.operator.use_operator_price = false;
+    }
+
+    settings::set_rita_client(rita_client);
+
+    // save immediately
+    if let Err(_e) = settings::write_config() {
+        return HttpResponse::InternalServerError().finish();
+    }
+
     HttpResponse::Ok().json(settings::get_rita_client().operator.operator_fee)
 }
 

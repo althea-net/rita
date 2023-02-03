@@ -83,6 +83,7 @@ pub fn start_client_dashboard(rita_dashboard_port: u16) {
                     .route("/operator/{address}", web::post().to(change_operator))
                     .route("/operator/remove", web::post().to(remove_operator))
                     .route("/operator_fee", web::get().to(get_operator_fee))
+                    .route("/operator_fee/{fee}", web::post().to(set_operator_fee))
                     .route("/operator_debt", web::get().to(get_operator_debt))
                     .route("/debts", web::get().to(get_debts))
                     .route("/debts/reset", web::post().to(reset_debt))
