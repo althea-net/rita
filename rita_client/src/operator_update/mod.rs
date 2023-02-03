@@ -3,12 +3,13 @@ pub mod update_loop;
 pub mod updater;
 extern crate openssh_keys;
 use crate::dashboard::system_chain::set_system_blockchain;
-use crate::dashboard::wifi::reset_wifi_pass;
 use crate::exit_manager::get_client_pub_ipv6;
 use crate::exit_manager::get_selected_exit_ip;
+use crate::reset_wifi_pass;
 use crate::rita_loop::is_gateway_client;
 use crate::rita_loop::CLIENT_LOOP_TIMEOUT;
 use crate::set_router_update_instruction;
+use crate::set_wifi_multi_internal;
 use althea_kernel_interface::hardware_info::get_hardware_info;
 use althea_types::get_sequence_num;
 use althea_types::AuthorizedKeys;
@@ -309,6 +310,15 @@ fn perform_operator_update(
         }
         Some(OperatorAction::ResetWiFiPassword) => {
             let _res = reset_wifi_pass();
+        }
+        Some(OperatorAction::SetWifi { token }) => {
+            info!("Received an action to set wifi info! {:?}", token);
+            let res = set_wifi_multi_internal(token);
+            info!(
+                "Set wifi multi returned with {:?} with message {:?}",
+                res.status(),
+                res.body()
+            );
         }
         Some(OperatorAction::ChangeOperatorAddress { new_address }) => {
             rita_client.operator.operator_address = new_address;

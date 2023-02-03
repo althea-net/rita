@@ -3,7 +3,10 @@
 use ::actix_web_async::http::StatusCode;
 use ::actix_web_async::web::Path;
 use ::actix_web_async::{web::Json, HttpRequest, HttpResponse};
-use althea_types::FromStr;
+use althea_types::{
+    FromStr, WifiChannel, WifiDisabled, WifiDisabledReturn, WifiPass, WifiSecurity, WifiSsid,
+    WifiToken,
+};
 use rita_common::dashboard::nickname::maybe_set_nickname;
 use rita_common::{RitaCommonError, KI};
 use serde::{Deserialize, Deserializer, Serializer};
@@ -197,12 +200,6 @@ impl Display for ValidationError {
     }
 }
 
-#[derive(Serialize, Deserialize, Default, Clone, Debug)]
-pub struct WifiSsid {
-    pub radio: String,
-    pub ssid: String,
-}
-
 fn set_ssid(wifi_ssid: &WifiSsid) -> Result<(), RitaClientError> {
     if let Err(e) = validate_config_value(&wifi_ssid.ssid) {
         info!("Setting of invalid SSID was requested: {}", e);
@@ -225,12 +222,6 @@ fn set_ssid(wifi_ssid: &WifiSsid) -> Result<(), RitaClientError> {
     let _ = maybe_set_nickname(wifi_ssid.ssid.clone());
 
     Ok(())
-}
-
-#[derive(Serialize, Deserialize, Default, Clone, Debug)]
-pub struct WifiPass {
-    pub radio: String,
-    pub pass: String,
 }
 
 /// Resets the wifi password to the stock value for all radios
@@ -276,12 +267,6 @@ fn set_pass(wifi_pass: &WifiPass) -> Result<(), RitaClientError> {
     Ok(())
 }
 
-#[derive(Serialize, Deserialize, Default, Clone, Debug)]
-pub struct WifiChannel {
-    pub radio: String,
-    pub channel: u16,
-}
-
 fn set_channel(wifi_channel: &WifiChannel) -> Result<(), RitaClientError> {
     let current_channel: u16 = KI
         .get_uci_var(&format!("wireless.{}.channel", wifi_channel.radio))?
@@ -306,12 +291,6 @@ fn set_channel(wifi_channel: &WifiChannel) -> Result<(), RitaClientError> {
     Ok(())
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct WifiSecurity {
-    pub radio: String,
-    pub encryption: String,
-}
-
 /// Changes the wifi encryption mode from a given dropdown menu
 fn set_security(wifi_security: &WifiSecurity) -> Result<(), RitaClientError> {
     // check that the given string is one of the approved strings for encryption mode
@@ -330,17 +309,6 @@ fn set_security(wifi_security: &WifiSecurity) -> Result<(), RitaClientError> {
             "Could not set wifi encryption; invalid encryption mode".to_string(),
         ))
     }
-}
-
-#[derive(Clone, Debug)]
-pub struct WifiDisabledReturn {
-    pub needs_reboot: bool,
-}
-
-#[derive(Serialize, Deserialize, Default, Clone, Debug)]
-pub struct WifiDisabled {
-    pub radio: String,
-    pub disabled: bool,
 }
 
 /// Disables the wifi on the specified radio
@@ -372,23 +340,25 @@ struct ErrorJsonResponse {
     error: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub enum WifiToken {
-    WifiChannel(WifiChannel),
-    WifiSsid(WifiSsid),
-    WifiPass(WifiPass),
-    WifiDisabled(WifiDisabled),
-    WifiSecurity(WifiSecurity),
-}
-
 /// an endpoint that takes a series of wifi tokens in json format and applies them all at once
 /// the reason for this is that changing any setting while on wifi will disconnect the caller
 /// so in order to have all the changes 'take' we need to have a single endpoint for all changes
 pub async fn set_wifi_multi(wifi_changes: Json<Vec<WifiToken>>) -> HttpResponse {
+    let changes = wifi_changes.into_inner();
+    let res = set_wifi_multi_internal(changes);
+    info!(
+        "Set wifi multi returned with {:?} with message {:?}",
+        res.status(),
+        res.body()
+    );
+    res
+}
+
+pub fn set_wifi_multi_internal(wifi_changes: Vec<WifiToken>) -> HttpResponse {
     trace!("Got multi wifi change!");
     let mut needs_reboot = false;
 
-    for token in wifi_changes.into_inner().iter() {
+    for token in wifi_changes.iter() {
         match token {
             WifiToken::WifiChannel(val) => {
                 if let Err(e) = set_channel(val) {
