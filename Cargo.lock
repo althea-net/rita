@@ -894,6 +894,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fixedbitset"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
+
+[[package]]
 name = "flate2"
 version = "1.0.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1969,6 +1975,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "petgraph"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6d5014253a1331579ce62aa67443b4a658c5e7dd03d4bc6d302b94474888143"
+dependencies = [
+ "fixedbitset",
+ "indexmap",
+]
+
+[[package]]
 name = "phonenumber"
 version = "0.3.1+8.12.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2655,11 +2671,14 @@ version = "0.1.0"
 dependencies = [
  "actix 0.13.0",
  "althea_kernel_interface",
+ "babel_monitor",
  "clu",
  "docopt",
  "env_logger",
+ "ipnetwork",
  "log",
  "nix 0.26.2",
+ "petgraph",
  "rita_client",
  "rita_common",
  "settings",
