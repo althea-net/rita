@@ -245,7 +245,9 @@ pub async fn operator_update() {
     operator.operator_fee = new_operator_fee;
     operator.installation_details = None;
     rita_client.operator = operator;
-    merge_settings_safely(new_settings.merge_json.clone());
+
+    // merge the new settings into the local settings
+    merge_settings_safely(&mut rita_client, new_settings.merge_json.clone());
 
     // Every tick, update the local router update instructions
     let update_instructions = match (
@@ -556,14 +558,14 @@ fn check_billing_update(current: Option<BillingDetails>, incoming: Option<Billin
 
 /// Merges an arbitrary settings string, after first filtering for several
 /// forbidden values
-fn merge_settings_safely(new_settings: Value) {
+fn merge_settings_safely(client_settings: &mut RitaClientSettings, new_settings: Value) {
     trace!("Got new settings from server {:?}", new_settings);
     // merge in arbitrary setting change string if it's not blank
     if new_settings != "" {
         if let Value::Object(map) = new_settings.clone() {
             let contains_forbidden_key = contains_forbidden_key(map, &FORBIDDEN_MERGE_VALUES);
             if !contains_forbidden_key {
-                match settings::get_rita_client().merge(new_settings.clone()) {
+                match client_settings.merge(new_settings.clone()) {
                     Ok(_) => trace!("Merged new settings successfully {:?}", new_settings),
                     Err(e) => error!(
                         "Failed to merge OperatorUpdate settings {:?} {:?}",

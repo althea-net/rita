@@ -228,6 +228,8 @@ pub struct RitaClientSettings {
 }
 
 impl RitaClientSettings {
+    /// This is a low level fn that mutates the current settings object, but does not save it.
+    /// prefer the higher level settings::merge_config_json(new_settings), which calls this, to actually merge into memory
     pub fn merge(&mut self, changed_settings: serde_json::Value) -> Result<(), SettingsError> {
         let mut settings_value = serde_json::to_value(self.clone())?;
 

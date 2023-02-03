@@ -1,7 +1,7 @@
 use phonenumber::PhoneNumber;
 
 fn default_wyre_enabled() -> bool {
-    true
+    false
 }
 
 fn default_display_currency_symbol() -> bool {
