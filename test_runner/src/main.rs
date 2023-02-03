@@ -1,6 +1,6 @@
 extern crate log;
 // Uncomment for manual debugging
-//use core::time;
+use core::time;
 use std::{
     collections::{HashMap, HashSet},
     convert::TryInto,
@@ -26,29 +26,52 @@ use rita_common::rita_loop::{
 };
 use settings::client::RitaClientSettings;
 
-use crate::tests::test_reach_all;
+use crate::tests::{test_reach_all, test_routes};
 
 pub mod tests;
+
+/// This struct holds the format for a namespace info
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub struct Namespace {
+    /// Name assigned to the namespace
+    pub name: String,
+    /// ID number of the namespace
+    pub id: u32,
+    /// Local Fee of the rita instance in the namespace, used also to assign
+    /// edge weight on the network graph
+    pub cost: u32,
+}
 
 /// This struct holds the setup instructions for namespaces
 #[derive(Clone, Eq, PartialEq)]
 pub struct NamespaceInfo {
     /// Namespace names and corresponding numbers for ip assignment to avoid having to string
-    /// parse every time we want its number for ips
-    pub names: Vec<(String, u32)>,
+    /// parse every time we want its number for ips, last number is cost (local fee)
+    pub names: Vec<Namespace>,
     /// Linked nodes written as tuple pairs
     /// The string is for the namespace name(NOTE: names must be <=4 characters as interfaces
     /// cannot be more than 15 char, and we input as veth-{}-{})
     /// The u32 is for the subnet on the 3rd octet
-    pub linked: Vec<((String, u32), (String, u32))>,
+    pub linked: Vec<(Namespace, Namespace)>,
+}
+
+/// For each key in destination, the u32 value is the price we expect to see in its route,
+/// and the namespace value is the next hop we take to reach the key. This struct is meant to
+/// be used within an outer hashmap which holds the "from" namespace.
+pub struct RouteHop {
+    pub destination: HashMap<Namespace, (u32, Namespace)>,
 }
 
 fn main() {
     // uncomment these 2 lines for manual debugging 600
-    //let ten_mins = time::Duration::from_secs(300);
+    //let five_mins = time::Duration::from_secs(300);
     //env_logger::init();
 
-    let namespaces = five_node_config();
+    let one_min = time::Duration::from_secs(60);
+
+    let node_config = five_node_config();
+    let namespaces = node_config.0;
+    let expected_routes = node_config.1;
 
     validate_connections(namespaces.clone());
 
@@ -58,14 +81,21 @@ fn main() {
     let res = thread_spawner(namespaces.clone());
     println!("Thread Spawner: {:?}", res);
 
-    // this sleep is for debugging so that the container can be accessed to poke around in
-    //thread::sleep(ten_mins);
+    // allow setup to finish before running tests
+    thread::sleep(one_min);
 
-    let res = test_reach_all(namespaces).expect("Could not reach all namespaces!");
+    // this sleep is for debugging so that the container can be accessed to poke around in
+    //thread::sleep(five_mins);
+
+    let res = test_reach_all(namespaces.clone()).expect("Could not reach all namespaces!");
     println!("Reachability Test: {:?}", res);
+
+    let res = test_routes(namespaces, expected_routes);
+    // this just returns a number at the moment, which must be 12 until more test instances are added
+    println!("Routes Test: {:?}", res);
 }
 
-fn five_node_config() -> NamespaceInfo {
+fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
     /*
     These are connected as such:
     A---------B
@@ -80,22 +110,89 @@ fn five_node_config() -> NamespaceInfo {
      /       \|
     D---------C
     */
-    let testa = ("n-1".to_string(), 1);
-    let testb = ("n-2".to_string(), 2);
-    let testc = ("n-3".to_string(), 3);
-    let testd = ("n-4".to_string(), 4);
+    let testa = Namespace {
+        name: "n-1".to_string(),
+        id: 1,
+        cost: 25,
+    };
+    let testb = Namespace {
+        name: "n-2".to_string(),
+        id: 2,
+        cost: 40,
+    };
+    let testc = Namespace {
+        name: "n-3".to_string(),
+        id: 3,
+        cost: 10,
+    };
+    let testd = Namespace {
+        name: "n-4".to_string(),
+        id: 4,
+        cost: 60,
+    };
 
-    NamespaceInfo {
+    let nsinfo = NamespaceInfo {
         names: vec![testa.clone(), testb.clone(), testc.clone(), testd.clone()],
         linked: vec![
             // arbitrary connections
             (testa.clone(), testb.clone()),
             (testb.clone(), testc.clone()),
-            (testa, testc.clone()),
-            (testc, testd.clone()),
-            (testb, testd),
+            (testa.clone(), testc.clone()),
+            (testc.clone(), testd.clone()),
+            (testb.clone(), testd.clone()),
         ],
-    }
+    };
+    // This is a Hashmap that contains the key namespace, and how it connects to each node in the network as its values.
+    // For each namespace in the outer hashmap(A), we have an inner hashmap holding the other namespace nodes(B), how
+    // much the expected price from A -> B is, and what the next hop would be from A -> B.
+    let mut expected_routes = HashMap::new();
+    let testa_routes = RouteHop {
+        destination: [
+            (testb.clone(), (0, testb.clone())),
+            (testc.clone(), (0, testc.clone())),
+            (testd.clone(), (10, testc.clone())),
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+    };
+    let testb_routes = RouteHop {
+        destination: [
+            (testa.clone(), (0, testa.clone())),
+            (testc.clone(), (0, testc.clone())),
+            (testd.clone(), (0, testd.clone())),
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+    };
+    let testc_routes = RouteHop {
+        destination: [
+            (testa.clone(), (0, testa.clone())),
+            (testb.clone(), (0, testb.clone())),
+            (testd.clone(), (0, testd.clone())),
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+    };
+    let testd_routes = RouteHop {
+        destination: [
+            (testa.clone(), (10, testc.clone())),
+            (testb.clone(), (0, testb.clone())),
+            (testc.clone(), (0, testc.clone())),
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+    };
+
+    expected_routes.insert(testa, testa_routes);
+    expected_routes.insert(testb, testb_routes);
+    expected_routes.insert(testc, testc_routes);
+    expected_routes.insert(testd, testd_routes);
+
+    (nsinfo, expected_routes)
 }
 
 fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
@@ -104,25 +201,25 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
     // clear namespaces
     KI.run_command("ip", &["-all", "netns", "delete", "||", "true"])?;
     // add namespaces
-    for name in spaces.names {
-        let res = KI.run_command("ip", &["netns", "add", &name.0]);
+    for ns in spaces.names {
+        let res = KI.run_command("ip", &["netns", "add", &ns.name]);
         println!("{:?}", res);
         // ip netns exec nB ip link set dev lo up
         let res = KI.run_command(
             "ip",
             &[
-                "netns", "exec", &name.0, "ip", "link", "set", "dev", "lo", "up",
+                "netns", "exec", &ns.name, "ip", "link", "set", "dev", "lo", "up",
             ],
         );
         println!("{res:?}");
     }
     for link in spaces.linked {
-        let veth_ab = format!("veth-{}-{}", link.0 .0, link.1 .0);
-        let veth_ba = format!("veth-{}-{}", link.1 .0, link.0 .0);
-        let ip_ab = format!("192.168.{}.{}/24", link.0 .1, counter);
-        let ip_ba = format!("192.168.{}.{}/24", link.1 .1, counter);
-        let subnet_a = format!("192.168.{}.0/24", link.0 .1);
-        let subnet_b = format!("192.168.{}.0/24", link.1 .1);
+        let veth_ab = format!("veth-{}-{}", link.0.name, link.1.name);
+        let veth_ba = format!("veth-{}-{}", link.1.name, link.0.name);
+        let ip_ab = format!("192.168.{}.{}/24", link.0.id, counter);
+        let ip_ba = format!("192.168.{}.{}/24", link.1.id, counter);
+        let subnet_a = format!("192.168.{}.0/24", link.0.id);
+        let subnet_b = format!("192.168.{}.0/24", link.1.id);
 
         counter += 1;
         // create veth to link them
@@ -134,16 +231,24 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
         );
         println!("{res:?}");
         // assign each side of the veth to one of the nodes namespaces
-        let res = KI.run_command("ip", &["link", "set", &veth_ab, "netns", &link.0 .0]);
-        println!("{res:?}");
-        let res = KI.run_command("ip", &["link", "set", &veth_ba, "netns", &link.1 .0]);
-        println!("{res:?}");
+        let res = KI.run_command("ip", &["link", "set", &veth_ab, "netns", &link.0.name]);
+        println!("{:?}", res);
+        let res = KI.run_command("ip", &["link", "set", &veth_ba, "netns", &link.1.name]);
+        println!("{:?}", res);
 
         // add ip addresses on each side
         let res = KI.run_command(
             "ip",
             &[
-                "netns", "exec", &link.0 .0, "ip", "addr", "add", &ip_ab, "dev", &veth_ab,
+                "netns",
+                "exec",
+                &link.0.name,
+                "ip",
+                "addr",
+                "add",
+                &ip_ab,
+                "dev",
+                &veth_ab,
             ],
         );
         println!("{res:?}");
@@ -151,7 +256,15 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
         let res = KI.run_command(
             "ip",
             &[
-                "netns", "exec", &link.1 .0, "ip", "addr", "add", &ip_ba, "dev", &veth_ba,
+                "netns",
+                "exec",
+                &link.1.name,
+                "ip",
+                "addr",
+                "add",
+                &ip_ba,
+                "dev",
+                &veth_ba,
             ],
         );
         println!("{res:?}");
@@ -160,7 +273,15 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
         let res = KI.run_command(
             "ip",
             &[
-                "netns", "exec", &link.0 .0, "ip", "link", "set", "dev", &veth_ab, "up",
+                "netns",
+                "exec",
+                &link.0.name,
+                "ip",
+                "link",
+                "set",
+                "dev",
+                &veth_ab,
+                "up",
             ],
         );
         println!("{res:?}");
@@ -168,7 +289,15 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
         let res = KI.run_command(
             "ip",
             &[
-                "netns", "exec", &link.1 .0, "ip", "link", "set", "dev", &veth_ba, "up",
+                "netns",
+                "exec",
+                &link.1.name,
+                "ip",
+                "link",
+                "set",
+                "dev",
+                &veth_ba,
+                "up",
             ],
         );
         println!("{res:?}");
@@ -178,14 +307,30 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
         let res = KI.run_command(
             "ip",
             &[
-                "netns", "exec", &link.0 .0, "ip", "route", "add", &subnet_b, "dev", &veth_ab,
+                "netns",
+                "exec",
+                &link.0.name,
+                "ip",
+                "route",
+                "add",
+                &subnet_b,
+                "dev",
+                &veth_ab,
             ],
         );
         println!("{res:?}");
         let res = KI.run_command(
             "ip",
             &[
-                "netns", "exec", &link.1 .0, "ip", "route", "add", &subnet_a, "dev", &veth_ba,
+                "netns",
+                "exec",
+                &link.1.name,
+                "ip",
+                "route",
+                "add",
+                &subnet_a,
+                "dev",
+                &veth_ba,
             ],
         );
         println!("{res:?}");
@@ -204,15 +349,22 @@ fn thread_spawner(namespaces: NamespaceInfo) -> Result<(), KernelInterfaceError>
     fs::write(babelconf_path.clone(), babelconf_data).unwrap();
     for ns in namespaces.names.clone() {
         let veth_interfaces = get_veth_interfaces(namespaces.clone());
-        let veth_interfaces = veth_interfaces.get(&ns.0).unwrap().clone();
+        let veth_interfaces = veth_interfaces.get(&ns.name).unwrap().clone();
         let rcsettings = ritasettings.clone();
-        let nspath = format!("/var/run/netns/{}", ns.0);
+        let nspath = format!("/var/run/netns/{}", ns.name);
         let nsfd = open(nspath.as_str(), OFlag::O_RDONLY, Mode::empty())
             .unwrap_or_else(|_| panic!("Could not open netns file: {}", nspath));
+        let local_fee = ns.cost;
 
-        spawn_rita(ns.clone().0, veth_interfaces, rcsettings, nsfd);
+        spawn_rita(
+            ns.clone().name,
+            veth_interfaces,
+            rcsettings,
+            nsfd,
+            local_fee,
+        );
 
-        spawn_babel(ns.0, babelconf_path.clone(), babeld_path.clone(), nsfd);
+        spawn_babel(ns.name, babelconf_path.clone(), babeld_path.clone(), nsfd);
     }
     Ok(())
 }
@@ -223,16 +375,16 @@ fn validate_connections(namespaces: NamespaceInfo) {
         if !namespaces.names.contains(&link.0) || !namespaces.names.contains(&link.1) {
             panic!(
                 "One or both of these names is not in the given namespace list: {}, {}",
-                link.0 .0, link.1 .0
+                link.0.name, link.1.name
             )
         }
-        if link.0 .0.len() + link.1 .0.len() > 8 {
+        if link.0.name.len() + link.1.name.len() > 8 {
             panic!(
                 "Namespace names are too long(max 4 chars): {}, {}",
-                link.0 .0, link.1 .0,
+                link.0.name, link.1.name,
             )
         }
-        if link.0 .0.eq(&link.1 .0) {
+        if link.0.name.eq(&link.1.name) {
             panic!("Cannot link namespace to itself!")
         }
     }
@@ -242,13 +394,13 @@ fn validate_connections(namespaces: NamespaceInfo) {
 fn get_veth_interfaces(nsinfo: NamespaceInfo) -> HashMap<String, HashSet<String>> {
     let mut res: HashMap<String, HashSet<String>> = HashMap::new();
     for name in nsinfo.names {
-        res.insert(name.0, HashSet::new());
+        res.insert(name.name, HashSet::new());
     }
     for link in nsinfo.linked {
-        let veth_ab = format!("veth-{}-{}", link.0 .0, link.1 .0);
-        let veth_ba = format!("veth-{}-{}", link.1 .0, link.0 .0);
-        res.entry(link.0 .0).or_default().insert(veth_ab);
-        res.entry(link.1 .0).or_default().insert(veth_ba);
+        let veth_ab = format!("veth-{}-{}", link.0.name, link.1.name);
+        let veth_ba = format!("veth-{}-{}", link.1.name, link.0.name);
+        res.entry(link.0.name).or_default().insert(veth_ab);
+        res.entry(link.1.name).or_default().insert(veth_ba);
     }
     res
 }
@@ -259,6 +411,7 @@ fn spawn_rita(
     veth_interfaces: HashSet<String>,
     mut rcsettings: RitaClientSettings,
     nsfd: i32,
+    local_fee: u32,
 ) {
     let wg_keypath = format!("/var/tmp/{ns}");
     let _rita_handler = thread::spawn(move || {
@@ -283,7 +436,7 @@ fn spawn_rita(
         )));
         rcsettings.network.wg_private_key_path = wg_keypath;
         rcsettings.network.peer_interfaces = veth_interfaces;
-        rcsettings.payment.local_fee = 10; //arbitrary for now
+        rcsettings.payment.local_fee = local_fee;
 
         // mirrored from rita_bin/src/client.rs
         let s = clu::init("linux", rcsettings);

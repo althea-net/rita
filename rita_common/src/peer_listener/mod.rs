@@ -256,7 +256,7 @@ impl ListenInterface {
         let iface_index: u32 = if cfg!(feature = "integration_test_v2") {
             // ip netns exec n-1 cat /sys/class/net/veth-n-1-n-2/iflink
             let ns = KI.get_namespace().unwrap();
-            let location = format!("/sys/class/net/{}/ifindex", ifname);
+            let location = format!("/sys/class/net/{ifname}/ifindex");
             let index = KI
                 .run_command("ip", &["netns", "exec", &ns, "cat", &location])
                 .unwrap();
