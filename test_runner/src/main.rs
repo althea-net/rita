@@ -79,7 +79,7 @@ fn main() {
     println!("Namespaces setup: {res:?}");
 
     let res = thread_spawner(namespaces.clone());
-    println!("Thread Spawner: {:?}", res);
+    println!("Thread Spawner: {res:?}");
 
     // allow setup to finish before running tests
     thread::sleep(one_min);
@@ -87,12 +87,16 @@ fn main() {
     // this sleep is for debugging so that the container can be accessed to poke around in
     //thread::sleep(five_mins);
 
-    let res = test_reach_all(namespaces.clone()).expect("Could not reach all namespaces!");
-    println!("Reachability Test: {:?}", res);
+    let res1 = test_reach_all(namespaces.clone()).expect("Could not reach all namespaces!");
+    println!("Reachability Test: {res1}");
 
-    let res = test_routes(namespaces, expected_routes);
+    let res2 = test_routes(namespaces, expected_routes);
     // this just returns a number at the moment, which must be 12 until more test instances are added
-    println!("Routes Test: {:?}", res);
+    println!("Routes Test: {res2}");
+
+    if res1 != 16 || res2 != 12 {
+        std::process::exit(1);
+    }
 }
 
 fn five_node_config() -> (NamespaceInfo, HashMap<Namespace, RouteHop>) {
@@ -203,7 +207,7 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
     // add namespaces
     for ns in spaces.names {
         let res = KI.run_command("ip", &["netns", "add", &ns.name]);
-        println!("{:?}", res);
+        println!("{res:?}");
         // ip netns exec nB ip link set dev lo up
         let res = KI.run_command(
             "ip",
@@ -232,9 +236,9 @@ fn setup_ns(spaces: NamespaceInfo) -> Result<(), KernelInterfaceError> {
         println!("{res:?}");
         // assign each side of the veth to one of the nodes namespaces
         let res = KI.run_command("ip", &["link", "set", &veth_ab, "netns", &link.0.name]);
-        println!("{:?}", res);
+        println!("{res:?}");
         let res = KI.run_command("ip", &["link", "set", &veth_ba, "netns", &link.1.name]);
-        println!("{:?}", res);
+        println!("{res:?}");
 
         // add ip addresses on each side
         let res = KI.run_command(

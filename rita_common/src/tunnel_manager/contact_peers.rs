@@ -6,9 +6,10 @@
 
 use crate::hello_handler::handle_hello;
 use crate::hello_handler::Hello;
-use crate::peer_listener::Hello as NewHello;
-use crate::peer_listener::PeerListener;
-use crate::peer_listener::{send_hello, Peer};
+use crate::peer_listener::send_hello;
+use crate::peer_listener::structs::Hello as NewHello;
+use crate::peer_listener::structs::Peer;
+use crate::peer_listener::structs::PeerListener;
 use crate::rita_loop::is_gateway;
 use crate::tunnel_manager::tm_get_port;
 use crate::RitaCommonError;

@@ -43,7 +43,7 @@ fn test_reach(from: Namespace, to: Namespace) -> bool {
         )
         .expect(&errormsg);
     let output = from_utf8(&output.stdout).expect("could not get output for ping6!");
-    println!("ping output: {:?} end", output);
+    println!("ping output: {output:?} end");
     output.contains("1 packets transmitted, 1 received, 0% packet loss")
 }
 
@@ -85,27 +85,10 @@ pub fn test_routes(nsinfo: NamespaceInfo, expected: HashMap<Namespace, RouteHop>
 
             let expected_data = expected.get(&ns1).unwrap().destination.get(ns2).unwrap();
             let expected_cost = expected_data.clone().0;
-            let expected_hop = expected_data.clone().1;
-            let neigh_ip = IpAddr::V6(Ipv6Addr::new(
-                0xfe80,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                expected_hop.id.try_into().unwrap(),
-            ));
-            let dest_ip = IpAddr::V6(Ipv6Addr::new(
-                0xfd00,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                ns2.id.try_into().unwrap(),
-            ));
+            let expected_hop_id: u16 = expected_data.clone().1.id.try_into().unwrap();
+            let ns2_id: u16 = ns2.id.try_into().unwrap();
+            let neigh_ip = IpAddr::V6(Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, expected_hop_id));
+            let dest_ip = IpAddr::V6(Ipv6Addr::new(0xfd00, 0, 0, 0, 0, 0, 0, ns2_id));
             for r in routes {
                 if let IpNetwork::V6(ref ip) = r.prefix {
                     if ip.ip() == dest_ip

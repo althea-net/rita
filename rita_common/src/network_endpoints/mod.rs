@@ -1,7 +1,7 @@
 //! Network endptoints for common Rita functionality (such as exchanging hello messages)
 
 use crate::payment_validator::{validate_later, ToValidate};
-use crate::peer_listener::Peer;
+use crate::peer_listener::structs::Peer;
 use crate::tm_identity_callback;
 use crate::tunnel_manager::id_callback::IdentityCallback;
 
