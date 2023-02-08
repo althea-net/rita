@@ -11,7 +11,7 @@ pub mod neighbor_status;
 pub mod shaping;
 
 use crate::blockchain_oracle::potential_payment_issues_detected;
-use crate::peer_listener::Peer;
+use crate::peer_listener::structs::Peer;
 use crate::RitaCommonError;
 use crate::FAST_LOOP_TIMEOUT;
 use crate::KI;

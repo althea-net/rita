@@ -1,4 +1,4 @@
-use crate::peer_listener::Peer;
+use crate::peer_listener::structs::Peer;
 use crate::tunnel_manager::Tunnel;
 use althea_types::LocalIdentity;
 use std::net::Ipv4Addr;

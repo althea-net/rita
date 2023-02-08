@@ -7,7 +7,7 @@
 
 use std::time::Duration;
 
-use crate::peer_listener::Peer;
+use crate::peer_listener::structs::Peer;
 use crate::tm_identity_callback;
 use crate::tunnel_manager::id_callback::IdentityCallback;
 
